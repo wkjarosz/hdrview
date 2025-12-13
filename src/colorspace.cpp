@@ -573,8 +573,10 @@ string transfer_function_name(TransferFunction tf)
         else
             return fmt::format("{} (={})", s_transfer_function_names[TransferFunction::Gamma], tf.gamma);
     }
-    else if (tf.type < TransferFunction::Unspecified || tf.type >= TransferFunction::Count)
+    else if (tf.type < TransferFunction::Unspecified)
         return s_transfer_function_names[TransferFunction::Unspecified];
+    else if (tf.type >= TransferFunction::Count)
+        return "Invalid";
     else
         return s_transfer_function_names[tf.type];
 }
@@ -583,9 +585,10 @@ TransferFunction transfer_function_from_CICP(int tc)
 {
     switch (tc)
     {
+    case 2: return TransferFunction::Unspecified;
     case 1: [[fallthrough]];
     case 6: [[fallthrough]];
-    case 12: [[fallthrough]];
+    case 12: [[fallthrough]]; // FIXME: is this actually the same?
     case 14: [[fallthrough]];
     case 15: return TransferFunction::ITU;
     case 4: return {TransferFunction::Gamma, 2.2f};
@@ -599,7 +602,7 @@ TransferFunction transfer_function_from_CICP(int tc)
     case 16: return TransferFunction::BT2100_PQ;
     case 17: return TransferFunction::DCI_P3;
     case 18: return TransferFunction::BT2100_HLG;
-    default: return TransferFunction::Unspecified;
+    default: return TransferFunction::Invalid;
     }
 }
 

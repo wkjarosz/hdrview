@@ -189,7 +189,8 @@ struct TransferFunction
         Log100_Sqrt10,
         IEC61966_2_4,
         DCI_P3,
-        Count
+        Count,
+        Invalid = Count
     };
 
     Type_ type  = Unspecified;

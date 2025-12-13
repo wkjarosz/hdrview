@@ -12,8 +12,7 @@
 #include <string_view>
 #include <sys/types.h>
 
-/*!
-    \brief Wrapper for an ICC profile providing utility routines used by HDRView.
+/*! Wrapper for an ICC profile providing utility routines used by HDRView.
 
     ICCProfile is non-copyable, and internally holds an opaque LCMS profile pointer (when built with LCMS2) and exposes
     a small set of convenience methods for creating linear profiles, extracting chromaticities, building linearized
@@ -22,8 +21,7 @@
 class ICCProfile
 {
 public:
-    /**
-        \brief Construct an ICCProfile from raw ICC profile data.
+    /*! Construct an ICCProfile from raw ICC profile data.
 
         Parses and validates the provided ICC profile byte buffer and initializes
         the ICCProfile instance. The input data is copied into internal storage;
@@ -34,13 +32,13 @@ public:
 
         \note If parsing fails, the resulting ICCProfile object will be invalid
               (i.e., `valid()` will return false).
-     */
+    */
     ICCProfile(const uint8_t *icc_profile, size_t icc_profile_size);
-    //! Construct an ICCProfile from a vector containing the ICC profile data. \see ICCProfile(const uint8_t*, size_t)
+    /// Construct an ICCProfile from a vector containing the ICC profile data. \see ICCProfile(const uint8_t*, size_t)
     ICCProfile(const std::vector<uint8_t> &icc_profile) : ICCProfile(icc_profile.data(), icc_profile.size()) {}
-    //! Constructs an null/invalid ICCProfile object.
+    /// Constructs an null/invalid ICCProfile object.
     ICCProfile() : m_profile{nullptr} {}
-    //! Destructor that releases internal ICC profile resources.
+    /// Destructor that releases internal ICC profile resources.
     ~ICCProfile();
 
     // non-copyable
@@ -61,16 +59,12 @@ public:
         return *this;
     }
 
-    //! Construct a linear RGB ICC profile with the specified chromaticities (or sRGB/Rec709 primaries if none are
-    //! provided).
+    /// Construct a linear RGB profile with specified chromaticities (or sRGB/Rec709 primaries if none are provided).
     static ICCProfile linear_RGB(const Chromaticities &chr = Chromaticities{});
-    //! Construct a linear Gray ICC profile with the specified white point (or D65 if none is provided).
+    /// Construct a linear Gray ICC profile with the specified white point (or D65 if none is provided).
     static ICCProfile linear_Gray(const float2 &whitepoint = white_point(WhitePoint_D65));
 
-    //! Check if ICC profile support is available (i.e., built with LCMS2).
-    static bool supported();
-
-    //!< Get the version of the linked LCMS2 library (or 0 if not built with LCMS2).
+    ///< Get the version of the linked LCMS2 library (or 0 if not built with LCMS2).
     static int lcms_version();
 
     /*!
@@ -98,12 +92,12 @@ public:
 
     std::vector<uint8_t> dump_to_memory() const;
 
-    bool is_CMYK() const; //!< Check if this is a CMYK profile.
-    bool is_RGB() const;  //!< Check if this is a RGB profile.
-    bool is_Gray() const; //!< Check if this is a Grayscale profile.
+    bool is_CMYK() const; ///< Check if this is a CMYK profile.
+    bool is_RGB() const;  ///< Check if this is a RGB profile.
+    bool is_Gray() const; ///< Check if this is a Grayscale profile.
 
     /*!
-        \brief Linearize a (potentially interleaved) array of floating-point pixel values  in-place using the transfer
+        \brief Linearize a (potentially interleaved) array of floating-point pixel values in-place using the transfer
                function of this ICC profile.
 
         \param[in,out] pixels
@@ -150,81 +144,104 @@ public:
     static bool transform_pixels(float *pixels, int3 size, const ICCProfile &profile_in, const ICCProfile &profile_out);
 
 private:
-    //! Internal constructor from raw profile pointer.
+    /// Internal constructor from raw profile pointer.
     ICCProfile(void *profile) : m_profile{profile} {}
     void *m_profile = nullptr;
 };
 
-// A lightweight wrapper for color profiles described using CICP integers
-// (color_primaries, transfer_characteristics, matrix_coeffs, full_range). This class
-// provides utility functions analogous to `ICCProfile` but for CICP-encoded
-// profiles and uses the helpers in `colorspace.h`.
+/*! A class to manage color profiles defined via Coding-independent code points (CICP).
+
+    CICP consists of three integers which specify the color primaries, the transfer characteristics, matrix
+    coefficients, and a flag to indicate full or narrow range.
+
+    Note that we store the matrix coefficients and full-range flag as integers as well for completeness, even though
+    we assume in \ref transform_pixels and \ref linearize_pixels that the pixels have already been converted to
+    floating-point RGB using the appropriate matrix coefficients and full vs. narrow range (\ref dequantize_full and
+   \ref dequantize_narrow).
+*/
 class CICPProfile
 {
 public:
-    // defaults to unspecified RGB full-range
-    CICPProfile(const std::array<int, 4> &quad = {2, 2, -1, -1}) : m_quad{quad} {}
+    /// Defaults to an invalid CICPProfile.
+    CICPProfile() : m_quad{{-1, -1, -1, -1}} {}
+    /// Construct a CICPProfile from an array of four integers.
+    CICPProfile(const std::array<int, 4> &quad) : m_quad{quad} {}
+    /// Construct a CICPProfile from four integers.
     CICPProfile(int color_primaries, int transfer_characteristics, int matrix_coeffs, int full_range) :
         m_quad{color_primaries, transfer_characteristics, matrix_coeffs, full_range}
     {
     }
 
+    ///@{
+    /// Convenience constructors for common color spaces
     static CICPProfile BT709() { return CICPProfile{1, 1, 1, 1}; }
     static CICPProfile sRGB() { return CICPProfile{1, 13, 0, 1}; }
     static CICPProfile linear_sRGB() { return CICPProfile{1, 8, 0, 1}; }
+    ///@}
 
-    // Construct a CICPProfile from explicit enums. If the provided enums/map
-    // cannot be converted to CICP integer codes an invalid CICPProfile is
-    // returned (i.e. `valid()` will be false).
-    static CICPProfile from_gamut_and_tf(ColorGamut_ gamut, TransferFunction tf, int matrix_coeffs = 0,
-                                         bool full_range = true);
+    /*! Construct a CICPProfile from explicit enums.
 
-    // casting to array
+        If the provided enums/map cannot be converted to CICP codes an invalid CICPProfile is returned (i.e. `valid()`
+        will be false).
+    */
+    static CICPProfile from_gamut_and_transfer(ColorGamut_ gamut, TransferFunction tf, int matrix_coeffs = 0,
+                                               int range = 1);
+
+    ///@{
+    /// casting to array
     operator std::array<int, 4> &() noexcept { return m_quad; }
     operator const std::array<int, 4> &() const noexcept { return m_quad; }
+    /// My comment
     const std::array<int, 4> &to_array() const { return m_quad; }
+    ///@}
 
-    // color primaries
-    int  cp() const { return m_quad[0]; }
+    /// Color primaries
+    int cp() const { return m_quad[0]; }
+    /// Color primaries
     int &cp() { return m_quad[0]; }
 
-    // transfer characteristics
-    int  tc() const { return m_quad[1]; }
+    /// Transfer characteristics
+    int tc() const { return m_quad[1]; }
+    /// Transfer characteristics
     int &tc() { return m_quad[1]; }
 
-    // matrix coefficients
-    int  mc() const { return m_quad[2]; }
+    /// Matrix coefficients
+    int mc() const { return m_quad[2]; }
+    /// Matrix coefficients
     int &mc() { return m_quad[2]; }
 
-    // range
-    int  r() const { return m_quad[3]; }
-    int &r() { return m_quad[3]; }
-    bool full_range() const { return m_quad[3] != 0; }
+    /// Full range
+    int fr() const { return m_quad[3]; }
+    /// Full range
+    int &fr() { return m_quad[3]; }
 
-    int  operator[](size_t index) const { return m_quad[index]; }
+    /// Array-style access
+    int operator[](size_t index) const { return m_quad[index]; }
+    /// Array-style access
     int &operator[](size_t index) { return m_quad[index]; }
 
-    // Validate the stored CICP codes. Returns true if both the transfer characteristics and color primaries map to
-    // known entries in the helpers from `colorspace.h`.
+    /// Returns true if all four CICP codes are valid
     bool valid() const;
-
-    //! Returns true if the transfer characteristics code maps to a known HDR transfer function -- PQ (16) or HLG (18).
-    bool     is_HDR() const { return tc() == 16 || tc() == 18; }
+    /// Returns true if the CICPProfile is valid
     explicit operator bool() const noexcept { return valid(); }
+    /// Returns true if the color primaries code maps to a known chromaticity set
+    bool valid_cp() const;
+    /// Returns true if the transfer characteristics code maps to a known transfer
+    bool valid_tc() const;
+    /// Returns true the matrix coefficients are a know set from the spec
+    bool valid_mc() const;
+    /// Returns true if the full-range flag is 0 or 1
+    bool valid_fr() const;
 
-    // Returns true if the color primaries code maps to a known chromaticity set
-    bool has_known_primaries() const;
-
-    // Returns true if the transfer characteristics code maps to a known transfer
-    bool has_known_transfer() const;
+    /// Returns true if tc() is a known HDR transfer function, namely PQ (16) or HLG (18).
+    bool is_HDR() const { return tc() == 16 || tc() == 18; }
 
     // Return the TransferFunction corresponding to `m_transfer_characteristics`.
     TransferFunction transfer_function() const;
     // Return the Chromaticities corresponding to `m_color_primaries`.
     Chromaticities chromaticities() const;
 
-    // Convert to the `ColorGamut_` enum if possible, otherwise returns
-    // `ColorGamut_Unspecified`.
+    /// Convert to the `ColorGamut_` enum if possible, otherwise returns `ColorGamut_Unspecified`.
     ColorGamut_ gamut_enum() const;
 
     // Human-friendly names for the stored codes. If the code is unknown a
@@ -232,23 +249,33 @@ public:
     std::string cp_long_name() const;
     std::string tc_long_name() const;
     std::string mc_long_name() const;
-    std::string r_long_name() const { return full_range() ? "Full" : "Narrow"; }
+    std::string r_long_name() const { return fr() ? "Full" : "Narrow"; }
 
     const char *cp_short_name() const;
     const char *tc_short_name() const;
     const char *mc_short_name() const;
-    const char *r_short_name() const { return full_range() ? "FR" : "NR"; }
+    const char *r_short_name() const { return fr() ? "FR" : "NR"; }
     std::string short_name() const;
 
-    // Linearize a pixel buffer encoded with this CICP profile. If `keep_primaries`
-    // is false, the pixels will also be converted to Rec.709/sRGB primaries.
+    /*! Linearize a pixel buffer in-place with this CICP profile.
+
+        If `keep_primaries` is false, the pixels will also be converted to Rec.709/sRGB primaries.
+
+        \note that we assume the pixels have already been converted to floating-point RGB using the appropriate matrix
+        coefficients and full vs. narrow range (via e.g. \ref dequantize_full or \ref dequantize_narrow).
+    */
     bool linearize_pixels(float *pixels, int3 size, bool keep_primaries = true,
                           std::string *profile_description = nullptr, Chromaticities *c = nullptr,
                           AdaptationMethod CAT_method = AdaptationMethod_Bradford) const;
 
-    // Transform pixel buffer in-place from one CICP profile to another. This
-    // performs inverse transfer of `profile_in`, optional primary conversion,
-    // and forward transfer of `profile_out`.
+    /*! Transform pixel buffer in-place from one CICP profile to another.
+
+        This performs inverse transfer of `profile_in`, optional primary conversion, and forward transfer of
+       `profile_out`.
+
+        \note that we assume the pixels have already been converted to floating-point RGB using the appropriate matrix
+        coefficients and full vs. narrow range (via e.g. \ref dequantize_full or \ref dequantize_narrow).
+    */
     static bool transform_pixels(float *pixels, int3 size, const CICPProfile &profile_in,
                                  const CICPProfile &profile_out,
                                  AdaptationMethod   CAT_method = AdaptationMethod_Bradford);

@@ -224,8 +224,7 @@ bool ICCProfile::extract_chromaticities(Chromaticities *c) const
 
     return true;
 }
-bool ICCProfile::supported() { return true; }
-int  ICCProfile::lcms_version() { return cmsGetEncodedCMMversion(); }
+int ICCProfile::lcms_version() { return cmsGetEncodedCMMversion(); }
 
 string ICCProfile::description() const
 {
@@ -402,7 +401,6 @@ ICCProfile::~ICCProfile() {}
 ICCProfile           ICCProfile::linear_RGB(const Chromaticities           &/*chr*/) { return ICCProfile(nullptr); }
 ICCProfile           ICCProfile::linear_Gray(const float2           &/*whitepoint*/) { return ICCProfile(nullptr); }
 ICCProfile           ICCProfile::linearized_profile(Chromaticities           */*c*/) const { return ICCProfile(nullptr); }
-bool                 ICCProfile::supported() { return false; }
 int                  ICCProfile::lcms_version() { return 0; }
 std::string          ICCProfile::description() const { return std::string(); }
 bool                 ICCProfile::extract_chromaticities(Chromaticities                 */*c*/) const { return false; }
@@ -516,9 +514,11 @@ bool CICPProfile::transform_pixels(float *pixels, int3 size, const CICPProfile &
 
 // --- CICPProfile helper implementations -------------------------------------
 
-bool CICPProfile::has_known_primaries() const { return chromaticities_from_CICP(cp()).valid(); }
-bool CICPProfile::has_known_transfer() const { return transfer_function().type != TransferFunction::Unspecified; }
-bool CICPProfile::valid() const { return has_known_transfer() && has_known_primaries(); }
+bool CICPProfile::valid_cp() const { return chromaticities_from_CICP(cp()).valid(); }
+bool CICPProfile::valid_tc() const { return transfer_function().type != TransferFunction::Invalid; }
+bool CICPProfile::valid_mc() const { return 0 <= mc() && mc() < 18 && mc() != 3; }
+bool CICPProfile::valid_fr() const { return fr() == 0 || fr() == 1; }
+bool CICPProfile::valid() const { return valid_tc() && valid_cp() && valid_mc() && valid_fr(); }
 
 TransferFunction CICPProfile::transfer_function() const { return transfer_function_from_CICP(tc()); }
 Chromaticities   CICPProfile::chromaticities() const { return chromaticities_from_CICP(cp()); }
@@ -547,6 +547,8 @@ std::string CICPProfile::tc_long_name() const
 
 std::string CICPProfile::mc_long_name() const
 {
+    if (mc() > 255 || mc() < 0)
+        return "Invalid";
     switch (mc())
     {
     case 0: return "Identity";
@@ -654,7 +656,7 @@ std::string CICPProfile::short_name() const
 {
     auto   p       = cp();
     auto   t       = tc();
-    string details = fmt::format(" {}, CICP {}-{}-{}-{}", r_long_name(), p, t, mc(), r());
+    string details = fmt::format(" {}, CICP {}-{}-{}-{}", r_long_name(), p, t, mc(), fr());
     if (p == 1)
     {
         if (t == 1)
@@ -717,7 +719,8 @@ std::string CICPProfile::short_name() const
     return fmt::format("CICP ({} {} {} {})", cp_short_name(), tc_short_name(), mc_short_name(), r_short_name());
 }
 
-CICPProfile CICPProfile::from_gamut_and_tf(ColorGamut_ gamut, TransferFunction tf, int matrix_coeffs, bool full_range)
+CICPProfile CICPProfile::from_gamut_and_transfer(ColorGamut_ gamut, TransferFunction tf, int matrix_coeffs,
+                                                 int full_range)
 {
     return {chromaticities_to_CICP(gamut_chromaticities(gamut)), transfer_function_to_CICP(tf), matrix_coeffs,
             full_range};
