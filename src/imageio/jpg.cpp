@@ -306,7 +306,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         }
         jpeg_finish_decompress(&cinfo);
 
-        if (opts.override_color())
+        if (opts.override_profile)
         {
             spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
                          color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));

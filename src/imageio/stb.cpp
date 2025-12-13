@@ -190,19 +190,16 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
 
     TransferFunction tf = TransferFunction::Linear;
     ColorGamut_      cg = ColorGamut_Unspecified;
-    if (!is_hdr && !opts.override_transfer())
+    if (!is_hdr && !opts.override_profile)
     {
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
         tf = TransferFunction::Unspecified;
     }
-    if (opts.override_transfer())
+    if (opts.override_profile)
     {
-        spdlog::info("Forcing transfer function to {}.", transfer_function_name(opts.tf_override));
+        spdlog::info("Forcing color profile to {} gamut with {} transfer.", color_gamut_name(opts.gamut_override),
+                     transfer_function_name(opts.tf_override));
         tf = opts.tf_override;
-    }
-    if (opts.override_gamut())
-    {
-        spdlog::info("Forcing color gamut to {}.", color_gamut_name(opts.gamut_override));
         cg = opts.gamut_override;
     }
 
@@ -228,7 +225,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
             image->metadata["pixel format"] = fmt::format("{} bbp", 8);
 
         image->metadata["color profile"] = color_profile_name(cg, tf);
-        if (opts.override_color())
+        if (opts.override_profile)
             image->metadata["color profile"] += " (user override)";
 
         // first convert+copy to float channels

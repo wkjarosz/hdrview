@@ -436,8 +436,8 @@ void HDRViewApp::draw_open_options_dialog(bool &open)
         ImGui::OpenPopup("Image loading options...");
 
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()),
-                            ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Once,
+                            ImVec2(0.5f, 0.0f));
 
     if (ImGui::BeginPopupModal("Image loading options...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {

@@ -147,7 +147,7 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename, con
     auto      image                  = make_shared<Image>(size.xy(), size.z);
     image->filename                  = filename;
     image->metadata["pixel format"]  = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
-    image->metadata["color profile"] = (opts.override_color())
+    image->metadata["color profile"] = opts.override_profile
                                            ? color_profile_name(ColorGamut_Unspecified, opts.tf_override)
                                            : color_profile_name(ColorGamut_Unspecified, TransferFunction::Linear);
 

@@ -359,7 +359,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                         bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
         }
 
-        if (opts.override_color())
+        if (opts.override_profile)
         {
             spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
                          color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));

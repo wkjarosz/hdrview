@@ -631,7 +631,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             //
             // We therefore swap the black channel for the alpha channel in the pixel array before applying the ICC
             // profile, and then swap them back afterwards.
-            if (!opts.override_color() && prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
+            if (!opts.override_profile && prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
                 float *black_data        = image->channels[size.z + first_black_channel].data();
@@ -655,7 +655,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
             string         profile_description;
             Chromaticities chr;
-            if (opts.override_color())
+            if (opts.override_profile)
             {
                 spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
                              transfer_function_name(opts.tf_override));
@@ -689,7 +689,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             }
             image->metadata["color profile"] = profile_description;
 
-            if (!opts.override_color() && prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
+            if (!opts.override_profile && prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
                 // Copy from alpha_copy back into the alpha channel
@@ -743,7 +743,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
                 spdlog::info("Applying transfer function to extra channel '{}'", channel.name);
 
-                if (opts.override_color())
+                if (opts.override_profile)
                     // use the transfer function specified by the user
                     to_linear(channel.data(), int3{size.xy(), 1}, opts.tf_override);
                 else

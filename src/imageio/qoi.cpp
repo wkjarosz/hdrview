@@ -96,20 +96,18 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
     TransferFunction tf =
         desc.colorspace == QOI_LINEAR ? TransferFunction{TransferFunction::Linear, 1.f} : TransferFunction::sRGB;
     ColorGamut_ cg = ColorGamut_sRGB_BT709;
-    if (opts.override_transfer())
+    if (opts.override_profile)
     {
         spdlog::info("Ignoring QOI file's {} color profile and linearizing using user-requested transfer function: {}",
                      transfer_function_name(tf), transfer_function_name(opts.tf_override));
         tf = opts.tf_override;
-    }
-    if (opts.override_gamut())
-    {
+
         spdlog::info("Ignoring QOI file's {} color profile and converting to requested color gamut: {}",
                      color_gamut_name(cg), color_gamut_name(opts.gamut_override));
         cg = opts.gamut_override;
     }
 
-    image->metadata["color profile"] = color_profile_name(cg, tf) + (opts.override_color() ? " (user override)" : "");
+    image->metadata["color profile"] = color_profile_name(cg, tf) + (opts.override_profile ? " (user override)" : "");
 
     Timer timer;
     // first convert/copy to float channels

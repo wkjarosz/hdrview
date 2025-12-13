@@ -659,43 +659,67 @@ const ImageLoadOptions &load_image_options_gui()
         "For example, \"diffuse,specular\" will only load layers which contain either of these two words, and \"-.A\" "
         "would exclude channels named \"A\". Leave empty to load all parts.");
 
-    auto tf_name = [](TransferFunction tf)
-    {
-        if (tf.type == TransferFunction::Unspecified)
-            return string("Use file's transfer function");
-        else
-            return transfer_function_name(tf);
-    };
-
-    if (ImGui::BeginCombo("Transfer function", tf_name(s_opts.tf_override).c_str()))
-    {
-        for (TransferFunction::Type i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
-        {
-            bool is_selected = (s_opts.tf_override.type == (TransferFunction::Type_)i);
-            if (ImGui::Selectable(tf_name({(TransferFunction::Type_)i, s_opts.tf_override.gamma}).c_str(), is_selected))
-                s_opts.tf_override.type = (TransferFunction::Type_)i;
-            if (is_selected)
-                ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
+    ImGui::Checkbox("Override file's color profile", &s_opts.override_profile);
     ImGui::Tooltip(
-        "HDRView can either try to determine the transfer function from the metadata in the file, or it can override "
-        "the metadata and assume pixel values in the image have been encoded using the transfer function you select "
-        "here.");
-    ImGui::BeginDisabled(s_opts.tf_override.type != TransferFunction::Gamma);
-    if (s_opts.tf_override.type == TransferFunction::Gamma)
-        ImGui::SliderFloat("Gamma", &s_opts.tf_override.gamma, 0.1f, 5.f);
-    ImGui::EndDisabled();
+        "By default, HDRView tries to detect the color profile of the image from metadata stored in the file. "
+        "Enabling this option instructs HDRView to ignore any color profile information in the file and instead use "
+        "the settings you select below.");
+
+    if (s_opts.override_profile)
+    {
+        ImGui::Indent();
+        // ImGui::BeginDisabled(!s_opts.override_profile);
+
+        if (ImGui::BeginCombo("Color gamut", color_gamut_name(s_opts.gamut_override), ImGuiComboFlags_HeightLargest))
+        {
+            auto csn = color_gamut_names();
+            for (ColorGamut n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
+            {
+                auto       cg          = (ColorGamut_)n;
+                const bool is_selected = (s_opts.gamut_override == n);
+                if (ImGui::Selectable(csn[n], is_selected))
+                    s_opts.gamut_override = cg;
+
+                // Set the initial focus when opening the combo (scrolling + keyboard
+                // navigation focus)
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf_override).c_str()))
+        {
+            for (TransferFunction::Type i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+            {
+                auto       t           = (TransferFunction::Type_)i;
+                const bool is_selected = (s_opts.tf_override.type == t);
+                if (ImGui::Selectable(transfer_function_name({t, s_opts.tf_override.gamma}).c_str(), is_selected))
+                    s_opts.tf_override.type = t;
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::BeginDisabled(s_opts.tf_override.type != TransferFunction::Gamma);
+        if (s_opts.tf_override.type == TransferFunction::Gamma)
+            ImGui::SliderFloat("Gamma", &s_opts.tf_override.gamma, 0.1f, 5.f);
+        ImGui::EndDisabled();
+
+        // ImGui::EndDisabled();
+        ImGui::Unindent();
+    }
 
     ImGui::Checkbox("Keep file's primaries and only linearize on load", &s_opts.keep_primaries);
     ImGui::Tooltip(
-        "By default, HDRView converts all pixel values to the working linear Rec709/sRGB color space upon loading. "
-        "Enabling this option will keep the image's original color primaries and only linearize the pixel values based "
-        "on the file's transfer function on load. HDRView will extract the file's primaries and still use them to "
-        "transform colors to the working space for display, but the numerical pixel values will remain in the original "
-        "color space.\n\n"
-        "This is useful if you want to work in the image's native color space.");
+        "HDRView can either 1) convert all pixel values to the working linear Rec709/sRGB color space upon loading, or "
+        "2) only linearize the pixel values on load while retaining the file's original color gamut/primaries.\n\n"
+        "With option 2, HDRView will still try to deduce the file's primaries during load, but it keeps the color "
+        "values in the file's color space, only transforming colors to HDRView's working color space during display. "
+        "This can be useful if you want to inspect the (linearized) pixel values in the image's native color space. It"
+        "is exact when the file unambiguously defines the color primaries via CICP, but color shifts may occur if the "
+        "color space is specified using a general ICC profile.");
 
     ImGui::Spacing();
     ImGui::Separator();

@@ -23,14 +23,11 @@ struct ImageLoadOptions
     //! Comma-separated list of channel names to include or exclude from the image. If empty, all channels are selected.
     string channel_selector;
 
-    bool override_gamut() const { return gamut_override != ColorGamut_Unspecified; }
-    bool override_transfer() const { return tf_override.type != TransferFunction::Unspecified; }
-    bool override_color() const { return override_gamut() || override_transfer(); }
-
-    //! Override any metadata in the file and decode pixel values using this transfer function.
-    TransferFunction tf_override = TransferFunction::Unspecified;
+    bool override_profile = false;
     //! Override any metadata in the file and decode pixel values using this color gamut.
-    ColorGamut_ gamut_override = ColorGamut_Unspecified;
+    ColorGamut_ gamut_override = ColorGamut_sRGB_BT709;
+    //! Override any metadata in the file and decode pixel values using this transfer function.
+    TransferFunction tf_override = TransferFunction::Linear;
 
     //! If true, keep the file's primaries and only linearize the pixel values on load. If false, convert to Rec709/sRGB
     //! or Gray at D65 primaries as appropriate.

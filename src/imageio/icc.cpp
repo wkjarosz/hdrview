@@ -232,7 +232,7 @@ string ICCProfile::description() const
     if (!valid())
     {
         spdlog::error("Could not open ICC profile from memory.");
-        return "ICC (Invalid)";
+        return "Invalid, ICC";
     }
 
     if (auto desc = reinterpret_cast<const cmsMLU *>(cmsReadTag(get(), cmsSigProfileDescriptionTag)))
@@ -240,9 +240,9 @@ string ICCProfile::description() const
         auto              size = cmsMLUgetASCII(desc, "en", "US", nullptr, 0);
         std::vector<char> desc_str((size_t)size);
         cmsMLUgetASCII(desc, "en", "US", desc_str.data(), (cmsUInt32Number)desc_str.size());
-        return fmt::format("ICC ({})", string(desc_str.data()));
+        return fmt::format("{}, ICC", string(desc_str.data()));
     }
-    return "ICC (Unknown Description)";
+    return "Unknown description, ICC";
 }
 
 bool ICCProfile::is_CMYK() const
@@ -652,58 +652,67 @@ const char *CICPProfile::mc_short_name() const
 
 std::string CICPProfile::short_name() const
 {
-    // // Functional equivalence groups (from H.273 and H-Suppl.19)
-    // auto is_sdr_tc = [&](uint8_t v) { return (v == 1 || v == 6 || v == 14 || v == 15); };
-    // auto is_601_mc = [&](uint8_t v) { return (v == 5 || v == 6); };
-
-    // bool full = full_range();
-
-    // // ------------------------------------------------------------
-    // // OFFICIAL TAGS from H‑Supplement 19
-    // // ------------------------------------------------------------
-
-    // // SDR NCG
-    // if (cp() == 1 && is_sdr_tc(tc()) && mc() == 1 && !full)
-    //     return "BT709_YCC";
-    // if (cp() == 1 && is_sdr_tc(tc()) && mc() == 0 && !full)
-    //     return "BT709_RGB";
-    // if (cp() == 6 && is_sdr_tc(tc()) && is_601_mc(mc()) && !full)
-    //     return "BT601_525";
-    // if (cp() == 5 && is_sdr_tc(tc()) && is_601_mc(mc()) && !full)
-    //     return "BT601_625";
-
-    // // SDR WCG
-    // if (cp() == 9 && is_sdr_tc(tc()) && mc() == 9 && !full)
-    //     return "BT2020_YCC_NCL";
-    // if (cp() == 9 && is_sdr_tc(tc()) && mc() == 0 && !full)
-    //     return "BT2020_RGB";
-
-    // // HDR WCG
-    // if (cp() == 9 && tc() == 16 && mc() == 9 && !full)
-    //     return "BT2100_PQ_YCC";
-    // if (cp() == 9 && tc() == 18 && mc() == 9 && !full)
-    //     return "BT2100_HLG_YCC";
-    // if (cp() == 9 && tc() == 16 && mc() == 14 && !full)
-    //     return "BT2100_PQ_ICTCP";
-    // if (cp() == 9 && tc() == 16 && mc() == 0 && !full)
-    //     return "BT2100_PQ_RGB";
-    // if (cp() == 9 && tc() == 18 && mc() == 0 && !full)
-    //     return "BT2100_HLG_RGB";
-
-    // // Additional Annex A combinations
-    // if (cp() == 1 && is_sdr_tc(tc()) && mc() == 0 && full)
-    //     return "FR709_RGB";
-    // if (cp() == 9 && is_sdr_tc(tc()) && mc() == 0 && full)
-    //     return "FR2020_RGB";
-    // if (cp() == 12 && is_sdr_tc(tc()) && is_601_mc(mc()) && full)
-    //     return "FRP3D65_YCC";
-
-    // // special-case for common profile
-    // if (cp() == 1 && tc() == 13 && full_range())
-    //     return "CICP (sRGB IEC61966-2.1)";
-    // // Rec. ITU-R BT.2100 PQ
-    // else if (cp() == 9 && tc() == 16 && mc() == 10 && !full_range())
-    //     return "CICP (Rec.ITU-R BT.2100 PQ)";
+    auto   p       = cp();
+    auto   t       = tc();
+    string details = fmt::format(" {}, CICP {}-{}-{}-{}", r_long_name(), p, t, mc(), r());
+    if (p == 1)
+    {
+        if (t == 1)
+            return fmt::format("Rec.ITU-R BT.709-6{}", details);
+        else if (t == 8)
+            return fmt::format("linear-light sRGB{}", details);
+        else if (t == 13)
+            return fmt::format("IEC 61966-2-1 sRGB{}", details);
+        else
+            return fmt::format("Unknown sRGB-like{}", details);
+    }
+    else if (p == 5)
+    {
+        if (t == 4)
+            return fmt::format("Rec.ITU-R BT.1700-0 625 (SECAM){}", details);
+        else if (t == 6)
+            return fmt::format("Rec.ITU-R BT.601-7 625 (PAL){}", details);
+        else
+            return fmt::format("Unknown 625-line PAL-like{}", details);
+    }
+    else if (p == 6)
+    {
+        if (t == 6)
+            return fmt::format("Rec.ITU-R BT.601-7 525 (NTSC){}", details);
+        else
+            return fmt::format("Unknown 525-line NTSC-like{}", details);
+    }
+    else if (p == 9)
+    {
+        if (t == 14)
+            return fmt::format("Rec.ITU-R BT.2020-2 (10-bit){}", details);
+        else if (t == 15)
+            return fmt::format("Rec.ITU-R BT.2020-2 (12-bit){}", details);
+        else if (t == 16)
+            return fmt::format("Rec.ITU-R BT.2100-2 PQ{}", details);
+        else if (t == 18)
+            return fmt::format("Rec.ITU-R BT.2100-2 HLG{}", details);
+        else
+            return fmt::format("Unknown Rec2020-like{}", details);
+    }
+    else if (p == 11)
+    {
+        if (t == 17)
+            return fmt::format("SMPTE RP 431-2 with SMPTE ST 428-1 D-Cinema Distribution Master (DCI-P3){}", details);
+        else
+            return fmt::format("Unknown DCI-P3-like{}", details);
+    }
+    else if (p == 12)
+    {
+        if (t == 13)
+            return fmt::format("Display P3{}", details);
+        else if (t == 16)
+            return fmt::format("P3D65-PQ{}", details);
+        else
+            return fmt::format("Unknown D65 P3-like{}", details);
+    }
+    else
+        return fmt::format("Unusual/historical{}", details);
 
     return fmt::format("CICP ({} {} {} {})", cp_short_name(), tc_short_name(), mc_short_name(), r_short_name());
 }

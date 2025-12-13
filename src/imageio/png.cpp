@@ -634,7 +634,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             image->icc_data = icc_profile;
 
         string profile_desc = color_profile_name(chr ? named_color_gamut(*chr) : ColorGamut_Unspecified, tf);
-        if (opts.override_color())
+        if (opts.override_profile)
         {
             spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
                          transfer_function_name(opts.tf_override));
