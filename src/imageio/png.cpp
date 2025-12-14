@@ -486,9 +486,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     {
         if (unit_type == PNG_RESOLUTION_METER)
             metadata["header"]["Pixels per meter"] = {
-                {"value", {u2.x, u2.y, (uint)unit_type}}, {"string", fmt::format("{}", u2)}, {"type", "int array"}};
+                {"value", {u2.x, u2.y, (uint32_t)unit_type}}, {"string", fmt::format("{}", u2)}, {"type", "int array"}};
         else
-            metadata["header"]["Pixels aspect ratio"] = {{"value", {u2.x, u2.y, (uint)unit_type}},
+            metadata["header"]["Pixels aspect ratio"] = {{"value", {u2.x, u2.y, (uint32_t)unit_type}},
                                                          {"string", fmt::format("{} x {}", u2.x, u2.y)},
                                                          {"type", "int array"}};
     }

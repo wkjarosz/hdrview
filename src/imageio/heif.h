@@ -23,25 +23,3 @@ struct HEIFSaveOptions;
 HEIFSaveOptions *heif_parameters_gui();
 // throws on error
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, const HEIFSaveOptions *params);
-
-// helpers to check which formats are supported in this build
-#ifdef HDRVIEW_ENABLE_HEIC
-#define HEIC_ENABLED 1
-#else
-#define HEIC_ENABLED 0
-#endif
-#ifdef HDRVIEW_ENABLE_AVIF
-#define AVIF_ENABLED 1
-#else
-#define AVIF_ENABLED 0
-#endif
-#ifdef HDRVIEW_ENABLE_AVCI
-#define AVCI_ENABLED 1
-#else
-#define AVCI_ENABLED 0
-#endif
-#ifdef HDRVIEW_ENABLE_HTJ2K
-#define HTJ2K_ENABLED 1
-#else
-#define HTJ2K_ENABLED 0
-#endif

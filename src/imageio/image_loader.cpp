@@ -861,6 +861,7 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
             throw invalid_argument("This doesn't seem to be a supported image file.");
 
         // compute size of the input stream
+        is.clear();
         std::streampos pos = is.tellg();
         is.seekg(0, std::ios::end);
         std::streampos size = is.tellg();

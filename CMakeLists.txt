@@ -451,7 +451,6 @@ if(HDRVIEW_ENABLE_LIBPNG)
   else()
     message(FATAL_ERROR "libpng not found. Please install it or turn off HDRVIEW_ENABLE_LIBPNG.")
   endif()
-  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBPNG)
 endif()
 
 CPMAddPackage(
@@ -480,9 +479,9 @@ endif()
 
 CPMAddPackage(
   NAME OpenEXR
-  # GITHUB_REPOSITORY AcademySoftwareFoundation/openexr FIXME: OpenEXR v3.3.0 and above seems to break our subsample
-  # channel loading
+  # GITHUB_REPOSITORY AcademySoftwareFoundation/openexr 
   FIND_PACKAGE_ARGUMENTS "REQUIRED"
+  # NOTE: OpenEXR v3.3.0 broke subsampled channel loading, but it seems to be fixed starting with v3.4
   VERSION 3.4.4
   GIT_TAG v3.4.4
   URL https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.4.4.zip
@@ -513,47 +512,6 @@ option(HDRVIEW_ENABLE_LIBJPEG "Enable libjpeg(-turbo) support" ON)
 if(HDRVIEW_ENABLE_LIBJPEG)
   find_package(JPEG)
   if(JPEG_FOUND)
-    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
-
-    include(CheckCXXSourceCompiles)
-
-    # this is needed for CheckCXXSourceCompiles
-    set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES})
-    set(CMAKE_REQUIRED_INCLUDES ${JPEG_INCLUDE_DIRS})
-    check_cxx_source_compiles(
-      "
-  #include <stddef.h>
-  #include <stdio.h>
-  #include <jpeglib.h>
-
-  int main() {
-    jpeg_write_icc_profile(NULL, NULL, 0);
-    return 0;
-  }
-  "
-      HAVE_JPEG_WRITE_ICC_PROFILE
-    )
-    unset(CMAKE_REQUIRED_LIBRARIES)
-    unset(CMAKE_REQUIRED_INCLUDES)
-
-    message(STATUS "Found libjpeg with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
-
-    # set(JPEG_HEADER_FOUND FALSE)
-    # foreach(JPEG_DIR ${JPEG_INCLUDE_DIRS})
-    #   if(EXISTS "${JPEG_DIR}/jpeglib.h")
-    #   file(READ "${JPEG_DIR}/jpeglib.h" JPEGLIB_H_CONTENTS)
-    #   message(STATUS "========== ${JPEG_DIR}/jpeglib.h ==========")
-    #   message(STATUS "${JPEGLIB_H_CONTENTS}")
-    #   set(JPEG_HEADER_FOUND TRUE)
-    #   endif()
-    # endforeach()
-    # if(NOT JPEG_HEADER_FOUND)
-    #   message(WARNING "Could not find jpeglib.h in any of: ${JPEG_INCLUDE_DIRS}")
-    # endif()
-
-    find_package(TurboJpeg QUIET)
-    message(STATUS "JPEG is libjpeg-turbo = ${TurboJpeg_FOUND}")
-
     list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
   else()
     message(STATUS "libjpeg library not found, will build libjpeg-turbo")
@@ -646,7 +604,6 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     add_library(JPEG::JPEG ALIAS jpeg-turbo)
 
     list(APPEND HDRVIEW_DEPENDENCIES jpeg-turbo)
-    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
   endif()
   if (HAVE_JPEG_WRITE_ICC_PROFILE)
     add_definitions(-DHAVE_JPEG_WRITE_ICC_PROFILE=1)
@@ -690,8 +647,6 @@ if(HDRVIEW_ENABLE_UHDR)
     add_dependencies(uhdr JPEG::JPEG)
     list(APPEND HDRVIEW_DEPENDENCIES "uhdr")
   endif()
-
-  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_UHDR)
 endif()
 # cmake-format: on
 
@@ -733,7 +688,6 @@ if(HDRVIEW_ENABLE_JPEGXL)
     message(FATAL_ERROR "JPEG-XL library not found. Please install it or turn off HDRVIEW_ENABLE_JPEGXL.")
   endif()
   list(APPEND HDRVIEW_DEPENDENCIES "jxl" "jxl_threads")
-  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_JPEGXL)
 endif()
 
 if(TARGET lcms2)
@@ -818,23 +772,6 @@ if(HDRVIEW_ENABLE_LIBHEIF)
     )
   endif()
   list(APPEND HDRVIEW_DEPENDENCIES "heif")
-  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBHEIF)
-  if(HDRVIEW_ENABLE_AVIF)
-    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_AVIF)
-  endif()
-  if(HDRVIEW_ENABLE_HEIC)
-    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HEIC)
-  endif()
-  if(HDRVIEW_ENABLE_AVCI)
-    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_AVCI)
-  endif()
-  if(HDRVIEW_ENABLE_J2K)
-    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_J2K)
-  endif()
-  if(HDRVIEW_ENABLE_HTJ2K)
-    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HTJ2K)
-  endif()
-  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_AVCI)
 endif()
 
 CPMAddPackage(
@@ -903,6 +840,32 @@ if(miniz_ADDED)
   target_include_directories(miniz PUBLIC ${miniz_SOURCE_DIR})
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES miniz)
+
+# Helper function to add XXX_ENABLED=0 or XXX_ENABLED=1 definitions based on HDRVIEW_ENABLE_XXX option
+# Also adds HDRVIEW_ENABLE_XXX itself when the option is ON
+function(add_enabled_definition option_name)
+  # Extract the feature name (e.g., "J2K" from "HDRVIEW_ENABLE_J2K")
+  string(REPLACE "HDRVIEW_ENABLE_" "" feature_name "${option_name}")
+  if(${option_name})
+    list(APPEND HDRVIEW_DEFINITIONS "${option_name}")
+    list(APPEND HDRVIEW_DEFINITIONS "${feature_name}_ENABLED=1")
+  else()
+    list(APPEND HDRVIEW_DEFINITIONS "${feature_name}_ENABLED=0")
+  endif()
+  set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} PARENT_SCOPE)
+endfunction()
+
+# Add XXX_ENABLED=0 or XXX_ENABLED=1 definitions for all configurable options
+add_enabled_definition(HDRVIEW_ENABLE_LIBPNG)
+add_enabled_definition(HDRVIEW_ENABLE_LIBJPEG)
+add_enabled_definition(HDRVIEW_ENABLE_UHDR)
+add_enabled_definition(HDRVIEW_ENABLE_JPEGXL)
+add_enabled_definition(HDRVIEW_ENABLE_LIBHEIF)
+add_enabled_definition(HDRVIEW_ENABLE_J2K)
+add_enabled_definition(HDRVIEW_ENABLE_HTJ2K)
+add_enabled_definition(HDRVIEW_ENABLE_AVIF)
+add_enabled_definition(HDRVIEW_ENABLE_HEIC)
+add_enabled_definition(HDRVIEW_ENABLE_AVCI)
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on

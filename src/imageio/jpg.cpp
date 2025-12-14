@@ -190,39 +190,46 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             fmt::format("{} ({} channel{}, {} bpc)", color_space_name(cinfo.jpeg_color_space), cinfo.num_components,
                         cinfo.num_components > 1 ? "s" : "", cinfo.data_precision);
 #if JPEG_LIB_VERSION >= 80
-        image->metadata["header"]["baseline"] = {
-            {"value", cinfo.is_baseline}, {"string", cinfo.is_baseline ? "true" : "false"}, {"type", "bool"}};
+        image->metadata["header"]["Is baseline"] = {
+            {"value", cinfo.is_baseline}, {"string", cinfo.is_baseline ? "yes" : "no"}, {"type", "bool"}};
 #endif
-        image->metadata["header"]["progressive"] = {
-            {"value", cinfo.progressive_mode}, {"string", cinfo.progressive_mode ? "true" : "false"}, {"type", "bool"}};
+        image->metadata["header"]["Is progressive"] = {
+            {"value", cinfo.progressive_mode}, {"string", cinfo.progressive_mode ? "yes" : "no"}, {"type", "bool"}};
 
-        image->metadata["header"]["coding"] = {
+        image->metadata["header"]["Coding method"] = {
             {"value", cinfo.arith_code}, {"string", cinfo.arith_code ? "Arithmetic" : "Huffman"}, {"type", "bool"}};
 
-        image->metadata["header"]["JFIF version"] = {
-            {"value", 100 * cinfo.JFIF_major_version + cinfo.JFIF_minor_version},
-            {"type", "float"},
-            {"string", fmt::format("{}.{}", cinfo.JFIF_major_version, cinfo.JFIF_minor_version)}};
-        image->metadata["header"]["density unit"] = {{"value", cinfo.density_unit},
-                                                     {"string", cinfo.density_unit == 1   ? "dots/inch"
-                                                                : cinfo.density_unit == 2 ? "dots/cm"
-                                                                                          : "unknown"},
-                                                     {"type", "uint8"}};
-        image->metadata["header"]["X density"]    = {
-            {"value", cinfo.X_density}, {"string", to_string(cinfo.X_density)}, {"type", "uint16"}};
-        image->metadata["header"]["Y density"] = {
-            {"value", cinfo.Y_density}, {"string", to_string(cinfo.Y_density)}, {"type", "uint16"}};
-        image->metadata["header"]["has Adobe marker"] = {{"value", cinfo.saw_Adobe_marker != 0},
-                                                         {"string", cinfo.saw_Adobe_marker ? "true" : "false"},
-                                                         {"type", "bool"}};
-        if (cinfo.saw_Adobe_marker)
-            image->metadata["header"]["Adobe transform"] = {{"value", cinfo.Adobe_transform},
-                                                            {"string", cinfo.Adobe_transform == 1 ? "YCbCr"
-                                                                       : cinfo.Adobe_transform == 2
-                                                                           ? "YCCK"
-                                                                           : "Unknown (RGB or CMYK)"},
-                                                            {"type", "uint8"}};
-
+        // image->metadata["header"]["Has JFIF marker"] = {
+        //     {"value", cinfo.saw_JFIF_marker != 0}, {"string", cinfo.saw_JFIF_marker ? "yes" : "no"}, {"type",
+        //     "bool"}};
+        if (cinfo.saw_JFIF_marker)
+        {
+            image->metadata["header"]["JFIF version"] = {
+                {"value", 100 * cinfo.JFIF_major_version + cinfo.JFIF_minor_version},
+                {"type", "float"},
+                {"string", fmt::format("{}.{}", cinfo.JFIF_major_version, cinfo.JFIF_minor_version)}};
+            auto units = cinfo.density_unit == 1 ? " pixels/inch" : cinfo.density_unit == 2 ? " pixels/cm" : "";
+            if (cinfo.density_unit == 0)
+                image->metadata["header"]["Pixel aspect ratio"] = {
+                    {"value", {cinfo.X_density, cinfo.Y_density}},
+                    {"string", fmt::format("{} x {}", cinfo.X_density, cinfo.Y_density)},
+                    {"type", "array"}};
+            else
+                image->metadata["header"]["Pixel density"] = {
+                    {"value", {cinfo.X_density, cinfo.Y_density}},
+                    {"string", fmt::format("{}{} x {}{}", cinfo.X_density, units, cinfo.Y_density, units)},
+                    {"type", "array"}};
+            // image->metadata["header"]["Has Adobe marker"] = {{"value", cinfo.saw_Adobe_marker != 0},
+            //                                                  {"string", cinfo.saw_Adobe_marker ? "yes" : "no"},
+            //                                                  {"type", "bool"}};
+            if (cinfo.saw_Adobe_marker)
+                image->metadata["header"]["Adobe transform"] = {{"value", cinfo.Adobe_transform},
+                                                                {"string", cinfo.Adobe_transform == 1 ? "YCbCr"
+                                                                           : cinfo.Adobe_transform == 2
+                                                                               ? "YCCK"
+                                                                               : "Unknown (RGB or CMYK)"},
+                                                                {"type", "uint8"}};
+        }
         // APP1 (EXIF and XMP) and comment extraction
         for (jpeg_saved_marker_ptr marker = cinfo.marker_list; marker; marker = marker->next)
         {

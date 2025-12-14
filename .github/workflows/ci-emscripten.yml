@@ -53,7 +53,7 @@ jobs:
 
       - name: Configure CMake
         run: |
-          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/deploy -DHDRVIEW_ENABLE_J2K=OFF -DHDRVIEW_ENABLE_HTJ2K=OFF -DHDRVIEW_ENABLE_AVIF=OFF -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF
+          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/deploy -DHDRVIEW_ENABLE_J2K=OFF -DHDRVIEW_ENABLE_HTJ2K=OFF -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel

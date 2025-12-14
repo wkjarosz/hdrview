@@ -1027,34 +1027,26 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     if (ICCProfile::lcms_version() != 0)
                         ImGui::PE::Hyperlink("lcms2", "LittleCMS color management engine.",
                                              "https://github.com/mm2/Little-CMS");
-#ifdef HDRVIEW_ENABLE_LIBHEIF
-                    ImGui::PE::Hyperlink("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
-                                         "https://github.com/strukturag/libheif");
-#ifdef HDRVIEW_ENABLE_HEIC
-                    ImGui::PE::Hyperlink("x265", "For encoding HEIC/HEVC files.",
-                                         "https://www.videolan.org/developers/x265.html");
-                    ImGui::PE::Hyperlink("libde265", "For decoding HEIC/HEVC files.",
-                                         "https://github.com/strukturag/libde265");
-#endif
-#ifdef HDRVIEW_ENABLE_AVCI
-                    ImGui::PE::Hyperlink("OpenH264", "For decoding AVCI files.", "https://github.com/cisco/openh264");
-#endif
-#ifdef HDRVIEW_ENABLE_HTJ2K
-                    ImGui::PE::Hyperlink("OpenJPEG", "For encoding/decoding J2K and decoding HTJ2K files.",
-                                         "https://github.com/uclouvain/openjpeg");
-                    ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K files.", "https://github.com/aous72/OpenJPH");
-#endif
-#endif
-#ifdef HDRVIEW_ENABLE_JPEGXL
-                    ImGui::PE::Hyperlink("libjxl", "For loading JPEG-XL files.", "https://github.com/libjxl/libjxl");
-#endif
-#ifdef HDRVIEW_ENABLE_LIBPNG
-                    ImGui::PE::Hyperlink("libpng", "For loading PNG files.", "https://github.com/pnggroup/libpng");
-#endif
-#ifdef HDRVIEW_ENABLE_UHDR
-                    ImGui::PE::Hyperlink("libuhdr", "For loading Ultra HDR JPEG files.",
-                                         "https://github.com/google/libultrahdr");
-#endif
+                    if (AVIF_ENABLED)
+                        ImGui::PE::Hyperlink("aom", "For encoding and decoding AV1/AVIF/AVIFS files.",
+                                             "https://aomedia.googlesource.com/aom");
+                    if (HEIC_ENABLED)
+                        ImGui::PE::Hyperlink("libde265", "For decoding HEIC/HEVC/H265 files.",
+                                             "https://github.com/strukturag/libde265");
+                    if (LIBHEIF_ENABLED)
+                        ImGui::PE::Hyperlink("libheif", "For loading HEIF files.",
+                                             "https://github.com/strukturag/libheif");
+                    if (JPEGXL_ENABLED)
+                        ImGui::PE::Hyperlink("libjxl", "For loading JPEG-XL files.",
+                                             "https://github.com/libjxl/libjxl");
+
+                    if (LIBPNG_ENABLED)
+                        ImGui::PE::Hyperlink("libpng", "For loading PNG files.", "https://github.com/pnggroup/libpng");
+
+                    if (UHDR_ENABLED)
+                        ImGui::PE::Hyperlink("libuhdr", "For loading Ultra HDR JPEG files.",
+                                             "https://github.com/google/libultrahdr");
+
                     ImGui::PE::Hyperlink(
                         "linalg", "Sterling Orsten's public domain, single header short vector math library for C++.",
                         "https://github.com/sgorsten/linalg");
@@ -1062,6 +1054,15 @@ void HDRViewApp::draw_about_dialog(bool &open)
                                          "https://github.com/mitsuba-renderer/nanogui");
                     ImGui::PE::Hyperlink("OpenEXR", "High Dynamic-Range (HDR) image file format.",
                                          "https://github.com/AcademySoftwareFoundation/openexr");
+                    if (AVCI_ENABLED)
+                        ImGui::PE::Hyperlink("OpenH264", "For decoding AVC/AVCI/AVCS/H264 files.",
+                                             "https://github.com/cisco/openh264");
+                    if (J2K_ENABLED)
+                        ImGui::PE::Hyperlink("OpenJPEG", "For encoding/decoding J2K and decoding HTJ2K files.",
+                                             "https://github.com/uclouvain/openjpeg");
+                    if (HTJ2K_ENABLED)
+                        ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K files.",
+                                             "https://github.com/aous72/OpenJPH");
 #ifndef __EMSCRIPTEN__
                     ImGui::PE::Hyperlink("portable-file-dialogs",
                                          "Sam Hocevar's WTFPL portable GUI dialogs library, C++11, single-header.",
@@ -1073,6 +1074,9 @@ void HDRViewApp::draw_about_dialog(bool &open)
                                          "https://github.com/nothings/stb");
                     ImGui::PE::Hyperlink("tev", "Some code is adapted from Thomas Müller's tev.",
                                          "https://github.com/Tom94/tev");
+                    if (HEIC_ENABLED)
+                        ImGui::PE::Hyperlink("x265", "For encoding HEIC/HEVC/H265 files.",
+                                             "https://www.videolan.org/developers/x265.html");
 
                     ImGui::PE::End();
                 }
@@ -1117,11 +1121,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::Text("Image IO libraries:");
                 ImGui::Text("\tOpenEXR: %d.%d.%d\n", OPENEXR_VERSION_MAJOR, OPENEXR_VERSION_MINOR,
                             OPENEXR_VERSION_PATCH);
-#ifdef HDRVIEW_ENABLE_UHDR
-                ImGui::Text("\tlibuhdr: %s", UHDR_LIB_VERSION_STR);
-#else
-                ImGui::Text("\tlibuhdr: no");
-#endif
+
+                ImGui::Text("\tlibuhdr: %s", UHDR_ENABLED ? UHDR_LIB_VERSION_STR : "no");
 #ifdef HDRVIEW_ENABLE_LIBJPEG
 #ifdef LIBJPEG_TURBO_VERSION
 #define LIBJPEG_STR_HELPER(x) #x
@@ -1137,53 +1138,67 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::Text("\tlibjpeg:  no");
 #endif
 
-#ifdef HDRVIEW_ENABLE_JPEGXL
-                ImGui::Text("\tlibjxl: %d.%d.%d", JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION);
-#else
-                ImGui::Text("\tlibjxl:  no");
-#endif
-#ifdef HDRVIEW_ENABLE_LIBHEIF
-                ImGui::Text("\tlibheif: %s", heif_get_version());
-                ImGui::Text("\t\tHDRVIEW_ENABLE_HEIC : %s", YESNO(HEIC_ENABLED));
-                ImGui::Text("\t\tHDRVIEW_ENABLE_AVIF : %s", YESNO(AVIF_ENABLED));
-                ImGui::Text("\t\tHDRVIEW_ENABLE_AVCI : %s", YESNO(AVCI_ENABLED));
-                ImGui::Text("\t\tHDRVIEW_ENABLE_HTJ2K: %s", YESNO(HTJ2K_ENABLED));
-                ImGui::Text("\t\tFormat          decoding   encoding");
-                ImGui::Text("\t\t===================================");
-                ImGui::Text("\t\tAVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_AVC)),
-                            YESNO(heif_have_encoder_for_format(heif_compression_AVC)));
-                ImGui::Text("\t\tAV1             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_AV1)),
-                            YESNO(heif_have_encoder_for_format(heif_compression_AV1)));
-                ImGui::Text("\t\tHEVC            %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_HEVC)),
-                            YESNO(heif_have_encoder_for_format(heif_compression_HEVC)));
-                ImGui::Text("\t\tJPEG            %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_JPEG)),
-                            YESNO(heif_have_encoder_for_format(heif_compression_JPEG)));
-                ImGui::Text("\t\tJPEG2000        %-10s %s",
-                            YESNO(heif_have_decoder_for_format(heif_compression_JPEG2000)),
-                            YESNO(heif_have_encoder_for_format(heif_compression_JPEG2000)));
-                ImGui::Text("\t\tUncompressed    %-10s %s",
-                            YESNO(heif_have_decoder_for_format(heif_compression_uncompressed)),
-                            YESNO(heif_have_encoder_for_format(heif_compression_uncompressed)));
-                ImGui::Text("\t\tVVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_VVC)),
-                            YESNO(heif_have_encoder_for_format(heif_compression_VVC)));
-                ImGui::Text("\t\tEVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_EVC)),
-                            YESNO(heif_have_encoder_for_format(heif_compression_EVC)));
-#else
-                ImGui::Text("\tlibheif: no");
-#endif
-#ifdef HDRVIEW_ENABLE_LIBPNG
-                ImGui::Text("\tlibpng: %s", PNG_LIBPNG_VER_STRING);
-                ImGui::Text("\t\tPNG_TEXT_SUPPORTED: %s", YESNO(PNG_TEXT_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_eXIf_SUPPORTED: %s", YESNO(PNG_eXIf_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_EASY_ACCESS_SUPPORTED: %s", YESNO(PNG_EASY_ACCESS_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_READ_ALPHA_MODE_SUPPORTED: %s", YESNO(PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_GAMMA_SUPPORTED: %s", YESNO(PNG_GAMMA_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_USER_CHUNKS_SUPPORTED: %s", YESNO(PNG_USER_CHUNKS_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_APNG_SUPPORTED: %s", YESNO(PNG_APNG_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_PROGRESSIVE_READ_SUPPORTED: %s", YESNO(PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_iCCP_SUPPORTED: %s", YESNO(PNG_iCCP_SUPPORTED_ENABLED));
-                ImGui::Text("\t\tPNG_cICP_SUPPORTED: %s", YESNO(PNG_cICP_SUPPORTED_ENABLED));
-#endif
+                if (JPEGXL_ENABLED)
+                    ImGui::Text("\tlibjxl: %d.%d.%d", JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION);
+                else
+                    ImGui::Text("\tlibjxl:  no");
+
+                if (LIBHEIF_ENABLED)
+                {
+                    ImGui::Text("\tlibheif: %s", heif_get_version());
+                    ImGui::Text("\t\tHDRVIEW_ENABLE_HEIC : %s", YESNO(HEIC_ENABLED));
+                    ImGui::Text("\t\tHDRVIEW_ENABLE_AVIF : %s", YESNO(AVIF_ENABLED));
+                    ImGui::Text("\t\tHDRVIEW_ENABLE_AVCI : %s", YESNO(AVCI_ENABLED));
+                    ImGui::Text("\t\tHDRVIEW_ENABLE_J2K  : %s", YESNO(J2K_ENABLED));
+                    ImGui::Text("\t\tHDRVIEW_ENABLE_HTJ2K: %s", YESNO(HTJ2K_ENABLED));
+                    ImGui::Text("\t\tFormat          decoding   encoding");
+                    ImGui::Text("\t\t===================================");
+                    ImGui::Text("\t\tAVC             %-10s %s",
+                                YESNO(heif_have_decoder_for_format(heif_compression_AVC)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_AVC)));
+                    ImGui::Text("\t\tAV1             %-10s %s",
+                                YESNO(heif_have_decoder_for_format(heif_compression_AV1)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_AV1)));
+                    ImGui::Text("\t\tHEVC            %-10s %s",
+                                YESNO(heif_have_decoder_for_format(heif_compression_HEVC)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_HEVC)));
+                    ImGui::Text("\t\tJPEG            %-10s %s",
+                                YESNO(heif_have_decoder_for_format(heif_compression_JPEG)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_JPEG)));
+                    ImGui::Text("\t\tJPEG2000        %-10s %s",
+                                YESNO(heif_have_decoder_for_format(heif_compression_JPEG2000)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_JPEG2000)));
+                    ImGui::Text("\t\tJPEG2000 (HT)   %-10s %s",
+                                YESNO(heif_have_decoder_for_format(heif_compression_HTJ2K)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_HTJ2K)));
+                    ImGui::Text("\t\tUncompressed    %-10s %s",
+                                YESNO(heif_get_decoder_descriptors(heif_compression_uncompressed, nullptr, 0)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_uncompressed)));
+                    ImGui::Text("\t\tVVC             %-10s %s",
+                                YESNO(heif_have_decoder_for_format(heif_compression_VVC)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_VVC)));
+                    ImGui::Text("\t\tEVC             %-10s %s",
+                                YESNO(heif_have_decoder_for_format(heif_compression_EVC)),
+                                YESNO(heif_have_encoder_for_format(heif_compression_EVC)));
+                }
+                else
+                    ImGui::Text("\tlibheif: no");
+
+                if (LIBPNG_ENABLED)
+                {
+                    ImGui::Text("\tlibpng: %s", PNG_LIBPNG_VER_STRING);
+                    ImGui::Text("\t\tPNG_TEXT_SUPPORTED:             %s", YESNO(PNG_TEXT_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_eXIf_SUPPORTED:             %s", YESNO(PNG_eXIf_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_EASY_ACCESS_SUPPORTED:      %s", YESNO(PNG_EASY_ACCESS_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_READ_ALPHA_MODE_SUPPORTED:  %s", YESNO(PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_GAMMA_SUPPORTED:            %s", YESNO(PNG_GAMMA_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_USER_CHUNKS_SUPPORTED:      %s", YESNO(PNG_USER_CHUNKS_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_APNG_SUPPORTED:             %s", YESNO(PNG_APNG_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_PROGRESSIVE_READ_SUPPORTED: %s",
+                                YESNO(PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_iCCP_SUPPORTED:             %s", YESNO(PNG_iCCP_SUPPORTED_ENABLED));
+                    ImGui::Text("\t\tPNG_cICP_SUPPORTED:             %s", YESNO(PNG_cICP_SUPPORTED_ENABLED));
+                }
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
                 ImGui::PopFont();
