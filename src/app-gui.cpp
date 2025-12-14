@@ -1121,8 +1121,11 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::Text("Image IO libraries:");
                 ImGui::Text("\tOpenEXR: %d.%d.%d\n", OPENEXR_VERSION_MAJOR, OPENEXR_VERSION_MINOR,
                             OPENEXR_VERSION_PATCH);
-
-                ImGui::Text("\tlibuhdr: %s", UHDR_ENABLED ? UHDR_LIB_VERSION_STR : "no");
+#if UHDR_ENABLED
+                ImGui::Text("\tlibuhdr: %s", UHDR_LIB_VERSION_STR);
+#else
+                ImGui::Text("\tlibuhdr: no");
+#endif
 #ifdef HDRVIEW_ENABLE_LIBJPEG
 #ifdef LIBJPEG_TURBO_VERSION
 #define LIBJPEG_STR_HELPER(x) #x

@@ -512,6 +512,34 @@ option(HDRVIEW_ENABLE_LIBJPEG "Enable libjpeg(-turbo) support" ON)
 if(HDRVIEW_ENABLE_LIBJPEG)
   find_package(JPEG)
   if(JPEG_FOUND)
+    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
+
+    include(CheckCXXSourceCompiles)
+
+    # this is needed for CheckCXXSourceCompiles
+    set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES})
+    set(CMAKE_REQUIRED_INCLUDES ${JPEG_INCLUDE_DIRS})
+    check_cxx_source_compiles(
+      "
+  #include <stddef.h>
+  #include <stdio.h>
+  #include <jpeglib.h>
+
+  int main() {
+    jpeg_write_icc_profile(NULL, NULL, 0);
+    return 0;
+  }
+  "
+      HAVE_JPEG_WRITE_ICC_PROFILE
+    )
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    unset(CMAKE_REQUIRED_INCLUDES)
+
+    message(STATUS "Found libjpeg with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
+
+    find_package(TurboJpeg QUIET)
+    message(STATUS "JPEG is libjpeg-turbo = ${TurboJpeg_FOUND}")
+
     list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
   else()
     message(STATUS "libjpeg library not found, will build libjpeg-turbo")
