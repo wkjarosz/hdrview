@@ -20,8 +20,17 @@
 #include "shader.h"
 #include "texture.h"
 
+#include <fmt/chrono.h>
+
 using namespace std;
 using namespace HelloImGui;
+
+static std::chrono::system_clock::time_point to_system_clock(std::filesystem::file_time_type ftime)
+{
+    using namespace std::chrono;
+    return time_point_cast<system_clock::duration>(ftime - std::filesystem::file_time_type::clock::now() +
+                                                   system_clock::now());
+}
 
 void Image::draw_histogram()
 {
@@ -356,7 +365,8 @@ int Image::draw_channel_rows(int img_idx, int &id, bool is_current, bool is_refe
 
 void Image::draw_info()
 {
-    auto bold_font = hdrview()->font("sans bold");
+    std::locale loc("en_US.UTF-8");
+    auto        bold_font = hdrview()->font("sans bold");
 
     static ImGuiTextFilter filter;
     const ImVec2           button_size   = ImGui::IconButtonSize();
@@ -393,6 +403,12 @@ void Image::draw_info()
         {
             ImGui::Indent(HelloImGui::EmSize(0.5f));
             filtered_property("File name", filename);
+            filtered_property(
+                "File size",
+                fmt::format(std::locale("en_US.UTF-8"), "{:.1h} ({:L} bytes)", human_readible{size_bytes}, size_bytes),
+                "This is the size of the image file on disk. If the image consists of multiple parts, "
+                "this is the size of the entire file.");
+            filtered_property("Last modified", fmt::format("{:%b %d, %Y at %I:%M %p}", to_system_clock(last_modified)));
             filtered_property("Part name", partname.empty() ? "<none>" : partname.c_str());
             filtered_property("Channel selector", channel_selector.empty() ? "<none>" : channel_selector.c_str());
             filtered_property("Loader", metadata.value<string>("loader", "unknown"));
@@ -407,23 +423,14 @@ void Image::draw_info()
                               "Type of alpha channel stored in the file. HDRView always converts the file's gamma to "
                               "premultiplied alpha upon load.");
             if (!exif_data.empty())
-            {
-                auto hs = human_readable_size(exif_data.size());
-                filtered_property("EXIF data", fmt::format("{} {}", hs.first, hs.second),
+                filtered_property("EXIF data", fmt::format("{:.0h}", human_readible{exif_data.size()}),
                                   "Size of the EXIF metadata block embedded in the image file.");
-            }
             if (!xmp_data.empty())
-            {
-                auto hs = human_readable_size(xmp_data.size());
-                filtered_property("XMP data", fmt::format("{} {}", hs.first, hs.second),
+                filtered_property("XMP data", fmt::format("{:.0h}", human_readible{xmp_data.size()}),
                                   "Size of the XMP metadata block embedded in the image file.");
-            }
             if (!icc_data.empty())
-            {
-                auto hs = human_readable_size(icc_data.size());
-                filtered_property("ICC data", fmt::format("{} {}", hs.first, hs.second),
+                filtered_property("ICC data", fmt::format("{:.0h}", human_readible{icc_data.size()}),
                                   "Size of the ICC profile embedded in the image file.");
-            }
             ImGui::Unindent(HelloImGui::EmSize(0.5f));
         }
 

@@ -304,6 +304,7 @@ public:
 
     fs::path           path;
     fs::file_time_type last_modified;
+    size_t             size_bytes = 0;
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().

@@ -410,9 +410,8 @@ void HDRViewApp::open_image()
                 spdlog::debug("User canceled upload.");
             else
             {
-                auto [size, unit] = human_readable_size(buffer.size());
-                spdlog::debug("User uploaded a {:.0f} {} file with filename '{}' of mime-type '{}'", size, unit,
-                              filename, mime_type);
+                spdlog::debug("User uploaded a {:.0h} file with filename '{}' of mime-type '{}'",
+                              human_readible{buffer.size()}, filename, mime_type);
                 hdrview()->load_image(filename, buffer, true, load_image_options());
             }
         });

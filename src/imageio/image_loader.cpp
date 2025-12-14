@@ -7,6 +7,7 @@
 #include "image_loader.h"
 #include "app.h"
 #include "colorspace.h"
+#include "common.h"
 #include "fonts.h"
 #include "hello_imgui/dpi_aware.h"
 #include "image.h"
@@ -349,8 +350,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     {
         // if we have a buffer, we assume it is a file that has been downloaded
         // and we load it directly from the buffer
-        auto [sz, unit] = human_readable_size(buffer.size());
-        spdlog::info("Loading image '{}' from {:.0f} {} buffer.", filename, sz, unit);
+        spdlog::info("Loading image '{}' from {:.0h} buffer.", filename, human_readible{buffer.size()});
 
         if (to_lower(get_extension(filename)) == ".zip")
         {
@@ -860,6 +860,12 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
         if (!recognized)
             throw invalid_argument("This doesn't seem to be a supported image file.");
 
+        // compute size of the input stream
+        std::streampos pos = is.tellg();
+        is.seekg(0, std::ios::end);
+        std::streampos size = is.tellg();
+        is.seekg(pos);
+
         for (auto i : images)
         {
             try
@@ -867,6 +873,7 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
                 i->finalize();
                 i->filename   = filename;
                 i->short_name = i->file_and_partname();
+                i->size_bytes = static_cast<size_t>(size);
 
                 // If multiple image "parts" were loaded and they have names, store these names in the image's
                 // channel selector. This is useful if we later want to reload a specific image part from the

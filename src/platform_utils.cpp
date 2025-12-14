@@ -129,8 +129,7 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size,
                                               bool should_select)
     {
-        auto [size, unit] = human_readable_size(buffer_size);
-        spdlog::info("User dropped a {:.0f} {} file with filename '{}'", size, unit, filename);
+        spdlog::info("User dropped a {:.0h} file with filename '{}'", human_readible{buffer_size}, filename);
 
         if (!buffer || buffer_size == 0)
         {

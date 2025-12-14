@@ -314,10 +314,12 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     {
         tf.type                    = TransferFunction::Gamma;
         tf.gamma                   = float(1.0 / gamma);
-        metadata["header"]["gAMA"] = {{"value", 1.0 / gamma},
-                                      {"string", fmt::format("{:.4f} ({:.4f})", 1.0 / gamma, gamma)},
-                                      {"type", "float"},
-                                      {"description", "PNG gAMA chunk specifies the image gamma"}};
+        metadata["header"]["gAMA"] = {
+            {"value", 1.0 / gamma},
+            {"string", fmt::format("{:.4f} ({:.4f})", gamma, 1.0 / gamma)},
+            {"type", "float"},
+            {"description",
+             "PNG gAMA chunk specifies the image gamma. Note that PNG stores the reciprocal of the gamma."}};
         spdlog::info("Found gamma chunk: {:.4f}", 1.0 / gamma);
     }
     else
@@ -454,58 +456,52 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 #endif
 
 #if defined(PNG_EASY_ACCESS_SUPPORTED)
+    auto color_type_name = [](png_byte t)
     {
-        auto color_type_name = [](png_byte t)
+        switch (t)
         {
-            switch (t)
-            {
-            case PNG_COLOR_TYPE_GRAY: return "Gray";
-            case PNG_COLOR_TYPE_PALETTE: return "Palette";
-            case PNG_COLOR_TYPE_RGB: return "RGB";
-            case PNG_COLOR_TYPE_RGB_ALPHA: return "RGB+Alpha";
-            case PNG_COLOR_TYPE_GRAY_ALPHA: return "Gray+Alpha";
-            default: return "Unknown";
-            }
-        };
-        auto b                           = png_get_color_type(png_ptr, info_ptr.get());
-        metadata["header"]["color type"] = {
-            {"value", b}, {"string", fmt::format("{} ({})", color_type_name(b), b)}, {"type", "int"}};
+        case PNG_COLOR_TYPE_GRAY: return "Gray";
+        case PNG_COLOR_TYPE_PALETTE: return "Palette";
+        case PNG_COLOR_TYPE_RGB: return "RGB";
+        case PNG_COLOR_TYPE_RGB_ALPHA: return "RGB+Alpha";
+        case PNG_COLOR_TYPE_GRAY_ALPHA: return "Gray+Alpha";
+        default: return "Unknown";
+        }
+    };
+    auto b                           = png_get_color_type(png_ptr, info_ptr.get());
+    metadata["header"]["Color type"] = {
+        {"value", b}, {"string", fmt::format("{} ({})", color_type_name(b), b)}, {"type", "int"}};
 
-        b                                 = png_get_filter_type(png_ptr, info_ptr.get());
-        metadata["header"]["filter type"] = {
-            {"value", b},
-            {"string", fmt::format("{} ({})", b == 0 ? "Default" : "Intrapixel Differencing", b)},
-            {"type", "int"}};
+    b                                    = png_get_interlace_type(png_ptr, info_ptr.get());
+    metadata["header"]["Interlace type"] = {
+        {"value", b},
+        {"string", fmt::format("{} ({})", b == PNG_INTERLACE_NONE ? "None" : "Adam7", b)},
+        {"type", "int"}};
+#endif
 
-        b                                      = png_get_compression_type(png_ptr, info_ptr.get());
-        metadata["header"]["compression type"] = {
-            {"value", b},
-            {"string", fmt::format("{} ({})", b == 0 ? "Default" : "Intrapixel Differencing", b)},
-            {"type", "int"}};
+#ifdef PNG_pHYs_SUPPORTED
+    int   unit_type{PNG_OFFSET_PIXEL};
+    uint2 u2{0u, 0u};
+    if (png_get_pHYs(png_ptr, info_ptr.get(), &u2.x, &u2.y, &unit_type))
+    {
+        if (unit_type == PNG_RESOLUTION_METER)
+            metadata["header"]["Pixels per meter"] = {
+                {"value", {u2.x, u2.y, (uint)unit_type}}, {"string", fmt::format("{}", u2)}, {"type", "int array"}};
+        else
+            metadata["header"]["Pixels aspect ratio"] = {{"value", {u2.x, u2.y, (uint)unit_type}},
+                                                         {"string", fmt::format("{} x {}", u2.x, u2.y)},
+                                                         {"type", "int array"}};
+    }
+#endif
 
-        b                                    = png_get_interlace_type(png_ptr, info_ptr.get());
-        metadata["header"]["interlace type"] = {
-            {"value", b},
-            {"string", fmt::format("{} ({})", b == PNG_INTERLACE_NONE ? "None" : "Adam7", b)},
-            {"type", "int"}};
-
-        auto u32                                 = png_get_x_pixels_per_meter(png_ptr, info_ptr.get());
-        metadata["header"]["x pixels per meter"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
-        u32                                      = png_get_y_pixels_per_meter(png_ptr, info_ptr.get());
-        metadata["header"]["y pixels per meter"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
-
-        u32                                   = png_get_x_offset_pixels(png_ptr, info_ptr.get());
-        metadata["header"]["x offset pixels"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
-        u32                                   = png_get_y_offset_pixels(png_ptr, info_ptr.get());
-        metadata["header"]["y offset pixels"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
-
-        u32                                    = png_get_x_offset_microns(png_ptr, info_ptr.get());
-        metadata["header"]["x offset microns"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
-        u32                                    = png_get_y_offset_microns(png_ptr, info_ptr.get());
-        metadata["header"]["y offset microns"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
-
-        auto f                                   = png_get_pixel_aspect_ratio(png_ptr, info_ptr.get());
-        metadata["header"]["pixel aspect ratio"] = {{"value", f}, {"string", to_string(f)}, {"type", "float"}};
+#ifdef PNG_oFFs_SUPPORTED
+    int2 i2{0, 0};
+    if (png_get_oFFs(png_ptr, info_ptr.get(), &i2.x, &i2.y, &unit_type))
+    {
+        metadata["header"]["Display offset"] = {
+            {"value", {i2.x, i2.y, unit_type}},
+            {"string", fmt::format("{} {}", i2, unit_type == PNG_OFFSET_PIXEL ? "pixels" : "microns")},
+            {"type", "int array"}};
     }
 #endif
 
@@ -547,7 +543,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     if (animation)
     {
         spdlog::info("Detected APNG with {} frames, {} plays", num_frames, num_plays);
-        metadata["header"]["animation"] = {
+        metadata["header"]["Animation"] = {
             {"value", {num_frames, num_plays}},
             {"string", fmt::format("{} frames, {} plays", num_frames, num_plays)},
             {"type", "array"},
@@ -556,7 +552,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     else
     {
         num_frames = 1, num_plays = 0;
-        metadata["header"]["animation"] = {
+        metadata["header"]["Animation"] = {
             {"value", {num_frames, num_plays}},
             {"string", "Not an animation"},
             {"type", "array"},

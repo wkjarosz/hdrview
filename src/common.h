@@ -54,6 +54,99 @@ std::string format_indented(int indent, fmt::format_string<Args...> format_str, 
     return fmt::format("{:{}}", "", indent) + fmt::format(format_str, std::forward<Args>(args)...);
 }
 
+/// A struct for formatting byte sizes in a human-readable way
+struct human_readible
+{
+    std::size_t bytes;
+};
+
+/// Custom formatter for human_size struct
+template <>
+struct fmt::formatter<human_readible>
+{
+    fmt::formatter<double> float_fmt;
+
+    enum class Mode
+    {
+        Raw,
+        Binary,
+        Decimal
+    };
+    Mode mode = Mode::Raw;
+
+    constexpr auto parse(format_parse_context &ctx)
+    {
+        auto it  = ctx.begin();
+        auto end = ctx.end();
+
+        // Scan for H or h in the format string
+        auto mode_it = it;
+        while (mode_it != end && *mode_it != 'H' && *mode_it != 'h') ++mode_it;
+
+        if (mode_it != end)
+        {
+            // Found H or h, set the mode
+            mode = (*mode_it == 'H') ? Mode::Binary : Mode::Decimal;
+
+            // Use stack buffer to create format string with 'f' (avoids heap allocation)
+            char        buf[32] = {}; // Format specs are typically < 20 chars
+            std::size_t len     = mode_it - it;
+            if (len > 0)
+                std::copy(it, mode_it, buf);
+            buf[len] = 'f';
+
+            // Parse the modified format string
+            auto temp_ctx = fmt::format_parse_context(std::string_view(buf, len + 1));
+            float_fmt.parse(temp_ctx);
+
+            return ++mode_it;
+        }
+
+        // No H or h found, parse as-is (raw mode or float format)
+        return float_fmt.parse(ctx);
+    }
+
+    template <typename FormatContext>
+    auto format(const human_readible &hs, FormatContext &ctx) const
+    {
+        if (mode == Mode::Raw)
+        {
+            return fmt::format_to(ctx.out(), "{}", hs.bytes);
+        }
+
+        double value = hs.bytes;
+        int    idx   = 0;
+
+        if (mode == Mode::Binary)
+        {
+            static const char *suffixes[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+
+            while (value >= 1024.0 && idx < 5)
+            {
+                value /= 1024.0;
+                ++idx;
+            }
+
+            auto out = float_fmt.format(value, ctx);
+            return fmt::format_to(out, " {}", suffixes[idx]);
+        }
+        else
+        {
+            // Decimal SI units
+            static const char *suffixes[] = {"B", "kB", "MB", "GB", "TB", "PB"};
+
+            while (value >= 1000.0 && idx < 5)
+            {
+                value /= 1000.0;
+                ++idx;
+            }
+
+            auto out = float_fmt.format(value, ctx);
+            return fmt::format_to(out, " {}", suffixes[idx]);
+        }
+    }
+};
+
 //! Returns 1 if architecture is little endian, 0 in case of big endian.
 inline bool is_little_endian()
 {
