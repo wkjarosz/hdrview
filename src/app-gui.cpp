@@ -1146,46 +1146,41 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 else
                     ImGui::Text("\tlibjxl:  no");
 
-                if (LIBHEIF_ENABLED)
-                {
-                    ImGui::Text("\tlibheif: %s", heif_get_version());
-                    ImGui::Text("\t\tHDRVIEW_ENABLE_HEIC : %s", YESNO(HEIC_ENABLED));
-                    ImGui::Text("\t\tHDRVIEW_ENABLE_AVIF : %s", YESNO(AVIF_ENABLED));
-                    ImGui::Text("\t\tHDRVIEW_ENABLE_AVCI : %s", YESNO(AVCI_ENABLED));
-                    ImGui::Text("\t\tHDRVIEW_ENABLE_J2K  : %s", YESNO(J2K_ENABLED));
-                    ImGui::Text("\t\tHDRVIEW_ENABLE_HTJ2K: %s", YESNO(HTJ2K_ENABLED));
-                    ImGui::Text("\t\tFormat          decoding   encoding");
-                    ImGui::Text("\t\t===================================");
-                    ImGui::Text("\t\tAVC             %-10s %s",
-                                YESNO(heif_have_decoder_for_format(heif_compression_AVC)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_AVC)));
-                    ImGui::Text("\t\tAV1             %-10s %s",
-                                YESNO(heif_have_decoder_for_format(heif_compression_AV1)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_AV1)));
-                    ImGui::Text("\t\tHEVC            %-10s %s",
-                                YESNO(heif_have_decoder_for_format(heif_compression_HEVC)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_HEVC)));
-                    ImGui::Text("\t\tJPEG            %-10s %s",
-                                YESNO(heif_have_decoder_for_format(heif_compression_JPEG)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_JPEG)));
-                    ImGui::Text("\t\tJPEG2000        %-10s %s",
-                                YESNO(heif_have_decoder_for_format(heif_compression_JPEG2000)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_JPEG2000)));
-                    ImGui::Text("\t\tJPEG2000 (HT)   %-10s %s",
-                                YESNO(heif_have_decoder_for_format(heif_compression_HTJ2K)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_HTJ2K)));
-                    ImGui::Text("\t\tUncompressed    %-10s %s",
-                                YESNO(heif_get_decoder_descriptors(heif_compression_uncompressed, nullptr, 0)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_uncompressed)));
-                    ImGui::Text("\t\tVVC             %-10s %s",
-                                YESNO(heif_have_decoder_for_format(heif_compression_VVC)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_VVC)));
-                    ImGui::Text("\t\tEVC             %-10s %s",
-                                YESNO(heif_have_decoder_for_format(heif_compression_EVC)),
-                                YESNO(heif_have_encoder_for_format(heif_compression_EVC)));
-                }
-                else
-                    ImGui::Text("\tlibheif: no");
+#ifdef HDRVIEW_ENABLE_LIBHEIF
+                ImGui::Text("\tlibheif: %s", heif_get_version());
+#else
+                ImGui::Text("\tlibheif: no");
+#endif
+                ImGui::Text("\t\tHDRVIEW_ENABLE_LIBHEIF : %s", YESNO(LIBHEIF_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_HEIC    : %s", YESNO(HEIC_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_AVIF    : %s", YESNO(AVIF_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_AVCI    : %s", YESNO(AVCI_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_J2K     : %s", YESNO(J2K_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_HTJ2K   : %s", YESNO(HTJ2K_ENABLED));
+#ifdef HDRVIEW_ENABLE_LIBHEIF
+                ImGui::Text("\t\tFormat          decoding   encoding");
+                ImGui::Text("\t\t===================================");
+                ImGui::Text("\t\tAVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_AVC)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_AVC)));
+                ImGui::Text("\t\tAV1             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_AV1)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_AV1)));
+                ImGui::Text("\t\tHEVC            %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_HEVC)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_HEVC)));
+                ImGui::Text("\t\tJPEG            %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_JPEG)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_JPEG)));
+                ImGui::Text("\t\tJPEG2000        %-10s %s",
+                            YESNO(heif_have_decoder_for_format(heif_compression_JPEG2000)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_JPEG2000)));
+                ImGui::Text("\t\tJPEG2000 (HT)   %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_HTJ2K)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_HTJ2K)));
+                ImGui::Text("\t\tUncompressed    %-10s %s",
+                            YESNO(heif_get_decoder_descriptors(heif_compression_uncompressed, nullptr, 0)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_uncompressed)));
+                ImGui::Text("\t\tVVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_VVC)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_VVC)));
+                ImGui::Text("\t\tEVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_EVC)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_EVC)));
+#endif
 
                 if (LIBPNG_ENABLED)
                 {

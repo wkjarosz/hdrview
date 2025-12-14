@@ -54,13 +54,55 @@ std::string format_indented(int indent, fmt::format_string<Args...> format_str, 
     return fmt::format("{:{}}", "", indent) + fmt::format(format_str, std::forward<Args>(args)...);
 }
 
-/// A struct for formatting byte sizes in a human-readable way
+/**
+    @brief A struct for formatting byte sizes in a human-readable way using fmt.
+
+    This type wraps a byte count and provides a custom fmt formatter that converts it to
+    human-readable units (B, KB, MB, GB, etc.) with full control over formatting.
+
+    @par Format Specification
+    The format specification grammar is:
+    @code
+    [[fill]align][width][.precision][mode]
+    @endcode
+
+    Where:
+    - `fill` (optional): Any character to use for padding (default is space)
+    - `align` (optional): Text alignment within the field width
+      - `<` : Left align (e.g., "32.5 MB    ")
+      - `>` : Right align (e.g., "    32.5 MB")
+      - `^` : Center align (e.g., "  32.5 MB  ")
+    - `width` (optional): Minimum field width for the entire output (number + space + unit)
+    - `.precision` (optional): Number of decimal places for the numeric value
+    - `mode` (required for human-readable output):
+      - `H` : Binary units (B, KiB, MiB, GiB, TiB, PiB) using 1024 divisor
+      - `h` : Decimal SI units (B, kB, MB, GB, TB, PB) using 1000 divisor
+      - (omit): Raw mode - prints the raw byte count without conversion
+
+    @par Examples
+    @code
+    human_readible m{32567542};
+    fmt::format("{:h}", m)       // "32.567542 MB"
+    fmt::format("{:.2h}", m)     // "32.57 MB"
+    fmt::format("{:H}", m)       // "31.068089 MiB"
+    fmt::format("{:.2H}", m)     // "31.07 MiB"
+    fmt::format("{:20h}", m)     // "        32.567542 MB"
+    fmt::format("{:<20h}", m)    // "32.567542 MB        "
+    fmt::format("{:^20h}", m)    // "    32.567542 MB    "
+    fmt::format("{:*<20h}", m)   // "32.567542 MB********"
+    fmt::format("{:0>20.2h}", m) // "000000000032.57 MB"
+    fmt::format("{}", m)         // "32567542" (raw mode)
+    @endcode
+
+    @note The width applies to the entire formatted output (number + space + suffix), ensuring
+          the suffix stays attached to the number with proper alignment.
+ */
 struct human_readible
 {
     std::size_t bytes;
 };
 
-/// Custom formatter for human_size struct
+/// Custom fmt::formatter specialization for human_readible
 template <>
 struct fmt::formatter<human_readible>
 {
@@ -74,10 +116,39 @@ struct fmt::formatter<human_readible>
     };
     Mode mode = Mode::Raw;
 
+    // Store width, alignment, and fill for manual application to the complete output
+    int  width = 0;
+    char fill  = ' ';
+    char align = '\0'; // '<', '>', '^', or '\0' for default (right)
+
     constexpr auto parse(format_parse_context &ctx)
     {
         auto it  = ctx.begin();
         auto end = ctx.end();
+
+        // Parse fill and align (must come before width)
+        if (it != end && it + 1 != end && (*(it + 1) == '<' || *(it + 1) == '>' || *(it + 1) == '^'))
+        {
+            fill  = *it;
+            align = *(it + 1);
+            it += 2;
+        }
+        else if (it != end && (*it == '<' || *it == '>' || *it == '^'))
+        {
+            align = *it;
+            ++it;
+        }
+
+        // Parse width
+        if (it != end && *it >= '0' && *it <= '9')
+        {
+            width = 0;
+            while (it != end && *it >= '0' && *it <= '9')
+            {
+                width = width * 10 + (*it - '0');
+                ++it;
+            }
+        }
 
         // Scan for H or h in the format string
         auto mode_it = it;
@@ -88,16 +159,21 @@ struct fmt::formatter<human_readible>
             // Found H or h, set the mode
             mode = (*mode_it == 'H') ? Mode::Binary : Mode::Decimal;
 
-            // Use stack buffer to create format string with 'f' (avoids heap allocation)
-            char        buf[32] = {}; // Format specs are typically < 20 chars
-            std::size_t len     = mode_it - it;
-            if (len > 0)
-                std::copy(it, mode_it, buf);
-            buf[len] = 'f';
+            // Build format string for float (precision, etc., but no width/alignment)
+            // Everything between current position and H/h goes to float formatter
+            std::size_t len = mode_it - it;
+            if (len >= 31) // Reserve 1 byte for 'f' + null terminator
+                throw fmt::format_error("Format specification too long");
 
-            // Parse the modified format string
-            auto temp_ctx = fmt::format_parse_context(std::string_view(buf, len + 1));
-            float_fmt.parse(temp_ctx);
+            if (len > 0)
+            {
+                char buf[32] = {};
+                std::copy(it, mode_it, buf);
+                buf[len]      = 'f';
+                buf[len + 1]  = '\0';
+                auto temp_ctx = fmt::format_parse_context(std::string_view(buf, len + 1));
+                float_fmt.parse(temp_ctx);
+            }
 
             return ++mode_it;
         }
@@ -110,40 +186,67 @@ struct fmt::formatter<human_readible>
     auto format(const human_readible &hs, FormatContext &ctx) const
     {
         if (mode == Mode::Raw)
-        {
             return fmt::format_to(ctx.out(), "{}", hs.bytes);
-        }
 
-        double value = hs.bytes;
-        int    idx   = 0;
+        // Calculate value and select suffix
+        double      value = static_cast<double>(hs.bytes);
+        const char *suffix;
+        int         idx = 0;
 
         if (mode == Mode::Binary)
         {
-            static const char *suffixes[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
-
+            static constexpr const char *suffixes[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
             while (value >= 1024.0 && idx < 5)
             {
                 value /= 1024.0;
                 ++idx;
             }
-
-            auto out = float_fmt.format(value, ctx);
-            return fmt::format_to(out, " {}", suffixes[idx]);
+            suffix = suffixes[idx];
         }
         else
         {
-            // Decimal SI units
-            static const char *suffixes[] = {"B", "kB", "MB", "GB", "TB", "PB"};
-
+            static constexpr const char *suffixes[] = {"B", "kB", "MB", "GB", "TB", "PB"};
             while (value >= 1000.0 && idx < 5)
             {
                 value /= 1000.0;
                 ++idx;
             }
-
-            auto out = float_fmt.format(value, ctx);
-            return fmt::format_to(out, " {}", suffixes[idx]);
+            suffix = suffixes[idx];
         }
+
+        // Format to a temporary buffer to measure size
+        auto buf      = fmt::memory_buffer();
+        auto temp_ctx = fmt::format_context(fmt::appender(buf), {}, {});
+        float_fmt.format(value, temp_ctx);
+        fmt::format_to(fmt::appender(buf), " {}", suffix);
+
+        // Apply width and alignment
+        int result_width = static_cast<int>(buf.size());
+        if (width > 0 && result_width < width)
+        {
+            int padding = width - result_width;
+
+            if (align == '<') // left align
+            {
+                auto out = fmt::format_to(ctx.out(), "{}", fmt::to_string(buf));
+                std::fill_n(out, padding, fill);
+                return out;
+            }
+            else if (align == '^') // center align
+            {
+                int  left_pad = padding / 2;
+                auto out      = std::fill_n(ctx.out(), left_pad, fill);
+                out           = fmt::format_to(out, "{}", fmt::to_string(buf));
+                return std::fill_n(out, padding - left_pad, fill);
+            }
+            else // right align (default or '>')
+            {
+                auto out = std::fill_n(ctx.out(), padding, fill);
+                return fmt::format_to(out, "{}", fmt::to_string(buf));
+            }
+        }
+
+        return fmt::format_to(ctx.out(), "{}", fmt::to_string(buf));
     }
 };
 
@@ -202,24 +305,6 @@ inline T lerp(T a, T b, S t)
     return T((S(1) - t) * a + t * b);
 }
 
-template <typename T>
-std::vector<T> linspaced(size_t num, T a, T b)
-{
-    std::vector<T> retVal(num);
-    for (size_t i = 0; i < num; ++i) retVal[i] = lerp(a, b, T(i) / (num - 1));
-
-    return retVal;
-}
-
-template <size_t Num, typename T>
-std::array<T, Num> linspaced(T a, T b)
-{
-    std::array<T, Num> ret;
-    for (size_t i = 0; i < Num; ++i) ret[i] = lerp(a, b, T(i) / (Num - 1));
-
-    return ret;
-}
-
 /*!
  * @brief Inverse linear interpolation.
  *
@@ -270,116 +355,6 @@ inline T smootherstep(T a, T b, T x)
 {
     T t = std::clamp(lerp_factor(a, b, x), T(0), T(1));
     return t * t * t * (t * (t * T(6) - T(15)) + T(10));
-}
-
-/*!
- * @brief  Evaluates Perlin's bias function to control the mean/midpoint of a function.
- *
- * Remaps the value t to increase/decrease the midpoint while preserving the values at t=0 and t=1.
- *
- * As described in:
- * "Hypertexture"
- * Ken Perlin and Eric M. Hoffert: Computer Graphics, v23, n3, p287-296, 1989.
- *
- * Properties:
- *    bias(0.0, a) = 0,
- *    bias(0.5, a) = a,
- *    bias(1.0, a) = 1, and
- *    bias(t  , a) remaps the value t using a power curve.
- *
- * @tparam T The template parameter (typically float or double)
- * @param  t The percentage value in [0,1]
- * @param  a The shape parameter in [0,1]
- * @return   The remapped result in [0,1]
- */
-template <typename T>
-inline T bias_Perlin(T t, T a)
-{
-    return pow(t, -log2(a));
-}
-
-/*!
- * @brief  Perlin's gain function to increase/decrease the gradient/slope of the input at the midpoint.
- *
- * Remaps the value t to increase or decrease contrast using an s-curve (or inverse s-curve) function.
- *
- * As described in:
- * "Hypertexture"
- * Ken Perlin and Eric M. Hoffert: Computer Graphics, v23, n3, p287-296, 1989.
- *
- * Properties:
- *    gain(0.0, P) = 0.0,
- *    gain(0.5, P) = 0.5,
- *    gain(1.0, P) = 1.0,
- *    gain(t  , 1) = t.
- *    gain(gain(t, P, 1/P) = t.
- *
- * @tparam T The template parameter (typically float or double)
- * @param  t The percentage value in [0,1]
- * @param  P The shape exponent. In Perlin's original version the exponent P = -log2(a).
- * 			 In this version we pass the exponent directly to avoid the logarithm.
- * 			 P > 1 creates an s-curve, and P < 1 an inverse s-curve.
- * 			 If the input is a linear ramp, the slope of the output at the midpoint 0.5 becomes P.
- * @return   The remapped result in [0,1]
- */
-template <typename T>
-inline T gain_Perlin(T t, T P)
-{
-    if (t > T(0.5))
-        return T(1) - T(0.5) * pow(T(2) - T(2) * t, P);
-    else
-        return T(0.5) * pow(T(2) * t, P);
-}
-
-/*!
- * @brief  Evaluates Schlick's rational version of Perlin's bias function.
- *
- * As described in:
- * "Fast Alternatives to Perlin's Bias and Gain Functions"
- * Christophe Schlick: Graphics Gems IV, p379-382, April 1994.
- *
- * @tparam T The template parameter (typically float or double)
- * @param  t The percentage value (between 0 and 1)
- * @param  a The shape parameter (between 0 and 1)
- * @return   The remapped result
- */
-template <typename T>
-inline T bias_Schlick(T t, T a)
-{
-    return t / ((((T(1) / a) - T(2)) * (T(1) - t)) + T(1));
-}
-
-/*!
- * @brief  Evaluates Schlick's rational version of Perlin's gain function.
- *
- * As described in:
- * "Fast Alternatives to Perlin's Bias and Gain Functions"
- * Christophe Schlick: Graphics Gems IV, p379-382, April 1994.
- *
- * @tparam T The template parameter (typically float or double)
- * @param  t The percentage value (between 0 and 1)
- * @param  a The shape parameter (between 0 and 1)
- * @return   The remapped result
- */
-template <typename T>
-inline T gain_Schlick(T t, T a)
-{
-    if (t < T(0.5))
-        return bias_Schlick(t * T(2), a) / T(2);
-    else
-        return bias_Schlick(t * T(2) - T(1), T(1) - a) / T(2) + T(0.5);
-}
-
-template <typename T>
-inline T brightness_contrast_linear(T v, T slope, T midpoint)
-{
-    return (v - midpoint) * slope + T(0.5);
-}
-
-template <typename T>
-inline T brightness_contrast_nonlinear(T v, T slope, T bias)
-{
-    return gain_Perlin(bias_Schlick(saturate(v), bias), slope);
 }
 
 //! Returns a modulus b.
