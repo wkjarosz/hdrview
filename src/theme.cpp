@@ -258,6 +258,11 @@ void Theme::load(json j)
         if (j.contains("style"))
         {
             spdlog::debug("Restoring custom ImGui style values from settings:\n{}", j["style"].dump(2));
+            spdlog::debug("[DIAGNOSTIC] Before loading custom style: FontSizeBase={}, FontScaleMain={}, "
+                          "FontScaleDpi={}, WindowPadding=({},{})",
+                          ImGui::GetStyle().FontSizeBase, ImGui::GetStyle().FontScaleMain,
+                          ImGui::GetStyle().FontScaleDpi, ImGui::GetStyle().WindowPadding.x,
+                          ImGui::GetStyle().WindowPadding.y);
             json   &j_style    = j["style"];
             auto   &style      = ImGui::GetStyle();
             ImVec4 *colors     = ImGui::GetStyle().Colors;
@@ -333,6 +338,12 @@ void Theme::load(json j)
             read_float1("CircleTessellationMaxError", style.CircleTessellationMaxError);
             if (j_style.contains("WindowMenuButtonPosition"))
                 style.WindowMenuButtonPosition = (ImGuiDir)j_style["WindowMenuButtonPosition"].get<int>();
+
+            spdlog::debug(
+                "[DIAGNOSTIC] After loading custom style: FontSizeBase={}, FontScaleMain={}, FontScaleDpi={}, "
+                "WindowPadding=({},{})",
+                style.FontSizeBase, style.FontScaleMain, style.FontScaleDpi, style.WindowPadding.x,
+                style.WindowPadding.y);
         }
     }
     else
@@ -349,8 +360,13 @@ void Theme::save(json &j) const
     if (theme != CUSTOM_THEME)
         return;
 
-    auto   &j_style = j["style"];
-    ImVec4 *colors  = ImGui::GetStyle().Colors;
+    const auto &style = ImGui::GetStyle();
+    spdlog::debug(
+        "[DIAGNOSTIC] Saving custom style: FontSizeBase={}, FontScaleMain={}, FontScaleDpi={}, WindowPadding=({},{})",
+        style.FontSizeBase, style.FontScaleMain, style.FontScaleDpi, style.WindowPadding.x, style.WindowPadding.y);
+
+    auto         &j_style = j["style"];
+    const ImVec4 *colors  = style.Colors;
     // Save all ImGuiCol colors
     for (int col = 0; col < ImGuiCol_COUNT; ++col)
     {
@@ -359,8 +375,6 @@ void Theme::save(json &j) const
         if (col_name)
             j_style[col_name] = {c.x, c.y, c.z, c.w};
     }
-
-    const auto &style                      = ImGui::GetStyle();
     j_style["Alpha"]                       = style.Alpha;
     j_style["DisabledAlpha"]               = style.DisabledAlpha;
     j_style["WindowPadding"]               = {style.WindowPadding.x, style.WindowPadding.y};
