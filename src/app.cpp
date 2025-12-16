@@ -379,7 +379,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         j["playback speed"]          = m_playback_speed;
         j["colormap index"]          = m_colormap_index;
 
-        m_theme.save(j);
+        m_theme.save(j, m_params.dpiAwareParams.dpiWindowSizeFactor);
 
         SaveUserPref("UserSettings", j.dump(4));
     };

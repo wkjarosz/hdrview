@@ -257,7 +257,7 @@ void Theme::load(json j)
         theme = CUSTOM_THEME;
         if (j.contains("style"))
         {
-            spdlog::debug("Restoring custom ImGui style values from settings:\n{}", j["style"].dump(2));
+            // spdlog::debug("Restoring custom ImGui style values from settings:\n{}", j["style"].dump(2));
             spdlog::debug("[DIAGNOSTIC] Before loading custom style: FontSizeBase={}, FontScaleMain={}, "
                           "FontScaleDpi={}, WindowPadding=({},{})",
                           ImGui::GetStyle().FontSizeBase, ImGui::GetStyle().FontScaleMain,
@@ -352,7 +352,7 @@ void Theme::load(json j)
     apply(theme);
 }
 
-void Theme::save(json &j) const
+void Theme::save(json &j, float dpiWindowSizeFactor) const
 {
     // Save ImGui theme tweaks
     j["theme"] = Theme::name(theme);
@@ -360,7 +360,7 @@ void Theme::save(json &j) const
     if (theme != CUSTOM_THEME)
         return;
 
-    const auto &style = ImGui::GetStyle();
+    auto style = ImGui::GetStyle(); // get a copy since we modify it before saving below
     spdlog::debug(
         "[DIAGNOSTIC] Saving custom style: FontSizeBase={}, FontScaleMain={}, FontScaleDpi={}, WindowPadding=({},{})",
         style.FontSizeBase, style.FontScaleMain, style.FontScaleDpi, style.WindowPadding.x, style.WindowPadding.y);
@@ -375,6 +375,13 @@ void Theme::save(json &j) const
         if (col_name)
             j_style[col_name] = {c.x, c.y, c.z, c.w};
     }
+
+    // Save unscaled base values by dividing by dpiWindowSizeFactor. This prevents compounding DPI scaling
+    // when values are loaded back and ImGui applies scaling again.
+    float inv_scale = (dpiWindowSizeFactor > 0.0f) ? (1.0f / dpiWindowSizeFactor) : 1.0f;
+    style.ScaleAllSizes(inv_scale); // first, reset any internal scaling
+    spdlog::debug("Scaling custom ImGui style values by inverse of: {}; {}", dpiWindowSizeFactor, style._MainScale);
+
     j_style["Alpha"]                       = style.Alpha;
     j_style["DisabledAlpha"]               = style.DisabledAlpha;
     j_style["WindowPadding"]               = {style.WindowPadding.x, style.WindowPadding.y};
@@ -418,5 +425,10 @@ void Theme::save(json &j) const
     j_style["CircleTessellationMaxError"]  = style.CircleTessellationMaxError;
     j_style["WindowMenuButtonPosition"]    = (int)style.WindowMenuButtonPosition;
 
-    spdlog::debug("Saved custom ImGui style values to settings:\n{}", j["style"].dump(2));
+    // spdlog::debug("Saved custom ImGui style values to settings:\n{}", j["style"].dump(2));
+
+    spdlog::debug("[DIAGNOSTIC] When saving custom style: FontSizeBase={}, FontScaleMain={}, "
+                  "FontScaleDpi={}, WindowPadding=({},{})",
+                  style.FontSizeBase, style.FontScaleMain, style.FontScaleDpi, style.WindowPadding.x,
+                  style.WindowPadding.y);
 }

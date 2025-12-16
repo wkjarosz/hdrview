@@ -18,7 +18,7 @@ struct Theme
 
     void set(int t);
     void load(json j);
-    void save(json &j) const;
+    void save(json &j, float dpiWindowSizeFactor = 1.f) const;
 
     bool operator==(int t) const { return theme == t; }
 
