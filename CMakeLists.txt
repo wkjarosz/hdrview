@@ -203,6 +203,58 @@ include(FindPkgConfig)
 # =====================================================================================
 include(cmake/CPM.cmake)
 
+# Function to mark a library's includes as SYSTEM to suppress compiler warnings
+# Usage: mark_as_system_library(target_name)
+function(mark_as_system_library target_name)
+  if(TARGET ${target_name})
+    # Resolve the actual target if this is an alias
+    get_target_property(aliased_target ${target_name} ALIASED_TARGET)
+    if(aliased_target)
+      set(actual_target ${aliased_target})
+    else()
+      set(actual_target ${target_name})
+    endif()
+    
+    # Get the library's existing interface includes
+    get_target_property(lib_includes ${actual_target} INTERFACE_INCLUDE_DIRECTORIES)
+    
+    if(lib_includes)
+      # Get existing system includes (if any) to avoid overwriting
+      get_target_property(existing_system_includes ${actual_target} INTERFACE_SYSTEM_INCLUDE_DIRECTORIES)
+      
+      # Combine existing system includes with the library's includes
+      if(existing_system_includes)
+        set(new_system_includes "${existing_system_includes};${lib_includes}")
+      else()
+        set(new_system_includes "${lib_includes}")
+      endif()
+      
+      # Update the target to use SYSTEM includes
+      set_target_properties(${actual_target} PROPERTIES
+        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${new_system_includes}"
+      )
+      message(STATUS "Marked ${target_name} includes as SYSTEM (actual target: ${actual_target})")
+    endif()
+  else()
+    message(WARNING "Target ${target_name} does not exist, cannot mark as SYSTEM")
+  endif()
+endfunction()
+
+# Function to disable warnings when compiling a third-party library target
+# Usage: disable_target_warnings(target_name)
+function(disable_target_warnings target_name)
+  if(TARGET ${target_name})
+    if(MSVC)
+      target_compile_options(${target_name} PRIVATE /W0)
+    else()
+      target_compile_options(${target_name} PRIVATE -w)
+    endif()
+    message(STATUS "Disabled warnings for ${target_name}")
+  else()
+    message(WARNING "Target ${target_name} does not exist, cannot disable warnings")
+  endif()
+endfunction()
+
 if(APPLE AND NOT EMSCRIPTEN)
   # default to GLFW+Metal on macOS
   set(HELLOIMGUI_HAS_METAL ON)
@@ -228,24 +280,24 @@ if(APPLE AND NOT EMSCRIPTEN)
             "BUILD_SHARED_LIBS OFF"
   )
 
-  if(glfw_ADDED)
-    message(STATUS "Using custom fork of glfw on macOS")
-
-    mark_as_advanced(
-      GLFW_BUILD_DOCS
-      GLFW_BUILD_EXAMPLES
-      GLFW_BUILD_INSTALL
-      GLFW_BUILD_TESTS
-      GLFW_DOCUMENT_INTERNALS
-      GLFW_INSTALL
-      GLFW_USE_CHDIR
-      GLFW_USE_MENUBAR
-      GLFW_USE_OSMESA
-      GLFW_VULKAN_STATIC
-      GLFW_USE_RETINA
-      GLFW_USE_MIR
-    )
+  if(NOT glfw_ADDED)
+    message(FATAL_ERROR "Could not download custom fork of glfw library.")
   endif()
+  message(STATUS "Using custom fork of glfw on macOS")
+  mark_as_advanced(
+    GLFW_BUILD_DOCS
+    GLFW_BUILD_EXAMPLES
+    GLFW_BUILD_INSTALL
+    GLFW_BUILD_TESTS
+    GLFW_DOCUMENT_INTERNALS
+    GLFW_INSTALL
+    GLFW_USE_CHDIR
+    GLFW_USE_MENUBAR
+    GLFW_USE_OSMESA
+    GLFW_VULKAN_STATIC
+    GLFW_USE_RETINA
+    GLFW_USE_MIR
+  )
 endif()
 
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF)
@@ -260,28 +312,36 @@ CPMAddPackage(
   GIT_TAG v1.92.5
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
+  SYSTEM YES
 )
-
-if(hello_imgui_ADDED)
-  message(STATUS "hello_imgui library added")
-  if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
-    add_compile_options(-pthread)
-  endif()
+if(NOT hello_imgui_ADDED)
+  message(FATAL_ERROR "Could not download hello_imgui library.")
 endif()
+
+message(STATUS "hello_imgui library added")
+if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+  add_compile_options(-pthread)
+endif()
+# Disable warnings for third-party compiled targets
+disable_target_warnings(imgui)
+disable_target_warnings(hello_imgui)
+disable_target_warnings(stb_hello_imgui)
 
 CPMAddPackage("gh:epezent/implot#3da8bd34299965d3b0ab124df743fe3e076fa222")
-if(implot_ADDED)
-  message(STATUS "implot library added")
-
-  # implot has no CMake support, so we create our own target
-  add_library(
-    implot STATIC ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h ${implot_SOURCE_DIR}/implot.cpp
-                  ${implot_SOURCE_DIR}/implot_items.cpp ${implot_SOURCE_DIR}/implot_demo.cpp
-  )
-  target_include_directories(implot PUBLIC ${implot_SOURCE_DIR})
-  target_link_libraries(implot PUBLIC imgui)
-  set_target_properties(implot PROPERTIES CXX_STANDARD 17)
+if(NOT implot_ADDED)
+  message(FATAL_ERROR "Could not download implot library.")
 endif()
+message(STATUS "implot library added")
+# implot has no CMake support, so we create our own target
+add_library(
+  implot STATIC ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h ${implot_SOURCE_DIR}/implot.cpp
+                ${implot_SOURCE_DIR}/implot_items.cpp ${implot_SOURCE_DIR}/implot_demo.cpp
+)
+target_include_directories(implot PUBLIC ${implot_SOURCE_DIR})
+target_link_libraries(implot PUBLIC imgui)
+set_target_properties(implot PROPERTIES CXX_STANDARD 17)
+disable_target_warnings(implot)
+mark_as_system_library(implot)
 list(APPEND HDRVIEW_DEPENDENCIES "implot")
 
 CPMAddPackage(
@@ -289,36 +349,33 @@ CPMAddPackage(
   GITHUB_REPOSITORY wkjarosz/imgui-command-palette
   GIT_TAG 425e8c8be56970b3d2173cf1d764614c9c978345
   DOWNLOAD_ONLY YES
+  SYSTEM YES
 )
-if(my_imgui_command_palette_ADDED)
-  message(STATUS "imgui-command-palette library added")
-  add_library(
-    my_imgui_command_palette
-    "${my_imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.h"
-    "${my_imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.cpp"
-    "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.h"
-    "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.cpp"
-  )
-  target_compile_features(my_imgui_command_palette PUBLIC cxx_std_11)
-  target_include_directories(my_imgui_command_palette PUBLIC ${my_imgui_command_palette_SOURCE_DIR})
-  target_link_libraries(my_imgui_command_palette PUBLIC imgui)
+if(NOT my_imgui_command_palette_ADDED)
+  message(FATAL_ERROR "Could not download imgui-command-palette library.")
 endif()
+message(STATUS "imgui-command-palette library added")
+add_library(
+  my_imgui_command_palette
+  "${my_imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.h"
+  "${my_imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.cpp"
+  "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.h"
+  "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.cpp"
+)
+target_compile_features(my_imgui_command_palette PUBLIC cxx_std_11)
+target_include_directories(my_imgui_command_palette PUBLIC ${my_imgui_command_palette_SOURCE_DIR})
+target_link_libraries(my_imgui_command_palette PUBLIC imgui)
+disable_target_warnings(my_imgui_command_palette)
+mark_as_system_library(my_imgui_command_palette)
 list(APPEND HDRVIEW_DEPENDENCIES "my_imgui_command_palette")
 
-CPMAddPackage("gh:wkjarosz/smallthreadpool#41a1f198429e88487e71793cd5b39a4bec65037b")
-if(smallthreadpool_ADDED)
-  message(STATUS "smallthreadpool library added")
-  add_library(smallthreadpool INTERFACE IMPORTED)
-  target_include_directories(smallthreadpool INTERFACE "${smallthreadpool_SOURCE_DIR}")
-endif()
-list(APPEND HDRVIEW_DEPENDENCIES "smallthreadpool")
-
 CPMAddPackage("gh:sgorsten/linalg@2.2")
-if(linalg_ADDED)
-  message(STATUS "linalg library added")
-  add_library(linalg INTERFACE IMPORTED)
-  target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
+if(NOT linalg_ADDED)
+  message(FATAL_ERROR "Could not download linalg library.")
 endif()
+message(STATUS "linalg library added")
+add_library(linalg INTERFACE IMPORTED)
+target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
 CPMAddPackage(
@@ -326,10 +383,12 @@ CPMAddPackage(
   GITHUB_REPOSITORY fmtlib/fmt
   GIT_TAG 9.1.0
   OPTIONS "FMT_INSTALL OFF" "FMT_HEADER_ONLY OFF"
+  SYSTEM YES
 )
-if(fmt_ADDED)
-  message(STATUS "fmt library added")
+if(NOT fmt_ADDED)
+  message(FATAL_ERROR "Could not download fmt library.")
 endif()
+message(STATUS "fmt library added")
 list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
 
 CPMAddPackage(
@@ -338,44 +397,69 @@ CPMAddPackage(
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
           "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
+  SYSTEM YES
 )
-if(spdlog_ADDED)
-  message(STATUS "spdlog library added")
+if(NOT spdlog_ADDED)
+  message(FATAL_ERROR "Could not download spdlog library.")
 endif()
+message(STATUS "spdlog library added")
 list(APPEND HDRVIEW_DEPENDENCIES "spdlog::spdlog")
 
-CPMAddPackage("gh:wkjarosz/stb#491e9c3ac2add5bda0fffb5a8cb99868c483506b")
-if(stb_ADDED)
-  message(STATUS "stb library added")
-  add_library(stb INTERFACE IMPORTED)
-  target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
+CPMAddPackage("gh:wkjarosz/smallthreadpool#41a1f198429e88487e71793cd5b39a4bec65037b")
+if(NOT smallthreadpool_ADDED)
+  message(FATAL_ERROR "Could not download smallthreadpool library.")
 endif()
+message(STATUS "smallthreadpool library added")
+# Create implementation library with wrapper
+configure_file("${CMAKE_SOURCE_DIR}/cmake/stp_impl.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/stp_impl.cpp" COPYONLY)
+add_library(stp STATIC "${CMAKE_CURRENT_BINARY_DIR}/stp_impl.cpp")
+target_include_directories(stp PUBLIC "${smallthreadpool_SOURCE_DIR}")
+target_link_libraries(stp PRIVATE spdlog::spdlog)
+target_compile_features(stp PUBLIC cxx_std_17)
+disable_target_warnings(stp)
+mark_as_system_library(stp)
+list(APPEND HDRVIEW_DEPENDENCIES "stp")
+
+CPMAddPackage("gh:wkjarosz/stb#491e9c3ac2add5bda0fffb5a8cb99868c483506b")
+if(NOT stb_ADDED)
+  message(FATAL_ERROR "Could not download stb library.")
+endif()
+message(STATUS "stb library added")
+add_library(stb INTERFACE IMPORTED)
+target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "stb")
 
 CPMAddPackage("gh:phoboslab/qoi#b0b926ee70108b0113dd2718d13d2207c474ed2e")
-if(qoi_ADDED)
-  message(STATUS "qoi library added")
-  add_library(qoi INTERFACE IMPORTED)
-  target_include_directories(qoi INTERFACE "${qoi_SOURCE_DIR}")
+if(NOT qoi_ADDED)
+  message(FATAL_ERROR "Could not download qoi library.")
 endif()
+message(STATUS "qoi library added")
+# Create implementation library with wrapper
+configure_file("${CMAKE_SOURCE_DIR}/cmake/qoi_impl.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/qoi_impl.cpp" COPYONLY)
+add_library(qoi STATIC "${CMAKE_CURRENT_BINARY_DIR}/qoi_impl.cpp")
+target_include_directories(qoi PUBLIC "${qoi_SOURCE_DIR}")
+disable_target_warnings(qoi)
+mark_as_system_library(qoi)
 list(APPEND HDRVIEW_DEPENDENCIES "qoi")
 
 if(EMSCRIPTEN)
 
   CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#d21dec772050d581c02aa9820e4d877fdb060dc8")
-  if(emscripten-browser-file_ADDED)
-    message(STATUS "emscripten-browser-file library added")
-    add_library(emscripten-browser-file INTERFACE IMPORTED)
-    target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
+  if(NOT emscripten-browser-file_ADDED)
+    message(FATAL_ERROR "Could not download emscripten-browser-file library.")
   endif()
+  message(STATUS "emscripten-browser-file library added")
+  add_library(emscripten-browser-file INTERFACE IMPORTED)
+  target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
   list(APPEND HDRVIEW_DEPENDENCIES "emscripten-browser-file")
 
   CPMAddPackage("gh:Armchair-Software/emscripten-browser-clipboard#bcba48fee22551b458fe5e1e513f6402c810d886")
-  if(emscripten-browser-clipboard_ADDED)
-    message(STATUS "emscripten-browser-clipboard library added")
-    add_library(emscripten-browser-clipboard INTERFACE IMPORTED)
-    target_include_directories(emscripten-browser-clipboard INTERFACE "${emscripten-browser-clipboard_SOURCE_DIR}")
+  if(NOT emscripten-browser-clipboard_ADDED)
+    message(FATAL_ERROR "Could not download emscripten-browser-clipboard library.")
   endif()
+  message(STATUS "emscripten-browser-clipboard library added")
+  add_library(emscripten-browser-clipboard INTERFACE IMPORTED)
+  target_include_directories(emscripten-browser-clipboard INTERFACE "${emscripten-browser-clipboard_SOURCE_DIR}")
   list(APPEND HDRVIEW_DEPENDENCIES "emscripten-browser-clipboard")
 
 else()
@@ -384,12 +468,14 @@ else()
     NAME portable-file-dialogs
     GITHUB_REPOSITORY wkjarosz/portable-file-dialogs
     GIT_TAG 1d755d814b77e546f544266bc24ac76029b8763b
+    SYSTEM YES
   )
-  if(portable-file-dialogs_ADDED)
-    message(STATUS "portable-file-dialogs library added")
-    add_library(portable-file-dialogs INTERFACE IMPORTED)
-    target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
+  if(NOT portable-file-dialogs_ADDED)
+    message(FATAL_ERROR "Could not download portable-file-dialogs library.")
   endif()
+  message(STATUS "portable-file-dialogs library added")
+  add_library(portable-file-dialogs INTERFACE IMPORTED)
+  target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
   list(APPEND HDRVIEW_DEPENDENCIES "portable-file-dialogs")
 
 endif()
@@ -399,13 +485,14 @@ CPMAddPackage(
   GITHUB_REPOSITORY Tom94/libexif
   GIT_TAG f99967d09f1424170388cb2c0b65dcf67d6f5ac3
   OPTIONS "BUILD_SHARED_LIBS OFF"
+  SYSTEM YES
 )
-if(exif_ADDED)
-  message(STATUS "Will build exif library")
-  list(APPEND HDRVIEW_DEPENDENCIES "exif_static")
-else()
+if(NOT exif_ADDED)
   message(FATAL_ERROR "libexif not found.")
 endif()
+message(STATUS "Will build exif library")
+disable_target_warnings(exif_static)
+list(APPEND HDRVIEW_DEPENDENCIES "exif_static")
 
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 if(HDRVIEW_ENABLE_LIBPNG)
@@ -414,10 +501,12 @@ if(HDRVIEW_ENABLE_LIBPNG)
     NAME zlib-cmake
     URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
     OPTIONS "ZLIB_TEST OFF" "ZLIB_INSTALL ON"
+    SYSTEM YES
   )
   if(zlib-cmake_ADDED)
     message(STATUS "Will build zlib library")
     set_target_properties(ZLIB PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+    disable_target_warnings(ZLIB)
   elseif(ZLIB_FOUND)
     message(STATUS "Using system-installed zlib library")
   else()
@@ -439,11 +528,14 @@ if(HDRVIEW_ENABLE_LIBPNG)
             "PNG_ARM_NEON off" # for now we disable NEON to avoid build issues on some CI machines
             "SKIP_INSTALL_ALL ON"
             "EXCLUDE_FROM_ALL YES"
+    SYSTEM YES
   )
   if(PNG_ADDED)
     message(STATUS "Will build libpng library")
     # set_target_properties(png_shared PROPERTIES POSITION_INDEPENDENT_CODE TRUE) set_target_properties(png_static
     # PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+    # mark_as_system_library(png_static)
+    disable_target_warnings(png_static)
     list(APPEND HDRVIEW_DEPENDENCIES "png_static")
   elseif(TARGET PNG::PNG)
     message(STATUS "Using system-installed libpng library")
@@ -496,9 +588,16 @@ CPMAddPackage(
           "OPENEXR_INSTALL_PKG_CONFIG OFF"
           "EXCLUDE_FROM_ALL YES"
           ${OPENEXR_THREADING_OPTIONS}
+  SYSTEM YES
 )
-if(openexr_ADDED)
+if(OpenEXR_ADDED)
   message(STATUS "Building OpenEXR library with threading options: ${OPENEXR_THREADING_OPTIONS}")
+  disable_target_warnings(OpenEXR)
+  disable_target_warnings(Iex)
+  disable_target_warnings(IlmThread)
+  disable_target_warnings(OpenEXRCore)
+  disable_target_warnings(OpenEXRUtil)
+  disable_target_warnings(Imath)
 elseif(TARGET OpenEXR::OpenEXR)
   message(STATUS "Will link against system-installed OpenEXR library")
 else()
@@ -540,6 +639,7 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     find_package(TurboJpeg QUIET)
     message(STATUS "JPEG is libjpeg-turbo = ${TurboJpeg_FOUND}")
 
+    mark_as_system_library(JPEG::JPEG)
     list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
   else()
     message(STATUS "libjpeg library not found, will build libjpeg-turbo")
@@ -631,6 +731,8 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     )
     add_library(JPEG::JPEG ALIAS jpeg-turbo)
 
+    disable_target_warnings(jpeg-turbo)
+    mark_as_system_library(jpeg-turbo)
     list(APPEND HDRVIEW_DEPENDENCIES jpeg-turbo)
   endif()
   if (HAVE_JPEG_WRITE_ICC_PROFILE)
@@ -657,9 +759,11 @@ if(HDRVIEW_ENABLE_UHDR)
             "UHDR_BUILD_EXAMPLES OFF"
             "UHDR_BUILD_TESTS OFF"
             "UHDR_ENABLE_INSTALL OFF"
+    SYSTEM YES
   )
   if(libuhdr_ADDED)
     message(STATUS "Building uhdr library with UHDR_BUILD_DEPS=${UHDR_BUILD_DEPS}")
+    disable_target_warnings(uhdr)
   elseif(TARGET core)
     message(STATUS "Will link against system-installed uhdr library")
   else()
@@ -705,11 +809,13 @@ if(HDRVIEW_ENABLE_JPEGXL)
             "JPEGXL_ENABLE_SJPEG OFF"
             # "JPEGXL_FORCE_SYSTEM_LCMS2 ON"
             "EXCLUDE_FROM_ALL YES"
+    SYSTEM YES
   )
   if(JXL_ADDED)
     message(STATUS "Building JPEG-XL library")
     # make the lcms2 target available for us to link against
     target_link_libraries(jxl PUBLIC lcms2)
+    disable_target_warnings(jxl)
   elseif(TARGET jxl)
     message(STATUS "Using system-installed JPEG-XL library")
   else()
@@ -726,6 +832,8 @@ else()
   find_package(LCMS2 REQUIRED)
   if(LCMS2_FOUND)
     message(STATUS "Using system-installed lcms2 library")
+    disable_target_warnings(lcms2)
+    mark_as_system_library(lcms2)
     list(APPEND HDRVIEW_DEPENDENCIES "lcms2")
     list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LCMS2)
   else()
@@ -780,6 +888,7 @@ if(HDRVIEW_ENABLE_LIBHEIF)
             "WITH_AOM_ENCODER ${HDRVIEW_ENABLE_AVIF}"
             "WITH_AOM_DECODER ${HDRVIEW_ENABLE_AVIF}"
             "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
+    SYSTEM YES
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
@@ -791,6 +900,7 @@ if(HDRVIEW_ENABLE_LIBHEIF)
       heif INTERFACE $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}> $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}/libheif/api/>
                      $<BUILD_INTERFACE:${Libheif_BINARY_DIR}>
     )
+    disable_target_warnings(heif)
   elseif(TARGET heif)
     message(STATUS "Using system-installed libheif library")
   else()
@@ -807,6 +917,7 @@ CPMAddPackage(
   VERSION 2.4.1
   URL https://github.com/CLIUtils/CLI11/archive/v2.4.2.zip
   DOWNLOAD_ONLY YES
+  SYSTEM YES
 )
 if(CLI11_ADDED)
   message(STATUS "Will build CLI11 library")
@@ -819,12 +930,18 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "CLI11::CLI11")
 
-CPMAddPackage("gh:wkjarosz/smalldds#09e94ab70a9362392a88f5bc5de91c9fd354d0cb")
-if(smalldds_ADDED)
-  message(STATUS "smalldds library added")
-  add_library(smalldds INTERFACE IMPORTED)
-  target_include_directories(smalldds INTERFACE "${smalldds_SOURCE_DIR}")
+CPMAddPackage("gh:wkjarosz/smalldds#78961e9d5407e6257e063c600c952a044e1b6dc1")
+if(NOT smalldds_ADDED)
+  message(FATAL_ERROR "Could not download smalldds library.")
 endif()
+message(STATUS "smalldds library added")
+# Create implementation library with wrapper
+configure_file("${CMAKE_SOURCE_DIR}/cmake/smalldds_impl.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/smalldds_impl.cpp" COPYONLY)
+add_library(smalldds STATIC "${CMAKE_CURRENT_BINARY_DIR}/smalldds_impl.cpp")
+target_include_directories(smalldds PUBLIC "${smalldds_SOURCE_DIR}")
+target_compile_features(smalldds PUBLIC cxx_std_17)
+disable_target_warnings(smalldds)
+mark_as_system_library(smalldds)
 list(APPEND HDRVIEW_DEPENDENCIES "smalldds")
 
 CPMAddPackage(
@@ -833,11 +950,16 @@ CPMAddPackage(
   GIT_TAG 963c5e56b7a335e066cff7d16a3de75f4e8ad366
   DOWNLOAD_ONLY YES
 )
-if(bcdec_ADDED)
-  message(STATUS "bcdec library added")
-  add_library(bcdec INTERFACE IMPORTED)
-  target_include_directories(bcdec INTERFACE "${bcdec_SOURCE_DIR}")
+if(NOT bcdec_ADDED)
+  message(FATAL_ERROR "Could not download bcdec library.")
 endif()
+message(STATUS "bcdec library added")
+# Create implementation library with wrapper
+configure_file("${CMAKE_SOURCE_DIR}/cmake/bcdec_impl.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/bcdec_impl.cpp" COPYONLY)
+add_library(bcdec STATIC "${CMAKE_CURRENT_BINARY_DIR}/bcdec_impl.cpp")
+target_include_directories(bcdec PUBLIC "${bcdec_SOURCE_DIR}")
+disable_target_warnings(bcdec)
+mark_as_system_library(bcdec)
 list(APPEND HDRVIEW_DEPENDENCIES "bcdec")
 
 CPMAddPackage(
@@ -846,13 +968,15 @@ CPMAddPackage(
   GIT_TAG 0b3a1decbcf1d49b9af65b3afb7499d7486252d2
   DOWNLOAD_ONLY YES
 )
-if(astc_dec_ADDED)
-  message(STATUS "astc_dec library added")
-  add_library(astc_dec "${astc_dec_SOURCE_DIR}/astc_decomp.cpp" "${astc_dec_SOURCE_DIR}/astc_decomp.h")
-  target_compile_features(astc_dec PUBLIC cxx_std_11)
-  target_include_directories(astc_dec PUBLIC ${astc_dec_SOURCE_DIR})
-
-endif()
+if(NOT astc_dec_ADDED)
+  message(FATAL_ERROR "Could not download astc_dec library.")
+  endif()
+message(STATUS "astc_dec library added")
+add_library(astc_dec "${astc_dec_SOURCE_DIR}/astc_decomp.cpp" "${astc_dec_SOURCE_DIR}/astc_decomp.h")
+target_compile_features(astc_dec PUBLIC cxx_std_11)
+target_include_directories(astc_dec PUBLIC ${astc_dec_SOURCE_DIR})
+disable_target_warnings(astc_dec)
+mark_as_system_library(astc_dec)
 list(APPEND HDRVIEW_DEPENDENCIES astc_dec)
 
 CPMAddPackage(
@@ -862,11 +986,14 @@ CPMAddPackage(
   URL https://github.com/richgel999/miniz/releases/download/3.0.2/miniz-3.0.2.zip
   DOWNLOAD_ONLY YES
 )
-if(miniz_ADDED)
-  message(STATUS "miniz library added")
-  add_library(miniz "${miniz_SOURCE_DIR}/miniz.c" "${miniz_SOURCE_DIR}/miniz.h")
-  target_include_directories(miniz PUBLIC ${miniz_SOURCE_DIR})
+if(NOT miniz_ADDED)
+  message(FATAL_ERROR "Could not download miniz library.")
 endif()
+message(STATUS "miniz library added")
+add_library(miniz "${miniz_SOURCE_DIR}/miniz.c" "${miniz_SOURCE_DIR}/miniz.h")
+target_include_directories(miniz PUBLIC ${miniz_SOURCE_DIR})
+disable_target_warnings(miniz)
+mark_as_system_library(miniz)
 list(APPEND HDRVIEW_DEPENDENCIES miniz)
 
 # Helper function to add XXX_ENABLED=0 or XXX_ENABLED=1 definitions based on HDRVIEW_ENABLE_XXX option

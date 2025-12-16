@@ -1,0 +1,2 @@
+#define SMALLDDS_IMPLEMENTATION
+#include <smalldds.h>

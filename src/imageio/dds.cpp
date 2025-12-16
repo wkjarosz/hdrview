@@ -18,13 +18,10 @@
 #pragma warning(push, 0)
 #endif
 
-#define SMALLDDS_IMPLEMENTATION
-#include "smalldds.h"
-
-#define BCDEC_IMPLEMENTATION
+#include "astc_decomp.h"
 #include "bcdec.h"
 
-#include "astc_decomp.h"
+#include <smalldds.h>
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

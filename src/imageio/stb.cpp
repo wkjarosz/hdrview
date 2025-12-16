@@ -6,7 +6,6 @@
 
 #include "stb.h"
 #include "colorspace.h"
-#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "timer.h"
 #include <cstdint>

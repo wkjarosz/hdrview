@@ -1,0 +1,2 @@
+#define SMALL_THREADPOOL_IMPLEMENTATION
+#include <smallthreadpool.h>

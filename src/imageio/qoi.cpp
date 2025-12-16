@@ -5,15 +5,11 @@
 //
 
 #include "app.h"
-#include "hello_imgui/dpi_aware.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 
 #include "fonts.h"
 
-#define QOI_NO_STDIO
-#define QOI_IMPLEMENTATION
-#include "qoi.h"
 #include <qoi.h>
 
 #include "colorspace.h"

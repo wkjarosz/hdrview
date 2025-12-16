@@ -5,7 +5,6 @@
 #include "hello_imgui/dpi_aware.h"
 #include "hello_imgui/hello_imgui.h"
 #include "image.h"
-#include "imageio/stb.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 #include "platform_utils.h"
