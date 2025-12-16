@@ -259,8 +259,8 @@ function(disable_target_warnings target_name)
         list(FILTER existing_flags EXCLUDE REGEX "^/[Ww][0-4]?")
         set_target_properties(${actual_target} PROPERTIES COMPILE_OPTIONS "${existing_flags}")
       endif()
-      # Use /w to disable all warnings
-      target_compile_options(${actual_target} PRIVATE /w)
+      # Use /w to disable all warnings, add it before other flags to avoid D9025 warnings
+      target_compile_options(${actual_target} BEFORE PRIVATE /w)
     else()
       target_compile_options(${actual_target} PRIVATE -w)
     endif()
@@ -400,7 +400,7 @@ CPMAddPackage(
   NAME fmt
   GITHUB_REPOSITORY fmtlib/fmt
   GIT_TAG 9.1.0
-  OPTIONS "FMT_INSTALL OFF" "FMT_HEADER_ONLY OFF"
+  OPTIONS "FMT_INSTALL OFF" "FMT_HEADER_ONLY OFF FMT_USE_CPP11 ON FMT_USE_INLINE_NAMESPACES ON"
   SYSTEM YES
 )
 if(fmt_ADDED)
@@ -414,9 +414,14 @@ if(fmt_ADDED)
       target_compile_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
       target_link_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
     else()
-      # If not an alias, use the target directly
-      target_compile_options(fmt::fmt PRIVATE -stdlib=libc++)
-      target_link_options(fmt::fmt PRIVATE -stdlib=libc++)
+      # Apply directly to fmt::fmt
+      target_compile_options(fmt::fmt INTERFACE -stdlib=libc++)
+      target_link_options(fmt::fmt INTERFACE -stdlib=libc++)
+    endif()
+    # Also apply to fmt-header-only if it exists
+    if(TARGET fmt-header-only)
+      target_compile_options(fmt-header-only INTERFACE -stdlib=libc++)
+      target_link_options(fmt-header-only INTERFACE -stdlib=libc++)
     endif()
   endif()
 elseif(fmt_FOUND OR TARGET fmt::fmt)

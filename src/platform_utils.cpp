@@ -104,24 +104,24 @@ void show_in_file_manager(const char *filename)
 #if defined(_WIN32)
     // Use explorer.exe to select the file
     std::string command = "explorer /select,\"" + std::string(filename) + "\"";
-    int         e       = system(command.c_str());
+    if (int e = system(command.c_str()); e != 0)
+        spdlog::warn("Failed to launch file manager with command: {}. Exit code {}", command, e);
 #elif defined(__APPLE__)
     // Use open command with -R to reveal the file in Finder
     std::string command = "open -R \"" + std::string(filename) + "\"";
-    int         e       = system(command.c_str());
+    if (int e = system(command.c_str()); e != 0)
+        spdlog::warn("Failed to launch file manager with command: {}. Exit code {}", command, e);
 #elif defined(__linux__)
     // Try to use xdg-open to open the containing folder
     std::string filepath(filename);
     size_t      last_slash = filepath.find_last_of("/\\");
     std::string folder     = (last_slash != std::string::npos) ? filepath.substr(0, last_slash) : ".";
     std::string command    = "xdg-open \"" + folder + "\"";
-    int         e          = system(command.c_str());
+    if (int e = system(command.c_str()); e != 0)
+        spdlog::warn("Failed to launch file manager with command: {}. Exit code {}", command, e);
 #else
     // Unsupported platform
 #endif
-
-    if (e != 0)
-        spdlog::warn("Failed to launch file manager with command: {}. Exit code {}", command, e);
 }
 
 #if defined(__EMSCRIPTEN__)
