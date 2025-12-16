@@ -253,7 +253,13 @@ function(disable_target_warnings target_name)
     endif()
 
     if(MSVC)
-      # Use /w (lowercase) to disable all warnings including deprecation warnings
+      # Remove any existing warning flags set by the target's own CMakeLists
+      get_target_property(existing_flags ${actual_target} COMPILE_OPTIONS)
+      if(existing_flags)
+        list(FILTER existing_flags EXCLUDE REGEX "^/[Ww][0-4]?")
+        set_target_properties(${actual_target} PROPERTIES COMPILE_OPTIONS "${existing_flags}")
+      endif()
+      # Use /w to disable all warnings
       target_compile_options(${actual_target} PRIVATE /w)
     else()
       target_compile_options(${actual_target} PRIVATE -w)
