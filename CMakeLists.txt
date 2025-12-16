@@ -250,8 +250,6 @@ function(disable_target_warnings target_name)
       target_compile_options(${target_name} PRIVATE -w)
     endif()
     message(STATUS "Disabled warnings for ${target_name}")
-  else()
-    message(WARNING "Target ${target_name} does not exist, cannot disable warnings")
   endif()
 endfunction()
 
@@ -314,8 +312,8 @@ CPMAddPackage(
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   SYSTEM YES
 )
-if(NOT hello_imgui_ADDED)
-  message(FATAL_ERROR "Could not download hello_imgui library.")
+if(NOT hello_imgui_ADDED and NOT hello_imgui_FOUND)
+  message(FATAL_ERROR "Could not find or download hello_imgui library.")
 endif()
 
 message(STATUS "hello_imgui library added")
@@ -385,8 +383,8 @@ CPMAddPackage(
   OPTIONS "FMT_INSTALL OFF" "FMT_HEADER_ONLY OFF"
   SYSTEM YES
 )
-if(NOT fmt_ADDED)
-  message(FATAL_ERROR "Could not download fmt library.")
+if(NOT fmt_ADDED and NOT fmt_FOUND)
+  message(FATAL_ERROR "Could not find or download fmt library.")
 endif()
 message(STATUS "fmt library added")
 list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
@@ -399,8 +397,8 @@ CPMAddPackage(
           "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
   SYSTEM YES
 )
-if(NOT spdlog_ADDED)
-  message(FATAL_ERROR "Could not download spdlog library.")
+if(NOT spdlog_ADDED and NOT spdlog_FOUND)
+  message(FATAL_ERROR "Could not find or download spdlog library.")
 endif()
 message(STATUS "spdlog library added")
 list(APPEND HDRVIEW_DEPENDENCIES "spdlog::spdlog")
@@ -487,8 +485,8 @@ CPMAddPackage(
   OPTIONS "BUILD_SHARED_LIBS OFF"
   SYSTEM YES
 )
-if(NOT exif_ADDED)
-  message(FATAL_ERROR "libexif not found.")
+if(NOT exif_ADDED and NOT exif_FOUND)
+  message(FATAL_ERROR "Could not find or download libexif.")
 endif()
 message(STATUS "Will build exif library")
 disable_target_warnings(exif_static)
@@ -592,6 +590,7 @@ CPMAddPackage(
 )
 if(OpenEXR_ADDED)
   message(STATUS "Building OpenEXR library with threading options: ${OPENEXR_THREADING_OPTIONS}")
+  # Disable warnings for all OpenEXR component targets
   disable_target_warnings(OpenEXR)
   disable_target_warnings(Iex)
   disable_target_warnings(IlmThread)
@@ -815,7 +814,17 @@ if(HDRVIEW_ENABLE_JPEGXL)
     message(STATUS "Building JPEG-XL library")
     # make the lcms2 target available for us to link against
     target_link_libraries(jxl PUBLIC lcms2)
+    # Disable warnings for all jxl targets
     disable_target_warnings(jxl)
+    disable_target_warnings(jxl_dec)
+    disable_target_warnings(jxl_enc)
+    disable_target_warnings(jxl_threads)
+    disable_target_warnings(jxl_dec-obj)
+    disable_target_warnings(jxl_enc-obj)
+    disable_target_warnings(jxl_dec-internal)
+    disable_target_warnings(jxl-internal)
+    disable_target_warnings(jxl_cms)
+    disable_target_warnings(hwy)
   elseif(TARGET jxl)
     message(STATUS "Using system-installed JPEG-XL library")
   else()
@@ -930,7 +939,7 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "CLI11::CLI11")
 
-CPMAddPackage("gh:wkjarosz/smalldds#78961e9d5407e6257e063c600c952a044e1b6dc1")
+CPMAddPackage("gh:wkjarosz/smalldds#cece9a892e5dbbd0603b1863cc1b2dbf21cf331d")
 if(NOT smalldds_ADDED)
   message(FATAL_ERROR "Could not download smalldds library.")
 endif()
@@ -986,8 +995,8 @@ CPMAddPackage(
   URL https://github.com/richgel999/miniz/releases/download/3.0.2/miniz-3.0.2.zip
   DOWNLOAD_ONLY YES
 )
-if(NOT miniz_ADDED)
-  message(FATAL_ERROR "Could not download miniz library.")
+if(NOT miniz_ADDED and NOT miniz_FOUND)
+  message(FATAL_ERROR "Could not find or download miniz library.")
 endif()
 message(STATUS "miniz library added")
 add_library(miniz "${miniz_SOURCE_DIR}/miniz.c" "${miniz_SOURCE_DIR}/miniz.h")
