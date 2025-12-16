@@ -312,7 +312,7 @@ CPMAddPackage(
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   SYSTEM YES
 )
-if(NOT hello_imgui_ADDED and NOT hello_imgui_FOUND)
+if(NOT hello_imgui_ADDED AND NOT hello_imgui_FOUND)
   message(FATAL_ERROR "Could not find or download hello_imgui library.")
 endif()
 
@@ -383,7 +383,7 @@ CPMAddPackage(
   OPTIONS "FMT_INSTALL OFF" "FMT_HEADER_ONLY OFF"
   SYSTEM YES
 )
-if(NOT fmt_ADDED and NOT fmt_FOUND)
+if(NOT fmt_ADDED AND NOT fmt_FOUND)
   message(FATAL_ERROR "Could not find or download fmt library.")
 endif()
 message(STATUS "fmt library added")
@@ -397,7 +397,7 @@ CPMAddPackage(
           "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
   SYSTEM YES
 )
-if(NOT spdlog_ADDED and NOT spdlog_FOUND)
+if(NOT spdlog_ADDED AND NOT spdlog_FOUND)
   message(FATAL_ERROR "Could not find or download spdlog library.")
 endif()
 message(STATUS "spdlog library added")
@@ -485,7 +485,7 @@ CPMAddPackage(
   OPTIONS "BUILD_SHARED_LIBS OFF"
   SYSTEM YES
 )
-if(NOT exif_ADDED and NOT exif_FOUND)
+if(NOT exif_ADDED AND NOT exif_FOUND)
   message(FATAL_ERROR "Could not find or download libexif.")
 endif()
 message(STATUS "Will build exif library")
@@ -995,7 +995,7 @@ CPMAddPackage(
   URL https://github.com/richgel999/miniz/releases/download/3.0.2/miniz-3.0.2.zip
   DOWNLOAD_ONLY YES
 )
-if(NOT miniz_ADDED and NOT miniz_FOUND)
+if(NOT miniz_ADDED AND NOT miniz_FOUND)
   message(FATAL_ERROR "Could not find or download miniz library.")
 endif()
 message(STATUS "miniz library added")
