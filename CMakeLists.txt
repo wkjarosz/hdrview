@@ -402,8 +402,16 @@ if(fmt_ADDED)
   disable_target_warnings(fmt::fmt)
   # Ensure same stdlib as main project to avoid locale/ABI issues
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-    target_compile_options(fmt::fmt PUBLIC -stdlib=libc++)
-    target_link_options(fmt::fmt PUBLIC -stdlib=libc++)
+    # Get the actual target behind the alias
+    get_target_property(fmt_actual_target fmt::fmt ALIASED_TARGET)
+    if(fmt_actual_target)
+      target_compile_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
+      target_link_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
+    else()
+      # If not an alias, use the target directly
+      target_compile_options(fmt::fmt PRIVATE -stdlib=libc++)
+      target_link_options(fmt::fmt PRIVATE -stdlib=libc++)
+    endif()
   endif()
 elseif(fmt_FOUND OR TARGET fmt::fmt)
   message(STATUS "Using system-installed fmt library")
