@@ -75,6 +75,7 @@ static TransferFunction transfer_function_from_color_encoding(const JxlColorEnco
     case JXL_TRANSFER_FUNCTION_HLG: return TransferFunction::BT2100_HLG;
     case JXL_TRANSFER_FUNCTION_DCI: return TransferFunction::DCI_P3;
     case JXL_TRANSFER_FUNCTION_UNKNOWN: return TransferFunction::Unspecified;
+    default: return TransferFunction::Invalid;
     }
 }
 

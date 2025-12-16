@@ -167,7 +167,6 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         {
             switch (cp)
             {
-            case JCS_UNKNOWN: return "Unknown";
             case JCS_GRAYSCALE: return "Grayscale";
             case JCS_RGB: return "RGB";
             case JCS_YCbCr: return "YCbCr";
@@ -184,6 +183,8 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             case JCS_EXT_ABGR: return "Extended ABGR";
             case JCS_EXT_ARGB: return "Extended ARGB";
             case JCS_RGB565: return "RGB565";
+            case JCS_UNKNOWN: [[fallthrough]];
+            default: return "Unknown";
             }
         };
         image->metadata["pixel format"] =
@@ -324,7 +325,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
                                  opts.keep_primaries, &profile_desc, &chr))
             {
                 image->chromaticities = chr;
-                profile_desc + " (override)";
+                profile_desc += " (override)";
             }
             image->metadata["color profile"] = profile_desc;
         }

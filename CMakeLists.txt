@@ -244,12 +244,24 @@ endfunction()
 # Usage: disable_target_warnings(target_name)
 function(disable_target_warnings target_name)
   if(TARGET ${target_name})
-    if(MSVC)
-      target_compile_options(${target_name} PRIVATE /W0)
+    # Resolve the actual target if this is an alias
+    get_target_property(aliased_target ${target_name} ALIASED_TARGET)
+    if(aliased_target)
+      set(actual_target ${aliased_target})
     else()
-      target_compile_options(${target_name} PRIVATE -w)
+      set(actual_target ${target_name})
     endif()
-    message(STATUS "Disabled warnings for ${target_name}")
+
+    if(MSVC)
+      target_compile_options(${actual_target} PRIVATE /W0)
+      # Also disable specific warnings that still appear even with /W0
+      target_compile_options(${actual_target} PRIVATE /wd4267 /wd4244 /wd4334)
+    else()
+      target_compile_options(${actual_target} PRIVATE -w)
+    endif()
+    message(STATUS "Disabled warnings for ${target_name} (actual target: ${actual_target})")
+  else()
+    message(WARNING "Target ${target_name} does not exist, cannot disable warnings")
   endif()
 endfunction()
 
@@ -312,18 +324,20 @@ CPMAddPackage(
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   SYSTEM YES
 )
-if(NOT hello_imgui_ADDED AND NOT hello_imgui_FOUND)
+if(hello_imgui_ADDED)
+  message(STATUS "Will build hello_imgui library")
+  if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    add_compile_options(-pthread)
+  endif()
+  # Disable warnings for third-party compiled targets
+  disable_target_warnings(imgui)
+  disable_target_warnings(hello_imgui)
+  disable_target_warnings(stb_hello_imgui)
+elseif(hello_imgui_FOUND or target HELLOIMGUI::hello_imgui)
+  message(STATUS "Using system-installed hello_imgui library")
+else()
   message(FATAL_ERROR "Could not find or download hello_imgui library.")
 endif()
-
-message(STATUS "hello_imgui library added")
-if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
-  add_compile_options(-pthread)
-endif()
-# Disable warnings for third-party compiled targets
-disable_target_warnings(imgui)
-disable_target_warnings(hello_imgui)
-disable_target_warnings(stb_hello_imgui)
 
 CPMAddPackage("gh:epezent/implot#3da8bd34299965d3b0ab124df743fe3e076fa222")
 if(NOT implot_ADDED)
@@ -383,10 +397,14 @@ CPMAddPackage(
   OPTIONS "FMT_INSTALL OFF" "FMT_HEADER_ONLY OFF"
   SYSTEM YES
 )
-if(NOT fmt_ADDED AND NOT fmt_FOUND)
+if(fmt_ADDED)
+  message(STATUS "Will build fmt library")
+  disable_target_warnings(fmt::fmt)
+elseif(fmt_FOUND OR target fmt::fmt)
+  message(STATUS "Using system-installed fmt library")
+else()
   message(FATAL_ERROR "Could not find or download fmt library.")
 endif()
-message(STATUS "fmt library added")
 list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
 
 CPMAddPackage(
@@ -397,10 +415,13 @@ CPMAddPackage(
           "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
   SYSTEM YES
 )
-if(NOT spdlog_ADDED AND NOT spdlog_FOUND)
+if(spdlog_ADDED)
+  message(STATUS "Will build spdlog library")
+elseif(spdlog_FOUND OR target spdlog::spdlog)
+  message(STATUS "Using system-installed spdlog library")
+else()
   message(FATAL_ERROR "Could not find or download spdlog library.")
 endif()
-message(STATUS "spdlog library added")
 list(APPEND HDRVIEW_DEPENDENCIES "spdlog::spdlog")
 
 CPMAddPackage("gh:wkjarosz/smallthreadpool#386dc5d7d5eaf60cb00b34345170548a0c0f3ef9")
@@ -485,10 +506,13 @@ CPMAddPackage(
   OPTIONS "BUILD_SHARED_LIBS OFF"
   SYSTEM YES
 )
-if(NOT exif_ADDED AND NOT exif_FOUND)
-  message(FATAL_ERROR "Could not find or download libexif.")
+if(exif_ADDED)
+  message(STATUS "Will build exif library")
+elseif(exif_FOUND OR target exif_static)
+  message(STATUS "Using system-installed exif library")
+else()
+  message(FATAL_ERROR "Could not find or download exif library.")
 endif()
-message(STATUS "Will build exif library")
 disable_target_warnings(exif_static)
 list(APPEND HDRVIEW_DEPENDENCIES "exif_static")
 
@@ -553,13 +577,12 @@ CPMAddPackage(
           "EXCLUDE_FROM_ALL YES"
 )
 if(Imath_ADDED)
-  message(STATUS "Building Imath library")
+  message(STATUS "Will build Imath library")
 elseif(TARGET Imath::Imath)
   message(STATUS "Will link against system-installed Imath library")
 else()
   message(FATAL_ERROR "Imath library not found. Please install it.")
 endif()
-# list(APPEND HDRVIEW_DEPENDENCIES "Imath::Imath")
 
 if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
   set(OPENEXR_THREADING_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
@@ -589,7 +612,7 @@ CPMAddPackage(
   SYSTEM YES
 )
 if(OpenEXR_ADDED)
-  message(STATUS "Building OpenEXR library with threading options: ${OPENEXR_THREADING_OPTIONS}")
+  message(STATUS "Will build OpenEXR library with threading options: ${OPENEXR_THREADING_OPTIONS}")
   # Disable warnings for all OpenEXR component targets
   disable_target_warnings(OpenEXR)
   disable_target_warnings(Iex)
@@ -761,7 +784,7 @@ if(HDRVIEW_ENABLE_UHDR)
     SYSTEM YES
   )
   if(libuhdr_ADDED)
-    message(STATUS "Building uhdr library with UHDR_BUILD_DEPS=${UHDR_BUILD_DEPS}")
+    message(STATUS "Will build uhdr library with UHDR_BUILD_DEPS=${UHDR_BUILD_DEPS}")
     disable_target_warnings(uhdr)
   elseif(TARGET core)
     message(STATUS "Will link against system-installed uhdr library")
@@ -811,13 +834,13 @@ if(HDRVIEW_ENABLE_JPEGXL)
     SYSTEM YES
   )
   if(JXL_ADDED)
-    message(STATUS "Building JPEG-XL library")
+    message(STATUS "Will build JPEG-XL library")
     # make the lcms2 target available for us to link against
     target_link_libraries(jxl PUBLIC lcms2)
     # Disable warnings for all jxl targets
     disable_target_warnings(jxl)
     disable_target_warnings(jxl_dec)
-    disable_target_warnings(jxl_enc)
+    # disable_target_warnings(jxl_enc)
     disable_target_warnings(jxl_threads)
     disable_target_warnings(jxl_dec-obj)
     disable_target_warnings(jxl_enc-obj)
@@ -909,6 +932,7 @@ if(HDRVIEW_ENABLE_LIBHEIF)
       heif INTERFACE $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}> $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}/libheif/api/>
                      $<BUILD_INTERFACE:${Libheif_BINARY_DIR}>
     )
+    mark_as_system_library(heif)
     disable_target_warnings(heif)
   elseif(TARGET heif)
     message(STATUS "Using system-installed libheif library")

@@ -370,7 +370,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                                  opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
             {
                 image->chromaticities = chr;
-                profile_desc + " (override)";
+                profile_desc += " (override)";
             }
             image->metadata["color profile"] = profile_desc;
         }
