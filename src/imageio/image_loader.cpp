@@ -648,7 +648,7 @@ const ImageLoadOptions &load_image_options_gui()
 
     static char buf[256] = "";
     if (s_opts.channel_selector != buf)
-        strncpy(buf, s_opts.channel_selector.c_str(), IM_ARRAYSIZE(buf));
+        snprintf(buf, sizeof(buf), "%s", s_opts.channel_selector.c_str());
     if (ImGui::InputTextWithHint("Channel selector", ICON_MY_FILTER " Filter 'include,-exclude'", buf,
                                  IM_ARRAYSIZE(buf)))
         s_opts.channel_selector = string(buf);

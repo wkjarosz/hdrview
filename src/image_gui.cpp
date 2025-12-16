@@ -172,7 +172,7 @@ void Image::draw_histogram()
                 ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c],
                                   &stats[c]->bin_y(stats[c]->value_to_bin(color32[c])), 1, 0);
 
-                ImPlot::TagX(color32[c], float4{colors[c].xyz(), 1.0f}, "");
+                ImPlot::TagX(color32[c], float4{colors[c].xyz(), 1.0f}, "%s", "");
 
                 ImPlot::PopStyleColor(2);
             }

@@ -622,7 +622,7 @@ void HDRViewApp::draw_file_window()
                 string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
                                   (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
-                bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "");
+                bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", "");
                 auto icon = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
                 ImGui::SameLine(0.f, 0.f);
                 string the_text = ImGui::TruncatedText(filename, icon);
