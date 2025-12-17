@@ -8,6 +8,7 @@
 #include <cmath>
 #include <float.h>
 
+#define SMALL_THREADPOOL_IMPLEMENTATION
 #include "smallthreadpool.h"
 
 using namespace std;
