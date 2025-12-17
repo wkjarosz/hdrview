@@ -1,12 +1,11 @@
 #include "shader.h"
 
-#include <fmt/core.h>      // for format, make_format_args
-#include <fmt/format.h>    // for vformat_to
-#include <spdlog/spdlog.h> // for error, info
-#include <sstream>         // for basic_ostringstream, bas...
-#include <string.h>        // for strncmp
+#include <spdlog/fmt/fmt.h> // for format, make_format_args, vformat_to
+#include <spdlog/spdlog.h>  // for error, info
+#include <sstream>          // for basic_ostringstream, bas...
+#include <string.h>         // for strncmp
 
-#include "hello_imgui/hello_imgui_assets.h" // for AssetFileData, AssetExists
+#include <hello_imgui/hello_imgui_assets.h> // for AssetFileData, AssetExists
 
 using std::string;
 using std::string_view;

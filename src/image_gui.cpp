@@ -10,7 +10,6 @@
 #include "app.h"
 #include "common.h"
 #include "fonts.h"
-#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "imgui.h"
 #include "imgui_ext.h"
@@ -19,8 +18,9 @@
 #include "implot_internal.h"
 #include "shader.h"
 #include "texture.h"
+#include <hello_imgui/dpi_aware.h>
 
-#include <fmt/chrono.h>
+#include <spdlog/fmt/chrono.h>
 
 using namespace std;
 using namespace HelloImGui;

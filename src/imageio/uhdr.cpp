@@ -14,9 +14,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <fmt/core.h>
 #include <half.h>
 #include <iostream>
+#include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
 #include "fonts.h"

@@ -9,7 +9,6 @@
 #include "common.h" // for lerp, mod, clamp, getExtension
 #include "exr_header.h"
 #include "exr_std_streams.h"
-#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "imgui.h"
 #include "imgui_ext.h"
@@ -26,6 +25,7 @@
 #include <ImfTestFile.h> // for isOpenExrFile
 #include <ImfTiledOutputFile.h>
 #include <ImfVersion.h>
+#include <hello_imgui/dpi_aware.h>
 #include <stdexcept> // for runtime_error, out_of_range
 
 using namespace std;

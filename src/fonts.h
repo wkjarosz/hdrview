@@ -22,7 +22,7 @@
 
 // https://fontawesome.com/v6/search?ic=free
 
-#include "hello_imgui/icons_font_awesome_6.h"
+#include <hello_imgui/icons_font_awesome_6.h>
 #define FONT_ICON_FILE_NAME_MY "fonts/Font_Awesome_6_Free-Solid-900.otf"
 #define ICON_MIN_MY            ICON_MIN_FA
 #define ICON_MAX_16_MY         ICON_MAX_16_FA

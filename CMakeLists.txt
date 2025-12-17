@@ -396,54 +396,54 @@ add_library(linalg INTERFACE IMPORTED)
 target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
-# Use fmt 11.x which is compatible with spdlog 1.16.0's bundled fmt
-CPMAddPackage(
-  NAME fmt
-  GITHUB_REPOSITORY fmtlib/fmt
-  GIT_TAG 11.0.2
-  OPTIONS "FMT_INSTALL OFF"
-          # "FMT_HEADER_ONLY OFF"
-          "FMT_USE_CPP11 ON"
-          "FMT_USE_INLINE_NAMESPACES ON"
-          "BUILD_SHARED_LIBS OFF"
-          "FMT_INCLUDE_INSTALL_DIR OFF"
-          "FMT_TEST OFF"
-          "FMT_DOC OFF"
-)
-if(fmt_ADDED)
-  message(STATUS "Will build fmt library")
-  disable_target_warnings(fmt::fmt)
-  # # Ensure same stdlib as main project to avoid locale/ABI issues
-  # if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-  #   # Get the actual target behind the alias
-  #   get_target_property(fmt_actual_target fmt::fmt ALIASED_TARGET)
-  #   if(fmt_actual_target)
-  #     target_compile_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
-  #     target_link_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
-  #   else()
-  #     # Apply directly to fmt::fmt
-  #     target_compile_options(fmt::fmt INTERFACE -stdlib=libc++)
-  #     target_link_options(fmt::fmt INTERFACE -stdlib=libc++)
-  #   endif()
-  #   # Also apply to fmt-header-only if it exists
-  #   if(TARGET fmt-header-only)
-  #     target_compile_options(fmt-header-only INTERFACE -stdlib=libc++)
-  #     target_link_options(fmt-header-only INTERFACE -stdlib=libc++)
-  #   endif()
-  # endif()
-elseif(fmt_FOUND OR TARGET fmt::fmt)
-  message(STATUS "Using system-installed fmt library")
-else()
-  message(FATAL_ERROR "Could not find or download fmt library.")
-endif()
-list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
+# # Use fmt 11.x which is compatible with spdlog 1.16.0's bundled fmt
+# CPMAddPackage(
+#   NAME fmt
+#   GITHUB_REPOSITORY fmtlib/fmt
+#   GIT_TAG 11.0.2
+#   OPTIONS "FMT_INSTALL OFF"
+#           # "FMT_HEADER_ONLY OFF"
+#           "FMT_USE_CPP11 ON"
+#           "FMT_USE_INLINE_NAMESPACES ON"
+#           "BUILD_SHARED_LIBS OFF"
+#           "FMT_INCLUDE_INSTALL_DIR OFF"
+#           "FMT_TEST OFF"
+#           "FMT_DOC OFF"
+# )
+# if(fmt_ADDED)
+#   message(STATUS "Will build fmt library")
+#   disable_target_warnings(fmt::fmt)
+#   # # Ensure same stdlib as main project to avoid locale/ABI issues
+#   # if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
+#   #   # Get the actual target behind the alias
+#   #   get_target_property(fmt_actual_target fmt::fmt ALIASED_TARGET)
+#   #   if(fmt_actual_target)
+#   #     target_compile_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
+#   #     target_link_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
+#   #   else()
+#   #     # Apply directly to fmt::fmt
+#   #     target_compile_options(fmt::fmt INTERFACE -stdlib=libc++)
+#   #     target_link_options(fmt::fmt INTERFACE -stdlib=libc++)
+#   #   endif()
+#   #   # Also apply to fmt-header-only if it exists
+#   #   if(TARGET fmt-header-only)
+#   #     target_compile_options(fmt-header-only INTERFACE -stdlib=libc++)
+#   #     target_link_options(fmt-header-only INTERFACE -stdlib=libc++)
+#   #   endif()
+#   # endif()
+# elseif(fmt_FOUND OR TARGET fmt::fmt)
+#   message(STATUS "Using system-installed fmt library")
+# else()
+#   message(FATAL_ERROR "Could not find or download fmt library.")
+# endif()
+# list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
 
 CPMAddPackage(
   NAME spdlog
-  VERSION 1.12.0 # we set the minimum version to the one included in ubuntu 24.04
+  VERSION 1.16.0
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
-          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above
+          # "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above
 )
 if(spdlog_ADDED)
   message(STATUS "Will build spdlog library")

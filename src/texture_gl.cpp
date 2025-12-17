@@ -1,7 +1,7 @@
 #if defined(HELLOIMGUI_HAS_OPENGL)
 
-#include "hello_imgui/hello_imgui_include_opengl.h" // cross-platform way to include OpenGL headers
 #include "opengl_check.h"
+#include <hello_imgui/hello_imgui_include_opengl.h> // cross-platform way to include OpenGL headers
 
 #include "texture.h"
 #include <cstring>

@@ -2,8 +2,6 @@
 
 #include "colormap.h"
 #include "fonts.h"
-#include "hello_imgui/dpi_aware.h"
-#include "hello_imgui/hello_imgui.h"
 #include "image.h"
 #include "imageio/icc.h"
 #include "imcmd_command_palette.h"
@@ -12,6 +10,8 @@
 #include "imgui_internal.h"
 #include "texture.h"
 #include "version.h"
+#include <hello_imgui/dpi_aware.h>
+#include <hello_imgui/hello_imgui.h>
 
 #include <OpenEXRConfig.h>
 

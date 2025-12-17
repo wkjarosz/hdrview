@@ -1,8 +1,8 @@
 #include "dds.h"
 #include "colorspace.h"
 #include "image.h"
-#include <fmt/core.h>
 #include <iostream>
+#include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 #include <string>
 #include <vector>

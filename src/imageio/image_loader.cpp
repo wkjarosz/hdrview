@@ -9,13 +9,12 @@
 #include "colorspace.h"
 #include "common.h"
 #include "fonts.h"
-#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "imgui_ext.h"
-#include "imgui_internal.h"
-#include "miniz.h"
 #include "timer.h"
 #include <fstream>
+#include <hello_imgui/dpi_aware.h>
+#include <miniz.h>
 #include <sstream>
 
 #include "imageio/dds.h"

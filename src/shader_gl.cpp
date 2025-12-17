@@ -1,18 +1,18 @@
 #if defined(HELLOIMGUI_HAS_OPENGL)
 
 #include "common.h"
-#include "hello_imgui/hello_imgui.h"
-#include "hello_imgui/hello_imgui_include_opengl.h" // cross-platform way to include OpenGL headers
 #include "opengl_check.h"
 #include "shader.h"
 #include "texture.h"
 #include <cstring>
+#include <hello_imgui/hello_imgui.h>
+#include <hello_imgui/hello_imgui_include_opengl.h> // cross-platform way to include OpenGL headers
 
 #if !defined(GL_HALF_FLOAT)
 #define GL_HALF_FLOAT 0x140B
 #endif
 
-#include <fmt/core.h>
+#include <spdlog/fmt/fmt.h>
 
 using std::string;
 using std::string_view;

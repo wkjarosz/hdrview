@@ -2,8 +2,8 @@
 
 #include "texture.h"
 
-#include "hello_imgui/hello_imgui.h"
-#include "hello_imgui/internal/backend_impls/rendering_metal.h"
+#include <hello_imgui/hello_imgui.h>
+#include <hello_imgui/internal/backend_impls/rendering_metal.h>
 
 #import <Metal/Metal.h>
 

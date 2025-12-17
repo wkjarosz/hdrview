@@ -2,8 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include "hello_imgui/hello_imgui.h"
-#include "hello_imgui/hello_imgui_include_opengl.h" // cross-platform way to include OpenGL headers
+#include <hello_imgui/hello_imgui.h>
+#include <hello_imgui/hello_imgui_include_opengl.h> // cross-platform way to include OpenGL headers
 
 bool check_glerror(const char *cmd, const char *file, int line)
 {

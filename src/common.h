@@ -19,9 +19,8 @@
 #include <utility>
 #include <vector>
 
-#include <fmt/color.h>
-#include <fmt/core.h>
-#include <fmt/ranges.h>
+#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/ranges.h>
 #include <spdlog/mdc.h>
 #include <spdlog/spdlog.h>
 

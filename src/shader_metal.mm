@@ -5,15 +5,14 @@
 #include "texture.h"
 #include <iostream>
 
-#include "hello_imgui/hello_imgui.h"
-#include "hello_imgui/internal/backend_impls/rendering_metal.h"
+#include <hello_imgui/hello_imgui.h>
+#include <hello_imgui/internal/backend_impls/rendering_metal.h>
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
 #define METAL_BUFFER_THRESHOLD 64
 
-// #include <fmt/core.h>
 #include <spdlog/spdlog.h>
 
 using HelloImGui::GetMetalGlobals;

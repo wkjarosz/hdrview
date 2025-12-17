@@ -1,10 +1,10 @@
 #if defined(HELLOIMGUI_HAS_OPENGL)
 
-#include "hello_imgui/hello_imgui_include_opengl.h" // cross-platform way to include OpenGL headers
 #include "opengl_check.h"
 #include "renderpass.h"
+#include <hello_imgui/hello_imgui_include_opengl.h> // cross-platform way to include OpenGL headers
 
-#include <fmt/core.h>
+#include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
 RenderPass::RenderPass(bool write_depth, bool clear) :

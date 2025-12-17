@@ -4,7 +4,7 @@
 
 #include "theme.h"
 
-#include "hello_imgui/hello_imgui.h"
+#include <hello_imgui/hello_imgui.h>
 
 #include <spdlog/spdlog.h>
 

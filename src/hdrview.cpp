@@ -7,11 +7,11 @@
 #include "imgui_ext.h"
 #include "version.h"
 #include <CLI/CLI.hpp>
-#include <fmt/core.h>
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #ifdef ASSETS_LOCATION
-#include "hello_imgui/hello_imgui_assets.h"
+#include <hello_imgui/hello_imgui_assets.h>
 #endif
 
 #ifdef _WIN32
