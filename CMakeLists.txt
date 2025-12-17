@@ -924,7 +924,7 @@ CPMAddPackage(
   URL https://github.com/webmproject/libwebp/archive/refs/tags/v1.6.0.zip
   # DOWNLOAD_ONLY YES
   OPTIONS "WEBP_LINK_STATIC ON"
-          "WEBP_ENABLE_SIMD OFF"
+          "WEBP_ENABLE_SIMD ON"
           "WEBP_BUILD_ANIM_UTILS OFF"
           "WEBP_BUILD_CWEBP OFF"
           "WEBP_BUILD_DWEBP OFF"
