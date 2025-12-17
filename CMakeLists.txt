@@ -132,21 +132,21 @@ endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
   # Prefer libc++ in conjunction with Clang
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    include(CheckCXXCompilerFlag)
-    check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCPP)
-    if(HAS_LIBCPP)
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
-      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
-      message(STATUS "HDRView: using libc++.")
-    else()
-      message(
-        WARNING
-          "libc++ is recommended in conjunction with clang. Please install the libc++ development headers, provided e.g. by the packages 'libc++-dev' and 'libc++abi-dev' on Debian/Ubuntu."
-      )
-    endif()
-  endif()
+  # if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  #   include(CheckCXXCompilerFlag)
+  #   check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCPP)
+  #   if(HAS_LIBCPP)
+  #     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
+  #     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+  #     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
+  #     message(STATUS "HDRView: using libc++.")
+  #   else()
+  #     message(
+  #       WARNING
+  #         "libc++ is recommended in conjunction with clang. Please install the libc++ development headers, provided e.g. by the packages 'libc++-dev' and 'libc++abi-dev' on Debian/Ubuntu."
+  #     )
+  #   endif()
+  # endif()
 
   # Enable link time optimization and set the default symbol visibility to hidden (very important to obtain small
   # binaries)
@@ -400,30 +400,36 @@ CPMAddPackage(
   NAME fmt
   GITHUB_REPOSITORY fmtlib/fmt
   GIT_TAG 9.1.0
-  OPTIONS "FMT_INSTALL OFF" "FMT_HEADER_ONLY OFF FMT_USE_CPP11 ON FMT_USE_INLINE_NAMESPACES ON"
+  OPTIONS "FMT_INSTALL OFF"
+          "FMT_HEADER_ONLY OFF"
+          "FMT_USE_CPP11 ON"
+          "FMT_USE_INLINE_NAMESPACES ON"
+          "BUILD_SHARED_LIBS OFF"
+          "FMT_INCLUDE_INSTALL_DIR OFF"
+          "FMT_TEST OFF"
   SYSTEM YES
 )
 if(fmt_ADDED)
   message(STATUS "Will build fmt library")
   disable_target_warnings(fmt::fmt)
-  # Ensure same stdlib as main project to avoid locale/ABI issues
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-    # Get the actual target behind the alias
-    get_target_property(fmt_actual_target fmt::fmt ALIASED_TARGET)
-    if(fmt_actual_target)
-      target_compile_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
-      target_link_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
-    else()
-      # Apply directly to fmt::fmt
-      target_compile_options(fmt::fmt INTERFACE -stdlib=libc++)
-      target_link_options(fmt::fmt INTERFACE -stdlib=libc++)
-    endif()
-    # Also apply to fmt-header-only if it exists
-    if(TARGET fmt-header-only)
-      target_compile_options(fmt-header-only INTERFACE -stdlib=libc++)
-      target_link_options(fmt-header-only INTERFACE -stdlib=libc++)
-    endif()
-  endif()
+  # # Ensure same stdlib as main project to avoid locale/ABI issues
+  # if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
+  #   # Get the actual target behind the alias
+  #   get_target_property(fmt_actual_target fmt::fmt ALIASED_TARGET)
+  #   if(fmt_actual_target)
+  #     target_compile_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
+  #     target_link_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
+  #   else()
+  #     # Apply directly to fmt::fmt
+  #     target_compile_options(fmt::fmt INTERFACE -stdlib=libc++)
+  #     target_link_options(fmt::fmt INTERFACE -stdlib=libc++)
+  #   endif()
+  #   # Also apply to fmt-header-only if it exists
+  #   if(TARGET fmt-header-only)
+  #     target_compile_options(fmt-header-only INTERFACE -stdlib=libc++)
+  #     target_link_options(fmt-header-only INTERFACE -stdlib=libc++)
+  #   endif()
+  # endif()
 elseif(fmt_FOUND OR TARGET fmt::fmt)
   message(STATUS "Using system-installed fmt library")
 else()
@@ -441,6 +447,10 @@ CPMAddPackage(
 )
 if(spdlog_ADDED)
   message(STATUS "Will build spdlog library")
+  # if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
+  #   target_compile_options(spdlog PUBLIC -stdlib=libc++)
+  #   target_link_options(spdlog PUBLIC -stdlib=libc++)
+  # endif()
 elseif(spdlog_FOUND OR TARGET spdlog::spdlog)
   message(STATUS "Using system-installed spdlog library")
 else()
@@ -460,10 +470,10 @@ target_include_directories(stp PUBLIC "${smallthreadpool_SOURCE_DIR}")
 target_link_libraries(stp PRIVATE spdlog::spdlog)
 target_compile_features(stp PUBLIC cxx_std_17)
 # Ensure same stdlib as main project
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-  target_compile_options(stp PUBLIC -stdlib=libc++)
-  target_link_options(stp PUBLIC -stdlib=libc++)
-endif()
+# if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
+#   target_compile_options(stp PUBLIC -stdlib=libc++)
+#   target_link_options(stp PUBLIC -stdlib=libc++)
+# endif()
 disable_target_warnings(stp)
 mark_as_system_library(stp)
 list(APPEND HDRVIEW_DEPENDENCIES "stp")
@@ -487,10 +497,10 @@ configure_file("${CMAKE_SOURCE_DIR}/cmake/qoi_impl.cpp.in" "${CMAKE_CURRENT_BINA
 add_library(qoi STATIC "${CMAKE_CURRENT_BINARY_DIR}/qoi_impl.cpp")
 target_include_directories(qoi PUBLIC "${qoi_SOURCE_DIR}")
 # Ensure same stdlib as main project
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-  target_compile_options(qoi PUBLIC -stdlib=libc++)
-  target_link_options(qoi PUBLIC -stdlib=libc++)
-endif()
+# if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
+#   target_compile_options(qoi PUBLIC -stdlib=libc++)
+#   target_link_options(qoi PUBLIC -stdlib=libc++)
+# endif()
 disable_target_warnings(qoi)
 mark_as_system_library(qoi)
 list(APPEND HDRVIEW_DEPENDENCIES "qoi")
