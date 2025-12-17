@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common.h"
 #include "fwd.h"
 
 #include "box.h"
@@ -15,11 +16,13 @@
 namespace ImGui
 {
 
-struct ScopedFont
+struct ScopedFont : ScopeGuard<std::function<void()>>
 {
 public:
-    explicit ScopedFont(ImFont *font, float font_size_base_unscaled) { ImGui::PushFont(font, font_size_base_unscaled); }
-    ~ScopedFont() { ImGui::PopFont(); }
+    explicit ScopedFont(ImFont *font, float font_size_base_unscaled) : ScopeGuard([]() { ImGui::PopFont(); })
+    {
+        ImGui::PushFont(font, font_size_base_unscaled);
+    }
 
     ScopedFont(ScopedFont &&)                 = delete;
     ScopedFont &operator=(ScopedFont &&)      = delete;

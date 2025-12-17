@@ -916,6 +916,43 @@ if(HDRVIEW_ENABLE_LIBHEIF)
   list(APPEND HDRVIEW_DEPENDENCIES "heif")
 endif()
 
+option(HDRVIEW_ENABLE_LIBWEBP "Enable LIBWEBP support" ON)
+if(HDRVIEW_ENABLE_LIBWEBP)
+CPMAddPackage(
+  NAME libwebp
+  VERSION 1.6.0
+  URL https://github.com/webmproject/libwebp/archive/refs/tags/v1.6.0.zip
+  # DOWNLOAD_ONLY YES
+  OPTIONS "WEBP_LINK_STATIC ON"
+          "WEBP_ENABLE_SIMD ON"
+          "WEBP_BUILD_ANIM_UTILS OFF"
+          "WEBP_BUILD_CWEBP OFF"
+          "WEBP_BUILD_DWEBP OFF"
+          "WEBP_BUILD_GIF2WEBP OFF"
+          "WEBP_BUILD_IMG2WEBP OFF"
+          "WEBP_BUILD_VWEBP OFF"
+          "WEBP_BUILD_WEBPINFO OFF"
+          "WEBP_BUILD_LIBWEBPMUX OFF"
+          "WEBP_BUILD_WEBPMUX ON"
+          "WEBP_BUILD_EXTRAS OFF"
+          "WEBP_BUILD_WEBP_JS OFF"
+          "WEBP_BUILD_FUZZTEST OFF"
+          "WEBP_USE_THREAD ON"
+          "WEBP_NEAR_LOSSLESS ON"
+          "WEBP_ENABLE_SWAP_16BIT_CSP ON"
+  SYSTEM YES
+)
+if(libwebp_ADDED)
+  message(STATUS "Will build libwebp library")
+elseif(TARGET webpdecoder)
+  message(STATUS "Will link against system-installed libwebp library")
+else()
+  message(FATAL_ERROR "libwebp library not found. Please install it.")
+endif()
+# Link both decoder and encoder libraries, plus demux for metadata extraction
+list(APPEND HDRVIEW_DEPENDENCIES "webp" "webpdemux")
+endif()
+
 CPMAddPackage(
   NAME CLI11
   VERSION 2.4.1
@@ -1025,6 +1062,7 @@ add_enabled_definition(HDRVIEW_ENABLE_HTJ2K)
 add_enabled_definition(HDRVIEW_ENABLE_AVIF)
 add_enabled_definition(HDRVIEW_ENABLE_HEIC)
 add_enabled_definition(HDRVIEW_ENABLE_AVCI)
+add_enabled_definition(HDRVIEW_ENABLE_LIBWEBP)
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -1085,6 +1123,7 @@ hello_imgui_add_app(
   src/imageio/stb.cpp
   src/imageio/qoi.cpp
   src/imageio/uhdr.cpp
+  src/imageio/webp.cpp
   src/app-draw.cpp
   src/app-file-io.cpp
   src/app-gui.cpp

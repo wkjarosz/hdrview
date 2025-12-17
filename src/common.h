@@ -24,6 +24,63 @@
 #include <spdlog/mdc.h>
 #include <spdlog/spdlog.h>
 
+/*!
+    @brief A generic scope guard that invokes a callback upon destruction.
+
+    This class template allows you to create a scope guard that executes a
+    specified callback function when the guard goes out of scope. This is useful
+    for ensuring that cleanup code is executed, even if an exception is thrown
+    or an early return occurs.
+
+    @tparam Callback The type of the callback function to be invoked on scope exit.
+
+    @par Example
+    @code
+    {
+        FILE* file = fopen("example.txt", "r");
+        if (!file) throw std::runtime_error("Failed to open file");
+
+        ScopeGuard guard([file]() { fclose(file); });
+
+        // Perform operations on the file...
+
+        // The file will be automatically closed when 'guard' goes out of scope.
+    }
+    @endcode
+
+ */
+template <typename T>
+class ScopeGuard
+{
+public:
+    // Discourage unnecessary moves / copies.
+    ScopeGuard(const ScopeGuard &)            = delete;
+    ScopeGuard &operator=(const ScopeGuard &) = delete;
+    // ScopeGuard &operator=(ScopeGuard &&)      = delete;
+
+    ScopeGuard(const T &callback) : m_callback{callback} {}
+    ScopeGuard(T &&callback) : m_callback{std::move(callback)} {}
+    ScopeGuard(ScopeGuard<T> &&other) { *this = std::move(other); }
+    ScopeGuard &operator=(ScopeGuard<T> &&other)
+    {
+        m_callback       = std::move(other.m_callback);
+        other.m_callback = {};
+        return *this;
+    }
+
+    ~ScopeGuard()
+    {
+        if (m_armed)
+            m_callback();
+    }
+
+    void disarm() { m_armed = false; }
+
+private:
+    T    m_callback;
+    bool m_armed = true;
+};
+
 /**
     Manages a scoped entry in the spdlog MDC (Mapped Diagnostic Context).
 
@@ -32,14 +89,13 @@
 
     Useful for associating contextual information with log messages within a scope.
  */
-class ScopedMDC
+class ScopedMDC : ScopeGuard<std::function<void()>>
 {
 public:
-    ScopedMDC(const std::string &key, const std::string &value) : m_key(key) { spdlog::mdc::put(m_key, value); }
-    ~ScopedMDC() { spdlog::mdc::remove(m_key); }
-
-private:
-    std::string m_key;
+    ScopedMDC(const std::string &key, const std::string &value) : ScopeGuard([key]() { spdlog::mdc::remove(key); })
+    {
+        spdlog::mdc::put(key, value);
+    }
 };
 
 #define MY_ASSERT(cond, description, ...)                                                                              \

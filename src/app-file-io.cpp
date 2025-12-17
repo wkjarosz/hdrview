@@ -15,6 +15,7 @@
 #include "imageio/qoi.h"
 #include "imageio/stb.h"
 #include "imageio/uhdr.h"
+#include "imageio/webp.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 
@@ -52,6 +53,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             Format_JPEG_STB,
             Format_JPEG_UHDR,
             Format_JPEG_XL,
+            Format_WEBP,
             Format_EXR,
             Format_PFM,
             Format_PNG_LIBPNG,
@@ -84,6 +86,11 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #else
                                                        false,
 #endif
+#ifdef HDRVIEW_ENABLE_WEBP
+                                                       true,
+#else
+                                                       false,
+#endif
                                                        true, true,
 #ifdef HDRVIEW_ENABLE_LIBPNG
                                                        true,
@@ -102,6 +109,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             "JPEG (stb)",
             "JPEG (UltraHDR)",
             "JPEG-XL",
+            "WebP",
             "OpenEXR",
             "PFM",
             "PNG (libpng)",
@@ -121,6 +129,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             ".jpg",
             ".jpg",
             ".jxl",
+            ".webp",
             ".exr",
             ".pfm",
             ".png",
@@ -203,6 +212,14 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             auto opts = jxl_parameters_gui();
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_jxl_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_WEBP:
+        {
+            auto opts = webp_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_webp_image(img, os, filename, opts); };
         }
         break;
 

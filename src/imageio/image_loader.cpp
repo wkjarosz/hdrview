@@ -27,6 +27,7 @@
 #include "imageio/qoi.h"
 #include "imageio/stb.h"
 #include "imageio/uhdr.h"
+#include "imageio/webp.h"
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -129,6 +130,18 @@ static std::vector<LoaderEntry> default_loaders()
              if (is_png_image(is))
              {
                  out = load_png_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#ifdef HDRVIEW_ENABLE_LIBWEBP
+        {"libwebp",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_webp_image(is))
+             {
+                 out = load_webp_image(is, filename, opts);
                  return true;
              }
              return false;

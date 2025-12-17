@@ -165,7 +165,6 @@ string_view get_exif_text_as_binary(char *text, size_t len)
 
         int remaining = binary_len - hex_offset;
         return {text + hex_offset, (size_t)remaining};
-        // return exif_to_json(u8 + hex_offset, remaining);
     }
     catch (const std::exception &e)
     {
