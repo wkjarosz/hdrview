@@ -396,10 +396,11 @@ add_library(linalg INTERFACE IMPORTED)
 target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
+# Use fmt 11.x which is compatible with spdlog 1.16.0's bundled fmt
 CPMAddPackage(
   NAME fmt
   GITHUB_REPOSITORY fmtlib/fmt
-  GIT_TAG 9.1.0
+  GIT_TAG 11.0.2
   OPTIONS "FMT_INSTALL OFF"
           # "FMT_HEADER_ONLY OFF"
           "FMT_USE_CPP11 ON"
@@ -407,6 +408,7 @@ CPMAddPackage(
           "BUILD_SHARED_LIBS OFF"
           "FMT_INCLUDE_INSTALL_DIR OFF"
           "FMT_TEST OFF"
+          "FMT_DOC OFF"
   SYSTEM YES
 )
 if(fmt_ADDED)
@@ -442,7 +444,7 @@ CPMAddPackage(
   VERSION 1.12.0 # we set the minimum version to the one included in ubuntu 24.04
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
-          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
+          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above
   SYSTEM YES
 )
 if(spdlog_ADDED)
@@ -1188,14 +1190,6 @@ hello_imgui_add_app(
   ${CMAKE_CURRENT_BINARY_DIR}/assets
 )
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-# Ensure spdlog's bundled fmt is used instead of system fmt (e.g., from Homebrew)
-# Add spdlog's include directory as a non-system include with high priority
-if(spdlog_ADDED)
-  get_target_property(spdlog_include_dirs spdlog::spdlog INTERFACE_INCLUDE_DIRECTORIES)
-  target_include_directories(HDRView BEFORE PRIVATE ${spdlog_include_dirs})
-  # Also add the bundled fmt directory explicitly
-  target_include_directories(HDRView BEFORE PRIVATE ${spdlog_SOURCE_DIR}/include)
-endif()
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
 
