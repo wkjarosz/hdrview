@@ -401,7 +401,7 @@ CPMAddPackage(
   GITHUB_REPOSITORY fmtlib/fmt
   GIT_TAG 9.1.0
   OPTIONS "FMT_INSTALL OFF"
-          "FMT_HEADER_ONLY OFF"
+          # "FMT_HEADER_ONLY OFF"
           "FMT_USE_CPP11 ON"
           "FMT_USE_INLINE_NAMESPACES ON"
           "BUILD_SHARED_LIBS OFF"
@@ -1188,6 +1188,14 @@ hello_imgui_add_app(
   ${CMAKE_CURRENT_BINARY_DIR}/assets
 )
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# Ensure spdlog's bundled fmt is used instead of system fmt (e.g., from Homebrew)
+# Add spdlog's include directory as a non-system include with high priority
+if(spdlog_ADDED)
+  get_target_property(spdlog_include_dirs spdlog::spdlog INTERFACE_INCLUDE_DIRECTORIES)
+  target_include_directories(HDRView BEFORE PRIVATE ${spdlog_include_dirs})
+  # Also add the bundled fmt directory explicitly
+  target_include_directories(HDRView BEFORE PRIVATE ${spdlog_SOURCE_DIR}/include)
+endif()
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
 
