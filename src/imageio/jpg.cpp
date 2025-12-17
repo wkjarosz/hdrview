@@ -8,12 +8,12 @@
 #include "app.h"
 #include "colorspace.h"
 #include "exif.h"
-#include "fmt/ranges.h"
 #include "icc.h"
 #include "image.h"
 #include <algorithm>
 #include <iostream>
 #include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/ranges.h>
 #include <stdexcept>
 #include <string>
 #include <vector>

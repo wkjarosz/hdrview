@@ -236,7 +236,8 @@ json entry_to_json(ExifEntry *entry, ExifByteOrder bo)
         {
             // For float, we need to handle endianness manually since libexif doesn't provide a utility
             uint32_t raw_bits = exif_get_long(reinterpret_cast<const unsigned char *>(&entry->data[4 * i]), bo);
-            float    val      = *reinterpret_cast<float *>(&raw_bits);
+            float    val;
+            memcpy(&val, &raw_bits, sizeof(float));
             vals.push_back(val);
         }
         value["type"] = "float";
@@ -258,7 +259,8 @@ json entry_to_json(ExifEntry *entry, ExifByteOrder bo)
             uint32_t high = exif_get_long(reinterpret_cast<const unsigned char *>(&entry->data[8 * i + 4]), bo);
 
             uint64_t raw_bits = (bo == EXIF_BYTE_ORDER_INTEL) ? (uint64_t)high << 32 | low : (uint64_t)low << 32 | high;
-            double   val      = *reinterpret_cast<double *>(&raw_bits);
+            double   val;
+            memcpy(&val, &raw_bits, sizeof(double));
             vals.push_back(val);
         }
         value["type"] = "double";
