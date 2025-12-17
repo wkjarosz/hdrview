@@ -131,23 +131,6 @@ if(CMAKE_GENERATOR MATCHES "Visual Studio")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  # Prefer libc++ in conjunction with Clang
-  # if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  #   include(CheckCXXCompilerFlag)
-  #   check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCPP)
-  #   if(HAS_LIBCPP)
-  #     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
-  #     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
-  #     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
-  #     message(STATUS "HDRView: using libc++.")
-  #   else()
-  #     message(
-  #       WARNING
-  #         "libc++ is recommended in conjunction with clang. Please install the libc++ development headers, provided e.g. by the packages 'libc++-dev' and 'libc++abi-dev' on Debian/Ubuntu."
-  #     )
-  #   endif()
-  # endif()
-
   # Enable link time optimization and set the default symbol visibility to hidden (very important to obtain small
   # binaries)
   if(NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
@@ -396,61 +379,15 @@ add_library(linalg INTERFACE IMPORTED)
 target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
-# # Use fmt 11.x which is compatible with spdlog 1.16.0's bundled fmt
-# CPMAddPackage(
-#   NAME fmt
-#   GITHUB_REPOSITORY fmtlib/fmt
-#   GIT_TAG 11.0.2
-#   OPTIONS "FMT_INSTALL OFF"
-#           # "FMT_HEADER_ONLY OFF"
-#           "FMT_USE_CPP11 ON"
-#           "FMT_USE_INLINE_NAMESPACES ON"
-#           "BUILD_SHARED_LIBS OFF"
-#           "FMT_INCLUDE_INSTALL_DIR OFF"
-#           "FMT_TEST OFF"
-#           "FMT_DOC OFF"
-# )
-# if(fmt_ADDED)
-#   message(STATUS "Will build fmt library")
-#   disable_target_warnings(fmt::fmt)
-#   # # Ensure same stdlib as main project to avoid locale/ABI issues
-#   # if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-#   #   # Get the actual target behind the alias
-#   #   get_target_property(fmt_actual_target fmt::fmt ALIASED_TARGET)
-#   #   if(fmt_actual_target)
-#   #     target_compile_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
-#   #     target_link_options(${fmt_actual_target} PRIVATE -stdlib=libc++)
-#   #   else()
-#   #     # Apply directly to fmt::fmt
-#   #     target_compile_options(fmt::fmt INTERFACE -stdlib=libc++)
-#   #     target_link_options(fmt::fmt INTERFACE -stdlib=libc++)
-#   #   endif()
-#   #   # Also apply to fmt-header-only if it exists
-#   #   if(TARGET fmt-header-only)
-#   #     target_compile_options(fmt-header-only INTERFACE -stdlib=libc++)
-#   #     target_link_options(fmt-header-only INTERFACE -stdlib=libc++)
-#   #   endif()
-#   # endif()
-# elseif(fmt_FOUND OR TARGET fmt::fmt)
-#   message(STATUS "Using system-installed fmt library")
-# else()
-#   message(FATAL_ERROR "Could not find or download fmt library.")
-# endif()
-# list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
-
 CPMAddPackage(
   NAME spdlog
   VERSION 1.16.0
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
-          # "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above
+  SYSTEM YES
 )
 if(spdlog_ADDED)
   message(STATUS "Will build spdlog library")
-  # if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-  #   target_compile_options(spdlog PUBLIC -stdlib=libc++)
-  #   target_link_options(spdlog PUBLIC -stdlib=libc++)
-  # endif()
 elseif(spdlog_FOUND OR TARGET spdlog::spdlog)
   message(STATUS "Using system-installed spdlog library")
 else()
@@ -463,21 +400,14 @@ if(NOT smallthreadpool_ADDED)
   message(FATAL_ERROR "Could not download smallthreadpool library.")
 endif()
 message(STATUS "smallthreadpool library added")
-# # Create implementation library with wrapper
-# configure_file("${CMAKE_SOURCE_DIR}/cmake/stp_impl.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/stp_impl.cpp" COPYONLY)
-# add_library(stp STATIC "${CMAKE_CURRENT_BINARY_DIR}/stp_impl.cpp")
-# target_include_directories(stp PUBLIC "${smallthreadpool_SOURCE_DIR}")
-# target_link_libraries(stp PRIVATE spdlog::spdlog)
-# target_compile_features(stp PUBLIC cxx_std_17)
-add_library(stp INTERFACE IMPORTED)
-target_include_directories(stp INTERFACE "${smallthreadpool_SOURCE_DIR}")
-# Ensure same stdlib as main project
-# if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-#   target_compile_options(stp PUBLIC -stdlib=libc++)
-#   target_link_options(stp PUBLIC -stdlib=libc++)
-# endif()
-# disable_target_warnings(stp)
-# mark_as_system_library(stp)
+# Create implementation library with wrapper
+configure_file("${CMAKE_SOURCE_DIR}/cmake/stp_impl.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/stp_impl.cpp" COPYONLY)
+add_library(stp STATIC "${CMAKE_CURRENT_BINARY_DIR}/stp_impl.cpp")
+target_include_directories(stp PUBLIC "${smallthreadpool_SOURCE_DIR}")
+target_link_libraries(stp PRIVATE spdlog::spdlog)
+target_compile_features(stp PUBLIC cxx_std_17)
+# add_library(stp INTERFACE IMPORTED)
+# target_include_directories(stp INTERFACE "${smallthreadpool_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "stp")
 
 CPMAddPackage("gh:wkjarosz/stb#491e9c3ac2add5bda0fffb5a8cb99868c483506b")
@@ -498,11 +428,6 @@ message(STATUS "qoi library added")
 configure_file("${CMAKE_SOURCE_DIR}/cmake/qoi_impl.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/qoi_impl.cpp" COPYONLY)
 add_library(qoi STATIC "${CMAKE_CURRENT_BINARY_DIR}/qoi_impl.cpp")
 target_include_directories(qoi PUBLIC "${qoi_SOURCE_DIR}")
-# Ensure same stdlib as main project
-# if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND HAS_LIBCPP)
-#   target_compile_options(qoi PUBLIC -stdlib=libc++)
-#   target_link_options(qoi PUBLIC -stdlib=libc++)
-# endif()
 disable_target_warnings(qoi)
 mark_as_system_library(qoi)
 list(APPEND HDRVIEW_DEPENDENCIES "qoi")
