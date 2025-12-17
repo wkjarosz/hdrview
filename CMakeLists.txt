@@ -409,7 +409,6 @@ CPMAddPackage(
           "FMT_INCLUDE_INSTALL_DIR OFF"
           "FMT_TEST OFF"
           "FMT_DOC OFF"
-  SYSTEM YES
 )
 if(fmt_ADDED)
   message(STATUS "Will build fmt library")
@@ -445,7 +444,6 @@ CPMAddPackage(
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
           "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above
-  SYSTEM YES
 )
 if(spdlog_ADDED)
   message(STATUS "Will build spdlog library")
