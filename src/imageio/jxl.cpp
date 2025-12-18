@@ -14,7 +14,6 @@
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
-#include "fonts.h"
 #include "imgui_ext.h"
 
 using namespace std;
@@ -60,6 +59,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 #include <jxl/version.h>
 
 #include "colorspace.h"
+#include "fonts.h"
 #include "icc.h"
 #include "timer.h"
 

@@ -5,6 +5,7 @@
 //
 
 #include "webp.h"
+#include "app.h"
 #include "common.h"
 #include "image.h"
 
@@ -12,11 +13,10 @@ using namespace std;
 
 struct WebPSaveOptions
 {
-    float            gain            = 1.f;
-    float            quality         = 95.f;
-    bool             lossless        = false;
-    TransferFunction tf              = TransferFunction::sRGB;
-    int              data_type_index = 0;
+    float            gain     = 1.f;
+    bool             lossless = false;
+    float            quality  = 95.f;
+    TransferFunction tf       = TransferFunction::sRGB;
 };
 
 static WebPSaveOptions s_opts;
@@ -59,6 +59,7 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
 
 #include "colorspace.h"
 #include "exif.h"
+#include "fonts.h"
 #include "icc.h"
 #include "imgui_ext.h"
 #include "timer.h"
@@ -488,30 +489,33 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
     return images;
 }
 
-void save_webp_image(const Image &img, ostream &os, string_view filename, float gain, float quality, bool lossless,
-                     TransferFunction tf)
+void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *opts)
 {
+    if (!opts)
+        throw invalid_argument{"WebP save options cannot be null"};
+
     Timer timer;
 
     // Get interleaved RGBA data
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved<uint8_t>(
-        &w, &h, &n, gain, tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, true);
+        &w, &h, &n, opts->gain,
+        opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, true);
 
     // WebP supports RGB or RGBA
     if (n != 3 && n != 4)
         throw runtime_error{fmt::format("WebP only supports RGB or RGBA images, but image has {} channels", n)};
 
     spdlog::info("Encoding {}-channel, {}x{} pixels {} WebP image (quality: {}, lossless: {})", n, w, h,
-                 tf.type == TransferFunction::sRGB ? "sRGB" : "linear", quality, lossless);
+                 opts->tf.type == TransferFunction::sRGB ? "sRGB" : "linear", opts->quality, opts->lossless);
 
     // Setup WebP encoder config
     WebPConfig config;
     if (!WebPConfigInit(&config))
         throw runtime_error{"Failed to initialize WebP config"};
 
-    config.lossless = lossless ? 1 : 0;
-    config.quality  = quality;
+    config.lossless = opts->lossless ? 1 : 0;
+    config.quality  = opts->quality;
     config.method   = 6; // 0=fast, 6=slower but better quality
 
     if (!WebPValidateConfig(&config))
@@ -524,7 +528,7 @@ void save_webp_image(const Image &img, ostream &os, string_view filename, float 
 
     picture.width    = w;
     picture.height   = h;
-    picture.use_argb = lossless ? 1 : 0; // Use ARGB for lossless, YUV for lossy
+    picture.use_argb = opts->lossless ? 1 : 0; // Use ARGB for lossless, YUV for lossy
 
     // Import pixels
     int import_result = 0;
@@ -565,65 +569,78 @@ void save_webp_image(const Image &img, ostream &os, string_view filename, float 
     spdlog::info("Saved WebP image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-WebPSaveOptions *webp_parameters_gui()
+void save_webp_image(const Image &img, ostream &os, string_view filename, float gain, float quality, bool lossless,
+                     TransferFunction tf)
 {
-    static bool first_time = true;
-    if (first_time)
-    {
-        s_opts     = WebPSaveOptions{};
-        first_time = false;
-    }
-
-    using ImGui::BeginGroup;
-    using ImGui::Checkbox;
-    using ImGui::Combo;
-    using ImGui::EndGroup;
-    using ImGui::IsItemDeactivatedAfterEdit;
-    using ImGui::RadioButton;
-    using ImGui::SameLine;
-    using ImGui::SetNextItemWidth;
-    using ImGui::SliderFloat;
-
-    bool  modified = false;
-    float pad      = ImGui::GetStyle().FramePadding.x;
-
-    // Gain/exposure adjustment
-    SetNextItemWidth(ImGui::CalcItemWidth() - ImGui::CalcTextSize("Gain:").x - 3 * pad);
-    modified |= ImGui::InputFloat("Gain:", &s_opts.gain, 0.0f, 0.0f, "%.6g");
-    ImGui::SetItemTooltip("Multiplication factor to apply to pixel values before quantization");
-
-    // Quality slider (only for lossy mode)
-    if (!s_opts.lossless)
-    {
-        SetNextItemWidth(ImGui::CalcItemWidth() - ImGui::CalcTextSize("Quality:").x - 3 * pad);
-        modified |= SliderFloat("Quality:", &s_opts.quality, 0.f, 100.f, "%.1f");
-        ImGui::SetItemTooltip("Quality factor (0=smallest file, 100=best quality)");
-    }
-
-    // Lossless checkbox
-    modified |= Checkbox("Lossless", &s_opts.lossless);
-    ImGui::SetItemTooltip("Use lossless compression (larger files but no quality loss)");
-
-    // Transfer function selection
-    static const char            *tf_items[] = {"Linear", "sRGB"};
-    static const TransferFunction tfs[]      = {{TransferFunction::Linear, 1.f}, TransferFunction::sRGB};
-    int                           tf_current = s_opts.tf.type == TransferFunction::Linear ? 0 : 1;
-    SetNextItemWidth(ImGui::CalcItemWidth() - ImGui::CalcTextSize("Transfer function:").x - 3 * pad);
-    if (Combo("Transfer function:", &tf_current, tf_items, IM_ARRAYSIZE(tf_items)))
-    {
-        s_opts.tf = tfs[tf_current];
-        modified  = true;
-    }
-    ImGui::SetItemTooltip("Transfer function to apply to pixel values");
-
-    return modified ? &s_opts : nullptr;
+    WebPSaveOptions opts{gain, lossless, quality, tf};
+    save_webp_image(img, os, filename, &opts);
 }
 
-void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *opts)
+WebPSaveOptions *webp_parameters_gui()
 {
-    if (!opts)
-        throw invalid_argument{"WebP save options cannot be null"};
-    save_webp_image(img, os, filename, opts->gain, opts->quality, opts->lossless, opts->tf);
+    if (ImGui::PE::Begin("WebP Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    {
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
+
+        ImGui::PE::Entry(
+            "Gain",
+            [&]
+            {
+                ImGui::BeginGroup();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
+                                        ImGui::GetStyle().ItemInnerSpacing.x);
+                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+                if (ImGui::IconButton(ICON_MY_EXPOSURE))
+                    s_opts.gain = exp2f(hdrview()->exposure());
+                ImGui::Tooltip("Set gain from the current viewport exposure value.");
+                ImGui::EndGroup();
+                return changed;
+            },
+            "Multiply the pixels by this value before saving.");
+
+        ImGui::PE::Entry(
+            "Transfer function",
+            [&]
+            {
+                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
+                {
+                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
+                    {
+                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
+                        if (ImGui::Selectable(
+                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
+                                is_selected))
+                            s_opts.tf.type = (TransferFunction::Type_)i;
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                return true;
+            },
+            "Encode the pixel values using this transfer function.");
+
+        if (s_opts.tf.type == TransferFunction::Gamma)
+            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
+                                   "When using a gamma transfer function, this is the gamma value to use.");
+
+        ImGui::PE::Checkbox(
+            "Lossless", &s_opts.lossless,
+            "If enabled, the image will be saved using lossless compression. Quality setting will be ignored.");
+
+        ImGui::BeginDisabled(s_opts.lossless);
+        ImGui::PE::SliderFloat("Quality", &s_opts.quality, 1, 100, "%.3f", 0, "Quality level for lossy compression.");
+        ImGui::EndDisabled();
+
+        ImGui::PE::End();
+    }
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_opts = WebPSaveOptions{};
+
+    return &s_opts;
 }
 
 #endif

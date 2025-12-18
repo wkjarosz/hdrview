@@ -86,7 +86,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #else
                                                        false,
 #endif
-#ifdef HDRVIEW_ENABLE_WEBP
+#ifdef HDRVIEW_ENABLE_LIBWEBP
                                                        true,
 #else
                                                        false,
