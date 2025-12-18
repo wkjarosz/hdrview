@@ -5,16 +5,8 @@
 //
 
 #include "webp.h"
-#include "app.h"
-#include "colorspace.h"
 #include "common.h"
-#include "exif.h"
-#include "icc.h"
 #include "image.h"
-#include "timer.h"
-
-#include "imgui_ext.h"
-#include <webp/mux_types.h>
 
 using namespace std;
 
@@ -62,7 +54,14 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
 #include <webp/demux.h>
 #include <webp/encode.h>
 #include <webp/mux.h>
+#include <webp/mux_types.h>
 #include <webp/types.h>
+
+#include "colorspace.h"
+#include "exif.h"
+#include "icc.h"
+#include "imgui_ext.h"
+#include "timer.h"
 
 using namespace std;
 
