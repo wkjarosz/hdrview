@@ -1050,7 +1050,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     if (JPEGXL_ENABLED)
                         ImGui::PE::Hyperlink("libjxl", "For loading & saving JPEG-XL images.",
                                              "https://github.com/libjxl/libjxl");
-                    if (HDRVIEW_ENABLE_LIBJPEG)
+                    if (LIBJPEG_ENABLED)
                         ImGui::PE::Hyperlink("libjpeg (turbo)", "For loading & saving JPEG images.",
                                              "https://github.com/libjpeg-turbo/libjpeg-turbo");
                     if (LIBPNG_ENABLED)
