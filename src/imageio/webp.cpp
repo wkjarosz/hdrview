@@ -250,9 +250,6 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
         else
             // sRGB transfer function
             for (int c = 0; c < 3; ++c) bg_color[c] = sRGB_to_linear(bg_color[c]);
-
-        // Premultiply alpha
-        for (int c = 0; c < 3; ++c) bg_color[c] *= bg_color[3];
     }
 
     // Prepare channel filter
@@ -305,10 +302,10 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             const bool transparent_bg = (bg_color[3] == 0.f);
 
             // If background is transparent and we're not compositing over previous frame,
-            // we can use frame size as data window
-            const bool use_frame_size   = transparent_bg && use_bg;
-            const int  img_width        = use_frame_size ? frame_width : canvas_width;
-            const int  img_height       = use_frame_size ? frame_height : canvas_height;
+            // we can use frame size as data window, otherwise have to form an image for the full canvas
+            const bool use_full_canvas  = !transparent_bg || !use_bg;
+            const int  img_width        = use_full_canvas ? canvas_width : frame_width;
+            const int  img_height       = use_full_canvas ? canvas_height : frame_height;
             auto       frame_image      = make_shared<Image>(int2{img_width, img_height}, num_channels);
             frame_image->filename       = filename;
             frame_image->partname       = partname;
@@ -316,10 +313,10 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             frame_image->icc_data       = icc_data;
             frame_image->exif_data      = exif_data;
             frame_image->display_window = Box2i{int2{0, 0}, int2{canvas_width, canvas_height}};
-            frame_image->data_window    = use_frame_size
-                                              ? Box2i{int2{iter.x_offset, iter.y_offset},
-                                                   int2{iter.x_offset + frame_width, iter.y_offset + frame_height}}
-                                              : frame_image->display_window;
+            frame_image->data_window    = use_full_canvas
+                                              ? frame_image->display_window
+                                              : Box2i{int2{iter.x_offset, iter.y_offset},
+                                                   int2{iter.x_offset + frame_width, iter.y_offset + frame_height}};
 
             // Start with base metadata common to all frames
             frame_image->metadata                 = base_metadata;
@@ -361,12 +358,12 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             }
 
             // Convert fragment to float and apply color profile
-            std::vector<float> fragment_float(frame_width * frame_height * num_channels);
+            std::vector<float> frame_pixels(frame_width * frame_height * num_channels);
             for (int y = 0; y < frame_height; ++y)
                 for (int x = 0; x < frame_width; ++x)
                     for (int c = 0; c < num_channels; ++c)
-                        fragment_float[(y * frame_width + x) * num_channels + c] =
-                            frame_data[(y * frame_width + x) * num_channels + c] / 255.f;
+                        frame_pixels[(y * frame_width + x) * num_channels + c] =
+                            dequantize_full(frame_data[(y * frame_width + x) * num_channels + c]);
 
             // Apply color profile transformations to fragment
             int3 frame_size{frame_width, frame_height, num_channels};
@@ -374,7 +371,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             {
                 string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
                 Chromaticities chr;
-                if (linearize_pixels(fragment_float.data(), frame_size, gamut_chromaticities(opts.gamut_override),
+                if (linearize_pixels(frame_pixels.data(), frame_size, gamut_chromaticities(opts.gamut_override),
                                      opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
                 {
                     frame_image->chromaticities = chr;
@@ -386,41 +383,22 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             {
                 string         profile_desc = color_profile_name(ColorGamut_sRGB_BT709, TransferFunction::sRGB);
                 Chromaticities chr;
-                if ((icc_profile.valid() && icc_profile.linearize_pixels(fragment_float.data(), frame_size,
+                if ((icc_profile.valid() && icc_profile.linearize_pixels(frame_pixels.data(), frame_size,
                                                                          opts.keep_primaries, &profile_desc, &chr)) ||
-                    linearize_pixels(fragment_float.data(), frame_size, Chromaticities{}, TransferFunction::sRGB,
+                    linearize_pixels(frame_pixels.data(), frame_size, Chromaticities{}, TransferFunction::sRGB,
                                      opts.keep_primaries, &profile_desc, &chr))
                     frame_image->chromaticities = chr;
 
                 frame_image->metadata["color profile"] = profile_desc;
             }
 
-            // Composite fragment onto canvas or use fragment directly
-            if (use_frame_size)
-            {
-                // Transparent background - just premultiply alpha in the fragment (if present)
-                if (has_alpha)
-                {
-                    for (int y = 0; y < frame_height; ++y)
-                    {
-                        for (int x = 0; x < frame_width; ++x)
-                        {
-                            const size_t idx   = (y * frame_width + x) * num_channels;
-                            const float  alpha = fragment_float[idx + 3];
-                            for (int c = 0; c < 3; ++c) fragment_float[idx + c] *= alpha;
-                        }
-                    }
-                }
+            float        *pixels = frame_pixels.data();
+            vector<float> canvas_float;
 
-                // Copy fragment directly to image channels
-                for (int c = 0; c < num_channels; ++c)
-                    frame_image->channels[c].copy_from_interleaved(fragment_float.data(), frame_width, frame_height,
-                                                                   num_channels, c, [](float v) { return v; });
-            }
-            else
+            if (use_full_canvas)
             {
                 // Need to composite onto canvas (opaque/semi-transparent background or previous frame)
-                vector<float> canvas_float(img_width * img_height * num_channels);
+                canvas_float.resize(canvas_width * canvas_height * num_channels);
 
                 for (int y = 0; y < canvas_height; ++y)
                 {
@@ -433,50 +411,54 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
                         const bool in_frame =
                             frame_x >= 0 && frame_x < frame_width && frame_y >= 0 && frame_y < frame_height;
 
-                        for (int c = 0; c < num_channels; ++c)
+                        // iterate in reverse so we compute alpha first if present, since for straight alpha we need it
+                        // to compute the RGB channels
+                        for (int c = num_channels - 1; c >= 0; --c)
                         {
                             // Get background value
                             float bg_val = use_bg ? bg_color[c] : prev_canvas[canvas_idx + c];
 
-                            if (in_frame)
-                            {
-                                const size_t fragment_idx = (frame_y * frame_width + frame_x) * num_channels;
-                                const float  frag_val     = fragment_float[fragment_idx + c];
-                                const float  frag_alpha   = fragment_float[fragment_idx + 3];
-
-                                // Blend based on blend method
-                                if (iter.blend_method == WEBP_MUX_NO_BLEND)
-                                {
-                                    // Replace mode - use fragment value directly (premultiplied)
-                                    canvas_float[canvas_idx + c] = c < 3 ? frag_val * frag_alpha : frag_alpha;
-                                }
-                                else
-                                {
-                                    // Alpha blend mode - composite over background
-                                    canvas_float[canvas_idx + c] =
-                                        c < 3 ? frag_val * frag_alpha + bg_val * (1.f - frag_alpha)
-                                              : frag_alpha + bg_val * (1.f - frag_alpha);
-                                }
-                            }
-                            else
+                            if (!in_frame)
                             {
                                 // Outside fragment - use background
                                 canvas_float[canvas_idx + c] = bg_val;
+                                continue;
+                            }
+
+                            const size_t fragment_idx = (frame_y * frame_width + frame_x) * num_channels;
+                            const float  frag_val     = frame_pixels[fragment_idx + c];
+                            const float  frag_alpha   = frame_pixels[fragment_idx + 3];
+
+                            // Blend based on blend method
+                            if (iter.blend_method == WEBP_MUX_NO_BLEND)
+                                // Replace mode - use fragment value directly
+                                canvas_float[canvas_idx + c] = frag_val;
+                            else
+                            {
+                                // Alpha blend mode - composite over background
+                                if (c < 3)
+                                    canvas_float[canvas_idx + c] =
+                                        (frag_val * frag_alpha + bg_val * (1.f - frag_alpha)) /
+                                        canvas_float[canvas_idx + 3];
+                                else
+                                    canvas_float[canvas_idx + 3] = frag_alpha + bg_val * (1.f - frag_alpha);
                             }
                         }
                     }
                 }
 
-                // Copy canvas to image channels
-                for (int c = 0; c < num_channels; ++c)
-                    frame_image->channels[c].copy_from_interleaved(canvas_float.data(), canvas_width, canvas_height,
-                                                                   num_channels, c, [](float v) { return v; });
+                pixels = canvas_float.data();
 
                 // Store canvas for next frame if not disposing
                 disposed = (iter.dispose_method == WEBP_MUX_DISPOSE_BACKGROUND);
                 if (!disposed)
                     prev_canvas = std::move(canvas_float);
             }
+
+            // Copy pixels to image channels
+            for (int c = 0; c < num_channels; ++c)
+                frame_image->channels[c].copy_from_interleaved(pixels, img_width, img_height, num_channels, c,
+                                                               [](float v) { return v; });
 
             images.push_back(frame_image);
             frame_idx++;

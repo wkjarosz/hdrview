@@ -39,6 +39,12 @@
 #include <ultrahdr_api.h>
 #endif
 
+#ifdef HDRVIEW_ENABLE_LIBWEBP
+#include <webp/decode.h>
+#include <webp/demux.h>
+#include <webp/encode.h>
+#endif
+
 #include "platform_utils.h"
 
 // Macro to convert a boolean or defined/undefined symbol to "yes"/"no" string
@@ -1132,6 +1138,16 @@ void HDRViewApp::draw_about_dialog(bool &open)
                         fmt::format("\tlibuhdr        {:<15} HDRVIEW_ENABLE_UHDR      : yes\n", UHDR_LIB_VERSION_STR);
 #else
                     info += fmt::format("\tlibuhdr        {:<15} HDRVIEW_ENABLE_UHDR      : no\n", "not found");
+#endif
+#if LIBWEBP_ENABLED
+                    int       webp_v  = WebPGetDecoderVersion();
+                    const int d_major = (webp_v >> 16) & 0xff;
+                    const int d_minor = (webp_v >> 8) & 0xff;
+                    const int d_rev   = webp_v & 0xff;
+                    info += fmt::format("\tlibwebp        {:<15} HDRVIEW_ENABLE_LIBWEBP   : yes\n",
+                                        fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v));
+#else
+                    info += fmt::format("\tlibwebp        {:<15} HDRVIEW_ENABLE_LIBWEBP   : no\n", "not found");
 #endif
 #ifdef HDRVIEW_ENABLE_LIBJPEG
 #ifdef LIBJPEG_TURBO_VERSION
