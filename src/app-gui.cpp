@@ -1039,25 +1039,30 @@ void HDRViewApp::draw_about_dialog(bool &open)
                         ImGui::PE::Hyperlink("lcms2", "LittleCMS color management engine.",
                                              "https://github.com/mm2/Little-CMS");
                     if (AVIF_ENABLED)
-                        ImGui::PE::Hyperlink("aom", "For encoding and decoding AV1/AVIF/AVIFS files.",
+                        ImGui::PE::Hyperlink("aom", "For encoding and decoding AV1/AVIF/AVIFS-compressed HEIF images.",
                                              "https://aomedia.googlesource.com/aom");
                     if (HEIC_ENABLED)
-                        ImGui::PE::Hyperlink("libde265", "For decoding HEIC/HEVC/H265 files.",
+                        ImGui::PE::Hyperlink("libde265", "For decoding HEIC/HEVC/H265-compressed HEIF images.",
                                              "https://github.com/strukturag/libde265");
                     if (LIBHEIF_ENABLED)
-                        ImGui::PE::Hyperlink("libheif", "For loading HEIF files.",
+                        ImGui::PE::Hyperlink("libheif", "For loading HEIF images.",
                                              "https://github.com/strukturag/libheif");
                     if (JPEGXL_ENABLED)
-                        ImGui::PE::Hyperlink("libjxl", "For loading JPEG-XL files.",
+                        ImGui::PE::Hyperlink("libjxl", "For loading & saving JPEG-XL images.",
                                              "https://github.com/libjxl/libjxl");
-
+                    if (HDRVIEW_ENABLE_LIBJPEG)
+                        ImGui::PE::Hyperlink("libjpeg (turbo)", "For loading & saving JPEG images.",
+                                             "https://github.com/libjpeg-turbo/libjpeg-turbo");
                     if (LIBPNG_ENABLED)
-                        ImGui::PE::Hyperlink("libpng", "For loading PNG files.", "https://github.com/pnggroup/libpng");
+                        ImGui::PE::Hyperlink("libpng", "For loading & saving PNG images.",
+                                             "https://github.com/pnggroup/libpng");
 
                     if (UHDR_ENABLED)
-                        ImGui::PE::Hyperlink("libuhdr", "For loading Ultra HDR JPEG files.",
+                        ImGui::PE::Hyperlink("libuhdr", "For loading Ultra HDR JPEG images.",
                                              "https://github.com/google/libultrahdr");
-
+                    if (LIBWEBP_ENABLED)
+                        ImGui::PE::Hyperlink("libwebp", "For loading & saving WebP images.",
+                                             "https://github.com/webmproject/libwebp");
                     ImGui::PE::Hyperlink(
                         "linalg", "Sterling Orsten's public domain, single header short vector math library for C++.",
                         "https://github.com/sgorsten/linalg");
@@ -1069,10 +1074,10 @@ void HDRViewApp::draw_about_dialog(bool &open)
                         ImGui::PE::Hyperlink("OpenH264", "For decoding AVC/AVCI/AVCS/H264 files.",
                                              "https://github.com/cisco/openh264");
                     if (J2K_ENABLED)
-                        ImGui::PE::Hyperlink("OpenJPEG", "For encoding/decoding J2K and decoding HTJ2K files.",
+                        ImGui::PE::Hyperlink("OpenJPEG", "For encoding/decoding J2K- and HTJ2K-compressed HEIF images.",
                                              "https://github.com/uclouvain/openjpeg");
                     if (HTJ2K_ENABLED)
-                        ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K files.",
+                        ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K-compressed HEIF images.",
                                              "https://github.com/aous72/OpenJPH");
 #ifndef __EMSCRIPTEN__
                     ImGui::PE::Hyperlink("portable-file-dialogs",
@@ -1081,7 +1086,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
 #endif
                     ImGui::PE::Hyperlink("smalldds", "Single-header library for loading DDS images.",
                                          "https://github.com/wkjarosz/smalldds");
-                    ImGui::PE::Hyperlink("stb_image/write", "Single-header libraries for loading/writing images.",
+                    ImGui::PE::Hyperlink("stb_image/write",
+                                         "Single-header libraries for loading/saving various image formats.",
                                          "https://github.com/nothings/stb");
                     ImGui::PE::Hyperlink("tev", "Some code is adapted from Thomas Müller's tev.",
                                          "https://github.com/Tom94/tev");
@@ -1133,22 +1139,13 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info += fmt::format(
                         "\tOpenEXR        {:<15} required\n",
                         fmt::format("{}.{}.{}", OPENEXR_VERSION_MAJOR, OPENEXR_VERSION_MINOR, OPENEXR_VERSION_PATCH));
-#if UHDR_ENABLED
-                    info +=
-                        fmt::format("\tlibuhdr        {:<15} HDRVIEW_ENABLE_UHDR      : yes\n", UHDR_LIB_VERSION_STR);
+
+#ifdef HDRVIEW_ENABLE_LIBHEIF
+                    info += fmt::format("\tlibheif        {:<15} HDRVIEW_ENABLE_LIBHEIF   : yes\n", heif_get_version());
 #else
-                    info += fmt::format("\tlibuhdr        {:<15} HDRVIEW_ENABLE_UHDR      : no\n", "not found");
+                    info += fmt::format("\tlibheif        {:<15} HDRVIEW_ENABLE_LIBHEIF   : no\n", "not found");
 #endif
-#if LIBWEBP_ENABLED
-                    int       webp_v  = WebPGetDecoderVersion();
-                    const int d_major = (webp_v >> 16) & 0xff;
-                    const int d_minor = (webp_v >> 8) & 0xff;
-                    const int d_rev   = webp_v & 0xff;
-                    info += fmt::format("\tlibwebp        {:<15} HDRVIEW_ENABLE_LIBWEBP   : yes\n",
-                                        fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v));
-#else
-                    info += fmt::format("\tlibwebp        {:<15} HDRVIEW_ENABLE_LIBWEBP   : no\n", "not found");
-#endif
+
 #ifdef HDRVIEW_ENABLE_LIBJPEG
 #ifdef LIBJPEG_TURBO_VERSION
 #define LIBJPEG_STR_HELPER(x) #x
@@ -1178,10 +1175,22 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     else
                         info += fmt::format("\tlibpng         {:<15} HDRVIEW_ENABLE_LIBPNG    : no\n", "not found");
 
-#ifdef HDRVIEW_ENABLE_LIBHEIF
-                    info += fmt::format("\tlibheif        {:<15} HDRVIEW_ENABLE_LIBHEIF   : yes\n", heif_get_version());
+#if UHDR_ENABLED
+                    info +=
+                        fmt::format("\tlibuhdr        {:<15} HDRVIEW_ENABLE_UHDR      : yes\n", UHDR_LIB_VERSION_STR);
 #else
-                    info += fmt::format("\tlibheif        {:<15} HDRVIEW_ENABLE_LIBHEIF   : no\n", "not found");
+                    info += fmt::format("\tlibuhdr        {:<15} HDRVIEW_ENABLE_UHDR      : no\n", "not found");
+#endif
+
+#if LIBWEBP_ENABLED
+                    int       webp_v  = WebPGetDecoderVersion();
+                    const int d_major = (webp_v >> 16) & 0xff;
+                    const int d_minor = (webp_v >> 8) & 0xff;
+                    const int d_rev   = webp_v & 0xff;
+                    info += fmt::format("\tlibwebp        {:<15} HDRVIEW_ENABLE_LIBWEBP   : yes\n",
+                                        fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v));
+#else
+                    info += fmt::format("\tlibwebp        {:<15} HDRVIEW_ENABLE_LIBWEBP   : no\n", "not found");
 #endif
 
                     if (LIBPNG_ENABLED)
