@@ -181,14 +181,22 @@ const std::set<std::string> &Image::loadable_formats()
                                                   "avci", "avcs",
 #endif
                                                   "pic",  "png",   "pnm",  "pgm", "ppm", "bmp", "dds",
-                                                  "psd",  "pfm",   "tga",  "gif", "hdr", "exr", "qoi"};
+                                                  "psd",  "pfm",   "tga",  "gif", "hdr", "exr", "qoi",
+#ifdef HDRVIEW_ENABLE_LIBTIFF
+                                                  "tif",  "tiff"
+#endif
+                                                  };
     return formats;
 }
 
 const std::set<std::string> &Image::savable_formats()
 {
     static const std::set<std::string> formats = {"bmp", "exr", "pfm",  "ppm", "png",
-                                                  "hdr", "jpg", "jpeg", "tga", "qoi"};
+                                                  "hdr", "jpg", "jpeg", "tga", "qoi",
+#ifdef HDRVIEW_ENABLE_LIBTIFF
+                                                  "tif", "tiff"
+#endif
+                                                  };
     return formats;
 }
 

@@ -26,6 +26,7 @@
 #include "imageio/png.h"
 #include "imageio/qoi.h"
 #include "imageio/stb.h"
+#include "imageio/tiff.h"
 #include "imageio/uhdr.h"
 #include "imageio/webp.h"
 
@@ -118,6 +119,18 @@ static std::vector<LoaderEntry> default_loaders()
              if (is_heif_image(is))
              {
                  out = load_heif_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#ifdef HDRVIEW_ENABLE_LIBTIFF
+        {"libtiff",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_tiff_image(is))
+             {
+                 out = load_tiff_image(is, filename, opts);
                  return true;
              }
              return false;

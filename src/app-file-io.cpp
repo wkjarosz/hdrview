@@ -14,6 +14,7 @@
 #include "imageio/png.h"
 #include "imageio/qoi.h"
 #include "imageio/stb.h"
+#include "imageio/tiff.h"
 #include "imageio/uhdr.h"
 #include "imageio/webp.h"
 #include "imgui.h"
@@ -60,7 +61,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             Format_PNG_STB,
             Format_QOI,
             Format_TGA_STB,
-            Format_Last = Format_TGA_STB
+            Format_TIFF,
+            Format_Last = Format_TIFF
         };
         static Format_ save_format = Format_EXR;
 
@@ -97,7 +99,13 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #else
                                                        false,
 #endif
-                                                       true, true, true};
+                                                       true, true, true,
+#ifdef HDRVIEW_ENABLE_LIBTIFF
+                                                       true
+#else
+                                                       false
+#endif
+                                                       };
 
         // Array of format names
         // clang-format off
@@ -115,7 +123,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             "PNG (libpng)",
             "PNG (stb)",
             "QOI",
-            "TGA (stb)"
+            "TGA (stb)",
+            "TIFF"
             };
         // clang-format on
 
@@ -135,7 +144,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             ".png",
             ".png",
             ".qoi",
-            ".tga"
+            ".tga",
+            ".tiff"
         };
         // clang-format on
 
@@ -292,6 +302,14 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             auto opts = stb_parameters_gui(false, false);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_stb_tga(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_TIFF:
+        {
+            auto opts = tiff_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_tiff_image(img, os, filename, opts); };
         }
         break;
         }

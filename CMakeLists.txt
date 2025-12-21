@@ -959,6 +959,39 @@ if(HDRVIEW_ENABLE_LIBWEBP)
   list(APPEND HDRVIEW_DEPENDENCIES "webp" "webpdemux")
 endif()
 
+
+option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
+if(HDRVIEW_ENABLE_LIBTIFF)
+  CPMAddPackage(
+    NAME libtiff
+    VERSION v4.7.0
+    GITHUB_REPOSITORY Tom94/libtiff
+    GIT_TAG b6446af165a5a4177eb9a4f6834bb948d4f89d39
+    OPTIONS "BUILD_SHARED_LIBS OFF"
+            "HAVE_JPEGTURBO_DUAL_MODE_8_12 TRUE"
+            "tiff-tools OFF"
+            "tiff-tests OFF"
+            "tiff-contrib OFF"
+            "tiff-docs OFF"
+            "tiff-deprecated OFF"
+            "tiff-install OFF"
+            "jbig OFF"
+            "lerc OFF"
+            "lzma OFF"
+            "zstd OFF" 
+    SYSTEM YES
+  )
+  if(libtiff_ADDED)
+    message(STATUS "Will build libtiff library")
+  elseif(TARGET tiff)
+    message(STATUS "Will link against system-installed libtiff library")
+  else()
+    message(FATAL_ERROR "libtiff library not found. Please install it.")
+  endif()
+  # Link both decoder and encoder libraries, plus demux for metadata extraction
+  list(APPEND HDRVIEW_DEPENDENCIES "tiff")
+endif()
+
 CPMAddPackage(
   NAME CLI11
   VERSION 2.4.1
@@ -1043,6 +1076,8 @@ disable_target_warnings(miniz)
 mark_as_system_library(miniz)
 list(APPEND HDRVIEW_DEPENDENCIES miniz)
 
+
+
 # Helper function to add XXX_ENABLED=0 or XXX_ENABLED=1 definitions based on HDRVIEW_ENABLE_XXX option
 # Also adds HDRVIEW_ENABLE_XXX itself when the option is ON
 function(add_enabled_definition option_name)
@@ -1069,6 +1104,7 @@ add_enabled_definition(HDRVIEW_ENABLE_AVIF)
 add_enabled_definition(HDRVIEW_ENABLE_HEIC)
 add_enabled_definition(HDRVIEW_ENABLE_AVCI)
 add_enabled_definition(HDRVIEW_ENABLE_LIBWEBP)
+add_enabled_definition(HDRVIEW_ENABLE_LIBTIFF)
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -1128,6 +1164,7 @@ hello_imgui_add_app(
   src/imageio/png.cpp
   src/imageio/stb.cpp
   src/imageio/qoi.cpp
+  src/imageio/tiff.cpp
   src/imageio/uhdr.cpp
   src/imageio/webp.cpp
   src/app-draw.cpp
