@@ -359,6 +359,27 @@ json exif_data_to_json(ExifData *ed)
                 }
                 ifd_json[tag_name]["string"] = compression_name;
             }
+            else if (entry->tag == EXIF_TAG_PHOTOMETRIC_INTERPRETATION)
+            {
+                string photo_interp;
+                switch (ifd_json[tag_name]["value"].get<int>())
+                {
+                case 4: ifd_json[tag_name]["string"] = "Transparency Mask"; break;
+                case 9: ifd_json[tag_name]["string"] = "ICCLab"; break;
+                case 10: ifd_json[tag_name]["string"] = "ITULab"; break;
+                case 32803: ifd_json[tag_name]["string"] = "Color Filter Array"; break;
+                case 32844: ifd_json[tag_name]["string"] = "CIE Log2(L)"; break;
+                case 32845: ifd_json[tag_name]["string"] = "CIE Log2(L) (u',v')"; break;
+                default: break;
+                }
+            }
+            else if (entry->tag == EXIF_TAG_PLANAR_CONFIGURATION)
+            {
+                if (ifd_json[tag_name]["value"].get<int>() == 1)
+                    ifd_json[tag_name]["string"] = "Single (interleaved) plane";
+                else if (ifd_json[tag_name]["value"].get<int>() == 2)
+                    ifd_json[tag_name]["string"] = "Separate planes";
+            }
         }
 
         if (j.contains(ExifIfdTable[ifd_idx]))

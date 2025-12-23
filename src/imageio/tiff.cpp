@@ -289,8 +289,9 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
         }
 
         // Handle palette/indexed color
-        uint16_t *palette_r = nullptr, *palette_g = nullptr, *palette_b = nullptr;
-        bool      is_palette = (photometric == PHOTOMETRIC_PALETTE);
+        // uint16_t *palette_r = nullptr, *palette_g = nullptr, *palette_b = nullptr;
+        const uint16_t *palette[3] = {};
+        bool            is_palette = (photometric == PHOTOMETRIC_PALETTE);
         if (is_palette)
         {
             if (num_channels != 1)
@@ -299,7 +300,7 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
             if (sample_format != SAMPLEFORMAT_UINT)
                 throw runtime_error{"Palette images must have unsigned integer sample format."};
 
-            if (!TIFFGetField(tif, TIFFTAG_COLORMAP, &palette_r, &palette_g, &palette_b))
+            if (!TIFFGetField(tif, TIFFTAG_COLORMAP, &palette[0], &palette[1], &palette[2]))
                 throw runtime_error("PHOTOMETRIC_PALETTE specified but no color palette found");
 
             spdlog::debug("Found palette with {} entries", 1u << file_bits_per_sample);
@@ -364,29 +365,6 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
 
         image->metadata["pixel format"] = format_str;
 
-        // Store photometric interpretation
-        const char *photometric_str = "Unknown";
-        switch (photometric)
-        {
-        case PHOTOMETRIC_MINISWHITE: photometric_str = "Min is White"; break;
-        case PHOTOMETRIC_MINISBLACK: photometric_str = "Min is Black"; break;
-        case PHOTOMETRIC_RGB: photometric_str = "RGB"; break;
-        case PHOTOMETRIC_PALETTE: photometric_str = "Palette"; break;
-        case PHOTOMETRIC_MASK: photometric_str = "Mask"; break;
-        case PHOTOMETRIC_SEPARATED: photometric_str = is_cmyk ? "CMYK" : "Separated"; break;
-        case PHOTOMETRIC_YCBCR: photometric_str = "CCIR 601 YCbCr"; break;
-        case PHOTOMETRIC_CIELAB: photometric_str = "1976 CIE L*a*b*"; break;
-        case PHOTOMETRIC_ICCLAB: photometric_str = "ICC L*a*b*"; break;
-        case PHOTOMETRIC_ITULAB: photometric_str = "ITU L*a*b*"; break;
-        case PHOTOMETRIC_CFA: photometric_str = "Color Filter Array"; break;
-        case PHOTOMETRIC_LOGL: photometric_str = "CIE Log2(L)"; break;
-        case PHOTOMETRIC_LOGLUV: photometric_str = "CIE Log2(L) (u',v')"; break;
-        }
-        image->metadata["header"]["Photometric interpretation"] = {{"value", photometric},
-                                                                   {"string", photometric_str},
-                                                                   {"type", "int"},
-                                                                   {"description", "TIFF photometric interpretation"}};
-
         if (use_rgba_interface)
         {
             image->metadata["header"]["Converted via RGBA interface"] = {
@@ -395,13 +373,6 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                 {"type", "bool"},
                 {"description", "Image was converted to RGB using libtiff RGBA interface"}};
         }
-
-        // Store planar configuration
-        image->metadata["header"]["Planar configuration"] = {
-            {"value", planar_config},
-            {"string", planar_config == PLANARCONFIG_CONTIG ? "Interleaved" : "Planar/Separate"},
-            {"type", "int"},
-            {"description", "Whether channels are interleaved or stored separately"}};
 
         // Store palette info
         if (is_palette)
@@ -632,34 +603,14 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
 
             // Store tile/strip information in metadata
             image->metadata["header"]["Pixel organization"] = {
-                {"value", is_tiled},
-                {"string", is_tiled ? "Tile-based" : "Strip-based"},
-                {"type", "bool"},
-                {"description", "Whether the TIFF uses tiled organization (true) or strips (false)"}};
-
-            if (is_tiled)
-                image->metadata["header"]["Tile width"] = {{"value", tile_width},
-                                                           {"string", fmt::format("{}", tile_width)},
-                                                           {"type", "int"},
-                                                           {"description", "Width of each tile in pixels"}};
-
-            image->metadata["header"][is_tiled ? "Tile height" : "Strip height"] = {
-                {"value", is_tiled ? tile_height : strip_height},
-                {"string", fmt::format("{}", is_tiled ? tile_height : strip_height)},
-                {"type", "int"},
-                {"description", is_tiled ? "Height of each tile in pixels" : "Number of rows per strip"}};
-
-            if (is_tiled)
-                image->metadata["header"]["Number of tiles in X"] = {{"value", num_tiles_x},
-                                                                     {"string", fmt::format("{}", num_tiles_x)},
-                                                                     {"type", "int"},
-                                                                     {"description", "Number of tiles horizontally"}};
-
-            image->metadata["header"][is_tiled ? "Number of tiles in Y" : "Number of strips"] = {
-                {"value", is_tiled ? num_tiles_y : num_strips},
-                {"string", fmt::format("{}", is_tiled ? num_tiles_y : num_strips)},
-                {"type", "int"},
-                {"description", is_tiled ? "Number of tiles vertically" : "Number of strips in the image"}};
+                {"value",
+                 {is_tiled, num_tiles_x, is_tiled ? num_tiles_y : num_strips, tile_width,
+                  is_tiled ? tile_height : strip_height}},
+                {"string", is_tiled ? fmt::format("{}{}{} grid of ({}{}{}) tiles", num_tiles_x, ICON_MY_TIMES,
+                                                  num_tiles_y, tile_width, ICON_MY_TIMES, tile_height)
+                                    : fmt::format("{} strips of height {}", num_strips, strip_height)},
+                {"type", "array"},
+                {"description", "TIFF pixel organization: tiled or strip-based"}};
 
             if (planar_config == PLANARCONFIG_CONTIG)
             {
@@ -718,9 +669,9 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
 
                                     // Store normalized palette values (0-1 range)
                                     size_t pixel_idx            = (y * width + x) * num_channels;
-                                    float_pixels[pixel_idx + 0] = palette_r[index] / 65535.0f;
-                                    float_pixels[pixel_idx + 1] = palette_g[index] / 65535.0f;
-                                    float_pixels[pixel_idx + 2] = palette_b[index] / 65535.0f;
+                                    float_pixels[pixel_idx + 0] = palette[0][index] / 65535.0f;
+                                    float_pixels[pixel_idx + 1] = palette[1][index] / 65535.0f;
+                                    float_pixels[pixel_idx + 2] = palette[2][index] / 65535.0f;
                                 }
                                 else
                                 {
