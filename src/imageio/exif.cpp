@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring> // for memcmp
 #include <libexif/exif-data.h>
+#include <libexif/exif-tag.h>
 #include <stdexcept>
 
 using std::string;
@@ -14,70 +15,59 @@ static json exif_data_to_json(ExifData *ed);
 
 json exif_to_json(const uint8_t *data_ptr, size_t data_size)
 {
-    json result;
-
-    try
+    // 1) Prepare data buffer and prepend FOURCC if missing
+    vector<uint8_t> data;
+    if (data_size < FOURCC.size() || memcmp(data_ptr, FOURCC.data(), FOURCC.size()) != 0)
     {
-        // 1) Prepare data buffer and prepend FOURCC if missing
-        vector<uint8_t> data;
-        if (data_size < FOURCC.size() || memcmp(data_ptr, FOURCC.data(), FOURCC.size()) != 0)
+        data.reserve(data_size + FOURCC.size());
+        data.insert(data.end(), FOURCC.begin(), FOURCC.end());
+        data.insert(data.end(), data_ptr, data_ptr + data_size);
+    }
+    else
+        data.assign(data_ptr, data_ptr + data_size);
+
+    // 2) Create ExifData and ExifLog with custom log function
+    bool error = false;
+
+    std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data(exif_data_new(), &exif_data_unref);
+    if (!exif_data)
+        throw std::invalid_argument("Failed to allocate ExifData.");
+
+    std::unique_ptr<ExifLog, decltype(&exif_log_unref)> exif_log(exif_log_new(), &exif_log_unref);
+    if (!exif_log)
+        throw std::invalid_argument("Failed to allocate ExifLog.");
+
+    exif_log_set_func(
+        exif_log.get(),
+        [](ExifLog *log, ExifLogCode kind, const char *domain, const char *format, va_list args, void *user_data)
         {
-            data.reserve(data_size + FOURCC.size());
-            data.insert(data.end(), FOURCC.begin(), FOURCC.end());
-            data.insert(data.end(), data_ptr, data_ptr + data_size);
-        }
-        else
-            data.assign(data_ptr, data_ptr + data_size);
+            bool *error = static_cast<bool *>(user_data);
+            char  buf[1024];
+            vsnprintf(buf, sizeof(buf), format, args);
 
-        // 2) Create ExifData and ExifLog with custom log function
-        bool error = false;
-
-        std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data(exif_data_new(), &exif_data_unref);
-        if (!exif_data)
-            throw std::invalid_argument("Failed to allocate ExifData.");
-
-        std::unique_ptr<ExifLog, decltype(&exif_log_unref)> exif_log(exif_log_new(), &exif_log_unref);
-        if (!exif_log)
-            throw std::invalid_argument("Failed to allocate ExifLog.");
-
-        exif_log_set_func(
-            exif_log.get(),
-            [](ExifLog *log, ExifLogCode kind, const char *domain, const char *format, va_list args, void *user_data)
+            switch (kind)
             {
-                bool *error = static_cast<bool *>(user_data);
-                char  buf[1024];
-                vsnprintf(buf, sizeof(buf), format, args);
+            case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, buf); break;
+            case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, buf); break;
+            case EXIF_LOG_CODE_NO_MEMORY:
+            case EXIF_LOG_CODE_CORRUPT_DATA:
+                *error = true;
+                spdlog::error("log: {}: {}", domain, buf);
+                break;
+            }
+        },
+        &error);
 
-                switch (kind)
-                {
-                case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, buf); break;
-                case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, buf); break;
-                case EXIF_LOG_CODE_NO_MEMORY:
-                case EXIF_LOG_CODE_CORRUPT_DATA:
-                    *error = true;
-                    spdlog::error("log: {}: {}", domain, buf);
-                    break;
-                }
-            },
-            &error);
+    exif_data_log(exif_data.get(), exif_log.get());
 
-        exif_data_log(exif_data.get(), exif_log.get());
+    // 3) Load the EXIF data from memory buffer
+    exif_data_load_data(exif_data.get(), data.data(), data.size());
 
-        // 3) Load the EXIF data from memory buffer
-        exif_data_load_data(exif_data.get(), data.data(), data.size());
+    if (!exif_data || error)
+        throw std::invalid_argument{"Failed to decode EXIF data."};
 
-        if (!exif_data || error)
-            throw std::invalid_argument{"Failed to decode EXIF data."};
-
-        // 4) Convert to JSON
-        result = exif_data_to_json(exif_data.get());
-    }
-    catch (const std::exception &e)
-    {
-        throw e;
-    }
-
-    return result;
+    // 4) Convert to JSON
+    return exif_data_to_json(exif_data.get());
 }
 
 json entry_to_json(ExifEntry *entry, ExifByteOrder bo)
@@ -281,7 +271,7 @@ json exif_data_to_json(ExifData *ed)
 {
     json j;
 
-    static const char *ExifIfdTable[] = {"TIFF", // Apple's Preview
+    static const char *ExifIfdTable[] = {"TIFF", // Apple Preview
                                          "TIFF", // seems to combine the 0th and 1st IFDs into a "TIFF" section
                                          "EXIF", "GPS", "Interoperability"};
 
@@ -319,6 +309,56 @@ json exif_data_to_json(ExifData *ed)
             string desc = exif_tag_get_description_in_ifd(entry->tag, static_cast<ExifIfd>(ifd_idx));
             if (!desc.empty())
                 ifd_json[tag_name]["description"] = desc;
+
+            // special handling of compression tag since libexif doesn't know about many compression formats
+            if (entry->tag == EXIF_TAG_COMPRESSION)
+            {
+                string compression_name;
+                switch (ifd_json[tag_name]["value"].get<int>())
+                {
+                // these codes and names are copied from libtiff typedefs and comments
+                case 1: compression_name = "Uncompressed"; break;
+                case 2: compression_name = "CCITT modified Huffman RLE"; break;
+                case 3: compression_name = "CCITT Group 3 fax encoding"; break;
+                case 4: compression_name = "CCITT Group 4 fax encoding"; break;
+                case 5: compression_name = "Lempel-Ziv & Welch (LZW)"; break;
+                case 6: compression_name = "JPEG"; break;
+                case 7: compression_name = "JPEG"; break;
+                case 8: compression_name = "Deflate/ZIP compression, as recognized by Adobe"; break;
+                case 9: compression_name = "T.85 JBIG compression"; break;
+                case 10: compression_name = "T.43 color by layered JBIG compression"; break;
+                case 32766: compression_name = "NeXT 2-bit RLE"; break;
+                case 32771: compression_name = "Uncompressed w/ word alignment"; break;
+                case 32773: compression_name = "Macintosh RLE"; break;
+                case 32809: compression_name = "ThunderScan RLE"; break;
+                /* codes 32895-32898 are reserved for ANSI IT8 TIFF/IT <dkelly@apago.com) */
+                case 32895: compression_name = "IT8 CT w/padding"; break;
+                case 32896: compression_name = "IT8 Linework RLE"; break;
+                case 32897: compression_name = "IT8 Monochrome picture"; break;
+                case 32898: compression_name = "IT8 Binary line art"; break;
+                /* compression codes 32908-32911 are reserved for Pixar */
+                case 32908: compression_name = "Pixar Film (10bit LZW)"; break;
+                case 32909: compression_name = "Pixar Log (11bit ZIP)"; break;
+                case 32910: [[fallthrough]];
+                case 32911: compression_name = "Unknown Pixar compression"; break;
+                case 32946: compression_name = "Deflate/ZIP compression, legacy tag"; break;
+                case 32947: compression_name = "Kodak DCS encoding"; break;
+                case 34661: compression_name = "ISO JBIG"; break;
+                case 34676: compression_name = "SGI Log Luminance RLE"; break;
+                case 34677: compression_name = "SGI Log 24-bit packed"; break;
+                case 34712: compression_name = "Leadtools JPEG2000"; break;
+                case 34887: [[fallthrough]];
+                case 34888: [[fallthrough]];
+                case 34889: compression_name = "ESRI Lerc codec: https://github.com/Esri/lerc"; break;
+                case 34925: compression_name = "LZMA2"; break;
+                case 50000: compression_name = "ZSTD"; break;
+                case 50001: compression_name = "WEBP"; break;
+                case 50002: compression_name = "JPEGXL"; break;
+                case 52546: compression_name = "JPEGXL from DNG 1.7 specification"; break;
+                default: compression_name = "Other";
+                }
+                ifd_json[tag_name]["string"] = compression_name;
+            }
         }
 
         if (j.contains(ExifIfdTable[ifd_idx]))
