@@ -564,11 +564,15 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                 return 0.f;
             };
 
-            // Treat scanlines as tiles with width = image width to unify the code below.
+            // Treat scanlines as tiles with width = image width. This unifies the code path.
+            // Use TIFFReadEncodedTile for tiled images and TIFFReadEncodedStrip for scanline-based images.
             const bool      is_tiled = TIFFIsTiled(tif);
             uint32_t        tile_width, tile_height, num_tiles_x, num_tiles_y;
-            uint64_t        tile_size, strip_height, num_strips;
+            uint64_t        tile_size, tile_row_size, strip_height, num_strips;
             vector<uint8_t> tile_buffer;
+
+            // Function pointer to read tile/strip data - both have the same signature
+            auto read_data = is_tiled ? TIFFReadEncodedTile : TIFFReadEncodedStrip;
 
             if (is_tiled)
             {
@@ -576,25 +580,34 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                     !TIFFGetField(tif, TIFFTAG_TILELENGTH, &tile_height))
                     throw runtime_error("Failed to read tile dimensions");
 
-                tile_size   = TIFFTileSize64(tif);
-                num_tiles_x = (width + tile_width - 1) / tile_width;
-                num_tiles_y = (height + tile_height - 1) / tile_height;
+                tile_size     = TIFFTileSize64(tif);
+                tile_row_size = TIFFTileRowSize64(tif);
+                num_tiles_x   = (width + tile_width - 1) / tile_width;
+                num_tiles_y   = (height + tile_height - 1) / tile_height;
             }
             else
             {
                 // Strips are just tiles with the same width as the image
-                // For scanlines, always read one row at a time
-                tile_width  = width;
-                tile_height = 1;
-                tile_size   = TIFFScanlineSize64(tif);
-                num_tiles_x = 1;
-                num_tiles_y = height;
+                tile_width    = width;
+                tile_size     = TIFFStripSize64(tif);
+                tile_row_size = TIFFScanlineSize64(tif);
+                num_tiles_x   = 1;
 
-                auto strip_size = TIFFStripSize64(tif);
-                strip_height    = tile_size > 0 ? strip_size / tile_size : 1;
-                num_strips      = (height + strip_height - 1) / strip_height;
+                // Get rows per strip to compute tile_height
+                uint32_t rows_per_strip = 0;
+                TIFFGetFieldDefaulted(tif, TIFFTAG_ROWSPERSTRIP, &rows_per_strip);
+                // Protect against invalid values (0 or excessively large)
+                if (rows_per_strip == 0 || rows_per_strip > height)
+                    rows_per_strip = height;
+                tile_height  = rows_per_strip;
+                num_tiles_y  = (height + tile_height - 1) / tile_height;
+                num_strips   = num_tiles_y;
+                strip_height = tile_height;
             }
 
+            // Ensure we allocate enough for potentially oversized tiles/strips (handles edge cases)
+            tile_size = std::max(tile_size, (uint64_t)tile_width * tile_height * file_bits_per_sample *
+                                                (is_palette ? 1 : (is_cmyk ? 4 : (is_lab ? 3 : num_channels))) / 8);
             tile_buffer.resize(tile_size);
 
             // Always unpack integer formats (unpack_bits handles both byte-aligned and bit-packed efficiently)
@@ -619,37 +632,36 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                 {
                     for (uint32_t tile_x = 0; tile_x < num_tiles_x; ++tile_x)
                     {
-                        // Read tile or strip
-                        if (is_tiled)
-                        {
-                            if (TIFFReadTile(tif, tile_buffer.data(), tile_x * tile_width, tile_y * tile_height, 0, 0) <
-                                0)
-                                throw runtime_error(fmt::format("Failed to read tile ({}, {})", tile_x, tile_y));
-                        }
-                        else
-                        {
-                            if (TIFFReadScanline(tif, tile_buffer.data(), tile_y * tile_height, 0) < 0)
-                                throw runtime_error(fmt::format("Failed to read scanline {}", tile_y * tile_height));
-                        }
+                        // Calculate tile/strip index for reading
+                        uint32_t tile_index = is_tiled ? (tile_y * num_tiles_x + tile_x) : tile_y;
 
-                        // Unpack bits if necessary
-                        const uint8_t *source_buffer = tile_buffer.data();
-                        if (needs_unpacking)
-                        {
-                            // For CMYK and Lab, need to read original channel count
-                            size_t num_samples = tile_width * tile_height *
-                                                 (is_palette ? 1 : (is_cmyk ? 4 : (is_lab ? 3 : num_channels)));
-                            unpacked_buffer.resize(num_samples);
-                            unpack_bits(tile_buffer.data(), tile_buffer.size(), file_bits_per_sample, unpacked_buffer,
-                                        sample_format == SAMPLEFORMAT_INT);
-                        }
+                        // Read tile or strip using the unified function pointer
+                        if (read_data(tif, tile_index, tile_buffer.data(), tile_size) < 0)
+                            throw runtime_error(fmt::format(
+                                "Failed to read {} {} (index {})", is_tiled ? "tile" : "strip",
+                                is_tiled ? fmt::format("({}, {})", tile_x, tile_y) : fmt::format("{}", tile_y),
+                                tile_index));
 
                         // Process pixels in this tile/strip
+                        // For sub-byte bit depths, we must unpack row-by-row because bit packing is done per scanline
+                        const size_t samples_per_row =
+                            tile_width * (is_palette ? 1 : (is_cmyk ? 4 : (is_lab ? 3 : num_channels)));
+                        if (needs_unpacking)
+                            unpacked_buffer.resize(samples_per_row);
+
                         for (uint32_t ty = 0; ty < tile_height; ++ty)
                         {
                             uint32_t y = tile_y * tile_height + ty;
                             if (y >= height)
                                 break;
+
+                            // Unpack this row if necessary
+                            const uint8_t *source_buffer = tile_buffer.data() + ty * tile_row_size;
+                            if (needs_unpacking)
+                            {
+                                unpack_bits(source_buffer, tile_row_size, file_bits_per_sample, unpacked_buffer,
+                                            sample_format == SAMPLEFORMAT_INT);
+                            }
 
                             for (uint32_t tx = 0; tx < tile_width; ++tx)
                             {
@@ -661,7 +673,7 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                                 {
                                     // Palette/indexed color: read index and look up RGB values
                                     // ColorMap values are display-referred and will be linearized later
-                                    size_t   buffer_idx = ty * tile_width + tx;
+                                    size_t   buffer_idx = tx; // Row-relative index
                                     uint32_t index      = needs_unpacking ? unpacked_buffer[buffer_idx]
                                                                           : (uint32_t)convert_to_float(source_buffer,
                                                                                                        nullptr, buffer_idx) *
@@ -678,7 +690,7 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                                     // Normal color data
                                     for (int c = 0; c < num_channels; ++c)
                                     {
-                                        size_t buffer_idx = (ty * tile_width + tx) * num_channels + c;
+                                        size_t buffer_idx = tx * num_channels + c; // Row-relative index
                                         size_t pixel_idx  = (y * width + x) * num_channels + c;
                                         float_pixels[pixel_idx] =
                                             convert_to_float(source_buffer, unpacked_buffer.data(), buffer_idx);
@@ -703,37 +715,45 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                     {
                         for (uint32_t tile_x = 0; tile_x < num_tiles_x; ++tile_x)
                         {
-                            // Read tile or strip
+                            // Calculate tile/strip index for reading (including plane offset for separate config)
+                            uint32_t tile_index;
                             if (is_tiled)
                             {
-                                if (TIFFReadTile(tif, tile_buffer.data(), tile_x * tile_width, tile_y * tile_height, 0,
-                                                 c) < 0)
-                                    throw runtime_error(
-                                        fmt::format("Failed to read tile ({}, {}) for channel {}", tile_x, tile_y, c));
+                                // For tiled: index = plane_offset + tile_y * num_tiles_x + tile_x
+                                uint32_t tiles_per_plane = num_tiles_x * num_tiles_y;
+                                tile_index               = c * tiles_per_plane + tile_y * num_tiles_x + tile_x;
                             }
                             else
                             {
-                                if (TIFFReadScanline(tif, tile_buffer.data(), tile_y * tile_height, c) < 0)
-                                    throw runtime_error(fmt::format("Failed to read scanline {} for channel {}",
-                                                                    tile_y * tile_height, c));
+                                // For strips: index = plane_offset + strip_number
+                                tile_index = c * num_tiles_y + tile_y;
                             }
 
-                            // Unpack bits if necessary
-                            const uint8_t *source_buffer = tile_buffer.data();
-                            if (needs_unpacking)
-                            {
-                                size_t num_samples = tile_width * tile_height;
-                                unpacked_buffer.resize(num_samples);
-                                unpack_bits(tile_buffer.data(), tile_buffer.size(), file_bits_per_sample,
-                                            unpacked_buffer, sample_format == SAMPLEFORMAT_INT);
-                            }
+                            // Read tile or strip using the unified function pointer
+                            if (read_data(tif, tile_index, tile_buffer.data(), tile_size) < 0)
+                                throw runtime_error(fmt::format(
+                                    "Failed to read {} {} for channel {} (index {})", is_tiled ? "tile" : "strip",
+                                    is_tiled ? fmt::format("({}, {})", tile_x, tile_y) : fmt::format("{}", tile_y), c,
+                                    tile_index));
 
                             // Process pixels in this tile/strip
+                            // For sub-byte bit depths, we must unpack row-by-row
+                            if (needs_unpacking)
+                                unpacked_buffer.resize(tile_width);
+
                             for (uint32_t ty = 0; ty < tile_height; ++ty)
                             {
                                 uint32_t y = tile_y * tile_height + ty;
                                 if (y >= height)
                                     break;
+
+                                // Unpack this row if necessary
+                                const uint8_t *source_buffer = tile_buffer.data() + ty * tile_row_size;
+                                if (needs_unpacking)
+                                {
+                                    unpack_bits(source_buffer, tile_row_size, file_bits_per_sample, unpacked_buffer,
+                                                sample_format == SAMPLEFORMAT_INT);
+                                }
 
                                 for (uint32_t tx = 0; tx < tile_width; ++tx)
                                 {
@@ -741,7 +761,7 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                                     if (x >= width)
                                         break;
 
-                                    size_t buffer_idx = ty * tile_width + tx;
+                                    size_t buffer_idx = tx; // Row-relative index
                                     size_t pixel_idx  = (y * width + x) * num_channels + c;
                                     float_pixels[pixel_idx] =
                                         convert_to_float(source_buffer, unpacked_buffer.data(), buffer_idx);
