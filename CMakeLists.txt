@@ -964,11 +964,11 @@ option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 if(HDRVIEW_ENABLE_LIBTIFF)
   CPMAddPackage(
     NAME libtiff
-    VERSION v4.7.0
+    VERSION 4.7.0
     GITHUB_REPOSITORY Tom94/libtiff
     GIT_TAG b6446af165a5a4177eb9a4f6834bb948d4f89d39
     OPTIONS "BUILD_SHARED_LIBS OFF"
-            "HAVE_JPEGTURBO_DUAL_MODE_8_12 TRUE"
+            # "HAVE_JPEGTURBO_DUAL_MODE_8_12 TRUE"
             "tiff-tools OFF"
             "tiff-tests OFF"
             "tiff-contrib OFF"
