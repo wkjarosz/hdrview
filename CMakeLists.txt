@@ -475,6 +475,7 @@ CPMAddPackage(
   GITHUB_REPOSITORY Tom94/libexif
   GIT_TAG f99967d09f1424170388cb2c0b65dcf67d6f5ac3
   OPTIONS "BUILD_SHARED_LIBS OFF"
+  VERSION 0.6.24
   SYSTEM YES
 )
 if(exif_ADDED)
@@ -1031,9 +1032,10 @@ if(HDRVIEW_ENABLE_LIBRAW)
   endif()
 
   # Before the LibRaw CPMAddPackage: 
-  if(WIN32 OR MSVC OR EMSCRIPTEN)
-    set(MATH_LIBRARY "" CACHE STRING "Math library not needed on Windows/MSVC/Emscripten")
-  endif()
+  # if(WIN32 OR MSVC OR EMSCRIPTEN)
+    set(MATH_LIBRARY "" CACHE STRING INTERNAL "Math library not needed on Windows/MSVC/Emscripten")
+    message(STATUS "No math library needed on Windows/MSVC/Emscripten for LibRaw")
+  # endif()
 
   CPMAddPackage(
       NAME LibRaw_cmake
