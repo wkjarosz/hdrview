@@ -319,9 +319,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                     if (tmp_buffer.size() < 4)
                         throw invalid_argument{"Invalid EXIF data: box size is smaller than 4 bytes."};
 
-                    uint32_t offset = *(uint32_t *)tmp_buffer.data();
-                    if (is_little_endian())
-                        offset = swap_bytes(offset);
+                    auto offset = read_as<uint32_t>(tmp_buffer.data(), Endian::Big);
 
                     if (offset + 4 > tmp_buffer.size())
                         throw invalid_argument{"Invalid EXIF data: offset is larger than box size."};

@@ -1056,6 +1056,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     if (LIBPNG_ENABLED)
                         ImGui::PE::Hyperlink("libpng", "For loading & saving PNG images.",
                                              "https://github.com/pnggroup/libpng");
+                    if (LIBRAW_ENABLED)
+                        ImGui::PE::Hyperlink("libraw", "For loading RAW images.", "https://github.com/LibRaw/LibRaw");
 
                     if (UHDR_ENABLED)
                         ImGui::PE::Hyperlink("libuhdr", "For loading Ultra HDR JPEG images.",

@@ -959,7 +959,6 @@ if(HDRVIEW_ENABLE_LIBWEBP)
   list(APPEND HDRVIEW_DEPENDENCIES "webp" "webpdemux")
 endif()
 
-
 option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 if(HDRVIEW_ENABLE_LIBTIFF)
   CPMAddPackage(
@@ -992,6 +991,37 @@ if(HDRVIEW_ENABLE_LIBTIFF)
   list(APPEND HDRVIEW_DEPENDENCIES "tiff")
 endif()
 
+
+option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
+if(HDRVIEW_ENABLE_LIBRAW)
+  CPMAddPackage(
+      NAME LibRaw_src
+      GITHUB_REPOSITORY LibRaw/LibRaw
+      GIT_TAG 0.21.4
+      VERSION 0.21.4
+      DOWNLOAD_ONLY YES
+      SYSTEM YES
+  )
+
+  CPMAddPackage(
+      NAME LibRaw_cmake
+      GITHUB_REPOSITORY LibRaw/LibRaw-cmake
+      GIT_TAG eb98e4325aef2ce85d2eb031c2ff18640ca616d3
+      OPTIONS "LIBRAW_PATH ${LibRaw_src_SOURCE_DIR}" "BUILD_SHARED_LIBS OFF" "LIBRAW_BUILD_TESTS OFF" "LIBRAW_BUILD_EXAMPLES OFF" "LIBRAW_INSTALL OFF"
+      SYSTEM YES
+  )
+  if(libtiff_ADDED)
+      message(STATUS "Will build libraw library")
+      mark_as_system_library(libraw::libraw_r)
+      disable_target_warnings(libraw::libraw_r)
+  elseif(TARGET libraw::libraw_r)
+    message(STATUS "Will link against system-installed libraw_r library")
+  else()
+    message(FATAL_ERROR "libraw_r library not found. Please install it.")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "libraw::libraw_r")
+endif()
+    
 CPMAddPackage(
   NAME CLI11
   VERSION 2.4.1
@@ -1105,6 +1135,7 @@ add_enabled_definition(HDRVIEW_ENABLE_HEIC)
 add_enabled_definition(HDRVIEW_ENABLE_AVCI)
 add_enabled_definition(HDRVIEW_ENABLE_LIBWEBP)
 add_enabled_definition(HDRVIEW_ENABLE_LIBTIFF)
+add_enabled_definition(HDRVIEW_ENABLE_LIBRAW)
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -1164,6 +1195,7 @@ hello_imgui_add_app(
   src/imageio/png.cpp
   src/imageio/stb.cpp
   src/imageio/qoi.cpp
+  src/imageio/raw.cpp
   src/imageio/tiff.cpp
   src/imageio/uhdr.cpp
   src/imageio/webp.cpp

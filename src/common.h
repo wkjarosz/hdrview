@@ -305,6 +305,15 @@ struct fmt::formatter<human_readible>
     }
 };
 
+//! Endianness indicator
+enum class Endian
+{
+    Little   = 0,
+    Intel    = Little,
+    Big      = 1,
+    Motorola = Big
+};
+
 //! Returns 1 if architecture is little endian, 0 in case of big endian.
 inline bool is_little_endian()
 {
@@ -312,6 +321,8 @@ inline bool is_little_endian()
     char        *c = (char *)&x;
     return bool((int)*c);
 }
+
+inline Endian host_endian() { return is_little_endian() ? Endian::Little : Endian::Big; }
 
 template <typename T>
 T swap_bytes(T value)
@@ -323,6 +334,50 @@ T swap_bytes(T value)
     for (size_t i = 0; i < sizeof(T); ++i) result_bytes[i] = value_bytes[sizeof(T) - 1 - i];
 
     return result;
+}
+
+/*!
+ * @brief Read a value of type T from a byte array and convert to host endianness.
+ *
+ * Reads sizeof(T) bytes from the given pointer and interprets them as type T,
+ * performing byte swapping if the data endianness differs from the machine's.
+ *
+ * @tparam T The type to read (e.g., float, double, uint32_t)
+ * @param ptr Pointer to the byte array to read from
+ * @param data_endian The endianness of the data in the byte array
+ * @return The value of type T in host endianness
+ */
+template <typename T>
+T read_as(const unsigned char *ptr, Endian data_endian)
+{
+    T value;
+    memcpy(&value, ptr, sizeof(T));
+
+    // Swap bytes if data endianness doesn't match machine endianness
+    bool data_is_big_endian = (data_endian == Endian::Big);
+    bool need_swap          = data_is_big_endian != !is_little_endian();
+    if (need_swap)
+        value = swap_bytes(value);
+
+    return value;
+}
+
+/*!
+ * @brief Read an array of values of type T from a byte array and convert to host endianness.
+ *
+ * Reads count * sizeof(T) bytes from the input pointer and interprets them as an array of type T,
+ * performing byte swapping on each element if the data endianness differs from the machine's.
+ *
+ * @tparam T The type to read (e.g., float, double, uint32_t, int32_t)
+ * @param output Pointer to the output array where results will be written
+ * @param input Pointer to the input byte array to read from
+ * @param count Number of elements to read
+ * @param data_endian The endianness of the data in the input byte array
+ */
+template <typename T>
+void read_array(T *output, const unsigned char *input, size_t count, Endian data_endian)
+{
+    for (size_t i = 0; i < count; i++) output[i] = read_as<T>(input + i * sizeof(T), data_endian);
 }
 
 template <typename T>

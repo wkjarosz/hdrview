@@ -10,5 +10,6 @@
 #include "json.h"
 #include <cstdint>
 
+json        entry_to_json(void *entry, int boi, unsigned int ifd_idx_i = 0);
 json        exif_to_json(const uint8_t *data_ptr, size_t data_size);
 inline json exif_to_json(const std::vector<uint8_t> &data) { return exif_to_json(data.data(), data.size()); }

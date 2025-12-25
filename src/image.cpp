@@ -164,39 +164,104 @@ Texture *Image::chromaticity_texture() { return s_chromaticity_texture.get(); }
 
 const std::set<std::string> &Image::loadable_formats()
 {
-    static const std::set<std::string> formats = {"dng",  "jpg",   "jpeg",
+    static const std::set<std::string> formats = {
+        "dng",
+        "jpg",
+        "jpeg",
 #ifdef HDRVIEW_ENABLE_JPEGXL
-                                                  "jxl",
+        "jxl",
 #endif
 #ifdef HDRVIEW_ENABLE_LIBHEIF
-                                                  "heif", "heifs",
+        "heif",
+        "heifs",
 #endif
 #ifdef HDRVIEW_ENABLE_HEIC
-                                                  "heic", "heics",
+        "heic",
+        "heics",
 #endif
 #ifdef HDRVIEW_ENABLE_AVIF
-                                                  "avif", "avifs",
+        "avif",
+        "avifs",
 #endif
 #ifdef HDRVIEW_ENABLE_AVCI
-                                                  "avci", "avcs",
+        "avci",
+        "avcs",
 #endif
-                                                  "pic",  "png",   "pnm",  "pgm", "ppm", "bmp", "dds",
-                                                  "psd",  "pfm",   "tga",  "gif", "hdr", "exr", "qoi",
+        "pic",
+        "png",
+        "pnm",
+        "pgm",
+        "ppm",
+        "bmp",
+        "dds",
+        "psd",
+        "pfm",
+        "tga",
+        "gif",
+        "hdr",
+        "exr",
+        "qoi",
 #ifdef HDRVIEW_ENABLE_LIBTIFF
-                                                  "tif",  "tiff"
+        "tif",
+        "tiff",
 #endif
-                                                  };
+#ifdef HDRVIEW_ENABLE_LIBRAW
+        // RAW formats supported by LibRaw
+        "bay",
+        "bmq",
+        "cr2",
+        "cr3",
+        "crw",
+        "cs1",
+        "dc2",
+        "dcr",
+        "erf",
+        "fff",
+        "k25",
+        "kdc",
+        "mdc",
+        "mos",
+        "mrw",
+        "nef",
+        "orf",
+        "pef",
+        "pxn",
+        "raf",
+        "raw",
+        "rdc",
+        "sr2",
+        "srf",
+        "x3f",
+        "arw",
+        "3fr",
+        "cine",
+        "ia",
+        "kc2",
+        "mef",
+        "nrw",
+        "qtk",
+        "rw2",
+        "sti",
+        "rwl",
+        "srw",
+        "drf",
+        "dsc",
+        "ptx",
+        "cap",
+        "iiq",
+        "rwz",
+#endif
+    };
     return formats;
 }
 
 const std::set<std::string> &Image::savable_formats()
 {
-    static const std::set<std::string> formats = {"bmp", "exr", "pfm",  "ppm", "png",
-                                                  "hdr", "jpg", "jpeg", "tga", "qoi",
+    static const std::set<std::string> formats = {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "jpeg", "tga", "qoi",
 #ifdef HDRVIEW_ENABLE_LIBTIFF
                                                   "tif", "tiff"
 #endif
-                                                  };
+    };
     return formats;
 }
 

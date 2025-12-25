@@ -25,6 +25,7 @@
 #include "imageio/pfm.h"
 #include "imageio/png.h"
 #include "imageio/qoi.h"
+#include "imageio/raw.h"
 #include "imageio/stb.h"
 #include "imageio/tiff.h"
 #include "imageio/uhdr.h"
@@ -119,6 +120,18 @@ static std::vector<LoaderEntry> default_loaders()
              if (is_heif_image(is))
              {
                  out = load_heif_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#ifdef HDRVIEW_ENABLE_LIBRAW
+        {"libraw",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_raw_image(is))
+             {
+                 out = load_raw_image(is, filename, opts);
                  return true;
              }
              return false;

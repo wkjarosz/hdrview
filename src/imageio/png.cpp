@@ -240,7 +240,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 
     png_read_update_info(png_ptr, info_ptr.get());
 
-    if (file_bit_depth > 8 && is_little_endian())
+    if (file_bit_depth > 8 && host_endian() != Endian::Big)
         png_set_swap(png_ptr);
 
     int channels  = png_get_channels(png_ptr, info_ptr.get());
