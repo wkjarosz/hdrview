@@ -21,13 +21,11 @@
 
 #include <smallthreadpool.h>
 
-using namespace std;
-
 #ifndef HDRVIEW_ENABLE_LIBRAW
 
-bool is_raw_image(istream &is) noexcept { return false; }
+bool is_raw_image(std::std::istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_raw_image(istream &is, string_view filename, const ImageLoadOptions &opts)
+vector<ImagePtr> load_raw_image(std::std::istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     throw runtime_error("RAW support not enabled in this build.");
 }
@@ -46,11 +44,11 @@ vector<ImagePtr> load_raw_image(istream &is, string_view filename, const ImageLo
 namespace
 {
 
-// Custom LibRaw datastream that wraps std::istream
+// Custom LibRaw datastream that wraps std::std::istream
 class LibRawIStream : public LibRaw_abstract_datastream
 {
 public:
-    LibRawIStream(istream &stream) : m_stream(stream) {}
+    LibRawIStream(std::istream &stream) : m_stream(stream) {}
 
     int valid() override { return m_stream.good() ? 1 : 0; }
 
@@ -62,12 +60,12 @@ public:
 
     int seek(INT64 offset, int whence) override
     {
-        ios_base::seekdir dir;
+        std::ios_base::seekdir dir;
         switch (whence)
         {
-        case SEEK_SET: dir = ios_base::beg; break;
-        case SEEK_CUR: dir = ios_base::cur; break;
-        case SEEK_END: dir = ios_base::end; break;
+        case SEEK_SET: dir = std::ios_base::beg; break;
+        case SEEK_CUR: dir = std::ios_base::cur; break;
+        case SEEK_END: dir = std::ios_base::end; break;
         default: return -1;
         }
         m_stream.clear(); // Clear any eof flags
@@ -80,9 +78,9 @@ public:
     INT64 size() override
     {
         auto current_pos = m_stream.tellg();
-        m_stream.seekg(0, ios_base::end);
+        m_stream.seekg(0, std::ios_base::end);
         auto stream_size = m_stream.tellg();
-        m_stream.seekg(current_pos, ios_base::beg);
+        m_stream.seekg(current_pos, std::ios_base::beg);
         return stream_size;
     }
 
@@ -103,7 +101,7 @@ public:
     const char *fname() override { return nullptr; }
 
 private:
-    istream &m_stream;
+    std::istream &m_stream;
 };
 
 // Context for LibRaw EXIF callback
@@ -209,7 +207,7 @@ void exif_handler(void *context, int tag, int type, int len, unsigned int ord, v
 
 } // namespace
 
-bool is_raw_image(istream &is) noexcept
+bool is_raw_image(std::istream &is) noexcept
 {
     try
     {
@@ -230,7 +228,7 @@ bool is_raw_image(istream &is) noexcept
     }
 }
 
-vector<ImagePtr> load_raw_image(istream &is, string_view filename, const ImageLoadOptions &opts)
+vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "RAW"};
     Timer     timer;
@@ -270,23 +268,23 @@ vector<ImagePtr> load_raw_image(istream &is, string_view filename, const ImageLo
                                                       // 7 DCI-P3
                                                       // 8 Rec2020
 
-    // Create custom datastream from istream
+    // Create custom datastream from std::istream
     LibRawIStream libraw_stream(is);
 
     // Open the RAW file using datastream (avoids loading entire file into memory)
     int ret = processor->open_datastream(&libraw_stream);
     if (ret != LIBRAW_SUCCESS)
-        throw runtime_error(fmt::format("Failed to open RAW file: {}", libraw_strerror(ret)));
+        throw std::runtime_error(fmt::format("Failed to open RAW file: {}", libraw_strerror(ret)));
 
     // Unpack the RAW data
     ret = processor->unpack();
     if (ret != LIBRAW_SUCCESS)
-        throw runtime_error(fmt::format("Failed to unpack RAW data: {}", libraw_strerror(ret)));
+        throw std::runtime_error(fmt::format("Failed to unpack RAW data: {}", libraw_strerror(ret)));
 
     // Process the image (demosaic, white balance, etc.)
     ret = processor->dcraw_process();
     if (ret != LIBRAW_SUCCESS)
-        throw runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
+        throw std::runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
 
     // Access image data directly from imgdata
     auto &idata = processor->imgdata;
@@ -302,10 +300,10 @@ vector<ImagePtr> load_raw_image(istream &is, string_view filename, const ImageLo
 
     // Verify we have image data
     if (!idata.image)
-        throw runtime_error("No image data available after processing");
+        throw std::runtime_error("No image data available after processing");
 
     // Create HDRView image with oriented dimensions
-    auto image                = make_shared<Image>(oriented_size, num_channels);
+    auto image                = std::make_shared<Image>(oriented_size, num_channels);
     image->filename           = filename;
     image->metadata["loader"] = "LibRaw";
 
@@ -325,7 +323,7 @@ vector<ImagePtr> load_raw_image(istream &is, string_view filename, const ImageLo
     auto flip_index = [&](int2 idx) -> int2
     {
         if (flip & 4)
-            swap(idx.x, idx.y);
+            std::swap(idx.x, idx.y);
 
         if (flip & 1)
             idx.y = oriented_size.y - 1 - idx.y;
