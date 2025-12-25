@@ -1003,43 +1003,45 @@ if(HDRVIEW_ENABLE_LIBRAW)
       SYSTEM YES
   )
 
-  # Prepare LCMS2 variables for LibRaw (from libjxl's lcms2 target)
-  set(LIBRAW_OPTIONS "LIBRAW_PATH ${LibRaw_src_SOURCE_DIR}" "BUILD_SHARED_LIBS OFF" 
-                      "LIBRAW_BUILD_TESTS OFF" "LIBRAW_BUILD_EXAMPLES OFF" "LIBRAW_INSTALL OFF")
+  # Pre-populate JPEG variables for LibRaw's find_package(JPEG)
+  if(TARGET JPEG::JPEG)
+    set(JPEG_FOUND TRUE CACHE INTERNAL "JPEG found")
+    set(JPEG_LIBRARIES JPEG::JPEG CACHE INTERNAL "JPEG library")
+    get_target_property(JPEG_INCLUDE_DIRS_TMP JPEG::JPEG INTERFACE_INCLUDE_DIRECTORIES)
+    if(JPEG_INCLUDE_DIRS_TMP)
+      set(JPEG_INCLUDE_DIR "${JPEG_INCLUDE_DIRS_TMP}" CACHE INTERNAL "JPEG include dir")
+    endif()
+    set(JPEG_VERSION TRUE CACHE INTERNAL 80)
+    message(STATUS "Providing JPEG target to LibRaw")
+  endif()
   
+  # If lcms2 target exists (from libjxl), set cache variables for LibRaw's find_package(LCMS2)
   if(TARGET lcms2)
-    # Disable LibRaw's LCMS search since we'll provide it manually
-    list(APPEND LIBRAW_OPTIONS "ENABLE_LCMS OFF")
+    # Get the include directories from the lcms2 target
+    get_target_property(LCMS2_INCLUDE_DIRS lcms2 INTERFACE_INCLUDE_DIRECTORIES)
+    if(NOT LCMS2_INCLUDE_DIRS)
+      get_target_property(LCMS2_INCLUDE_DIRS lcms2 INCLUDE_DIRECTORIES)
+    endif()
+    # Set cache variables that LibRaw's FindLCMS2.cmake module expects
+    # Note: FindLCMS2 checks for LCMS2_INCLUDE_DIR (singular) not LCMS2_INCLUDE_DIRS (plural)
+    set(LCMS2_INCLUDE_DIR "${LCMS2_INCLUDE_DIRS}" CACHE PATH "LCMS2 include dir from jxl" FORCE)
+    set(LCMS2_LIBRARIES lcms2 CACHE STRING "LCMS2 library from jxl" FORCE)
+    set(LCMS2_FOUND TRUE CACHE BOOL "LCMS2 found via jxl" FORCE)
+    message(STATUS "Providing lcms2 target (from libjxl) to LibRaw: ${LCMS2_INCLUDE_DIR}")
   endif()
 
   CPMAddPackage(
       NAME LibRaw_cmake
       GITHUB_REPOSITORY LibRaw/LibRaw-cmake
       GIT_TAG eb98e4325aef2ce85d2eb031c2ff18640ca616d3
-      OPTIONS ${LIBRAW_OPTIONS}
+      OPTIONS "LIBRAW_PATH ${LibRaw_src_SOURCE_DIR}" "BUILD_SHARED_LIBS OFF" 
+                      "LIBRAW_BUILD_TESTS OFF" "LIBRAW_BUILD_EXAMPLES OFF" "LIBRAW_INSTALL OFF"
       SYSTEM YES
   )
   if(LibRaw_cmake_ADDED)
       message(STATUS "Will build libraw library")
       mark_as_system_library(libraw::libraw_r)
       disable_target_warnings(libraw::libraw_r)
-      
-      # Manually provide LCMS2 support if we have the lcms2 target from jxl
-      # Note: raw_r is the real target, libraw::libraw_r is an alias
-      if(TARGET lcms2)
-        # Add LCMS support definition that LibRaw expects
-        target_compile_definitions(raw_r PUBLIC LIBRAW_USE_LCMS)
-        # Link against the lcms2 target
-        target_link_libraries(raw_r PUBLIC lcms2)
-        message(STATUS "Manually linked lcms2 (from libjxl) to libraw with LCMS support enabled")
-      endif()
-      
-      # Manually provide JPEG support if we have JPEG
-      if(TARGET JPEG::JPEG)
-        target_compile_definitions(raw_r PUBLIC LIBRAW_USE_DNGLOSSYCODEC)
-        target_link_libraries(raw_r PUBLIC JPEG::JPEG)
-        message(STATUS "Manually linked JPEG to libraw with DNG lossy codec support enabled")
-      endif()
   elseif(TARGET libraw::libraw_r)
     message(STATUS "Will link against system-installed libraw_r library")
   else()
