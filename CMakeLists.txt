@@ -1003,6 +1003,20 @@ if(HDRVIEW_ENABLE_LIBRAW)
       SYSTEM YES
   )
 
+  # If lcms2 target exists (from libjxl), set cache variables for LibRaw's find_package(LCMS2)
+  if(TARGET lcms2)
+    # Get the include directories from the lcms2 target
+    get_target_property(LCMS2_INCLUDE_DIRS lcms2 INTERFACE_INCLUDE_DIRECTORIES)
+    if(NOT LCMS2_INCLUDE_DIRS)
+      get_target_property(LCMS2_INCLUDE_DIRS lcms2 INCLUDE_DIRECTORIES)
+    endif()
+    # Set cache variables that LibRaw's CMake will see
+    set(LCMS2_FOUND TRUE CACHE INTERNAL "LCMS2 found via jxl")
+    set(LCMS2_LIBRARIES lcms2 CACHE INTERNAL "LCMS2 library from jxl")
+    set(LCMS2_INCLUDE_DIRS "${LCMS2_INCLUDE_DIRS}" CACHE INTERNAL "LCMS2 include dirs from jxl")
+    message(STATUS "Providing lcms2 target (from libjxl) to LibRaw: ${LCMS2_INCLUDE_DIRS}")
+  endif()
+
   CPMAddPackage(
       NAME LibRaw_cmake
       GITHUB_REPOSITORY LibRaw/LibRaw-cmake
@@ -1010,7 +1024,7 @@ if(HDRVIEW_ENABLE_LIBRAW)
       OPTIONS "LIBRAW_PATH ${LibRaw_src_SOURCE_DIR}" "BUILD_SHARED_LIBS OFF" "LIBRAW_BUILD_TESTS OFF" "LIBRAW_BUILD_EXAMPLES OFF" "LIBRAW_INSTALL OFF"
       SYSTEM YES
   )
-  if(libtiff_ADDED)
+  if(LibRaw_cmake_ADDED)
       message(STATUS "Will build libraw library")
       mark_as_system_library(libraw::libraw_r)
       disable_target_warnings(libraw::libraw_r)
