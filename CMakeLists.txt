@@ -1030,6 +1030,11 @@ if(HDRVIEW_ENABLE_LIBRAW)
     message(STATUS "Providing lcms2 target (from libjxl) to LibRaw: ${LCMS2_INCLUDE_DIR}")
   endif()
 
+  # Before the LibRaw CPMAddPackage: 
+  if(WIN32 OR MSVC OR EMSCRIPTEN)
+    set(MATH_LIBRARY "" CACHE STRING "Math library not needed on Windows/MSVC/Emscripten")
+  endif()
+
   CPMAddPackage(
       NAME LibRaw_cmake
       GITHUB_REPOSITORY LibRaw/LibRaw-cmake
