@@ -242,11 +242,11 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
     else
         value["description"] = tag_desc;
 
-    char   buf[256] = {0};
-    string str      = exif_entry_get_value(entry, buf, sizeof(buf));
+    char   buf[1024] = {0};
+    string str       = exif_entry_get_value(entry, buf, sizeof(buf));
     if (str.empty())
         str = "n/a";
-    else if (str.length() >= 255)
+    else if (str.length() >= sizeof(buf) - 1)
         str += "…";
     value["string"] = str;
 
@@ -468,6 +468,12 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             value["string"] = "Single (interleaved) plane";
         else if (value["value"].get<int>() == 2)
             value["string"] = "Separate planes";
+    }
+    else if (entry->tag == EXIF_TAG_XML_PACKET)
+    {
+        // Special handling for XMP data
+        string xmp_data(reinterpret_cast<char *>(entry->data), entry->size);
+        value = {{"value", xmp_data}, {"string", xmp_data}, {"type", "string"}, {"description", "XMP metadata packet"}};
     }
 
     // DNG-specific TIFF tags (Adobe DNG Specification versions 1.0-1.7)
@@ -1040,17 +1046,6 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
         break;
     default: break;
     }
-
-    // if (entry->tag == EXIF_TAG_XML_PACKET)
-    // {
-    //     // Special handling for XMP data
-    //     string xmp_data(reinterpret_cast<char *>(entry->data), entry->size);
-    //     ifd_json["XMP"] = {{"value", xmp_data},
-    //                        {"string", xmp_data},
-    //                        {"type", "string"},
-    //                        {"description", "XMP metadata packet"}};
-    //     continue;
-    // }
 
     return ret;
 }

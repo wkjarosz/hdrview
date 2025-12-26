@@ -9,8 +9,11 @@
 #include "colorspace.h"
 #include "common.h"
 #include "exif.h"
+#include "icc.h"
 #include "image.h"
+#include "jpg.h"
 #include "timer.h"
+#include <sstream>
 
 #include <algorithm>
 #include <cstring>
@@ -272,110 +275,255 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     LibRawIStream libraw_stream(is);
 
     // Open the RAW file using datastream (avoids loading entire file into memory)
-    int ret = processor->open_datastream(&libraw_stream);
-    if (ret != LIBRAW_SUCCESS)
+    if (auto ret = processor->open_datastream(&libraw_stream); ret != LIBRAW_SUCCESS)
         throw std::runtime_error(fmt::format("Failed to open RAW file: {}", libraw_strerror(ret)));
-
-    // Unpack the RAW data
-    ret = processor->unpack();
-    if (ret != LIBRAW_SUCCESS)
-        throw std::runtime_error(fmt::format("Failed to unpack RAW data: {}", libraw_strerror(ret)));
-
-    // Process the image (demosaic, white balance, etc.)
-    ret = processor->dcraw_process();
-    if (ret != LIBRAW_SUCCESS)
-        throw std::runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
 
     // Access image data directly from imgdata
     auto &idata = processor->imgdata;
-    auto &sizes = idata.sizes;
-
-    // Use iwidth/iheight for the processed image dimensions
-    int2 size{sizes.iwidth, sizes.iheight};
-    int  flip         = sizes.flip;
-    int  num_channels = 3; // Force RGB
-
-    // Calculate oriented size based on flip
-    int2 oriented_size = (flip & 4) ? int2{size.y, size.x} : size;
-
-    // Verify we have image data
-    if (!idata.image)
-        throw std::runtime_error("No image data available after processing");
 
     // Create HDRView image with oriented dimensions
-    auto image                = std::make_shared<Image>(oriented_size, num_channels);
-    image->filename           = filename;
-    image->metadata["loader"] = "LibRaw";
+    std::vector<ImagePtr> images;
 
-    // Add collected EXIF metadata if any
+    ImGuiTextFilter filter{opts.channel_selector.c_str()};
+    filter.Build();
+
+    if (filter.PassFilter("main"))
+    {
+        try
+        {
+            // Unpack the RAW data
+            if (auto ret = processor->unpack(); ret != LIBRAW_SUCCESS)
+                throw std::runtime_error(fmt::format("Failed to unpack RAW data: {}", libraw_strerror(ret)));
+
+            // Now process the full image (demosaic, white balance, etc.)
+            if (auto ret = processor->dcraw_process(); ret != LIBRAW_SUCCESS)
+                throw std::runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
+
+            auto &sizes = idata.sizes;
+
+            // Use iwidth/iheight for the processed image dimensions
+            int2 size{sizes.iwidth, sizes.iheight};
+            int  flip         = sizes.flip;
+            int  num_channels = 3; // Force RGB
+
+            // Calculate oriented size based on flip
+            int2 oriented_size = (flip & 4) ? int2{size.y, size.x} : size;
+
+            // Verify we have image data
+            if (!idata.image)
+                throw std::runtime_error("No image data available after processing");
+
+            auto image                = std::make_shared<Image>(oriented_size, num_channels);
+            image->filename           = filename;
+            image->partname           = "main";
+            image->metadata["loader"] = "LibRaw";
+
+            // Helper function to handle flip transformations
+            auto flip_index = [&](int2 idx) -> int2
+            {
+                if (flip & 4)
+                    std::swap(idx.x, idx.y);
+
+                if (flip & 1)
+                    idx.y = oriented_size.y - 1 - idx.y;
+
+                if (flip & 2)
+                    idx.x = oriented_size.x - 1 - idx.x;
+
+                return idx;
+            };
+
+            // Access image data as array of ushort[4]
+            const auto *img_data = idata.image;
+
+            // Allocate float buffer for all pixels
+            vector<float> float_pixels((size_t)oriented_size.x * oriented_size.y * num_channels);
+
+            // Convert from 16-bit to float [0,1] with flip handling
+            // We include an ad-hoc scale factor here to make the exposure match the DNG preview better
+            constexpr float scale = 2.2f / 65535.0f;
+
+            stp::parallel_for(stp::blocked_range<int>(0, size.y, 32),
+                              [&](int begin, int end, int unit_index, int thread_index)
+                              {
+                                  for (int y = begin; y < end; ++y)
+                                  {
+                                      for (int x = 0; x < size.x; ++x)
+                                      {
+                                          size_t src_i   = (size_t)y * size.x + x;
+                                          int2   flipped = flip_index({x, y});
+                                          size_t dst_i   = (size_t)flipped.y * oriented_size.x + flipped.x;
+
+                                          for (int c = 0; c < num_channels; ++c)
+                                              float_pixels[dst_i * num_channels + c] = img_data[src_i][c] * scale;
+                                      }
+                                  }
+                              });
+
+            string profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+            if (opts.override_profile)
+            {
+                spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
+                             color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
+
+                Chromaticities chr;
+                if (linearize_pixels(float_pixels.data(), int3{size, num_channels},
+                                     gamut_chromaticities(opts.gamut_override), opts.tf_override, opts.keep_primaries,
+                                     &profile_desc, &chr))
+                {
+                    image->chromaticities = chr;
+                    profile_desc += " (override)";
+                }
+            }
+            else
+            {
+                Chromaticities chr;
+                // We configured LibRaw to output to linear sRGB above
+                if (linearize_pixels(float_pixels.data(), int3{size, num_channels},
+                                     gamut_chromaticities(ColorGamut_sRGB_BT709), TransferFunction::Linear,
+                                     opts.keep_primaries, &profile_desc, &chr))
+                    image->chromaticities = chr;
+            }
+            image->metadata["color profile"] = profile_desc;
+
+            // Copy data to image channels
+            for (int c = 0; c < num_channels; ++c)
+                image->channels[c].copy_from_interleaved(float_pixels.data(), oriented_size.x, oriented_size.y,
+                                                         num_channels, c, [](float v) { return v; });
+
+            images.push_back(image);
+        }
+        catch (const std::exception &e)
+        {
+            throw std::runtime_error(fmt::format("Error processing RAW image: {}", e.what()));
+        }
+    }
+    else
+        spdlog::debug("Skipping main RAW image (filtered out by channel selector '{}')", opts.channel_selector);
+
+    for (int ti = 0; ti < idata.thumbs_list.thumbcount; ti++)
+    {
+        string name = fmt::format("thumbnail:{}", ti);
+
+        if (!filter.PassFilter(&name[0], &name[0] + name.size()))
+        {
+            spdlog::debug("Skipping thumbnail image {}: '{}' (filtered out by channel selector '{}')", ti, name,
+                          opts.channel_selector);
+            continue;
+        }
+
+        int tret = processor->unpack_thumb_ex(ti);
+        if (tret != LIBRAW_SUCCESS)
+            break; // no more thumbnails or error
+
+        int                       err   = 0;
+        libraw_processed_image_t *thumb = processor->dcraw_make_mem_thumb(&err);
+        if (!thumb)
+            continue;
+
+        const auto guard = ScopeGuard([&]() { LibRaw::dcraw_clear_mem(thumb); });
+
+        try
+        {
+            if (thumb->type == LIBRAW_IMAGE_JPEG)
+            {
+                std::string        s(reinterpret_cast<char *>(thumb->data), thumb->data_size);
+                std::istringstream iss(s);
+                auto               thumbs = load_jpg_image(iss, fmt::format("{}:thumb{}", filename, ti), opts);
+                for (auto &ti_img : thumbs)
+                {
+                    ti_img->metadata["loader"]                 = "LibRaw";
+                    ti_img->metadata["header"]["Is thumbnail"] = {
+                        {"value", true},
+                        {"string", "Yes"},
+                        {"type", "bool"},
+                        {"description", "Indicates this image is a thumbnail"}};
+                    ti_img->partname = fmt::format("thumbnail:{}", ti);
+                    images.push_back(ti_img);
+                }
+            }
+            else if (thumb->type == LIBRAW_IMAGE_BITMAP)
+            {
+                int  w         = thumb->width;
+                int  h         = thumb->height;
+                int  n         = thumb->colors;
+                auto timg      = std::make_shared<Image>(int2{w, h}, n);
+                timg->filename = filename;
+                timg->partname = fmt::format("thumbnail:{}", ti);
+                timg->metadata["pixel format"] =
+                    fmt::format("{}-bit ({} bpc)", thumb->colors * thumb->bits, thumb->bits);
+                timg->metadata["loader"]                 = "LibRaw";
+                timg->metadata["header"]["Is thumbnail"] = {{"value", true},
+                                                            {"string", "Yes"},
+                                                            {"type", "bool"},
+                                                            {"description", "Indicates this image is a thumbnail"}};
+                timg->partname                           = fmt::format("thumbnail:{}", ti);
+
+                // Load interleaved bytes/shorts into a float buffer, then linearize
+                std::vector<float> float_pixels((size_t)w * h * n);
+                if (thumb->bits == 8)
+                {
+                    auto data8 = reinterpret_cast<uint8_t *>(thumb->data);
+                    for (size_t i = 0; i < (size_t)w * h * n; ++i) float_pixels[i] = data8[i] / 255.0f;
+                }
+                else if (thumb->bits == 16)
+                {
+                    auto data16 = reinterpret_cast<uint16_t *>(thumb->data);
+                    for (size_t i = 0; i < (size_t)w * h * n; ++i) float_pixels[i] = data16[i] / 65535.0f;
+                }
+
+                // Apply sRGB->linear correction to bitmap thumbnails (fix washed-out appearance)
+                string profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::sRGB);
+                if (opts.override_profile)
+                {
+                    spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
+                                 color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
+
+                    Chromaticities chr;
+                    if (linearize_pixels(float_pixels.data(), int3{w, h, n}, gamut_chromaticities(opts.gamut_override),
+                                         opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
+                    {
+                        timg->chromaticities = chr;
+                        profile_desc += " (override)";
+                    }
+                }
+                else
+                {
+                    Chromaticities chr;
+                    // LibRaw bitmap thumbnails are in sRGB color space
+                    if (linearize_pixels(float_pixels.data(), int3{w, h, n},
+                                         gamut_chromaticities(ColorGamut_sRGB_BT709), TransferFunction::sRGB,
+                                         opts.keep_primaries, &profile_desc, &chr))
+                        timg->chromaticities = chr;
+                }
+                timg->metadata["color profile"] = profile_desc;
+
+                for (int c = 0; c < n; ++c)
+                    timg->channels[c].copy_from_interleaved<float>(float_pixels.data(), w, h, n, c,
+                                                                   [](float v) { return v; });
+
+                images.push_back(timg);
+            }
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::warn("Error loading thumbnail {}: {}", ti, e.what());
+        }
+    }
+
+    spdlog::info("Loaded RAW image in {:.2f}ms", timer.elapsed());
+
+    // Attach EXIF/XMP metadata (if present) to all images (thumbnails + main)
     if (!exif_ctx.metadata.empty())
     {
-        image->metadata["exif"] = exif_ctx.metadata;
-        // spdlog::info("Extracted {} EXIF IFD sections from RAW file", exif_ctx.metadata.size());
-        // spdlog::info("Exif: {}", exif_ctx.metadata.dump(2));
+        for (auto &img_ptr : images) { img_ptr->metadata["exif"] = exif_ctx.metadata; }
     }
     else
     {
         spdlog::warn("No EXIF metadata extracted from RAW file");
     }
 
-    // Helper function to handle flip transformations
-    auto flip_index = [&](int2 idx) -> int2
-    {
-        if (flip & 4)
-            std::swap(idx.x, idx.y);
-
-        if (flip & 1)
-            idx.y = oriented_size.y - 1 - idx.y;
-
-        if (flip & 2)
-            idx.x = oriented_size.x - 1 - idx.x;
-
-        return idx;
-    };
-
-    // Access image data as array of ushort[4]
-    const auto *img_data = idata.image;
-
-    // Allocate float buffer for all pixels
-    vector<float> float_pixels((size_t)oriented_size.x * oriented_size.y * num_channels);
-
-    // Convert from 16-bit to float [0,1] with flip handling
-    constexpr float scale = 1.0f / 65535.0f;
-
-    stp::parallel_for(stp::blocked_range<int>(0, size.y, 32),
-                      [&](int begin, int end, int unit_index, int thread_index)
-                      {
-                          for (int y = begin; y < end; ++y)
-                          {
-                              for (int x = 0; x < size.x; ++x)
-                              {
-                                  size_t src_i   = (size_t)y * size.x + x;
-                                  int2   flipped = flip_index({x, y});
-                                  size_t dst_i   = (size_t)flipped.y * oriented_size.x + flipped.x;
-
-                                  for (int c = 0; c < num_channels; ++c)
-                                      float_pixels[dst_i * num_channels + c] = img_data[src_i][c] * scale;
-                              }
-                          }
-                      });
-
-    // Copy data to image channels
-    for (int c = 0; c < num_channels; ++c)
-    {
-        image->channels[c].copy_from_interleaved(float_pixels.data(), oriented_size.x, oriented_size.y, num_channels, c,
-                                                 [](float v) { return v; });
-    }
-
-    // Set chromaticities - RAW files are typically in a camera-specific color space
-    // LibRaw outputs to sRGB by default, but with linear gamma as we requested
-    image->chromaticities            = Chromaticities(); // Default is sRGB/Rec709
-    image->metadata["color profile"] = "Linear sRGB";
-
-    spdlog::info("Loaded RAW image ({}x{}, {} channels) in {:.2f}ms", oriented_size.x, oriented_size.y, num_channels,
-                 timer.elapsed());
-
-    return {image};
+    return images;
 }
 
 #endif
