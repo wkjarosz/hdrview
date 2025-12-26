@@ -237,7 +237,18 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     Timer     timer;
 
     // Create and configure LibRaw processor (use heap allocation for thread-safe version)
-    unique_ptr<LibRaw> processor(new LibRaw());
+    unique_ptr<LibRaw> processor;
+
+    {
+        // See https://github.com/AcademySoftwareFoundation/OpenImageIO/issues/2630
+        // Something inside LibRaw constructor is not thread safe. Use a
+        // static mutex here to make sure only one thread is constructing a
+        // LibRaw at a time. Cross fingers and hope all the rest of LibRaw
+        // is re-entrant.
+        static std::mutex           libraw_ctr_mutex;
+        std::lock_guard<std::mutex> lock(libraw_ctr_mutex);
+        processor.reset(new LibRaw());
+    }
 
     // Set up EXIF callback handler to extract metadata
     ExifContext exif_ctx; // Constructor creates and initializes libexif structures

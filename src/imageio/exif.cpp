@@ -87,7 +87,6 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
     ExifByteOrder bo      = static_cast<ExifByteOrder>(boi);
     auto          tag     = std::underlying_type<ExifTag>::type(entry->tag);
 
-    json   ret;
     Endian data_endian = (bo == EXIF_BYTE_ORDER_INTEL) ? Endian::Little : Endian::Big;
 
     const char *tag_name_ptr = exif_tag_get_title_in_ifd(entry->tag, ifd_idx);
@@ -103,8 +102,13 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
         case 323: tag_name = "Tile Length"; break;
         case 324: tag_name = "Tile Offsets"; break;
         case 325: tag_name = "Tile Byte Counts"; break;
+        case 513: tag_name = "JPEG Interchange Format"; break;
+        case 514: tag_name = "JPEG Interchange Format Length"; break;
         case 34665: tag_name = "Exif IFD Pointer"; break;
+        case 34853: tag_name = "GPS Info IFD Pointer"; break;
+        case 37399: tag_name = "Sensing Method"; break;
         case 37393: tag_name = "Image Number"; break;
+        case 36867: tag_name = "Date Time Original"; break;
         case 50706: tag_name = "DNG Version"; break;
         case 50707: tag_name = "DNG Backward Version"; break;
         case 50708: tag_name = "Unique Camera Model"; break;
@@ -232,8 +236,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
         }
     }
 
-    ret[tag_name] = json::object();
-    json &value   = ret[tag_name];
+    json value = json::object();
 
     string tag_desc = fmt::format(" (ifd:tag {}:{})", std::underlying_type<ExifTag>::type(ifd_idx),
                                   std::underlying_type<ExifTag>::type(entry->tag));
@@ -394,62 +397,58 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
         break;
     }
 
-    default: value = nullptr; return ret; // unknown or unsupported format
+    default: value = nullptr; break;
     }
 
-    // special handling of some tags
-    // special handling of compression tag since libexif doesn't know about many compression formats
-    if (entry->tag == EXIF_TAG_COMPRESSION)
+    // DNG-specific TIFF tags (Adobe DNG Specification versions 1.0-1.7)
+    switch (tag)
     {
-        string compression_name;
+    case 259: // Compression
         switch (value["value"].get<int>())
         {
         // these codes and names are copied from libtiff typedefs and comments
-        case 1: compression_name = "Uncompressed"; break;
-        case 2: compression_name = "CCITT modified Huffman RLE"; break;
-        case 3: compression_name = "CCITT Group 3 fax encoding"; break;
-        case 4: compression_name = "CCITT Group 4 fax encoding"; break;
-        case 5: compression_name = "Lempel-Ziv & Welch (LZW)"; break;
-        case 6: compression_name = "JPEG"; break;
-        case 7: compression_name = "JPEG"; break;
-        case 8: compression_name = "Deflate/ZIP compression, as recognized by Adobe"; break;
-        case 9: compression_name = "T.85 JBIG compression"; break;
-        case 10: compression_name = "T.43 color by layered JBIG compression"; break;
-        case 32766: compression_name = "NeXT 2-bit RLE"; break;
-        case 32771: compression_name = "Uncompressed w/ word alignment"; break;
-        case 32773: compression_name = "Macintosh RLE"; break;
-        case 32809: compression_name = "ThunderScan RLE"; break;
+        case 1: value["string"] = "Uncompressed"; break;
+        case 2: value["string"] = "CCITT modified Huffman RLE"; break;
+        case 3: value["string"] = "CCITT Group 3 fax encoding"; break;
+        case 4: value["string"] = "CCITT Group 4 fax encoding"; break;
+        case 5: value["string"] = "Lempel-Ziv & Welch (LZW)"; break;
+        case 6: value["string"] = "JPEG"; break;
+        case 7: value["string"] = "JPEG"; break;
+        case 8: value["string"] = "Deflate/ZIP compression, as recognized by Adobe"; break;
+        case 9: value["string"] = "T.85 JBIG compression"; break;
+        case 10: value["string"] = "T.43 color by layered JBIG compression"; break;
+        case 32766: value["string"] = "NeXT 2-bit RLE"; break;
+        case 32771: value["string"] = "Uncompressed w/ word alignment"; break;
+        case 32773: value["string"] = "Macintosh RLE"; break;
+        case 32809: value["string"] = "ThunderScan RLE"; break;
         /* codes 32895-32898 are reserved for ANSI IT8 TIFF/IT <dkelly@apago.com) */
-        case 32895: compression_name = "IT8 CT w/padding"; break;
-        case 32896: compression_name = "IT8 Linework RLE"; break;
-        case 32897: compression_name = "IT8 Monochrome picture"; break;
-        case 32898: compression_name = "IT8 Binary line art"; break;
+        case 32895: value["string"] = "IT8 CT w/padding"; break;
+        case 32896: value["string"] = "IT8 Linework RLE"; break;
+        case 32897: value["string"] = "IT8 Monochrome picture"; break;
+        case 32898: value["string"] = "IT8 Binary line art"; break;
         /* compression codes 32908-32911 are reserved for Pixar */
-        case 32908: compression_name = "Pixar Film (10bit LZW)"; break;
-        case 32909: compression_name = "Pixar Log (11bit ZIP)"; break;
+        case 32908: value["string"] = "Pixar Film (10bit LZW)"; break;
+        case 32909: value["string"] = "Pixar Log (11bit ZIP)"; break;
         case 32910: [[fallthrough]];
-        case 32911: compression_name = "Unknown Pixar compression"; break;
-        case 32946: compression_name = "Deflate/ZIP compression, legacy tag"; break;
-        case 32947: compression_name = "Kodak DCS encoding"; break;
-        case 34661: compression_name = "ISO JBIG"; break;
-        case 34676: compression_name = "SGI Log Luminance RLE"; break;
-        case 34677: compression_name = "SGI Log 24-bit packed"; break;
-        case 34712: compression_name = "Leadtools JPEG2000"; break;
+        case 32911: value["string"] = "Unknown Pixar compression"; break;
+        case 32946: value["string"] = "Deflate/ZIP compression, legacy tag"; break;
+        case 32947: value["string"] = "Kodak DCS encoding"; break;
+        case 34661: value["string"] = "ISO JBIG"; break;
+        case 34676: value["string"] = "SGI Log Luminance RLE"; break;
+        case 34677: value["string"] = "SGI Log 24-bit packed"; break;
+        case 34712: value["string"] = "Leadtools JPEG2000"; break;
         case 34887: [[fallthrough]];
         case 34888: [[fallthrough]];
-        case 34889: compression_name = "ESRI Lerc codec: https://github.com/Esri/lerc"; break;
-        case 34925: compression_name = "LZMA2"; break;
-        case 50000: compression_name = "ZSTD"; break;
-        case 50001: compression_name = "WEBP"; break;
-        case 50002: compression_name = "JPEGXL"; break;
-        case 52546: compression_name = "JPEGXL from DNG 1.7 specification"; break;
-        default: compression_name = "Other";
+        case 34889: value["string"] = "ESRI Lerc codec: https://github.com/Esri/lerc"; break;
+        case 34925: value["string"] = "LZMA2"; break;
+        case 50000: value["string"] = "ZSTD"; break;
+        case 50001: value["string"] = "WEBP"; break;
+        case 50002: value["string"] = "JPEGXL"; break;
+        case 52546: value["string"] = "JPEGXL from DNG 1.7 specification"; break;
+        default: value["string"] = "Unrecognized"; break;
         }
-        value["string"] = compression_name;
-    }
-    else if (entry->tag == EXIF_TAG_PHOTOMETRIC_INTERPRETATION)
-    {
-        string photo_interp;
+        break;
+    case 262: // PhotometricInterpretation
         switch (value["value"].get<int>())
         {
         case 4: value["string"] = "Transparency Mask"; break;
@@ -459,26 +458,39 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
         case 32844: value["string"] = "CIE Log2(L)"; break;
         case 32845: value["string"] = "CIE Log2(L) (u',v')"; break;
         case 34892: value["string"] = "Linear RAW"; break; // DNG ext
-        default: break;
+        default: value["string"] = "Unrecognized"; break;
         }
-    }
-    else if (entry->tag == EXIF_TAG_PLANAR_CONFIGURATION)
-    {
+        break;
+    case 284: // PlanarConfiguration
         if (value["value"].get<int>() == 1)
             value["string"] = "Single (interleaved) plane";
         else if (value["value"].get<int>() == 2)
             value["string"] = "Separate planes";
-    }
-    else if (entry->tag == EXIF_TAG_XML_PACKET)
+        else
+            value["string"] = "Unrecognized";
+        break;
+    case 700:
     {
         // Special handling for XMP data
         string xmp_data(reinterpret_cast<char *>(entry->data), entry->size);
         value = {{"value", xmp_data}, {"string", xmp_data}, {"type", "string"}, {"description", "XMP metadata packet"}};
+        tag_name = "XMP Metadata";
     }
-
-    // DNG-specific TIFF tags (Adobe DNG Specification versions 1.0-1.7)
-    switch (tag)
-    {
+    break;
+    case 37399: // SensorType
+        value["description"] = "Indicates the type of image sensor used to capture the image." + tag_desc;
+        switch (value["value"].get<int>())
+        {
+        case 1: value["string"] = "Undefined sensing method"; break;
+        case 2: value["string"] = "One chip color area sensor"; break;
+        case 3: value["string"] = "Two chip color area sensor"; break;
+        case 4: value["string"] = "Three chip color area sensor"; break;
+        case 5: value["string"] = "Color sequential area sensor"; break;
+        case 7: value["string"] = "Trilinear sensor"; break;
+        case 8: value["string"] = "Color sequential linear sensor"; break;
+        default: break;
+        }
+        break;
     case 50706: // DNGVersion
         value["description"] = "The DNG four-tier version number. Files compliant with e.g. version 1.6.0.0 of the DNG "
                                "spec should contain the bytes: 1, 6, 0, 0." +
@@ -1047,6 +1059,8 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
     default: break;
     }
 
+    json ret;
+    ret[tag_name] = value;
     return ret;
 }
 
