@@ -25,6 +25,10 @@
 #include "imageio/heif.h"
 #endif
 
+#ifdef HDRVIEW_ENABLE_LIBRAW
+#include <libraw/libraw_version.h>
+#endif
+
 #ifdef HDRVIEW_ENABLE_JPEGXL
 #include <jxl/version.h>
 #endif
@@ -1136,16 +1140,18 @@ void HDRViewApp::draw_about_dialog(bool &open)
                         info += "lcms2: NO\n";
 
                     info += "Image IO libraries:\n";
-                    info += "\tLibrary        Version         Flag\n";
-                    info += "\t=============================================================\n";
+                    info += fmt::format("\t{:<15} {:<15} {:<25}\n", "Library", "Version", "Flags");
+                    info += fmt::format("\t{:=<15} {:=<15} {:=<30}\n", "", "", "");
                     info += fmt::format(
-                        "\tOpenEXR        {:<15} required\n",
+                        "\t{:<15} {:<15} always enabled\n", "OpenEXR",
                         fmt::format("{}.{}.{}", OPENEXR_VERSION_MAJOR, OPENEXR_VERSION_MINOR, OPENEXR_VERSION_PATCH));
 
 #ifdef HDRVIEW_ENABLE_LIBHEIF
-                    info += fmt::format("\tlibheif        {:<15} HDRVIEW_ENABLE_LIBHEIF   : yes\n", heif_get_version());
+                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libheif", heif_get_version(),
+                                        "HDRVIEW_ENABLE_LIBHEIF");
 #else
-                    info += fmt::format("\tlibheif        {:<15} HDRVIEW_ENABLE_LIBHEIF   : no\n", "not found");
+                    info +=
+                        fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libheif", "not found", "HDRVIEW_ENABLE_LIBHEIF");
 #endif
 
 #ifdef HDRVIEW_ENABLE_LIBJPEG
@@ -1153,35 +1159,48 @@ void HDRViewApp::draw_about_dialog(bool &open)
 #define LIBJPEG_STR_HELPER(x) #x
 #define LIBJPEG_STR(x)        LIBJPEG_STR_HELPER(x)
                     info += fmt::format(
-                        "\tlibjpeg-turbo  {:<15} HDRVIEW_ENABLE_LIBJPEG   : yes\n",
-                        fmt::format("{} ({})", LIBJPEG_STR(LIBJPEG_TURBO_VERSION), LIBJPEG_TURBO_VERSION_NUMBER));
+                        "\t{:<15} {:<15} {:<24} : yes\n", "libjpeg-turbo",
+                        fmt::format("{} ({})", LIBJPEG_STR(LIBJPEG_TURBO_VERSION), LIBJPEG_TURBO_VERSION_NUMBER),
+                        "HDRVIEW_ENABLE_LIBJPEG");
 #undef LIBJPEG_STR
 #undef LIBJPEG_STR_HELPER
 #else
-                    info += fmt::format("\tlibjpeg        {:<15} HDRVIEW_ENABLE_LIBJPEG   : yes\n", JPEG_LIB_VERSION);
+                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libjpeg", JPEG_LIB_VERSION,
+                                        "HDRVIEW_ENABLE_LIBJPEG");
 #endif
 #else
-                    info += fmt::format("\tlibjpeg        {:<15} HDRVIEW_ENABLE_LIBJPEG   : no\n", "not found");
+                    info +=
+                        fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libjpeg", "not found", "HDRVIEW_ENABLE_LIBJPEG");
 #endif
 
                     if (JPEGXL_ENABLED)
                         info += fmt::format(
-                            "\tlibjxl         {:<15} HDRVIEW_ENABLE_LIBJPEGXL : yes\n",
-                            fmt::format("{}.{}.{}", JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION));
+                            "\t{:<15} {:<15} {:<24} : yes\n", "libjxl",
+                            fmt::format("{}.{}.{}", JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION),
+                            "HDRVIEW_ENABLE_LIBJPEGXL");
                     else
-                        info += fmt::format("\tlibjxl         {:<15} HDRVIEW_ENABLE_LIBJPEGXL : no\n", "not found");
+                        info += fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libjxl", "not found",
+                                            "HDRVIEW_ENABLE_LIBJPEGXL");
 
                     if (LIBPNG_ENABLED)
-                        info += fmt::format("\tlibpng         {:<15} HDRVIEW_ENABLE_LIBPNG    : yes\n",
-                                            PNG_LIBPNG_VER_STRING);
+                        info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libpng", PNG_LIBPNG_VER_STRING,
+                                            "HDRVIEW_ENABLE_LIBPNG");
                     else
-                        info += fmt::format("\tlibpng         {:<15} HDRVIEW_ENABLE_LIBPNG    : no\n", "not found");
+                        info += fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libpng", "not found",
+                                            "HDRVIEW_ENABLE_LIBPNG");
+#ifdef LIBRAW_ENABLED
+                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libraw", LIBRAW_VERSION_STR,
+                                        "HDRVIEW_ENABLE_LIBRAW");
+#else
+                    info +=
+                        fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libraw", "not found", "HDRVIEW_ENABLE_LIBRAW");
+#endif
 
 #if UHDR_ENABLED
-                    info +=
-                        fmt::format("\tlibuhdr        {:<15} HDRVIEW_ENABLE_UHDR      : yes\n", UHDR_LIB_VERSION_STR);
+                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libuhdr", UHDR_LIB_VERSION_STR,
+                                        "HDRVIEW_ENABLE_UHDR");
 #else
-                    info += fmt::format("\tlibuhdr        {:<15} HDRVIEW_ENABLE_UHDR      : no\n", "not found");
+                    info += fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libuhdr", "not found", "HDRVIEW_ENABLE_UHDR");
 #endif
 
 #if LIBWEBP_ENABLED
@@ -1189,10 +1208,12 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     const int d_major = (webp_v >> 16) & 0xff;
                     const int d_minor = (webp_v >> 8) & 0xff;
                     const int d_rev   = webp_v & 0xff;
-                    info += fmt::format("\tlibwebp        {:<15} HDRVIEW_ENABLE_LIBWEBP   : yes\n",
-                                        fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v));
+                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libwebp",
+                                        fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v),
+                                        "HDRVIEW_ENABLE_LIBWEBP");
 #else
-                    info += fmt::format("\tlibwebp        {:<15} HDRVIEW_ENABLE_LIBWEBP   : no\n", "not found");
+                    info +=
+                        fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libwebp", "not found", "HDRVIEW_ENABLE_LIBWEBP");
 #endif
 
                     if (LIBPNG_ENABLED)

@@ -749,7 +749,7 @@ if(HDRVIEW_ENABLE_UHDR)
             "UHDR_BUILD_FUZZERS OFF"
             "JPEG_FOUND TRUE"
             "BUILD_SHARED_LIBS OFF"
-            "UHDR_BUILD_DEPS ON"
+            "UHDR_BUILD_DEPS ${UHDR_BUILD_DEPS}"
             "UHDR_BUILD_EXAMPLES OFF"
             "UHDR_BUILD_TESTS OFF"
             "UHDR_ENABLE_INSTALL OFF"
@@ -848,8 +848,8 @@ endif()
 option(HDRVIEW_ENABLE_J2K "Enable JPEG-2000 support" ON)
 option(HDRVIEW_ENABLE_HTJ2K "Enable high-throughput JPEG2000 (HTJ2K) support" ON)
 option(HDRVIEW_ENABLE_AVIF "Enable AVIF support" ON)
-option(HDRVIEW_ENABLE_HEIC "Enable HEIC support" OFF)
-option(HDRVIEW_ENABLE_AVCI "Enable AVCI support" OFF)
+option(HDRVIEW_ENABLE_HEIC "Enable HEIC support" ON)
+option(HDRVIEW_ENABLE_AVCI "Enable AVCI support" ON)
 
 set(HDRVIEW_ENABLE_LIBHEIF OFF)
 if(HDRVIEW_ENABLE_J2K

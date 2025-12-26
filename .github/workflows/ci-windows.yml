@@ -37,7 +37,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DHDRVIEW_ENABLE_HEIC=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DUHDR_BUILD_DEPS=ON
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
