@@ -1033,7 +1033,7 @@ if(HDRVIEW_ENABLE_LIBRAW)
 
   # Before the LibRaw CPMAddPackage: 
   if(WIN32 OR MSVC OR EMSCRIPTEN)
-    set(MATH_LIBRARY "" CACHE STRING "Math library not needed on Windows/MSVC/Emscripten")
+    set(MATH_LIBRARY "" CACHE STRING "Math library not needed on Windows/MSVC/Emscripten" FORCE)
     message(STATUS "No math library needed on Windows/MSVC/Emscripten for LibRaw")
   endif()
 
