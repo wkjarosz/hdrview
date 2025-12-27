@@ -738,6 +738,7 @@ endif()
 # cmake-format: on
 
 # cmake-format: off
+option(UHDR_BUILD_DEPS "Whether to build uhdr dependencies instead of using system-installed ones" ON)
 option(HDRVIEW_ENABLE_UHDR "Whether to build with Ultra HDR support" ON)
 if(HDRVIEW_ENABLE_UHDR)
   CPMAddPackage(
