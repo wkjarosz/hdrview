@@ -208,7 +208,7 @@ void exif_handler(void *context, int tag, int type, int len, unsigned int ord, v
     catch (const std::exception &e)
     {
         // ignore errors
-        spdlog::warn("Error processing EXIF tag {}: {}", tag, e.what());
+        spdlog::warn("Error processing EXIF tag {}: {}", actual_tag, e.what());
     }
 }
 
@@ -298,7 +298,7 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
         }
         {
             const auto &lnmn = processor->imgdata.lens.makernotes;
-            maker_add("Lens ID", lnmn.LensID, false, 0ULL);
+            maker_add("Lens ID", lnmn.LensID, false, (unsigned long long)(-1));
             maker_add("Lens", std::string(lnmn.Lens), false, std::string());
             maker_add("Lens Format", lnmn.LensFormat, false, 0);
             maker_add("Lens Mount", lnmn.LensMount, false, 0);
@@ -358,9 +358,9 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
             maker_add("Drive Mode", mn.DriveMode, false, -1);
             maker_add("Focus Mode", mn.FocusMode, false, -1);
             maker_add("Metering Mode", mn.MeteringMode, false, -1);
-            maker_add("AF Point", mn.AFPoint);
+            maker_add("AF Point", mn.AFPoint, false, -1);
             maker_add("Exposure Mode", mn.ExposureMode, false, -1);
-            maker_add("Image Stabilization", mn.ImageStabilization);
+            maker_add("Image Stabilization", mn.ImageStabilization, false, -1);
             maker_add("Body Serial", std::string(mn.BodySerial), false, std::string());
             maker_add("Internal Body Serial", std::string(mn.InternalBodySerial), false, std::string());
         }
