@@ -394,10 +394,19 @@ void Image::draw_info()
             ImGui::PE::WrappedText(property_name, value, tooltip, bold_font);
     };
 
+    ImGui::BeginChild("Image info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+
     static const ImGuiTableFlags table_flags =
         ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_NoBordersInBodyUntilResize;
-    if (ImGui::CollapsingHeader("General", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanFullWidth |
-                                               ImGuiTreeNodeFlags_SpanAllColumns))
+    ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
+    ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
+    ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
+    ImGui::PushFont(bold_font, 0.f);
+    auto open = ImGui::CollapsingHeader("General", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanFullWidth |
+                                                       ImGuiTreeNodeFlags_SpanAllColumns);
+    ImGui::PopFont();
+    ImGui::PopStyleColor(3);
+    if (open)
     {
         if (ImGui::PE::Begin("Image info", table_flags))
         {
@@ -443,18 +452,21 @@ void Image::draw_info()
         if (field_obj.contains("description") && field_obj["description"].is_string())
             tt += field_obj["description"].get<std::string>() + "\n\n";
 
+        if (field_obj.contains("ifd") && field_obj["ifd"].is_number())
+            tt += fmt::format("IFD: {}\n", field_obj["ifd"].get<int>());
+
+        if (field_obj.contains("tag") && field_obj["tag"].is_number())
+            tt += fmt::format("Tag: {}\n", field_obj["tag"].get<int>());
+
         if (field_obj.contains("type") && field_obj["type"].is_string())
-        {
-            auto t = field_obj["type"].get<std::string>();
-            tt += std::string("type: ") + field_obj["type"].get<std::string>() + "\n";
-        }
+            tt += fmt::format("Type: {}\n", field_obj["type"].get<std::string>());
 
         if (field_obj.contains("value"))
         {
             const auto &v = field_obj["value"];
             if (!v.is_object() && !v.is_string() &&
                 (!v.is_array() || (v.is_array() && v.size() > 0 && v.size() <= 5 && v[0].is_number())))
-                tt += std::string("value: ") + v.dump();
+                tt += fmt::format("Value: {}", v.dump());
         }
         return tt;
     };
@@ -479,8 +491,16 @@ void Image::draw_info()
 
     if (metadata.contains("header") && metadata["header"].is_object())
     {
-        if (ImGui::CollapsingHeader("Header", ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-                                                  ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns))
+        ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
+        ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
+        ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
+        ImGui::PushFont(bold_font, 0.f);
+        auto open =
+            ImGui::CollapsingHeader("Header", ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
+                                                  ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns);
+        ImGui::PopFont();
+        ImGui::PopStyleColor(3);
+        if (open)
         {
             if (ImGui::PE::Begin("Image info", table_flags))
             {
@@ -500,9 +520,16 @@ void Image::draw_info()
             if (!table_obj.is_object())
                 continue;
 
-            if (ImGui::CollapsingHeader(exif_entry.key().c_str(),
-                                        ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-                                            ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns))
+            ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
+            ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
+            ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
+            ImGui::PushFont(bold_font, 0.f);
+            auto open = ImGui::CollapsingHeader(
+                exif_entry.key().c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
+                                              ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns);
+            ImGui::PopFont();
+            ImGui::PopStyleColor(3);
+            if (open)
             {
                 if (ImGui::PE::Begin("Image info", table_flags))
                 {
@@ -514,6 +541,8 @@ void Image::draw_info()
             }
         }
     }
+
+    ImGui::EndChild();
 }
 
 void Image::draw_chromaticity_diagram()

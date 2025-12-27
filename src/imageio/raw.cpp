@@ -12,7 +12,6 @@
 #include "icc.h"
 #include "image.h"
 #include "jpg.h"
-#include "timer.h"
 #include <sstream>
 
 #include <algorithm>
@@ -648,8 +647,8 @@ Box2i get_display_window(const libraw_data_t &idata)
             if (crop_left >= 0 && crop_top >= 0 && crop_left + crop_width <= image_width &&
                 crop_top + crop_height <= image_height)
             {
-                spdlog::info("Using RAW crop window: left={}, top={}, width={}, height={}", crop_left, crop_top,
-                             crop_width, crop_height);
+                spdlog::debug("Using RAW crop window: left={}, top={}, width={}, height={}", crop_left, crop_top,
+                              crop_width, crop_height);
                 return Box2i{{crop_left, crop_top}, {crop_left + crop_width, crop_top + crop_height}};
             }
         }
@@ -683,7 +682,6 @@ bool is_raw_image(std::istream &is) noexcept
 vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "RAW"};
-    Timer     timer;
 
     // Create and configure LibRaw processor (use heap allocation for thread-safe version)
     unique_ptr<LibRaw> processor;
@@ -738,6 +736,14 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     if (auto ret = processor->open_datastream(&libraw_stream); ret != LIBRAW_SUCCESS)
         throw std::runtime_error(fmt::format("Failed to open RAW file: {}", libraw_strerror(ret)));
 
+    add_maker_notes(processor, exif_ctx.metadata);
+
+    // Attach EXIF/XMP metadata (if present) to all images (thumbnails + main)
+    if (!exif_ctx.metadata.empty())
+        spdlog::debug("Successfully extracted EXIF metadata");
+    else
+        spdlog::debug("No EXIF metadata extracted from RAW file");
+
     // Access image data directly from imgdata
     auto &idata = processor->imgdata;
 
@@ -776,6 +782,8 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             image->filename           = filename;
             image->partname           = "main";
             image->metadata["loader"] = "LibRaw";
+            if (!exif_ctx.metadata.empty())
+                image->metadata["exif"] = exif_ctx.metadata;
 
             // Helper function to handle flip transformations
             auto flip_index = [&](int2 idx) -> int2
@@ -800,7 +808,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
 
             // Convert from 16-bit to float [0,1] with flip handling
             // We include an ad-hoc scale factor here to make the exposure match the DNG preview better
-            constexpr float scale = 2.2f / 65535.0f;
+            constexpr float scale = 2.0f / 65535.0f;
 
             stp::parallel_for(stp::blocked_range<int>(0, size.y, 32),
                               [&](int begin, int end, int unit_index, int thread_index)
@@ -894,13 +902,15 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 auto               thumbs = load_jpg_image(iss, fmt::format("{}:thumb{}", filename, ti), opts);
                 for (auto &ti_img : thumbs)
                 {
+                    ti_img->partname                           = fmt::format("thumbnail:{}", ti);
                     ti_img->metadata["loader"]                 = "LibRaw";
                     ti_img->metadata["header"]["Is thumbnail"] = {
                         {"value", true},
                         {"string", "Yes"},
                         {"type", "bool"},
                         {"description", "Indicates this image is a thumbnail"}};
-                    ti_img->partname = fmt::format("thumbnail:{}", ti);
+                    if (!exif_ctx.metadata.empty())
+                        ti_img->metadata["exif"] = exif_ctx.metadata;
                     images.push_back(ti_img);
                 }
             }
@@ -919,7 +929,32 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                                                             {"string", "Yes"},
                                                             {"type", "bool"},
                                                             {"description", "Indicates this image is a thumbnail"}};
-                timg->partname                           = fmt::format("thumbnail:{}", ti);
+                if (!exif_ctx.metadata.empty())
+                {
+                    timg->metadata["exif"] = exif_ctx.metadata;
+
+                    // Bitmap thumbnails are already oriented by LibRaw, so we rename any potential EXIF orientation
+                    // field to original_orientation.
+                    // Rename any "orientation" tag inside EXIF IFDs to "original orientation"
+                    for (auto it_ifd = timg->metadata["exif"].begin(); it_ifd != timg->metadata["exif"].end(); ++it_ifd)
+                    {
+                        if (!it_ifd->is_object())
+                            continue;
+                        json                    &ifd_obj = *it_ifd;
+                        std::vector<std::string> keys_to_erase;
+                        for (auto it = ifd_obj.begin(); it != ifd_obj.end(); ++it)
+                        {
+                            std::string tag_key = it.key();
+                            if (to_lower(tag_key) == "orientation")
+                            {
+                                // move the orientation entry to "original orientation" within the same IFD
+                                ifd_obj["original " + tag_key] = it.value();
+                                keys_to_erase.push_back(tag_key);
+                            }
+                        }
+                        for (const auto &k : keys_to_erase) ifd_obj.erase(k);
+                    }
+                }
 
                 // Load interleaved bytes/shorts into a float buffer, then linearize
                 std::vector<float> float_pixels((size_t)w * h * n);
@@ -971,20 +1006,6 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
         {
             spdlog::warn("Error loading thumbnail {}: {}", ti, e.what());
         }
-    }
-
-    spdlog::info("Loaded RAW image in {:.2f}ms", timer.elapsed());
-
-    add_maker_notes(processor, exif_ctx.metadata);
-
-    // Attach EXIF/XMP metadata (if present) to all images (thumbnails + main)
-    if (!exif_ctx.metadata.empty())
-    {
-        for (auto &img_ptr : images) { img_ptr->metadata["exif"] = exif_ctx.metadata; }
-    }
-    else
-    {
-        spdlog::warn("No EXIF metadata extracted from RAW file");
     }
 
     return images;

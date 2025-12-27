@@ -76,36 +76,32 @@ json exif_to_json(const uint8_t *data_ptr, size_t data_size)
     return exif_data_to_json(exif_data.get());
 }
 
-json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
+json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx)
 {
-    if (ifd_idx_i >= EXIF_IFD_COUNT)
+    if (ifd_idx >= EXIF_IFD_COUNT)
         throw std::invalid_argument("Invalid IFD index");
     if (boi > EXIF_BYTE_ORDER_INTEL)
         throw std::invalid_argument("Invalid byte order");
 
-    auto          entry   = static_cast<ExifEntry *>(entry_v);
-    auto          ifd_idx = static_cast<ExifIfd>(ifd_idx_i);
-    ExifByteOrder bo      = static_cast<ExifByteOrder>(boi);
-    auto          tag     = std::underlying_type<ExifTag>::type(entry->tag);
+    auto          entry = static_cast<ExifEntry *>(entry_v);
+    auto          ifd   = static_cast<ExifIfd>(ifd_idx);
+    ExifByteOrder bo    = static_cast<ExifByteOrder>(boi);
+    auto          tag   = std::underlying_type<ExifTag>::type(entry->tag);
 
     Endian data_endian = (bo == EXIF_BYTE_ORDER_INTEL) ? Endian::Little : Endian::Big;
 
-    if (tag == 40965 && ifd_idx == EXIF_IFD_EXIF) // Pointer to EXIF Interoperability private directory
-        return json::object();                    // Ignore since this isn't useful to show to user
+    if (tag == 40965 && ifd == EXIF_IFD_EXIF) // Pointer to EXIF Interoperability private directory
+        return json::object();                // Ignore since this isn't useful to show to user
 
-    const char *tag_name_ptr = exif_tag_get_title_in_ifd(entry->tag, ifd_idx);
+    const char *tag_name_ptr = exif_tag_get_title_in_ifd(entry->tag, ifd);
     string      tag_name;
     if (tag_name_ptr)
         tag_name = tag_name_ptr;
 
     json value = json::object();
 
-    string tag_desc = fmt::format(" (ifd:tag {}:{})", std::underlying_type<ExifTag>::type(ifd_idx),
-                                  std::underlying_type<ExifTag>::type(entry->tag));
-    if (const char *desc_ptr = exif_tag_get_description_in_ifd(entry->tag, ifd_idx))
-        value["description"] = fmt::format("{}{}", desc_ptr, tag_desc);
-    else
-        value["description"] = tag_desc;
+    if (const char *desc_ptr = exif_tag_get_description_in_ifd(entry->tag, ifd))
+        value["description"] = std::string(desc_ptr);
 
     char   buf[1024] = {0};
     string str       = exif_entry_get_value(entry, buf, sizeof(buf));
@@ -121,6 +117,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
         value["type"] = "unknown";
 
     value["tag"] = tag;
+    value["ifd"] = ifd_idx;
 
     switch (entry->format)
     {
@@ -264,7 +261,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
     default: value = nullptr; break;
     }
 
-    if (ifd_idx == EXIF_IFD_0)
+    if (ifd == EXIF_IFD_0)
     {
         // Add special handling for certain tags
         switch (tag)
@@ -366,7 +363,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 37399: // SensorMethod
             tag_name             = "Sensing Method";
-            value["description"] = "Indicates the type of image sensor used to capture the image." + tag_desc;
+            value["description"] = "Indicates the type of image sensor used to capture the image.";
             switch (value["value"].get<int>())
             {
             case 1: value["string"] = "Undefined sensing method"; break;
@@ -386,8 +383,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             tag_name = "DNG Version";
             value["description"] =
                 "The DNG four-tier version number. Files compliant with e.g. version 1.6.0.0 of the DNG "
-                "spec should contain the bytes: 1, 6, 0, 0." +
-                tag_desc;
+                "spec should contain the bytes: 1, 6, 0, 0.";
             break;
         case 50707: // DNGBackwardVersion
             tag_name = "DNG Backward Version";
@@ -395,8 +391,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
                 "Specifies the oldest version of the DNG spec for which a file is compatible. Readers should not "
                 "attempt "
                 "to read a file if this tag specifies a version number that is higher than the version number of the "
-                "specification the reader was based on." +
-                tag_desc;
+                "specification the reader was based on.";
             break;
         case 50708: // UniqueCameraModel
             tag_name             = "Unique Camera Model";
@@ -404,23 +399,21 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
                                    "in the raw file. This "
                                    "name should include the manufacturer's name to avoid conflicts, and should not be "
                                    "localized, even if the "
-                                   "camera name itself is localized for different markets." +
-                                   tag_desc;
+                                   "camera name itself is localized for different markets.";
             break;
         case 50709: // LocalizedCameraModel
             tag_name             = "Localized Camera Model";
-            value["description"] = "Localized camera model name" + tag_desc;
+            value["description"] = "Localized camera model name";
             break;
         case 50710: // CFAPlaneColor
             tag_name = "CFA Plane Color";
             value["description"] =
                 "Provides a mapping between the values in the CFAPattern tag and the plane numbers in "
-                "LinearRaw space. This is a required tag for non-RGB CFA images." +
-                tag_desc;
+                "LinearRaw space. This is a required tag for non-RGB CFA images.";
             break;
         case 50711: // CFALayout
             tag_name             = "CFA Layout";
-            value["description"] = "Describes the spatial layout of the CFA." + tag_desc;
+            value["description"] = "Describes the spatial layout of the CFA.";
             switch (value["value"].get<int>())
             {
             case 1: value["string"] = "Rectangular (or square) layout"; break;
@@ -454,131 +447,126 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
                 "increase compression ratios by storing the raw data in a non-linear, more visually uniform space with "
                 "fewer total encoding levels. If SamplesPerPixel is not equal to one, this single table applies to all "
                 "the "
-                "samples for each pixel." +
-                tag_desc;
+                "samples for each pixel.";
             break;
         case 50713: // BlackLevelRepeatDim
             tag_name             = "Black Level Repeat Dim";
-            value["description"] = "Specifies repeat pattern size for the BlackLevel tag." + tag_desc;
+            value["description"] = "Specifies repeat pattern size for the BlackLevel tag.";
             break;
         case 50714: // BlackLevel
             tag_name = "Black Level";
             value["description"] =
                 "Specifies the zero light (a.k.a. thermal black or black current) encoding level, as a "
                 "repeating pattern. The origin of this pattern is the top-left corner of the ActiveArea "
-                "rectangle. The values are stored in row-column-sample scan order." +
-                tag_desc;
+                "rectangle. The values are stored in row-column-sample scan order.";
             break;
         case 50715: // BlackLevelDeltaH
             tag_name             = "Black Level Delta H";
-            value["description"] = "Horizontal black level delta per column." + tag_desc;
+            value["description"] = "Horizontal black level delta per column.";
             break;
         case 50716: // BlackLevelDeltaV
             tag_name             = "Black Level Delta V";
-            value["description"] = "Vertical black level delta per row." + tag_desc;
+            value["description"] = "Vertical black level delta per row.";
             break;
         case 50717: // WhiteLevel
             tag_name             = "White Level";
-            value["description"] = "Per-channel white/saturation level." + tag_desc;
+            value["description"] = "Per-channel white/saturation level.";
             break;
         case 50718: // DefaultScale
             tag_name             = "Default Scale";
-            value["description"] = "Default scale factors for X and Y dimensions." + tag_desc;
+            value["description"] = "Default scale factors for X and Y dimensions.";
             break;
         case 50719: // DefaultCropOrigin
             tag_name             = "Default Crop Origin";
-            value["description"] = "Origin of final image area in raw coordinates." + tag_desc;
+            value["description"] = "Origin of final image area in raw coordinates.";
             break;
         case 50720: // DefaultCropSize
             tag_name             = "Default Crop Size";
-            value["description"] = "Size of final image area in raw coordinates." + tag_desc;
+            value["description"] = "Size of final image area in raw coordinates.";
             break;
         case 50721: // ColorMatrix1
-            tag_name = "Color Matrix 1";
-            value["description"] =
-                "Color transform matrix from camera color space to reference illuminant 1." + tag_desc;
+            tag_name             = "Color Matrix 1";
+            value["description"] = "Color transform matrix from camera color space to reference illuminant 1.";
             break;
         case 50722: // ColorMatrix2
-            tag_name = "Color Matrix 2";
-            value["description"] =
-                "Color transform matrix from camera color space to reference illuminant 2." + tag_desc;
+            tag_name             = "Color Matrix 2";
+            value["description"] = "Color transform matrix from camera color space to reference illuminant 2.";
             break;
         case 50723: // CameraCalibration1
             tag_name             = "Camera Calibration 1";
-            value["description"] = "Camera calibration matrix for illuminant 1." + tag_desc;
+            value["description"] = "Camera calibration matrix for illuminant 1.";
             break;
         case 50724: // CameraCalibration2
             tag_name             = "Camera Calibration 2";
-            value["description"] = "Camera calibration matrix for illuminant 2." + tag_desc;
+            value["description"] = "Camera calibration matrix for illuminant 2.";
             break;
         case 50725: // ReductionMatrix1
             tag_name             = "Reduction Matrix 1";
-            value["description"] = "Dimensionality reduction matrix for illuminant 1." + tag_desc;
+            value["description"] = "Dimensionality reduction matrix for illuminant 1.";
             break;
         case 50726: // ReductionMatrix2
             tag_name             = "Reduction Matrix 2";
-            value["description"] = "Dimensionality reduction matrix for illuminant 2." + tag_desc;
+            value["description"] = "Dimensionality reduction matrix for illuminant 2.";
             break;
         case 50727: // AnalogBalance
             tag_name             = "Analog Balance";
-            value["description"] = "Per-channel analog gain applied before digitization." + tag_desc;
+            value["description"] = "Per-channel analog gain applied before digitization.";
             break;
         case 50728: // AsShotNeutral
             tag_name             = "As Shot Neutral";
-            value["description"] = "Selected white balance at time of capture in inverse format." + tag_desc;
+            value["description"] = "Selected white balance at time of capture in inverse format.";
             break;
         case 50729: // AsShotWhiteXY
             tag_name             = "As Shot White XY";
-            value["description"] = "Selected white balance at time of capture in chromaticity coordinates." + tag_desc;
+            value["description"] = "Selected white balance at time of capture in chromaticity coordinates.";
             break;
         case 50730: // BaselineExposure
             tag_name             = "Baseline Exposure";
-            value["description"] = "Camera model-specific baseline exposure compensation." + tag_desc;
+            value["description"] = "Camera model-specific baseline exposure compensation.";
             break;
         case 50731: // BaselineNoise
             tag_name             = "Baseline Noise";
-            value["description"] = "Camera model-specific noise level at ISO 100." + tag_desc;
+            value["description"] = "Camera model-specific noise level at ISO 100.";
             break;
         case 50732: // BaselineSharpness
             tag_name             = "Baseline Sharpness";
-            value["description"] = "Camera model-specific sharpness level." + tag_desc;
+            value["description"] = "Camera model-specific sharpness level.";
             break;
         case 50733: // BayerGreenSplit
             tag_name             = "Bayer Green Split";
-            value["description"] = "Bayer green channel split quality metric." + tag_desc;
+            value["description"] = "Bayer green channel split quality metric.";
             break;
         case 50734: // LinearResponseLimit
             tag_name             = "Linear Response Limit";
-            value["description"] = "Fraction of encoded range above which response may be non-linear." + tag_desc;
+            value["description"] = "Fraction of encoded range above which response may be non-linear.";
             break;
         case 50735: // CameraSerialNumber
             tag_name             = "Camera Serial Number";
-            value["description"] = "Camera serial number." + tag_desc;
+            value["description"] = "Camera serial number.";
             break;
         case 50736: // LensInfo
-            tag_name = "Lens Info";
-            value["description"] =
-                "Lens information: min focal length, max focal length, min F-stop, max F-stop." + tag_desc;
+            tag_name             = "Lens Info";
+            value["description"] = "Lens information: min focal length, max focal length, min F-stop, max F-stop.";
             break;
         case 50737: // ChromaBlurRadius
             tag_name             = "Chroma Blur Radius";
-            value["description"] = "Chroma blur radius for anti-aliasing." + tag_desc;
+            value["description"] = "Chroma blur radius for anti-aliasing.";
             break;
         case 50738: // AntiAliasStrength
             tag_name             = "Anti Alias Strength";
-            value["description"] = "Anti-aliasing filter strength." + tag_desc;
+            value["description"] = "Anti-aliasing filter strength.";
             break;
         case 50739: // ShadowScale
             tag_name             = "Shadow Scale";
-            value["description"] = "Shadow scale factor hint." + tag_desc;
+            value["description"] = "Shadow scale factor hint.";
             break;
         case 50740: // DNGPrivateData
             tag_name             = "DNG Private Data";
-            value["description"] = "Private DNG data block." + tag_desc;
+            value["description"] = "Private DNG data block.";
             break;
         case 50741: // MakerNoteSafety
             tag_name             = "Maker Note Safety";
-            value["description"] = "MakerNote data safety indicator." + tag_desc;
+            value["description"] = "MakerNote data safety indicator.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Unsafe - may require original file for processing"; break;
@@ -588,7 +576,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 50778: // CalibrationIlluminant1
             tag_name             = "Calibration Illuminant 1";
-            value["description"] = "Illuminant type for ColorMatrix1 and CameraCalibration1." + tag_desc;
+            value["description"] = "Illuminant type for ColorMatrix1 and CameraCalibration1.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Unknown"; break;
@@ -618,7 +606,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 50779: // CalibrationIlluminant2
             tag_name             = "Calibration Illuminant 2";
-            value["description"] = "Illuminant type for ColorMatrix2 and CameraCalibration2." + tag_desc;
+            value["description"] = "Illuminant type for ColorMatrix2 and CameraCalibration2.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Unknown"; break;
@@ -648,54 +636,52 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 50780: // BestQualityScale
             tag_name             = "Best Quality Scale";
-            value["description"] = "Best quality multiplier for final image size." + tag_desc;
+            value["description"] = "Best quality multiplier for final image size.";
             break;
         case 50781: // RawDataUniqueID
             tag_name             = "Raw Data Unique ID";
-            value["description"] = "Unique identifier for raw image data." + tag_desc;
+            value["description"] = "Unique identifier for raw image data.";
             break;
         case 50827: // OriginalRawFileName
             tag_name             = "Original Raw File Name";
-            value["description"] = "Original raw file name before conversion." + tag_desc;
+            value["description"] = "Original raw file name before conversion.";
             break;
         case 50828: // OriginalRawFileData
             tag_name             = "Original Raw File Data";
-            value["description"] = "Original raw file embedded data." + tag_desc;
+            value["description"] = "Original raw file embedded data.";
             break;
         case 50829: // ActiveArea
             tag_name = "Active Area";
             value["description"] =
                 "This rectangle defines the active (non-masked) pixels of the sensor. The order of the "
-                "rectangle coordinates is: top, left, bottom, right." +
-                tag_desc;
+                "rectangle coordinates is: top, left, bottom, right.";
             break;
         case 50830: // MaskedAreas
             tag_name = "Masked Areas";
             value["description"] =
                 "A list of non-overlapping rectangle coordinates of fully masked pixels, which can be "
                 "optionally used by DNG readers to measure the black encoding level.The order of each "
-                "rectangle's coordinates is: top, left, bottom, right." +
-                tag_desc;
+                "rectangle's coordinates is: top, left, bottom, right.";
             break;
         case 50831: // AsShotICCProfile
             tag_name             = "As Shot ICC Profile";
-            value["description"] = "ICC profile for as-shot color space." + tag_desc;
+            value["description"] = "ICC profile for as-shot color space.";
             break;
         case 50832: // AsShotPreProfileMatrix
             tag_name             = "As Shot Pre Profile Matrix";
-            value["description"] = "Matrix applied before ICC profile for as-shot rendering." + tag_desc;
+            value["description"] = "Matrix applied before ICC profile for as-shot rendering.";
             break;
         case 50833: // CurrentICCProfile
             tag_name             = "Current ICC Profile";
-            value["description"] = "ICC profile for current rendering." + tag_desc;
+            value["description"] = "ICC profile for current rendering.";
             break;
         case 50834: // CurrentPreProfileMatrix
             tag_name             = "Current Pre Profile Matrix";
-            value["description"] = "Matrix applied before ICC profile for current rendering." + tag_desc;
+            value["description"] = "Matrix applied before ICC profile for current rendering.";
             break;
         case 50879: // ColorimetricReference
             tag_name             = "Colorimetric Reference";
-            value["description"] = "Colorimetric reference for camera color space." + tag_desc;
+            value["description"] = "Colorimetric reference for camera color space.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Scene-referred (default)"; break;
@@ -705,43 +691,43 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 50931: // CameraCalibrationSignature
             tag_name             = "Camera Calibration Signature";
-            value["description"] = "Digital signature for camera calibration data." + tag_desc;
+            value["description"] = "Digital signature for camera calibration data.";
             break;
         case 50932: // ProfileCalibrationSignature
             tag_name             = "Profile Calibration Signature";
-            value["description"] = "Digital signature for profile calibration data." + tag_desc;
+            value["description"] = "Digital signature for profile calibration data.";
             break;
         case 50934: // AsShotProfileName
             tag_name             = "As Shot Profile Name";
-            value["description"] = "Name of as-shot camera profile." + tag_desc;
+            value["description"] = "Name of as-shot camera profile.";
             break;
         case 50935: // NoiseReductionApplied
             tag_name             = "Noise Reduction Applied";
-            value["description"] = "Amount of noise reduction already applied." + tag_desc;
+            value["description"] = "Amount of noise reduction already applied.";
             break;
         case 50936: // ProfileName
             tag_name             = "Profile Name";
-            value["description"] = "Name of camera profile." + tag_desc;
+            value["description"] = "Name of camera profile.";
             break;
         case 50937: // ProfileHueSatMapDims
             tag_name             = "Profile Hue Sat Map Dims";
-            value["description"] = "Dimensions of ProfileHueSatMapData arrays." + tag_desc;
+            value["description"] = "Dimensions of ProfileHueSatMapData arrays.";
             break;
         case 50938: // ProfileHueSatMapData1
             tag_name             = "Profile Hue Sat Map Data 1";
-            value["description"] = "Hue/saturation/value mapping table for illuminant 1." + tag_desc;
+            value["description"] = "Hue/saturation/value mapping table for illuminant 1.";
             break;
         case 50939: // ProfileHueSatMapData2
             tag_name             = "Profile Hue Sat Map Data 2";
-            value["description"] = "Hue/saturation/value mapping table for illuminant 2." + tag_desc;
+            value["description"] = "Hue/saturation/value mapping table for illuminant 2.";
             break;
         case 50940: // ProfileToneCurve
             tag_name             = "Profile Tone Curve";
-            value["description"] = "Default tone curve for camera profile." + tag_desc;
+            value["description"] = "Default tone curve for camera profile.";
             break;
         case 50941: // ProfileEmbedPolicy
             tag_name             = "Profile Embed Policy";
-            value["description"] = "Profile embedding policy." + tag_desc;
+            value["description"] = "Profile embedding policy.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Allow copying"; break;
@@ -753,35 +739,35 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 50942: // ProfileCopyright
             tag_name             = "Profile Copyright";
-            value["description"] = "Camera profile copyright string." + tag_desc;
+            value["description"] = "Camera profile copyright string.";
             break;
         case 50964: // ForwardMatrix1
             tag_name             = "Forward Matrix 1";
-            value["description"] = "Matrix mapping XYZ values to camera color space for illuminant 1." + tag_desc;
+            value["description"] = "Matrix mapping XYZ values to camera color space for illuminant 1.";
             break;
         case 50965: // ForwardMatrix2
             tag_name             = "Forward Matrix 2";
-            value["description"] = "Matrix mapping XYZ values to camera color space for illuminant 2." + tag_desc;
+            value["description"] = "Matrix mapping XYZ values to camera color space for illuminant 2.";
             break;
         case 50966: // PreviewApplicationName
             tag_name             = "Preview Application Name";
-            value["description"] = "Name of application used to create preview." + tag_desc;
+            value["description"] = "Name of application used to create preview.";
             break;
         case 50967: // PreviewApplicationVersion
             tag_name             = "Preview Application Version";
-            value["description"] = "Version of application used to create preview." + tag_desc;
+            value["description"] = "Version of application used to create preview.";
             break;
         case 50968: // PreviewSettingsName
             tag_name             = "Preview Settings Name";
-            value["description"] = "Name of preview settings." + tag_desc;
+            value["description"] = "Name of preview settings.";
             break;
         case 50969: // PreviewSettingsDigest
             tag_name             = "Preview Settings Digest";
-            value["description"] = "MD5 digest of preview settings." + tag_desc;
+            value["description"] = "MD5 digest of preview settings.";
             break;
         case 50970: // PreviewColorSpace
             tag_name             = "Preview Color Space";
-            value["description"] = "Color space of preview image." + tag_desc;
+            value["description"] = "Color space of preview image.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Unknown"; break;
@@ -794,79 +780,79 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 50971: // PreviewDateTime
             tag_name             = "Preview Date Time";
-            value["description"] = "Date/time preview was created." + tag_desc;
+            value["description"] = "Date/time preview was created.";
             break;
         case 50972: // RawImageDigest
             tag_name             = "Raw Image Digest";
-            value["description"] = "MD5 digest of raw image data." + tag_desc;
+            value["description"] = "MD5 digest of raw image data.";
             break;
         case 50973: // OriginalRawFileDigest
             tag_name             = "Original Raw File Digest";
-            value["description"] = "MD5 digest of original raw file data." + tag_desc;
+            value["description"] = "MD5 digest of original raw file data.";
             break;
         case 50974: // SubTileBlockSize
             tag_name             = "Sub Tile Block Size";
-            value["description"] = "Tile block size for sub-tile access." + tag_desc;
+            value["description"] = "Tile block size for sub-tile access.";
             break;
         case 50975: // RowInterleaveFactor
             tag_name             = "Row Interleave Factor";
-            value["description"] = "Number of interleaved fields per row." + tag_desc;
+            value["description"] = "Number of interleaved fields per row.";
             break;
         case 50981: // ProfileLookTableDims
             tag_name             = "Profile Look Table Dims";
-            value["description"] = "Dimensions of ProfileLookTableData." + tag_desc;
+            value["description"] = "Dimensions of ProfileLookTableData.";
             break;
         case 50982: // ProfileLookTableData
             tag_name             = "Profile Look Table Data";
-            value["description"] = "3D lookup table for profile color transform." + tag_desc;
+            value["description"] = "3D lookup table for profile color transform.";
             break;
         case 51008: // OpcodeList1
             tag_name             = "Opcode List 1";
-            value["description"] = "Processing operations applied to raw data." + tag_desc;
+            value["description"] = "Processing operations applied to raw data.";
             break;
         case 51009: // OpcodeList2
             tag_name             = "Opcode List 2";
-            value["description"] = "Processing operations applied after demosaicing." + tag_desc;
+            value["description"] = "Processing operations applied after demosaicing.";
             break;
         case 51022: // OpcodeList3
             tag_name             = "Opcode List 3";
-            value["description"] = "Processing operations applied after color correction." + tag_desc;
+            value["description"] = "Processing operations applied after color correction.";
             break;
         case 51041: // NoiseProfile
             tag_name             = "Noise Profile";
-            value["description"] = "Noise model parameters for each channel." + tag_desc;
+            value["description"] = "Noise model parameters for each channel.";
             break;
         case 51043: // TimeCodes
             tag_name             = "Time Codes";
-            value["description"] = "SMPTE time codes for video frames." + tag_desc;
+            value["description"] = "SMPTE time codes for video frames.";
             break;
         case 51044: // FrameRate
             tag_name             = "Frame Rate";
-            value["description"] = "Video frame rate as rational number." + tag_desc;
+            value["description"] = "Video frame rate as rational number.";
             break;
         case 51058: // TStop
             tag_name             = "T Stop";
-            value["description"] = "T-stop value for lens transmission loss." + tag_desc;
+            value["description"] = "T-stop value for lens transmission loss.";
             break;
         case 51081: // ReelName
             tag_name             = "Reel Name";
-            value["description"] = "Film reel or video tape identifier." + tag_desc;
+            value["description"] = "Film reel or video tape identifier.";
             break;
         case 51089: // OriginalDefaultFinalSize
             tag_name             = "Original Default Final Size";
-            value["description"] = "Default final image size before cropping." + tag_desc;
+            value["description"] = "Default final image size before cropping.";
             break;
         case 51090: // OriginalBestQualityFinalSize
             tag_name             = "Original Best Quality Final Size";
-            value["description"] = "Best quality final image size before cropping." + tag_desc;
+            value["description"] = "Best quality final image size before cropping.";
             break;
         case 51091: // OriginalDefaultCropSize
             tag_name             = "Original Default Crop Size";
-            value["description"] = "Default crop size in original coordinates." + tag_desc;
+            value["description"] = "Default crop size in original coordinates.";
             break;
         case 51105: // ProfileHueSatMapEncoding
             tag_name             = "Profile Hue Sat Map Encoding";
-            value["description"] = "Encoding method for hue/saturation/value maps." + tag_desc;
+            value["description"] = "Encoding method for hue/saturation/value maps.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Linear"; break;
@@ -876,7 +862,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 51107: // ProfileLookTableEncoding
             tag_name             = "Profile Look Table Encoding";
-            value["description"] = "Encoding method for profile lookup tables." + tag_desc;
+            value["description"] = "Encoding method for profile lookup tables.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Linear"; break;
@@ -886,11 +872,11 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 51108: // BaselineExposureOffset
             tag_name             = "Baseline Exposure Offset";
-            value["description"] = "Baseline exposure offset for DNG 1.4." + tag_desc;
+            value["description"] = "Baseline exposure offset for DNG 1.4.";
             break;
         case 51109: // DefaultBlackRender
             tag_name             = "Default Black Render";
-            value["description"] = "Preferred black rendering method." + tag_desc;
+            value["description"] = "Preferred black rendering method.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Auto"; break;
@@ -900,27 +886,27 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 51110: // NewRawImageDigest
             tag_name             = "New Raw Image Digest";
-            value["description"] = "Enhanced MD5 digest of raw image data." + tag_desc;
+            value["description"] = "Enhanced MD5 digest of raw image data.";
             break;
         case 51111: // RawToPreviewGain
             tag_name             = "Raw To Preview Gain";
-            value["description"] = "Gain factor from raw to preview linear space." + tag_desc;
+            value["description"] = "Gain factor from raw to preview linear space.";
             break;
         case 51112: // CacheBlob
             tag_name             = "Cache Blob";
-            value["description"] = "Cached data for faster processing (DNG 1.4)." + tag_desc;
+            value["description"] = "Cached data for faster processing (DNG 1.4).";
             break;
         case 51114: // CacheVersion
             tag_name             = "Cache Version";
-            value["description"] = "Version of cached data format (DNG 1.4)." + tag_desc;
+            value["description"] = "Version of cached data format (DNG 1.4).";
             break;
         case 51125: // DefaultUserCrop
             tag_name             = "Default User Crop";
-            value["description"] = "Default user crop rectangle." + tag_desc;
+            value["description"] = "Default user crop rectangle.";
             break;
         case 51157: // DepthFormat
             tag_name             = "Depth Format";
-            value["description"] = "Format of depth map data." + tag_desc;
+            value["description"] = "Format of depth map data.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Unknown"; break;
@@ -931,15 +917,15 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 51158: // DepthNear
             tag_name             = "Depth Near";
-            value["description"] = "Distance to nearest object in depth map." + tag_desc;
+            value["description"] = "Distance to nearest object in depth map.";
             break;
         case 51159: // DepthFar
             tag_name             = "Depth Far";
-            value["description"] = "Distance to farthest object in depth map." + tag_desc;
+            value["description"] = "Distance to farthest object in depth map.";
             break;
         case 51160: // DepthUnits
             tag_name             = "Depth Units";
-            value["description"] = "Measurement units for depth values." + tag_desc;
+            value["description"] = "Measurement units for depth values.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Unknown"; break;
@@ -949,7 +935,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 51161: // DepthMeasureType
             tag_name             = "Depth Measure Type";
-            value["description"] = "Type of depth measurement." + tag_desc;
+            value["description"] = "Type of depth measurement.";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Unknown"; break;
@@ -960,23 +946,23 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 51162: // EnhanceParams
             tag_name             = "Enhance Params";
-            value["description"] = "Parameters for image enhancement." + tag_desc;
+            value["description"] = "Parameters for image enhancement.";
             break;
         case 52525: // ProfileGainTableMap
             tag_name             = "Profile Gain Table Map";
-            value["description"] = "Gain table map for sensor variations (DNG 1.6)." + tag_desc;
+            value["description"] = "Gain table map for sensor variations (DNG 1.6).";
             break;
         case 52526: // SemanticName
             tag_name             = "Semantic Name";
-            value["description"] = "Semantic label for image content (DNG 1.6)." + tag_desc;
+            value["description"] = "Semantic label for image content (DNG 1.6).";
             break;
         case 52528: // SemanticInstanceID
             tag_name             = "Semantic Instance ID";
-            value["description"] = "Instance identifier for semantic content (DNG 1.6)." + tag_desc;
+            value["description"] = "Instance identifier for semantic content (DNG 1.6).";
             break;
         case 52529: // CalibrationIlluminant3
             tag_name             = "Calibration Illuminant 3";
-            value["description"] = "Illuminant type for third calibration set (DNG 1.6)." + tag_desc;
+            value["description"] = "Illuminant type for third calibration set (DNG 1.6).";
             switch (value["value"].get<int>())
             {
             case 0: value["string"] = "Unknown"; break;
@@ -1006,79 +992,79 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
             break;
         case 52530: // CameraCalibration3
             tag_name             = "Camera Calibration 3";
-            value["description"] = "Camera calibration matrix for illuminant 3 (DNG 1.6)." + tag_desc;
+            value["description"] = "Camera calibration matrix for illuminant 3 (DNG 1.6).";
             break;
         case 52531: // ColorMatrix3
             tag_name             = "Color Matrix 3";
-            value["description"] = "Color transform matrix for illuminant 3 (DNG 1.6)." + tag_desc;
+            value["description"] = "Color transform matrix for illuminant 3 (DNG 1.6).";
             break;
         case 52532: // ForwardMatrix3
             tag_name             = "Forward Matrix 3";
-            value["description"] = "Forward matrix for illuminant 3 (DNG 1.6)." + tag_desc;
+            value["description"] = "Forward matrix for illuminant 3 (DNG 1.6).";
             break;
         case 52533: // IlluminantData1
             tag_name             = "Illuminant Data 1";
-            value["description"] = "Spectral data for illuminant 1 (DNG 1.6)." + tag_desc;
+            value["description"] = "Spectral data for illuminant 1 (DNG 1.6).";
             break;
         case 52534: // IlluminantData2
             tag_name             = "Illuminant Data 2";
-            value["description"] = "Spectral data for illuminant 2 (DNG 1.6)." + tag_desc;
+            value["description"] = "Spectral data for illuminant 2 (DNG 1.6).";
             break;
         case 52535: // IlluminantData3
             tag_name             = "Illuminant Data 3";
-            value["description"] = "Spectral data for illuminant 3 (DNG 1.6)." + tag_desc;
+            value["description"] = "Spectral data for illuminant 3 (DNG 1.6).";
             break;
         case 52536: // MaskSubArea
             tag_name             = "Mask Sub Area";
-            value["description"] = "Sub-area for mask or matte (DNG 1.6)." + tag_desc;
+            value["description"] = "Sub-area for mask or matte (DNG 1.6).";
             break;
         case 52537: // ProfileHueSatMapData3
             tag_name             = "Profile Hue Sat Map Data 3";
-            value["description"] = "Hue/saturation/value mapping table for illuminant 3 (DNG 1.6)." + tag_desc;
+            value["description"] = "Hue/saturation/value mapping table for illuminant 3 (DNG 1.6).";
             break;
         case 52538: // ReductionMatrix3
             tag_name             = "Reduction Matrix 3";
-            value["description"] = "Dimensionality reduction matrix for illuminant 3 (DNG 1.6)." + tag_desc;
+            value["description"] = "Dimensionality reduction matrix for illuminant 3 (DNG 1.6).";
             break;
         case 52539: // RGBTables
             tag_name             = "RGB Tables";
-            value["description"] = "RGB lookup tables for color correction (DNG 1.6)." + tag_desc;
+            value["description"] = "RGB lookup tables for color correction (DNG 1.6).";
             break;
         case 52541: // ProfileGainTableMap2
             tag_name             = "Profile Gain Table Map 2";
-            value["description"] = "Second gain table map for sensor variations (DNG 1.6)." + tag_desc;
+            value["description"] = "Second gain table map for sensor variations (DNG 1.6).";
             break;
         case 52544: // ColumnInterleaveFactor
             tag_name             = "Column Interleave Factor";
-            value["description"] = "Number of interleaved fields per column (DNG 1.7)." + tag_desc;
+            value["description"] = "Number of interleaved fields per column (DNG 1.7).";
             break;
         case 52545: // ImageSequenceInfo
             tag_name             = "Image Sequence Info";
-            value["description"] = "Information about image sequence or burst (DNG 1.7)." + tag_desc;
+            value["description"] = "Information about image sequence or burst (DNG 1.7).";
             break;
         case 52546: // ImageStats
             tag_name             = "Image Stats";
-            value["description"] = "Statistical information about image data (DNG 1.7)." + tag_desc;
+            value["description"] = "Statistical information about image data (DNG 1.7).";
             break;
         case 52547: // ProfileDynamicRange
             tag_name             = "Profile Dynamic Range";
-            value["description"] = "Dynamic range of camera profile (DNG 1.7)." + tag_desc;
+            value["description"] = "Dynamic range of camera profile (DNG 1.7).";
             break;
         case 52548: // ProfileGroupName
             tag_name             = "Profile Group Name";
-            value["description"] = "Group name for related camera profiles (DNG 1.7)." + tag_desc;
+            value["description"] = "Group name for related camera profiles (DNG 1.7).";
             break;
         case 52550: // JXLDistance
             tag_name             = "JXL Distance";
-            value["description"] = "JPEG XL compression distance parameter (DNG 1.7)." + tag_desc;
+            value["description"] = "JPEG XL compression distance parameter (DNG 1.7).";
             break;
         case 52551: // JXLEffort
             tag_name             = "JXL Effort";
-            value["description"] = "JPEG XL encoding effort level (DNG 1.7)." + tag_desc;
+            value["description"] = "JPEG XL encoding effort level (DNG 1.7).";
             break;
         case 52552: // JXLDecodeSpeed
             tag_name             = "JXL Decode Speed";
-            value["description"] = "JPEG XL decode speed tier (DNG 1.7)." + tag_desc;
+            value["description"] = "JPEG XL decode speed tier (DNG 1.7).";
             break;
 
             // FujiFilm tag value mappings (from https://exiftool.org/TagNames/FujiFilm.html)
@@ -1415,7 +1401,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx_i)
     if (tag_name.empty())
     {
         tag_name = fmt::format("Unknown Tag {:05}", tag);
-        spdlog::warn("Encountered {}", tag_name);
+        spdlog::debug("EXIF: Encountered {}", tag_name);
     }
 
     json ret;

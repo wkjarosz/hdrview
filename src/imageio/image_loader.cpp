@@ -52,6 +52,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_exr_image(is, filename))
              {
+                 spdlog::info("Loading '{}' using OpenEXR loader...", filename);
                  out = load_exr_image(is, filename, opts);
                  return true;
              }
@@ -63,6 +64,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_uhdr_image(is))
              {
+                 spdlog::info("Loading '{}' using UltraHDR loader...", filename);
                  out = load_uhdr_image(is, filename, opts);
                  return true;
              }
@@ -75,6 +77,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_jpg_image(is))
              {
+                 spdlog::info("Loading '{}' using libjpg loader...", filename);
                  out = load_jpg_image(is, filename, opts);
                  return true;
              }
@@ -86,6 +89,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_qoi_image(is))
              {
+                 spdlog::info("Loading '{}' using qoi loader...", filename);
                  out = load_qoi_image(is, filename);
                  return true;
              }
@@ -97,6 +101,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_jxl_image(is))
              {
+                 spdlog::info("Loading '{}' using libjxl loader...", filename);
                  out = load_jxl_image(is, filename, opts);
                  return true;
              }
@@ -108,6 +113,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_dds_image(is))
              {
+                 spdlog::info("Loading '{}' using dds loader...", filename);
                  out = load_dds_image(is, filename, opts);
                  return true;
              }
@@ -119,6 +125,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_heif_image(is))
              {
+                 spdlog::info("Loading '{}' using libheif loader...", filename);
                  out = load_heif_image(is, filename, opts);
                  return true;
              }
@@ -131,6 +138,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_raw_image(is))
              {
+                 spdlog::info("Loading '{}' using libraw loader...", filename);
                  out = load_raw_image(is, filename, opts);
                  return true;
              }
@@ -143,6 +151,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_tiff_image(is))
              {
+                 spdlog::info("Loading '{}' using libtiff loader...", filename);
                  out = load_tiff_image(is, filename, opts);
                  return true;
              }
@@ -155,6 +164,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_png_image(is))
              {
+                 spdlog::info("Loading '{}' using libpng loader...", filename);
                  out = load_png_image(is, filename, opts);
                  return true;
              }
@@ -167,6 +177,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_webp_image(is))
              {
+                 spdlog::info("Loading '{}' using libwebp loader...", filename);
                  out = load_webp_image(is, filename, opts);
                  return true;
              }
@@ -178,6 +189,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_stb_image(is))
              {
+                 spdlog::info("Loading '{}' using stb loader...", filename);
                  out = load_stb_image(is, filename, opts);
                  return true;
              }
@@ -188,6 +200,7 @@ static std::vector<LoaderEntry> default_loaders()
          {
              if (is_pfm_image(is))
              {
+                 spdlog::info("Loading '{}' using pfm loader...", filename);
                  out = load_pfm_image(is, filename);
                  return true;
              }
@@ -432,7 +445,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
 
         for (size_t i = 0; i < entries.size(); ++i)
         {
-            spdlog::info("Loading file '{}'...", entries[i].path().u8string());
+            // spdlog::info("Loading file '{}'...", entries[i].path().u8string());
             load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, opts);
         }
 
@@ -480,7 +493,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         }
         else
         {
-            spdlog::info("Loading file '{}'...", filename);
+            // spdlog::info("Loading file '{}'...", filename);
             load_one(filename, buffer, true, should_select, to_replace, opts);
         }
     }
@@ -560,7 +573,10 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
                                                 return true;
 
                                             for (size_t i = 0; i < p->images.size(); ++i)
-                                                callback(p->images[i], p->to_replace, p->should_select);
+                                                callback(p->images[i], p->to_replace,
+                                                         p->should_select &&
+                                                             i == 0); // i == 0 to always select the first of the
+                                                                      // possibly multiple 'should_select' images
 
                                             // if loading was successful, add the filename to the recent list
                                             if (p->add_to_recent)
@@ -871,31 +887,30 @@ const ImageLoadOptions &load_image_options_gui()
 
 vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
-    spdlog::info("Loading from file: {}", filename);
-    ScopedMDC mdc{"file", string(get_basename(filename))};
     Timer     timer;
+    ScopedMDC mdc{"file", string(get_filename(filename))};
     try
     {
         if (!is.good())
             throw invalid_argument("Invalid input stream");
 
         vector<ImagePtr> images;
-
-        bool recognized = false;
+        int              num_successful = 0;
+        string           active_loader  = "";
         for (auto &loader : g_loaders)
         {
             if (!loader.enabled)
                 continue;
             is.clear();
             is.seekg(0, std::ios::beg);
+            spdlog::debug("Trying {} loader...", loader.name);
             if (loader.try_load(is, filename, opts, images) && !images.empty())
             {
-                spdlog::info("Loaded using {} loader.", loader.name);
-                recognized = true;
+                active_loader = loader.name;
                 break;
             }
         }
-        if (!recognized)
+        if (active_loader.empty())
             throw invalid_argument("This doesn't seem to be a supported image file.");
 
         // compute size of the input stream
@@ -929,8 +944,7 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
                     else
                         i->channel_selector = opts.channel_selector;
                 }
-
-                spdlog::info("Loaded image in {:f} seconds:\n{:s}", timer.elapsed() / 1000.f, i->to_string());
+                ++num_successful;
             }
             catch (const exception &e)
             {
@@ -938,6 +952,8 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
                 continue; // skip this image
             }
         }
+        spdlog::info("Loaded {} images from {} using {} in {:f} seconds.", num_successful, filename, active_loader,
+                     timer.elapsed() / 1000.f);
         return images;
     }
     catch (const exception &e)

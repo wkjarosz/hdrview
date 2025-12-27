@@ -758,7 +758,7 @@ bool is_heif_image(istream &is) noexcept
     }
     catch (const exception &e)
     {
-        spdlog::debug("Cannot load image with libheif: {}", e.what());
+        // spdlog::debug("Cannot load image with libheif: {}", e.what());
         ret = false;
     }
 

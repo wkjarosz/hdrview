@@ -105,34 +105,34 @@ bool is_uhdr_image(istream &is) noexcept
                 fmt::format("Failed to read : {} bytes, read : {} bytes", size, (size_t)is.gcount())};
 
         // we could just call ::is_uhdr_image now, but we want to report the error in case this is not a uhdr image
-        // ret = ::is_uhdr_image(data.get(), size);
+        return ::is_uhdr_image(data.get(), size);
 
-        auto throw_if_error = [](uhdr_error_info_t status)
-        {
-            if (status.error_code != UHDR_CODEC_OK)
-                throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
-        };
+        // auto throw_if_error = [](uhdr_error_info_t status)
+        // {
+        //     if (status.error_code != UHDR_CODEC_OK)
+        //         throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
+        // };
 
-        using Decoder = unique_ptr<uhdr_codec_private_t, decltype(&uhdr_release_decoder)>;
-        auto decoder  = Decoder{uhdr_create_decoder(), &uhdr_release_decoder};
+        // using Decoder = unique_ptr<uhdr_codec_private_t, decltype(&uhdr_release_decoder)>;
+        // auto decoder  = Decoder{uhdr_create_decoder(), &uhdr_release_decoder};
 
-        uhdr_compressed_image_t compressed_image{
-            data.get(),          /**< Pointer to a block of data to decode */
-            size,                /**< size of the data buffer */
-            size,                /**< maximum size of the data buffer */
-            UHDR_CG_UNSPECIFIED, /**< Color Gamut */
-            UHDR_CT_UNSPECIFIED, /**< Color Transfer */
-            UHDR_CR_UNSPECIFIED  /**< Color Range */
-        };
+        // uhdr_compressed_image_t compressed_image{
+        //     data.get(),          /**< Pointer to a block of data to decode */
+        //     size,                /**< size of the data buffer */
+        //     size,                /**< maximum size of the data buffer */
+        //     UHDR_CG_UNSPECIFIED, /**< Color Gamut */
+        //     UHDR_CT_UNSPECIFIED, /**< Color Transfer */
+        //     UHDR_CR_UNSPECIFIED  /**< Color Range */
+        // };
 
-        throw_if_error(uhdr_dec_set_image(decoder.get(), &compressed_image));
-        throw_if_error(uhdr_dec_probe(decoder.get()));
+        // throw_if_error(uhdr_dec_set_image(decoder.get(), &compressed_image));
+        // throw_if_error(uhdr_dec_probe(decoder.get()));
 
-        ret = true;
+        // ret = true;
     }
     catch (const exception &e)
     {
-        spdlog::debug("Cannot load image with UltraHDR: {}", e.what());
+        // spdlog::debug("Cannot load image with UltraHDR: {}", e.what());
         ret = false;
     }
 

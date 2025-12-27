@@ -437,13 +437,13 @@ bool linearize_pixels(float *pixels, int3 size, const Chromaticities &src_chroma
 
     if (!src_chroma.valid())
     {
-        spdlog::warn("linearize_pixels: invalid color primaries");
+        spdlog::debug("linearize_pixels: invalid color primaries");
         return true;
     }
 
     if (!keep_primaries)
     {
-        spdlog::warn("linearize_pixels: converting to Rec.709/sRGB primaries.");
+        spdlog::debug("linearize_pixels: converting to Rec.709/sRGB primaries.");
         auto dst_chroma = Chromaticities{}; // Rec.709/sRGB
         if (c)
             *c = dst_chroma;
@@ -451,7 +451,7 @@ bool linearize_pixels(float *pixels, int3 size, const Chromaticities &src_chroma
     }
     else
     {
-        spdlog::warn("linearize_pixels: keeping original primaries.");
+        spdlog::debug("linearize_pixels: keeping original primaries.");
         // keep primaries; provide chromaticities if requested
         if (c)
             *c = src_chroma;

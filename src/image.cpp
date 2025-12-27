@@ -319,10 +319,10 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         if (ref && desired.blend_mode != BlendMode_Normal)
         {
             croi = croi.intersect(rroi);
-            spdlog::info("c and r roi's: {}..{}; {}..{}", croi.min, croi.max, rroi.min, rroi.max);
+            spdlog::debug("c and r roi's: {}..{}; {}..{}", croi.min, croi.max, rroi.min, rroi.max);
         }
 
-        spdlog::info("Image ROI: {}..{}", croi.min, croi.max);
+        spdlog::debug("Image ROI: {}..{}", croi.min, croi.max);
 
         if (croi.size() != rroi.size())
             spdlog::error("Image and reference channel ROIs are not the same size!");
@@ -610,7 +610,7 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
         async_tracker  = do_async(
             [this, desired_settings, canceled = async_canceled, img_data_origin, ref, ref_data_origin]()
             {
-                spdlog::info("Starting a new stats computation");
+                spdlog::debug("Starting a new stats computation");
                 async_stats->calculate(*this, img_data_origin, ref, ref_data_origin, desired_settings, *canceled);
             });
         async_settings = desired_settings;
