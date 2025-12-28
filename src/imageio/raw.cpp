@@ -12,10 +12,8 @@
 #include "icc.h"
 #include "image.h"
 #include "jpg.h"
-#include <spdlog/fmt/bundled/format.h>
 #include <sstream>
 
-#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <libexif/exif-tag.h>

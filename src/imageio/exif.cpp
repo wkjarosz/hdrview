@@ -9,7 +9,6 @@
 #include <libexif/exif-mnote-data.h>
 #include <libexif/exif-tag.h>
 #include <memory>
-#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <type_traits>
 
