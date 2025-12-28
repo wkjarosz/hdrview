@@ -589,7 +589,7 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
 // Robust display window logic adapted from OIIO
 Box2i get_display_window(const libraw_data_t &idata)
 {
-    int flip       = idata.sizes.flip;
+    // int flip       = idata.sizes.flip;
     int crop_width = 0, crop_height = 0, crop_left = 0, crop_top = 0;
 #if LIBRAW_VERSION >= LIBRAW_MAKE_VERSION(0, 21, 0)
     if (idata.sizes.raw_inset_crops[0].cwidth != 0)
@@ -623,11 +623,11 @@ Box2i get_display_window(const libraw_data_t &idata)
         if (crop_top == 65535)
             crop_top = (image_height - crop_height) / 2;
 
-        // Apply flip corrections
-        if (flip & 1)
-            crop_left = image_width - crop_width - crop_left;
-        if (flip & 2)
-            crop_top = image_height - crop_height - crop_top;
+        // // Apply flip corrections
+        // if (flip & 1)
+        //     crop_left = image_width - crop_width - crop_left;
+        // if (flip & 2)
+        //     crop_top = image_height - crop_height - crop_top;
 
         // Subtract margins if crop is within them
         if (crop_top >= top_margin && crop_left >= left_margin)
@@ -636,12 +636,12 @@ Box2i get_display_window(const libraw_data_t &idata)
             crop_left -= left_margin;
 
             // Swap axes if flip & 4
-            if (flip & 4)
-            {
-                std::swap(crop_left, crop_top);
-                std::swap(crop_width, crop_height);
-                std::swap(image_width, image_height);
-            }
+            // if (flip & 4)
+            // {
+            //     std::swap(crop_left, crop_top);
+            //     std::swap(crop_width, crop_height);
+            //     std::swap(image_width, image_height);
+            // }
 
             // Only use crop if it fits within the image
             if (crop_left >= 0 && crop_top >= 0 && crop_left + crop_width <= image_width &&
@@ -753,6 +753,8 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
 
+    auto &sizes = idata.sizes;
+
     if (filter.PassFilter("main"))
     {
         try
@@ -765,65 +767,38 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             if (auto ret = processor->dcraw_process(); ret != LIBRAW_SUCCESS)
                 throw std::runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
 
-            auto &sizes = idata.sizes;
-
             // Use iwidth/iheight for the processed image dimensions
             int2 size{sizes.iwidth, sizes.iheight};
             int  num_channels = 3; // Force RGB
-
-            // Calculate oriented size based on flip
-            int2 oriented_size = size; //(flip & 4) ? int2{size.y, size.x} : size;
 
             // Verify we have image data
             if (!idata.image)
                 throw std::runtime_error("No image data available after processing");
 
-            auto image                = std::make_shared<Image>(oriented_size, num_channels);
+            auto image                = std::make_shared<Image>(size, num_channels);
             image->filename           = filename;
             image->partname           = "main";
             image->metadata["loader"] = "LibRaw";
             if (!exif_ctx.metadata.empty())
                 image->metadata["exif"] = exif_ctx.metadata;
 
-            // Helper function to handle flip transformations
-            auto flip_index = [&](int2 idx) -> int2
-            {
-                // if (flip & 4)
-                //     std::swap(idx.x, idx.y);
-
-                // if (flip & 1)
-                //     idx.y = oriented_size.y - 1 - idx.y;
-
-                // if (flip & 2)
-                //     idx.x = oriented_size.x - 1 - idx.x;
-
-                return idx;
-            };
-
             // Access image data as array of ushort[4]
             const auto *img_data = idata.image;
 
             // Allocate float buffer for all pixels
-            vector<float> float_pixels((size_t)oriented_size.x * oriented_size.y * num_channels);
+            vector<float> float_pixels((size_t)size.x * size.y * num_channels);
 
             // Convert from 16-bit to float [0,1] with flip handling
             // We include an ad-hoc scale factor here to make the exposure match the DNG preview better
             constexpr float scale = 2.0f / 65535.0f;
 
-            stp::parallel_for(stp::blocked_range<int>(0, size.y, 32),
+            stp::parallel_for(stp::blocked_range<int>(0, size.x * size.y, 1024),
                               [&](int begin, int end, int unit_index, int thread_index)
                               {
-                                  for (int y = begin; y < end; ++y)
+                                  for (int i = begin; i < end; ++i)
                                   {
-                                      for (int x = 0; x < size.x; ++x)
-                                      {
-                                          size_t src_i   = (size_t)y * size.x + x;
-                                          int2   flipped = flip_index({x, y});
-                                          size_t dst_i   = (size_t)flipped.y * oriented_size.x + flipped.x;
-
-                                          for (int c = 0; c < num_channels; ++c)
-                                              float_pixels[dst_i * num_channels + c] = img_data[src_i][c] * scale;
-                                      }
+                                      for (int c = 0; c < num_channels; ++c)
+                                          float_pixels[i * num_channels + c] = img_data[i][c] * scale;
                                   }
                               });
 
@@ -855,8 +830,8 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
 
             // Copy data to image channels
             for (int c = 0; c < num_channels; ++c)
-                image->channels[c].copy_from_interleaved(float_pixels.data(), oriented_size.x, oriented_size.y,
-                                                         num_channels, c, [](float v) { return v; });
+                image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, num_channels, c,
+                                                         [](float v) { return v; });
 
             // Set display window using LibRaw crop info
             image->display_window = get_display_window(idata);
@@ -916,60 +891,39 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             }
             else if (thumb->type == LIBRAW_IMAGE_BITMAP)
             {
-                int  w         = thumb->width;
-                int  h         = thumb->height;
-                int  n         = thumb->colors;
-                auto timg      = std::make_shared<Image>(int2{w, h}, n);
-                timg->filename = filename;
-                timg->partname = fmt::format("thumbnail:{}", ti);
-                timg->metadata["pixel format"] =
-                    fmt::format("{}-bit ({} bpc)", thumb->colors * thumb->bits, thumb->bits);
+                int w = thumb->width;
+                int h = thumb->height;
+                int n = thumb->colors;
+
+                auto timg                                = std::make_shared<Image>(int2{w, h}, n);
+                timg->filename                           = filename;
+                timg->partname                           = fmt::format("thumbnail:{}", ti);
+                timg->metadata["pixel format"]           = fmt::format("{}-bit ({} bpc)", n * thumb->bits, thumb->bits);
                 timg->metadata["loader"]                 = "LibRaw";
                 timg->metadata["header"]["Is thumbnail"] = {{"value", true},
                                                             {"string", "Yes"},
                                                             {"type", "bool"},
                                                             {"description", "Indicates this image is a thumbnail"}};
                 if (!exif_ctx.metadata.empty())
-                {
                     timg->metadata["exif"] = exif_ctx.metadata;
-
-                    // Bitmap thumbnails are already oriented by LibRaw, so we rename any potential EXIF orientation
-                    // field to original_orientation.
-                    // Rename any "orientation" tag inside EXIF IFDs to "original orientation"
-                    for (auto it_ifd = timg->metadata["exif"].begin(); it_ifd != timg->metadata["exif"].end(); ++it_ifd)
-                    {
-                        if (!it_ifd->is_object())
-                            continue;
-                        json                    &ifd_obj = *it_ifd;
-                        std::vector<std::string> keys_to_erase;
-                        for (auto it = ifd_obj.begin(); it != ifd_obj.end(); ++it)
-                        {
-                            std::string tag_key = it.key();
-                            if (to_lower(tag_key) == "orientation")
-                            {
-                                // move the orientation entry to "original orientation" within the same IFD
-                                ifd_obj["original " + tag_key] = it.value();
-                                keys_to_erase.push_back(tag_key);
-                            }
-                        }
-                        for (const auto &k : keys_to_erase) ifd_obj.erase(k);
-                    }
-                }
 
                 // Load interleaved bytes/shorts into a float buffer, then linearize
                 std::vector<float> float_pixels((size_t)w * h * n);
-                if (thumb->bits == 8)
-                {
-                    auto data8 = reinterpret_cast<uint8_t *>(thumb->data);
-                    for (size_t i = 0; i < (size_t)w * h * n; ++i) float_pixels[i] = data8[i] / 255.0f;
-                }
-                else if (thumb->bits == 16)
-                {
-                    auto data16 = reinterpret_cast<uint16_t *>(thumb->data);
-                    for (size_t i = 0; i < (size_t)w * h * n; ++i) float_pixels[i] = data16[i] / 65535.0f;
-                }
+                auto               data8  = reinterpret_cast<uint8_t *>(thumb->data);
+                auto               data16 = reinterpret_cast<uint16_t *>(thumb->data);
+                stp::parallel_for(stp::blocked_range<int>(0, w * h, 1024),
+                                  [&](int begin, int end, int unit_index, int thread_index)
+                                  {
+                                      for (int i = begin; i < end; ++i)
+                                      {
+                                          for (int c = 0; c < n; ++c)
+                                              float_pixels[i * n + c] = (thumb->bits == 8)
+                                                                            ? data8[i * n + c] / 255.0f
+                                                                            : data16[i * n + c] / 65535.0f;
+                                      }
+                                  });
 
-                // Apply sRGB->linear correction to bitmap thumbnails (fix washed-out appearance)
+                // Apply sRGB->linear correction to bitmap thumbnails
                 string profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::sRGB);
                 if (opts.override_profile)
                 {
