@@ -431,8 +431,8 @@ void Image::draw_info()
             filtered_property("Alpha", alpha_type_name(alpha_type),
                               "Type of alpha channel stored in the file. HDRView always converts the file's gamma to "
                               "premultiplied alpha upon load.");
-            if (!exif_data.empty())
-                filtered_property("EXIF data", fmt::format("{:.0h}", human_readible{exif_data.size()}),
+            if (exif.valid())
+                filtered_property("EXIF data", fmt::format("{:.0h}", human_readible{exif.size()}),
                                   "Size of the EXIF metadata block embedded in the image file.");
             if (!xmp_data.empty())
                 filtered_property("XMP data", fmt::format("{:.0h}", human_readible{xmp_data.size()}),

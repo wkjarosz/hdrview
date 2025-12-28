@@ -524,7 +524,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     {
         if (!exif_data.empty())
         {
-            metadata["exif"] = exif_to_json(reinterpret_cast<const uint8_t *>(exif_data.data()), exif_data.size());
+            Exif exif{reinterpret_cast<const uint8_t *>(exif_data.data()), exif_data.size()};
+            metadata["exif"] = exif.to_json();
             spdlog::debug("EXIF metadata successfully parsed: {}", metadata["exif"].dump(2));
         }
     }
@@ -589,7 +590,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         image->alpha_type     = size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None;
         image->chromaticities = chr;
         image->metadata       = metadata;
-        image->exif_data = exif_data.empty() ? vector<uint8_t>{} : vector<uint8_t>(exif_data.begin(), exif_data.end());
+        image->exif           = Exif{reinterpret_cast<const uint8_t *>(exif_data.data()), exif_data.size()};
 
         if (animation)
         {

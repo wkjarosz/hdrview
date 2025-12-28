@@ -803,7 +803,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             for (auto &&image : images)
             {
                 image->metadata["exif"] = j;
-                image->exif_data        = exif_buffer;
+                image->exif             = Exif{exif_buffer};
             }
         }
         catch (const std::exception &e)

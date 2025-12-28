@@ -611,8 +611,8 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 {
                     try
                     {
-                        image->exif_data.assign(exif_data.data() + 4, exif_data.data() + exif_data.size());
-                        image->metadata["exif"] = exif_to_json(image->exif_data);
+                        image->exif             = Exif{exif_data.data() + 4, exif_data.size() - 4};
+                        image->metadata["exif"] = image->exif.to_json();
 
                         // // libheif already applies the orientation field, so we need to remove it from exif
                         // std::string orientation_key;
@@ -636,7 +636,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     catch (const std::exception &e)
                     {
                         spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
-                        image->exif_data.clear();
+                        image->exif.reset();
                     }
                 }
 

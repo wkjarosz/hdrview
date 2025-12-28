@@ -11,14 +11,15 @@
 #include "array2d.h"
 #include "box.h"
 #include "colorspace.h"
+#include "imageio/exif.h"
 #include "json.h"
-#include "smallthreadpool.h"
 #include "texture.h"
 #include <cfloat>
 #include <half.h>
 #include <map>
 #include <optional>
 #include <set>
+#include <smallthreadpool.h>
 #include <string>
 #include <vector>
 
@@ -298,9 +299,9 @@ public:
     WhitePoint_                   white_point       = WhitePoint_Unspecified;
     AlphaType            alpha_type = AlphaType_None; //!< Does the image have straight (unpremultiplied) alpha?
     json                 metadata   = json::object();
-    std::vector<uint8_t> exif_data; //!< The raw EXIF data from the file, if any
-    std::vector<uint8_t> xmp_data;  //!< The raw XMP data from the file, if any
-    std::vector<uint8_t> icc_data;  //!< The raw ICC profile data from the file, if any
+    Exif                 exif;     //!< The raw EXIF data from the file, if any
+    std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any
+    std::vector<uint8_t> icc_data; //!< The raw ICC profile data from the file, if any
 
     fs::path           path;
     fs::file_time_type last_modified;

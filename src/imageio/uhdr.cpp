@@ -269,16 +269,15 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
 
         try
         {
-            image->exif_data.assign(reinterpret_cast<uint8_t *>(exif_data->data),
-                                    reinterpret_cast<uint8_t *>(exif_data->data) + exif_data->data_sz);
-            auto j                  = exif_to_json(image->exif_data);
+            image->exif             = Exif{reinterpret_cast<uint8_t *>(exif_data->data), exif_data->data_sz};
+            auto j                  = image->exif.to_json();
             image->metadata["exif"] = j;
             spdlog::debug("EXIF metadata successfully parsed: {}", j.dump(2));
         }
         catch (const std::exception &e)
         {
             spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
-            image->exif_data.clear();
+            image->exif.reset();
         }
     }
 

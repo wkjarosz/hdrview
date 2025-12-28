@@ -311,7 +311,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             frame_image->partname       = partname;
             frame_image->alpha_type     = has_alpha ? AlphaType_Straight : AlphaType_None;
             frame_image->icc_data       = icc_data;
-            frame_image->exif_data      = exif_data;
+            frame_image->exif           = Exif{exif_data};
             frame_image->display_window = Box2i{int2{0, 0}, int2{canvas_width, canvas_height}};
             frame_image->data_window    = use_full_canvas
                                               ? frame_image->display_window

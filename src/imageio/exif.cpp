@@ -17,9 +17,6 @@ using std::vector;
 
 static const vector<uint8_t> FOURCC = {'E', 'x', 'i', 'f', 0, 0};
 
-// Forward declarations for helper functions:
-static json exif_data_to_json(ExifData *ed);
-
 static std::string entry_to_string(ExifEntry *e)
 {
     if (!e)
@@ -36,61 +33,160 @@ static std::string entry_to_string(ExifEntry *e)
         return "";
 }
 
+struct Exif::Impl
+{
+    vector<uint8_t>                                       data;
+    std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data{nullptr, &exif_data_unref};
+    std::unique_ptr<ExifLog, decltype(&exif_log_unref)>   exif_log{nullptr, &exif_log_unref};
+};
+
+Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<Impl>())
+{
+    try
+    {
+        // 1) Prepare data buffer and prepend FOURCC if missing
+        if (data_size < FOURCC.size() || memcmp(data_ptr, FOURCC.data(), FOURCC.size()) != 0)
+        {
+            m_impl->data.reserve(data_size + FOURCC.size());
+            m_impl->data.insert(m_impl->data.end(), FOURCC.begin(), FOURCC.end());
+            m_impl->data.insert(m_impl->data.end(), data_ptr, data_ptr + data_size);
+        }
+        else
+            m_impl->data.assign(data_ptr, data_ptr + data_size);
+
+        // 2) Create ExifData and ExifLog with custom log function
+        bool error = false;
+
+        m_impl->exif_data = std::unique_ptr<ExifData, decltype(&exif_data_unref)>(exif_data_new(), &exif_data_unref);
+        if (!m_impl->exif_data)
+            throw std::invalid_argument("Failed to allocate ExifData.");
+
+        m_impl->exif_log = std::unique_ptr<ExifLog, decltype(&exif_log_unref)>(exif_log_new(), &exif_log_unref);
+        if (!m_impl->exif_log)
+            throw std::invalid_argument("Failed to allocate ExifLog.");
+
+        exif_log_set_func(
+            m_impl->exif_log.get(),
+            [](ExifLog *log, ExifLogCode kind, const char *domain, const char *format, va_list args, void *user_data)
+            {
+                bool *error = static_cast<bool *>(user_data);
+                char  buf[1024];
+                vsnprintf(buf, sizeof(buf), format, args);
+
+                switch (kind)
+                {
+                case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, buf); break;
+                case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, buf); break;
+                case EXIF_LOG_CODE_NO_MEMORY:
+                case EXIF_LOG_CODE_CORRUPT_DATA:
+                    *error = true;
+                    spdlog::error("log: {}: {}", domain, buf);
+                    break;
+                }
+            },
+            &error);
+
+        exif_data_log(m_impl->exif_data.get(), m_impl->exif_log.get());
+
+        // 3) Load the EXIF data from memory buffer
+        exif_data_load_data(m_impl->exif_data.get(), m_impl->data.data(), m_impl->data.size());
+
+        if (!m_impl->exif_data || error)
+            throw std::invalid_argument{"Failed to decode EXIF data."};
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::error("Exif parsing error: {}", e.what());
+        m_impl.reset();
+    }
+}
+
+Exif::Exif(Exif &&other) noexcept       = default;
+Exif &Exif::operator=(Exif &&) noexcept = default;
+Exif::~Exif()                           = default;
+
+bool           Exif::valid() const { return static_cast<bool>(m_impl) && static_cast<bool>(m_impl->exif_data); }
+void           Exif::reset() { m_impl.reset(); }
+size_t         Exif::size() const { return m_impl ? m_impl->data.size() : 0; }
+const uint8_t *Exif::data() const { return m_impl ? m_impl->data.data() : nullptr; }
+
+json Exif::to_json() const
+{
+    if (!m_impl || !m_impl->exif_data)
+        throw std::runtime_error{"Failed to parse EXIF data."};
+
+    auto ed = m_impl->exif_data.get();
+    json j;
+
+    static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
+
+    for (int ifd_idx = 0; ifd_idx < EXIF_IFD_COUNT; ++ifd_idx)
+    {
+        ExifContent *content = ed->ifd[ifd_idx];
+        if (!content || !content->count)
+            continue;
+
+        json &ifd_json = j[ExifIfdTable[ifd_idx]];
+
+        for (unsigned int i = 0; i < content->count; ++i)
+        {
+            ExifEntry *entry = content->entries[i];
+            if (!entry)
+                continue;
+
+            ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
+        }
+    }
+
+    // Handle MakerNotes
+    ExifMnoteData *md = exif_data_get_mnote_data(ed);
+    if (md)
+    {
+        ExifContent *ifd0 = ed->ifd[EXIF_IFD_0];
+        std::string  make = entry_to_string(exif_content_get_entry(ifd0, EXIF_TAG_MAKE));
+
+        auto &mn = j[make.empty() ? "Maker Note" : "Maker Note (" + make + ")"] = json::object();
+
+        unsigned int n = exif_mnote_data_count(md);
+        for (unsigned int i = 0; i < n; ++i)
+        {
+            char   buf[1024] = {0};
+            auto   tag       = exif_mnote_data_get_id(md, i);
+            auto   name      = exif_mnote_data_get_name(md, i);
+            auto   title     = exif_mnote_data_get_title(md, i);
+            auto   desc      = exif_mnote_data_get_description(md, i);
+            string str;
+
+            string key;
+            if (title && strlen(title) > 0)
+                key = title;
+            else if (name && strlen(name) > 0)
+                key = name;
+            else
+                key = fmt::format("Tag {:05}", tag);
+
+            if (auto p = exif_mnote_data_get_value(md, i, buf, sizeof(buf)))
+            {
+                str = p;
+                if (str.length() >= sizeof(buf) - 1)
+                    str += "…";
+            }
+            else
+                str = "n/a";
+
+            mn[key] = {{"string", str}, {"type", "MakerNote"}, {"tag", tag}};
+            if (desc && strlen(desc) > 0)
+                mn[key]["description"] = desc;
+        }
+    }
+
+    return j;
+}
+
 json exif_to_json(const uint8_t *data_ptr, size_t data_size)
 {
-    // 1) Prepare data buffer and prepend FOURCC if missing
-    vector<uint8_t> data;
-    if (data_size < FOURCC.size() || memcmp(data_ptr, FOURCC.data(), FOURCC.size()) != 0)
-    {
-        data.reserve(data_size + FOURCC.size());
-        data.insert(data.end(), FOURCC.begin(), FOURCC.end());
-        data.insert(data.end(), data_ptr, data_ptr + data_size);
-    }
-    else
-        data.assign(data_ptr, data_ptr + data_size);
-
-    // 2) Create ExifData and ExifLog with custom log function
-    bool error = false;
-
-    std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data(exif_data_new(), &exif_data_unref);
-    if (!exif_data)
-        throw std::invalid_argument("Failed to allocate ExifData.");
-
-    std::unique_ptr<ExifLog, decltype(&exif_log_unref)> exif_log(exif_log_new(), &exif_log_unref);
-    if (!exif_log)
-        throw std::invalid_argument("Failed to allocate ExifLog.");
-
-    exif_log_set_func(
-        exif_log.get(),
-        [](ExifLog *log, ExifLogCode kind, const char *domain, const char *format, va_list args, void *user_data)
-        {
-            bool *error = static_cast<bool *>(user_data);
-            char  buf[1024];
-            vsnprintf(buf, sizeof(buf), format, args);
-
-            switch (kind)
-            {
-            case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, buf); break;
-            case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, buf); break;
-            case EXIF_LOG_CODE_NO_MEMORY:
-            case EXIF_LOG_CODE_CORRUPT_DATA:
-                *error = true;
-                spdlog::error("log: {}: {}", domain, buf);
-                break;
-            }
-        },
-        &error);
-
-    exif_data_log(exif_data.get(), exif_log.get());
-
-    // 3) Load the EXIF data from memory buffer
-    exif_data_load_data(exif_data.get(), data.data(), data.size());
-
-    if (!exif_data || error)
-        throw std::invalid_argument{"Failed to decode EXIF data."};
-
-    // 4) Convert to JSON
-    return exif_data_to_json(exif_data.get());
+    Exif e{data_ptr, data_size};
+    return e.to_json();
 }
 
 json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx)
@@ -1419,73 +1515,4 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx)
     json ret;
     ret[tag_name] = value;
     return ret;
-}
-
-json exif_data_to_json(ExifData *ed)
-{
-    json j;
-
-    static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
-
-    for (int ifd_idx = 0; ifd_idx < EXIF_IFD_COUNT; ++ifd_idx)
-    {
-        ExifContent *content = ed->ifd[ifd_idx];
-        if (!content || !content->count)
-            continue;
-
-        json &ifd_json = j[ExifIfdTable[ifd_idx]];
-
-        for (unsigned int i = 0; i < content->count; ++i)
-        {
-            ExifEntry *entry = content->entries[i];
-            if (!entry)
-                continue;
-
-            ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
-        }
-    }
-
-    // Handle MakerNotes
-    ExifMnoteData *md = exif_data_get_mnote_data(ed);
-    if (md)
-    {
-        ExifContent *ifd0 = ed->ifd[EXIF_IFD_0];
-        std::string  make = entry_to_string(exif_content_get_entry(ifd0, EXIF_TAG_MAKE));
-
-        auto &mn = j[make.empty() ? "Maker Note" : "Maker Note (" + make + ")"] = json::object();
-
-        unsigned int n = exif_mnote_data_count(md);
-        for (unsigned int i = 0; i < n; ++i)
-        {
-            char   buf[1024] = {0};
-            auto   tag       = exif_mnote_data_get_id(md, i);
-            auto   name      = exif_mnote_data_get_name(md, i);
-            auto   title     = exif_mnote_data_get_title(md, i);
-            auto   desc      = exif_mnote_data_get_description(md, i);
-            string str;
-
-            string key;
-            if (title && strlen(title) > 0)
-                key = title;
-            else if (name && strlen(name) > 0)
-                key = name;
-            else
-                key = fmt::format("Tag {:05}", tag);
-
-            if (auto p = exif_mnote_data_get_value(md, i, buf, sizeof(buf)))
-            {
-                str = p;
-                if (str.length() >= sizeof(buf) - 1)
-                    str += "…";
-            }
-            else
-                str = "n/a";
-
-            mn[key] = {{"string", str}, {"type", "MakerNote"}, {"tag", tag}};
-            if (desc && strlen(desc) > 0)
-                mn[key]["description"] = desc;
-        }
-    }
-
-    return j;
 }

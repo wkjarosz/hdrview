@@ -244,14 +244,14 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             {
                 try
                 {
-                    image->exif_data.assign(marker->data + exif_hdr_sz, marker->data + marker->data_length);
-                    image->metadata["exif"] = exif_to_json(image->exif_data);
+                    image->exif             = Exif{marker->data + exif_hdr_sz, marker->data_length - exif_hdr_sz};
+                    image->metadata["exif"] = image->exif.to_json();
                     spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
                 }
                 catch (const std::exception &e)
                 {
                     spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
-                    image->exif_data.clear();
+                    image->exif.reset();
                 }
             }
             else if (marker->marker == JPEG_APP0 + 1 && marker->data_length > xmp_hdr_sz &&
