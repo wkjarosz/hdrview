@@ -6,8 +6,10 @@
 #include <cstring> // for memcmp
 #include <libexif/exif-data.h>
 #include <libexif/exif-ifd.h>
+#include <libexif/exif-mnote-data.h>
 #include <libexif/exif-tag.h>
 #include <memory>
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <type_traits>
 
@@ -18,6 +20,22 @@ static const vector<uint8_t> FOURCC = {'E', 'x', 'i', 'f', 0, 0};
 
 // Forward declarations for helper functions:
 static json exif_data_to_json(ExifData *ed);
+
+static std::string entry_to_string(ExifEntry *e)
+{
+    if (!e)
+        return "";
+    char buf[1024] = {0};
+    if (auto p = exif_entry_get_value(e, buf, sizeof(buf)))
+    {
+        std::string str = p;
+        if (str.length() >= sizeof(buf) - 1)
+            str += "…";
+        return str;
+    }
+    else
+        return "";
+}
 
 json exif_to_json(const uint8_t *data_ptr, size_t data_size)
 {
@@ -90,8 +108,8 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx)
 
     Endian data_endian = (bo == EXIF_BYTE_ORDER_INTEL) ? Endian::Little : Endian::Big;
 
-    if (tag == 40965 && ifd == EXIF_IFD_EXIF) // Pointer to EXIF Interoperability private directory
-        return json::object();                // Ignore since this isn't useful to show to user
+    if (tag == EXIF_TAG_INTEROPERABILITY_IFD_POINTER && ifd == EXIF_IFD_EXIF)
+        return json::object(); // Ignore since this isn't useful to show to user
 
     const char *tag_name_ptr = exif_tag_get_title_in_ifd(entry->tag, ifd);
     string      tag_name;
@@ -100,15 +118,12 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx)
 
     json value = json::object();
 
-    if (const char *desc_ptr = exif_tag_get_description_in_ifd(entry->tag, ifd))
+    if (auto desc_ptr = exif_tag_get_description_in_ifd(entry->tag, ifd))
         value["description"] = std::string(desc_ptr);
 
-    char   buf[1024] = {0};
-    string str       = exif_entry_get_value(entry, buf, sizeof(buf));
+    string str = entry_to_string(entry);
     if (str.empty())
         str = "n/a";
-    else if (str.length() >= sizeof(buf) - 1)
-        str += "…";
     value["string"] = str;
 
     if (auto format_name = exif_format_get_name(entry->format))
@@ -261,7 +276,7 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx)
     default: value = nullptr; break;
     }
 
-    if (ifd == EXIF_IFD_0)
+    if (ifd == EXIF_IFD_0 || ifd == EXIF_IFD_1)
     {
         // Add special handling for certain tags
         switch (tag)
@@ -1270,130 +1285,128 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx)
             default: value["string"] = "Unknown"; break;
             }
             break;
-        // FujiFilm IFD/RAF tags (from https://exiftool.org/TagNames/FujiFilm.html)
-        case 61441: tag_name = "Raw Image Full Width"; break;                       // 0xf001
-        case 61442: tag_name = "Raw Image Full Height"; break;                      // 0xf002
-        case 61443: tag_name = "Bits Per Sample"; break;                            // 0xf003
-        case 61447: tag_name = "Strip Offsets"; break;                              // 0xf007
-        case 61448: tag_name = "Strip Byte Counts"; break;                          // 0xf008
-        case 61450: tag_name = "Black Level"; break;                                // 0xf00a
-        case 61451: tag_name = "Geometric Distortion Params"; break;                // 0xf00b
-        case 61452: tag_name = "WB GRB Levels Standard"; break;                     // 0xf00c
-        case 61453: tag_name = "WB GRB Levels Auto"; break;                         // 0xf00d
-        case 61454: tag_name = "WB GRB Levels"; break;                              // 0xf00e
-        case 61455: tag_name = "Chromatic Aberration Params"; break;                // 0xf00f
-        case 61456: tag_name = "Vignetting Params"; break;                          // 0xf010
-        case 256: tag_name = "Raw Image Full Size"; break;                          // 0x0100
-        case 272: tag_name = "Raw Image Crop Top Left"; break;                      // 0x0110
-        case 273: tag_name = "Raw Image Cropped Size"; break;                       // 0x0111
-        case 277: tag_name = "Raw Image Aspect Ratio"; break;                       // 0x0115
-        case 279: tag_name = "Raw Zoom Active"; break;                              // 0x0117
-        case 280: tag_name = "Raw Zoom Top Left"; break;                            // 0x0118
-        case 281: tag_name = "Raw Zoom Size"; break;                                // 0x0119
-        case 289: tag_name = "Raw Image Size"; break;                               // 0x0121
-        case 304: tag_name = "Fuji Layout"; break;                                  // 0x0130
-        case 305: tag_name = "XTrans Layout"; break;                                // 0x0131
-        case 8192: tag_name = "WB GRGB Levels Auto"; break;                         // 0x2000
-        case 8448: tag_name = "WB GRGB Levels Daylight"; break;                     // 0x2100
-        case 8704: tag_name = "WB GRGB Levels Cloudy"; break;                       // 0x2200
-        case 8960: tag_name = "WB GRGB Levels Daylight Fluor"; break;               // 0x2300
-        case 8961: tag_name = "WB GRGB Levels Day White Fluor"; break;              // 0x2301
-        case 8962: tag_name = "WB GRGB Levels White Fluorescent"; break;            // 0x2302
-        case 8976: tag_name = "WB GRGB Levels Warm White Fluor"; break;             // 0x2310
-        case 8977: tag_name = "WB GRGB Levels Living Room Warm White Fluor"; break; // 0x2311
-        case 9216: tag_name = "WB GRGB Levels Tungsten"; break;                     // 0x2400
-        case 12272: tag_name = "WB GRGB Levels"; break;                             // 0x2ff0
-        case 37376: tag_name = "Relative Exposure"; break;                          // 0x9200
-        case 38480: tag_name = "Raw Exposure Bias"; break;                          // 0x9650
-        case 49152:
-            tag_name = "RAFData";
-            break; // 0xc000
+        // // FujiFilm IFD/RAF tags (from https://exiftool.org/TagNames/FujiFilm.html)
+        // case 61441: tag_name = "Raw Image Full Width"; break;                       // 0xf001
+        // case 61442: tag_name = "Raw Image Full Height"; break;                      // 0xf002
+        // case 61443: tag_name = "Bits Per Sample"; break;                            // 0xf003
+        // case 61447: tag_name = "Strip Offsets"; break;                              // 0xf007
+        // case 61448: tag_name = "Strip Byte Counts"; break;                          // 0xf008
+        // case 61450: tag_name = "Black Level"; break;                                // 0xf00a
+        // case 61451: tag_name = "Geometric Distortion Params"; break;                // 0xf00b
+        // case 61452: tag_name = "WB GRB Levels Standard"; break;                     // 0xf00c
+        // case 61453: tag_name = "WB GRB Levels Auto"; break;                         // 0xf00d
+        // case 61454: tag_name = "WB GRB Levels"; break;                              // 0xf00e
+        // case 61455: tag_name = "Chromatic Aberration Params"; break;                // 0xf00f
+        // case 61456: tag_name = "Vignetting Params"; break;                          // 0xf010
+        // case 256: tag_name = "Raw Image Full Size"; break;                          // 0x0100
+        // case 272: tag_name = "Raw Image Crop Top Left"; break;                      // 0x0110
+        // case 273: tag_name = "Raw Image Cropped Size"; break;                       // 0x0111
+        // case 277: tag_name = "Raw Image Aspect Ratio"; break;                       // 0x0115
+        // case 279: tag_name = "Raw Zoom Active"; break;                              // 0x0117
+        // case 280: tag_name = "Raw Zoom Top Left"; break;                            // 0x0118
+        // case 281: tag_name = "Raw Zoom Size"; break;                                // 0x0119
+        // case 289: tag_name = "Raw Image Size"; break;                               // 0x0121
+        // case 304: tag_name = "Fuji Layout"; break;                                  // 0x0130
+        // case 305: tag_name = "XTrans Layout"; break;                                // 0x0131
+        // case 8192: tag_name = "WB GRGB Levels Auto"; break;                         // 0x2000
+        // case 8448: tag_name = "WB GRGB Levels Daylight"; break;                     // 0x2100
+        // case 8704: tag_name = "WB GRGB Levels Cloudy"; break;                       // 0x2200
+        // case 8960: tag_name = "WB GRGB Levels Daylight Fluor"; break;               // 0x2300
+        // case 8961: tag_name = "WB GRGB Levels Day White Fluor"; break;              // 0x2301
+        // case 8962: tag_name = "WB GRGB Levels White Fluorescent"; break;            // 0x2302
+        // case 8976: tag_name = "WB GRGB Levels Warm White Fluor"; break;             // 0x2310
+        // case 8977: tag_name = "WB GRGB Levels Living Room Warm White Fluor"; break; // 0x2311
+        // case 9216: tag_name = "WB GRGB Levels Tungsten"; break;                     // 0x2400
+        // case 12272: tag_name = "WB GRGB Levels"; break;                             // 0x2ff0
+        // case 37376: tag_name = "Relative Exposure"; break;                          // 0x9200
+        // case 38480: tag_name = "Raw Exposure Bias"; break;                          // 0x9650
+        // case 49152: tag_name = "RAFData"; break; // 0xc000
 
-        // Sony-specific tags (from https://exiftool.org/TagNames/Sony.html)
-        case 4096:
-            tag_name = "Multi Burst Mode";
-            break; // 0x1000
-        // case 4097: tag_name = "Multi Burst Image Width"; break;          // 0x1001
-        // case 4098: tag_name = "Multi Burst Image Height"; break;         // 0x1002
-        // case 4099: tag_name = "Panorama"; break;                         // 0x1003
-        case 8193: tag_name = "Preview Image"; break;                    // 0x2001
-        case 8194: tag_name = "Rating"; break;                           // 0x2002
-        case 8196: tag_name = "Contrast"; break;                         // 0x2004
-        case 8197: tag_name = "Saturation"; break;                       // 0x2005
-        case 8198: tag_name = "Sharpness"; break;                        // 0x2006
-        case 8199: tag_name = "Brightness"; break;                       // 0x2007
-        case 8200: tag_name = "Long Exposure Noise Reduction"; break;    // 0x2008
-        case 8201: tag_name = "High ISO Noise Reduction"; break;         // 0x2009
-        case 8202: tag_name = "HDR"; break;                              // 0x200A
-        case 8206: tag_name = "Picture Effect"; break;                   // 0x200E
-        case 8207: tag_name = "Soft Skin Effect"; break;                 // 0x200F
-        case 8209: tag_name = "Vignetting Correction"; break;            // 0x2011
-        case 8210: tag_name = "Lateral Chromatic Aberration"; break;     // 0x2012
-        case 8211: tag_name = "Distortion Correction Setting"; break;    // 0x2013
-        case 8212: tag_name = "WB Shift AB GM"; break;                   // 0x2014
-        case 8214: tag_name = "Auto Portrait Framed"; break;             // 0x2016
-        case 8215: tag_name = "Flash Action"; break;                     // 0x2017
-        case 8218: tag_name = "Electronic Front Curtain Shutter"; break; // 0x201A
-        case 8219: tag_name = "Focus Mode"; break;                       // 0x201B
-        case 8220: tag_name = "AF Area Mode Setting"; break;             // 0x201C
-        case 8221: tag_name = "Flexible Spot Position"; break;           // 0x201D
-        case 8222: tag_name = "AF Point Selected"; break;                // 0x201E
-        case 8224: tag_name = "AF Points Used"; break;                   // 0x2020
-        case 8225: tag_name = "AF Tracking"; break;                      // 0x2021
-        case 8226: tag_name = "Focal Plane AF Points Used"; break;       // 0x2022
-        case 8227: tag_name = "Multi Frame NR Effect"; break;            // 0x2023
-        case 8230: tag_name = "WB Shift AB GM Precise"; break;           // 0x2026
-        case 8231: tag_name = "Focus Location"; break;                   // 0x2027
-        case 8232: tag_name = "Variable Low Pass Filter"; break;         // 0x2028
-        case 8233: tag_name = "RAW File Type"; break;                    // 0x2029
-        case 8235: tag_name = "Priority Set In AWB"; break;              // 0x202B
-        case 8236: tag_name = "Metering Mode 2"; break;                  // 0x202C
-        case 8237: tag_name = "Exposure Standard Adjustment"; break;     // 0x202D
-        case 8238: tag_name = "Quality"; break;                          // 0x202E
-        case 8239: tag_name = "Pixel Shift Info"; break;                 // 0x202F
-        case 8241: tag_name = "Serial Number"; break;                    // 0x2031
-        case 8242: tag_name = "Shadows"; break;                          // 0x2032
-        case 8243: tag_name = "Highlights"; break;                       // 0x2033
-        case 8244: tag_name = "Fade"; break;                             // 0x2034
-        case 8245: tag_name = "Sharpness Range"; break;                  // 0x2035
-        case 8246: tag_name = "Clarity"; break;                          // 0x2036
-        case 8247: tag_name = "Focus Frame Size"; break;                 // 0x2037
-        case 8249: tag_name = "JPEG-HEIF Switch"; break;                 // 0x2039
-        case 8268: tag_name = "Hidden Info"; break;                      // 0x2044
-        case 8266: tag_name = "Focus Location 2"; break;                 // 0x204A
-        case 8284: tag_name = "Step Crop Shooting"; break;               // 0x205C
-        case 36880: tag_name = "Shot Info"; break;                       // 0x3000
-        case 36875: tag_name = "Tag 900B"; break;                        // 0x900B
-        case 36912: tag_name = "Tag 9050A"; break;                       // 0x9050
-        case 37888: tag_name = "Tag 9400A"; break;                       // 0x9400
-        case 37889: tag_name = "Tag 9401"; break;                        // 0x9401
-        case 37890: tag_name = "Tag 9402"; break;                        // 0x9402
-        case 37891: tag_name = "Tag 9403"; break;                        // 0x9403
-        case 37892: tag_name = "Tag 9404A"; break;                       // 0x9404
-        case 37893: tag_name = "Tag 9405A"; break;                       // 0x9405
-        case 45056: tag_name = "File Format"; break;                     // 0xB000
-        case 45057: tag_name = "Model ID"; break;                        // 0xB001
-        case 45088: tag_name = "Creative Style"; break;                  // 0xB020
-        case 45089: tag_name = "Color Temperature"; break;               // 0xB021
-        case 45090: tag_name = "Color Compensation Filter"; break;       // 0xB022
-        case 45091: tag_name = "Scene Mode"; break;                      // 0xB023
-        case 45092: tag_name = "Zone Matching"; break;                   // 0xB024
-        case 45093: tag_name = "Dynamic Range Optimizer"; break;         // 0xB025
-        case 45094: tag_name = "Image Stabilization"; break;             // 0xB026
-        case 45095: tag_name = "Lens Type"; break;                       // 0xB027
-        case 45096: tag_name = "Minolta Maker Note"; break;              // 0xB028
-        case 45097: tag_name = "Color Mode"; break;                      // 0xB029
-        case 45098: tag_name = "Lens Spec"; break;                       // 0xB02A
-        case 45099: tag_name = "Full Image Size"; break;                 // 0xB02B
-        case 45121: tag_name = "Exposure Mode"; break;                   // 0xB041
-        case 45122: tag_name = "Focus Mode"; break;                      // 0xB042
-        case 45123: tag_name = "AF Area Mode"; break;                    // 0xB043
-        case 45124: tag_name = "AF Illuminator"; break;                  // 0xB044
-        case 45127: tag_name = "JPEG Quality"; break;                    // 0xB047
-        case 45128: tag_name = "Flash Level"; break;                     // 0xB048
-        case 45129: tag_name = "Release Mode"; break;                    // 0xB049
-        case 45130: tag_name = "Sequence Number"; break;                 // 0xB04A
-        case 45140: tag_name = "White Balance"; break;                   // 0xB054
+        // // Sony-specific tags (from https://exiftool.org/TagNames/Sony.html)
+        // case 4096:
+        //     tag_name = "Multi Burst Mode";
+        //     break; // 0x1000
+        // // case 4097: tag_name = "Multi Burst Image Width"; break;          // 0x1001
+        // // case 4098: tag_name = "Multi Burst Image Height"; break;         // 0x1002
+        // // case 4099: tag_name = "Panorama"; break;                         // 0x1003
+        // case 8193: tag_name = "Preview Image"; break;                    // 0x2001
+        // case 8194: tag_name = "Rating"; break;                           // 0x2002
+        // case 8196: tag_name = "Contrast"; break;                         // 0x2004
+        // case 8197: tag_name = "Saturation"; break;                       // 0x2005
+        // case 8198: tag_name = "Sharpness"; break;                        // 0x2006
+        // case 8199: tag_name = "Brightness"; break;                       // 0x2007
+        // case 8200: tag_name = "Long Exposure Noise Reduction"; break;    // 0x2008
+        // case 8201: tag_name = "High ISO Noise Reduction"; break;         // 0x2009
+        // case 8202: tag_name = "HDR"; break;                              // 0x200A
+        // case 8206: tag_name = "Picture Effect"; break;                   // 0x200E
+        // case 8207: tag_name = "Soft Skin Effect"; break;                 // 0x200F
+        // case 8209: tag_name = "Vignetting Correction"; break;            // 0x2011
+        // case 8210: tag_name = "Lateral Chromatic Aberration"; break;     // 0x2012
+        // case 8211: tag_name = "Distortion Correction Setting"; break;    // 0x2013
+        // case 8212: tag_name = "WB Shift AB GM"; break;                   // 0x2014
+        // case 8214: tag_name = "Auto Portrait Framed"; break;             // 0x2016
+        // case 8215: tag_name = "Flash Action"; break;                     // 0x2017
+        // case 8218: tag_name = "Electronic Front Curtain Shutter"; break; // 0x201A
+        // case 8219: tag_name = "Focus Mode"; break;                       // 0x201B
+        // case 8220: tag_name = "AF Area Mode Setting"; break;             // 0x201C
+        // case 8221: tag_name = "Flexible Spot Position"; break;           // 0x201D
+        // case 8222: tag_name = "AF Point Selected"; break;                // 0x201E
+        // case 8224: tag_name = "AF Points Used"; break;                   // 0x2020
+        // case 8225: tag_name = "AF Tracking"; break;                      // 0x2021
+        // case 8226: tag_name = "Focal Plane AF Points Used"; break;       // 0x2022
+        // case 8227: tag_name = "Multi Frame NR Effect"; break;            // 0x2023
+        // case 8230: tag_name = "WB Shift AB GM Precise"; break;           // 0x2026
+        // case 8231: tag_name = "Focus Location"; break;                   // 0x2027
+        // case 8232: tag_name = "Variable Low Pass Filter"; break;         // 0x2028
+        // case 8233: tag_name = "RAW File Type"; break;                    // 0x2029
+        // case 8235: tag_name = "Priority Set In AWB"; break;              // 0x202B
+        // case 8236: tag_name = "Metering Mode 2"; break;                  // 0x202C
+        // case 8237: tag_name = "Exposure Standard Adjustment"; break;     // 0x202D
+        // case 8238: tag_name = "Quality"; break;                          // 0x202E
+        // case 8239: tag_name = "Pixel Shift Info"; break;                 // 0x202F
+        // case 8241: tag_name = "Serial Number"; break;                    // 0x2031
+        // case 8242: tag_name = "Shadows"; break;                          // 0x2032
+        // case 8243: tag_name = "Highlights"; break;                       // 0x2033
+        // case 8244: tag_name = "Fade"; break;                             // 0x2034
+        // case 8245: tag_name = "Sharpness Range"; break;                  // 0x2035
+        // case 8246: tag_name = "Clarity"; break;                          // 0x2036
+        // case 8247: tag_name = "Focus Frame Size"; break;                 // 0x2037
+        // case 8249: tag_name = "JPEG-HEIF Switch"; break;                 // 0x2039
+        // case 8268: tag_name = "Hidden Info"; break;                      // 0x2044
+        // case 8266: tag_name = "Focus Location 2"; break;                 // 0x204A
+        // case 8284: tag_name = "Step Crop Shooting"; break;               // 0x205C
+        // case 36880: tag_name = "Shot Info"; break;                       // 0x3000
+        // case 36875: tag_name = "Tag 900B"; break;                        // 0x900B
+        // case 36912: tag_name = "Tag 9050A"; break;                       // 0x9050
+        // case 37888: tag_name = "Tag 9400A"; break;                       // 0x9400
+        // case 37889: tag_name = "Tag 9401"; break;                        // 0x9401
+        // case 37890: tag_name = "Tag 9402"; break;                        // 0x9402
+        // case 37891: tag_name = "Tag 9403"; break;                        // 0x9403
+        // case 37892: tag_name = "Tag 9404A"; break;                       // 0x9404
+        // case 37893: tag_name = "Tag 9405A"; break;                       // 0x9405
+        // case 45056: tag_name = "File Format"; break;                     // 0xB000
+        // case 45057: tag_name = "Model ID"; break;                        // 0xB001
+        // case 45088: tag_name = "Creative Style"; break;                  // 0xB020
+        // case 45089: tag_name = "Color Temperature"; break;               // 0xB021
+        // case 45090: tag_name = "Color Compensation Filter"; break;       // 0xB022
+        // case 45091: tag_name = "Scene Mode"; break;                      // 0xB023
+        // case 45092: tag_name = "Zone Matching"; break;                   // 0xB024
+        // case 45093: tag_name = "Dynamic Range Optimizer"; break;         // 0xB025
+        // case 45094: tag_name = "Image Stabilization"; break;             // 0xB026
+        // case 45095: tag_name = "Lens Type"; break;                       // 0xB027
+        // case 45096: tag_name = "Minolta Maker Note"; break;              // 0xB028
+        // case 45097: tag_name = "Color Mode"; break;                      // 0xB029
+        // case 45098: tag_name = "Lens Spec"; break;                       // 0xB02A
+        // case 45099: tag_name = "Full Image Size"; break;                 // 0xB02B
+        // case 45121: tag_name = "Exposure Mode"; break;                   // 0xB041
+        // case 45122: tag_name = "Focus Mode"; break;                      // 0xB042
+        // case 45123: tag_name = "AF Area Mode"; break;                    // 0xB043
+        // case 45124: tag_name = "AF Illuminator"; break;                  // 0xB044
+        // case 45127: tag_name = "JPEG Quality"; break;                    // 0xB047
+        // case 45128: tag_name = "Flash Level"; break;                     // 0xB048
+        // case 45129: tag_name = "Release Mode"; break;                    // 0xB049
+        // case 45130: tag_name = "Sequence Number"; break;                 // 0xB04A
+        // case 45140: tag_name = "White Balance"; break;                   // 0xB054
         default: break;
         }
     }
@@ -1413,9 +1426,7 @@ json exif_data_to_json(ExifData *ed)
 {
     json j;
 
-    static const char *ExifIfdTable[] = {"TIFF", // Apple Preview
-                                         "TIFF", // seems to combine the 0th and 1st IFDs into a "TIFF" section
-                                         "EXIF", "GPS", "Interoperability"};
+    static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
 
     for (int ifd_idx = 0; ifd_idx < EXIF_IFD_COUNT; ++ifd_idx)
     {
@@ -1432,6 +1443,48 @@ json exif_data_to_json(ExifData *ed)
                 continue;
 
             ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
+        }
+    }
+
+    // Handle MakerNotes
+    ExifMnoteData *md = exif_data_get_mnote_data(ed);
+    if (md)
+    {
+        ExifContent *ifd0 = ed->ifd[EXIF_IFD_0];
+        std::string  make = entry_to_string(exif_content_get_entry(ifd0, EXIF_TAG_MAKE));
+
+        auto &mn = j[make.empty() ? "Maker Note" : "Maker Note (" + make + ")"] = json::object();
+
+        unsigned int n = exif_mnote_data_count(md);
+        for (unsigned int i = 0; i < n; ++i)
+        {
+            char   buf[1024] = {0};
+            auto   tag       = exif_mnote_data_get_id(md, i);
+            auto   name      = exif_mnote_data_get_name(md, i);
+            auto   title     = exif_mnote_data_get_title(md, i);
+            auto   desc      = exif_mnote_data_get_description(md, i);
+            string str;
+
+            string key;
+            if (title && strlen(title) > 0)
+                key = title;
+            else if (name && strlen(name) > 0)
+                key = name;
+            else
+                key = fmt::format("Tag {:05}", tag);
+
+            if (auto p = exif_mnote_data_get_value(md, i, buf, sizeof(buf)))
+            {
+                str = p;
+                if (str.length() >= sizeof(buf) - 1)
+                    str += "…";
+            }
+            else
+                str = "n/a";
+
+            mn[key] = {{"string", str}, {"type", "MakerNote"}, {"tag", tag}};
+            if (desc && strlen(desc) > 0)
+                mn[key]["description"] = desc;
         }
     }
 

@@ -12,6 +12,7 @@
 #include "icc.h"
 #include "image.h"
 #include "jpg.h"
+#include <spdlog/fmt/bundled/format.h>
 #include <sstream>
 
 #include <algorithm>
@@ -138,33 +139,33 @@ void exif_handler(void *context, int tag, int type, int len, unsigned int ord, v
 {
     ExifContext &exif = *(ExifContext *)context;
 
-    // LibRaw encodes IFD information in bits 16-23 of the tag parameter:
-    // 0x00 (0) = EXIF sub-IFD tags (from parse_exif)
-    // 0x20 (2) = Kodak maker notes (from parse_kodak_ifd)
-    // 0x40 (4) = Interoperability IFD (from parse_exif_interop)
-    // 0x50 (5) = GPS IFD (from parse_gps_libraw)
-    int libraw_ifd_idx = (tag >> 16) & 0xFF;
+    // tag: 16-bit of TIFF/EXIF tag or'ed with
+    // 0 - for EXIF parsing
+    // 0x20000 - for Kodak makernotes parsing
+    // 0x30000 - for Panasonic makernotes parsing
+    // 0x40000 - for EXIF Interop IFD parsing
+    // 0x50000 - for EXIF GPS IFD parsing
+    // (ifdN + 1) << 20) - for TIFF ifdN
+    int libraw_ifd_idx = (tag >> 16) & 0xFFFF;
 
     // Get actual tag value (lower 16 bits)
     int actual_tag = tag & 0xFFFF;
 
     // Map LibRaw IFD indices to libexif ExifIfd enum and IFD name
-    const char *ifd_name;
-    ExifIfd     ifd_enum;
+    string  ifd_name;
+    ExifIfd ifd_enum;
 
     switch (libraw_ifd_idx)
     {
-    default: // Unknown, treat as EXIF_IFD_0
-        ifd_name = "TIFF";
-        ifd_enum = EXIF_IFD_0;
-        break;
     case 0x00: // EXIF sub-IFD
         ifd_name = "EXIF";
         ifd_enum = EXIF_IFD_EXIF;
         break;
-    case 0x02: // Kodak maker notes - treat as EXIF_IFD_0
-        ifd_name = "TIFF";
-        ifd_enum = EXIF_IFD_0;
+    case 0x02: // Kodak maker notes - skip
+        return;
+        break;
+    case 0x03: // Panasonic maker notes - skip
+        return;
         break;
     case 0x04: // Interoperability IFD
         ifd_name = "Interoperability";
@@ -173,6 +174,11 @@ void exif_handler(void *context, int tag, int type, int len, unsigned int ord, v
     case 0x05: // GPS IFD
         ifd_name = "GPS";
         ifd_enum = EXIF_IFD_GPS;
+        break;
+    default: // Unknown, treat as EXIF_IFD_0
+        // (ifdN + 1) << 20) - for TIFF ifdN
+        ifd_name = fmt::format("TIFF IFD{}", (tag >> 20) - 1);
+        ifd_enum = EXIF_IFD_0;
         break;
     }
 
@@ -202,7 +208,9 @@ void exif_handler(void *context, int tag, int type, int len, unsigned int ord, v
 
     try
     {
-        exif.metadata[ifd_name].update(entry_to_json(entry, ord == 0x4949 ? 1 : 0, ifd_enum));
+        auto j = entry_to_json(entry, ord == 0x4949 ? 1 : 0, ifd_enum);
+        if (!j.empty())
+            exif.metadata[ifd_name].update(j);
     }
     catch (const std::exception &e)
     {
@@ -775,12 +783,34 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             if (!idata.image)
                 throw std::runtime_error("No image data available after processing");
 
-            auto image                = std::make_shared<Image>(size, num_channels);
-            image->filename           = filename;
-            image->partname           = "main";
-            image->metadata["loader"] = "LibRaw";
+            auto image                      = std::make_shared<Image>(size, num_channels);
+            image->filename                 = filename;
+            image->partname                 = "main";
+            image->metadata["loader"]       = fmt::format("LibRaw; {}", libraw_unpack_function_name(&idata));
+            image->metadata["pixel format"] = fmt::format(
+                "{}-bit {} {}", idata.color.raw_bps, idata.idata.cdesc,
+                idata.idata.filters ? "Bayer CFA" : (idata.idata.xtrans[0][0] >= 0 ? "X-Trans CFA" : "Non-CFA"));
+            spdlog::warn("LibRaw unpack function name: {}", libraw_unpack_function_name(&idata));
             if (!exif_ctx.metadata.empty())
                 image->metadata["exif"] = exif_ctx.metadata;
+
+            if (idata.idata.xmplen > 0)
+            {
+                image->xmp_data.assign(idata.idata.xmpdata, idata.idata.xmpdata + idata.idata.xmplen);
+                auto xmp = string(image->xmp_data.data(), image->xmp_data.data() + image->xmp_data.size());
+                image->metadata["header"]["XMP"] = {
+                    {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
+                spdlog::debug("XMP metadata successfully parsed: {}", xmp);
+            }
+
+            if (idata.color.profile)
+            {
+                image->metadata["header"]["ICC Profile"] = {{"value", "<embedded ICC profile>"},
+                                                            {"string", "<embedded ICC profile>"},
+                                                            {"type", "blob"},
+                                                            {"description", "Embedded ICC color profile"}};
+                spdlog::warn("Embedded ICC profile of length {} bytes found", idata.color.profile_length);
+            }
 
             // Access image data as array of ushort[4]
             const auto *img_data = idata.image;
@@ -857,8 +887,12 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             continue;
         }
 
-        int tret = processor->unpack_thumb_ex(ti);
-        if (tret != LIBRAW_SUCCESS)
+        // spdlog::warn("Thumbnail {}: width={}, height={}, length={}, flip={}, format={}", ti,
+        //              idata.thumbs_list.thumblist[ti].twidth, idata.thumbs_list.thumblist[ti].theight,
+        //              idata.thumbs_list.thumblist[ti].tlength, idata.thumbs_list.thumblist[ti].tflip,
+        //              (int)idata.thumbs_list.thumblist[ti].tformat);
+
+        if (processor->unpack_thumb_ex(ti) != LIBRAW_SUCCESS)
             break; // no more thumbnails or error
 
         int                       err   = 0;
@@ -877,8 +911,8 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 auto               thumbs = load_jpg_image(iss, fmt::format("{}:thumb{}", filename, ti), opts);
                 for (auto &ti_img : thumbs)
                 {
-                    ti_img->partname                           = fmt::format("thumbnail:{}", ti);
-                    ti_img->metadata["loader"]                 = "LibRaw";
+                    ti_img->partname           = fmt::format("thumbnail:{}", ti);
+                    ti_img->metadata["loader"] = fmt::format("LibRaw + {}", ti_img->metadata["loader"].get<string>());
                     ti_img->metadata["header"]["Is thumbnail"] = {
                         {"value", true},
                         {"string", "Yes"},
