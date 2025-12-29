@@ -3,12 +3,17 @@
 #include "json.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring> // for memcmp
+#include <iomanip>
+#include <libexif/exif-byte-order.h>
 #include <libexif/exif-data.h>
+#include <libexif/exif-format.h>
 #include <libexif/exif-ifd.h>
 #include <libexif/exif-mnote-data.h>
 #include <libexif/exif-tag.h>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <type_traits>
 
@@ -31,6 +36,100 @@ static std::string entry_to_string(ExifEntry *e)
     }
     else
         return "";
+}
+
+static json get_value(int format, size_t components, const uint8_t *data, Endian data_endian)
+{
+    switch (format)
+    {
+    case EXIF_FORMAT_ASCII:
+    {
+        // EXIF ASCII strings are null-terminated, so we need to exclude the null terminator
+        if (components > 0 && data[components - 1] == '\0')
+            components--;
+        return string(reinterpret_cast<const char *>(data), components);
+    }
+
+    case EXIF_FORMAT_BYTE:
+    case EXIF_FORMAT_UNDEFINED:
+    {
+        vector<uint8_t> vals(data, data + components);
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_SHORT:
+    {
+        vector<uint16_t> vals(components);
+        read_array(vals.data(), data, components, data_endian);
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_LONG:
+    {
+        vector<uint32_t> vals(components);
+        read_array(vals.data(), data, components, data_endian);
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_SBYTE:
+    {
+        vector<int8_t> vals(reinterpret_cast<const int8_t *>(data),
+                            reinterpret_cast<const int8_t *>(data) + components);
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_SSHORT:
+    {
+        vector<int16_t> vals(components);
+        read_array(vals.data(), data, components, data_endian);
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_SLONG:
+    {
+        vector<int32_t> vals(components);
+        read_array(vals.data(), data, components, data_endian);
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_RATIONAL:
+    {
+        vector<double> vals;
+        for (unsigned int i = 0; i < components; i++)
+        {
+            auto r = read_as<uint2>(&data[sizeof(uint2) * i], data_endian);
+            vals.push_back(double(r.x) / r.y);
+        }
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_SRATIONAL:
+    {
+        vector<double> vals;
+        for (unsigned int i = 0; i < components; i++)
+        {
+            auto r = read_as<int2>(&data[sizeof(int2) * i], data_endian);
+            vals.push_back(double(r.x) / r.y);
+        }
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_FLOAT:
+    {
+        vector<float> vals(components);
+        read_array(vals.data(), data, components, data_endian);
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    case EXIF_FORMAT_DOUBLE:
+    {
+        vector<double> vals(components);
+        read_array(vals.data(), data, components, data_endian);
+        return vals.size() == 1 ? json(vals[0]) : json(vals);
+    }
+
+    default: return nullptr; break;
+    }
 }
 
 struct Exif::Impl
@@ -110,43 +209,16 @@ void           Exif::reset() { m_impl.reset(); }
 size_t         Exif::size() const { return m_impl ? m_impl->data.size() : 0; }
 const uint8_t *Exif::data() const { return m_impl ? m_impl->data.data() : nullptr; }
 
-json Exif::to_json() const
+static json get_makernote(ExifData *ed)
 {
-    if (!m_impl || !m_impl->exif_data)
-        throw std::runtime_error{"Failed to parse EXIF data."};
+    ExifEntry *maker_note = exif_data_get_entry(ed, EXIF_TAG_MAKER_NOTE);
+    if (!maker_note || !maker_note->data || maker_note->size == 0)
+        return nullptr;
 
-    auto ed = m_impl->exif_data.get();
-    json j;
+    json mn = json::object();
 
-    static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
-
-    for (int ifd_idx = 0; ifd_idx < EXIF_IFD_COUNT; ++ifd_idx)
+    if (auto md = exif_data_get_mnote_data(ed))
     {
-        ExifContent *content = ed->ifd[ifd_idx];
-        if (!content || !content->count)
-            continue;
-
-        json &ifd_json = j[ExifIfdTable[ifd_idx]];
-
-        for (unsigned int i = 0; i < content->count; ++i)
-        {
-            ExifEntry *entry = content->entries[i];
-            if (!entry)
-                continue;
-
-            ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
-        }
-    }
-
-    // Handle MakerNotes
-    ExifMnoteData *md = exif_data_get_mnote_data(ed);
-    if (md)
-    {
-        ExifContent *ifd0 = ed->ifd[EXIF_IFD_0];
-        std::string  make = entry_to_string(exif_content_get_entry(ifd0, EXIF_TAG_MAKE));
-
-        auto &mn = j[make.empty() ? "Maker Note" : "Maker Note (" + make + ")"] = json::object();
-
         unsigned int n = exif_mnote_data_count(md);
         for (unsigned int i = 0; i < n; ++i)
         {
@@ -178,7 +250,261 @@ json Exif::to_json() const
             if (desc && strlen(desc) > 0)
                 mn[key]["description"] = desc;
         }
+
+        return mn;
     }
+
+    // Additionally, since libexif doesn't decode Apple-specific maker notes, try to decode them ourselves
+    static constexpr auto APPLE_SIGNATURE = "Apple iOS";
+
+    if (maker_note->size >= strlen(APPLE_SIGNATURE) + 1 &&
+        memcmp((const char *)maker_note->data, APPLE_SIGNATURE, strlen(APPLE_SIGNATURE)) == 0)
+    {
+        const uint8_t *mn_data = maker_note->data;
+        size_t         mn_size = maker_note->size;
+
+        Endian endian = Endian::Intel;
+        if (mn_size >= 14)
+        {
+            /* Byte order (offset 12, length 2) */
+            if (!memcmp(mn_data + 12, "II", 2))
+                endian = Endian::Intel;
+            else if (!memcmp(mn_data + 12, "MM", 2))
+                endian = Endian::Motorola;
+        }
+
+        uint16_t tcount = 0;
+        if (mn_size >= 16)
+            tcount = read_as<uint16_t>(mn_data + 14, endian);
+
+        spdlog::debug("ExifMnoteApple: detected {} tags", tcount);
+
+        // Sanity check the offset
+        if (mn_size < 6 + 16 + tcount * 12 + 4)
+        {
+            spdlog::error("ExifMnoteApple Short MakerNote");
+            return nullptr;
+        }
+
+        size_t ofs = 16;
+        for (uint32_t i = 0; i < tcount; ++i, ofs += 12)
+        {
+            if (ofs + 12 > mn_size)
+            {
+                spdlog::error("ExifMnoteApple", "Tag size overflow detected ({} vs size {})", ofs + 12, mn_size);
+                break;
+            }
+
+            auto tag        = read_as<uint16_t>(mn_data + ofs, endian);
+            auto format     = read_as<uint16_t>(mn_data + ofs + 2, endian);
+            auto components = read_as<uint32_t>(mn_data + ofs + 4, endian);
+
+            spdlog::debug("tag {}; format {}; nComponents {}", tag, format, components);
+
+            unsigned size_per_component = exif_format_get_size((ExifFormat)format);
+
+            if (size_per_component == 0)
+            {
+                spdlog::warn("Unknown data format, assuming 32-bit int");
+                size_per_component = 4;
+                format             = EXIF_FORMAT_SLONG;
+            }
+
+            if ((components > 0) && (mn_size / components < size_per_component))
+            {
+                spdlog::error("ExifMnoteApple: Tag size overflow detected (components {} vs size {})", components,
+                              mn_size);
+                continue;
+            }
+
+            auto entry_size = components * size_per_component;
+
+            if ((entry_size > 65536) || (entry_size > mn_size))
+            {
+                // Corrupt data: EXIF data size is limited to the maximum size of a JPEG segment (64 kb).
+                spdlog::error("ExifMnoteApple: Tag size overflow detected (entry_size {} vs size {})", entry_size,
+                              mn_size);
+                break;
+            }
+
+            // if the data fits in 4 bytes, it sits at location 8, otherwise location 8 stores a 32-bit offset
+            // to where the data is
+            size_t entry_offset = (entry_size > 4) ? read_as<uint32_t>(mn_data + ofs + 8, endian) : (ofs + 8);
+            if (entry_offset + entry_size > mn_size)
+            {
+                spdlog::warn("skipping");
+                continue;
+            }
+
+            const uint8_t *data = mn_data + entry_offset;
+
+            try
+            {
+                json value = json::object();
+
+                // if (auto desc_ptr = exif_tag_get_description_in_ifd((ExifTag)tag, EXIF_IFD_0))
+                //     value["description"] = std::string(desc_ptr);
+
+                if (auto format_name = exif_format_get_name((ExifFormat)format))
+                    value["type"] = format_name;
+                else
+                    value["type"] = "unknown";
+
+                value["tag"]    = tag;
+                value["value"]  = get_value((ExifFormat)format, components, data, endian);
+                value["string"] = value["value"].empty() ? "n/a" : value["value"].dump();
+
+                string tag_name = fmt::format("Tag {:05} (0x{:04x})", tag, tag);
+                switch (tag)
+                {
+                case 0x0001: tag_name = "Maker Note Version"; break; // MakerNoteVersion
+                case 0x0002: tag_name = "AE Matrix"; break;          // AEMatrix?
+                case 0x0003:                                         // RunTime (PLIST)
+                    tag_name             = "RunTime";
+                    value["description"] = "The amount of time the phone has been running since the last boot, not "
+                                           "including standby time.";
+                    break;
+                case 0x0004: // AEStable
+                    tag_name        = "AE Stable";
+                    value["string"] = !value["value"].empty() && value["value"].get<int32_t>() != 0 ? "Yes" : "No";
+                    break;
+                case 0x0005: tag_name = "AE Target"; break;  // AETarget
+                case 0x0006: tag_name = "AE Average"; break; // AEAverage
+                case 0x0007:                                 // AFStable
+                    tag_name        = "AF Stable";
+                    value["string"] = !value["value"].empty() && value["value"].get<int32_t>() != 0 ? "Yes" : "No";
+                    break;
+                case 0x0008: // AccelerationVector
+                    tag_name = "Acceleration Vector";
+                    value["description"] =
+                        "XYZ coordinates of the acceleration vector in units of g. As viewed from the front of "
+                        "the phone, positive X is toward the left side, positive Y is toward the bottom, and "
+                        "positive Z points into the face of the phone";
+                    break;
+                case 0x000d: tag_name = "Sphere Health Average Current"; break; // 0,1,6,20,24,32,40
+                case 0x000e: tag_name = "Sphere Motion Data Status"; break;     // 0,1,4,12 (0=landscape? 4=portrait?)
+                case 0x0010: tag_name = "Sphere Status"; break;                 //
+                case 0x000A: tag_name = "HDR Image Type"; break;                // HDRImageType
+                case 0x000B: tag_name = "Burst UUID"; break;                    // BurstUUID
+                case 0x000C: tag_name = "Focus Distance Range"; break;          // FocusDistanceRange
+                case 0x000F: tag_name = "OIS Mode"; break;                      // OISMode
+                case 0x0011: tag_name = "Content Identifier"; break;            // ContentIdentifier / MediaGroupUUID
+                case 0x0014:                                                    // ImageCaptureType
+                {
+                    tag_name = "Image Capture Type";
+                    auto m   = std::map<int, string>{
+                        {1, "ProRAW"}, {2, "Portrait"}, {10, "Photo"}, {11, "Manual Focus"}, {12, "Scene"}};
+                    value["string"]      = value["value"].get<int32_t>() && m.count(value["value"].get<int32_t>()) > 0
+                                               ? m[value["value"].get<int32_t>()]
+                                               : "Unknown";
+                    value["description"] = "Type of image captured.\n1  = ProRAW\n2  = Portrait\n10 = Photo\n11 = "
+                                           "Manual Focus\n12 = Scene";
+                    break;
+                }
+                case 0x0015: tag_name = "Image Unique ID"; break;        // ImageUniqueID
+                case 0x0017: tag_name = "Live Photo Video Index"; break; // LivePhotoVideoIndex
+                case 0x0019:
+                    tag_name        = "Image Processing Flags";
+                    value["string"] = fmt::format("{:032b}", value["value"].get<int32_t>());
+                    break;                                                  // ImageProcessingFlags
+                case 0x001A: tag_name = "Quality Hint"; break;              // QualityHint
+                case 0x001D: tag_name = "Luminance Noise Amplitude"; break; // LuminanceNoiseAmplitude
+                case 0x001F:                                                // PhotosAppFeatureFlags
+                    tag_name             = "Photos App Feature Flags";
+                    value["string"]      = fmt::format("{:032b}", value["value"].get<int32_t>());
+                    value["description"] = "Set if a person or pet is detected in the image";
+                    break;
+                case 0x0020: tag_name = "Image Capture Request ID"; break; // ImageCaptureRequestID
+                case 0x0021: tag_name = "HDR Headroom"; break;             // HDRHeadroom
+                case 0x0023: tag_name = "AF Performance"; break;           // AFPerformance
+                case 0x0025:                                               // SceneFlags
+                    tag_name        = "Scene Flags";
+                    value["string"] = fmt::format("{:032b}", value["value"].get<int32_t>());
+                    break;
+                case 0x0026: tag_name = "Signal To Noise Ratio Type"; break; // SignalToNoiseRatioType
+                case 0x0027: tag_name = "Signal To Noise Ratio"; break;      // SignalToNoiseRatio
+                case 0x002B: tag_name = "Photo Identifier"; break;           // PhotoIdentifier
+                case 0x002D: tag_name = "Color Temperature"; break;          // ColorTemperature
+                case 0x002E:                                                 // CameraType
+                    tag_name        = "Camera Type";
+                    value["string"] = value["value"].get<int32_t>() == 0
+                                          ? "Back Wide Angle"
+                                          : (value["value"].get<int32_t>() == 1
+                                                 ? "Back Normal"
+                                                 : (value["value"].get<int32_t>() == 6 ? "Front" : "Unknown"));
+                    break;
+                case 0x002F: tag_name = "Focus Position"; break; // FocusPosition
+                case 0x0030: tag_name = "HDR Gain"; break;       // HDRGain
+
+                case 0x0031: tag_name = "Still Image Processing Homography"; break;
+                case 0x0032: tag_name = "Intelligent Distortion Correction"; break;
+                case 0x0033: tag_name = "NRF Status"; break;
+                case 0x0034: tag_name = "NRF Input Bracket Count"; break;
+                // case 0x0034: tag_name = "Flash on"; break;
+                case 0x0035: tag_name = "NRF Registered Bracket Count"; break;
+                // case 0x0035: tag_name = "0 for flash on"; break;
+                case 0x0036: tag_name = "Lux Level"; break;
+                case 0x0037: tag_name = "Last Focusing Method"; break;
+                case 0x0038: tag_name = "AF Measured Depth"; break;             // AFMeasuredDepth
+                case 0x003D: tag_name = "AF Confidence"; break;                 // AFConfidence
+                case 0x003E: tag_name = "Color Correction Matrix"; break;       // ColorCorrectionMatrix
+                case 0x003F: tag_name = "Green Ghost Mitigation Status"; break; // GreenGhostMitigationStatus
+                case 0x0040: tag_name = "Semantic Style"; break;                // SemanticStyle
+                case 0x0041: tag_name = "Semantic Style Rendering Ver"; break;  // SemanticStyleRenderingVer
+                case 0x0042:
+                    tag_name = "Semantic Style Preset";
+                    break; // SemanticStylePreset
+                // case 0x004E: tag_name = "Apple_0x004e"; break;
+                // case 0x004F: tag_name = "Apple_0x004f"; break;
+                // case 0x0054: tag_name = "Apple_0x0054"; break;
+                // case 0x005A: tag_name = "Apple_0x005a"; break;
+                default: break;
+                }
+
+                mn[tag_name] = value;
+            }
+            catch (const std::exception &e)
+            {
+                // continue;
+                spdlog::error("Exception while parsing Apple MakerNote tag {}; {}", tag, e.what());
+            }
+        }
+    }
+
+    return mn;
+}
+
+json Exif::to_json() const
+{
+    if (!m_impl || !m_impl->exif_data)
+        throw std::runtime_error{"Failed to parse EXIF data."};
+
+    auto ed = m_impl->exif_data.get();
+    json j;
+
+    static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
+
+    for (int ifd_idx = 0; ifd_idx < EXIF_IFD_COUNT; ++ifd_idx)
+    {
+        ExifContent *content = ed->ifd[ifd_idx];
+        if (!content || !content->count)
+            continue;
+
+        json &ifd_json = j[ExifIfdTable[ifd_idx]];
+
+        for (unsigned int i = 0; i < content->count; ++i)
+        {
+            ExifEntry *entry = content->entries[i];
+            if (!entry)
+                continue;
+
+            ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
+        }
+    }
+
+    // Handle MakerNote
+    if (auto mn = get_makernote(ed); !mn.is_null())
+        j["Maker notes"] = mn;
 
     return j;
 }
@@ -226,150 +552,9 @@ json entry_to_json(void *entry_v, int boi, unsigned int ifd_idx)
     else
         value["type"] = "unknown";
 
-    value["tag"] = tag;
-    value["ifd"] = ifd_idx;
-
-    switch (entry->format)
-    {
-    case EXIF_FORMAT_ASCII:
-    {
-        // EXIF ASCII strings are null-terminated, so we need to exclude the null terminator
-        size_t len = entry->components;
-        if (len > 0 && entry->data[len - 1] == '\0')
-            len--;
-        value["value"] = string(reinterpret_cast<char *>(entry->data), len);
-        break;
-    }
-
-    case EXIF_FORMAT_BYTE:
-    case EXIF_FORMAT_UNDEFINED:
-    {
-        vector<uint8_t> vals(entry->data, entry->data + entry->components);
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    case EXIF_FORMAT_SHORT:
-    {
-        vector<uint16_t> vals(entry->components);
-        read_array(vals.data(), entry->data, entry->components, data_endian);
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    case EXIF_FORMAT_LONG:
-    {
-        vector<uint32_t> vals(entry->components);
-        read_array(vals.data(), entry->data, entry->components, data_endian);
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    case EXIF_FORMAT_SBYTE:
-    {
-        vector<int8_t> sbytes(reinterpret_cast<int8_t *>(entry->data),
-                              reinterpret_cast<int8_t *>(entry->data) + entry->components);
-        if (sbytes.size() == 1)
-            value["value"] = sbytes[0];
-        else
-            value["value"] = sbytes;
-        break;
-    }
-
-    case EXIF_FORMAT_SSHORT:
-    {
-        vector<int16_t> vals(entry->components);
-        read_array(vals.data(), entry->data, entry->components, data_endian);
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    case EXIF_FORMAT_SLONG:
-    {
-        vector<int32_t> vals(entry->components);
-        read_array(vals.data(), entry->data, entry->components, data_endian);
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    case EXIF_FORMAT_RATIONAL:
-    {
-        vector<double> vals;
-        for (unsigned int i = 0; i < entry->components; i++)
-        {
-            auto r = read_as<uint2>(&entry->data[8 * i], data_endian);
-            vals.push_back(double(r.x) / r.y);
-        }
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    case EXIF_FORMAT_SRATIONAL:
-    {
-        vector<double> vals;
-        for (unsigned int i = 0; i < entry->components; i++)
-        {
-            auto r = read_as<int2>(&entry->data[8 * i], data_endian);
-            vals.push_back(double(r.x) / r.y);
-        }
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    case EXIF_FORMAT_FLOAT:
-    {
-        vector<float> vals(entry->components);
-        read_array(vals.data(), entry->data, entry->components, data_endian);
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    case EXIF_FORMAT_DOUBLE:
-    {
-        vector<double> vals(entry->components);
-        read_array(vals.data(), entry->data, entry->components, data_endian);
-
-        if (vals.size() == 1)
-            value["value"] = vals[0];
-        else
-            value["value"] = vals;
-        break;
-    }
-
-    default: value = nullptr; break;
-    }
+    value["tag"]   = tag;
+    value["ifd"]   = ifd_idx;
+    value["value"] = get_value(entry->format, entry->components, entry->data, data_endian);
 
     if (ifd == EXIF_IFD_0 || ifd == EXIF_IFD_1)
     {

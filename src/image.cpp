@@ -931,7 +931,7 @@ void Image::apply_exif_orientation()
 
     if (orientation != 1)
     {
-        spdlog::info("Applying EXIF orientation: {}", orientation);
+        spdlog::debug("Applying EXIF orientation: {}", orientation);
         // Helper lambdas for flipping/rotating
         auto flip_horizontal = [this]()
         {

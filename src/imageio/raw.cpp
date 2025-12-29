@@ -226,8 +226,6 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
     if (processor->imgdata.idata.make[0])
         make = std::string(processor->imgdata.idata.make);
 
-    std::string maker_key = make.empty() ? "Maker Notes" : fmt::format("Maker Notes ({})", make);
-
     json maker_notes = json::object();
 
     // Helper: add a maker-note field to the maker_notes JSON. If `force` is false and the value equals `ignore`, the
@@ -292,14 +290,14 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
             const auto &ln = processor->imgdata.lens;
             maker_add("Min Focal", ln.MinFocal, false, 0.0f);
             maker_add("Max Focal", ln.MaxFocal, false, 0.0f);
-            maker_add("Max Ap 4 Min Focal", ln.MaxAp4MinFocal, false, 0.0f);
-            maker_add("Max Ap 4 Max Focal", ln.MaxAp4MaxFocal, false, 0.0f);
+            maker_add("Max Ap at Min Focal", ln.MaxAp4MinFocal, false, 0.0f);
+            maker_add("Max Ap at Max Focal", ln.MaxAp4MaxFocal, false, 0.0f);
             maker_add("EXIF Max Ap", ln.EXIF_MaxAp, false, 0.0f);
             maker_add("Lens Make", std::string(ln.LensMake), false, std::string());
             maker_add("Lens", std::string(ln.Lens), false, std::string());
             maker_add("Lens Serial", std::string(ln.LensSerial), false, std::string());
             maker_add("Internal Lens Serial", std::string(ln.InternalLensSerial), false, std::string());
-            maker_add("Focal Length In 35mm Format", ln.FocalLengthIn35mmFormat, false, 0.0f);
+            maker_add("Focal Length in 35mm Format", ln.FocalLengthIn35mmFormat, false, 0.0f);
         }
         {
             const auto &lnmn = processor->imgdata.lens.makernotes;
@@ -316,16 +314,16 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
             maker_add("Lens Features Suf", std::string(lnmn.LensFeatures_suf), false, std::string());
             maker_add("Min Focal", lnmn.MinFocal, false, 0.0f);
             maker_add("Max Focal", lnmn.MaxFocal, false, 0.0f);
-            maker_add("Max Ap 4 Min Focal", lnmn.MaxAp4MinFocal, false, 0.0f);
-            maker_add("Max Ap 4 Max Focal", lnmn.MaxAp4MaxFocal, false, 0.0f);
-            maker_add("Min Ap 4 Min Focal", lnmn.MinAp4MinFocal, false, 0.0f);
-            maker_add("Min Ap 4 Max Focal", lnmn.MinAp4MaxFocal, false, 0.0f);
+            maker_add("Max Ap at Min Focal", lnmn.MaxAp4MinFocal, false, 0.0f);
+            maker_add("Max Ap at Max Focal", lnmn.MaxAp4MaxFocal, false, 0.0f);
+            maker_add("Min Ap at Min Focal", lnmn.MinAp4MinFocal, false, 0.0f);
+            maker_add("Min Ap at Max Focal", lnmn.MinAp4MaxFocal, false, 0.0f);
             maker_add("Max Ap", lnmn.MaxAp, false, 0.0f);
             maker_add("Min Ap", lnmn.MinAp, false, 0.0f);
             maker_add("Cur Focal", lnmn.CurFocal, false, 0.0f);
             maker_add("Cur Ap", lnmn.CurAp, false, 0.0f);
-            maker_add("Max Ap 4 Cur Focal", lnmn.MaxAp4CurFocal, false, 0.0f);
-            maker_add("Min Ap 4 Cur Focal", lnmn.MinAp4CurFocal, false, 0.0f);
+            maker_add("Max Ap at Cur Focal", lnmn.MaxAp4CurFocal, false, 0.0f);
+            maker_add("Min Ap at Cur Focal", lnmn.MinAp4CurFocal, false, 0.0f);
             maker_add("Min Focus Distance", lnmn.MinFocusDistance, false, 0.0f);
             maker_add("Focus Range Index", lnmn.FocusRangeIndex, false, 0.0f);
             maker_add("Lens F Stops", lnmn.LensFStops, false, 0.0f);
@@ -336,7 +334,7 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
             maker_add("Attachment ID", lnmn.AttachmentID, false, 0ULL);
             maker_add("Attachment", std::string(lnmn.Attachment), false, std::string());
             maker_add("Focal Units", lnmn.FocalUnits, false, 0);
-            maker_add("Focal Length In 35mm Format", lnmn.FocalLengthIn35mmFormat, false, 0.0f);
+            maker_add("Focal Length in 35mm Format", lnmn.FocalLengthIn35mmFormat, false, 0.0f);
         }
         // Vendor-specific lens makernotes
         if (lc_make.rfind("nikon", 0) == 0)
@@ -351,8 +349,8 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
         if (lc_make.rfind("dng", 0) == 0)
         {
             const auto &lnd = processor->imgdata.lens.dng;
-            maker_add("Max Ap 4 Max Focal", lnd.MaxAp4MaxFocal, false, 0.0f);
-            maker_add("Max Ap 4 Min Focal", lnd.MaxAp4MinFocal, false, 0.0f);
+            maker_add("Max Ap at Max Focal", lnd.MaxAp4MaxFocal, false, 0.0f);
+            maker_add("Max Ap at Min Focal", lnd.MaxAp4MinFocal, false, 0.0f);
             maker_add("Max Focal", lnd.MaxFocal, false, 0.0f);
             maker_add("Min Focal", lnd.MinFocal, false, 0.0f);
         }
@@ -589,10 +587,12 @@ void add_maker_notes(const unique_ptr<LibRaw> &processor, json &metadata)
     }
 
     if (!maker_notes.empty())
-        metadata[maker_key] = maker_notes;
+        metadata["Maker notes"] = maker_notes;
 }
 
-// Robust display window logic adapted from OIIO
+// Robust display window logic
+// This was initially adapted from OIIO, but modified to use width/height instead of iwidth/iheight (see segfault
+// comments below), and removed flipping logic since we handle that separately.
 Box2i get_display_window(const libraw_data_t &idata)
 {
     // int flip       = idata.sizes.flip;
@@ -614,13 +614,13 @@ Box2i get_display_window(const libraw_data_t &idata)
         crop_top    = idata.sizes.raw_inset_crop.ctop;
     }
 #endif
-    int image_width  = idata.sizes.iwidth;
-    int image_height = idata.sizes.iheight;
+    int image_width  = idata.sizes.width;
+    int image_height = idata.sizes.height;
     int left_margin  = idata.sizes.left_margin;
     int top_margin   = idata.sizes.top_margin;
 
-    // Only use crop if width/height positive and less than image size
-    if (crop_width > 0 && crop_height > 0 && crop_width <= image_width && crop_height <= image_height)
+    // Only use crop if width/height positive
+    if (crop_width > 0 && crop_height > 0)
     {
         // If crop_left is undefined, assume central crop
         if (crop_left == 65535)
@@ -629,37 +629,26 @@ Box2i get_display_window(const libraw_data_t &idata)
         if (crop_top == 65535)
             crop_top = (image_height - crop_height) / 2;
 
-        // // Apply flip corrections
-        // if (flip & 1)
-        //     crop_left = image_width - crop_width - crop_left;
-        // if (flip & 2)
-        //     crop_top = image_height - crop_height - crop_top;
-
         // Subtract margins if crop is within them
         if (crop_top >= top_margin && crop_left >= left_margin)
         {
-            crop_top -= top_margin;
-            crop_left -= left_margin;
+            const int adj_top  = crop_top - top_margin;
+            const int adj_left = crop_left - left_margin;
 
-            // Swap axes if flip & 4
-            // if (flip & 4)
-            // {
-            //     std::swap(crop_left, crop_top);
-            //     std::swap(crop_width, crop_height);
-            //     std::swap(image_width, image_height);
-            // }
-
-            // Only use crop if it fits within the image
-            if (crop_left >= 0 && crop_top >= 0 && crop_left + crop_width <= image_width &&
-                crop_top + crop_height <= image_height)
+            // Only use crop if it fits within the processed image.
+            // Note: raw_inset_crop is defined in raw/sensor coordinates; after subtracting
+            // margins we validate in processed-image coordinates (width/height).
+            if (adj_left >= 0 && adj_top >= 0 && adj_left + crop_width <= image_width &&
+                adj_top + crop_height <= image_height)
             {
-                spdlog::debug("Using RAW crop window: left={}, top={}, width={}, height={}", crop_left, crop_top,
+                spdlog::debug("Using RAW crop window: left={}, top={}, width={}, height={}", adj_left, adj_top,
                               crop_width, crop_height);
-                return Box2i{{crop_left, crop_top}, {crop_left + crop_width, crop_top + crop_height}};
+                return Box2i{{adj_left, adj_top}, {adj_left + crop_width, adj_top + crop_height}};
             }
         }
     }
-    return Box2i{{0, 0}, {idata.sizes.iwidth, idata.sizes.iheight}};
+
+    return Box2i{{0, 0}, {idata.sizes.width, idata.sizes.height}};
 }
 
 } // namespace
@@ -759,8 +748,6 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
 
-    auto &sizes = idata.sizes;
-
     if (filter.PassFilter("main"))
     {
         try
@@ -773,22 +760,22 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             if (auto ret = processor->dcraw_process(); ret != LIBRAW_SUCCESS)
                 throw std::runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
 
-            // Use iwidth/iheight for the processed image dimensions
-            int2 size{sizes.iwidth, sizes.iheight};
-            int  num_channels = 3; // Force RGB
+            // Use width/height for the processed image dimensions
+            // Note, previously we were using iwidth/iheight here, but that can lead to
+            // segfaults in some cases (try for instance RAW_FUJI_S9600.RAF from www.rawsamples.ch)
+            int3 size{idata.sizes.width, idata.sizes.height, 3};
 
             // Verify we have image data
             if (!idata.image)
                 throw std::runtime_error("No image data available after processing");
 
-            auto image                      = std::make_shared<Image>(size, num_channels);
+            auto image                      = std::make_shared<Image>(size.xy(), size.z);
             image->filename                 = filename;
             image->partname                 = "main";
             image->metadata["loader"]       = fmt::format("LibRaw; {}", libraw_unpack_function_name(&idata));
             image->metadata["pixel format"] = fmt::format(
                 "{}-bit {} {}", idata.color.raw_bps, idata.idata.cdesc,
                 idata.idata.filters ? "Bayer CFA" : (idata.idata.xtrans[0][0] >= 0 ? "X-Trans CFA" : "Non-CFA"));
-            spdlog::warn("LibRaw unpack function name: {}", libraw_unpack_function_name(&idata));
             if (!exif_ctx.metadata.empty())
                 image->metadata["exif"] = exif_ctx.metadata;
 
@@ -814,7 +801,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             const auto *img_data = idata.image;
 
             // Allocate float buffer for all pixels
-            vector<float> float_pixels((size_t)size.x * size.y * num_channels);
+            vector<float> float_pixels((size_t)size.x * size.y * size.z);
 
             // Convert from 16-bit to float [0,1] with flip handling
             // We include an ad-hoc scale factor here to make the exposure match the DNG preview better
@@ -825,8 +812,8 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                               {
                                   for (int i = begin; i < end; ++i)
                                   {
-                                      for (int c = 0; c < num_channels; ++c)
-                                          float_pixels[i * num_channels + c] = img_data[i][c] * scale;
+                                      for (int c = 0; c < size.z; ++c)
+                                          float_pixels[i * size.z + c] = img_data[i][c] * scale;
                                   }
                               });
 
@@ -837,9 +824,8 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                              color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
 
                 Chromaticities chr;
-                if (linearize_pixels(float_pixels.data(), int3{size, num_channels},
-                                     gamut_chromaticities(opts.gamut_override), opts.tf_override, opts.keep_primaries,
-                                     &profile_desc, &chr))
+                if (linearize_pixels(float_pixels.data(), size, gamut_chromaticities(opts.gamut_override),
+                                     opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
                 {
                     image->chromaticities = chr;
                     profile_desc += " (override)";
@@ -849,16 +835,15 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             {
                 Chromaticities chr;
                 // We configured LibRaw to output to linear sRGB above
-                if (linearize_pixels(float_pixels.data(), int3{size, num_channels},
-                                     gamut_chromaticities(ColorGamut_sRGB_BT709), TransferFunction::Linear,
-                                     opts.keep_primaries, &profile_desc, &chr))
+                if (linearize_pixels(float_pixels.data(), size, gamut_chromaticities(ColorGamut_sRGB_BT709),
+                                     TransferFunction::Linear, opts.keep_primaries, &profile_desc, &chr))
                     image->chromaticities = chr;
             }
             image->metadata["color profile"] = profile_desc;
 
             // Copy data to image channels
-            for (int c = 0; c < num_channels; ++c)
-                image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, num_channels, c,
+            for (int c = 0; c < size.z; ++c)
+                image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
                                                          [](float v) { return v; });
 
             // Set display window using LibRaw crop info

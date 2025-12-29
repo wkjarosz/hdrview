@@ -614,22 +614,22 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         image->exif             = Exif{exif_data.data() + 4, exif_data.size() - 4};
                         image->metadata["exif"] = image->exif.to_json();
 
-                        // // libheif already applies the orientation field, so we need to remove it from exif
-                        // std::string orientation_key;
-                        // for (auto &exif_entry : image->metadata["exif"].items())
-                        // {
-                        //     if (exif_entry.value().contains("orientation") ||
-                        //         exif_entry.value().contains("Orientation"))
-                        //     {
-                        //         orientation_key = exif_entry.key();
-                        //         break;
-                        //     }
-                        // }
-                        // if (!orientation_key.empty())
-                        // {
-                        //     image->metadata["exif"][orientation_key].erase("orientation");
-                        //     image->metadata["exif"][orientation_key].erase("Orientation");
-                        // }
+                        // libheif already applies the orientation field, so we need to remove it from exif
+                        std::string orientation_key;
+                        for (auto &exif_entry : image->metadata["exif"].items())
+                        {
+                            if (exif_entry.value().contains("orientation") ||
+                                exif_entry.value().contains("Orientation"))
+                            {
+                                orientation_key = exif_entry.key();
+                                break;
+                            }
+                        }
+                        if (!orientation_key.empty())
+                        {
+                            image->metadata["exif"][orientation_key].erase("orientation");
+                            image->metadata["exif"][orientation_key].erase("Orientation");
+                        }
 
                         spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
                     }
