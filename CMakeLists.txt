@@ -995,6 +995,7 @@ endif()
 
 
 option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
+option(HDRVIEW_ENABLE_X3F "Enable LibRaw X3F support" ON)
 if(HDRVIEW_ENABLE_LIBRAW)
   CPMAddPackage(
       NAME LibRaw_src
@@ -1042,8 +1043,12 @@ if(HDRVIEW_ENABLE_LIBRAW)
       NAME LibRaw_cmake
       GITHUB_REPOSITORY LibRaw/LibRaw-cmake
       GIT_TAG eb98e4325aef2ce85d2eb031c2ff18640ca616d3
-      OPTIONS "LIBRAW_PATH ${LibRaw_src_SOURCE_DIR}" "BUILD_SHARED_LIBS OFF" 
-                      "LIBRAW_BUILD_TESTS OFF" "LIBRAW_BUILD_EXAMPLES OFF" "LIBRAW_INSTALL OFF"
+      OPTIONS "LIBRAW_PATH ${LibRaw_src_SOURCE_DIR}"
+              "BUILD_SHARED_LIBS OFF" 
+              "LIBRAW_BUILD_TESTS OFF"
+              "LIBRAW_BUILD_EXAMPLES OFF"
+              "LIBRAW_INSTALL OFF"
+              "ENABLE_X3FTOOLS ${HDRVIEW_ENABLE_X3F}"
       SYSTEM YES
   )
   if(LibRaw_cmake_ADDED)
@@ -1297,7 +1302,7 @@ if(EMSCRIPTEN)
   hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 120)
 endif()
 
-if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
+if(UNIX AND NOT IS_MULTI AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
   add_custom_command(
     TARGET HDRView
     POST_BUILD

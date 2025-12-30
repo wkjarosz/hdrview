@@ -679,7 +679,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     ScopedMDC mdc{"IO", "RAW"};
 
     // Create and configure LibRaw processor (use heap allocation for thread-safe version)
-    unique_ptr<LibRaw> processor;
+    unique_ptr<LibRaw> raw;
 
     {
         // See https://github.com/AcademySoftwareFoundation/OpenImageIO/issues/2630
@@ -689,49 +689,49 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
         // is re-entrant.
         static std::mutex           libraw_ctr_mutex;
         std::lock_guard<std::mutex> lock(libraw_ctr_mutex);
-        processor.reset(new LibRaw());
+        raw.reset(new LibRaw());
     }
 
     // Set up EXIF callback handler to extract metadata
     ExifContext exif_ctx; // Constructor creates and initializes libexif structures
-    processor->set_exifparser_handler(exif_handler, &exif_ctx);
+    raw->set_exifparser_handler(exif_handler, &exif_ctx);
 
     // Set processing parameters
-    processor->imgdata.params.use_camera_matrix = 1; // Use camera color matrix
-    processor->imgdata.params.use_camera_wb     = 1; // Use camera white balance
-    processor->imgdata.params.use_auto_wb       = 0;
-    processor->imgdata.params.no_auto_bright    = 1;   // Prevent exposure scaling
-    processor->imgdata.params.gamm[0]           = 1.0; // Keep linear output
-    processor->imgdata.params.gamm[1]           = 1.0;
-    processor->imgdata.params.highlight         = 0;  // Disable highlight recovery / compression
-    processor->imgdata.params.output_bps        = 16; // Full precision
-    processor->imgdata.params.user_qual         = 3;  // demosaic algorithm/quality:
-                                                      // 0 - linear
-                                                      // 1 - VNG
-                                                      // 2 - PPG
-                                                      // 3 - AHD
-                                                      // 4 - DCB
-                                                      // 11 - DHT
-                                                      // 12 - AAHD
-    processor->imgdata.params.output_color = 1;       // Output color space (camera → XYZ → output)
-                                                      // 0 Raw color (unique to each camera)
-                                                      // 1 sRGB D65 (default)
-                                                      // 2 Adobe RGB (1998) D65
-                                                      // 3 Wide Gamut RGB D65
-                                                      // 4 Kodak ProPhoto RGB D65
-                                                      // 5 XYZ
-                                                      // 6 ACES
-                                                      // 7 DCI-P3
-                                                      // 8 Rec2020
+    raw->imgdata.params.use_camera_matrix = 1; // Use camera color matrix
+    raw->imgdata.params.use_camera_wb     = 1; // Use camera white balance
+    raw->imgdata.params.use_auto_wb       = 0;
+    raw->imgdata.params.no_auto_bright    = 1;   // Prevent exposure scaling
+    raw->imgdata.params.gamm[0]           = 1.0; // Keep linear output
+    raw->imgdata.params.gamm[1]           = 1.0;
+    raw->imgdata.params.highlight         = 0;  // Disable highlight recovery / compression
+    raw->imgdata.params.output_bps        = 16; // Full precision
+    raw->imgdata.params.user_qual         = 3;  // demosaic algorithm/quality:
+                                                // 0 - linear
+                                                // 1 - VNG
+                                                // 2 - PPG
+                                                // 3 - AHD
+                                                // 4 - DCB
+                                                // 11 - DHT
+                                                // 12 - AAHD
+    raw->imgdata.params.output_color = 1;       // Output color space (camera → XYZ → output)
+                                                // 0 Raw color (unique to each camera)
+                                                // 1 sRGB D65 (default)
+                                                // 2 Adobe RGB (1998) D65
+                                                // 3 Wide Gamut RGB D65
+                                                // 4 Kodak ProPhoto RGB D65
+                                                // 5 XYZ
+                                                // 6 ACES
+                                                // 7 DCI-P3
+                                                // 8 Rec2020
 
     // Create custom datastream from std::istream
     LibRawIStream libraw_stream(is);
 
     // Open the RAW file using datastream (avoids loading entire file into memory)
-    if (auto ret = processor->open_datastream(&libraw_stream); ret != LIBRAW_SUCCESS)
+    if (auto ret = raw->open_datastream(&libraw_stream); ret != LIBRAW_SUCCESS)
         throw std::runtime_error(fmt::format("Failed to open RAW file: {}", libraw_strerror(ret)));
 
-    add_maker_notes(processor, exif_ctx.metadata);
+    add_maker_notes(raw, exif_ctx.metadata);
 
     // Attach EXIF/XMP metadata (if present) to all images (thumbnails + main)
     if (!exif_ctx.metadata.empty())
@@ -740,7 +740,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
         spdlog::debug("No EXIF metadata extracted from RAW file");
 
     // Access image data directly from imgdata
-    auto &idata = processor->imgdata;
+    auto &idata = raw->imgdata;
 
     // Create HDRView image with oriented dimensions
     std::vector<ImagePtr> images;
@@ -753,11 +753,11 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
         try
         {
             // Unpack the RAW data
-            if (auto ret = processor->unpack(); ret != LIBRAW_SUCCESS)
+            if (auto ret = raw->unpack(); ret != LIBRAW_SUCCESS)
                 throw std::runtime_error(fmt::format("Failed to unpack RAW data: {}", libraw_strerror(ret)));
 
             // Now process the full image (demosaic, white balance, etc.)
-            if (auto ret = processor->dcraw_process(); ret != LIBRAW_SUCCESS)
+            if (auto ret = raw->dcraw_process(); ret != LIBRAW_SUCCESS)
                 throw std::runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
 
             // Use width/height for the processed image dimensions
@@ -875,11 +875,11 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
         //              idata.thumbs_list.thumblist[ti].tlength, idata.thumbs_list.thumblist[ti].tflip,
         //              (int)idata.thumbs_list.thumblist[ti].tformat);
 
-        if (processor->unpack_thumb_ex(ti) != LIBRAW_SUCCESS)
+        if (raw->unpack_thumb_ex(ti) != LIBRAW_SUCCESS)
             break; // no more thumbnails or error
 
         int                       err   = 0;
-        libraw_processed_image_t *thumb = processor->dcraw_make_mem_thumb(&err);
+        libraw_processed_image_t *thumb = raw->dcraw_make_mem_thumb(&err);
         if (!thumb)
             continue;
 
