@@ -78,12 +78,12 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                                                        false,
 #endif
                                                        true,
-#ifdef HDRVIEW_ENABLE_UHDR
+#ifdef HDRVIEW_ENABLE_LIBUHDR
                                                        true,
 #else
                                                        false,
 #endif
-#ifdef HDRVIEW_ENABLE_JPEGXL
+#ifdef HDRVIEW_ENABLE_LIBJXL
                                                        true,
 #else
                                                        false,
@@ -105,7 +105,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #else
                                                        false
 #endif
-                                                       };
+        };
 
         // Array of format names
         // clang-format off

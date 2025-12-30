@@ -58,7 +58,7 @@ static std::vector<LoaderEntry> default_loaders()
              }
              return false;
          }},
-#ifdef HDRVIEW_ENABLE_UHDR
+#ifdef HDRVIEW_ENABLE_LIBUHDR
         {"libultrahdr",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
@@ -95,7 +95,7 @@ static std::vector<LoaderEntry> default_loaders()
              }
              return false;
          }},
-#ifdef HDRVIEW_ENABLE_JPEGXL
+#ifdef HDRVIEW_ENABLE_LIBJXL
         {"libjxl",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {

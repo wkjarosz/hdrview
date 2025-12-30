@@ -739,8 +739,8 @@ endif()
 
 # cmake-format: off
 option(UHDR_BUILD_DEPS "Whether to build uhdr dependencies instead of using system-installed ones" ON)
-option(HDRVIEW_ENABLE_UHDR "Whether to build with Ultra HDR support" ON)
-if(HDRVIEW_ENABLE_UHDR)
+option(HDRVIEW_ENABLE_LIBUHDR "Whether to build with Ultra HDR support" ON)
+if(HDRVIEW_ENABLE_LIBUHDR)
   CPMAddPackage(
     NAME libuhdr
     GITHUB_REPOSITORY google/libultrahdr
@@ -762,7 +762,7 @@ if(HDRVIEW_ENABLE_UHDR)
   elseif(TARGET core)
     message(STATUS "Will link against system-installed uhdr library")
   else()
-    message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_UHDR.")
+    message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_LIBUHDR.")
   endif()
   message(STATUS "setting uhdr dependent on ${JPEGTURBO_TARGET_NAME}")
 
@@ -777,8 +777,8 @@ if(HDRVIEW_ENABLE_UHDR)
 endif()
 # cmake-format: on
 
-option(HDRVIEW_ENABLE_JPEGXL "Enable JPEG-XL support" ON)
-if(HDRVIEW_ENABLE_JPEGXL)
+option(HDRVIEW_ENABLE_LIBJXL "Enable JPEG-XL support" ON)
+if(HDRVIEW_ENABLE_LIBJXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
@@ -825,7 +825,7 @@ if(HDRVIEW_ENABLE_JPEGXL)
   elseif(TARGET jxl)
     message(STATUS "Using system-installed JPEG-XL library")
   else()
-    message(FATAL_ERROR "JPEG-XL library not found. Please install it or turn off HDRVIEW_ENABLE_JPEGXL.")
+    message(FATAL_ERROR "JPEG-XL library not found. Please install it or turn off HDRVIEW_ENABLE_LIBJXL.")
   endif()
   list(APPEND HDRVIEW_DEPENDENCIES "jxl" "jxl_threads")
 endif()
@@ -1166,8 +1166,8 @@ endfunction()
 # Add XXX_ENABLED=0 or XXX_ENABLED=1 definitions for all configurable options
 add_enabled_definition(HDRVIEW_ENABLE_LIBPNG)
 add_enabled_definition(HDRVIEW_ENABLE_LIBJPEG)
-add_enabled_definition(HDRVIEW_ENABLE_UHDR)
-add_enabled_definition(HDRVIEW_ENABLE_JPEGXL)
+add_enabled_definition(HDRVIEW_ENABLE_LIBUHDR)
+add_enabled_definition(HDRVIEW_ENABLE_LIBJXL)
 add_enabled_definition(HDRVIEW_ENABLE_LIBHEIF)
 add_enabled_definition(HDRVIEW_ENABLE_J2K)
 add_enabled_definition(HDRVIEW_ENABLE_HTJ2K)
@@ -1270,6 +1270,8 @@ hello_imgui_add_app(
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
+
+list(APPEND HDRVIEW_DEFINITIONS "HDRVIEW_BUILD_TYPE=\"${CMAKE_BUILD_TYPE}\"")
 
 message(STATUS "HDRView build dependencies: ${HDRVIEW_DEPENDENCIES}")
 message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")

@@ -748,7 +748,29 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
 
-    if (filter.PassFilter("main"))
+    string pixel_format;
+    if (idata.idata.is_foveon)
+        pixel_format = fmt::format("{}-bit Foveon (X3)", idata.color.raw_bps);
+    else
+    {
+        bool is_xtrans = false;
+        for (int i = 0; i < 6 && !is_xtrans; ++i)
+            for (int j = 0; j < 6 && !is_xtrans; ++j)
+                if (idata.idata.xtrans[i][j] != 0)
+                    is_xtrans = true;
+        if (is_xtrans)
+            pixel_format = fmt::format("{}-bit X-Trans CFA", idata.color.raw_bps);
+        else if (idata.idata.filters)
+            // Bayer CFA
+            pixel_format = fmt::format("{}-bit Bayer CFA ({})", idata.color.raw_bps, idata.idata.cdesc);
+        else
+            pixel_format = fmt::format("{}-bit Unknown CFA", idata.color.raw_bps);
+    }
+
+    bool pass_main_filter = filter.PassFilter("main");
+    bool pass_cfa_filter  = filter.PassFilter("CFA");
+
+    if (pass_main_filter || pass_cfa_filter)
     {
         try
         {
@@ -756,100 +778,156 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
             if (auto ret = raw->unpack(); ret != LIBRAW_SUCCESS)
                 throw std::runtime_error(fmt::format("Failed to unpack RAW data: {}", libraw_strerror(ret)));
 
-            // Now process the full image (demosaic, white balance, etc.)
-            if (auto ret = raw->dcraw_process(); ret != LIBRAW_SUCCESS)
-                throw std::runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
-
-            // Use width/height for the processed image dimensions
-            // Note, previously we were using iwidth/iheight here, but that can lead to
-            // segfaults in some cases (try for instance RAW_FUJI_S9600.RAF from www.rawsamples.ch)
-            int3 size{idata.sizes.width, idata.sizes.height, 3};
-
-            // Verify we have image data
-            if (!idata.image)
-                throw std::runtime_error("No image data available after processing");
-
-            auto image                      = std::make_shared<Image>(size.xy(), size.z);
-            image->filename                 = filename;
-            image->partname                 = "main";
-            image->metadata["loader"]       = fmt::format("LibRaw; {}", libraw_unpack_function_name(&idata));
-            image->metadata["pixel format"] = fmt::format(
-                "{}-bit {} {}", idata.color.raw_bps, idata.idata.cdesc,
-                idata.idata.filters ? "Bayer CFA" : (idata.idata.xtrans[0][0] >= 0 ? "X-Trans CFA" : "Non-CFA"));
-            if (!exif_ctx.metadata.empty())
-                image->metadata["exif"] = exif_ctx.metadata;
-
-            if (idata.idata.xmplen > 0)
-            {
-                image->xmp_data.assign(idata.idata.xmpdata, idata.idata.xmpdata + idata.idata.xmplen);
-                auto xmp = string(image->xmp_data.data(), image->xmp_data.data() + image->xmp_data.size());
-                image->metadata["header"]["XMP"] = {
-                    {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
-                spdlog::debug("XMP metadata successfully parsed: {}", xmp);
-            }
-
-            if (idata.color.profile)
-            {
-                image->metadata["header"]["ICC Profile"] = {{"value", "<embedded ICC profile>"},
-                                                            {"string", "<embedded ICC profile>"},
-                                                            {"type", "blob"},
-                                                            {"description", "Embedded ICC color profile"}};
-                spdlog::warn("Embedded ICC profile of length {} bytes found", idata.color.profile_length);
-            }
-
-            // Access image data as array of ushort[4]
-            const auto *img_data = idata.image;
-
-            // Allocate float buffer for all pixels
-            vector<float> float_pixels((size_t)size.x * size.y * size.z);
-
-            // Convert from 16-bit to float [0,1] with flip handling
-            // We include an ad-hoc scale factor here to make the exposure match the DNG preview better
-            constexpr float scale = 2.0f / 65535.0f;
-
-            stp::parallel_for(stp::blocked_range<int>(0, size.x * size.y, 1024),
-                              [&](int begin, int end, int unit_index, int thread_index)
-                              {
-                                  for (int i = begin; i < end; ++i)
-                                  {
-                                      for (int c = 0; c < size.z; ++c)
-                                          float_pixels[i * size.z + c] = img_data[i][c] * scale;
-                                  }
-                              });
-
-            string profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
-            if (opts.override_profile)
-            {
-                spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
-                             color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
-
-                Chromaticities chr;
-                if (linearize_pixels(float_pixels.data(), size, gamut_chromaticities(opts.gamut_override),
-                                     opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
-                {
-                    image->chromaticities = chr;
-                    profile_desc += " (override)";
-                }
-            }
+            string pixel_format;
+            if (idata.idata.is_foveon)
+                pixel_format = fmt::format("{}-bit Foveon (X3)", idata.color.raw_bps);
             else
             {
-                Chromaticities chr;
-                // We configured LibRaw to output to linear sRGB above
-                if (linearize_pixels(float_pixels.data(), size, gamut_chromaticities(ColorGamut_sRGB_BT709),
-                                     TransferFunction::Linear, opts.keep_primaries, &profile_desc, &chr))
-                    image->chromaticities = chr;
+                bool is_xtrans = false;
+                for (int i = 0; i < 6 && !is_xtrans; ++i)
+                    for (int j = 0; j < 6 && !is_xtrans; ++j)
+                        if (idata.idata.xtrans[i][j] != 0)
+                            is_xtrans = true;
+                if (is_xtrans)
+                    pixel_format = fmt::format("{}-bit X-Trans CFA", idata.color.raw_bps);
+                else if (idata.idata.filters)
+                    // Bayer CFA
+                    pixel_format = fmt::format("{}-bit Bayer CFA ({})", idata.color.raw_bps, idata.idata.cdesc);
+                else
+                    pixel_format = fmt::format("{}-bit Unknown CFA", idata.color.raw_bps);
             }
-            image->metadata["color profile"] = profile_desc;
 
-            // Copy data to image channels
-            for (int c = 0; c < size.z; ++c)
-                image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
-                                                         [](float v) { return v; });
+            if (pass_main_filter)
+            {
+                // Now process the full image (demosaic, white balance, etc.)
+                if (auto ret = raw->dcraw_process(); ret != LIBRAW_SUCCESS)
+                    throw std::runtime_error(fmt::format("Failed to process RAW image: {}", libraw_strerror(ret)));
 
-            // Set display window using LibRaw crop info
-            image->display_window = get_display_window(idata);
+                // Use width/height for the processed image dimensions
+                // Note, previously we were using iwidth/iheight here, but that can lead to
+                // segfaults in some cases (try for instance RAW_FUJI_S9600.RAF from www.rawsamples.ch)
+                int3 size{idata.sizes.width, idata.sizes.height, 3};
 
-            images.push_back(image);
+                // Verify we have image data
+                if (!idata.image)
+                    throw std::runtime_error("No image data available after processing");
+
+                auto image                      = std::make_shared<Image>(size.xy(), size.z);
+                image->filename                 = filename;
+                image->partname                 = "main";
+                image->metadata["loader"]       = fmt::format("LibRaw; {}", libraw_unpack_function_name(&idata));
+                image->metadata["pixel format"] = pixel_format;
+                if (!exif_ctx.metadata.empty())
+                    image->metadata["exif"] = exif_ctx.metadata;
+
+                if (idata.idata.xmplen > 0)
+                {
+                    image->xmp_data.assign(idata.idata.xmpdata, idata.idata.xmpdata + idata.idata.xmplen);
+                    auto xmp = string(image->xmp_data.data(), image->xmp_data.data() + image->xmp_data.size());
+                    image->metadata["header"]["XMP"] = {
+                        {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
+                    spdlog::debug("XMP metadata successfully parsed: {}", xmp);
+                }
+
+                if (idata.color.profile)
+                {
+                    image->metadata["header"]["ICC Profile"] = {{"value", "<embedded ICC profile>"},
+                                                                {"string", "<embedded ICC profile>"},
+                                                                {"type", "blob"},
+                                                                {"description", "Embedded ICC color profile"}};
+                    spdlog::warn("Embedded ICC profile of length {} bytes found", idata.color.profile_length);
+                }
+
+                // Access image data as array of ushort[4]
+                const auto *img_data = idata.image;
+
+                // Allocate float buffer for all pixels
+                vector<float> float_pixels((size_t)size.x * size.y * size.z);
+
+                // Convert from 16-bit to float [0,1] with flip handling
+                // We include an ad-hoc scale factor here to make the exposure match the DNG preview better
+                constexpr float scale = 2.0f / 65535.0f;
+
+                stp::parallel_for(stp::blocked_range<int>(0, size.x * size.y, 1024),
+                                  [&](int begin, int end, int unit_index, int thread_index)
+                                  {
+                                      for (int i = begin; i < end; ++i)
+                                      {
+                                          for (int c = 0; c < size.z; ++c)
+                                              float_pixels[i * size.z + c] = img_data[i][c] * scale;
+                                      }
+                                  });
+
+                string profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+                if (opts.override_profile)
+                {
+                    spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
+                                 color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
+
+                    Chromaticities chr;
+                    if (linearize_pixels(float_pixels.data(), size, gamut_chromaticities(opts.gamut_override),
+                                         opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
+                    {
+                        image->chromaticities = chr;
+                        profile_desc += " (override)";
+                    }
+                }
+                else
+                {
+                    Chromaticities chr;
+                    // We configured LibRaw to output to linear sRGB above
+                    if (linearize_pixels(float_pixels.data(), size, gamut_chromaticities(ColorGamut_sRGB_BT709),
+                                         TransferFunction::Linear, opts.keep_primaries, &profile_desc, &chr))
+                        image->chromaticities = chr;
+                }
+                image->metadata["color profile"] = profile_desc;
+
+                // Copy data to image channels
+                for (int c = 0; c < size.z; ++c)
+                    image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
+                                                             [](float v) { return v; });
+
+                // Set display window using LibRaw crop info
+                image->display_window = get_display_window(idata);
+
+                images.push_back(image);
+            }
+
+            if (pass_cfa_filter)
+            {
+                int raw_w = idata.sizes.raw_width;
+                int raw_h = idata.sizes.raw_height;
+
+                // Expose the raw CFA data as a grayscale Image if available.
+                if (pass_cfa_filter && idata.rawdata.raw_image && raw_w > 0 && raw_h > 0)
+                {
+                    auto cfa_img                      = std::make_shared<Image>(int2{raw_w, raw_h}, 1);
+                    cfa_img->filename                 = filename;
+                    cfa_img->partname                 = "cfa";
+                    cfa_img->metadata["loader"]       = "LibRaw (CFA)";
+                    cfa_img->metadata["pixel format"] = pixel_format;
+                    if (!exif_ctx.metadata.empty())
+                        cfa_img->metadata["exif"] = exif_ctx.metadata;
+
+                    // Copy raw ushort values into float buffer without scaling
+                    std::vector<float> cfa_pixels((size_t)raw_w * raw_h);
+                    ushort            *rawp = idata.rawdata.raw_image;
+
+                    constexpr float scale = 1.0f / 65535.0f;
+                    stp::parallel_for(stp::blocked_range<int>(0, raw_w * raw_h, 1024),
+                                      [&](int begin, int end, int unit_index, int thread_index)
+                                      {
+                                          for (int i = begin; i < end; ++i) cfa_pixels[i] = rawp[i] * scale;
+                                      });
+
+                    // Copy into single channel
+                    cfa_img->channels[0].copy_from_interleaved<float>(cfa_pixels.data(), raw_w, raw_h, 1, 0,
+                                                                      [](float v) { return v; });
+                    cfa_img->display_window = Box2i{{0, 0}, {raw_w, raw_h}};
+
+                    images.push_back(cfa_img);
+                }
+            }
         }
         catch (const std::exception &e)
         {

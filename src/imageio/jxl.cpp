@@ -29,7 +29,7 @@ struct JXLSaveOptions
 
 static JXLSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_JPEGXL
+#ifndef HDRVIEW_ENABLE_LIBJXL
 
 bool is_jxl_image(istream &is) noexcept { return false; }
 

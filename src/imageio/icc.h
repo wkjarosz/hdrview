@@ -9,7 +9,6 @@
 #include "fwd.h"
 #include <cstdint>
 #include <string>
-#include <string_view>
 #include <sys/types.h>
 
 /*! Wrapper for an ICC profile providing utility routines used by HDRView.

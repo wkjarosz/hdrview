@@ -29,7 +29,7 @@
 #include <libraw/libraw_version.h>
 #endif
 
-#ifdef HDRVIEW_ENABLE_JPEGXL
+#ifdef HDRVIEW_ENABLE_LIBJXL
 #include <jxl/version.h>
 #endif
 
@@ -39,7 +39,7 @@
 #include "imageio/png.h"
 #endif
 
-#ifdef HDRVIEW_ENABLE_UHDR
+#ifdef HDRVIEW_ENABLE_LIBUHDR
 #include <ultrahdr_api.h>
 #endif
 
@@ -49,13 +49,17 @@
 #include <webp/encode.h>
 #endif
 
+#ifdef HDRVIEW_ENABLE_LIBTIFF
+#include <tiffio.h>
+#endif
+
 #include "platform_utils.h"
 
-// Macro to convert a boolean or defined/undefined symbol to "yes"/"no" string
+// Macro to convert a boolean to a "yes" or "no" string
 #define YESNO(x) ((x) ? "yes" : "no")
 
 // Macro to format a feature flag with its name and value
-// Usage: info += PRINT_FEATURE("\t\t{:32s} : {}", PNG_TEXT_SUPPORTED_ENABLED);
+// Usage: info += PRINT_FEATURE("{:32s} : {}", PNG_TEXT_SUPPORTED_ENABLED);
 // Output: "		PNG_TEXT_SUPPORTED_ENABLED        : yes"
 #define PRINT_FEATURE(format_str, feature) fmt::format(format_str, #feature, YESNO(feature))
 
@@ -1051,7 +1055,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     if (LIBHEIF_ENABLED)
                         ImGui::PE::Hyperlink("libheif", "For loading HEIF images.",
                                              "https://github.com/strukturag/libheif");
-                    if (JPEGXL_ENABLED)
+                    if (LIBJXL_ENABLED)
                         ImGui::PE::Hyperlink("libjxl", "For loading & saving JPEG-XL images.",
                                              "https://github.com/libjxl/libjxl");
                     if (LIBJPEG_ENABLED)
@@ -1063,7 +1067,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     if (LIBRAW_ENABLED)
                         ImGui::PE::Hyperlink("libraw", "For loading RAW images.", "https://github.com/LibRaw/LibRaw");
 
-                    if (UHDR_ENABLED)
+                    if (LIBUHDR_ENABLED)
                         ImGui::PE::Hyperlink("libuhdr", "For loading Ultra HDR JPEG images.",
                                              "https://github.com/google/libultrahdr");
                     if (LIBWEBP_ENABLED)
@@ -1114,93 +1118,111 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 auto build_info_text = [&]()
                 {
                     string info;
-                    info += fmt::format("ImGui version: {}\n", ImGui::GetVersion());
-                    info += fmt::format("EDR support: {}\n", hasEdrSupport() ? "yes" : "no");
+                    info += fmt::format("{:<16} : {}\n", "HDRView version", version());
+                    info += fmt::format("{:<16} : {}\n", "Build timestamp", build_timestamp());
+                    info += fmt::format("{:<16} : {}\n", "Build type", HDRVIEW_BUILD_TYPE);
+                    info += fmt::format("{:<16} : {}\n", "Platform backend", platform_backend);
+                    info += fmt::format("{:<16} : {}\n", "Renderer backend", renderer_backend);
+
+                    info += fmt::format("{:<16} : {}\n", "ImGui version", ImGui::GetVersion());
+                    info += fmt::format("{:<16} : {}\n", "EDR support", hasEdrSupport() ? "yes" : "no");
+
+                    info += fmt::format("{:<16} : {}\n", "__EMSCRIPTEN__",
 #ifdef __EMSCRIPTEN__
-                    info += "define: __EMSCRIPTEN__\n";
+                                        "yes"
+#else
+                                        "(not defined)"
 #endif
+                    );
+                    info += fmt::format("{:<16} : {}\n", "ASSETS_LOCATION",
 #ifdef ASSETS_LOCATION
-                    info += fmt::format("ASSETS_LOCATION: {}\n", ASSETS_LOCATION);
+                                        ASSETS_LOCATION
+#else
+                                        "(not defined)"
 #endif
+                    );
+                    info += fmt::format("{:<16} : {}\n", "HDRVIEW_ICONSET",
 #ifdef HDRVIEW_ICONSET_FA6
-                    info += "HDRVIEW_ICONSET: Font Awesome 6\n";
+                                        "Font Awesome 6"
 #elif defined(HDRVIEW_ICONSET_LC)
-                    info += "HDRVIEW_ICONSET: Lucide Icons\n";
+                                        "Lucide Icons"
 #elif defined(HDRVIEW_ICONSET_MS)
-                    info += "HDRVIEW_ICONSET: Material Symbols\n";
+                                        "Material Symbols"
 #elif defined(HDRVIEW_ICONSET_MD)
-                    info += "HDRVIEW_ICONSET: Material Design\n";
+                                        "Material Design"
 #elif defined(HDRVIEW_ICONSET_MDI)
-                    info += "HDRVIEW_ICONSET: Material Design Icons\n";
+                                        "Material Design Icons"
 #endif
+                    );
 
-                    if (ICCProfile::lcms_version() != 0)
-                        info += fmt::format("lcms2: {}\n", ICCProfile::lcms_version());
-                    else
-                        info += "lcms2: NO\n";
-
-                    info += "Image IO libraries:\n";
-                    info += fmt::format("\t{:<15} {:<15} {:<25}\n", "Library", "Version", "Flags");
-                    info += fmt::format("\t{:=<15} {:=<15} {:=<30}\n", "", "", "");
+                    info += "\n";
+                    info += fmt::format("{:<8} {:<15} {:<25}\n", "Library", "Version", "Flags");
+                    info += fmt::format("{:=<8} {:=<15} {:=<30}\n", "", "", "");
                     info += fmt::format(
-                        "\t{:<15} {:<15} always enabled\n", "OpenEXR",
+                        "{:<8} {:<15} always enabled\n", "OpenEXR",
                         fmt::format("{}.{}.{}", OPENEXR_VERSION_MAJOR, OPENEXR_VERSION_MINOR, OPENEXR_VERSION_PATCH));
 
+                    info +=
+                        fmt::format("{:<8} {:<15} {:<24}\n", "lcms2",
+                                    ICCProfile::lcms_version() ? to_string(ICCProfile::lcms_version()) : "not found",
+                                    "enable via libjxl");
 #ifdef HDRVIEW_ENABLE_LIBHEIF
-                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libheif", heif_get_version(),
+                    info += fmt::format("{:<8} {:<15} {:<24} : yes\n", "libheif", heif_get_version(),
                                         "HDRVIEW_ENABLE_LIBHEIF");
 #else
-                    info +=
-                        fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libheif", "not found", "HDRVIEW_ENABLE_LIBHEIF");
+                    info += fmt::format("{:<8} {:<15} {:<24} : no\n", "libheif", "not found", "HDRVIEW_ENABLE_LIBHEIF");
 #endif
 
+                    info += fmt::format("{0:<8} {2:<15} {1:<24} : {3}\n", "libjpeg", "HDRVIEW_ENABLE_LIBJPEG",
 #ifdef HDRVIEW_ENABLE_LIBJPEG
 #ifdef LIBJPEG_TURBO_VERSION
 #define LIBJPEG_STR_HELPER(x) #x
 #define LIBJPEG_STR(x)        LIBJPEG_STR_HELPER(x)
-                    info += fmt::format(
-                        "\t{:<15} {:<15} {:<24} : yes\n", "libjpeg-turbo",
-                        fmt::format("{} ({})", LIBJPEG_STR(LIBJPEG_TURBO_VERSION), LIBJPEG_TURBO_VERSION_NUMBER),
-                        "HDRVIEW_ENABLE_LIBJPEG");
+                                        fmt::format("{} (turbo)", LIBJPEG_STR(LIBJPEG_TURBO_VERSION)), "yes"
 #undef LIBJPEG_STR
 #undef LIBJPEG_STR_HELPER
 #else
-                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libjpeg", JPEG_LIB_VERSION,
-                                        "HDRVIEW_ENABLE_LIBJPEG");
+                                        JPEG_LIB_VERSION, "yes"
 #endif
 #else
-                    info +=
-                        fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libjpeg", "not found", "HDRVIEW_ENABLE_LIBJPEG");
+                                        "not enabled", HDRVIEW_ENABLE_LIBJPEG
 #endif
+                    );
 
-                    if (JPEGXL_ENABLED)
+                    if (LIBJXL_ENABLED)
                         info += fmt::format(
-                            "\t{:<15} {:<15} {:<24} : yes\n", "libjxl",
+                            "{:<8} {:<15} {:<24} : yes\n", "libjxl",
                             fmt::format("{}.{}.{}", JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION),
-                            "HDRVIEW_ENABLE_LIBJPEGXL");
+                            "HDRVIEW_ENABLE_LIBJXL");
                     else
-                        info += fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libjxl", "not found",
-                                            "HDRVIEW_ENABLE_LIBJPEGXL");
+                        info +=
+                            fmt::format("{:<8} {:<15} {:<24} : no\n", "libjxl", "not found", "HDRVIEW_ENABLE_LIBJXL");
 
                     if (LIBPNG_ENABLED)
-                        info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libpng", PNG_LIBPNG_VER_STRING,
+                        info += fmt::format("{:<8} {:<15} {:<24} : yes\n", "libpng", PNG_LIBPNG_VER_STRING,
                                             "HDRVIEW_ENABLE_LIBPNG");
                     else
-                        info += fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libpng", "not found",
-                                            "HDRVIEW_ENABLE_LIBPNG");
+                        info +=
+                            fmt::format("{:<8} {:<15} {:<24} : no\n", "libpng", "not found", "HDRVIEW_ENABLE_LIBPNG");
 #ifdef LIBRAW_ENABLED
-                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libraw", LIBRAW_VERSION_STR,
+                    info += fmt::format("{:<8} {:<15} {:<24} : yes\n", "libraw", LIBRAW_VERSION_STR,
                                         "HDRVIEW_ENABLE_LIBRAW");
 #else
-                    info +=
-                        fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libraw", "not found", "HDRVIEW_ENABLE_LIBRAW");
+                    info += fmt::format("{:<8} {:<15} {:<24} : no\n", "libraw", "not found", "HDRVIEW_ENABLE_LIBRAW");
 #endif
 
-#if UHDR_ENABLED
-                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libuhdr", UHDR_LIB_VERSION_STR,
-                                        "HDRVIEW_ENABLE_UHDR");
+#if LIBTIFF_ENABLED
+                    info += fmt::format("{:<8} {:<15} {:<24} : yes\n", "libtiff", TIFFLIB_VERSION_STR_MAJ_MIN_MIC,
+                                        "HDRVIEW_ENABLE_LIBTIFF");
 #else
-                    info += fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libuhdr", "not found", "HDRVIEW_ENABLE_UHDR");
+                    info += fmt::format("{:<8} {:<15} {:<24} : no\n", "libtiff", "not found", "HDRVIEW_ENABLE_LIBTIFF");
+#endif
+
+#if LIBUHDR_ENABLED
+                    info += fmt::format("{:<8} {:<15} {:<24} : yes\n", "libuhdr", UHDR_LIB_VERSION_STR,
+                                        "HDRVIEW_ENABLE_LIBUHDR");
+#else
+                    info += fmt::format("{:<8} {:<15} {:<24} : no\n", "libuhdr", "not found", "HDRVIEW_ENABLE_LIBUHDR");
 #endif
 
 #if LIBWEBP_ENABLED
@@ -1208,63 +1230,62 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     const int d_major = (webp_v >> 16) & 0xff;
                     const int d_minor = (webp_v >> 8) & 0xff;
                     const int d_rev   = webp_v & 0xff;
-                    info += fmt::format("\t{:<15} {:<15} {:<24} : yes\n", "libwebp",
+                    info += fmt::format("{:<8} {:<15} {:<24} : yes\n", "libwebp",
                                         fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v),
                                         "HDRVIEW_ENABLE_LIBWEBP");
 #else
-                    info +=
-                        fmt::format("\t{:<15} {:<15} {:<24} : no\n", "libwebp", "not found", "HDRVIEW_ENABLE_LIBWEBP");
+                    info += fmt::format("{:<8} {:<15} {:<24} : no\n", "libwebp", "not found", "HDRVIEW_ENABLE_LIBWEBP");
 #endif
 
                     if (LIBPNG_ENABLED)
                     {
-                        info += "\n\tlibpng features:\n";
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_TEXT_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_eXIf_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_EASY_ACCESS_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_GAMMA_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_USER_CHUNKS_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_APNG_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_iCCP_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("\t\t{:40s} : {}\n", PNG_cICP_SUPPORTED_ENABLED);
+                        info += "\nlibpng features:\n";
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_TEXT_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_eXIf_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_EASY_ACCESS_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_GAMMA_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_USER_CHUNKS_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_APNG_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_iCCP_SUPPORTED_ENABLED);
+                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_cICP_SUPPORTED_ENABLED);
                     }
 
 #ifdef HDRVIEW_ENABLE_LIBHEIF
-                    info += "\n\tlibheif features:\n";
-                    info += PRINT_FEATURE("\t\t{:20s} : {}\n", HEIC_ENABLED);
-                    info += PRINT_FEATURE("\t\t{:20s} : {}\n", AVIF_ENABLED);
-                    info += PRINT_FEATURE("\t\t{:20s} : {}\n", AVCI_ENABLED);
-                    info += PRINT_FEATURE("\t\t{:20s} : {}\n", J2K_ENABLED);
-                    info += PRINT_FEATURE("\t\t{:20s} : {}\n", HTJ2K_ENABLED);
-                    info += "\t\tFormat          decoding   encoding\n";
-                    info += "\t\t===================================\n";
-                    info += fmt::format("\t\tAVC             {:<10} {}\n",
+                    info += "\nlibheif features:\n";
+                    info += PRINT_FEATURE("{:13} : {}\n", HEIC_ENABLED);
+                    info += PRINT_FEATURE("{:13} : {}\n", AVIF_ENABLED);
+                    info += PRINT_FEATURE("{:13} : {}\n", AVCI_ENABLED);
+                    info += PRINT_FEATURE("{:13} : {}\n", J2K_ENABLED);
+                    info += PRINT_FEATURE("{:13} : {}\n", HTJ2K_ENABLED);
+                    info += "Format          decoding   encoding\n";
+                    info += "===================================\n";
+                    info += fmt::format("{:<15} {:<10} {}\n", "AVC",
                                         YESNO(heif_have_decoder_for_format(heif_compression_AVC)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_AVC)));
-                    info += fmt::format("\t\tAV1             {:<10} {}\n",
+                    info += fmt::format("{:<15} {:<10} {}\n", "AV1",
                                         YESNO(heif_have_decoder_for_format(heif_compression_AV1)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_AV1)));
-                    info += fmt::format("\t\tHEVC            {:<10} {}\n",
+                    info += fmt::format("{:<15} {:<10} {}\n", "HEVC",
                                         YESNO(heif_have_decoder_for_format(heif_compression_HEVC)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_HEVC)));
-                    info += fmt::format("\t\tJPEG            {:<10} {}\n",
+                    info += fmt::format("{:<15} {:<10} {}\n", "JPEG",
                                         YESNO(heif_have_decoder_for_format(heif_compression_JPEG)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_JPEG)));
-                    info += fmt::format("\t\tJPEG2000        {:<10} {}\n",
+                    info += fmt::format("{:<15} {:<10} {}\n", "JPEG2000",
                                         YESNO(heif_have_decoder_for_format(heif_compression_JPEG2000)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_JPEG2000)));
-                    info += fmt::format("\t\tJPEG2000 (HT)   {:<10} {}\n",
+                    info += fmt::format("{:<15} {:<10} {}\n", "JPEG2000 (HT)",
                                         YESNO(heif_have_decoder_for_format(heif_compression_HTJ2K)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_HTJ2K)));
-                    info += fmt::format("\t\tUncompressed    {:<10} {}\n",
+                    info += fmt::format("{:<15} {:<10} {}\n", "Uncompressed",
                                         YESNO(heif_get_decoder_descriptors(heif_compression_uncompressed, nullptr, 0)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_uncompressed)));
-                    info += fmt::format("\t\tVVC             {:<10} {}\n",
+                    info += fmt::format("{:<15} {:<10} {}\n", "VVC",
                                         YESNO(heif_have_decoder_for_format(heif_compression_VVC)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_VVC)));
-                    info += fmt::format("\t\tEVC             {:<10} {}\n",
+                    info += fmt::format("{:<15} {:<10} {}\n", "EVC",
                                         YESNO(heif_have_decoder_for_format(heif_compression_EVC)),
                                         YESNO(heif_have_encoder_for_format(heif_compression_EVC)));
 #endif

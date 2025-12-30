@@ -168,7 +168,7 @@ const std::set<std::string> &Image::loadable_formats()
         "dng",
         "jpg",
         "jpeg",
-#ifdef HDRVIEW_ENABLE_JPEGXL
+#ifdef HDRVIEW_ENABLE_LIBJXL
         "jxl",
 #endif
 #ifdef HDRVIEW_ENABLE_LIBHEIF

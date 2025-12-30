@@ -38,7 +38,7 @@ struct UHDRSaveOptions
 
 static UHDRSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_UHDR
+#ifndef HDRVIEW_ENABLE_LIBUHDR
 
 bool is_uhdr_image(istream &is) noexcept { return false; }
 
