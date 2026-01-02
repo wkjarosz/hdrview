@@ -941,6 +941,10 @@ if(HDRVIEW_ENABLE_LIBHEIF)
       heif INTERFACE $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}> $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}/libheif/api/>
                      $<BUILD_INTERFACE:${Libheif_BINARY_DIR}>
     )
+    # Ensure heif waits for turbojpeg to be built
+    if(TARGET ${JPEGTURBO_TARGET_NAME})
+      add_dependencies(heif ${JPEGTURBO_TARGET_NAME})
+    endif()
     mark_as_system_library(heif)
     disable_target_warnings(heif)
   elseif(TARGET heif)
