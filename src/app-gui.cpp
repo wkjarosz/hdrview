@@ -1185,7 +1185,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                                         JPEG_LIB_VERSION, "yes"
 #endif
 #else
-                                        "not enabled", HDRVIEW_ENABLE_LIBJPEG
+                                        "not enabled", "no"
 #endif
                     );
 
