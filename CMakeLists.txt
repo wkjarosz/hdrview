@@ -727,7 +727,12 @@ if(HDRVIEW_ENABLE_LIBJPEG)
 
     # The following variables ensure that find_package can find libjpeg-turbo
     set(JPEG_LIBRARY ${JPEG_LIBRARIES})
-    set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR}/src)
+    # Expose both the libjpeg-turbo build/include (binary dir) and the
+    # source include directory so external projects (CPM/ExternalProject)
+    # that look for `JPEG_INCLUDE_DIR`/`JPEG_INCLUDE_DIRS` will find
+    # the generated `jconfig.h` as well as the public headers.
+    set(JPEG_INCLUDE_DIR ${JPEGTURBO_BINARY_DIR} CACHE INTERNAL "JPEG include dir")
+    set(JPEG_INCLUDE_DIRS "${JPEGTURBO_BINARY_DIR};${JPEGTURBO_SOURCE_DIR}/src" CACHE INTERNAL "JPEG include dirs")
 
     set(HAVE_JPEG_WRITE_ICC_PROFILE TRUE)
 
