@@ -731,7 +731,11 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     # source include directory so external projects (CPM/ExternalProject)
     # that look for `JPEG_INCLUDE_DIR`/`JPEG_INCLUDE_DIRS` will find
     # the generated `jconfig.h` as well as the public headers.
-    set(JPEG_INCLUDE_DIR ${JPEGTURBO_BINARY_DIR} CACHE INTERNAL "JPEG include dir")
+    # Provide a path that some CMake Find modules expect to be a file
+    # (e.g. FindJPEG may read the file with file(STRINGS ...)). Point it
+    # at the primary header so modules don't accidentally try to read a
+    # directory as a file on Windows.
+    set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR}/src/jpeglib.h CACHE INTERNAL "JPEG include dir")
     set(JPEG_INCLUDE_DIRS "${JPEGTURBO_BINARY_DIR};${JPEGTURBO_SOURCE_DIR}/src" CACHE INTERNAL "JPEG include dirs")
 
     set(HAVE_JPEG_WRITE_ICC_PROFILE TRUE)
