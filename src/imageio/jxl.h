@@ -13,6 +13,10 @@
 #include "fwd.h"
 #include "image_loader.h"
 
+#include "json.h"
+// return a JSON object describing the libjxl backend
+json get_jxl_info();
+
 // should not throw
 bool is_jxl_image(std::istream &is) noexcept;
 bool jxl_supported_tf(TransferFunction tf) noexcept;

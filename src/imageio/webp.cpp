@@ -1,13 +1,15 @@
+#include "webp.h"
+#include "json.h"
 //
 // Copyright (C) Wojciech Jarosz. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can
 // be found in the LICENSE.txt file.
 //
 
-#include "webp.h"
 #include "app.h"
 #include "common.h"
 #include "image.h"
+#include "webp.h"
 
 using namespace std;
 
@@ -21,7 +23,9 @@ struct WebPSaveOptions
 
 static WebPSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_LIBWEBP
+#if !HDRVIEW_ENABLE_LIBWEBP
+
+json get_webp_info() { return {{"name", "libwebp"}}; }
 
 bool is_webp_image(istream &is) noexcept { return false; }
 
@@ -65,6 +69,33 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
 #include "timer.h"
 
 using namespace std;
+
+json get_webp_info()
+{
+    json j;
+    j["enabled"]      = true;
+    j["name"]         = "libwebp";
+    int       webp_v  = WebPGetDecoderVersion();
+    const int d_major = (webp_v >> 16) & 0xff;
+    const int d_minor = (webp_v >> 8) & 0xff;
+    const int d_rev   = webp_v & 0xff;
+    j["version"]      = fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v);
+
+#ifdef WEBP_HAVE_ENCODER
+    bool enc = true;
+#else
+    bool enc = false;
+#endif
+
+#ifdef WEBP_HAVE_DECODER
+    bool dec = true;
+#else
+    bool dec = false;
+#endif
+
+    j["features"] = json::object();
+    return j;
+}
 
 namespace
 {

@@ -22,7 +22,10 @@
 
 #include <smallthreadpool.h>
 
-#ifndef HDRVIEW_ENABLE_LIBRAW
+#if !HDRVIEW_ENABLE_LIBRAW
+
+// Return JSON describing libraw availability (disabled stub)
+json get_raw_info() { return {{"name", "libraw"}}; }
 
 bool is_raw_image(std::std::istream &is) noexcept { return false; }
 
@@ -45,6 +48,25 @@ vector<ImagePtr> load_raw_image(std::std::istream &is, string_view filename, con
 // Some structure layouts changed mid-release on this snapshot
 #define LIBRAW_VERSION_AT_LEAST_SNAPSHOT_202110                                                                        \
     (LIBRAW_VERSION >= LIBRAW_MAKE_VERSION(0, 21, 0) && LIBRAW_SHLIB_CURRENT >= 22)
+
+// Return JSON describing libraw availability and version
+json get_raw_info()
+{
+#if !HDRVIEW_ENABLE_LIBRAW
+    return json{{"enabled", false}, {"name", "libraw"}, {"version", ""}, {"features", json::object()}};
+#else
+    json j;
+    j["enabled"] = true;
+    j["name"]    = "libraw";
+#ifdef LIBRAW_VERSION_STR
+    j["version"] = LIBRAW_VERSION_STR;
+#else
+    j["version"] = "";
+#endif
+    j["features"] = json::object();
+    return j;
+#endif
+}
 
 namespace
 {

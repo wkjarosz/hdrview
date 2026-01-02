@@ -168,22 +168,22 @@ const std::set<std::string> &Image::loadable_formats()
         "dng",
         "jpg",
         "jpeg",
-#ifdef HDRVIEW_ENABLE_LIBJXL
+#if HDRVIEW_ENABLE_LIBJXL
         "jxl",
 #endif
-#ifdef HDRVIEW_ENABLE_LIBHEIF
+#if HDRVIEW_ENABLE_LIBHEIF
         "heif",
         "heifs",
 #endif
-#ifdef HDRVIEW_ENABLE_HEIC
+#if HDRVIEW_ENABLE_HEIC
         "heic",
         "heics",
 #endif
-#ifdef HDRVIEW_ENABLE_AVIF
+#if HDRVIEW_ENABLE_AVIF
         "avif",
         "avifs",
 #endif
-#ifdef HDRVIEW_ENABLE_AVCI
+#if HDRVIEW_ENABLE_AVCI
         "avci",
         "avcs",
 #endif
@@ -201,11 +201,11 @@ const std::set<std::string> &Image::loadable_formats()
         "hdr",
         "exr",
         "qoi",
-#ifdef HDRVIEW_ENABLE_LIBTIFF
+#if HDRVIEW_ENABLE_LIBTIFF
         "tif",
         "tiff",
 #endif
-#ifdef HDRVIEW_ENABLE_LIBRAW
+#if HDRVIEW_ENABLE_LIBRAW
         // RAW formats supported by LibRaw
         "bay",
         "bmq",
@@ -231,7 +231,7 @@ const std::set<std::string> &Image::loadable_formats()
         "rdc",
         "sr2",
         "srf",
-#ifdef HDRVIEW_ENABLE_X3F
+#if HDRVIEW_ENABLE_X3F
         "x3f",
 #endif
         "arw",
@@ -260,7 +260,7 @@ const std::set<std::string> &Image::loadable_formats()
 const std::set<std::string> &Image::savable_formats()
 {
     static const std::set<std::string> formats = {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "jpeg", "tga", "qoi",
-#ifdef HDRVIEW_ENABLE_LIBTIFF
+#if HDRVIEW_ENABLE_LIBTIFF
                                                   "tif", "tiff"
 #endif
     };

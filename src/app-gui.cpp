@@ -15,52 +15,23 @@
 
 #include <OpenEXRConfig.h>
 
-#ifdef HDRVIEW_ENABLE_LIBJPEG
-#include <jpeglib.h>
-#endif
-
-#ifdef HDRVIEW_ENABLE_LIBHEIF
-#include <libheif/heif.h>
-
 #include "imageio/heif.h"
-#endif
-
-#ifdef HDRVIEW_ENABLE_LIBRAW
-#include <libraw/libraw_version.h>
-#endif
-
-#ifdef HDRVIEW_ENABLE_LIBJXL
-#include <jxl/version.h>
-#endif
-
-#ifdef HDRVIEW_ENABLE_LIBPNG
-#include <png.h>
-
+#include "imageio/jpg.h"
+#include "imageio/jxl.h"
 #include "imageio/png.h"
-#endif
-
-#ifdef HDRVIEW_ENABLE_LIBUHDR
-#include <ultrahdr_api.h>
-#endif
-
-#ifdef HDRVIEW_ENABLE_LIBWEBP
-#include <webp/decode.h>
-#include <webp/demux.h>
-#include <webp/encode.h>
-#endif
-
-#ifdef HDRVIEW_ENABLE_LIBTIFF
-#include <tiffio.h>
-#endif
+#include "imageio/raw.h"
+#include "imageio/tiff.h"
+#include "imageio/uhdr.h"
+#include "imageio/webp.h"
 
 #include "platform_utils.h"
 
 // Macro to convert a boolean to a "yes" or "no" string
-#define YESNO(x) ((x) ? "yes" : "no")
+#define YESNO(x) ((x) ? "ON" : "OFF")
 
 // Macro to format a feature flag with its name and value
-// Usage: info += PRINT_FEATURE("{:32s} : {}", PNG_TEXT_SUPPORTED_ENABLED);
-// Output: "PNG_TEXT_SUPPORTED_ENABLED        : yes"
+// Usage: info += PRINT_FEATURE("{:32s} : {}", HDRVIEW_ENABLE_LIBJPEG);
+// Output: "HDRVIEW_ENABLE_LIBJPEG        : ON"
 #define PRINT_FEATURE(format_str, feature) fmt::format(format_str, #feature, YESNO(feature))
 
 using namespace std;
@@ -1046,31 +1017,31 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     if (ICCProfile::lcms_version() != 0)
                         ImGui::PE::Hyperlink("lcms2", "LittleCMS color management engine.",
                                              "https://github.com/mm2/Little-CMS");
-                    if (AVIF_ENABLED)
+                    if (HDRVIEW_ENABLE_AVIF)
                         ImGui::PE::Hyperlink("aom", "For encoding and decoding AV1/AVIF/AVIFS-compressed HEIF images.",
                                              "https://aomedia.googlesource.com/aom");
-                    if (HEIC_ENABLED)
+                    if (HDRVIEW_ENABLE_HEIC)
                         ImGui::PE::Hyperlink("libde265", "For decoding HEIC/HEVC/H265-compressed HEIF images.",
                                              "https://github.com/strukturag/libde265");
-                    if (LIBHEIF_ENABLED)
+                    if (HDRVIEW_ENABLE_LIBHEIF)
                         ImGui::PE::Hyperlink("libheif", "For loading HEIF images.",
                                              "https://github.com/strukturag/libheif");
-                    if (LIBJXL_ENABLED)
+                    if (HDRVIEW_ENABLE_LIBJXL)
                         ImGui::PE::Hyperlink("libjxl", "For loading & saving JPEG-XL images.",
                                              "https://github.com/libjxl/libjxl");
-                    if (LIBJPEG_ENABLED)
+                    if (HDRVIEW_ENABLE_LIBJPEG)
                         ImGui::PE::Hyperlink("libjpeg (turbo)", "For loading & saving JPEG images.",
                                              "https://github.com/libjpeg-turbo/libjpeg-turbo");
-                    if (LIBPNG_ENABLED)
+                    if (HDRVIEW_ENABLE_LIBPNG)
                         ImGui::PE::Hyperlink("libpng", "For loading & saving PNG images.",
                                              "https://github.com/pnggroup/libpng");
-                    if (LIBRAW_ENABLED)
+                    if (HDRVIEW_ENABLE_LIBRAW)
                         ImGui::PE::Hyperlink("libraw", "For loading RAW images.", "https://github.com/LibRaw/LibRaw");
 
-                    if (LIBUHDR_ENABLED)
+                    if (HDRVIEW_ENABLE_LIBUHDR)
                         ImGui::PE::Hyperlink("libuhdr", "For loading Ultra HDR JPEG images.",
                                              "https://github.com/google/libultrahdr");
-                    if (LIBWEBP_ENABLED)
+                    if (HDRVIEW_ENABLE_LIBWEBP)
                         ImGui::PE::Hyperlink("libwebp", "For loading & saving WebP images.",
                                              "https://github.com/webmproject/libwebp");
                     ImGui::PE::Hyperlink(
@@ -1080,13 +1051,13 @@ void HDRViewApp::draw_about_dialog(bool &open)
                                          "https://github.com/mitsuba-renderer/nanogui");
                     ImGui::PE::Hyperlink("OpenEXR", "High Dynamic-Range (HDR) image file format.",
                                          "https://github.com/AcademySoftwareFoundation/openexr");
-                    if (AVCI_ENABLED)
+                    if (HDRVIEW_ENABLE_AVCI)
                         ImGui::PE::Hyperlink("OpenH264", "For decoding AVC/AVCI/AVCS/H264 files.",
                                              "https://github.com/cisco/openh264");
-                    if (J2K_ENABLED)
+                    if (HDRVIEW_ENABLE_J2K)
                         ImGui::PE::Hyperlink("OpenJPEG", "For encoding/decoding J2K- and HTJ2K-compressed HEIF images.",
                                              "https://github.com/uclouvain/openjpeg");
-                    if (HTJ2K_ENABLED)
+                    if (HDRVIEW_ENABLE_HTJ2K)
                         ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K-compressed HEIF images.",
                                              "https://github.com/aous72/OpenJPH");
 #ifndef __EMSCRIPTEN__
@@ -1101,7 +1072,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                                          "https://github.com/nothings/stb");
                     ImGui::PE::Hyperlink("tev", "Some code is adapted from Thomas Müller's tev.",
                                          "https://github.com/Tom94/tev");
-                    if (HEIC_ENABLED)
+                    if (HDRVIEW_ENABLE_HEIC)
                         ImGui::PE::Hyperlink("x265", "For encoding HEIC/HEVC/H265 files.",
                                              "https://www.videolan.org/developers/x265.html");
 
@@ -1117,6 +1088,15 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 // Build the info text string for display and clipboard
                 auto build_info_text = [&]()
                 {
+                    auto heif_info = get_heif_info();
+                    auto jpg_info  = get_jpg_info();
+                    auto png_info  = get_png_info();
+                    auto jxl_info  = get_jxl_info();
+                    auto raw_info  = get_raw_info();
+                    auto uhdr_info = get_uhdr_info();
+                    auto webp_info = get_webp_info();
+                    auto tiff_info = get_tiff_info();
+
                     string info;
                     info += fmt::format("{:<16} : {}\n", "HDRView version", version());
                     info += fmt::format("{:<16} : {}\n", "Build timestamp", build_timestamp());
@@ -1171,7 +1151,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_LIBWEBP);
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_LIBTIFF);
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_LIBRAW);
-                    info += PRINT_FEATURE("{:22} : {}\n\n", HDRVIEW_ENABLE_X3F);
+                    info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_X3F);
+                    info += "\n";
 
                     info += fmt::format("{:<8} {:<15}\n", "Library", "Version");
                     info += fmt::format("{:=<8} {:=<15}\n", "", "");
@@ -1182,115 +1163,46 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info +=
                         fmt::format("{:<8} {:<15}\n", "lcms2",
                                     ICCProfile::lcms_version() ? to_string(ICCProfile::lcms_version()) : "not found");
-#ifdef HDRVIEW_ENABLE_LIBHEIF
-                    info += fmt::format("{:<8} {:<15}\n", "libheif", heif_get_version());
-#else
-                    info += fmt::format("{:<8} {:<15} {:<24} : no\n", "libheif", "not found", "HDRVIEW_ENABLE_LIBHEIF");
-#endif
 
-                    info += fmt::format("{:<8} {:<15}\n", "libjpeg",
-#ifdef HDRVIEW_ENABLE_LIBJPEG
-#ifdef LIBJPEG_TURBO_VERSION
-#define LIBJPEG_STR_HELPER(x) #x
-#define LIBJPEG_STR(x)        LIBJPEG_STR_HELPER(x)
-                                        fmt::format("{} (turbo)", LIBJPEG_STR(LIBJPEG_TURBO_VERSION))
-#undef LIBJPEG_STR
-#undef LIBJPEG_STR_HELPER
-#else
-                                        JPEG_LIB_VERSION
-#endif
-#else
-                                        "not enabled"
-#endif
-                    );
+                    info += fmt::format("{:<8} {:<15}\n", "libheif", heif_info.value("version", "not enabled"));
+                    info += fmt::format("{:<8} {:<15}\n", "libjpeg", jpg_info.value("version", "not enabled"));
+                    info += fmt::format("{:<8} {:<15}\n", "libjxl", jxl_info.value("version", "not enabled"));
+                    info += fmt::format("{:<8} {:<15}\n", "libpng", png_info.value("version", "not enabled"));
+                    info += fmt::format("{:<8} {:<15}\n", "libraw", raw_info.value("version", "not enabled"));
+                    info += fmt::format("{:<8} {:<15}\n", "libtiff", tiff_info.value("version", "not enabled"));
+                    info += fmt::format("{:<8} {:<15}\n", "libuhdr", uhdr_info.value("version", "not enabled"));
+                    info += fmt::format("{:<8} {:<15}\n", "libwebp", webp_info.value("version", "not enabled"));
 
-                    if (LIBJXL_ENABLED)
-                        info += fmt::format(
-                            "{:<8} {:<15}\n", "libjxl",
-                            fmt::format("{}.{}.{}", JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION));
-                    else
-                        info += fmt::format("{:<8} {:<15}\n", "libjxl", "not found");
-
-                    if (LIBPNG_ENABLED)
-                        info += fmt::format("{:<8} {:<15}\n", "libpng", PNG_LIBPNG_VER_STRING);
-                    else
-                        info += fmt::format("{:<8} {:<15}\n", "libpng", "not found");
-#ifdef LIBRAW_ENABLED
-                    info += fmt::format("{:<8} {:<15}\n", "libraw", LIBRAW_VERSION_STR);
-#else
-                    info += fmt::format("{:<8} {:<15}\n", "libraw", "not found");
-#endif
-
-#if LIBTIFF_ENABLED
-                    info += fmt::format("{:<8} {:<15}\n", "libtiff", TIFFLIB_VERSION_STR_MAJ_MIN_MIC);
-#else
-                    info += fmt::format("{:<8} {:<15}\n", "libtiff", "not found");
-#endif
-
-#if LIBUHDR_ENABLED
-                    info += fmt::format("{:<8} {:<15}\n", "libuhdr", UHDR_LIB_VERSION_STR);
-#else
-                    info += fmt::format("{:<8} {:<15}\n", "libuhdr", "not found");
-#endif
-
-#if LIBWEBP_ENABLED
-                    int       webp_v  = WebPGetDecoderVersion();
-                    const int d_major = (webp_v >> 16) & 0xff;
-                    const int d_minor = (webp_v >> 8) & 0xff;
-                    const int d_rev   = webp_v & 0xff;
-                    info += fmt::format("{:<8} {:<15}\n", "libwebp",
-                                        fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v));
-#else
-                    info += fmt::format("{:<8} {:<15}\n", "libwebp", "not found");
-#endif
-
-                    if (LIBPNG_ENABLED)
+                    if (png_info.value("enabled", false))
                     {
                         info += "\nlibpng features:\n";
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_TEXT_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_eXIf_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_EASY_ACCESS_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_GAMMA_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_USER_CHUNKS_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_APNG_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_iCCP_SUPPORTED_ENABLED);
-                        info += PRINT_FEATURE("{:40s} : {}\n", PNG_cICP_SUPPORTED_ENABLED);
+                        info += fmt::format("{:=<23}\n", "");
+                        for (auto &it : png_info["features"].items())
+                        {
+                            auto key = it.key();
+                            bool val = it.value().get<bool>();
+                            info += fmt::format("{:<16} : {}\n", key, val ? "yes" : "no");
+                        }
                     }
 
-#ifdef HDRVIEW_ENABLE_LIBHEIF
-                    info += "\nlibheif compression support:\n";
-                    info += "Format          decoding   encoding\n";
-                    info += "===================================\n";
-                    info += fmt::format("{:<15} {:<10} {}\n", "AVC",
-                                        YESNO(heif_have_decoder_for_format(heif_compression_AVC)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_AVC)));
-                    info += fmt::format("{:<15} {:<10} {}\n", "AV1",
-                                        YESNO(heif_have_decoder_for_format(heif_compression_AV1)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_AV1)));
-                    info += fmt::format("{:<15} {:<10} {}\n", "HEVC",
-                                        YESNO(heif_have_decoder_for_format(heif_compression_HEVC)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_HEVC)));
-                    info += fmt::format("{:<15} {:<10} {}\n", "JPEG",
-                                        YESNO(heif_have_decoder_for_format(heif_compression_JPEG)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_JPEG)));
-                    info += fmt::format("{:<15} {:<10} {}\n", "JPEG2000",
-                                        YESNO(heif_have_decoder_for_format(heif_compression_JPEG2000)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_JPEG2000)));
-                    info += fmt::format("{:<15} {:<10} {}\n", "JPEG2000 (HT)",
-                                        YESNO(heif_have_decoder_for_format(heif_compression_HTJ2K)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_HTJ2K)));
-                    info += fmt::format("{:<15} {:<10} {}\n", "Uncompressed",
-                                        YESNO(heif_get_decoder_descriptors(heif_compression_uncompressed, nullptr, 0)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_uncompressed)));
-                    info += fmt::format("{:<15} {:<10} {}\n", "VVC",
-                                        YESNO(heif_have_decoder_for_format(heif_compression_VVC)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_VVC)));
-                    info += fmt::format("{:<15} {:<10} {}\n", "EVC",
-                                        YESNO(heif_have_decoder_for_format(heif_compression_EVC)),
-                                        YESNO(heif_have_encoder_for_format(heif_compression_EVC)));
-#endif
+                    if (heif_info.value("enabled", false))
+                    {
+                        info += "\nlibheif compression support:\n";
+                        info += fmt::format("{:<13} {:<8} {:<8}\n", "Format", "decoding", "encoding");
+                        info += fmt::format("{:=<13} {:=<8} {:=<8}\n", "", "", "");
+                        if (heif_info.contains("features") && heif_info["features"].contains("compression"))
+                        {
+                            for (auto &it : heif_info["features"]["compression"].items())
+                            {
+                                auto codec = it.key();
+                                auto val   = it.value();
+                                bool dec   = val.value("decoder", false);
+                                bool enc   = val.value("encoder", false);
+                                info +=
+                                    fmt::format("{:<13} {:<8} {:<8}\n", codec, dec ? "yes" : "no", enc ? "yes" : "no");
+                            }
+                        }
+                    }
                     return info;
                 };
 

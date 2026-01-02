@@ -12,6 +12,11 @@
 #include "fwd.h"
 #include "image_loader.h"
 
+#include "json.h"
+
+// return a JSON object describing the libraw backend
+json get_raw_info();
+
 // should not throw
 bool is_raw_image(std::istream &is) noexcept;
 // throws on error

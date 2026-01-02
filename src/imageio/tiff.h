@@ -13,6 +13,10 @@
 #include <istream>
 #include <string_view>
 
+#include "json.h"
+// return a JSON object describing the libtiff backend
+json get_tiff_info();
+
 // should not throw
 bool is_tiff_image(std::istream &is) noexcept;
 // throws on error

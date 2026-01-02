@@ -28,7 +28,9 @@ struct TIFFSaveOptions
 
 static TIFFSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_LIBTIFF
+#if !HDRVIEW_ENABLE_LIBTIFF
+
+json get_tiff_info() { return {{"name", "libtiff"}}; }
 
 bool is_tiff_image(istream &is) noexcept { return false; }
 
@@ -57,6 +59,20 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 #include <tiffio.h>
+
+json get_tiff_info()
+{
+    json j;
+    j["enabled"] = true;
+    j["name"]    = "libtiff";
+#ifdef TIFFLIB_VERSION_STR_MAJ_MIN_MIC
+    j["version"] = TIFFLIB_VERSION_STR_MAJ_MIN_MIC;
+#else
+    j["version"] = "";
+#endif
+    j["features"] = json::object();
+    return j;
+}
 
 namespace
 {

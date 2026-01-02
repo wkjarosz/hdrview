@@ -9,7 +9,7 @@ using std::string_view;
 using std::vector;
 using namespace stp;
 
-#ifdef HDRVIEW_ENABLE_LCMS2
+#if HDRVIEW_ENABLE_LCMS2
 #include <lcms2.h>
 
 //

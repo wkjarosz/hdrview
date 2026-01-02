@@ -12,6 +12,11 @@
 #include "fwd.h"
 #include "image_loader.h"
 
+#include "json.h"
+
+// return a JSON object describing the jpeg backend (see schema in app-gui comments)
+json get_jpg_info();
+
 // should not throw
 bool is_jpg_image(std::istream &is) noexcept;
 // throws on error

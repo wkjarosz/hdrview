@@ -34,9 +34,12 @@ struct JPGSaveOptions
 
 static JPGSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_LIBJPEG
+#if !HDRVIEW_ENABLE_LIBJPEG
 
 #include "stb.h"
+
+// Return JSON describing libjpeg availability and features (disabled stub)
+json get_jpg_info() { return json{{"name", "libjpeg"}}; }
 
 bool is_jpg_image(istream &is) noexcept { return false; }
 
@@ -63,6 +66,36 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 
 #include <jerror.h>
 #include <jpeglib.h>
+
+// Return JSON describing libjpeg availability and features
+json get_jpg_info()
+{
+    json j;
+    j["enabled"] = true;
+    j["name"]    = "libjpeg";
+#ifdef LIBJPEG_TURBO_VERSION
+#define LIBJPEG_STR_HELPER(x) #x
+#define LIBJPEG_STR(x)        LIBJPEG_STR_HELPER(x)
+    j["version"] = fmt::format("{} (turbo)", LIBJPEG_STR(LIBJPEG_TURBO_VERSION));
+#undef LIBJPEG_STR
+#undef LIBJPEG_STR_HELPER
+#else
+    j["version"] = fmt::format("{}", JPEG_LIB_VERSION);
+#endif
+
+    json features = json::object();
+    // library provides decode and encode functionality
+    features["decoder"] = true;
+    features["encoder"] = true;
+#ifdef LIBJPEG_TURBO_VERSION
+    features["turbo"] = true;
+#else
+    features["turbo"] = false;
+#endif
+
+    j["features"] = features;
+    return j;
+}
 
 bool is_jpg_image(std::istream &is) noexcept
 {

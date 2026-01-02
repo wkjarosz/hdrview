@@ -13,6 +13,10 @@
 #include <istream>
 #include <string_view>
 
+#include "json.h"
+// return a JSON object describing the libwebp backend
+json get_webp_info();
+
 // should not throw
 bool is_webp_image(std::istream &is) noexcept;
 // throws on error

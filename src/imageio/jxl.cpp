@@ -29,7 +29,10 @@ struct JXLSaveOptions
 
 static JXLSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_LIBJXL
+#if !HDRVIEW_ENABLE_LIBJXL
+
+// Return JSON describing libjxl availability (disabled stub)
+json get_jxl_info() { return json{{"name", "libjxl"}}; }
 
 bool is_jxl_image(istream &is) noexcept { return false; }
 
@@ -95,6 +98,21 @@ static JxlTransferFunction jxl_tf(TransferFunction tf) noexcept
 }
 
 bool jxl_supported_tf(TransferFunction::Type_ tf) noexcept { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
+
+// Return JSON describing libjxl availability and version
+json get_jxl_info()
+{
+    json j;
+    j["enabled"] = true;
+    j["name"]    = "libjxl";
+#ifdef JPEGXL_MAJOR_VERSION
+    j["version"] = fmt::format("{}.{}.{}", JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION);
+#else
+    j["version"] = "";
+#endif
+    j["features"] = json::object();
+    return j;
+}
 
 static string color_encoding_info(const JxlColorEncoding &enc)
 {

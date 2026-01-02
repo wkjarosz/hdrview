@@ -38,7 +38,10 @@ struct UHDRSaveOptions
 
 static UHDRSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_LIBUHDR
+#if !HDRVIEW_ENABLE_LIBUHDR
+
+// Return JSON describing libuhdr availability (disabled stub)
+json get_uhdr_info() { return {{"name", "libuhdr"}}; }
 
 bool is_uhdr_image(istream &is) noexcept { return false; }
 
@@ -80,6 +83,21 @@ static uhdr_color_transfer_t uhdr_tf(TransferFunction tf)
 }
 
 bool uhdr_supported_tf(TransferFunction tf) noexcept { return uhdr_tf(tf) != UHDR_CT_UNSPECIFIED; }
+
+// Return JSON describing libuhdr availability and version
+json get_uhdr_info()
+{
+    json j;
+    j["enabled"] = true;
+    j["name"]    = "libuhdr";
+#ifdef UHDR_LIB_VERSION_STR
+    j["version"] = UHDR_LIB_VERSION_STR;
+#else
+    j["version"] = "";
+#endif
+    j["features"] = json::object();
+    return j;
+}
 
 bool is_uhdr_image(istream &is) noexcept
 {

@@ -13,6 +13,10 @@
 #include "fwd.h"
 #include "image_loader.h"
 
+#include "json.h"
+// return a JSON object describing the libuhdr backend
+json get_uhdr_info();
+
 // should not throw
 bool is_uhdr_image(std::istream &is) noexcept;
 bool uhdr_supported_tf(TransferFunction tf) noexcept;

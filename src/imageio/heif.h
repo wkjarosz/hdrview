@@ -11,6 +11,11 @@
 #include "fwd.h"
 #include "image_loader.h"
 
+#include "json.h"
+
+// return a JSON object describing the libheif backend (see schema in app-gui comments)
+json get_heif_info();
+
 // should not throw
 bool is_heif_image(std::istream &is) noexcept;
 // throws on error

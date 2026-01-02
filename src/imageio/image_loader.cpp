@@ -58,7 +58,7 @@ static std::vector<LoaderEntry> default_loaders()
              }
              return false;
          }},
-#ifdef HDRVIEW_ENABLE_LIBUHDR
+#if HDRVIEW_ENABLE_LIBUHDR
         {"libultrahdr",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
@@ -71,7 +71,7 @@ static std::vector<LoaderEntry> default_loaders()
              return false;
          }},
 #endif
-#ifdef HDRVIEW_ENABLE_LIBJPEG
+#if HDRVIEW_ENABLE_LIBJPEG
         {"libjpg",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
@@ -95,7 +95,7 @@ static std::vector<LoaderEntry> default_loaders()
              }
              return false;
          }},
-#ifdef HDRVIEW_ENABLE_LIBJXL
+#if HDRVIEW_ENABLE_LIBJXL
         {"libjxl",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
@@ -119,7 +119,7 @@ static std::vector<LoaderEntry> default_loaders()
              }
              return false;
          }},
-#ifdef HDRVIEW_ENABLE_LIBHEIF
+#if HDRVIEW_ENABLE_LIBHEIF
         {"libheif",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
@@ -132,7 +132,7 @@ static std::vector<LoaderEntry> default_loaders()
              return false;
          }},
 #endif
-#ifdef HDRVIEW_ENABLE_LIBRAW
+#if HDRVIEW_ENABLE_LIBRAW
         {"libraw",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
@@ -145,7 +145,7 @@ static std::vector<LoaderEntry> default_loaders()
              return false;
          }},
 #endif
-#ifdef HDRVIEW_ENABLE_LIBTIFF
+#if HDRVIEW_ENABLE_LIBTIFF
         {"libtiff",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
@@ -158,7 +158,7 @@ static std::vector<LoaderEntry> default_loaders()
              return false;
          }},
 #endif
-#ifdef HDRVIEW_ENABLE_LIBPNG
+#if HDRVIEW_ENABLE_LIBPNG
         {"libpng",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
@@ -171,7 +171,7 @@ static std::vector<LoaderEntry> default_loaders()
              return false;
          }},
 #endif
-#ifdef HDRVIEW_ENABLE_LIBWEBP
+#if HDRVIEW_ENABLE_LIBWEBP
         {"libwebp",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {

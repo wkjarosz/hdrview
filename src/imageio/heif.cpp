@@ -15,7 +15,10 @@
 
 using namespace std;
 
-#ifndef HDRVIEW_ENABLE_LIBHEIF
+#if !HDRVIEW_ENABLE_LIBHEIF
+
+// Return JSON describing libheif availability, version, and features (including compression support)
+json get_heif_info() { return json{{"name", "libheif"}}; }
 
 bool is_heif_image(istream &is) noexcept { return false; }
 
@@ -104,6 +107,39 @@ static void init_heif_supported_formats()
     }
 
     s_encoders_initialized = true;
+}
+
+// Return JSON describing libheif availability, version, and features (including compression support)
+json get_heif_info()
+{
+    json j;
+    j["enabled"] = true;
+    j["name"]    = "libheif";
+    j["version"] = heif_get_version();
+
+    json features    = json::object();
+    json compression = json::object();
+
+    auto add_codec = [&](const char *name, heif_compression_format comp)
+    {
+        bool dec          = (heif_have_decoder_for_format(comp) != 0);
+        bool enc          = (heif_have_encoder_for_format(comp) != 0);
+        compression[name] = json{{"decoder", dec}, {"encoder", enc}};
+    };
+
+    add_codec("AVC", heif_compression_AVC);
+    add_codec("AV1", heif_compression_AV1);
+    add_codec("HEVC", heif_compression_HEVC);
+    add_codec("JPEG", heif_compression_JPEG);
+    add_codec("JPEG2000", heif_compression_JPEG2000);
+    add_codec("HTJ2K", heif_compression_HTJ2K);
+    add_codec("Uncompressed", heif_compression_uncompressed);
+    add_codec("VVC", heif_compression_VVC);
+    add_codec("EVC", heif_compression_EVC);
+
+    features["compression"] = compression;
+    j["features"]           = features;
+    return j;
 }
 
 // Helper: throw a std::runtime_error when a libheif call returns an error

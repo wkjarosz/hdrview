@@ -28,9 +28,12 @@ struct PNGSaveOptions
 
 static PNGSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_LIBPNG
+#if !HDRVIEW_ENABLE_LIBPNG
 
 bool is_png_image(istream &is) noexcept { return false; }
+
+// Return JSON describing libpng availability and features (disabled stub)
+json get_png_info() { return json{{"name", "libpng"}}; }
 
 vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
@@ -56,10 +59,6 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 #include <vector>
-
-#include <ImfHeader.h>
-#include <ImfRgbaYca.h>
-#include <ImfStandardAttributes.h>
 
 using namespace std;
 
@@ -174,6 +173,86 @@ string_view get_exif_text_as_binary(char *text, size_t len)
 }
 
 } // end anonymous namespace
+
+// helpers to check which features are supported in this build
+#ifdef PNG_TEXT_SUPPORTED
+#define PNG_TEXT_SUPPORTED_ENABLED 1
+#else
+#define PNG_TEXT_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_eXIf_SUPPORTED
+#define PNG_eXIf_SUPPORTED_ENABLED 1
+#else
+#define PNG_eXIf_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_EASY_ACCESS_SUPPORTED
+#define PNG_EASY_ACCESS_SUPPORTED_ENABLED 1
+#else
+#define PNG_EASY_ACCESS_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_READ_ALPHA_MODE_SUPPORTED
+#define PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED 1
+#else
+#define PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_GAMMA_SUPPORTED
+#define PNG_GAMMA_SUPPORTED_ENABLED 1
+#else
+#define PNG_GAMMA_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_USER_CHUNKS_SUPPORTED
+#define PNG_USER_CHUNKS_SUPPORTED_ENABLED 1
+#else
+#define PNG_USER_CHUNKS_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_APNG_SUPPORTED
+#define PNG_APNG_SUPPORTED_ENABLED 1
+#else
+#define PNG_APNG_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_PROGRESSIVE_READ_SUPPORTED
+#define PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED 1
+#else
+#define PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_cICP_SUPPORTED
+#define PNG_cICP_SUPPORTED_ENABLED 1
+#else
+#define PNG_cICP_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_iCCP_SUPPORTED
+#define PNG_iCCP_SUPPORTED_ENABLED 1
+#else
+#define PNG_iCCP_SUPPORTED_ENABLED 0
+#endif
+
+// Return JSON describing libpng availability and features
+json get_png_info()
+{
+    json j;
+    j["enabled"] = true;
+    j["name"]    = "libpng";
+#ifdef PNG_LIBPNG_VER_STRING
+    j["version"] = PNG_LIBPNG_VER_STRING;
+#else
+    j["version"] = "";
+#endif
+
+    json features                = json::object();
+    features["TEXT"]             = (bool)PNG_TEXT_SUPPORTED_ENABLED;
+    features["eXIf"]             = (bool)PNG_eXIf_SUPPORTED_ENABLED;
+    features["EASY_ACCESS"]      = (bool)PNG_EASY_ACCESS_SUPPORTED_ENABLED;
+    features["READ_ALPHA_MODE"]  = (bool)PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED;
+    features["GAMMA"]            = (bool)PNG_GAMMA_SUPPORTED_ENABLED;
+    features["USER_CHUNKS"]      = (bool)PNG_USER_CHUNKS_SUPPORTED_ENABLED;
+    features["APNG"]             = (bool)PNG_APNG_SUPPORTED_ENABLED;
+    features["PROGRESSIVE_READ"] = (bool)PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED;
+    features["iCCP"]             = (bool)PNG_iCCP_SUPPORTED_ENABLED;
+    features["cICP"]             = (bool)PNG_cICP_SUPPORTED_ENABLED;
+
+    j["features"] = features;
+    return j;
+}
 
 bool is_png_image(istream &is) noexcept
 {
