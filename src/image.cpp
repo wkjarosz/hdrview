@@ -231,7 +231,9 @@ const std::set<std::string> &Image::loadable_formats()
         "rdc",
         "sr2",
         "srf",
+#ifdef HDRVIEW_ENABLE_X3F
         "x3f",
+#endif
         "arw",
         "3fr",
         "cine",

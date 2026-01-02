@@ -614,15 +614,15 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     set(CMAKE_REQUIRED_INCLUDES ${JPEG_INCLUDE_DIRS})
     check_cxx_source_compiles(
       "
-  #include <stddef.h>
-  #include <stdio.h>
-  #include <jpeglib.h>
+      #include <stddef.h>
+      #include <stdio.h>
+      #include <jpeglib.h>
 
-  int main() {
-    jpeg_write_icc_profile(NULL, NULL, 0);
-    return 0;
-  }
-  "
+      int main() {
+        jpeg_write_icc_profile(NULL, NULL, 0);
+        return 0;
+      }
+      "
       HAVE_JPEG_WRITE_ICC_PROFILE
     )
     unset(CMAKE_REQUIRED_LIBRARIES)
@@ -728,6 +728,16 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     # disable_target_warnings(jpeg-turbo)
     mark_as_system_library(jpeg-turbo)
     list(APPEND HDRVIEW_DEPENDENCIES jpeg-turbo)
+
+    # Pre-populate JPEG variables so other dependency's find_package(JPEG) will use this one
+    set(JPEG_FOUND TRUE CACHE INTERNAL "JPEG found")
+    set(JPEG_LIBRARIES JPEG::JPEG CACHE INTERNAL "JPEG library")
+    get_target_property(JPEG_INCLUDE_DIRS_TMP JPEG::JPEG INTERFACE_INCLUDE_DIRECTORIES)
+    if(JPEG_INCLUDE_DIRS_TMP)
+      set(JPEG_INCLUDE_DIR "${JPEG_INCLUDE_DIRS_TMP}" CACHE INTERNAL "JPEG include dir")
+    endif()
+    set(JPEG_VERSION TRUE CACHE INTERNAL 80)
+    message(STATUS "Providing JPEG target to other dependencies")
   endif()
   if (HAVE_JPEG_WRITE_ICC_PROFILE)
     add_definitions(-DHAVE_JPEG_WRITE_ICC_PROFILE=1)
@@ -834,6 +844,18 @@ if(TARGET lcms2)
   message(STATUS "Using lcms2 target already provided by libjxl")
   # list(APPEND HDRVIEW_DEPENDENCIES lcms2)
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LCMS2)
+
+  # Set cache variables for so other dependency's find_package(LCMS2) finds this one
+  # Get the include directories from the lcms2 target
+  get_target_property(LCMS2_INCLUDE_DIRS lcms2 INTERFACE_INCLUDE_DIRECTORIES)
+  if(NOT LCMS2_INCLUDE_DIRS)
+    get_target_property(LCMS2_INCLUDE_DIRS lcms2 INCLUDE_DIRECTORIES)
+  endif()
+  # Note: FindLCMS2 checks for LCMS2_INCLUDE_DIR (singular) not LCMS2_INCLUDE_DIRS (plural)
+  set(LCMS2_INCLUDE_DIR "${LCMS2_INCLUDE_DIRS}" CACHE PATH "LCMS2 include dir from jxl" FORCE)
+  set(LCMS2_LIBRARIES lcms2 CACHE STRING "LCMS2 library from jxl" FORCE)
+  set(LCMS2_FOUND TRUE CACHE BOOL "LCMS2 found via jxl" FORCE)
+  message(STATUS "Providing lcms2 target (from libjxl) to other dependencies: ${LCMS2_INCLUDE_DIR}")
 else()
   find_package(LCMS2 REQUIRED)
   if(LCMS2_FOUND)
@@ -888,8 +910,8 @@ if(HDRVIEW_ENABLE_LIBHEIF)
             "WITH_OPENJPH_ENCODER ${HDRVIEW_ENABLE_HTJ2K}"
             "WITH_OpenH264_ENCODER ${HDRVIEW_ENABLE_AVCI}"
             "WITH_OpenH264_DECODER ${HDRVIEW_ENABLE_AVCI}"
-            "WITH_JPEG_ENCODER OFF"
-            "WITH_JPEG_DECODER OFF"
+            "WITH_JPEG_ENCODER ${HDRVIEW_ENABLE_LIBJPEG}"
+            "WITH_JPEG_DECODER ${HDRVIEW_ENABLE_LIBJPEG}"
             "WITH_AOM_ENCODER ${HDRVIEW_ENABLE_AVIF}"
             "WITH_AOM_DECODER ${HDRVIEW_ENABLE_AVIF}"
             "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
@@ -1005,33 +1027,6 @@ if(HDRVIEW_ENABLE_LIBRAW)
       DOWNLOAD_ONLY YES
       SYSTEM YES
   )
-
-  # Pre-populate JPEG variables for LibRaw's find_package(JPEG)
-  if(TARGET JPEG::JPEG)
-    set(JPEG_FOUND TRUE CACHE INTERNAL "JPEG found")
-    set(JPEG_LIBRARIES JPEG::JPEG CACHE INTERNAL "JPEG library")
-    get_target_property(JPEG_INCLUDE_DIRS_TMP JPEG::JPEG INTERFACE_INCLUDE_DIRECTORIES)
-    if(JPEG_INCLUDE_DIRS_TMP)
-      set(JPEG_INCLUDE_DIR "${JPEG_INCLUDE_DIRS_TMP}" CACHE INTERNAL "JPEG include dir")
-    endif()
-    set(JPEG_VERSION TRUE CACHE INTERNAL 80)
-    message(STATUS "Providing JPEG target to LibRaw")
-  endif()
-  
-  # If lcms2 target exists (from libjxl), set cache variables for LibRaw's find_package(LCMS2)
-  if(TARGET lcms2)
-    # Get the include directories from the lcms2 target
-    get_target_property(LCMS2_INCLUDE_DIRS lcms2 INTERFACE_INCLUDE_DIRECTORIES)
-    if(NOT LCMS2_INCLUDE_DIRS)
-      get_target_property(LCMS2_INCLUDE_DIRS lcms2 INCLUDE_DIRECTORIES)
-    endif()
-    # Set cache variables that LibRaw's FindLCMS2.cmake module expects
-    # Note: FindLCMS2 checks for LCMS2_INCLUDE_DIR (singular) not LCMS2_INCLUDE_DIRS (plural)
-    set(LCMS2_INCLUDE_DIR "${LCMS2_INCLUDE_DIRS}" CACHE PATH "LCMS2 include dir from jxl" FORCE)
-    set(LCMS2_LIBRARIES lcms2 CACHE STRING "LCMS2 library from jxl" FORCE)
-    set(LCMS2_FOUND TRUE CACHE BOOL "LCMS2 found via jxl" FORCE)
-    message(STATUS "Providing lcms2 target (from libjxl) to LibRaw: ${LCMS2_INCLUDE_DIR}")
-  endif()
 
   # Before the LibRaw CPMAddPackage: 
   if(WIN32 OR MSVC OR EMSCRIPTEN)
@@ -1177,6 +1172,7 @@ add_enabled_definition(HDRVIEW_ENABLE_AVCI)
 add_enabled_definition(HDRVIEW_ENABLE_LIBWEBP)
 add_enabled_definition(HDRVIEW_ENABLE_LIBTIFF)
 add_enabled_definition(HDRVIEW_ENABLE_LIBRAW)
+add_enabled_definition(HDRVIEW_ENABLE_X3F)
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
