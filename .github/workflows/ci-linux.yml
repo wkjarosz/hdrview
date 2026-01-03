@@ -35,8 +35,13 @@ jobs:
         buildtype: [Release, Debug]
 
     steps:
-      - name: Install dependencies
+      - name: Install dependencies (Ubuntu 24.04)
+        if: matrix.config.os == 'ubuntu-24.04'
         run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libimath-dev libopenexr-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libde265-dev libx265-dev libjxl-dev libcli11-dev libspdlog-dev libfmt-dev
+
+      - name: Install dependencies (Ubuntu 22.04)
+        if: matrix.config.os == 'ubuntu-22.04'
+        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libimath-dev libopenexr-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libde265-dev libx265-dev libcli11-dev libspdlog-dev libfmt-dev
 
       - uses: actions/checkout@v4
         with:
