@@ -61,6 +61,13 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 #include <jxl/types.h>
 #include <jxl/version.h>
 
+// Check if we have JXL_DEC_BOX_COMPLETE (added in 0.11.0)
+#if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0, 11, 0)
+#define HDRVIEW_HAS_JXL_BOX_COMPLETE 1
+#else
+#define HDRVIEW_HAS_JXL_BOX_COMPLETE 0
+#endif
+
 #include "colorspace.h"
 #include "fonts.h"
 #include "icc.h"
@@ -258,9 +265,12 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
     // Multi-threaded parallel runner.
     auto runner = JxlResizableParallelRunnerMake(nullptr);
     auto dec    = JxlDecoderMake(nullptr);
-    if (JXL_DEC_SUCCESS !=
-        JxlDecoderSubscribeEvents(dec.get(), JXL_DEC_BASIC_INFO | JXL_DEC_COLOR_ENCODING | JXL_DEC_FULL_IMAGE |
-                                                 JXL_DEC_FRAME | JXL_DEC_BOX | JXL_DEC_BOX_COMPLETE))
+    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec.get(), JXL_DEC_BASIC_INFO | JXL_DEC_COLOR_ENCODING |
+                                                                    JXL_DEC_FULL_IMAGE | JXL_DEC_FRAME | JXL_DEC_BOX
+#if HDRVIEW_HAS_JXL_BOX_COMPLETE
+                                                                    | JXL_DEC_BOX_COMPLETE
+#endif
+                                                     ))
         throw invalid_argument{"JxlDecoderSubscribeEvents failed"};
 
     if (JXL_DEC_SUCCESS != JxlDecoderSetParallelRunner(dec.get(), JxlResizableParallelRunner, runner.get()))
@@ -325,8 +335,14 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 JxlDecoderSetBoxBuffer(dec.get(), tmp_buffer.data() + output_pos, prev_size);
             }
 
+#if HDRVIEW_HAS_JXL_BOX_COMPLETE
             if (status != JXL_DEC_BOX_COMPLETE)
                 throw invalid_argument{"Failed to process box."};
+#else
+            // In versions before 0.11.0, JXL_DEC_SUCCESS or JXL_DEC_BOX imply the box is complete
+            if (status != JXL_DEC_SUCCESS && status != JXL_DEC_BOX)
+                throw invalid_argument{"Failed to process box."};
+#endif
 
             tmp_buffer.resize(tmp_buffer.size() - JxlDecoderReleaseBoxBuffer(dec.get()));
 
