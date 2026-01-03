@@ -8,6 +8,7 @@
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
         "CMAKE_POLICY_DEFAULT_CMP0135": "NEW"
       }
     },

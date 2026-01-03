@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(CMAKE_POLICY_VERSION 3.5)
-
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules" "${CMAKE_SOURCE_DIR}/cmake/")
 
 include(VersionFromGit)
