@@ -54,7 +54,12 @@ HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
 #include <cstdio>
 
 #include <libheif/heif.h>
+#if LIBHEIF_NUMERIC_VERSION >= ((1 << 24) | (20 << 16) | (1 << 8) | 0) // 1.20.0
 #include <libheif/heif_sequences.h>
+#define HDRVIEW_HAS_HEIF_SEQUENCES 1
+#else
+#define HDRVIEW_HAS_HEIF_SEQUENCES 0
+#endif
 #include <memory>
 
 using HeifContextPtr         = std::unique_ptr<heif_context, void (*)(heif_context *)>;
