@@ -947,6 +947,19 @@ if(HDRVIEW_ENABLE_LIBJXL)
     disable_target_warnings(jxl_cms)
     disable_target_warnings(enc_fast_lossless)
     disable_target_warnings(hwy)
+    # After CPM adds JXL, use the source directory variable
+    if(JXL_SOURCE_DIR)
+      message(STATUS "Adding include directory for bundled Highway: ${JXL_SOURCE_DIR}/third_party/highway")
+      # Prioritize the bundled Highway over system installation
+      include_directories(BEFORE SYSTEM 
+        ${JXL_SOURCE_DIR}/third_party/highway
+      )
+    else()
+      message(STATUS "Adding include directory for bundled Highway: ${CMAKE_BINARY_DIR}/cpm_modules/jxl/39d3/third_party/highway")
+      include_directories(BEFORE SYSTEM 
+        ${CMAKE_BINARY_DIR}/cpm_modules/jxl/39d3/third_party/highway
+        )
+    endif()
   elseif(TARGET jxl)
     message(STATUS "Using system-installed JPEG-XL library")
   else()
