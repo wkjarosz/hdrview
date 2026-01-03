@@ -621,26 +621,39 @@ if(HDRVIEW_ENABLE_LIBJPEG)
   if(JPEG_FOUND)
     list(APPEND HDRVIEW_DEFINITIONS "HDRVIEW_ENABLE_LIBJPEG=1")
 
+    # Test whether libjpeg provides jpeg_write_icc_profile
     include(CheckCXXSourceCompiles)
 
-    # this is needed for CheckCXXSourceCompiles
-    set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES})
-    set(CMAKE_REQUIRED_INCLUDES ${JPEG_INCLUDE_DIRS})
-    check_cxx_source_compiles(
+    set(JPEG_ICC_TEST_SOURCE
       "
       #include <stddef.h>
       #include <stdio.h>
       #include <jpeglib.h>
 
       int main() {
-        jpeg_write_icc_profile(NULL, NULL, 0);
+        jpeg_write_icc_profile((j_compress_ptr)0, (const JOCTET*)0, 0);
         return 0;
       }
       "
-      HAVE_JPEG_WRITE_ICC_PROFILE
     )
-    unset(CMAKE_REQUIRED_LIBRARIES)
-    unset(CMAKE_REQUIRED_INCLUDES)
+
+    # Prefer linking via imported target if available
+    if(TARGET JPEG::JPEG)
+      # write source and run try_compile linking the imported target
+      file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/cmake_check_jpeg_icc.cpp" "${JPEG_ICC_TEST_SOURCE}")
+      try_compile(HAVE_JPEG_WRITE_ICC_PROFILE
+        "${CMAKE_CURRENT_BINARY_DIR}/cmake_check_jpeg_icc"
+        SOURCES "${CMAKE_CURRENT_BINARY_DIR}/cmake_check_jpeg_icc.cpp"
+        LINK_LIBRARIES JPEG::JPEG
+      )
+    else()
+      # fallback: use the existing check with required includes/libs
+      set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES})
+      set(CMAKE_REQUIRED_INCLUDES ${JPEG_INCLUDE_DIRS})
+      check_cxx_source_compiles("${JPEG_ICC_TEST_SOURCE}" HAVE_JPEG_WRITE_ICC_PROFILE)
+      unset(CMAKE_REQUIRED_LIBRARIES)
+      unset(CMAKE_REQUIRED_INCLUDES)
+    endif()
 
     message(STATUS "Found libjpeg with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
 
@@ -1041,7 +1054,7 @@ endif()
 option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 if(HDRVIEW_ENABLE_LIBTIFF)
   CPMAddPackage(
-    NAME libtiff
+    NAME TIFF
     VERSION 4.7.0
     GITHUB_REPOSITORY Tom94/libtiff
     GIT_TAG b6446af165a5a4177eb9a4f6834bb948d4f89d39
@@ -1059,9 +1072,9 @@ if(HDRVIEW_ENABLE_LIBTIFF)
             "zstd OFF" 
     SYSTEM YES
   )
-  if(libtiff_ADDED)
+  if(TIFF_ADDED)
     message(STATUS "Will build libtiff library")
-  elseif(TARGET tiff)
+  elseif(TARGET TIFF::TIFF OR TARGET tiff)
     message(STATUS "Will link against system-installed libtiff library")
   else()
     message(FATAL_ERROR "libtiff library not found. Please install it.")
@@ -1090,9 +1103,10 @@ if(HDRVIEW_ENABLE_LIBRAW)
   endif()
 
   CPMAddPackage(
-      NAME LibRaw_cmake
+      NAME LibRaw
       GITHUB_REPOSITORY LibRaw/LibRaw-cmake
       GIT_TAG eb98e4325aef2ce85d2eb031c2ff18640ca616d3
+      VERSION 0.21.0
       OPTIONS "LIBRAW_PATH ${LibRaw_src_SOURCE_DIR}"
               "BUILD_SHARED_LIBS OFF" 
               "LIBRAW_BUILD_TESTS OFF"
@@ -1101,7 +1115,7 @@ if(HDRVIEW_ENABLE_LIBRAW)
               "ENABLE_X3FTOOLS ${HDRVIEW_ENABLE_X3F}"
       SYSTEM YES
   )
-  if(LibRaw_cmake_ADDED)
+  if(LibRaw_ADDED)
       message(STATUS "Will build libraw library")
       mark_as_system_library(libraw::libraw_r)
       disable_target_warnings(libraw::libraw_r)

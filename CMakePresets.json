@@ -2,25 +2,21 @@
   "version": 8,
   "configurePresets": [
     {
-      "name": "default",
-      "displayName": "Auto (Ninja on Linux/macOS and MSBuild on Windows)",
-      "description": "Auto-select generator per-host (inherits platform generator presets).",
-      "inherits": ["ninja-multi", "msvc"],
-      "binaryDir": "${sourceDir}/build",
+      "name": "base",
+      "hidden": true,
+      "description": "Base preset with common settings",
       "cacheVariables": {
-        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo"
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_POLICY_DEFAULT_CMP0135": "NEW"
       }
     },
     {
-      "name": "ninja-multi",
-      "displayName": "Ninja Multi-Config (Linux/macOS)",
-      "description": "Multi-configuration Ninja generator. Used on non-Windows hosts.",
+      "name": "ninja-multi-base",
+      "hidden": true,
+      "inherits": "base",
+      "description": "Base for Ninja Multi-Config builds",
       "generator": "Ninja Multi-Config",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      },
       "condition": {
         "type": "notEquals",
         "lhs": "${hostSystemName}",
@@ -28,14 +24,11 @@
       }
     },
     {
-      "name": "msvc",
-      "displayName": "Visual Studio (Windows)",
-      "description": "Visual Studio generator for MSVC on Windows. Used on Windows hosts.",
+      "name": "msvc-base",
+      "hidden": true,
+      "inherits": "base",
+      "description": "Base for Visual Studio builds",
       "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo"
-      },
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -43,77 +36,364 @@
       }
     },
     {
-      "name": "ninja-debug-single",
-      "displayName": "Ninja single-config (Debug) [hidden]",
+      "name": "ccache",
       "hidden": true,
-      "description": "Fallback single-config Ninja preset for Debug builds (hidden).",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "description": "Enable ccache for faster rebuilds",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
       }
     },
     {
-      "name": "ninja-release-single",
-      "displayName": "Ninja single-config (Release) [hidden]",
+      "name": "macos-base",
       "hidden": true,
-      "description": "Fallback single-config Ninja preset for Release builds (hidden).",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "description": "Base settings for macOS builds",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
       }
     },
     {
-      "name": "ninja-minsizerel-single",
-      "displayName": "Ninja single-config (MinSizeRel) [hidden]",
+      "name": "macos-cpm",
       "hidden": true,
-      "description": "Fallback single-config Ninja preset for MinSizeRel builds (hidden).",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "inherits": "macos-base",
+      "description": "macOS with CPM dependencies (ignoring brew)",
+      "toolchainFile": "${sourceDir}/cmake/ignore-brew.cmake",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "MinSizeRel"
+        "UHDR_BUILD_DEPS": "ON"
       }
     },
     {
-      "name": "ninja-relwithdeb-single",
-      "displayName": "Ninja single-config (RelWithDebInfo) [hidden]",
+      "name": "macos-brew",
       "hidden": true,
-      "description": "Fallback single-config Ninja preset for RelWithDebInfo builds (hidden).",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "inherits": "macos-base",
+      "description": "macOS using Homebrew dependencies",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CPM_USE_LOCAL_PACKAGES": "ON",
+        "UHDR_BUILD_DEPS": "ON",
+        "CMAKE_PREFIX_PATH": "/opt/homebrew;/usr/local"
+      }
+    },
+    {
+      "name": "default",
+      "displayName": "Default",
+      "description": "Default build (auto-detects platform)",
+      "inherits": ["ninja-multi-base", "msvc-base"],
+      "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "macos-arm64-cpm",
+      "displayName": "macOS Apple Silicon (CPM)",
+      "description": "Native Apple Silicon build using CPM for dependencies",
+      "inherits": ["ninja-multi-base", "macos-cpm"],
+      "binaryDir": "${sourceDir}/build/macos-arm64-cpm"
+    },
+    {
+      "name": "macos-arm64-brew",
+      "displayName": "macOS Apple Silicon (Homebrew)",
+      "description": "Native Apple Silicon build using Homebrew dependencies",
+      "inherits": ["ninja-multi-base", "macos-brew"],
+      "binaryDir": "${sourceDir}/build/macos-arm64-brew"
+    },
+    {
+      "name": "macos-x86_64-cpm",
+      "displayName": "macOS Intel (CPM)",
+      "description": "Native Intel build using CPM for dependencies",
+      "inherits": ["ninja-multi-base", "macos-cpm"],
+      "binaryDir": "${sourceDir}/build/macos-x86_64-cpm"
+    },
+    {
+      "name": "macos-x86_64-brew",
+      "displayName": "macOS Intel (Homebrew)",
+      "description": "Native Intel build using Homebrew dependencies",
+      "inherits": ["ninja-multi-base", "macos-brew"],
+      "binaryDir": "${sourceDir}/build/macos-x86_64-brew"
+    },
+    {
+      "name": "macos-universal",
+      "displayName": "macOS Universal Binary",
+      "description": "Universal binary for both Apple Silicon and Intel",
+      "inherits": ["ninja-multi-base", "macos-cpm"],
+      "binaryDir": "${sourceDir}/build/macos-universal",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
+        "HDRVIEW_ENABLE_LIBWEBP": "OFF",
+        "HDRVIEW_ENABLE_LIBJPEG": "OFF",
+        "HDRVIEW_ENABLE_LIBUHDR": "OFF",
+        "HELLOIMGUI_FREETYPE_STATIC": "ON",
+        "PNG_HARDWARE_OPTIMIZATIONS": "ON"
+      }
+    },
+    {
+      "name": "windows",
+      "displayName": "Windows",
+      "description": "Windows build with Visual Studio",
+      "inherits": "msvc-base",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "UHDR_BUILD_DEPS": "ON"
+      }
+    },
+    {
+      "name": "linux",
+      "displayName": "Linux",
+      "description": "Linux build with system dependencies",
+      "inherits": "ninja-multi-base",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "HELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED": "ON",
+        "ASSETS_LOCATION": "/usr/share/HDRView/assets"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "emscripten",
+      "displayName": "Emscripten (WebAssembly)",
+      "description": "Build for web using Emscripten (requires EMSDK environment variable)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/emscripten",
+      "toolchainFile": "$env{EMSDK}/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/emscripten/deploy",
+        "HDRVIEW_ENABLE_J2K": "OFF",
+        "HDRVIEW_ENABLE_HTJ2K": "OFF",
+        "HDRVIEW_ENABLE_AVIF": "OFF",
+        "HDRVIEW_ENABLE_HEIC": "OFF",
+        "HDRVIEW_ENABLE_AVCI": "OFF",
+        "UHDR_BUILD_DEPS": "ON"
       }
     }
   ],
   "buildPresets": [
     {
-      "name": "Debug",
-      "displayName": "Build Debug",
-      "configurePreset": "default",
+      "name": "build-base-debug",
+      "hidden": true,
       "configuration": "Debug",
       "jobs": 0
     },
     {
-      "name": "Release",
-      "displayName": "Build Release",
-      "configurePreset": "default",
+      "name": "build-base-release",
+      "hidden": true,
       "configuration": "Release",
       "jobs": 0
     },
     {
-      "name": "MinSizeRel",
-      "displayName": "Build MinSizeRel",
-      "configurePreset": "default",
+      "name": "build-base-minsizerel",
+      "hidden": true,
       "configuration": "MinSizeRel",
       "jobs": 0
     },
     {
-      "name": "RelWithDebInfo",
-      "displayName": "Build RelWithDebInfo",
-      "configurePreset": "default",
+      "name": "build-base-relwithdebinfo",
+      "hidden": true,
       "configuration": "RelWithDebInfo",
+      "jobs": 0
+    },
+    {
+      "name": "default-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "default"
+    },
+    {
+      "name": "default-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "default"
+    },
+    {
+      "name": "default-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "default"
+    },
+    {
+      "name": "default-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "default"
+    },
+    {
+      "name": "macos-arm64-cpm-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "macos-arm64-cpm"
+    },
+    {
+      "name": "macos-arm64-cpm-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "macos-arm64-cpm"
+    },
+    {
+      "name": "macos-arm64-cpm-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "macos-arm64-cpm"
+    },
+    {
+      "name": "macos-arm64-cpm-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "macos-arm64-cpm"
+    },
+    {
+      "name": "macos-arm64-brew-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "macos-arm64-brew"
+    },
+    {
+      "name": "macos-arm64-brew-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "macos-arm64-brew"
+    },
+    {
+      "name": "macos-arm64-brew-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "macos-arm64-brew"
+    },
+    {
+      "name": "macos-arm64-brew-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "macos-arm64-brew"
+    },
+    {
+      "name": "macos-x86_64-cpm-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "macos-x86_64-cpm"
+    },
+    {
+      "name": "macos-x86_64-cpm-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "macos-x86_64-cpm"
+    },
+    {
+      "name": "macos-x86_64-cpm-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "macos-x86_64-cpm"
+    },
+    {
+      "name": "macos-x86_64-cpm-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "macos-x86_64-cpm"
+    },
+    {
+      "name": "macos-x86_64-brew-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "macos-x86_64-brew"
+    },
+    {
+      "name": "macos-x86_64-brew-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "macos-x86_64-brew"
+    },
+    {
+      "name": "macos-x86_64-brew-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "macos-x86_64-brew"
+    },
+    {
+      "name": "macos-x86_64-brew-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "macos-x86_64-brew"
+    },
+    {
+      "name": "macos-universal-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "macos-universal"
+    },
+    {
+      "name": "macos-universal-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "macos-universal"
+    },
+    {
+      "name": "macos-universal-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "macos-universal"
+    },
+    {
+      "name": "macos-universal-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "macos-universal"
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "windows"
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "windows"
+    },
+    {
+      "name": "windows-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "windows"
+    },
+    {
+      "name": "windows-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "windows"
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "linux"
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "linux"
+    },
+    {
+      "name": "linux-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "linux"
+    },
+    {
+      "name": "linux-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "linux"
+    },
+    {
+      "name": "emscripten",
+      "displayName": "Build",
+      "configurePreset": "emscripten",
       "jobs": 0
     }
   ],

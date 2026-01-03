@@ -80,20 +80,7 @@ json get_webp_info()
     const int d_minor = (webp_v >> 8) & 0xff;
     const int d_rev   = webp_v & 0xff;
     j["version"]      = fmt::format("{}.{}.{} ({})", d_major, d_minor, d_rev, webp_v);
-
-#ifdef WEBP_HAVE_ENCODER
-    bool enc = true;
-#else
-    bool enc = false;
-#endif
-
-#ifdef WEBP_HAVE_DECODER
-    bool dec = true;
-#else
-    bool dec = false;
-#endif
-
-    j["features"] = json::object();
+    j["features"]     = json::object();
     return j;
 }
 
