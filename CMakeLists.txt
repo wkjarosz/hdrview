@@ -884,7 +884,8 @@ if(HDRVIEW_ENABLE_LIBJXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
-    VERSION 0.11.1 # version in ubuntu 24.04
+    VERSION 0.7.0 # version in ubuntu 24.04
+    FIND_PACKAGE_ARGUMENTS "REQUIRED"
     URL https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.1.zip
     # GIT_TAG 6e83d97e73c68ff7d3374f939971bab617be4c3c
     OPTIONS "BUILD_SHARED_LIBS OFF"

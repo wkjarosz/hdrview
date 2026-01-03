@@ -16,7 +16,17 @@
 
 include(FindPackageHandleStandardArgs)
 
-find_path(JXL_INCLUDE_DIR NAMES jxl/decode.h jxl/encode.h)
+# First try pkg-config (Ubuntu 24.04 libjxl-dev only provides pkg-config files)
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+  pkg_check_modules(PC_JXL QUIET libjxl)
+  pkg_check_modules(PC_JXL_THREADS QUIET libjxl_threads)
+  pkg_check_modules(PC_JXL_CMS QUIET libjxl_cms)
+endif()
+
+find_path(JXL_INCLUDE_DIR NAMES jxl/decode.h jxl/encode.h
+  HINTS ${PC_JXL_INCLUDE_DIRS}
+)
 mark_as_advanced(JXL_INCLUDE_DIR)
 
 if(JXL_INCLUDE_DIR)
@@ -29,13 +39,24 @@ if(JXL_INCLUDE_DIR)
   set(JXL_VERSION "${JPEGXL_MAJOR_VERSION}.${JPEGXL_MINOR_VERSION}.${JPEGXL_PATCH_VERSION}")
 endif()
 
-find_library(JXL_LIBRARY NAMES jxl)
+# Use pkg-config version if header version wasn't found
+if(NOT JXL_VERSION AND PC_JXL_VERSION)
+  set(JXL_VERSION ${PC_JXL_VERSION})
+endif()
+
+find_library(JXL_LIBRARY NAMES jxl
+  HINTS ${PC_JXL_LIBRARY_DIRS}
+)
 mark_as_advanced(JXL_LIBRARY JXL_VERSION)
 
-find_library(JXL_THREADS_LIBRARY NAMES jxl_threads)
+find_library(JXL_THREADS_LIBRARY NAMES jxl_threads
+  HINTS ${PC_JXL_THREADS_LIBRARY_DIRS}
+)
 mark_as_advanced(JXL_THREADS_LIBRARY)
 
-find_library(JXL_CMS_LIBRARY NAMES jxl_cms)
+find_library(JXL_CMS_LIBRARY NAMES jxl_cms
+  HINTS ${PC_JXL_CMS_LIBRARY_DIRS}
+)
 mark_as_advanced(JXL_CMS_LIBRARY)
 
 find_package_handle_standard_args(
