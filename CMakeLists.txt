@@ -900,6 +900,12 @@ endif()
 # cmake-format: on
 
 if(HDRVIEW_ENABLE_LIBJXL)
+  # Set Highway options before CPMAddPackage so they affect the transitive dependency
+  set(HWY_ENABLE_TESTS OFF)
+  set(HWY_ENABLE_INSTALL OFF)
+  set(HWY_ENABLE_EXAMPLES OFF)
+  set(HWY_ENABLE_CONTRIB OFF)
+  
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
@@ -924,10 +930,6 @@ if(HDRVIEW_ENABLE_LIBJXL)
             "JPEGXL_BUNDLE_LIBPNG OFF"
             "JPEGXL_ENABLE_SJPEG OFF"
             # "JPEGXL_FORCE_SYSTEM_LCMS2 ON"
-            "HWY_ENABLE_TESTS OFF"
-            "HWY_ENABLE_INSTALL OFF"
-            "HWY_ENABLE_EXAMPLES OFF"
-            "HWY_ENABLE_CONTRIB OFF"
             "EXCLUDE_FROM_ALL YES"
     SYSTEM YES
   )
