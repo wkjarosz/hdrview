@@ -28,8 +28,10 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { name: "Ubuntu 24.04", os: ubuntu-24.04 }
-          - { name: "Ubuntu 22.04", os: ubuntu-22.04 }
+          - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm-build" }
+          - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local-build" }
+          - { name: "Ubuntu 22.04 CPM", os: ubuntu-22.04, preset: "linux-cpm-build" }
+          - { name: "Ubuntu 22.04 Local", os: ubuntu-22.04, preset: "linux-local-build" }
         buildtype: [Release, Debug]
 
     steps:
@@ -49,22 +51,22 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
+          key: ${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build/${{ matrix.buildtype }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DHELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED=ON -DASSETS_LOCATION="/usr/share/HDRView/assets"
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build/${{ matrix.buildtype }} --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build --preset ${{ matrix.config.preset }}-${{ matrix.buildtype }}
 
       - name: Checking that HDRView runs
         run: |
-          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView --help
+          ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.buildtype }}
+          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build/${{ matrix.buildtype }}
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}

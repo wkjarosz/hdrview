@@ -29,56 +29,45 @@ jobs:
       matrix:
         config:
           # macos-14 is an arm64 runner
-          # -DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake constructs a list of directories to ignore during CMake's
-          #   library and header search. This helps avoid picking up non-universal versions
-          #   of harfbuzz and brotli from Homebrew installations, which cause failures for universal builds.
           - {
-              name: "macOS 14 universal cpm",
+              name: "macOS 14 universal",
               os: macos-14,
-              arch: "universal",
-              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DHDRVIEW_ENABLE_LIBWEBP=OFF -DHDRVIEW_ENABLE_LIBJPEG=OFF -DHDRVIEW_ENABLE_LIBUHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=ON",
+              preset: "macos-universal",
             }
           - {
-              name: "macOS 15 universal cpm",
+              name: "macOS 15 universal",
               os: macos-15,
-              arch: "universal",
-              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DHDRVIEW_ENABLE_LIBWEBP=OFF -DHDRVIEW_ENABLE_LIBJPEG=OFF -DHDRVIEW_ENABLE_LIBUHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=ON",
+              preset: "macos-universal",
             }
           - {
               name: "macOS 14 Apple Silicon cpm",
               os: macos-14,
-              arch: "arm64-cpm",
-              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DUHDR_BUILD_DEPS=ON",
+              preset: "macos-arm64-cpm",
             }
           - {
               name: "macOS 14 Apple Silicon brew",
               os: macos-14,
-              arch: "arm64-brew",
-              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DUHDR_BUILD_DEPS=ON",
+              preset: "macos-arm64-brew",
             }
           - {
               name: "macOS 15 Apple Silicon cpm",
               os: macos-15,
-              arch: "arm64-cpm",
-              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DUHDR_BUILD_DEPS=ON",
+              preset: "macos-arm64-cpm",
             }
           - {
               name: "macOS 15 Apple Silicon brew",
               os: macos-15,
-              arch: "arm64-brew",
-              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DUHDR_BUILD_DEPS=ON",
+              preset: "macos-arm64-brew",
             }
           - {
               name: "macOS 15 Intel cpm",
               os: macos-15-intel,
-              arch: "x86_64-cpm",
-              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DUHDR_BUILD_DEPS=ON",
+              preset: "macos-x86_64-cpm",
             }
           - {
               name: "macOS 15 Intel brew",
               os: macos-15-intel,
-              arch: "x86_64-brew",
-              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DUHDR_BUILD_DEPS=ON",
+              preset: "macos-x86_64-brew",
             }
 
         buildtype: [Release, Debug]
@@ -100,28 +89,28 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.config.os }}-${{ matrix.config.arch }}-${{ matrix.buildtype }}
+          key: ${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 ${{ matrix.config.flags }}
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}  --parallel --config ${{ matrix.buildtype }}
+        run: cmake --build --preset ${{ matrix.config.preset }}-${{ matrix.buildtype }}
 
       - name: Checking that HDRView runs
         run: |
-          ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView --help
+          ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView --help
 
       - name: Bundle dependencies
-        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}/HDRView.app/Contents/libs/
+        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.app/Contents/libs/
 
       - name: Creating dmg (macOS)
         run: |
-          RESULT="${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}/HDRView.dmg"
+          RESULT="${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.dmg"
           test -f $RESULT && rm $RESULT
           for i in 1 2 3; do
-            if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}/HDRView.app; then
+            if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.app; then
               break
             elif [ $i -eq 3 ]; then
               echo "create-dmg failed after 3 attempts"
@@ -135,13 +124,13 @@ jobs:
       - name: Archive dmg (macOS)
         uses: actions/upload-artifact@v4
         with:
-          name: HDRView-${{ matrix.config.os }}-${{ matrix.config.arch }}-${{ matrix.buildtype }}.dmg
+          name: HDRView-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}.dmg
           path: |
-            ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}/HDRView.dmg
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.dmg
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.arch }}-${{ matrix.buildtype }}
+          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}
