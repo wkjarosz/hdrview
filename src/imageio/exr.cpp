@@ -7,28 +7,369 @@
 #include "exr.h"
 #include "colorspace.h"
 #include "common.h" // for lerp, mod, clamp, getExtension
-#include "exr_header.h"
 #include "exr_std_streams.h"
 #include "image.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 #include "timer.h"
+#include <ImfBoxAttribute.h>
 #include <ImfChannelList.h>
 #include <ImfChannelListAttribute.h>
+#include <ImfChromaticitiesAttribute.h>
 #include <ImfCompression.h>
+#include <ImfCompressionAttribute.h>
+#include <ImfDoubleAttribute.h>
+#include <ImfEnvmapAttribute.h>
+#include <ImfFloatAttribute.h>
 #include <ImfFrameBuffer.h>
 #include <ImfHeader.h>
 #include <ImfInputPart.h>
+#include <ImfIntAttribute.h>
+#include <ImfKeyCodeAttribute.h>
+#include <ImfLineOrderAttribute.h>
+#include <ImfMatrixAttribute.h>
 #include <ImfMultiPartInputFile.h>
 #include <ImfOutputFile.h>
+#include <ImfPreviewImageAttribute.h>
+#include <ImfRationalAttribute.h>
 #include <ImfStandardAttributes.h>
+#include <ImfStringAttribute.h>
+#include <ImfStringVectorAttribute.h>
 #include <ImfTestFile.h> // for isOpenExrFile
+#include <ImfTileDescriptionAttribute.h>
 #include <ImfTiledOutputFile.h>
+#include <ImfTimeCodeAttribute.h>
+#include <ImfVecAttribute.h>
 #include <ImfVersion.h>
 #include <hello_imgui/dpi_aware.h>
+#include <sstream>
 #include <stdexcept> // for runtime_error, out_of_range
 
 using namespace std;
+
+// OpenEXR 3.3+ added HTJ2K compression and helper functions
+// For older versions, we need to provide fallbacks
+#if !defined(OPENEXR_VERSION_MAJOR) || (OPENEXR_VERSION_MAJOR < 3) ||                                                  \
+    (OPENEXR_VERSION_MAJOR == 3 && OPENEXR_VERSION_MINOR < 3)
+#define HDRVIEW_OPENEXR_PRE_3_3
+#endif
+
+namespace
+{
+#ifdef HDRVIEW_OPENEXR_PRE_3_3
+// Fallback for getCompressionNameFromId for OpenEXR < 3.3
+void getCompressionNameFromId(Imf::Compression c, std::string &name)
+{
+    switch (c)
+    {
+    case Imf::NO_COMPRESSION: name = "none"; break;
+    case Imf::RLE_COMPRESSION: name = "rle"; break;
+    case Imf::ZIPS_COMPRESSION: name = "zips"; break;
+    case Imf::ZIP_COMPRESSION: name = "zip"; break;
+    case Imf::PIZ_COMPRESSION: name = "piz"; break;
+    case Imf::PXR24_COMPRESSION: name = "pxr24"; break;
+    case Imf::B44_COMPRESSION: name = "b44"; break;
+    case Imf::B44A_COMPRESSION: name = "b44a"; break;
+    case Imf::DWAA_COMPRESSION: name = "dwaa"; break;
+    case Imf::DWAB_COMPRESSION: name = "dwab"; break;
+    default: name = "unknown"; break;
+    }
+}
+
+// Fallback for getCompressionDescriptionFromId for OpenEXR < 3.3
+void getCompressionDescriptionFromId(Imf::Compression c, std::string &desc)
+{
+    switch (c)
+    {
+    case Imf::NO_COMPRESSION: desc = "No compression"; break;
+    case Imf::RLE_COMPRESSION: desc = "Run-length encoding"; break;
+    case Imf::ZIPS_COMPRESSION: desc = "Zlib compression, one scan line at a time"; break;
+    case Imf::ZIP_COMPRESSION: desc = "Zlib compression, 16 scan lines at a time"; break;
+    case Imf::PIZ_COMPRESSION: desc = "Piz-based wavelet compression"; break;
+    case Imf::PXR24_COMPRESSION: desc = "Lossy 24-bit float compression"; break;
+    case Imf::B44_COMPRESSION: desc = "Lossy 4-by-4 pixel block compression, fixed rate"; break;
+    case Imf::B44A_COMPRESSION: desc = "Lossy 4-by-4 pixel block compression, flat fields are compressed more"; break;
+    case Imf::DWAA_COMPRESSION: desc = "Lossy DCT based compression, 32 scanlines at a time"; break;
+    case Imf::DWAB_COMPRESSION: desc = "Lossy DCT based compression, 256 scanlines at a time"; break;
+    default: desc = "Unknown compression"; break;
+    }
+}
+#endif
+
+json attribute_to_json(const Imf::Attribute &a)
+{
+    json        j;
+    std::string type = a.typeName();
+    j["type"]        = type;
+    if (const auto *ta = dynamic_cast<const Imf::Box2iAttribute *>(&a))
+    {
+        auto &b           = ta->value();
+        j["value"]["min"] = {b.min.x, b.min.y};
+        j["value"]["max"] = {b.max.x, b.max.y};
+        j["string"]       = fmt::format("({}, {}) - ({}, {})", b.min.x, b.min.y, b.max.x, b.max.y);
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::Box2fAttribute *>(&a))
+    {
+        auto &b           = ta->value();
+        j["value"]["min"] = {b.min.x, b.min.y};
+        j["value"]["max"] = {b.max.x, b.max.y};
+        j["string"]       = fmt::format("({}, {}) - ({}, {})", b.min.x, b.min.y, b.max.x, b.max.y);
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::ChannelListAttribute *>(&a))
+    {
+        json               channels = json::array();
+        std::ostringstream oss;
+        for (Imf::ChannelList::ConstIterator i = ta->value().begin(); i != ta->value().end(); ++i)
+        {
+            json ch;
+            ch["name"]      = i.name();
+            ch["type"]      = i.channel().type;
+            ch["xSampling"] = i.channel().xSampling;
+            ch["ySampling"] = i.channel().ySampling;
+            ch["pLinear"]   = i.channel().pLinear;
+            channels.push_back(ch);
+
+            oss << (i == ta->value().begin() ? "" : "\n");
+            oss << i.name() << ", ";
+            // Print pixel type as string
+            switch (i.channel().type)
+            {
+            case Imf::HALF: oss << "half"; break;
+            case Imf::FLOAT: oss << "float"; break;
+            case Imf::UINT: oss << "uint"; break;
+            default: oss << "unknown type (" << int(i.channel().type) << ")"; break;
+            }
+            oss << ", sampling " << i.channel().xSampling << " " << i.channel().ySampling;
+            if (i.channel().pLinear)
+                oss << ", plinear";
+        }
+        j["value"]["channels"] = channels;
+        j["string"]            = oss.str();
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::ChromaticitiesAttribute *>(&a))
+    {
+        auto &c             = ta->value();
+        j["value"]["red"]   = {c.red.x, c.red.y};
+        j["value"]["green"] = {c.green.x, c.green.y};
+        j["value"]["blue"]  = {c.blue.x, c.blue.y};
+        j["value"]["white"] = {c.white.x, c.white.y};
+        j["string"] = fmt::format("red ({}, {})\ngreen ({}, {})\nblue ({}, {})\nwhite ({}, {})", c.red.x, c.red.y,
+                                  c.green.x, c.green.y, c.blue.x, c.blue.y, c.white.x, c.white.y);
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::CompressionAttribute *>(&a))
+    {
+        j["value"] = ta->value();
+        std::string comp_str;
+#ifdef HDRVIEW_OPENEXR_PRE_3_3
+        getCompressionNameFromId(ta->value(), comp_str);
+#else
+        Imf::getCompressionNameFromId(ta->value(), comp_str);
+#endif
+        j["string"] = comp_str;
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::DoubleAttribute *>(&a))
+    {
+        j["value"]  = ta->value();
+        j["string"] = fmt::format("{}", ta->value());
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::EnvmapAttribute *>(&a))
+    {
+        j["value"] = ta->value();
+        string str;
+        switch (ta->value())
+        {
+        case Imf::ENVMAP_LATLONG: str = "latitude-longitude map"; break;
+        case Imf::ENVMAP_CUBE: str = "cube-face map"; break;
+        default: str = fmt::format("map type {}", int(ta->value())); break;
+        }
+        j["string"] = str;
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::FloatAttribute *>(&a))
+    {
+        j["value"]  = ta->value();
+        j["string"] = fmt::format("{}", ta->value());
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::IntAttribute *>(&a))
+    {
+        j["value"]  = ta->value();
+        j["string"] = fmt::format("{}", ta->value());
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::KeyCodeAttribute *>(&a))
+    {
+        j["value"]["filmMfcCode"]   = ta->value().filmMfcCode();
+        j["value"]["filmType"]      = ta->value().filmType();
+        j["value"]["prefix"]        = ta->value().prefix();
+        j["value"]["count"]         = ta->value().count();
+        j["value"]["perfOffset"]    = ta->value().perfOffset();
+        j["value"]["perfsPerFrame"] = ta->value().perfsPerFrame();
+        j["value"]["perfsPerCount"] = ta->value().perfsPerCount();
+        j["string"] =
+            fmt::format("film manufacturer code {}, film type code {}, prefix {}, count {}, perf offset {}, perfs per "
+                        "frame {}, perfs per count {}",
+                        ta->value().filmMfcCode(), ta->value().filmType(), ta->value().prefix(), ta->value().count(),
+                        ta->value().perfOffset(), ta->value().perfsPerFrame(), ta->value().perfsPerCount());
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::LineOrderAttribute *>(&a))
+    {
+        auto &lo   = ta->value();
+        j["value"] = static_cast<int>(lo);
+        string str;
+        switch (lo)
+        {
+        case Imf::INCREASING_Y: str = "increasing y"; break;
+        case Imf::DECREASING_Y: str = "decreasing y"; break;
+        case Imf::RANDOM_Y: str = "random y"; break;
+        default: str = fmt::format("unknown line order (={})", static_cast<int>(lo)); break;
+        }
+        j["string"] = str;
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::M33fAttribute *>(&a))
+    {
+        json mat = json::array();
+        for (int r = 0; r < 3; ++r)
+        {
+            json row = json::array();
+            for (int c = 0; c < 3; ++c) row.push_back(ta->value()[r][c]);
+            mat.push_back(row);
+        }
+        j["value"]      = mat;
+        std::string str = "[";
+        for (int r = 0; r < 3; ++r)
+        {
+            for (int c = 0; c < 3; ++c)
+            {
+                str += fmt::format("{}", ta->value()[r][c]);
+                if (r != 2 || c != 2)
+                    str += ", ";
+            }
+        }
+        str += "]";
+        j["string"] = str;
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::M44fAttribute *>(&a))
+    {
+        json mat = json::array();
+        for (int r = 0; r < 4; ++r)
+        {
+            json row = json::array();
+            for (int c = 0; c < 4; ++c) row.push_back(ta->value()[r][c]);
+            mat.push_back(row);
+        }
+        j["value"]      = mat;
+        std::string str = "[";
+        for (int r = 0; r < 4; ++r)
+        {
+            for (int c = 0; c < 4; ++c)
+            {
+                str += fmt::format("{}", ta->value()[r][c]);
+                if (r != 3 || c != 3)
+                    str += ", ";
+            }
+        }
+        str += "]";
+        j["string"] = str;
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::PreviewImageAttribute *>(&a))
+    {
+        j["value"]["width"]  = ta->value().width();
+        j["value"]["height"] = ta->value().height();
+        j["string"]          = fmt::format("{} by {} pixels", ta->value().width(), ta->value().height());
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::StringAttribute *>(&a))
+    {
+        j["value"] = j["string"] = ta->value();
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::StringVectorAttribute *>(&a))
+    {
+        j["value"] = ta->value();
+        std::string str;
+        for (const auto &s : ta->value()) str += s + ", ";
+        j["string"] = str;
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::RationalAttribute *>(&a))
+    {
+        j["value"]["numerator"]   = ta->value().n / ta->value().d;
+        j["value"]["numerator"]   = ta->value().n;
+        j["value"]["denominator"] = ta->value().d;
+        j["string"] = fmt::format("{}/{} ({})", ta->value().n, ta->value().d, static_cast<double>(ta->value()));
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::TileDescriptionAttribute *>(&a))
+    {
+        auto &t                    = ta->value();
+        j["value"]["mode"]         = t.mode;
+        j["value"]["xSize"]        = t.xSize;
+        j["value"]["ySize"]        = t.ySize;
+        j["value"]["roundingMode"] = t.roundingMode;
+        std::string mode_str;
+        switch (t.mode)
+        {
+        case Imf::ONE_LEVEL: mode_str = "single level"; break;
+        case Imf::MIPMAP_LEVELS: mode_str = "mip-map"; break;
+        case Imf::RIPMAP_LEVELS: mode_str = "rip-map"; break;
+        default: mode_str = fmt::format("level mode {}", int(t.mode)); break;
+        }
+        std::string rounding_str;
+        switch (t.roundingMode)
+        {
+        case Imf::ROUND_DOWN: rounding_str = "down"; break;
+        case Imf::ROUND_UP: rounding_str = "up"; break;
+        default: rounding_str = fmt::format("mode {}", int(t.roundingMode)); break;
+        }
+        j["string"] = fmt::format("mode {}, tile size {}x{}, rounding {}", mode_str, t.xSize, t.ySize, rounding_str);
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::TimeCodeAttribute *>(&a))
+    {
+        auto &t                  = ta->value();
+        j["value"]["hours"]      = t.hours();
+        j["value"]["minutes"]    = t.minutes();
+        j["value"]["seconds"]    = t.seconds();
+        j["value"]["frame"]      = t.frame();
+        j["value"]["dropFrame"]  = t.dropFrame();
+        j["value"]["colorFrame"] = t.colorFrame();
+        j["value"]["fieldPhase"] = t.fieldPhase();
+        j["value"]["bgf0"]       = t.bgf0();
+        j["value"]["bgf1"]       = t.bgf1();
+        j["value"]["bgf2"]       = t.bgf2();
+        j["value"]["userData"]   = t.userData();
+        j["string"] = fmt::format("time {:02}:{:02}:{:02}:{:02}", t.hours(), t.minutes(), t.seconds(), t.frame());
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::V2iAttribute *>(&a))
+    {
+        j["value"]  = {ta->value().x, ta->value().y};
+        j["string"] = fmt::format("({}, {})", ta->value().x, ta->value().y);
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::V2fAttribute *>(&a))
+    {
+        j["value"]  = {ta->value().x, ta->value().y};
+        j["string"] = fmt::format("({}, {})", ta->value().x, ta->value().y);
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::V3iAttribute *>(&a))
+    {
+        j["value"]  = {ta->value().x, ta->value().y, ta->value().z};
+        j["string"] = fmt::format("({}, {}, {})", ta->value().x, ta->value().y, ta->value().z);
+    }
+    else if (const auto *ta = dynamic_cast<const Imf::V3fAttribute *>(&a))
+    {
+        j["value"]  = {ta->value().x, ta->value().y, ta->value().z};
+        j["string"] = fmt::format("({}, {}, {})", ta->value().x, ta->value().y, ta->value().z);
+    }
+    else
+    {
+        j["string"] = "unknown attribute type";
+    }
+    return j;
+}
+
+json exr_header_to_json(const Imf::Header &header)
+{
+    json j;
+    for (Imf::Header::ConstIterator i = header.begin(); i != header.end(); ++i)
+        j[i.name()] = attribute_to_json(i.attribute());
+
+    return j;
+}
+
+} // namespace
 
 struct EXRSaveOptions
 {
@@ -346,13 +687,21 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
             [&]
             {
                 static const Imf::Compression compression_values[] = {
-                    Imf::NO_COMPRESSION,   Imf::RLE_COMPRESSION,   Imf::ZIPS_COMPRESSION,    Imf::ZIP_COMPRESSION,
-                    Imf::PIZ_COMPRESSION,  Imf::PXR24_COMPRESSION, Imf::B44_COMPRESSION,     Imf::B44A_COMPRESSION,
-                    Imf::DWAA_COMPRESSION, Imf::DWAB_COMPRESSION,  Imf::HTJ2K32_COMPRESSION, Imf::HTJ2K256_COMPRESSION};
+                    Imf::NO_COMPRESSION,      Imf::RLE_COMPRESSION,     Imf::ZIPS_COMPRESSION, Imf::ZIP_COMPRESSION,
+                    Imf::PIZ_COMPRESSION,     Imf::PXR24_COMPRESSION,   Imf::B44_COMPRESSION,  Imf::B44A_COMPRESSION,
+                    Imf::DWAA_COMPRESSION,    Imf::DWAB_COMPRESSION,
+#ifndef HDRVIEW_OPENEXR_PRE_3_3
+                    Imf::HTJ2K32_COMPRESSION, Imf::HTJ2K256_COMPRESSION
+#endif
+                };
                 static const int num_compressions = IM_ARRAYSIZE(compression_values);
 
                 string name;
+#ifdef HDRVIEW_OPENEXR_PRE_3_3
+                getCompressionNameFromId(compression_values[s_opts.compression], name);
+#else
                 Imf::getCompressionNameFromId(compression_values[s_opts.compression], name);
+#endif
 
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 if (ImGui::BeginCombo("##Compression", name.c_str()))
@@ -360,13 +709,21 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
                     for (int i = 0; i < num_compressions; ++i)
                     {
                         bool is_selected = (s_opts.compression == compression_values[i]);
+#ifdef HDRVIEW_OPENEXR_PRE_3_3
+                        getCompressionNameFromId(compression_values[i], name);
+#else
                         Imf::getCompressionNameFromId(compression_values[i], name);
+#endif
                         if (ImGui::Selectable(name.c_str(), is_selected))
                             s_opts.compression = compression_values[i];
 
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
+#ifdef HDRVIEW_OPENEXR_PRE_3_3
+                        getCompressionDescriptionFromId(compression_values[i], name);
+#else
                         Imf::getCompressionDescriptionFromId(compression_values[i], name);
+#endif
                         ImGui::Tooltip(name.c_str());
                     }
                     ImGui::EndCombo();

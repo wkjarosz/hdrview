@@ -280,7 +280,7 @@ static json get_makernote(ExifData *ed)
         spdlog::debug("ExifMnoteApple: detected {} tags", tcount);
 
         // Sanity check the offset
-        if (mn_size < 6 + 16 + tcount * 12 + 4)
+        if (mn_size < size_t(6 + 16 + tcount * 12 + 4))
         {
             spdlog::error("ExifMnoteApple Short MakerNote");
             return nullptr;

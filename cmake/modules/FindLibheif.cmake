@@ -33,7 +33,9 @@ find_library(
 
 if(LIBHEIF_INCLUDE_DIR)
   file(STRINGS "${LIBHEIF_INCLUDE_DIR}/libheif/heif_version.h" TMP REGEX "^#define LIBHEIF_VERSION[ \t].*$")
-  string(REGEX MATCHALL "[0-9.]+" LIBHEIF_VERSION ${TMP})
+  if(TMP)
+    string(REGEX MATCHALL "[0-9.]+" LIBHEIF_VERSION ${TMP})
+  endif()
 endif()
 
 find_package_handle_standard_args(Libheif REQUIRED_VARS LIBHEIF_INCLUDE_DIR LIBHEIF_LIBRARY)

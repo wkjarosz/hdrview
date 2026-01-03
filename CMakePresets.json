@@ -79,6 +79,39 @@
       }
     },
     {
+      "name": "linux-base",
+      "hidden": true,
+      "description": "Base settings for Linux builds",
+      "cacheVariables": {
+        "HELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED": "ON",
+        "ASSETS_LOCATION": "/usr/share/HDRView/assets"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-cpm",
+      "hidden": true,
+      "inherits": "linux-base",
+      "description": "Linux with CPM dependencies",
+      "cacheVariables": {
+        "UHDR_BUILD_DEPS": "ON"
+      }
+    },
+    {
+      "name": "linux-local",
+      "hidden": true,
+      "inherits": "linux-base",
+      "description": "Linux using system dependencies",
+      "cacheVariables": {
+        "CPM_USE_LOCAL_PACKAGES": "ON",
+        "UHDR_BUILD_DEPS": "ON"
+      }
+    },
+    {
       "name": "default",
       "displayName": "Default",
       "description": "Default build (auto-detects platform)",
@@ -90,28 +123,48 @@
       "displayName": "macOS Apple Silicon (CPM)",
       "description": "Native Apple Silicon build using CPM for dependencies",
       "inherits": ["ninja-multi-base", "macos-cpm"],
-      "binaryDir": "${sourceDir}/build/macos-arm64-cpm"
+      "binaryDir": "${sourceDir}/build/macos-arm64-cpm",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
     },
     {
       "name": "macos-arm64-brew",
       "displayName": "macOS Apple Silicon (Homebrew)",
       "description": "Native Apple Silicon build using Homebrew dependencies",
       "inherits": ["ninja-multi-base", "macos-brew"],
-      "binaryDir": "${sourceDir}/build/macos-arm64-brew"
+      "binaryDir": "${sourceDir}/build/macos-arm64-brew",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
     },
     {
       "name": "macos-x86_64-cpm",
       "displayName": "macOS Intel (CPM)",
       "description": "Native Intel build using CPM for dependencies",
       "inherits": ["ninja-multi-base", "macos-cpm"],
-      "binaryDir": "${sourceDir}/build/macos-x86_64-cpm"
+      "binaryDir": "${sourceDir}/build/macos-x86_64-cpm",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
     },
     {
       "name": "macos-x86_64-brew",
       "displayName": "macOS Intel (Homebrew)",
       "description": "Native Intel build using Homebrew dependencies",
       "inherits": ["ninja-multi-base", "macos-brew"],
-      "binaryDir": "${sourceDir}/build/macos-x86_64-brew"
+      "binaryDir": "${sourceDir}/build/macos-x86_64-brew",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
     },
     {
       "name": "macos-universal",
@@ -126,6 +179,11 @@
         "HDRVIEW_ENABLE_LIBUHDR": "OFF",
         "HELLOIMGUI_FREETYPE_STATIC": "ON",
         "PNG_HARDWARE_OPTIMIZATIONS": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
       }
     },
     {
@@ -136,18 +194,31 @@
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "UHDR_BUILD_DEPS": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
       }
     },
     {
-      "name": "linux",
-      "displayName": "Linux",
-      "description": "Linux build with system dependencies",
-      "inherits": "ninja-multi-base",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "HELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED": "ON",
-        "ASSETS_LOCATION": "/usr/share/HDRView/assets"
-      },
+      "name": "linux-cpm-build",
+      "displayName": "Linux (CPM)",
+      "description": "Linux build using CPM for dependencies",
+      "inherits": ["ninja-multi-base", "linux-cpm"],
+      "binaryDir": "${sourceDir}/build/linux-cpm",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-local-build",
+      "displayName": "Linux (Local)",
+      "description": "Linux build using system dependencies",
+      "inherits": ["ninja-multi-base", "linux-local"],
+      "binaryDir": "${sourceDir}/build/linux-local",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -367,28 +438,52 @@
       "configurePreset": "windows"
     },
     {
-      "name": "linux-debug",
+      "name": "linux-cpm-debug",
       "displayName": "Debug",
       "inherits": "build-base-debug",
-      "configurePreset": "linux"
+      "configurePreset": "linux-cpm-build"
     },
     {
-      "name": "linux-release",
+      "name": "linux-cpm-release",
       "displayName": "Release",
       "inherits": "build-base-release",
-      "configurePreset": "linux"
+      "configurePreset": "linux-cpm-build"
     },
     {
-      "name": "linux-minsizerel",
+      "name": "linux-cpm-minsizerel",
       "displayName": "MinSizeRel",
       "inherits": "build-base-minsizerel",
-      "configurePreset": "linux"
+      "configurePreset": "linux-cpm-build"
     },
     {
-      "name": "linux-relwithdebinfo",
+      "name": "linux-cpm-relwithdebinfo",
       "displayName": "RelWithDebInfo",
       "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "linux"
+      "configurePreset": "linux-cpm-build"
+    },
+    {
+      "name": "linux-local-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "linux-local-build"
+    },
+    {
+      "name": "linux-local-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "linux-local-build"
+    },
+    {
+      "name": "linux-local-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "linux-local-build"
+    },
+    {
+      "name": "linux-local-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "linux-local-build"
     },
     {
       "name": "emscripten",

@@ -395,7 +395,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
 CPMAddPackage(
   NAME spdlog
-  VERSION 1.16.0
+  VERSION 1.15.3
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
   SYSTEM YES
@@ -485,38 +485,58 @@ else()
 endif()
 
 CPMAddPackage(
-  NAME exif
+  NAME libexif
   GITHUB_REPOSITORY Tom94/libexif
   GIT_TAG f99967d09f1424170388cb2c0b65dcf67d6f5ac3
+  FIND_PACKAGE_ARGUMENTS "QUIET"
   OPTIONS "BUILD_SHARED_LIBS OFF"
   VERSION 0.6.24
   SYSTEM YES
 )
-if(exif_ADDED)
+
+if(libexif_ADDED AND TARGET exif_static)
   message(STATUS "Will build exif library")
-elseif(exif_FOUND OR TARGET exif_static)
-  message(STATUS "Using system-installed exif library")
+  disable_target_warnings(exif_static)
+  list(APPEND HDRVIEW_DEPENDENCIES "exif_static")
+elseif(libexif_FOUND AND TARGET exif)
+  message(STATUS "Using system-installed exif library (version ${LIBEXIF_VERSION})")
+  list(APPEND HDRVIEW_DEPENDENCIES "exif")
 else()
   message(FATAL_ERROR "Could not find or download exif library.")
 endif()
-disable_target_warnings(exif_static)
-list(APPEND HDRVIEW_DEPENDENCIES "exif_static")
 
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 if(HDRVIEW_ENABLE_LIBPNG)
   # cmake-format: off
+  # Try to find system ZLIB first (using our FindZLIB.cmake to avoid broken zlib-ng-compat configs)
   CPMAddPackage(
-    NAME zlib-cmake
-    URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
-    OPTIONS "ZLIB_TEST OFF" "ZLIB_INSTALL ON"
+    NAME ZLIB
+    VERSION 1.3.1
+    URL https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.2.zip
+    OPTIONS "ZLIB_TEST OFF"
+            "WITH_GTEST OFF"
+            "ZLIB_INSTALL ON"
+            "ZLIB_ALIASES ON"
+            "ZLIB_COMPAT ON"
     SYSTEM YES
   )
-  if(zlib-cmake_ADDED)
+  if(ZLIB_ADDED)
     message(STATUS "Will build zlib library")
-    set_target_properties(ZLIB PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-    disable_target_warnings(ZLIB)
-  elseif(ZLIB_FOUND)
-    message(STATUS "Using system-installed zlib library")
+    # zlib-ng creates 'zlib-ng' target; create ZLIB::ZLIB alias if not already present
+    if(NOT TARGET ZLIB::ZLIB)
+      if(TARGET zlib-ng)
+        add_library(ZLIB::ZLIB ALIAS zlib-ng)
+      else()
+        message(FATAL_ERROR "Neither ZLIB::ZLIB nor zlib-ng target found after building zlib-ng")
+      endif()
+    endif()
+  elseif(TARGET ZLIB::ZLIB)
+    # Target exists but wasn't built by CPM, so it was found by find_package()
+    if(DEFINED ZLIB_VERSION_STRING)
+      message(STATUS "Using system-installed zlib library (version ${ZLIB_VERSION_STRING})")
+    else()
+      message(STATUS "Using system-installed zlib library")
+    endif()
   else()
     message(FATAL_ERROR "zlib not found.")
   endif()
@@ -581,7 +601,7 @@ CPMAddPackage(
   # GITHUB_REPOSITORY AcademySoftwareFoundation/openexr 
   FIND_PACKAGE_ARGUMENTS "REQUIRED"
   # NOTE: OpenEXR v3.3.0 broke subsampled channel loading, but it seems to be fixed starting with v3.4
-  VERSION 3.4.4
+  VERSION 3.2.4
   GIT_TAG v3.4.4
   URL https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.4.4.zip
   OPTIONS "BUILD_SHARED_LIBS OFF"
@@ -1020,6 +1040,7 @@ if(HDRVIEW_ENABLE_LIBWEBP)
     NAME libwebp
     VERSION 1.6.0
     URL https://github.com/webmproject/libwebp/archive/refs/tags/v1.6.0.zip
+    FIND_PACKAGE_ARGUMENTS "QUIET"
     # DOWNLOAD_ONLY YES
     OPTIONS "WEBP_LINK_STATIC ON"
             "WEBP_ENABLE_SIMD ${WEBP_SIMD_ENABLED}"
@@ -1042,8 +1063,10 @@ if(HDRVIEW_ENABLE_LIBWEBP)
   )
   if(libwebp_ADDED)
     message(STATUS "Will build libwebp library")
-  elseif(TARGET webpdecoder)
-    message(STATUS "Will link against system-installed libwebp library")
+  elseif(libwebp_FOUND AND TARGET webp AND TARGET webpdemux)
+    message(STATUS "Using system-installed libwebp library (version ${WEBP_VERSION})")
+  elseif(TARGET webp AND TARGET webpdemux)
+    message(STATUS "Using previously built libwebp library")
   else()
     message(FATAL_ERROR "libwebp library not found. Please install it.")
   endif()
@@ -1108,6 +1131,7 @@ if(HDRVIEW_ENABLE_LIBRAW)
       GITHUB_REPOSITORY LibRaw/LibRaw-cmake
       GIT_TAG eb98e4325aef2ce85d2eb031c2ff18640ca616d3
       VERSION 0.21.0
+      FIND_PACKAGE_ARGUMENTS "QUIET"
       OPTIONS "LIBRAW_PATH ${LibRaw_src_SOURCE_DIR}"
               "BUILD_SHARED_LIBS OFF" 
               "LIBRAW_BUILD_TESTS OFF"
@@ -1116,12 +1140,12 @@ if(HDRVIEW_ENABLE_LIBRAW)
               "ENABLE_X3FTOOLS ${HDRVIEW_ENABLE_X3F}"
       SYSTEM YES
   )
-  if(LibRaw_ADDED)
+  if(LibRaw_ADDED AND TARGET libraw::libraw_r)
       message(STATUS "Will build libraw library")
       mark_as_system_library(libraw::libraw_r)
       disable_target_warnings(libraw::libraw_r)
-  elseif(TARGET libraw::libraw_r)
-    message(STATUS "Will link against system-installed libraw_r library")
+  elseif(LibRaw_FOUND AND TARGET libraw::libraw_r)
+    message(STATUS "Using system-installed libraw library (version ${LIBRAW_VERSION})")
   else()
     message(FATAL_ERROR "libraw_r library not found. Please install it.")
   endif()
@@ -1290,7 +1314,6 @@ hello_imgui_add_app(
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
   src/imageio/image_loader.cpp
   src/imageio/dds.cpp
-  src/imageio/exr_header.cpp
   src/imageio/exif.cpp
   src/imageio/exr.cpp
   src/imageio/heif.cpp
