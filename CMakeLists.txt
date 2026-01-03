@@ -16,6 +16,30 @@ project(
 
 # By default, we install in a portable way (i.e. assets and executable are in the same folder)
 option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
+option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
+option(HDRVIEW_ENABLE_LIBJPEG "Enable libjpeg(-turbo) support" ON)
+option(UHDR_BUILD_DEPS "Whether to build uhdr dependencies instead of using system-installed ones" ON)
+option(HDRVIEW_ENABLE_LIBUHDR "Whether to build with Ultra HDR support" ON)
+option(HDRVIEW_ENABLE_LIBJXL "Enable JPEG-XL support" ON)
+option(HDRVIEW_ENABLE_J2K "Enable JPEG-2000 support" ON)
+option(HDRVIEW_ENABLE_HTJ2K "Enable high-throughput JPEG2000 (HTJ2K) support" ON)
+option(HDRVIEW_ENABLE_AVIF "Enable AVIF support" ON)
+option(HDRVIEW_ENABLE_HEIC "Enable HEIC support" ON)
+option(HDRVIEW_ENABLE_AVCI "Enable AVCI support" ON)
+option(HDRVIEW_ENABLE_LIBWEBP "Enable LIBWEBP support" ON)
+option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
+option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
+option(HDRVIEW_ENABLE_X3F "Enable LibRaw X3F support" ON)
+
+set(HDRVIEW_ENABLE_LIBHEIF OFF)
+if(HDRVIEW_ENABLE_J2K
+   OR HDRVIEW_ENABLE_HTJ2K
+   OR HDRVIEW_ENABLE_AVIF
+   OR HDRVIEW_ENABLE_HEIC
+   OR HDRVIEW_ENABLE_AVCI
+)
+  set(HDRVIEW_ENABLE_LIBHEIF ON)
+endif()
 
 set(CMAKE_INCLUDE_DIRECTORIES_PROJECT_BEFORE ON)
 
@@ -505,33 +529,37 @@ else()
   message(FATAL_ERROR "Could not find or download exif library.")
 endif()
 
-option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
-if(HDRVIEW_ENABLE_LIBPNG)
+
+if(HDRVIEW_ENABLE_LIBPNG OR HDRVIEW_ENABLE_LIBHEIF)
   # cmake-format: off
-  CPMAddPackage(
-    NAME zlib-cmake
-    VERSION 1.2.12
-    URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
-    #FIND_PACKAGE_ARGUMENTS "NAMES zlib ZLIB"
-    OPTIONS "ZLIB_TEST OFF" "ZLIB_INSTALL ON"
-    SYSTEM YES
-  )
-  if(zlib-cmake_ADDED)
-    message(STATUS "Will build zlib library")
-    set_target_properties(ZLIB PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-    disable_target_warnings(ZLIB)
-  elseif(TARGET ZLIB::ZLIB)
-    # Target exists but wasn't built by CPM, so it was found by find_package()
-    if(DEFINED ZLIB_VERSION_STRING)
-      message(STATUS "Using system-installed zlib library (version ${ZLIB_VERSION_STRING})")
+  if(EMSCRIPTEN OR (CMAKE_OSX_ARCHITECTURES MATCHES ".*arm64.*" AND CMAKE_OSX_ARCHITECTURES MATCHES ".*x86_64.*"))
+    CPMAddPackage(
+      NAME zlib-cmake
+      VERSION 1.2.12
+      URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
+      #FIND_PACKAGE_ARGUMENTS "NAMES zlib ZLIB"
+      OPTIONS "ZLIB_TEST OFF" "ZLIB_INSTALL ON"
+      SYSTEM YES
+    )
+    if(zlib-cmake_ADDED)
+      message(STATUS "Will build zlib library")
+      set_target_properties(ZLIB PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+      disable_target_warnings(ZLIB)
+    elseif(TARGET ZLIB::ZLIB)
+      # Target exists but wasn't built by CPM, so it was found by find_package()
+      if(DEFINED ZLIB_VERSION_STRING)
+        message(STATUS "Using system-installed zlib library (version ${ZLIB_VERSION_STRING})")
+      else()
+        message(STATUS "Using system-installed zlib library")
+      endif()
     else()
-      message(STATUS "Using system-installed zlib library")
+      message(FATAL_ERROR "zlib not found.")
     endif()
-  else()
-    message(FATAL_ERROR "zlib not found.")
   endif()
   # cmake-format: on
+endif()
 
+if(HDRVIEW_ENABLE_LIBPNG)
   CPMAddPackage(
     NAME PNG
     GITHUB_REPOSITORY pnggroup/libpng
@@ -625,7 +653,6 @@ list(APPEND HDRVIEW_DEPENDENCIES "OpenEXR::OpenEXR")
 
 # cmake-format: off
 # libjpeg-turbo
-option(HDRVIEW_ENABLE_LIBJPEG "Enable libjpeg(-turbo) support" ON)
 if(HDRVIEW_ENABLE_LIBJPEG)
   find_package(JPEG)
   if(JPEG_FOUND)
@@ -816,8 +843,6 @@ endif()
 # cmake-format: on
 
 # cmake-format: off
-option(UHDR_BUILD_DEPS "Whether to build uhdr dependencies instead of using system-installed ones" ON)
-option(HDRVIEW_ENABLE_LIBUHDR "Whether to build with Ultra HDR support" ON)
 if(HDRVIEW_ENABLE_LIBUHDR)
   CPMAddPackage(
     NAME libuhdr
@@ -855,7 +880,6 @@ if(HDRVIEW_ENABLE_LIBUHDR)
 endif()
 # cmake-format: on
 
-option(HDRVIEW_ENABLE_LIBJXL "Enable JPEG-XL support" ON)
 if(HDRVIEW_ENABLE_LIBJXL)
   CPMAddPackage(
     NAME JXL
@@ -936,22 +960,6 @@ else()
   endif()
 endif()
 
-option(HDRVIEW_ENABLE_J2K "Enable JPEG-2000 support" ON)
-option(HDRVIEW_ENABLE_HTJ2K "Enable high-throughput JPEG2000 (HTJ2K) support" ON)
-option(HDRVIEW_ENABLE_AVIF "Enable AVIF support" ON)
-option(HDRVIEW_ENABLE_HEIC "Enable HEIC support" ON)
-option(HDRVIEW_ENABLE_AVCI "Enable AVCI support" ON)
-
-set(HDRVIEW_ENABLE_LIBHEIF OFF)
-if(HDRVIEW_ENABLE_J2K
-   OR HDRVIEW_ENABLE_HTJ2K
-   OR HDRVIEW_ENABLE_AVIF
-   OR HDRVIEW_ENABLE_HEIC
-   OR HDRVIEW_ENABLE_AVCI
-)
-  set(HDRVIEW_ENABLE_LIBHEIF ON)
-endif()
-
 if(HDRVIEW_ENABLE_LIBHEIF)
   CPMAddPackage(
     NAME Libheif
@@ -1018,7 +1026,6 @@ if(HDRVIEW_ENABLE_LIBHEIF)
   list(APPEND HDRVIEW_DEPENDENCIES "heif")
 endif()
 
-option(HDRVIEW_ENABLE_LIBWEBP "Enable LIBWEBP support" ON)
 if(HDRVIEW_ENABLE_LIBWEBP)
   # Disable SIMD for Emscripten to avoid AVX2 pointer type issues
   if(EMSCRIPTEN)
@@ -1064,7 +1071,6 @@ if(HDRVIEW_ENABLE_LIBWEBP)
   list(APPEND HDRVIEW_DEPENDENCIES "webp" "webpdemux")
 endif()
 
-option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 if(HDRVIEW_ENABLE_LIBTIFF)
   CPMAddPackage(
     NAME TIFF
@@ -1098,8 +1104,6 @@ if(HDRVIEW_ENABLE_LIBTIFF)
 endif()
 
 
-option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
-option(HDRVIEW_ENABLE_X3F "Enable LibRaw X3F support" ON)
 if(HDRVIEW_ENABLE_LIBRAW)
   CPMAddPackage(
       NAME LibRaw_src
