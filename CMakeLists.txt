@@ -885,7 +885,6 @@ if(HDRVIEW_ENABLE_LIBJXL)
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
     VERSION 0.7.0 # version in ubuntu 24.04
-    FIND_PACKAGE_ARGUMENTS "REQUIRED"
     URL https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.1.zip
     # GIT_TAG 6e83d97e73c68ff7d3374f939971bab617be4c3c
     OPTIONS "BUILD_SHARED_LIBS OFF"
@@ -912,7 +911,7 @@ if(HDRVIEW_ENABLE_LIBJXL)
   if(JXL_ADDED)
     message(STATUS "Will build JPEG-XL library")
     # make the lcms2 target available for us to link against
-    target_link_libraries(jxl PUBLIC lcms2)
+    # target_link_libraries(jxl PUBLIC lcms2)
     # Disable warnings for all jxl targets
     disable_target_warnings(jxl)
     disable_target_warnings(jxl_dec)
