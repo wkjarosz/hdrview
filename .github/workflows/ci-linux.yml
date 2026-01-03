@@ -28,10 +28,10 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm-build" }
-          - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local-build" }
-          - { name: "Ubuntu 22.04 CPM", os: ubuntu-22.04, preset: "linux-cpm-build" }
-          - { name: "Ubuntu 22.04 Local", os: ubuntu-22.04, preset: "linux-local-build" }
+          - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm" }
+          - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local" }
+          - { name: "Ubuntu 22.04 CPM", os: ubuntu-22.04, preset: "linux-cpm" }
+          - { name: "Ubuntu 22.04 Local", os: ubuntu-22.04, preset: "linux-local" }
         buildtype: [Release, Debug]
 
     steps:

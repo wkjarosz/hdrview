@@ -202,7 +202,7 @@
       }
     },
     {
-      "name": "linux-cpm-build",
+      "name": "linux-cpm",
       "displayName": "Linux (CPM)",
       "description": "Linux build using CPM for dependencies",
       "inherits": ["ninja-multi-base", "linux-cpm"],
@@ -214,7 +214,7 @@
       }
     },
     {
-      "name": "linux-local-build",
+      "name": "linux-local",
       "displayName": "Linux (Local)",
       "description": "Linux build using system dependencies",
       "inherits": ["ninja-multi-base", "linux-local"],
@@ -441,49 +441,49 @@
       "name": "linux-cpm-debug",
       "displayName": "Debug",
       "inherits": "build-base-debug",
-      "configurePreset": "linux-cpm-build"
+      "configurePreset": "linux-cpm"
     },
     {
       "name": "linux-cpm-release",
       "displayName": "Release",
       "inherits": "build-base-release",
-      "configurePreset": "linux-cpm-build"
+      "configurePreset": "linux-cpm"
     },
     {
       "name": "linux-cpm-minsizerel",
       "displayName": "MinSizeRel",
       "inherits": "build-base-minsizerel",
-      "configurePreset": "linux-cpm-build"
+      "configurePreset": "linux-cpm"
     },
     {
       "name": "linux-cpm-relwithdebinfo",
       "displayName": "RelWithDebInfo",
       "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "linux-cpm-build"
+      "configurePreset": "linux-cpm"
     },
     {
       "name": "linux-local-debug",
       "displayName": "Debug",
       "inherits": "build-base-debug",
-      "configurePreset": "linux-local-build"
+      "configurePreset": "linux-local"
     },
     {
       "name": "linux-local-release",
       "displayName": "Release",
       "inherits": "build-base-release",
-      "configurePreset": "linux-local-build"
+      "configurePreset": "linux-local"
     },
     {
       "name": "linux-local-minsizerel",
       "displayName": "MinSizeRel",
       "inherits": "build-base-minsizerel",
-      "configurePreset": "linux-local-build"
+      "configurePreset": "linux-local"
     },
     {
       "name": "linux-local-relwithdebinfo",
       "displayName": "RelWithDebInfo",
       "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "linux-local-build"
+      "configurePreset": "linux-local"
     },
     {
       "name": "emscripten",
