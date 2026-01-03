@@ -140,7 +140,7 @@ json get_heif_info()
     add_codec("HEVC", heif_compression_HEVC);
     add_codec("JPEG", heif_compression_JPEG);
     add_codec("JPEG2000", heif_compression_JPEG2000);
-#if LIBHEIF_NUMERIC_VERSION >= ((1 << 24) | (17 << 16) | (0 << 8) | 0) // 1.17.0
+#if LIBHEIF_NUMERIC_VERSION >= ((1 << 24) | (20 << 16) | (0 << 8) | 0) // 1.20.0
     add_codec("HTJ2K", heif_compression_HTJ2K);
 #endif
     add_codec("Uncompressed", heif_compression_uncompressed);
