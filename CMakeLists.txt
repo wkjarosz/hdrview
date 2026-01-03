@@ -1074,13 +1074,14 @@ if(HDRVIEW_ENABLE_LIBTIFF)
   )
   if(TIFF_ADDED)
     message(STATUS "Will build libtiff library")
+    disable_target_warnings(tiff)
+    list(APPEND HDRVIEW_DEPENDENCIES "tiff")
   elseif(TARGET TIFF::TIFF)
     message(STATUS "Will link against system-installed libtiff library")
+    list(APPEND HDRVIEW_DEPENDENCIES "TIFF::TIFF")
   else()
     message(FATAL_ERROR "libtiff library not found. Please install it.")
   endif()
-  # Link both decoder and encoder libraries, plus demux for metadata extraction
-  list(APPEND HDRVIEW_DEPENDENCIES "TIFF::TIFF")
 endif()
 
 
