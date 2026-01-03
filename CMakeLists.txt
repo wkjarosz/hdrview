@@ -419,7 +419,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
 CPMAddPackage(
   NAME spdlog
-  VERSION 1.12.0
+  VERSION 1.14.0 # this is the first version that has MDC support, unfortunately ubuntu 22.04 has 1.12.0
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
   SYSTEM YES
@@ -884,7 +884,7 @@ if(HDRVIEW_ENABLE_LIBJXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
-    VERSION 0.7.0 # version in ubuntu 24.04
+    VERSION 0.11.1 # version in ubuntu 24.04
     URL https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.1.zip
     # GIT_TAG 6e83d97e73c68ff7d3374f939971bab617be4c3c
     OPTIONS "BUILD_SHARED_LIBS OFF"
