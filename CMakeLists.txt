@@ -508,28 +508,17 @@ endif()
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 if(HDRVIEW_ENABLE_LIBPNG)
   # cmake-format: off
-  # Try to find system ZLIB first (using our FindZLIB.cmake to avoid broken zlib-ng-compat configs)
   CPMAddPackage(
     NAME ZLIB
     VERSION 1.2.12
-    URL https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.2.zip
-    OPTIONS "ZLIB_TEST OFF"
-            "WITH_GTEST OFF"
-            "ZLIB_INSTALL ON"
-            "ZLIB_ALIASES ON"
-            "ZLIB_COMPAT ON"
+    URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
+    OPTIONS "ZLIB_TEST OFF" "ZLIB_INSTALL ON"
     SYSTEM YES
   )
   if(ZLIB_ADDED)
     message(STATUS "Will build zlib library")
-    # zlib-ng creates 'zlib-ng' target; create ZLIB::ZLIB alias if not already present
-    if(NOT TARGET ZLIB::ZLIB)
-      if(TARGET zlib-ng)
-        add_library(ZLIB::ZLIB ALIAS zlib-ng)
-      else()
-        message(FATAL_ERROR "Neither ZLIB::ZLIB nor zlib-ng target found after building zlib-ng")
-      endif()
-    endif()
+    set_target_properties(ZLIB PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+    disable_target_warnings(ZLIB)
   elseif(TARGET ZLIB::ZLIB)
     # Target exists but wasn't built by CPM, so it was found by find_package()
     if(DEFINED ZLIB_VERSION_STRING)
