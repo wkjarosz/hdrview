@@ -40,34 +40,34 @@ jobs:
               preset: "macos-universal",
             }
           - {
-              name: "macOS 14 Apple Silicon cpm",
+              name: "macOS 14 Apple Silicon CPM",
               os: macos-14,
               preset: "macos-arm64-cpm",
             }
           - {
-              name: "macOS 14 Apple Silicon brew",
+              name: "macOS 14 Apple Silicon Local",
               os: macos-14,
-              preset: "macos-arm64-brew",
+              preset: "macos-arm64-local",
             }
           - {
-              name: "macOS 15 Apple Silicon cpm",
+              name: "macOS 15 Apple Silicon CPM",
               os: macos-15,
               preset: "macos-arm64-cpm",
             }
           - {
-              name: "macOS 15 Apple Silicon brew",
+              name: "macOS 15 Apple Silicon Local",
               os: macos-15,
-              preset: "macos-arm64-brew",
+              preset: "macos-arm64-local",
             }
           - {
-              name: "macOS 15 Intel cpm",
+              name: "macOS 15 Intel CPM",
               os: macos-15-intel,
               preset: "macos-x86_64-cpm",
             }
           - {
-              name: "macOS 15 Intel brew",
+              name: "macOS 15 Intel Local",
               os: macos-15-intel,
-              preset: "macos-x86_64-brew",
+              preset: "macos-x86_64-local",
             }
 
         buildtype: [Release, Debug]

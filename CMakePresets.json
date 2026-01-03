@@ -68,7 +68,7 @@
       }
     },
     {
-      "name": "macos-brew",
+      "name": "macos-local",
       "hidden": true,
       "inherits": "macos-base",
       "description": "macOS using Homebrew dependencies",
@@ -131,11 +131,11 @@
       }
     },
     {
-      "name": "macos-arm64-brew",
-      "displayName": "macOS Apple Silicon (Homebrew)",
+      "name": "macos-arm64-local",
+      "displayName": "macOS Apple Silicon (Local)",
       "description": "Native Apple Silicon build using Homebrew dependencies",
-      "inherits": ["ninja-multi-base", "macos-brew"],
-      "binaryDir": "${sourceDir}/build/macos-arm64-brew",
+      "inherits": ["ninja-multi-base", "macos-local"],
+      "binaryDir": "${sourceDir}/build/macos-arm64-local",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -155,11 +155,11 @@
       }
     },
     {
-      "name": "macos-x86_64-brew",
-      "displayName": "macOS Intel (Homebrew)",
+      "name": "macos-x86_64-local",
+      "displayName": "macOS Intel (Local)",
       "description": "Native Intel build using Homebrew dependencies",
-      "inherits": ["ninja-multi-base", "macos-brew"],
-      "binaryDir": "${sourceDir}/build/macos-x86_64-brew",
+      "inherits": ["ninja-multi-base", "macos-local"],
+      "binaryDir": "${sourceDir}/build/macos-x86_64-local",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -318,28 +318,28 @@
       "configurePreset": "macos-arm64-cpm"
     },
     {
-      "name": "macos-arm64-brew-debug",
+      "name": "macos-arm64-local-debug",
       "displayName": "Debug",
       "inherits": "build-base-debug",
-      "configurePreset": "macos-arm64-brew"
+      "configurePreset": "macos-arm64-local"
     },
     {
-      "name": "macos-arm64-brew-release",
+      "name": "macos-arm64-local-release",
       "displayName": "Release",
       "inherits": "build-base-release",
-      "configurePreset": "macos-arm64-brew"
+      "configurePreset": "macos-arm64-local"
     },
     {
-      "name": "macos-arm64-brew-minsizerel",
+      "name": "macos-arm64-local-minsizerel",
       "displayName": "MinSizeRel",
       "inherits": "build-base-minsizerel",
-      "configurePreset": "macos-arm64-brew"
+      "configurePreset": "macos-arm64-local"
     },
     {
-      "name": "macos-arm64-brew-relwithdebinfo",
+      "name": "macos-arm64-local-relwithdebinfo",
       "displayName": "RelWithDebInfo",
       "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "macos-arm64-brew"
+      "configurePreset": "macos-arm64-local"
     },
     {
       "name": "macos-x86_64-cpm-debug",
@@ -366,28 +366,28 @@
       "configurePreset": "macos-x86_64-cpm"
     },
     {
-      "name": "macos-x86_64-brew-debug",
+      "name": "macos-x86_64-local-debug",
       "displayName": "Debug",
       "inherits": "build-base-debug",
-      "configurePreset": "macos-x86_64-brew"
+      "configurePreset": "macos-x86_64-local"
     },
     {
-      "name": "macos-x86_64-brew-release",
+      "name": "macos-x86_64-local-release",
       "displayName": "Release",
       "inherits": "build-base-release",
-      "configurePreset": "macos-x86_64-brew"
+      "configurePreset": "macos-x86_64-local"
     },
     {
-      "name": "macos-x86_64-brew-minsizerel",
+      "name": "macos-x86_64-local-minsizerel",
       "displayName": "MinSizeRel",
       "inherits": "build-base-minsizerel",
-      "configurePreset": "macos-x86_64-brew"
+      "configurePreset": "macos-x86_64-local"
     },
     {
-      "name": "macos-x86_64-brew-relwithdebinfo",
+      "name": "macos-x86_64-local-relwithdebinfo",
       "displayName": "RelWithDebInfo",
       "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "macos-x86_64-brew"
+      "configurePreset": "macos-x86_64-local"
     },
     {
       "name": "macos-universal-debug",

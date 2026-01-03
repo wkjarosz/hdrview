@@ -419,7 +419,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
 CPMAddPackage(
   NAME spdlog
-  VERSION 1.15.3
+  VERSION 1.12.0
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
   SYSTEM YES
@@ -884,7 +884,7 @@ if(HDRVIEW_ENABLE_LIBJXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
-    VERSION 0.11.1
+    VERSION 0.7.0 # version in ubuntu 24.04
     URL https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.1.zip
     # GIT_TAG 6e83d97e73c68ff7d3374f939971bab617be4c3c
     OPTIONS "BUILD_SHARED_LIBS OFF"
@@ -1035,7 +1035,7 @@ if(HDRVIEW_ENABLE_LIBWEBP)
   endif()
   CPMAddPackage(
     NAME libwebp
-    VERSION 1.6.0
+    VERSION 1.3.2 # version in ubuntu 24.04
     URL https://github.com/webmproject/libwebp/archive/refs/tags/v1.6.0.zip
     FIND_PACKAGE_ARGUMENTS "QUIET"
     # DOWNLOAD_ONLY YES
@@ -1074,7 +1074,7 @@ endif()
 if(HDRVIEW_ENABLE_LIBTIFF)
   CPMAddPackage(
     NAME TIFF
-    VERSION 4.7.0
+    VERSION 4.5.1 # version in ubuntu 24.04
     GITHUB_REPOSITORY Tom94/libtiff
     GIT_TAG b6446af165a5a4177eb9a4f6834bb948d4f89d39
     OPTIONS "BUILD_SHARED_LIBS OFF"
