@@ -532,7 +532,26 @@ endif()
 
 if(HDRVIEW_ENABLE_LIBPNG OR HDRVIEW_ENABLE_LIBHEIF)
   # cmake-format: off
-  if(WIN32 OR MSVC OR EMSCRIPTEN OR (CMAKE_OSX_ARCHITECTURES MATCHES ".*arm64.*" AND CMAKE_OSX_ARCHITECTURES MATCHES ".*x86_64.*"))
+  # Build zlib ourselves if:
+  # - On Windows/Emscripten (system zlib may not be available)
+  # - Building a universal binary on macOS (need both architectures)
+  # - Cross-compiling on macOS (CMAKE_OSX_ARCHITECTURES is set and differs from host)
+  set(NEED_CUSTOM_ZLIB FALSE)
+  if(WIN32 OR MSVC OR EMSCRIPTEN)
+    set(NEED_CUSTOM_ZLIB TRUE)
+  elseif(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    # Check if building universal binary
+    if(CMAKE_OSX_ARCHITECTURES MATCHES ".*arm64.*" AND CMAKE_OSX_ARCHITECTURES MATCHES ".*x86_64.*")
+      set(NEED_CUSTOM_ZLIB TRUE)
+    else()
+      # Check if cross-compiling (target arch differs from host)
+      if(NOT CMAKE_OSX_ARCHITECTURES STREQUAL "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+        set(NEED_CUSTOM_ZLIB TRUE)
+      endif()
+    endif()
+  endif()
+  
+  if(NEED_CUSTOM_ZLIB)
     CPMAddPackage(
       NAME zlib-cmake
       VERSION 1.2.12
@@ -905,6 +924,10 @@ if(HDRVIEW_ENABLE_LIBJXL)
             "JPEGXL_BUNDLE_LIBPNG OFF"
             "JPEGXL_ENABLE_SJPEG OFF"
             # "JPEGXL_FORCE_SYSTEM_LCMS2 ON"
+            "HWY_ENABLE_TESTS OFF"
+            "HWY_ENABLE_INSTALL OFF"
+            "HWY_ENABLE_EXAMPLES OFF"
+            "HWY_ENABLE_CONTRIB OFF"
             "EXCLUDE_FROM_ALL YES"
     SYSTEM YES
   )
