@@ -93,7 +93,7 @@
       }
     },
     {
-      "name": "linux-cpm",
+      "name": "linux-cpm-base",
       "hidden": true,
       "inherits": "linux-base",
       "description": "Linux with CPM dependencies",
@@ -102,7 +102,7 @@
       }
     },
     {
-      "name": "linux-local",
+      "name": "linux-local-base",
       "hidden": true,
       "inherits": "linux-base",
       "description": "Linux using system dependencies",
@@ -205,7 +205,7 @@
       "name": "linux-cpm",
       "displayName": "Linux (CPM)",
       "description": "Linux build using CPM for dependencies",
-      "inherits": ["ninja-multi-base", "linux-cpm"],
+      "inherits": ["ninja-multi-base", "linux-cpm-base"],
       "binaryDir": "${sourceDir}/build/linux-cpm",
       "condition": {
         "type": "equals",
@@ -217,7 +217,7 @@
       "name": "linux-local",
       "displayName": "Linux (Local)",
       "description": "Linux build using system dependencies",
-      "inherits": ["ninja-multi-base", "linux-local"],
+      "inherits": ["ninja-multi-base", "linux-local-base"],
       "binaryDir": "${sourceDir}/build/linux-local",
       "condition": {
         "type": "equals",
