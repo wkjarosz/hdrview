@@ -68,10 +68,62 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 #define HDRVIEW_HAS_JXL_BOX_COMPLETE 0
 #endif
 
+// Check if decoder functions have removed unused_format parameter (removed in 0.9.0)
+#if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0, 9, 0)
+#define HDRVIEW_JXL_DECODER_NO_UNUSED_FORMAT 1
+#else
+#define HDRVIEW_JXL_DECODER_NO_UNUSED_FORMAT 0
+#endif
+
 #include "colorspace.h"
 #include "fonts.h"
 #include "icc.h"
 #include "timer.h"
+
+// Wrapper functions to handle API changes across libjxl versions
+
+static inline JxlDecoderStatus hdrview_JxlDecoderGetICCProfileSize(const JxlDecoder *dec, JxlColorProfileTarget target,
+                                                                   size_t *size)
+{
+#if HDRVIEW_JXL_DECODER_NO_UNUSED_FORMAT
+    return JxlDecoderGetICCProfileSize(dec, target, size);
+#else
+    return JxlDecoderGetICCProfileSize(dec, nullptr, target, size);
+#endif
+}
+
+static inline JxlDecoderStatus hdrview_JxlDecoderGetColorAsICCProfile(const JxlDecoder     *dec,
+                                                                      JxlColorProfileTarget target,
+                                                                      uint8_t *icc_profile, size_t size)
+{
+#if HDRVIEW_JXL_DECODER_NO_UNUSED_FORMAT
+    return JxlDecoderGetColorAsICCProfile(dec, target, icc_profile, size);
+#else
+    return JxlDecoderGetColorAsICCProfile(dec, nullptr, target, icc_profile, size);
+#endif
+}
+
+static inline JxlDecoderStatus hdrview_JxlDecoderGetColorAsEncodedProfile(const JxlDecoder     *dec,
+                                                                          JxlColorProfileTarget target,
+                                                                          JxlColorEncoding     *color_encoding)
+{
+#if HDRVIEW_JXL_DECODER_NO_UNUSED_FORMAT
+    return JxlDecoderGetColorAsEncodedProfile(dec, target, color_encoding);
+#else
+    return JxlDecoderGetColorAsEncodedProfile(dec, nullptr, target, color_encoding);
+#endif
+}
+
+static inline float hdrview_JxlEncoderDistanceFromQuality(float quality)
+{
+#if HDRVIEW_JXL_DECODER_NO_UNUSED_FORMAT
+    return JxlEncoderDistanceFromQuality(quality);
+#else
+    // Manual quality-to-distance conversion for libjxl < 0.9.0
+    // Based on the formula used in libjxl: distance = quality >= 100 ? 0 : 0.1 + (100 - quality) * 0.09
+    return quality >= 100.0f ? 0.0f : 0.1f + (100.0f - quality) * 0.09f;
+#endif
+}
 
 static TransferFunction transfer_function_from_color_encoding(const JxlColorEncoding &enc)
 {
@@ -475,12 +527,13 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             // Get the ICC color profile of the pixel data
             size_t icc_size;
 
-            if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &icc_size))
+            if (JXL_DEC_SUCCESS !=
+                hdrview_JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &icc_size))
                 throw invalid_argument{"JxlDecoderGetICCProfileSize failed"};
 
             icc_profile.resize(icc_size);
-            if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA,
-                                                                  icc_profile.data(), icc_profile.size()))
+            if (JXL_DEC_SUCCESS != hdrview_JxlDecoderGetColorAsICCProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA,
+                                                                          icc_profile.data(), icc_profile.size()))
                 throw invalid_argument{"JxlDecoderGetColorAsICCProfile failed"};
             else
             {
@@ -489,7 +542,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             }
 
             if (JXL_DEC_SUCCESS ==
-                JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &file_enc))
+                hdrview_JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &file_enc))
             {
                 has_encoded_profile = true;
                 spdlog::info("File has an encoded color profile:\n{}", color_encoding_info(file_enc));
@@ -981,7 +1034,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     if (!frame_settings)
         throw std::runtime_error("JxlEncoderFrameSettingsCreate failed");
 
-    float distance = JxlEncoderDistanceFromQuality(quality);
+    float distance = hdrview_JxlEncoderDistanceFromQuality(quality);
     if (JXL_ENC_SUCCESS != JxlEncoderSetFrameDistance(frame_settings, distance))
         throw std::runtime_error("JxlEncoderSetFrameDistance failed");
 
