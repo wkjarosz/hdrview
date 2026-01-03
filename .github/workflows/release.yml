@@ -21,25 +21,17 @@ jobs:
       matrix:
         config:
           # macos-14 is an arm64 runner
-          #
-          # Disabling universal build until libultrahdr fixes its cross-compilation
-          # - {
-          #     name: "macOS Universal",
-          #     os: macos-14,
-          #     arch: "universal",
-          #     flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/opt/homebrew/Cellar/brotli/1.1.0/include;/opt/homebrew/Cellar/brotli/1.1.0/lib/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/Cellar" -DHDRVIEW_ENABLE_LIBUHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON',
-          #   }
           - {
               name: "macOS Apple Silicon",
               os: macos-14,
-              arch: "arm64",
-              flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF -DUHDR_BUILD_DEPS=ON",
+              preset: "macos-arm64-cpm",
+              flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
           - {
               name: "macOS Intel",
               os: macos-15-intel,
-              arch: "x86_64",
-              flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF -DUHDR_BUILD_DEPS=ON",
+              preset: "macos-x86_64-cpm",
+              flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
 
     steps:
@@ -59,28 +51,28 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.config.os }}-${{ matrix.config.arch }}
+          key: ${{ matrix.config.os }}-${{ matrix.config.preset }}
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build/${{ matrix.config.arch }} -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 ${{ matrix.config.flags }}
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ${{ matrix.config.flags }}
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build/${{ matrix.config.arch }} --parallel --config ${{env.BUILD_TYPE}}
+        run: cmake --build --preset ${{ matrix.config.preset }}-release
 
       - name: Checking that HDRView runs
         run: |
-          ${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView.app/Contents/MacOS/HDRView --help
+          ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app/Contents/MacOS/HDRView --help
 
       - name: Bundle dependencies
-        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView.app/Contents/libs/
+        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app/Contents/libs/
 
       - name: Creating dmg
         run: |
-          RESULT="${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView-${{ matrix.config.arch }}.dmg"
+          RESULT="${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${{ matrix.config.preset }}.dmg"
           test -f $RESULT && rm $RESULT
           for i in 1 2 3; do
-            if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView.app; then
+            if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app; then
               break
             elif [ $i -eq 3 ]; then
               echo "create-dmg failed after 3 attempts"
@@ -94,14 +86,14 @@ jobs:
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.arch }}
+          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}
           path: |
-            ${{github.workspace}}/build/${{ matrix.config.arch }}
+            ${{github.workspace}}/build/${{ matrix.config.preset }}
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView-${{ matrix.config.arch }}.dmg
+          files: ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${{ matrix.config.preset }}.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -118,10 +110,10 @@ jobs:
           fetch-depth: 0
 
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF -DUHDR_BUILD_DEPS=ON
+        run: cmake --preset windows -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}} --verbose
+        run: cmake --build --preset windows-release --verbose
 
       - name: Checking that HDRView runs
         working-directory: ${{github.workspace}}
@@ -179,20 +171,20 @@ jobs:
 
       - name: Configure CMake
         run: |
-          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/deploy -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF -DUHDR_BUILD_DEPS=ON
+          emcmake cmake --preset emscripten
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel
+        run: cmake --build ${{github.workspace}}/build/emscripten --parallel
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-emscripten
           path: |
-            ${{github.workspace}}/build
+            ${{github.workspace}}/build/emscripten
 
       - name: CPack
-        working-directory: ${{github.workspace}}/build
+        working-directory: ${{github.workspace}}/build/emscripten
         run: |
           cmake --install .
           mv deploy/HDRView.html deploy/index.html
@@ -202,4 +194,4 @@ jobs:
         with:
           personal_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: ${{github.workspace}}/build/deploy
+          publish_dir: ${{github.workspace}}/build/emscripten/deploy

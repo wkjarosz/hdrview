@@ -53,20 +53,20 @@ jobs:
 
       - name: Configure CMake
         run: |
-          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/deploy -DHDRVIEW_ENABLE_J2K=OFF -DHDRVIEW_ENABLE_HTJ2K=OFF -DHDRVIEW_ENABLE_AVIF=OFF -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF -DUHDR_BUILD_DEPS=ON
+          emcmake cmake --preset emscripten
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel
+        run: cmake --build ${{github.workspace}}/build/emscripten --parallel
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-emscripten
           path: |
-            ${{github.workspace}}/build
+            ${{github.workspace}}/build/emscripten
 
       - name: CPack
-        working-directory: ${{github.workspace}}/build
+        working-directory: ${{github.workspace}}/build/emscripten
         run: |
           cmake --install .
           mv deploy/HDRView.html deploy/index.html
@@ -77,4 +77,4 @@ jobs:
           personal_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           destination_dir: dev
-          publish_dir: ${{github.workspace}}/build/deploy
+          publish_dir: ${{github.workspace}}/build/emscripten/deploy

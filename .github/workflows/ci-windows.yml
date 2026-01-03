@@ -40,7 +40,9 @@ jobs:
         run: cmake --preset ${{ matrix.config.preset }}
 
       - name: Build
-        run: cmake --build --preset ${{ matrix.config.preset }}-${{ matrix.buildtype }}
+        run: |
+          $buildtype_lower = "${{ matrix.buildtype }}".ToLower()
+          cmake --build --preset ${{ matrix.config.preset }}-$buildtype_lower
 
       - name: Checking that HDRView runs
         working-directory: ${{github.workspace}}

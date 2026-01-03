@@ -58,7 +58,9 @@ jobs:
           cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build --preset ${{ matrix.config.preset }}-${{ matrix.buildtype }}
+        run: |
+          BUILDTYPE_LOWER=$(echo "${{ matrix.buildtype }}" | tr '[:upper:]' '[:lower:]')
+          cmake --build --preset ${{ matrix.config.preset }}-${BUILDTYPE_LOWER}
 
       - name: Checking that HDRView runs
         run: |
