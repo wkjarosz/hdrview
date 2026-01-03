@@ -1,4 +1,4 @@
-prefix=/Users/runner/work/hdrview/hdrview/build/deploy
+prefix=/Users/runner/work/hdrview/hdrview/build/emscripten/deploy
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
