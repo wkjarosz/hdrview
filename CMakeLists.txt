@@ -511,7 +511,7 @@ if(HDRVIEW_ENABLE_LIBPNG)
   # Try to find system ZLIB first (using our FindZLIB.cmake to avoid broken zlib-ng-compat configs)
   CPMAddPackage(
     NAME ZLIB
-    VERSION 1.3.1
+    VERSION 1.2.12
     URL https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.2.zip
     OPTIONS "ZLIB_TEST OFF"
             "WITH_GTEST OFF"
