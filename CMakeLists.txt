@@ -509,13 +509,14 @@ option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 if(HDRVIEW_ENABLE_LIBPNG)
   # cmake-format: off
   CPMAddPackage(
-    NAME ZLIB
+    NAME zlib-cmake
     VERSION 1.2.12
     URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
+    #FIND_PACKAGE_ARGUMENTS "NAMES zlib ZLIB"
     OPTIONS "ZLIB_TEST OFF" "ZLIB_INSTALL ON"
     SYSTEM YES
   )
-  if(ZLIB_ADDED)
+  if(zlib-cmake_ADDED)
     message(STATUS "Will build zlib library")
     set_target_properties(ZLIB PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
     disable_target_warnings(ZLIB)
