@@ -25,12 +25,14 @@ jobs:
               name: "macOS Apple Silicon",
               os: macos-14,
               preset: "macos-arm64-cpm",
+              arch: "arm64",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
           - {
               name: "macOS Intel",
               os: macos-15-intel,
               preset: "macos-x86_64-cpm",
+              arch: "x86_64",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
 
@@ -41,6 +43,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Set version variables
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION_NO_V="${VERSION#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
 
       - uses: actions/cache@v4
         with:
@@ -60,19 +69,25 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.config.preset }}-release
 
+      - name: Rename app bundle with version
+        run: |
+          cd ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}
+          mv HDRView.app "HDRView ${VERSION_NO_V}.app"
+
       - name: Checking that HDRView runs
         run: |
-          ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app/Contents/MacOS/HDRView --help
+          "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app/Contents/MacOS/HDRView" --help
 
       - name: Bundle dependencies
-        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app/Contents/libs/
+        run: |
+          dylibbundler -od -b -x "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app/Contents/MacOS/HDRView" -d "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app/Contents/libs/"
 
       - name: Creating dmg
         run: |
-          RESULT="${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${{ matrix.config.preset }}.dmg"
+          RESULT="${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${VERSION}-macOS-${{ matrix.config.arch }}.dmg"
           test -f $RESULT && rm $RESULT
           for i in 1 2 3; do
-            if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app; then
+            if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon "HDRView ${VERSION_NO_V}.app" 130 105 $RESULT "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app"; then
               break
             elif [ $i -eq 3 ]; then
               echo "create-dmg failed after 3 attempts"
@@ -93,7 +108,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${{ matrix.config.preset }}.dmg
+          files: ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${{ env.VERSION }}-macOS-${{ matrix.config.arch }}.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -108,6 +123,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Set version variables
+        run: |
+          $VERSION = "${{ github.ref_name }}"
+          echo "VERSION=$VERSION" >> $env:GITHUB_ENV
 
       - name: Configure CMake
         run: cmake --preset windows -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF
@@ -136,14 +156,14 @@ jobs:
         uses: thedoctor0/zip-release@0.7.5
         with:
           type: "zip"
-          filename: "HDRView-windows.zip"
+          filename: "HDRView-${{ env.VERSION }}-windows.zip"
           directory: ${{github.workspace}}/build/deploy
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{github.workspace}}/build/deploy/HDRView-windows.zip
+            ${{github.workspace}}/build/deploy/HDRView-${{ env.VERSION }}-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
