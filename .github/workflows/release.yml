@@ -25,14 +25,14 @@ jobs:
               name: "macOS Apple Silicon",
               os: macos-14,
               preset: "macos-arm64-cpm",
-              arch: "arm64",
+              arch: "Apple Silicon",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
           - {
               name: "macOS Intel",
               os: macos-15-intel,
               preset: "macos-x86_64-cpm",
-              arch: "x86_64",
+              arch: "Intel",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
 
@@ -84,7 +84,7 @@ jobs:
 
       - name: Creating dmg
         run: |
-          RESULT="${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${VERSION}-macOS-${{ matrix.config.arch }}.dmg"
+          RESULT="${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${VERSION} (${{ matrix.config.arch }}).dmg"
           test -f $RESULT && rm $RESULT
           for i in 1 2 3; do
             if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon "HDRView ${VERSION_NO_V}.app" 130 105 $RESULT "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app"; then
@@ -108,7 +108,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${{ env.VERSION }}-macOS-${{ matrix.config.arch }}.dmg
+          files: "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${{ env.VERSION }} (${{ matrix.config.arch }}).dmg"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
