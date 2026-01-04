@@ -948,6 +948,131 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
     return images;
 }
 
+/// Extract EXIF data from TIFF file as a blob suitable for libexif parsing.
+/// Returns a vector with "Exif\0\0" header followed by minimal TIFF structure.
+/// Returns empty vector if extraction fails or is not possible.
+vector<uint8_t> extract_tiff_exif_blob(const vector<uint8_t> &data, bool reverse_endian)
+{
+    if (data.size() < 8)
+        return {};
+
+    try
+    {
+        // Determine TIFF endianness
+        Endian   tiff_endian      = reverse_endian ? (is_little_endian() ? Endian::Big : Endian::Little)
+                                                   : (is_little_endian() ? Endian::Little : Endian::Big);
+        uint32_t first_ifd_offset = read_as<uint32_t>(&data[4], tiff_endian);
+
+        spdlog::debug("First IFD offset: {} (0x{:08X})", first_ifd_offset, first_ifd_offset);
+
+        if (first_ifd_offset <= 8 || first_ifd_offset >= data.size())
+            return {};
+
+        // Construct a minimal TIFF blob: header + IFD + trailing data
+        // We include extra data after the IFD to capture offset-referenced values
+        const size_t ifd_buffer_size = 256 * 1024; // 256KB should cover most metadata
+        size_t       blob_data_size  = std::min(ifd_buffer_size, data.size() - first_ifd_offset);
+        size_t       blob_size       = 8 + blob_data_size; // header + IFD data
+
+        vector<uint8_t> tiff_blob(blob_size);
+
+        // Copy TIFF header (8 bytes)
+        memcpy(tiff_blob.data(), data.data(), 8);
+
+        // Modify the IFD offset to point right after the header (offset 8)
+        write_as<uint32_t>(tiff_blob.data() + 4, 8, tiff_endian);
+
+        // Copy IFD and trailing data
+        memcpy(tiff_blob.data() + 8, data.data() + first_ifd_offset, blob_data_size);
+
+        // Now we need to adjust any offsets in the IFD entries
+        // IFD structure: 2-byte count, then 12-byte entries
+        uint16_t num_entries = read_as<uint16_t>(tiff_blob.data() + 8, tiff_endian);
+        spdlog::debug("IFD has {} entries", num_entries);
+
+        // Adjust offsets in IFD entries (subtract the old IFD offset, add 8)
+        int32_t offset_delta = 8 - (int32_t)first_ifd_offset;
+
+        for (uint16_t i = 0; i < num_entries && i < 1000; ++i) // sanity limit
+        {
+            size_t   entry_offset = 8 + 2 + (i * 12); // header + count + entry
+            uint16_t tag          = read_as<uint16_t>(tiff_blob.data() + entry_offset + 0, tiff_endian);
+            uint16_t type         = read_as<uint16_t>(tiff_blob.data() + entry_offset + 2, tiff_endian);
+            uint32_t count        = read_as<uint32_t>(tiff_blob.data() + entry_offset + 4, tiff_endian);
+            uint32_t value_offset = read_as<uint32_t>(tiff_blob.data() + entry_offset + 8, tiff_endian);
+
+            // Determine if this is an offset or inline value
+            // Values > 4 bytes are stored as offsets
+            size_t type_size = 0;
+            switch (type)
+            {
+            case 1: type_size = 1; break;  // BYTE
+            case 2: type_size = 1; break;  // ASCII
+            case 3: type_size = 2; break;  // SHORT
+            case 4: type_size = 4; break;  // LONG
+            case 5: type_size = 8; break;  // RATIONAL
+            case 6: type_size = 1; break;  // SBYTE
+            case 7: type_size = 1; break;  // UNDEFINED
+            case 8: type_size = 2; break;  // SSHORT
+            case 9: type_size = 4; break;  // SLONG
+            case 10: type_size = 8; break; // SRATIONAL
+            case 11: type_size = 4; break; // FLOAT
+            case 12: type_size = 8; break; // DOUBLE
+            default: type_size = 1; break;
+            }
+
+            size_t value_size = type_size * count;
+
+            // If value doesn't fit inline (> 4 bytes), it's an offset that needs adjusting
+            if (value_size > 4 && value_offset >= first_ifd_offset && value_offset < first_ifd_offset + blob_data_size)
+            {
+                uint32_t new_offset = value_offset + offset_delta;
+                write_as<uint32_t>(tiff_blob.data() + entry_offset + 8, new_offset, tiff_endian);
+                spdlog::debug("Adjusted tag 0x{:04X} offset from {} to {}", tag, value_offset, new_offset);
+            }
+        }
+
+        // Adjust the "next IFD" offset at the end of the IFD
+        size_t next_ifd_offset_pos = 8 + 2 + (num_entries * 12);
+        if (next_ifd_offset_pos + 4 <= tiff_blob.size())
+        {
+            uint32_t next_ifd = read_as<uint32_t>(tiff_blob.data() + next_ifd_offset_pos, tiff_endian);
+            if (next_ifd > 0 && next_ifd >= first_ifd_offset && next_ifd < first_ifd_offset + blob_data_size)
+            {
+                write_as<uint32_t>(tiff_blob.data() + next_ifd_offset_pos, next_ifd + offset_delta, tiff_endian);
+                spdlog::debug("Adjusted next IFD offset from {} to {}", next_ifd, next_ifd + offset_delta);
+            }
+            else if (next_ifd > 0)
+            {
+                // Next IFD is outside our buffer, set to 0 (no next IFD)
+                write_as<uint32_t>(tiff_blob.data() + next_ifd_offset_pos, 0, tiff_endian);
+                spdlog::debug("Set next IFD offset to 0 (was {})", next_ifd);
+            }
+        }
+
+        // Prepend "Exif\0\0" header if not already present
+        if (tiff_blob.size() < 6 || memcmp(tiff_blob.data(), "Exif\0\0", 6) != 0)
+        {
+            vector<uint8_t> exif_blob(6 + tiff_blob.size());
+            exif_blob[0] = 'E';
+            exif_blob[1] = 'x';
+            exif_blob[2] = 'i';
+            exif_blob[3] = 'f';
+            exif_blob[4] = 0;
+            exif_blob[5] = 0;
+            memcpy(exif_blob.data() + 6, tiff_blob.data(), tiff_blob.size());
+            return exif_blob;
+        }
+
+        return tiff_blob;
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::debug("Failed to extract EXIF blob: {}", e.what());
+        return {};
+    }
+}
+
 vector<ImagePtr> load_sub_images(TIFF *tif, bool reverse_endian, tdir_t dir, const ImageLoadOptions &opts)
 {
     vector<ImagePtr> images;
@@ -1040,17 +1165,28 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
 
     auto tif_guard = ScopeGuard{[tif] { TIFFClose(tif); }};
 
-    // Extract EXIF data once for all images/sub-images
-    json exif_json;
-    try
+    // Extract EXIF/TIFF metadata using libexif
+    Exif            exif;
+    json            exif_json;
+    vector<uint8_t> exif_blob = extract_tiff_exif_blob(data, reverse_endian);
+    if (!exif_blob.empty())
     {
-        exif_json = exif_to_json(data.data(), data.size());
-        if (!exif_json.empty())
-            spdlog::debug("EXIF metadata successfully parsed");
-    }
-    catch (const std::exception &e)
-    {
-        spdlog::warn("Exception while parsing EXIF data: {}", e.what());
+        spdlog::debug("Found EXIF data of size {} bytes", exif_blob.size());
+
+        try
+        {
+            exif      = Exif{exif_blob};
+            exif_json = exif.to_json();
+            if (!exif_json.empty())
+                spdlog::debug("TIFF/EXIF metadata successfully parsed");
+            else
+                spdlog::debug("EXIF blob extracted but parsing returned empty result");
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::warn("Exception while parsing EXIF data: {}", e.what());
+            exif.reset();
+        }
     }
 
     vector<ImagePtr> images;
@@ -1065,8 +1201,11 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
         {
             image->filename = filename;
             // Use pre-parsed EXIF data
-            if (!exif_json.empty())
+            if (exif.valid())
+            {
+                image->exif             = exif;
                 image->metadata["exif"] = exif_json;
+            }
             images.push_back(image);
         }
 
@@ -1075,8 +1214,11 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
         {
             sub_image->filename = filename;
             // Use pre-parsed EXIF data
-            if (!exif_json.empty())
+            if (exif.valid())
+            {
+                sub_image->exif             = exif;
                 sub_image->metadata["exif"] = exif_json;
+            }
             images.push_back(sub_image);
         }
 

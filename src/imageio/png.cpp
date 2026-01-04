@@ -599,18 +599,24 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     else
         metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", channels * file_bit_depth, file_bit_depth);
 
-    try
+    // Parse EXIF metadata using libexif
+    Exif exif;
+    if (!exif_data.empty())
     {
-        if (!exif_data.empty())
+        spdlog::debug("Found EXIF data of size {} bytes", exif_data.size());
+
+        try
         {
-            Exif exif{reinterpret_cast<const uint8_t *>(exif_data.data()), exif_data.size()};
-            metadata["exif"] = exif.to_json();
-            spdlog::debug("EXIF metadata successfully parsed: {}", metadata["exif"].dump(2));
+            exif                = Exif{reinterpret_cast<const uint8_t *>(exif_data.data()), exif_data.size()};
+            auto exif_json      = exif.to_json();
+            metadata["exif"]    = exif_json;
+            spdlog::debug("EXIF metadata successfully parsed: {}", exif_json.dump(2));
         }
-    }
-    catch (const std::exception &e)
-    {
-        spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+        catch (const std::exception &e)
+        {
+            spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+            exif.reset();
+        }
     }
 
     png_uint_32 num_frames = 0, num_plays = 0;
@@ -669,7 +675,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         image->alpha_type     = size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None;
         image->chromaticities = chr;
         image->metadata       = metadata;
-        image->exif           = Exif{reinterpret_cast<const uint8_t *>(exif_data.data()), exif_data.size()};
+        if (exif.valid())
+            image->exif = exif;
 
         if (animation)
         {

@@ -200,7 +200,22 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
     }
 }
 
-Exif::Exif(Exif &&other) noexcept       = default;
+Exif::Exif(Exif &&other) noexcept = default;
+
+// Copy constructor: reconstruct from the other's raw data
+Exif::Exif(const Exif &other) : Exif(other.data(), other.size()) {}
+
+// Copy assignment: reconstruct from the other's raw data
+Exif &Exif::operator=(const Exif &other)
+{
+    if (this != &other)
+    {
+        // Use copy-and-swap idiom via move assignment
+        *this = Exif(other.data(), other.size());
+    }
+    return *this;
+}
+
 Exif &Exif::operator=(Exif &&) noexcept = default;
 Exif::~Exif()                           = default;
 
@@ -479,14 +494,14 @@ json Exif::to_json() const
     if (!m_impl || !m_impl->exif_data)
         throw std::runtime_error{"Failed to parse EXIF data."};
 
-    auto ed = m_impl->exif_data.get();
-    json j;
+    const auto &ed = m_impl->exif_data.get();
+    json        j;
 
     static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
 
     for (int ifd_idx = 0; ifd_idx < EXIF_IFD_COUNT; ++ifd_idx)
     {
-        ExifContent *content = ed->ifd[ifd_idx];
+        auto content = ed->ifd[ifd_idx];
         if (!content || !content->count)
             continue;
 

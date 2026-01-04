@@ -353,10 +353,8 @@ T read_as(const unsigned char *ptr, Endian data_endian)
     T value;
     memcpy(&value, ptr, sizeof(T));
 
-    // Swap bytes if data endianness doesn't match machine endianness
-    bool data_is_big_endian = (data_endian == Endian::Big);
-    bool need_swap          = data_is_big_endian != !is_little_endian();
-    if (need_swap)
+    // Only swap bytes if necessary
+    if (data_endian != host_endian())
         value = swap_bytes(value);
 
     return value;
@@ -377,7 +375,59 @@ T read_as(const unsigned char *ptr, Endian data_endian)
 template <typename T>
 void read_array(T *output, const unsigned char *input, size_t count, Endian data_endian)
 {
-    for (size_t i = 0; i < count; i++) output[i] = read_as<T>(input + i * sizeof(T), data_endian);
+    // First, copy all bytes at once
+    memcpy(output, input, count * sizeof(T));
+
+    // Only swap bytes if necessary
+    if (data_endian != host_endian())
+        for (size_t i = 0; i < count; i++) output[i] = swap_bytes(output[i]);
+}
+
+/*!
+ * @brief Write a value of type T to a byte array with specified endianness.
+ *
+ * Writes sizeof(T) bytes to the given pointer, performing byte swapping if the target
+ * endianness differs from the machine's endianness.
+ *
+ * @tparam T The type to write (e.g., float, double, uint32_t)
+ * @param ptr Pointer to the byte array to write to
+ * @param value The value to write
+ * @param target_endian The desired endianness for the data in the byte array
+ */
+template <typename T>
+void write_as(unsigned char *ptr, T value, Endian target_endian)
+{
+    // Swap bytes if target endianness doesn't match machine endianness
+    if (target_endian != host_endian())
+        value = swap_bytes(value);
+
+    memcpy(ptr, &value, sizeof(T));
+}
+
+/*!
+ * @brief Write an array of values of type T to a byte array with specified endianness.
+ *
+ * Writes count * sizeof(T) bytes to the output pointer, performing byte swapping on each
+ * element if the target endianness differs from the machine's.
+ *
+ * @tparam T The type to write (e.g., float, double, uint32_t, int32_t)
+ * @param output Pointer to the output byte array to write to
+ * @param input Pointer to the input array of values
+ * @param count Number of elements to write
+ * @param target_endian The desired endianness for the data in the output byte array
+ */
+template <typename T>
+void write_array(unsigned char *output, const T *input, size_t count, Endian target_endian)
+{
+    // First, copy all bytes at once
+    memcpy(output, input, count * sizeof(T));
+
+    // Only swap bytes if necessary
+    if (target_endian != host_endian())
+    {
+        T *output_typed = reinterpret_cast<T *>(output);
+        for (size_t i = 0; i < count; i++) output_typed[i] = swap_bytes(output_typed[i]);
+    }
 }
 
 template <typename T>

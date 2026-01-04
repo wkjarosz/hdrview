@@ -18,8 +18,9 @@ class Exif
 public:
     Exif(const uint8_t *data_ptr = nullptr, size_t data_size = 0U);
     Exif(const std::vector<uint8_t> &data) : Exif(data.data(), data.size()) {}
+    Exif(const Exif &other); /// Performs a deep copy
     Exif(Exif &&other) noexcept;
-    Exif &operator=(const Exif &);
+    Exif &operator=(const Exif &); /// Performs a deep copy
     Exif &operator=(Exif &&) noexcept;
     ~Exif();
 
