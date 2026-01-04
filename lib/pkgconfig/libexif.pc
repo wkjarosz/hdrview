@@ -1,11 +1,11 @@
-prefix=/Users/runner/work/hdrview/hdrview/build/deploy
-exec_prefix=/Users/runner/work/hdrview/hdrview/build/deploy
-libdir=/Users/runner/work/hdrview/hdrview/build/deploy/lib
-includedir=/Users/runner/work/hdrview/hdrview/build/deploy/include/libexif
+prefix=/Users/runner/work/hdrview/hdrview/build/emscripten/deploy
+exec_prefix=/Users/runner/work/hdrview/hdrview/build/emscripten/deploy
+libdir=/Users/runner/work/hdrview/hdrview/build/emscripten/deploy/lib
+includedir=/Users/runner/work/hdrview/hdrview/build/emscripten/deploy/include/libexif
 
 Name: libexif
 Description: A library for parsing, editing, and saving EXIF data.
 URL: https://github.com/libexif/libexif
 Version: 0.6.24
-Libs: -L/Users/runner/work/hdrview/hdrview/build/deploy/lib -lminivideo 
-Cflags: -I/Users/runner/work/hdrview/hdrview/build/deploy/include/libexif
+Libs: -L/Users/runner/work/hdrview/hdrview/build/emscripten/deploy/lib -lminivideo 
+Cflags: -I/Users/runner/work/hdrview/hdrview/build/emscripten/deploy/include/libexif

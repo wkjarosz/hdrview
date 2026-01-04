@@ -1,5 +1,5 @@
-prefix=/Users/runner/work/hdrview/hdrview/build/deploy
-exec_prefix=/Users/runner/work/hdrview/hdrview/build/deploy
+prefix=/Users/runner/work/hdrview/hdrview/build/emscripten/deploy
+exec_prefix=/Users/runner/work/hdrview/hdrview/build/emscripten/deploy
 libdir=${prefix}/lib
 includedir=${prefix}/include
 
