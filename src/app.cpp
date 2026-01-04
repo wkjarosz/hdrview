@@ -462,8 +462,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     m_dialogs["Save as..."]         = make_unique<PopupDialog>([this](bool &open) { draw_save_as_dialog(open); });
     m_dialogs["Image loading options..."] =
         make_unique<PopupDialog>([this](bool &open) { draw_open_options_dialog(open); });
-    m_dialogs["Custom background color picker"] =
-        make_unique<PopupDialog>([this](bool &open) { draw_color_picker(open); });
     m_dialogs["Create dither image..."] = make_unique<PopupDialog>(
         [this](bool &open)
         {

@@ -188,7 +188,6 @@ private:
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
     void draw_open_options_dialog(bool &open);
-    void draw_color_picker(bool &);
     void draw_pixel_info() const;
     void draw_pixel_grid() const;
     void draw_image() const;
