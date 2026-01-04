@@ -1,500 +1,524 @@
 {
-  "version": 8,
-  "configurePresets": [
-    {
-      "name": "base",
-      "hidden": true,
-      "description": "Base preset with common settings",
-      "cacheVariables": {
-        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
-        "CMAKE_POLICY_DEFAULT_CMP0077": "NEW",
-        "CMAKE_POLICY_DEFAULT_CMP0135": "NEW"
-      }
-    },
-    {
-      "name": "ninja-multi-base",
-      "hidden": true,
-      "inherits": "base",
-      "description": "Base for Ninja Multi-Config builds",
-      "generator": "Ninja Multi-Config",
-      "condition": {
-        "type": "notEquals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
-    },
-    {
-      "name": "msvc-base",
-      "hidden": true,
-      "inherits": "base",
-      "description": "Base for Visual Studio builds",
-      "generator": "Visual Studio 17 2022",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
-    },
-    {
-      "name": "ccache",
-      "hidden": true,
-      "description": "Enable ccache for faster rebuilds",
-      "cacheVariables": {
-        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
-      }
-    },
-    {
-      "name": "macos-base",
-      "hidden": true,
-      "description": "Base settings for macOS builds",
-      "cacheVariables": {
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      }
-    },
-    {
-      "name": "macos-cpm",
-      "hidden": true,
-      "inherits": "macos-base",
-      "description": "macOS with CPM dependencies (ignoring brew)",
-      "toolchainFile": "${sourceDir}/cmake/ignore-brew.cmake",
-      "cacheVariables": {
-        "UHDR_BUILD_DEPS": "ON"
-      }
-    },
-    {
-      "name": "macos-local",
-      "hidden": true,
-      "inherits": "macos-base",
-      "description": "macOS using Homebrew dependencies",
-      "cacheVariables": {
-        "CPM_USE_LOCAL_PACKAGES": "ON",
-        "UHDR_BUILD_DEPS": "ON",
-        "CMAKE_PREFIX_PATH": "/opt/homebrew;/usr/local"
-      }
-    },
-    {
-      "name": "linux-base",
-      "hidden": true,
-      "description": "Base settings for Linux builds",
-      "cacheVariables": {
-        "HELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED": "ON",
-        "ASSETS_LOCATION": "/usr/share/HDRView/assets"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Linux"
-      }
-    },
-    {
-      "name": "linux-cpm-base",
-      "hidden": true,
-      "inherits": "linux-base",
-      "description": "Linux with CPM dependencies",
-      "cacheVariables": {
-        "UHDR_BUILD_DEPS": "ON"
-      }
-    },
-    {
-      "name": "linux-local-base",
-      "hidden": true,
-      "inherits": "linux-base",
-      "description": "Linux using system dependencies",
-      "cacheVariables": {
-        "CPM_USE_LOCAL_PACKAGES": "ON",
-        "UHDR_BUILD_DEPS": "ON"
-      }
-    },
-    {
-      "name": "default",
-      "displayName": "Default",
-      "description": "Default build (auto-detects platform)",
-      "inherits": ["ninja-multi-base", "msvc-base"],
-      "binaryDir": "${sourceDir}/build"
-    },
-    {
-      "name": "macos-arm64-cpm",
-      "displayName": "macOS Apple Silicon (CPM)",
-      "description": "Native Apple Silicon build using CPM for dependencies",
-      "inherits": ["ninja-multi-base", "macos-cpm"],
-      "binaryDir": "${sourceDir}/build/macos-arm64-cpm",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      }
-    },
-    {
-      "name": "macos-arm64-local",
-      "displayName": "macOS Apple Silicon (Local)",
-      "description": "Native Apple Silicon build using Homebrew dependencies",
-      "inherits": ["ninja-multi-base", "macos-local"],
-      "binaryDir": "${sourceDir}/build/macos-arm64-local",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      }
-    },
-    {
-      "name": "macos-x86_64-cpm",
-      "displayName": "macOS Intel (CPM)",
-      "description": "Native Intel build using CPM for dependencies",
-      "inherits": ["ninja-multi-base", "macos-cpm"],
-      "binaryDir": "${sourceDir}/build/macos-x86_64-cpm",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      }
-    },
-    {
-      "name": "macos-x86_64-local",
-      "displayName": "macOS Intel (Local)",
-      "description": "Native Intel build using Homebrew dependencies",
-      "inherits": ["ninja-multi-base", "macos-local"],
-      "binaryDir": "${sourceDir}/build/macos-x86_64-local",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      }
-    },
-    {
-      "name": "macos-universal",
-      "displayName": "macOS Universal Binary",
-      "description": "Universal binary for both Apple Silicon and Intel",
-      "inherits": ["ninja-multi-base", "macos-cpm"],
-      "binaryDir": "${sourceDir}/build/macos-universal",
-      "cacheVariables": {
-        "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
-        "HDRVIEW_ENABLE_LIBWEBP": "OFF",
-        "HDRVIEW_ENABLE_LIBJPEG": "OFF",
-        "HDRVIEW_ENABLE_LIBUHDR": "OFF",
-        "HELLOIMGUI_FREETYPE_STATIC": "ON",
-        "PNG_HARDWARE_OPTIMIZATIONS": "ON"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      }
-    },
-    {
-      "name": "windows",
-      "displayName": "Windows",
-      "description": "Windows build with Visual Studio",
-      "inherits": "msvc-base",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "UHDR_BUILD_DEPS": "ON"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
-    },
-    {
-      "name": "linux-cpm",
-      "displayName": "Linux (CPM)",
-      "description": "Linux build using CPM for dependencies",
-      "inherits": ["ninja-multi-base", "linux-cpm-base"],
-      "binaryDir": "${sourceDir}/build/linux-cpm",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Linux"
-      }
-    },
-    {
-      "name": "linux-local",
-      "displayName": "Linux (Local)",
-      "description": "Linux build using system dependencies",
-      "inherits": ["ninja-multi-base", "linux-local-base"],
-      "binaryDir": "${sourceDir}/build/linux-local",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Linux"
-      }
-    },
-    {
-      "name": "emscripten",
-      "displayName": "Emscripten (WebAssembly)",
-      "description": "Build for web using Emscripten (requires EMSDK environment variable)",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/emscripten",
-      "toolchainFile": "$env{EMSDK}/cmake/Modules/Platform/Emscripten.cmake",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "MinSizeRel",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/emscripten/deploy",
-        "HDRVIEW_ENABLE_J2K": "OFF",
-        "HDRVIEW_ENABLE_HTJ2K": "OFF",
-        "HDRVIEW_ENABLE_AVIF": "OFF",
-        "HDRVIEW_ENABLE_HEIC": "OFF",
-        "HDRVIEW_ENABLE_AVCI": "OFF",
-        "UHDR_BUILD_DEPS": "ON"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "build-base-debug",
-      "hidden": true,
-      "configuration": "Debug",
-      "jobs": 0
-    },
-    {
-      "name": "build-base-release",
-      "hidden": true,
-      "configuration": "Release",
-      "jobs": 0
-    },
-    {
-      "name": "build-base-minsizerel",
-      "hidden": true,
-      "configuration": "MinSizeRel",
-      "jobs": 0
-    },
-    {
-      "name": "build-base-relwithdebinfo",
-      "hidden": true,
-      "configuration": "RelWithDebInfo",
-      "jobs": 0
-    },
-    {
-      "name": "default-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "default"
-    },
-    {
-      "name": "default-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "default"
-    },
-    {
-      "name": "default-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "default"
-    },
-    {
-      "name": "default-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "default"
-    },
-    {
-      "name": "macos-arm64-cpm-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "macos-arm64-cpm"
-    },
-    {
-      "name": "macos-arm64-cpm-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "macos-arm64-cpm"
-    },
-    {
-      "name": "macos-arm64-cpm-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "macos-arm64-cpm"
-    },
-    {
-      "name": "macos-arm64-cpm-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "macos-arm64-cpm"
-    },
-    {
-      "name": "macos-arm64-local-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "macos-arm64-local"
-    },
-    {
-      "name": "macos-arm64-local-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "macos-arm64-local"
-    },
-    {
-      "name": "macos-arm64-local-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "macos-arm64-local"
-    },
-    {
-      "name": "macos-arm64-local-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "macos-arm64-local"
-    },
-    {
-      "name": "macos-x86_64-cpm-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "macos-x86_64-cpm"
-    },
-    {
-      "name": "macos-x86_64-cpm-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "macos-x86_64-cpm"
-    },
-    {
-      "name": "macos-x86_64-cpm-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "macos-x86_64-cpm"
-    },
-    {
-      "name": "macos-x86_64-cpm-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "macos-x86_64-cpm"
-    },
-    {
-      "name": "macos-x86_64-local-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "macos-x86_64-local"
-    },
-    {
-      "name": "macos-x86_64-local-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "macos-x86_64-local"
-    },
-    {
-      "name": "macos-x86_64-local-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "macos-x86_64-local"
-    },
-    {
-      "name": "macos-x86_64-local-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "macos-x86_64-local"
-    },
-    {
-      "name": "macos-universal-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "macos-universal"
-    },
-    {
-      "name": "macos-universal-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "macos-universal"
-    },
-    {
-      "name": "macos-universal-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "macos-universal"
-    },
-    {
-      "name": "macos-universal-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "macos-universal"
-    },
-    {
-      "name": "windows-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "windows"
-    },
-    {
-      "name": "windows-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "windows"
-    },
-    {
-      "name": "windows-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "windows"
-    },
-    {
-      "name": "windows-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "windows"
-    },
-    {
-      "name": "linux-cpm-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "linux-cpm"
-    },
-    {
-      "name": "linux-cpm-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "linux-cpm"
-    },
-    {
-      "name": "linux-cpm-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "linux-cpm"
-    },
-    {
-      "name": "linux-cpm-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "linux-cpm"
-    },
-    {
-      "name": "linux-local-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "linux-local"
-    },
-    {
-      "name": "linux-local-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "linux-local"
-    },
-    {
-      "name": "linux-local-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "linux-local"
-    },
-    {
-      "name": "linux-local-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "linux-local"
-    },
-    {
-      "name": "emscripten",
-      "displayName": "Build",
-      "configurePreset": "emscripten",
-      "jobs": 0
-    }
-  ],
-  "testPresets": [],
-  "packagePresets": [],
-  "workflowPresets": []
+    "version": 8,
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "description": "Base preset with common settings",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
+                "CMAKE_POLICY_DEFAULT_CMP0077": "NEW",
+                "CMAKE_POLICY_DEFAULT_CMP0135": "NEW"
+            }
+        },
+        {
+            "name": "ninja-multi-base",
+            "hidden": true,
+            "inherits": "base",
+            "description": "Base for Ninja Multi-Config builds",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "notEquals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "msvc-base",
+            "hidden": true,
+            "inherits": "base",
+            "description": "Base for Visual Studio builds",
+            "generator": "Visual Studio 17 2022",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "ccache",
+            "hidden": true,
+            "description": "Enable ccache for faster rebuilds",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+                "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+            }
+        },
+        {
+            "name": "macos-base",
+            "hidden": true,
+            "description": "Base settings for macOS builds",
+            "cacheVariables": {
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-cpm",
+            "hidden": true,
+            "inherits": "macos-base",
+            "description": "macOS with CPM dependencies (ignoring brew)",
+            "toolchainFile": "${sourceDir}/cmake/ignore-brew.cmake",
+            "cacheVariables": {
+                "UHDR_BUILD_DEPS": "ON"
+            }
+        },
+        {
+            "name": "macos-local",
+            "hidden": true,
+            "inherits": "macos-base",
+            "description": "macOS using Homebrew dependencies",
+            "cacheVariables": {
+                "CPM_USE_LOCAL_PACKAGES": "ON",
+                "UHDR_BUILD_DEPS": "ON",
+                "CMAKE_PREFIX_PATH": "/opt/homebrew;/usr/local"
+            }
+        },
+        {
+            "name": "linux-base",
+            "hidden": true,
+            "description": "Base settings for Linux builds",
+            "cacheVariables": {
+                "HELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED": "ON",
+                "ASSETS_LOCATION": "/usr/share/HDRView/assets"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "linux-cpm-base",
+            "hidden": true,
+            "inherits": "linux-base",
+            "description": "Linux with CPM dependencies",
+            "cacheVariables": {
+                "UHDR_BUILD_DEPS": "ON"
+            }
+        },
+        {
+            "name": "linux-local-base",
+            "hidden": true,
+            "inherits": "linux-base",
+            "description": "Linux using system dependencies",
+            "cacheVariables": {
+                "CPM_USE_LOCAL_PACKAGES": "ON",
+                "UHDR_BUILD_DEPS": "ON"
+            }
+        },
+        {
+            "name": "default",
+            "displayName": "Default",
+            "description": "Default build (auto-detects platform)",
+            "inherits": [
+                "ninja-multi-base",
+                "msvc-base"
+            ],
+            "binaryDir": "${sourceDir}/build"
+        },
+        {
+            "name": "macos-arm64-cpm",
+            "displayName": "macOS Apple Silicon (CPM)",
+            "description": "Native Apple Silicon build using CPM for dependencies",
+            "inherits": [
+                "ninja-multi-base",
+                "macos-cpm"
+            ],
+            "binaryDir": "${sourceDir}/build/macos-arm64-cpm",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-arm64-local",
+            "displayName": "macOS Apple Silicon (Local)",
+            "description": "Native Apple Silicon build using Homebrew dependencies",
+            "inherits": [
+                "ninja-multi-base",
+                "macos-local"
+            ],
+            "binaryDir": "${sourceDir}/build/macos-arm64-local",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-x86_64-cpm",
+            "displayName": "macOS Intel (CPM)",
+            "description": "Native Intel build using CPM for dependencies",
+            "inherits": [
+                "ninja-multi-base",
+                "macos-cpm"
+            ],
+            "binaryDir": "${sourceDir}/build/macos-x86_64-cpm",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-x86_64-local",
+            "displayName": "macOS Intel (Local)",
+            "description": "Native Intel build using Homebrew dependencies",
+            "inherits": [
+                "ninja-multi-base",
+                "macos-local"
+            ],
+            "binaryDir": "${sourceDir}/build/macos-x86_64-local",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-universal",
+            "displayName": "macOS Universal Binary",
+            "description": "Universal binary for both Apple Silicon and Intel",
+            "inherits": [
+                "ninja-multi-base",
+                "macos-cpm"
+            ],
+            "binaryDir": "${sourceDir}/build/macos-universal",
+            "cacheVariables": {
+                "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
+                "HDRVIEW_ENABLE_LIBWEBP": "OFF",
+                "HDRVIEW_ENABLE_LIBJPEG": "OFF",
+                "HDRVIEW_ENABLE_LIBUHDR": "OFF",
+                "HELLOIMGUI_FREETYPE_STATIC": "ON",
+                "PNG_HARDWARE_OPTIMIZATIONS": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "windows",
+            "displayName": "Windows",
+            "description": "Windows build with Visual Studio",
+            "inherits": "msvc-base",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "UHDR_BUILD_DEPS": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "linux-cpm",
+            "displayName": "Linux (CPM)",
+            "description": "Linux build using CPM for dependencies",
+            "inherits": [
+                "ninja-multi-base",
+                "linux-cpm-base"
+            ],
+            "binaryDir": "${sourceDir}/build/linux-cpm",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "linux-local",
+            "displayName": "Linux (Local)",
+            "description": "Linux build using system dependencies",
+            "inherits": [
+                "ninja-multi-base",
+                "linux-local-base"
+            ],
+            "binaryDir": "${sourceDir}/build/linux-local",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "emscripten",
+            "displayName": "Emscripten (WebAssembly)",
+            "description": "Build for web using Emscripten (requires EMSDK environment variable)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/emscripten",
+            "toolchainFile": "$env{EMSDK}/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "MinSizeRel",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/emscripten/deploy",
+                "HDRVIEW_ENABLE_J2K": "OFF",
+                "HDRVIEW_ENABLE_HTJ2K": "OFF",
+                "HDRVIEW_ENABLE_AVIF": "OFF",
+                "HDRVIEW_ENABLE_HEIC": "OFF",
+                "HDRVIEW_ENABLE_AVCI": "OFF",
+                "UHDR_BUILD_DEPS": "ON"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "build-base-debug",
+            "hidden": true,
+            "configuration": "Debug",
+            "jobs": 0
+        },
+        {
+            "name": "build-base-release",
+            "hidden": true,
+            "configuration": "Release",
+            "jobs": 0
+        },
+        {
+            "name": "build-base-minsizerel",
+            "hidden": true,
+            "configuration": "MinSizeRel",
+            "jobs": 0
+        },
+        {
+            "name": "build-base-relwithdebinfo",
+            "hidden": true,
+            "configuration": "RelWithDebInfo",
+            "jobs": 0
+        },
+        {
+            "name": "default-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "default"
+        },
+        {
+            "name": "default-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "default"
+        },
+        {
+            "name": "default-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "default"
+        },
+        {
+            "name": "default-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "default"
+        },
+        {
+            "name": "macos-arm64-cpm-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "macos-arm64-cpm"
+        },
+        {
+            "name": "macos-arm64-cpm-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "macos-arm64-cpm"
+        },
+        {
+            "name": "macos-arm64-cpm-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "macos-arm64-cpm"
+        },
+        {
+            "name": "macos-arm64-cpm-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "macos-arm64-cpm"
+        },
+        {
+            "name": "macos-arm64-local-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "macos-arm64-local"
+        },
+        {
+            "name": "macos-arm64-local-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "macos-arm64-local"
+        },
+        {
+            "name": "macos-arm64-local-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "macos-arm64-local"
+        },
+        {
+            "name": "macos-arm64-local-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "macos-arm64-local"
+        },
+        {
+            "name": "macos-x86_64-cpm-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "macos-x86_64-cpm"
+        },
+        {
+            "name": "macos-x86_64-cpm-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "macos-x86_64-cpm"
+        },
+        {
+            "name": "macos-x86_64-cpm-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "macos-x86_64-cpm"
+        },
+        {
+            "name": "macos-x86_64-cpm-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "macos-x86_64-cpm"
+        },
+        {
+            "name": "macos-x86_64-local-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "macos-x86_64-local"
+        },
+        {
+            "name": "macos-x86_64-local-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "macos-x86_64-local"
+        },
+        {
+            "name": "macos-x86_64-local-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "macos-x86_64-local"
+        },
+        {
+            "name": "macos-x86_64-local-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "macos-x86_64-local"
+        },
+        {
+            "name": "macos-universal-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "macos-universal"
+        },
+        {
+            "name": "macos-universal-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "macos-universal"
+        },
+        {
+            "name": "macos-universal-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "macos-universal"
+        },
+        {
+            "name": "macos-universal-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "macos-universal"
+        },
+        {
+            "name": "windows-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "windows"
+        },
+        {
+            "name": "windows-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "windows"
+        },
+        {
+            "name": "windows-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "windows"
+        },
+        {
+            "name": "windows-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "windows"
+        },
+        {
+            "name": "linux-cpm-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "linux-cpm"
+        },
+        {
+            "name": "linux-cpm-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "linux-cpm"
+        },
+        {
+            "name": "linux-cpm-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "linux-cpm"
+        },
+        {
+            "name": "linux-cpm-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "linux-cpm"
+        },
+        {
+            "name": "linux-local-debug",
+            "displayName": "Debug",
+            "inherits": "build-base-debug",
+            "configurePreset": "linux-local"
+        },
+        {
+            "name": "linux-local-release",
+            "displayName": "Release",
+            "inherits": "build-base-release",
+            "configurePreset": "linux-local"
+        },
+        {
+            "name": "linux-local-minsizerel",
+            "displayName": "MinSizeRel",
+            "inherits": "build-base-minsizerel",
+            "configurePreset": "linux-local"
+        },
+        {
+            "name": "linux-local-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "inherits": "build-base-relwithdebinfo",
+            "configurePreset": "linux-local"
+        },
+        {
+            "name": "emscripten",
+            "displayName": "Build",
+            "configurePreset": "emscripten",
+            "jobs": 0
+        }
+    ],
+    "testPresets": [],
+    "packagePresets": [],
+    "workflowPresets": []
 }
