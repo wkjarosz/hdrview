@@ -452,7 +452,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
             });
 
         draw_tweak_window();
-        draw_develop_windows();
+        draw_developer_windows();
     };
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
     m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
@@ -637,21 +637,33 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         const auto always_enabled = []() { return true; };
         const auto if_img         = [this]() { return current_image() != nullptr; };
         using ImGui::Action;
-        auto add = [this](const Action &a) { m_actions[a.name] = a; };
-        add(Action{"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
+        auto add = [this](const Action &a) { m_actions[a.names[0]] = a; };
+        add(Action{{"Open image..."}, ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
-        add(Action{"Create gradient image...", ICON_MY_DITHER, ImGuiKey_None, 0,
+        add(Action{{"Create gradient image..."},
+                   ICON_MY_DITHER,
+                   ImGuiKey_None,
+                   0,
                    [this]() { m_dialogs["Create gradient image..."]->open = true; }});
-        add(Action{"Create dither image...", ICON_MY_DITHER, ImGuiKey_None, 0,
+        add(Action{{"Create dither image..."},
+                   ICON_MY_DITHER,
+                   ImGuiKey_None,
+                   0,
                    [this]() { m_dialogs["Create dither image..."]->open = true; }});
 
-        add(Action{"Image loading options...", ICON_MY_SETTINGS_WINDOW, ImGuiKey_None, 0,
+        add(Action{{"Image loading options..."},
+                   ICON_MY_SETTINGS_WINDOW,
+                   ImGuiKey_None,
+                   0,
                    [this]() { m_dialogs["Image loading options..."]->open = true; }});
 
 #if !defined(__EMSCRIPTEN__)
-        add(Action{"Open folder...", ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0, [this]() { open_folder(); }});
+        add(Action{{"Open folder..."}, ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0, [this]() { open_folder(); }});
 
-        add(Action{reveal_in_file_manager_text(), ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0,
+        add(Action{{reveal_in_file_manager_text()},
+                   ICON_MY_OPEN_FOLDER,
+                   ImGuiKey_None,
+                   0,
                    [this]()
                    {
                        if (auto img = current_image())
@@ -666,7 +678,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 #endif
 
 #if defined(__EMSCRIPTEN__)
-        add(Action{"Open URL...", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0,
+        add(Action{{"Open URL..."},
+                   ICON_MY_OPEN_IMAGE,
+                   ImGuiKey_None,
+                   0,
                    [this]()
                    {
                        char url[256];
@@ -677,19 +692,35 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                            load_url(url);
                        }
                    },
-                   always_enabled, true});
+                   always_enabled,
+                   true});
 #endif
 
-        add(Action{"Show help", ICON_MY_ABOUT, ImGuiMod_Shift | ImGuiKey_Slash, 0, []() {}, always_enabled, false,
+        add(Action{{"Show help"},
+                   ICON_MY_ABOUT,
+                   ImGuiMod_Shift | ImGuiKey_Slash,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_dialogs["About"]->open});
-        add(Action{"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
+        add(Action{{"Quit"}, ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
-        add(Action{"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
-                   []() {}, always_enabled, false, &m_dialogs["Command palette..."]->open});
+        add(Action{{"Command palette..."},
+                   ICON_MY_COMMAND_PALETTE,
+                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
+                   &m_dialogs["Command palette..."]->open});
 
         static bool toolbar_on =
             m_params.callbacks.edgesToolbars.find(EdgeToolbarType::Top) != m_params.callbacks.edgesToolbars.end();
-        add(Action{"Show top toolbar", ICON_MY_TOOLBAR, 0, 0,
+        add(Action{{"Show top toolbar"},
+                   ICON_MY_TOOLBAR,
+                   0,
+                   0,
                    [this]()
                    {
                        if (!toolbar_on)
@@ -698,14 +729,28 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                            m_params.callbacks.AddEdgeToolbar(
                                EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
                    },
-                   always_enabled, false, &toolbar_on});
-        add(Action{"Show menu bar", ICON_MY_HIDE_ALL_WINDOWS, 0, 0, []() {}, always_enabled, false,
+                   always_enabled,
+                   false,
+                   &toolbar_on});
+        add(Action{{"Show menu bar"},
+                   ICON_MY_HIDE_ALL_WINDOWS,
+                   0,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_params.imGuiWindowParams.showMenuBar});
-        add(Action{"Show status bar", ICON_MY_STATUSBAR, 0, 0, []() {}, always_enabled, false,
+        add(Action{{"Show status bar"},
+                   ICON_MY_STATUSBAR,
+                   0,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_params.imGuiWindowParams.showStatusBar});
-        add(Action{"Show FPS in status bar", ICON_MY_FPS, 0, 0, []() {}, always_enabled, false, &m_show_FPS});
-        add(Action{"Enable idling", ICON_MY_BLANK, 0, 0, []() {}, always_enabled, false,
-                   &m_params.fpsIdling.enableIdling});
+        add(Action{{"Show FPS in status bar"}, ICON_MY_FPS, 0, 0, []() {}, always_enabled, false, &m_show_FPS});
+        add(Action{
+            {"Enable idling"}, ICON_MY_BLANK, 0, 0, []() {}, always_enabled, false, &m_params.fpsIdling.enableIdling});
 
         auto any_window_hidden = [this]()
         {
@@ -715,7 +760,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
             return false;
         };
 
-        add(Action{"Show all windows", ICON_MY_SHOW_ALL_WINDOWS, ImGuiKey_Tab, 0,
+        add(Action{{"Show all windows"},
+                   ICON_MY_SHOW_ALL_WINDOWS,
+                   ImGuiKey_Tab,
+                   0,
                    [this]()
                    {
                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
@@ -724,7 +772,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    },
                    any_window_hidden});
 
-        add(Action{"Hide all windows", ICON_MY_HIDE_ALL_WINDOWS, ImGuiKey_Tab, 0,
+        add(Action{{"Hide all windows"},
+                   ICON_MY_HIDE_ALL_WINDOWS,
+                   ImGuiKey_Tab,
+                   0,
                    [this]()
                    {
                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
@@ -733,7 +784,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    },
                    [any_window_hidden]() { return !any_window_hidden(); }});
 
-        add(Action{"Show entire GUI", ICON_MY_SHOW_ALL_WINDOWS, ImGuiMod_Shift | ImGuiKey_Tab, 0,
+        add(Action{{"Show entire GUI"},
+                   ICON_MY_SHOW_ALL_WINDOWS,
+                   ImGuiMod_Shift | ImGuiKey_Tab,
+                   0,
                    [this]()
                    {
                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
@@ -751,7 +805,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                               !m_params.imGuiWindowParams.showStatusBar || !toolbar_on;
                    }});
 
-        add(Action{"Hide entire GUI", ICON_MY_HIDE_GUI, ImGuiMod_Shift | ImGuiKey_Tab, 0,
+        add(Action{{"Hide entire GUI"},
+                   ICON_MY_HIDE_GUI,
+                   ImGuiMod_Shift | ImGuiKey_Tab,
+                   0,
                    [this]()
                    {
                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
@@ -768,33 +825,74 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                               m_params.imGuiWindowParams.showStatusBar || toolbar_on;
                    }});
 
-        add(Action{"Restore default layout", ICON_MY_RESTORE_LAYOUT, 0, 0,
+        add(Action{{"Restore default layout"},
+                   ICON_MY_RESTORE_LAYOUT,
+                   0,
+                   0,
                    [this]() { m_params.dockingParams.layoutReset = true; },
                    [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
 
-        add(Action{"Show developer menu", ICON_MY_DEVELOPER_WINDOW, 0, 0, []() {}, always_enabled, false,
+        add(Action{{"Show developer menu"},
+                   ICON_MY_DEVELOPER_WINDOW,
+                   0,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_show_developer_menu});
-        add(Action{"Show Dear ImGui demo window", ICON_MY_DEMO_WINDOW, 0, 0, []() {}, always_enabled, false,
+        add(Action{{"Show Dear ImGui demo window"},
+                   ICON_MY_DEMO_WINDOW,
+                   0,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_show_demo_window});
-        add(Action{"Show debug window", ICON_MY_LOG_LEVEL_DEBUG, 0, 0, []() {}, always_enabled, false,
+        add(Action{{"Show debug window"},
+                   ICON_MY_LOG_LEVEL_DEBUG,
+                   0,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_show_debug_window});
-        add(Action{"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false,
-                   &m_show_tweak_window});
-        add(Action{"Locate settings file", ICON_MY_DEVELOPER_WINDOW, 0, 0,
-                   [this]() { show_in_file_manager(IniSettingsLocation(m_params).c_str()); }, always_enabled, false});
+        add(Action{
+            {"Theme tweak window"}, ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false, &m_show_tweak_window});
+        add(Action{{"Locate settings file"},
+                   ICON_MY_DEVELOPER_WINDOW,
+                   0,
+                   0,
+                   [this]() { show_in_file_manager(IniSettingsLocation(m_params).c_str()); },
+                   always_enabled,
+                   false});
 
         for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
         {
             DockableWindow &w = m_params.dockingParams.dockableWindows[i];
-            add(Action{fmt::format("Show {} window", w.label).c_str(), window_info[i].icon, window_info[i].chord, 0,
-                       []() {}, [&w]() { return w.canBeClosed; }, false, &w.isVisible});
+            add(Action{{fmt::format("Show {} window", w.label).c_str()},
+                       window_info[i].icon,
+                       window_info[i].chord,
+                       0,
+                       []() {},
+                       [&w]() { return w.canBeClosed; },
+                       false,
+                       &w.isVisible});
         }
 
-        add(Action{"Decrease exposure", ICON_MY_DECREASE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat,
+        add(Action{{"Decrease exposure"},
+                   ICON_MY_DECREASE_EXPOSURE,
+                   ImGuiKey_E,
+                   ImGuiInputFlags_Repeat,
                    [this]() { m_exposure_live = m_exposure -= 0.25f; }});
-        add(Action{"Increase exposure", ICON_MY_INCREASE_EXPOSURE, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
+        add(Action{{"Increase exposure"},
+                   ICON_MY_INCREASE_EXPOSURE,
+                   ImGuiMod_Shift | ImGuiKey_E,
+                   ImGuiInputFlags_Repeat,
                    [this]() { m_exposure_live = m_exposure += 0.25f; }});
-        add(Action{"Reset tonemapping", ICON_MY_RESET_TONEMAPPING, 0, 0,
+        add(Action{{"Reset tonemapping"},
+                   ICON_MY_RESET_TONEMAPPING,
+                   0,
+                   0,
                    [this]()
                    {
                        m_exposure_live = m_exposure = 0.f;
@@ -802,27 +900,69 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        m_gamma_live = m_gamma = 1.f;
                        m_tonemap              = Tonemap_Gamma;
                    },
-                   always_enabled, false, nullptr, "Reset the exposure and blackpoint offset to 0."});
-        add(Action{"Reverse colormap", ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false,
-                   &m_reverse_colormap});
+                   always_enabled,
+                   false,
+                   nullptr,
+                   "Reset the exposure and blackpoint offset to 0."});
+        add(Action{
+            {"Reverse colormap"}, ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false, &m_reverse_colormap});
         if (m_params.rendererBackendOptions.requestFloatBuffer)
-            add(Action{"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
-                       false, &m_clamp_to_LDR});
-        add(Action{"Dither", ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
-        add(Action{"Clip warnings", ICON_MY_ZEBRA_STRIPES, 0, 0, []() {}, always_enabled, false,
+            add(Action{{"Clamp to LDR"},
+                       ICON_MY_CLAMP_TO_LDR,
+                       ImGuiMod_Ctrl | ImGuiKey_L,
+                       0,
+                       []() {},
+                       always_enabled,
+                       false,
+                       &m_clamp_to_LDR});
+        add(Action{{"Dither"}, ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
+        add(Action{{"Clip warnings", "Zebra stripes"},
+                   ICON_MY_ZEBRA_STRIPES,
+                   0,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_draw_clip_warnings});
 
-        add(Action{"Draw pixel grid", ICON_MY_SHOW_GRID, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled, false,
+        add(Action{{"Draw pixel grid"},
+                   ICON_MY_SHOW_GRID,
+                   ImGuiMod_Ctrl | ImGuiKey_G,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_draw_grid});
-        add(Action{"Draw pixel values", ICON_MY_SHOW_PIXEL_VALUES, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {},
-                   always_enabled, false, &m_draw_pixel_info});
+        add(Action{{"Draw pixel values"},
+                   ICON_MY_SHOW_PIXEL_VALUES,
+                   ImGuiMod_Ctrl | ImGuiKey_P,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
+                   &m_draw_pixel_info});
 
-        add(Action{"Draw data window", ICON_MY_DATA_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
+        add(Action{{"Draw data window"},
+                   ICON_MY_DATA_WINDOW,
+                   ImGuiKey_None,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_draw_data_window});
-        add(Action{"Draw display window", ICON_MY_DISPLAY_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
+        add(Action{{"Draw display window"},
+                   ICON_MY_DISPLAY_WINDOW,
+                   ImGuiKey_None,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_draw_display_window});
 
-        add(Action{"Decrease gamma/Previous colormap", ICON_MY_DECREASE_GAMMA, ImGuiKey_G, ImGuiInputFlags_Repeat,
+        add(Action{{"Decrease gamma/Previous colormap"},
+                   ICON_MY_DECREASE_GAMMA,
+                   ImGuiKey_G,
+                   ImGuiInputFlags_Repeat,
                    [this]()
                    {
                        switch (m_tonemap)
@@ -836,7 +976,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        }
                    },
                    always_enabled});
-        add(Action{"Increase gamma/Next colormap", ICON_MY_INCREASE_GAMMA, ImGuiMod_Shift | ImGuiKey_G,
+        add(Action{{"Increase gamma/Next colormap"},
+                   ICON_MY_INCREASE_GAMMA,
+                   ImGuiMod_Shift | ImGuiKey_G,
                    ImGuiInputFlags_Repeat,
                    [this]()
                    {
@@ -854,62 +996,102 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
         static bool s_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
 
-        add(Action{"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_P, 0,
+        add(Action{{"Pan and zoom"},
+                   ICON_MY_PAN_ZOOM_TOOL,
+                   ImGuiKey_P,
+                   0,
                    [this]()
                    {
                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
                        m_mouse_mode                            = MouseMode_PanZoom;
                        s_mouse_mode_enabled[MouseMode_PanZoom] = true;
                    },
-                   always_enabled, false, &s_mouse_mode_enabled[MouseMode_PanZoom]});
-        add(Action{"Rectangular select", ICON_MY_SELECT, ImGuiKey_M, 0,
+                   always_enabled,
+                   false,
+                   &s_mouse_mode_enabled[MouseMode_PanZoom]});
+        add(Action{{"Rectangular select"},
+                   ICON_MY_SELECT,
+                   ImGuiKey_M,
+                   0,
                    [this]()
                    {
                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
                        m_mouse_mode                                         = MouseMode_RectangularSelection;
                        s_mouse_mode_enabled[MouseMode_RectangularSelection] = true;
                    },
-                   always_enabled, false, &s_mouse_mode_enabled[MouseMode_RectangularSelection]});
-        add(Action{"Pixel/color inspector", ICON_MY_WATCHED_PIXEL, ImGuiKey_I, 0,
+                   always_enabled,
+                   false,
+                   &s_mouse_mode_enabled[MouseMode_RectangularSelection]});
+        add(Action{{"Pixel/color inspector"},
+                   ICON_MY_WATCHED_PIXEL,
+                   ImGuiKey_I,
+                   0,
                    [this]()
                    {
                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
                        m_mouse_mode                                   = MouseMode_ColorInspector;
                        s_mouse_mode_enabled[MouseMode_ColorInspector] = true;
                    },
-                   always_enabled, false, &s_mouse_mode_enabled[MouseMode_ColorInspector]});
+                   always_enabled,
+                   false,
+                   &s_mouse_mode_enabled[MouseMode_ColorInspector]});
 
         // below actions are only available if there is an image
 
 #if !defined(__EMSCRIPTEN__)
-        add(Action{"Reload image", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiKey_R, 0,
-                   [this]() { reload_image(current_image()); }, if_img});
-        add(Action{"Reload all images", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R, 0,
+        add(Action{{"Reload image"},
+                   ICON_MY_RELOAD,
+                   ImGuiMod_Ctrl | ImGuiKey_R,
+                   0,
+                   [this]() { reload_image(current_image()); },
+                   if_img});
+        add(Action{{"Reload all images"},
+                   ICON_MY_RELOAD,
+                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R,
+                   0,
                    [this]()
                    {
                        for (auto &i : m_images) reload_image(i);
                    },
                    if_img});
-        add(Action{"Watch for changes", ICON_MY_WATCH_CHANGES, ImGuiKey_None, 0, []() {}, always_enabled, false,
+        add(Action{{"Watch for changes"},
+                   ICON_MY_WATCH_CHANGES,
+                   ImGuiKey_None,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
                    &m_watch_files_for_changes,
                    "Regularly monitor opened files and folders, loading new files, and reloading existing files when "
                    "changes are detected."});
-        add(Action{"Add watched folder...", ICON_MY_ADD_WATCHED_FOLDER, ImGuiKey_None, 0,
+        add(Action{{"Add watched folder..."},
+                   ICON_MY_ADD_WATCHED_FOLDER,
+                   ImGuiKey_None,
+                   0,
                    [this]()
                    {
                        if (m_image_loader.add_watched_directory(
                                pfd::select_folder("Open images in folder", "").result(), true))
                            m_watch_files_for_changes = true;
                    },
-                   always_enabled, false, nullptr,
+                   always_enabled,
+                   false,
+                   nullptr,
                    "Do not load the selected folder, but monitor it for new files and load those as they are "
                    "created.\nUseful if you plan to periodically write images into a folder (e.g. renderings) and "
                    "want HDRView to automatically load them as they appear."});
 #endif
-        add(Action{"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
-                   [this]() { m_dialogs["Save as..."]->open = true; }, if_img});
+        add(Action{{"Save as..."},
+                   ICON_MY_SAVE_AS,
+                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S,
+                   0,
+                   [this]() { m_dialogs["Save as..."]->open = true; },
+                   if_img});
 
-        add(Action{"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0,
+        add(Action{{"Normalize exposure"},
+                   ICON_MY_NORMALIZE_EXPOSURE,
+                   ImGuiKey_N,
+                   0,
                    [this]()
                    {
                        if (auto img = current_image())
@@ -942,37 +1124,57 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                            m_offset_live = m_offset = -minimum * factor;
                        }
                    },
-                   if_img, false, nullptr,
+                   if_img,
+                   false,
+                   nullptr,
                    "Adjust the exposure and blackpoint offset to fit image values to the range [0, 1]."});
 
-        add(Action{"Play forward", ICON_MY_PLAY_FORWARD, ImGuiKey_Space, 0,
+        add(Action{{"Play forward"},
+                   ICON_MY_PLAY_FORWARD,
+                   ImGuiKey_Space,
+                   0,
                    [this]
                    {
                        m_play_backward &= !m_play_forward;
                        m_play_stopped             = !(m_play_forward || m_play_backward);
                        m_params.fpsIdling.fpsIdle = m_play_stopped ? 9.f : 0.f;
                    },
-                   always_enabled, false, &m_play_forward});
-        add(Action{"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
+                   always_enabled,
+                   false,
+                   &m_play_forward});
+        add(Action{{"Stop playback"},
+                   ICON_MY_STOP,
+                   ImGuiKey_Space,
+                   0,
                    [this]
                    {
                        m_play_forward &= !m_play_stopped;
                        m_play_backward &= !m_play_stopped;
                        m_params.fpsIdling.fpsIdle = m_play_stopped ? 9.f : 0.f;
                    },
-                   [this] { return m_play_forward || m_play_backward; }, false, &m_play_stopped});
-        add(Action{"Play backward", ICON_MY_PLAY_BACKWARD, ImGuiMod_Shift | ImGuiKey_Space, 0,
+                   [this] { return m_play_forward || m_play_backward; },
+                   false,
+                   &m_play_stopped});
+        add(Action{{"Play backward"},
+                   ICON_MY_PLAY_BACKWARD,
+                   ImGuiMod_Shift | ImGuiKey_Space,
+                   0,
                    [this]
                    {
                        m_play_forward &= !m_play_backward;
                        m_play_stopped             = !(m_play_forward || m_play_backward);
                        m_params.fpsIdling.fpsIdle = m_play_stopped ? 9.f : 0.f;
                    },
-                   always_enabled, false, &m_play_backward});
+                   always_enabled,
+                   false,
+                   &m_play_backward});
 
         // switch the current image using the image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add(Action{fmt::format("Go to image {}", n), ICON_MY_IMAGE, ImGuiKey_0 + mod(n, 10), 0,
+            add(Action{{fmt::format("Go to image {}", n)},
+                       ICON_MY_IMAGE,
+                       ImGuiKey_0 + mod(n, 10),
+                       0,
                        [this, n]()
                        {
                            set_current_image_index(nth_visible_image_index(mod(n - 1, 10)));
@@ -986,8 +1188,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
         // select the reference image using Cmd + image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add(Action{fmt::format("Set image {} as reference", n), ICON_MY_REFERENCE_IMAGE,
-                       ImGuiMod_Ctrl | (ImGuiKey_0 + mod(n, 10)), 0,
+            add(Action{{fmt::format("Set image {} as reference", n)},
+                       ICON_MY_REFERENCE_IMAGE,
+                       ImGuiMod_Ctrl | (ImGuiKey_0 + mod(n, 10)),
+                       0,
                        [this, n]()
                        {
                            auto nth_visible = nth_visible_image_index(mod(n - 1, 10));
@@ -1004,8 +1208,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
         // switch the selected channel group using Ctrl + number key (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add(Action{fmt::format("Go to channel group {}", n), ICON_MY_CHANNEL_GROUP,
-                       modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
+            add(Action{{fmt::format("Go to channel group {}", n)},
+                       ICON_MY_CHANNEL_GROUP,
+                       modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)),
+                       0,
                        [this, n]()
                        {
                            auto img               = current_image();
@@ -1023,8 +1229,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        }});
         // switch the reference channel group using Shift + Ctrl + number key (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add(Action{fmt::format("Set channel group {} as reference", n), ICON_MY_REFERENCE_IMAGE,
-                       ImGuiMod_Shift | modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
+            add(Action{{fmt::format("Set channel group {} as reference", n)},
+                       ICON_MY_REFERENCE_IMAGE,
+                       ImGuiMod_Shift | modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)),
+                       0,
                        [this, n]()
                        {
                            auto img         = current_image();
@@ -1050,12 +1258,23 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                            return false;
                        }});
 
-        add(Action{"Close", ICON_MY_CLOSE, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
-                   [this]() { close_image(); }, if_img});
-        add(Action{"Close all", ICON_MY_CLOSE_ALL, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W, 0,
-                   [this]() { close_all_images(); }, if_img});
+        add(Action{{"Close"},
+                   ICON_MY_CLOSE,
+                   ImGuiMod_Ctrl | ImGuiKey_W,
+                   ImGuiInputFlags_Repeat,
+                   [this]() { close_image(); },
+                   if_img});
+        add(Action{{"Close all"},
+                   ICON_MY_CLOSE_ALL,
+                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W,
+                   0,
+                   [this]() { close_all_images(); },
+                   if_img});
 
-        add(Action{"Go to next image", ICON_MY_BLANK, ImGuiKey_DownArrow, ImGuiInputFlags_Repeat,
+        add(Action{{"Go to next image"},
+                   ICON_MY_BLANK,
+                   ImGuiKey_DownArrow,
+                   ImGuiInputFlags_Repeat,
                    [this]()
                    {
                        set_current_image_index(next_visible_image_index(m_current, Direction_Forward));
@@ -1066,7 +1285,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        auto i = next_visible_image_index(m_current, Direction_Forward);
                        return is_valid(i) && i != m_current;
                    }});
-        add(Action{"Go to previous image", ICON_MY_BLANK, ImGuiKey_UpArrow, ImGuiInputFlags_Repeat,
+        add(Action{{"Go to previous image"},
+                   ICON_MY_BLANK,
+                   ImGuiKey_UpArrow,
+                   ImGuiInputFlags_Repeat,
                    [this]()
                    {
                        set_current_image_index(next_visible_image_index(m_current, Direction_Backward));
@@ -1077,7 +1299,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        auto i = next_visible_image_index(m_current, Direction_Backward);
                        return is_valid(i) && i != m_current;
                    }});
-        add(Action{"Make next image the reference", ICON_MY_BLANK, ImGuiMod_Shift | ImGuiKey_DownArrow,
+        add(Action{{"Make next image the reference"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Shift | ImGuiKey_DownArrow,
                    ImGuiInputFlags_Repeat,
                    [this]() { set_reference_image_index(next_visible_image_index(m_reference, Direction_Forward)); },
                    [this]()
@@ -1085,7 +1309,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        auto i = next_visible_image_index(m_reference, Direction_Forward);
                        return is_valid(i) && i != m_reference;
                    }});
-        add(Action{"Make previous image the reference", ICON_MY_BLANK, ImGuiMod_Shift | ImGuiKey_UpArrow,
+        add(Action{{"Make previous image the reference"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Shift | ImGuiKey_UpArrow,
                    ImGuiInputFlags_Repeat,
                    [this]() { set_reference_image_index(next_visible_image_index(m_reference, Direction_Backward)); },
                    [this]()
@@ -1093,7 +1319,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        auto i = next_visible_image_index(m_reference, Direction_Backward);
                        return is_valid(i) && i != m_reference;
                    }});
-        add(Action{"Go to next channel group", ICON_MY_BLANK, ImGuiKey_RightArrow, ImGuiInputFlags_Repeat,
+        add(Action{{"Go to next channel group"},
+                   ICON_MY_BLANK,
+                   ImGuiKey_RightArrow,
+                   ImGuiInputFlags_Repeat,
                    [this]()
                    {
                        auto img               = current_image();
@@ -1101,7 +1330,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        m_scroll_to_next_frame = 1.f;
                    },
                    [this]() { return current_image() != nullptr; }});
-        add(Action{"Go to previous channel group", ICON_MY_BLANK, ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat,
+        add(Action{{"Go to previous channel group"},
+                   ICON_MY_BLANK,
+                   ImGuiKey_LeftArrow,
+                   ImGuiInputFlags_Repeat,
                    [this]()
                    {
                        auto img               = current_image();
@@ -1109,7 +1341,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        m_scroll_to_next_frame = 0.f;
                    },
                    [this]() { return current_image() != nullptr; }});
-        add(Action{"Go to next channel group in reference", ICON_MY_BLANK, ImGuiMod_Shift | ImGuiKey_RightArrow,
+        add(Action{{"Go to next channel group in reference"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Shift | ImGuiKey_RightArrow,
                    ImGuiInputFlags_Repeat,
                    [this]()
                    {
@@ -1120,7 +1354,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        img->reference_group = img->next_visible_group_index(img->reference_group, Direction_Forward);
                    },
                    [this]() { return reference_image() || current_image(); }});
-        add(Action{"Go to previous channel group in reference", ICON_MY_BLANK, ImGuiMod_Shift | ImGuiKey_LeftArrow,
+        add(Action{{"Go to previous channel group in reference"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Shift | ImGuiKey_LeftArrow,
                    ImGuiInputFlags_Repeat,
                    [this]()
                    {
@@ -1132,64 +1368,102 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    },
                    [this]() { return reference_image() || current_image(); }});
 
-        add(Action{"Zoom out", ICON_MY_ZOOM_OUT, ImGuiKey_Minus, ImGuiInputFlags_Repeat,
+        add(Action{{"Zoom out"},
+                   ICON_MY_ZOOM_OUT,
+                   ImGuiKey_Minus,
+                   ImGuiInputFlags_Repeat,
                    [this]()
                    {
                        zoom_out();
                        cancel_autofit();
                    },
                    if_img});
-        add(Action{"Zoom in", ICON_MY_ZOOM_IN, ImGuiKey_Equal, ImGuiInputFlags_Repeat,
+        add(Action{{"Zoom in"},
+                   ICON_MY_ZOOM_IN,
+                   ImGuiKey_Equal,
+                   ImGuiInputFlags_Repeat,
                    [this]()
                    {
                        zoom_in();
                        cancel_autofit();
                    },
                    if_img});
-        add(Action{"100%", ICON_MY_ZOOM_100, 0, 0,
+        add(Action{{"100%"},
+                   ICON_MY_ZOOM_100,
+                   0,
+                   0,
                    [this]()
                    {
                        set_zoom_level(0.f);
                        cancel_autofit();
                    },
                    if_img});
-        add(Action{"Center", ICON_MY_CENTER, ImGuiKey_C, 0,
+        add(Action{{"Center"},
+                   ICON_MY_CENTER,
+                   ImGuiKey_C,
+                   0,
                    [this]()
                    {
                        center();
                        cancel_autofit();
                    },
                    if_img});
-        add(Action{"Fit display window", ICON_MY_FIT_TO_WINDOW, ImGuiKey_F, 0,
+        add(Action{{"Fit display window"},
+                   ICON_MY_FIT_TO_WINDOW,
+                   ImGuiKey_F,
+                   0,
                    [this]()
                    {
                        fit_display_window();
                        cancel_autofit();
                    },
                    if_img});
-        add(Action{"Auto fit display window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiKey_F, 0,
-                   [this]() { m_auto_fit_selection = m_auto_fit_data = false; }, if_img, false, &m_auto_fit_display});
-        add(Action{"Fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Alt | ImGuiKey_F, 0,
+        add(Action{{"Auto fit display window"},
+                   ICON_MY_FIT_TO_WINDOW,
+                   ImGuiMod_Shift | ImGuiKey_F,
+                   0,
+                   [this]() { m_auto_fit_selection = m_auto_fit_data = false; },
+                   if_img,
+                   false,
+                   &m_auto_fit_display});
+        add(Action{{"Fit data window"},
+                   ICON_MY_FIT_TO_WINDOW,
+                   ImGuiMod_Alt | ImGuiKey_F,
+                   0,
                    [this]()
                    {
                        fit_data_window();
                        cancel_autofit();
                    },
                    if_img});
-        add(Action{"Auto fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiMod_Alt | ImGuiKey_F, 0,
-                   [this]() { m_auto_fit_selection = m_auto_fit_display = false; }, if_img, false, &m_auto_fit_data});
-        add(Action{"Fit selection", ICON_MY_FIT_TO_WINDOW, ImGuiKey_None, 0,
+        add(Action{{"Auto fit data window"},
+                   ICON_MY_FIT_TO_WINDOW,
+                   ImGuiMod_Shift | ImGuiMod_Alt | ImGuiKey_F,
+                   0,
+                   [this]() { m_auto_fit_selection = m_auto_fit_display = false; },
+                   if_img,
+                   false,
+                   &m_auto_fit_data});
+        add(Action{{"Fit selection"},
+                   ICON_MY_FIT_TO_WINDOW,
+                   ImGuiKey_None,
+                   0,
                    [this]()
                    {
                        fit_selection();
                        cancel_autofit();
                    },
                    [if_img, this]() { return if_img() && m_roi.has_volume(); }});
-        add(Action{"Auto fit selection", ICON_MY_FIT_TO_WINDOW, ImGuiKey_None, 0,
+        add(Action{{"Auto fit selection"},
+                   ICON_MY_FIT_TO_WINDOW,
+                   ImGuiKey_None,
+                   0,
                    [this]() { m_auto_fit_display = m_auto_fit_data = false; },
-                   [if_img, this]() { return if_img() && m_roi.has_volume(); }, false, &m_auto_fit_selection});
-        add(Action{"Flip horizontally", ICON_MY_FLIP_HORIZ, ImGuiKey_H, 0, []() {}, if_img, false, &m_flip.x});
-        add(Action{"Flip vertically", ICON_MY_FLIP_VERT, ImGuiKey_V, 0, []() {}, if_img, false, &m_flip.y});
+                   [if_img, this]() { return if_img() && m_roi.has_volume(); },
+                   false,
+                   &m_auto_fit_selection});
+        add(Action{{"Flip horizontally"}, ICON_MY_FLIP_HORIZ, ImGuiKey_H, 0, []() {}, if_img, false, &m_flip.x});
+        add(Action{{"Flip vertically"}, ICON_MY_FLIP_VERT, ImGuiKey_V, 0, []() {}, if_img, false, &m_flip.y});
     }
 
     // load any passed-in images

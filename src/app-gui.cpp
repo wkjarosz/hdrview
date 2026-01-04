@@ -648,38 +648,41 @@ void HDRViewApp::draw_top_toolbar()
 
 void HDRViewApp::draw_command_palette(bool &open)
 {
-    if (!open)
-        return;
+    if (open)
+        ImGui::OpenPopup("Command palette...");
 
     static int last_used = 0;
 
+    auto viewport = ImGui::GetMainViewport();
+
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * EmSize()), ImGuiCond_Appearing,
-                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x / 2, viewport->Pos.y + 5.f * EmSize()),
+                            ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2{EmSize(30), 0}, ImGuiCond_Always);
 
-    ImGui::Begin("Command palette...", nullptr,
-                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking);
-
-    if (ImGui::IsWindowAppearing())
+    if (ImGui::BeginPopupModal("Command palette...", nullptr,
+                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar |
+                                   ImGuiWindowFlags_NoDocking))
     {
-        spdlog::trace("Creating ImCmd context");
-        if (ImCmd::GetCurrentContext())
+        if (ImGui::IsWindowAppearing())
         {
-            ImCmd::RemoveAllCaches();
-            ImCmd::DestroyContext();
-        }
-        ImCmd::CreateContext();
-        ImCmd::SetStyleFont(ImCmdTextType_Regular, m_sans_regular);
-        ImCmd::SetStyleFont(ImCmdTextType_Highlight, m_sans_bold);
-        ImCmd::SetStyleFlag(ImCmdTextType_Highlight, ImCmdTextFlag_Underline, true);
-        ImCmd::SetStyleColor(ImCmdTextType_Highlight, ImGui::GetColorU32(ImGuiCol_CheckMark));
+            spdlog::trace("Creating ImCmd context");
+            if (ImCmd::GetCurrentContext())
+            {
+                ImCmd::RemoveAllCaches();
+                ImCmd::DestroyContext();
+            }
+            ImCmd::CreateContext();
+            ImCmd::SetStyleFont(ImCmdTextType_Regular, m_sans_regular);
+            ImCmd::SetStyleFont(ImCmdTextType_Highlight, m_sans_bold);
+            ImCmd::SetStyleFlag(ImCmdTextType_Highlight, ImCmdTextFlag_Underline, true);
+            ImCmd::SetStyleColor(ImCmdTextType_Highlight, ImGui::GetColorU32(ImGuiCol_CheckMark));
 
-        for (auto &a : m_actions)
-        {
-            if (a.second.enabled())
-                ImCmd::AddCommand({
-                        a.second.name,
+            for (auto &a : m_actions)
+            {
+                if (a.second.enabled())
+                    ImCmd::AddCommand({
+                        a.second.names,
                         a.second.p_selected ? [&a](){
                             *a.second.p_selected = !*a.second.p_selected;
                             a.second.callback();
@@ -693,292 +696,315 @@ void HDRViewApp::draw_command_palette(bool &open)
                         a.second.p_selected,
                         a.second.last_used
                     });
-        }
+            }
 
 #if !defined(__EMSCRIPTEN__)
-        // add a two-step command to list and open recent files
-        if (!m_image_loader.recent_files().empty())
-        {
-            static int open_recent_last_used = 0;
-            ImCmd::AddCommand({"Open recent",
-                               [this]()
-                               {
-                                   ImCmd::Prompt(m_image_loader.recent_files_short());
-                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
-                               },
-                               [this](int selected_option) { m_image_loader.load_recent_file(selected_option); },
-                               nullptr, nullptr, []() { open_recent_last_used = ++last_used; }, ICON_MY_OPEN_IMAGE, "",
-                               nullptr, open_recent_last_used});
-        }
+            // add a two-step command to list and open recent files
+            if (!m_image_loader.recent_files().empty())
+            {
+                static int open_recent_last_used = 0;
+                ImCmd::AddCommand({{"Open recent"},
+                                   [this]()
+                                   {
+                                       ImCmd::Prompt(m_image_loader.recent_files_short());
+                                       ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                                   },
+                                   [this](int selected_option) { m_image_loader.load_recent_file(selected_option); },
+                                   nullptr,
+                                   nullptr,
+                                   []() { open_recent_last_used = ++last_used; },
+                                   ICON_MY_OPEN_IMAGE,
+                                   "",
+                                   nullptr,
+                                   open_recent_last_used});
+            }
 
 #endif
-        // set logging verbosity. This is a two-step command
-        static int set_logging_last_used = 0;
-        ImCmd::AddCommand(
-            {"Set logging verbosity",
-             []()
-             {
-                 ImCmd::Prompt(
-                     vector<string>{"0: trace", "1: debug", "2: info", "3: warn", "4: err", "5: critical", "6: off"});
-                 ImCmd::SetNextCommandPaletteSearchBoxFocused();
-             },
-             [](int selected_option)
-             {
-                 ImGui::GlobalSpdLogWindow().sink()->set_level(spdlog::level::level_enum(selected_option));
-                 spdlog::info("Setting verbosity threshold to level {:d}.", selected_option);
-             },
-             nullptr, nullptr, []() { set_logging_last_used = ++last_used; }, ICON_MY_LOG_LEVEL, "", nullptr,
-             set_logging_last_used});
+            // set logging verbosity. This is a two-step command
+            static int set_logging_last_used = 0;
+            ImCmd::AddCommand({{"Set logging verbosity"},
+                               []()
+                               {
+                                   ImCmd::Prompt(vector<string>{"0: trace", "1: debug", "2: info", "3: warn", "4: err",
+                                                                "5: critical", "6: off"});
+                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                               },
+                               [](int selected_option)
+                               {
+                                   ImGui::GlobalSpdLogWindow().sink()->set_level(
+                                       spdlog::level::level_enum(selected_option));
+                                   spdlog::info("Setting verbosity threshold to level {:d}.", selected_option);
+                               },
+                               nullptr,
+                               nullptr,
+                               []() { set_logging_last_used = ++last_used; },
+                               ICON_MY_LOG_LEVEL,
+                               "",
+                               nullptr,
+                               set_logging_last_used});
 
-        // set background color. This is a two-step command, or three-step if custom color is chosen
-        static int  set_background_last_used = 0;
-        static bool first_frame_bg           = true;
-        ImCmd::AddCommand(
-            {"Set background color",
-             []()
-             {
-                 ImCmd::Prompt(
-                     vector<string>{"0: black", "1: white", "2: dark checker", "3: light checker", "4: custom..."});
-                 ImCmd::SetNextCommandPaletteSearchBoxFocused();
-             },
-             [this](int selected_option)
-             {
-                 if (selected_option == 4)
+            // set background color. This is a two-step command, or three-step if custom color is chosen
+            static int  set_background_last_used = 0;
+            static bool first_frame_bg           = true;
+            ImCmd::AddCommand(
+                {{"Set background color", "background", "bg color", "change background"},
+                 []()
                  {
-                     // Custom color - show color picker widget
-                     first_frame_bg = true;
-                     // Save current color for cancel
-                     static float4 previous_bg_color;
-
-                     ImCmd::PromptWidget(
-                         [this]() -> bool
-                         {
-                             ImGui::Text("Select a custom background color:");
-                             ImGui::Spacing();
-
-                             // ColorPicker4 with HDR support - allows keyboard entry
-                             // Focus the Red input field on first frame (need to call SetKeyboardFocusHere before the
-                             // picker)
-                             if (first_frame_bg)
-                             {
-                                 // Save current color for cancel
-                                 previous_bg_color = m_bg_color;
-                                 // The picker has: SV square, Hue bar, then R,G,B inputs
-                                 // Skip to the R input (typically offset 0 or 2 depending on whether square/hue are
-                                 // focusable)
-                                 ImGui::SetKeyboardFocusHere(2);
-                                 first_frame_bg = false;
-                             }
-
-                             // Calculate width to make the picker fill available space
-                             // ColorPicker4 renders: sv_picker + spacing + hue_bar + spacing +
-                             // side_preview(square_sz*3) The internal calculation is: sv_picker = width - (hue_bar +
-                             // spacing) Total width = width + spacing + (square_sz * 3) So to fill available_width:
-                             // width = available_width - spacing - (square_sz * 3)
-                             float available    = ImGui::GetContentRegionAvail().x;
-                             float square_sz    = ImGui::GetFrameHeight();
-                             float spacing      = ImGui::GetStyle().ItemInnerSpacing.x;
-                             float picker_width = available - spacing - (square_sz * 3);
-
-                             ImGui::SetNextItemWidth(picker_width);
-                             ImGui::ColorPicker4("##Custom background color", (float *)&m_bg_color,
-                                                 ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float |
-                                                     ImGuiColorEditFlags_NoAlpha,
-                                                 (float *)&previous_bg_color);
-
-                             //  ImGui::Spacing();
-                             bool applied = false;
-
-                             // Also allow Enter key to apply
-                             if (ImGui::IsKeyPressed(ImGuiKey_Enter) && !ImGui::IsItemActive())
-                                 applied = true;
-
-                             // Cancel restores previous color
-                             if (ImGui::IsKeyPressed(ImGuiKey_Escape))
-                             {
-                                 m_bg_color = previous_bg_color;
-                                 applied    = true; // Close the widget
-                             }
-
-                             return applied;
-                         },
-                         "Use the color picker or type RGB values. Press Enter to apply or Escape to cancel.");
-                 }
-                 else
+                     ImCmd::Prompt(
+                         vector<string>{"0: black", "1: white", "2: dark checker", "3: light checker", "4: custom..."});
+                     ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                 },
+                 [this](int selected_option)
                  {
-                     // Set predefined background mode
-                     m_bg_mode = (BackgroundMode_)clamp(selected_option, (int)BGMode_Black, (int)BGMode_COUNT - 1);
-                 }
-             },
-             nullptr,
-             [this]()
-             {
-                 // Only called when custom color is accepted
-                 m_bg_mode = BGMode_Custom_Color;
-                 spdlog::info("Background color set to: ({:.3f}, {:.3f}, {:.3f})", m_bg_color.x, m_bg_color.y,
-                              m_bg_color.z);
-             },
-             []() { set_background_last_used = ++last_used; }, ICON_MY_BLANK, "", nullptr, set_background_last_used});
+                     if (selected_option == 4)
+                     {
+                         // Custom color - show color picker widget
+                         first_frame_bg = true;
+                         // Save current color for cancel
+                         static float4 previous_bg_color;
 
-        // add two-step theme selection command
-        static int set_theme_last_used = 0;
-        ImCmd::AddCommand({"Set theme",
-                           []()
-                           {
-                               vector<string> theme_names;
-                               theme_names.push_back(Theme::name(Theme::LIGHT_THEME));
-                               theme_names.push_back(Theme::name(Theme::DARK_THEME));
-                               for (int i = 0; i < ImGuiTheme::ImGuiTheme_Count; ++i)
-                                   theme_names.push_back(ImGuiTheme::ImGuiTheme_Name((ImGuiTheme::ImGuiTheme_)(i)));
+                         ImCmd::PromptWidget(
+                             [this]() -> bool
+                             {
+                                 ImGui::Text("Select a custom background color:");
+                                 ImGui::Spacing();
 
-                               ImCmd::Prompt(theme_names);
-                               ImCmd::SetNextCommandPaletteSearchBoxFocused();
-                           },
-                           [this](int selected_option) { m_theme.set(Theme::LIGHT_THEME + selected_option); }, nullptr,
-                           nullptr, []() { set_theme_last_used = ++last_used; }, ICON_MY_THEME, "", nullptr,
-                           set_theme_last_used});
+                                 // ColorPicker4 with HDR support - allows keyboard entry
+                                 // Focus the Red input field on first frame (need to call SetKeyboardFocusHere before
+                                 // the picker)
+                                 if (first_frame_bg)
+                                 {
+                                     // Save current color for cancel
+                                     previous_bg_color = m_bg_color;
+                                     // The picker has: SV square, Hue bar, then R,G,B inputs
+                                     // Skip to the R input (typically offset 0 or 2 depending on whether square/hue are
+                                     // focusable)
+                                     ImGui::SetKeyboardFocusHere(2);
+                                     first_frame_bg = false;
+                                 }
 
-        // // Example: Free-form text input
-        // static int text_input_last_used = 0;
-        // ImCmd::AddCommand({"Enter custom text",
-        //                    []()
-        //                    {
-        //                        ImCmd::PromptText(
-        //                            "Type some text...",
-        //                            [](const char *input) -> std::string
-        //                            {
-        //                                if (strlen(input) == 0)
-        //                                    return "Enter any text you'd like";
-        //                                return fmt::format("You typed: '{}'", input);
-        //                            },
-        //                            ImCmd::ValidateNotEmpty());
-        //                    },
-        //                    nullptr, [](const std::string &text) { spdlog::info("User entered text: '{}'", text); },
-        //                    nullptr, []() { text_input_last_used = ++last_used; }, ICON_MY_TEXT_WRAP_ON, "", nullptr,
-        //                    text_input_last_used});
+                                 // Calculate width to make the picker fill available space
+                                 // ColorPicker4 renders: sv_picker + spacing + hue_bar + spacing +
+                                 // side_preview(square_sz*3) The internal calculation is: sv_picker = width - (hue_bar
+                                 // + spacing) Total width = width + spacing + (square_sz * 3) So to fill
+                                 // available_width: width = available_width - spacing - (square_sz * 3)
+                                 float available    = ImGui::GetContentRegionAvail().x;
+                                 float square_sz    = ImGui::GetFrameHeight();
+                                 float spacing      = ImGui::GetStyle().ItemInnerSpacing.x;
+                                 float picker_width = available - spacing - (square_sz * 3);
 
-        // // Example: Integer input with range validation
-        // static int int_input_last_used = 0;
-        // ImCmd::AddCommand(
-        //     {"Set image quality (1-100)",
-        //      []()
-        //      {
-        //          ImCmd::PromptInt(
-        //              "Enter quality (1-100)...",
-        //              [](const char *input) -> std::string
-        //              {
-        //                  if (strlen(input) == 0)
-        //                      return "Enter a quality value between 1 and 100";
-        //                  return fmt::format("Quality will be set to: {}", input);
-        //              },
-        //              ImCmd::ValidateIntRange(1, 100));
-        //      },
-        //      nullptr, [](const std::string &text) { spdlog::info("Quality set to: {}", std::stoi(text)); }, nullptr,
-        //      []() { int_input_last_used = ++last_used; }, ICON_MY_SETTINGS_WINDOW, "", nullptr,
-        //      int_input_last_used});
+                                 ImGui::SetNextItemWidth(picker_width);
+                                 ImGui::ColorPicker4("##Custom background color", (float *)&m_bg_color,
+                                                     ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float |
+                                                         ImGuiColorEditFlags_NoAlpha,
+                                                     (float *)&previous_bg_color);
 
-        // // Example: Float input with range validation
-        // static int float_input_last_used = 0;
-        // ImCmd::AddCommand({"Set custom exposure",
-        //                    []()
-        //                    {
-        //                        ImCmd::PromptFloat(
-        //                            "Enter exposure value...",
-        //                            [](const char *input) -> std::string
-        //                            {
-        //                                if (strlen(input) == 0)
-        //                                    return "Enter an exposure value between -9.0 and 9.0";
-        //                                return fmt::format("Exposure will be set to: {}", input);
-        //                            },
-        //                            ImCmd::ValidateFloatRange(-9.0f, 9.0f));
-        //                    },
-        //                    nullptr,
-        //                    [](const std::string &text)
-        //                    {
-        //                        float val = std::stof(text);
-        //                        spdlog::info("Would set exposure to: {}", val);
-        //                    },
-        //                    nullptr, []() { float_input_last_used = ++last_used; }, ICON_MY_EXPOSURE, "", nullptr,
-        //                    float_input_last_used});
+                                 //  ImGui::Spacing();
+                                 bool applied = false;
 
-        // // Example: Complex validation with combined validators
-        // static int filename_input_last_used = 0;
-        // ImCmd::AddCommand(
-        //     {"Save with custom filename",
-        //      []()
-        //      {
-        //          auto validate =
-        //              ImCmd::CombineValidators({ImCmd::ValidateNotEmpty(), [](const char *input) -> std::string
-        //                                        {
-        //                                            std::string s(input);
-        //                                            // Check for invalid filename characters
-        //                                            if (s.find_first_of("/\\:*?\"<>|") != std::string::npos)
-        //                                                return "Filename contains invalid characters";
-        //                                            return "";
-        //                                        }});
+                                 // Also allow Enter key to apply
+                                 if (ImGui::IsKeyPressed(ImGuiKey_Enter) && !ImGui::IsItemActive())
+                                     applied = true;
 
-        //          ImCmd::PromptText(
-        //              "Enter filename...",
-        //              [](const char *input) -> std::string
-        //              {
-        //                  if (strlen(input) == 0)
-        //                      return "Enter a filename without extension";
-        //                  return fmt::format("Will save as: {}.png", input);
-        //              },
-        //              validate);
-        //      },
-        //      nullptr, [](const std::string &text) { spdlog::info("Would save as: {}.png", text); }, nullptr,
-        //      []() { filename_input_last_used = ++last_used; }, ICON_MY_SAVE_AS, "", nullptr,
-        //      filename_input_last_used});
+                                 // Cancel restores previous color
+                                 if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                                 {
+                                     m_bg_color = previous_bg_color;
+                                     applied    = true; // Close the widget
+                                 }
 
-        ImCmd::SetNextCommandPaletteSearchBoxFocused();
-        ImCmd::SetNextCommandPaletteSearch("");
+                                 return applied;
+                             },
+                             "Use the color picker or type RGB values. Press Enter to apply or Escape to cancel.");
+                     }
+                     else
+                     {
+                         // Set predefined background mode
+                         m_bg_mode = (BackgroundMode_)clamp(selected_option, (int)BGMode_Black, (int)BGMode_COUNT - 1);
+                     }
+                 },
+                 nullptr,
+                 [this]()
+                 {
+                     // Only called when custom color is accepted
+                     m_bg_mode = BGMode_Custom_Color;
+                     spdlog::info("Background color set to: ({:.3f}, {:.3f}, {:.3f})", m_bg_color.x, m_bg_color.y,
+                                  m_bg_color.z);
+                 },
+                 []() { set_background_last_used = ++last_used; },
+                 ICON_MY_BLANK,
+                 "",
+                 nullptr,
+                 set_background_last_used});
+
+            // add two-step theme selection command
+            static int set_theme_last_used = 0;
+            ImCmd::AddCommand({{"Set theme", "Set style", "Set appearance", "Change colors"},
+                               []()
+                               {
+                                   vector<string> theme_names;
+                                   theme_names.push_back(Theme::name(Theme::LIGHT_THEME));
+                                   theme_names.push_back(Theme::name(Theme::DARK_THEME));
+                                   for (int i = 0; i < ImGuiTheme::ImGuiTheme_Count; ++i)
+                                       theme_names.push_back(ImGuiTheme::ImGuiTheme_Name((ImGuiTheme::ImGuiTheme_)(i)));
+
+                                   ImCmd::Prompt(theme_names);
+                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                               },
+                               [this](int selected_option) { m_theme.set(Theme::LIGHT_THEME + selected_option); },
+                               nullptr,
+                               nullptr,
+                               []() { set_theme_last_used = ++last_used; },
+                               ICON_MY_THEME,
+                               "",
+                               nullptr,
+                               set_theme_last_used});
+
+            // // Example: Free-form text input
+            // static int text_input_last_used = 0;
+            // ImCmd::AddCommand({"Enter custom text",
+            //                    []()
+            //                    {
+            //                        ImCmd::PromptText(
+            //                            "Type some text...",
+            //                            [](const char *input) -> std::string
+            //                            {
+            //                                if (strlen(input) == 0)
+            //                                    return "Enter any text you'd like";
+            //                                return fmt::format("You typed: '{}'", input);
+            //                            },
+            //                            ImCmd::ValidateNotEmpty());
+            //                    },
+            //                    nullptr, [](const std::string &text) { spdlog::info("User entered text: '{}'", text);
+            //                    }, nullptr, []() { text_input_last_used = ++last_used; }, ICON_MY_TEXT_WRAP_ON, "",
+            //                    nullptr, text_input_last_used});
+
+            // // Example: Integer input with range validation
+            // static int int_input_last_used = 0;
+            // ImCmd::AddCommand(
+            //     {"Set image quality (1-100)",
+            //      []()
+            //      {
+            //          ImCmd::PromptInt(
+            //              "Enter quality (1-100)...",
+            //              [](const char *input) -> std::string
+            //              {
+            //                  if (strlen(input) == 0)
+            //                      return "Enter a quality value between 1 and 100";
+            //                  return fmt::format("Quality will be set to: {}", input);
+            //              },
+            //              ImCmd::ValidateIntRange(1, 100));
+            //      },
+            //      nullptr, [](const std::string &text) { spdlog::info("Quality set to: {}", std::stoi(text)); },
+            //      nullptr,
+            //      []() { int_input_last_used = ++last_used; }, ICON_MY_SETTINGS_WINDOW, "", nullptr,
+            //      int_input_last_used});
+
+            // // Example: Float input with range validation
+            // static int float_input_last_used = 0;
+            // ImCmd::AddCommand({"Set custom exposure",
+            //                    []()
+            //                    {
+            //                        ImCmd::PromptFloat(
+            //                            "Enter exposure value...",
+            //                            [](const char *input) -> std::string
+            //                            {
+            //                                if (strlen(input) == 0)
+            //                                    return "Enter an exposure value between -9.0 and 9.0";
+            //                                return fmt::format("Exposure will be set to: {}", input);
+            //                            },
+            //                            ImCmd::ValidateFloatRange(-9.0f, 9.0f));
+            //                    },
+            //                    nullptr,
+            //                    [](const std::string &text)
+            //                    {
+            //                        float val = std::stof(text);
+            //                        spdlog::info("Would set exposure to: {}", val);
+            //                    },
+            //                    nullptr, []() { float_input_last_used = ++last_used; }, ICON_MY_EXPOSURE, "", nullptr,
+            //                    float_input_last_used});
+
+            // // Example: Complex validation with combined validators
+            // static int filename_input_last_used = 0;
+            // ImCmd::AddCommand(
+            //     {"Save with custom filename",
+            //      []()
+            //      {
+            //          auto validate =
+            //              ImCmd::CombineValidators({ImCmd::ValidateNotEmpty(), [](const char *input) -> std::string
+            //                                        {
+            //                                            std::string s(input);
+            //                                            // Check for invalid filename characters
+            //                                            if (s.find_first_of("/\\:*?\"<>|") != std::string::npos)
+            //                                                return "Filename contains invalid characters";
+            //                                            return "";
+            //                                        }});
+
+            //          ImCmd::PromptText(
+            //              "Enter filename...",
+            //              [](const char *input) -> std::string
+            //              {
+            //                  if (strlen(input) == 0)
+            //                      return "Enter a filename without extension";
+            //                  return fmt::format("Will save as: {}.png", input);
+            //              },
+            //              validate);
+            //      },
+            //      nullptr, [](const std::string &text) { spdlog::info("Would save as: {}.png", text); }, nullptr,
+            //      []() { filename_input_last_used = ++last_used; }, ICON_MY_SAVE_AS, "", nullptr,
+            //      filename_input_last_used});
+
+            ImCmd::SetNextCommandPaletteSearchBoxFocused();
+            ImCmd::SetNextCommandPaletteSearch("");
+        }
+
+        bool prev_clicked = false, next_clicked = false, use_clicked = false, esc_clicked = false;
+
+        if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
+        {
+            ImGui::TableNextColumn();
+            prev_clicked = ImGui::Button(ICON_MY_ARROW_UP);
+            ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+            next_clicked = ImGui::Button(ICON_MY_ARROW_DOWN);
+            ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+            ImGui::Text("to navigate");
+
+            ImGui::TableNextColumn();
+            ImGui::AlignCursor(HelloImGui::EmSize(5.f), 0.5f);
+            use_clicked = ImGui::Button(ICON_MY_KEY_RETURN " to use", HelloImGui::EmToVec2(5.f, 0.f));
+
+            ImGui::TableNextColumn();
+            ImGui::AlignCursor(HelloImGui::EmSize(7.f), 1.f);
+            esc_clicked = ImGui::Button(ICON_MY_KEY_ESC " to dismiss ", HelloImGui::EmToVec2(7.f, 0.f));
+
+            ImGui::EndTable();
+        }
+
+        ImCmd::CommandPalette("Command palette", "Filter commands...");
+
+        if (!ImCmd::IsAnyItemSelected())
+        {
+            if (ImGui::Shortcut(ImGuiKey_UpArrow, ImGuiInputFlags_Repeat) || prev_clicked)
+                ImCmd::FocusPreviousItem();
+            else if (ImGui::Shortcut(ImGuiKey_DownArrow, ImGuiInputFlags_Repeat) || next_clicked)
+                ImCmd::FocusNextItem();
+            else if (ImGui::IsKeyPressed(ImGuiKey_Enter) || use_clicked)
+                ImCmd::Submit();
+        }
+
+        ImCmd::EndCommandPalette();
+
+        // Close window when we select an item, hit escape
+        if (ImCmd::IsAnyItemSelected() || esc_clicked ||
+            ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive))
+        {
+            ImGui::CloseCurrentPopup();
+            open = false;
+        }
+
+        ImGui::EndPopup();
     }
-
-    bool prev_clicked = false, next_clicked = false, use_clicked = false, esc_clicked = false;
-
-    if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
-    {
-        ImGui::TableNextColumn();
-        prev_clicked = ImGui::Button(ICON_MY_ARROW_UP);
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        next_clicked = ImGui::Button(ICON_MY_ARROW_DOWN);
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::Text("to navigate");
-
-        ImGui::TableNextColumn();
-        ImGui::AlignCursor(HelloImGui::EmSize(5.f), 0.5f);
-        use_clicked = ImGui::Button(ICON_MY_KEY_RETURN " to use", HelloImGui::EmToVec2(5.f, 0.f));
-
-        ImGui::TableNextColumn();
-        ImGui::AlignCursor(HelloImGui::EmSize(7.f), 1.f);
-        esc_clicked = ImGui::Button(ICON_MY_KEY_ESC " to dismiss ", HelloImGui::EmToVec2(7.f, 0.f));
-
-        ImGui::EndTable();
-    }
-
-    ImCmd::CommandPalette("Command palette", "Filter commands...");
-
-    if (!ImCmd::IsAnyItemSelected())
-    {
-        if (ImGui::Shortcut(ImGuiKey_UpArrow, ImGuiInputFlags_Repeat) || prev_clicked)
-            ImCmd::FocusPreviousItem();
-        else if (ImGui::Shortcut(ImGuiKey_DownArrow, ImGuiInputFlags_Repeat) || next_clicked)
-            ImCmd::FocusNextItem();
-        else if (ImGui::IsKeyPressed(ImGuiKey_Enter) || use_clicked)
-            ImCmd::Submit();
-    }
-
-    ImCmd::EndCommandPalette();
-
-    // Close window when we select an item, hit escape, or unfocus the command palette window (click elsewhere)
-    if (ImCmd::IsAnyItemSelected() || esc_clicked ||
-        ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
-        ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive) ||
-        !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
-        open = false;
-
-    ImGui::End();
 }
 
 void HDRViewApp::draw_about_dialog(bool &open)

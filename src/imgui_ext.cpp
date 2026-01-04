@@ -575,9 +575,10 @@ void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const string &subs
 
 void MenuItem(const Action &a, bool include_name)
 {
+    const auto &name = a.names[0];
     if (a.needs_menu)
     {
-        if (ImGui::BeginMenuEx(a.name.c_str(), a.icon.c_str(), a.enabled()))
+        if (ImGui::BeginMenuEx(name.c_str(), a.icon.c_str(), a.enabled()))
         {
             a.callback();
             ImGui::EndMenu();
@@ -585,11 +586,11 @@ void MenuItem(const Action &a, bool include_name)
     }
     else
     {
-        if (ImGui::MenuItemEx(include_name ? a.name : a.icon, include_name ? a.icon : "",
+        if (ImGui::MenuItemEx(include_name ? name : a.icon, include_name ? a.icon : "",
                               ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected, a.enabled()))
             a.callback();
         if (!include_name)
-            ImGui::Tooltip(fmt::format("{}{}{}", a.name,
+            ImGui::Tooltip(fmt::format("{}{}{}", name,
                                        a.chord ? fmt::format(" ({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "",
                                        a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
                                .c_str());
@@ -602,11 +603,12 @@ void MenuItem(const Action &a, bool include_name)
 
 void IconButton(const Action &a, bool include_name)
 {
+    const auto &name = a.names[0];
     ImGui::BeginDisabled(a.enabled() == false);
 
     if (include_name)
     {
-        if (ImGui::IconButton(fmt::format("{} {}", a.icon, a.name).c_str(), a.p_selected, ImVec2(0, -1)))
+        if (ImGui::IconButton(fmt::format("{} {}", a.icon, name).c_str(), a.p_selected, ImVec2(0, -1)))
             a.callback();
         if (a.chord)
             ImGui::Tooltip(fmt::format("({}){}", ImGui::GetKeyChordNameTranslated(a.chord),
@@ -617,15 +619,15 @@ void IconButton(const Action &a, bool include_name)
     }
     else
     {
-        if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str(), a.p_selected))
+        if (ImGui::IconButton(fmt::format("{}##{}", a.icon, name).c_str(), a.p_selected))
             a.callback();
         if (a.chord)
-            ImGui::Tooltip(fmt::format("{} ({}){}", a.name, ImGui::GetKeyChordNameTranslated(a.chord),
+            ImGui::Tooltip(fmt::format("{} ({}){}", name, ImGui::GetKeyChordNameTranslated(a.chord),
                                        a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
                                .c_str());
         else
             ImGui::Tooltip(
-                fmt::format("{}{}", a.name, a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip)).c_str());
+                fmt::format("{}{}", name, a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip)).c_str());
     }
 
     ImGui::EndDisabled();
@@ -633,7 +635,7 @@ void IconButton(const Action &a, bool include_name)
 
 void Checkbox(const Action &a)
 {
-    ImGui::Checkbox(a.name.c_str(), a.p_selected);
+    ImGui::Checkbox(a.names[0].c_str(), a.p_selected);
     if (!a.tooltip.empty() || a.chord)
     {
         string parenthesized_chord = a.chord ? fmt::format("({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "";

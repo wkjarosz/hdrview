@@ -67,16 +67,16 @@ bool   IconButton(const char *icon, bool *v = nullptr, const ImVec2 &size = ImVe
 //! A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
 struct Action
 {
-    std::string           name;
-    std::string           icon       = "";
-    ImGuiKeyChord         chord      = ImGuiKey_None;
-    ImGuiInputFlags       flags      = ImGuiInputFlags_None;
-    std::function<void()> callback   = []() { return; };
-    std::function<bool()> enabled    = []() { return true; };
-    bool                  needs_menu = false;
-    bool                 *p_selected = nullptr;
-    std::string           tooltip    = "";
-    int                   last_used  = 0; // incremented whenever the action is used
+    std::vector<std::string> names; // first element is primary name, rest are aliases
+    std::string              icon       = "";
+    ImGuiKeyChord            chord      = ImGuiKey_None;
+    ImGuiInputFlags          flags      = ImGuiInputFlags_None;
+    std::function<void()>    callback   = []() { return; };
+    std::function<bool()>    enabled    = []() { return true; };
+    bool                     needs_menu = false;
+    bool                    *p_selected = nullptr;
+    std::string              tooltip    = "";
+    int                      last_used  = 0; // incremented whenever the action is used
 };
 
 void MenuItem(const Action &a, bool inlude_name = true);

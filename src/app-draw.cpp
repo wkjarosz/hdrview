@@ -316,7 +316,8 @@ void HDRViewApp::process_shortcuts()
             if (a.second.enabled() && !ImGui::GetIO().NavVisible &&
                 ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {
-                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.name, ImGui::GetFrameCount());
+                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.names[0],
+                              ImGui::GetFrameCount());
                 if (a.second.p_selected)
                     *a.second.p_selected = !*a.second.p_selected;
                 a.second.callback();

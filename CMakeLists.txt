@@ -384,29 +384,29 @@ mark_as_system_library(implot)
 list(APPEND HDRVIEW_DEPENDENCIES "implot")
 
 CPMAddPackage(
-  NAME my_imgui_command_palette
+  NAME imgui_command_palette
   GITHUB_REPOSITORY wkjarosz/imgui-command-palette
-  GIT_TAG 58f56535b81d51705db6bc6ddd00c71baa1e869c
+  GIT_TAG 10cffbedbd63296098d462c96b5488e59617b16b
   DOWNLOAD_ONLY YES
   SYSTEM YES
 )
-if(NOT my_imgui_command_palette_ADDED)
+if(NOT imgui_command_palette_ADDED)
   message(FATAL_ERROR "Could not download imgui-command-palette library.")
 endif()
 message(STATUS "imgui-command-palette library added")
 add_library(
-  my_imgui_command_palette
-  "${my_imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.h"
-  "${my_imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.cpp"
-  "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.h"
-  "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.cpp"
+  imgui_command_palette
+  "${imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.h"
+  "${imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.cpp"
+  "${imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.h"
+  "${imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.cpp"
 )
-target_compile_features(my_imgui_command_palette PUBLIC cxx_std_11)
-target_include_directories(my_imgui_command_palette PUBLIC ${my_imgui_command_palette_SOURCE_DIR})
-target_link_libraries(my_imgui_command_palette PUBLIC imgui)
-disable_target_warnings(my_imgui_command_palette)
-mark_as_system_library(my_imgui_command_palette)
-list(APPEND HDRVIEW_DEPENDENCIES "my_imgui_command_palette")
+target_compile_features(imgui_command_palette PUBLIC cxx_std_11)
+target_include_directories(imgui_command_palette PUBLIC ${imgui_command_palette_SOURCE_DIR})
+target_link_libraries(imgui_command_palette PUBLIC imgui)
+disable_target_warnings(imgui_command_palette)
+mark_as_system_library(imgui_command_palette)
+list(APPEND HDRVIEW_DEPENDENCIES "imgui_command_palette")
 
 CPMAddPackage("gh:sgorsten/linalg@2.2")
 if(NOT linalg_ADDED)

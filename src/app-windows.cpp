@@ -57,7 +57,7 @@ void HDRViewApp::draw_tweak_window()
     ImGui::End();
 }
 
-void HDRViewApp::draw_develop_windows()
+void HDRViewApp::draw_developer_windows()
 {
     if (m_show_demo_window)
     {

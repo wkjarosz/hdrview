@@ -197,7 +197,7 @@ private:
     void draw_top_toolbar();
     void draw_menus();
     void draw_status_bar();
-    void draw_develop_windows();
+    void draw_developer_windows();
     void draw_tweak_window();
     void process_shortcuts();
     bool process_event(void *event);
