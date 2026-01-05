@@ -69,13 +69,13 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.config.preset }}-release
 
+      - name: Checking that HDRView runs
+        run: |
+          "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView.app/Contents/MacOS/HDRView" --help
+
       - name: Package with CPack
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{env.BUILD_TYPE}} -G DragNDrop
-
-      - name: Checking that HDRView runs
-        run: |
-          "${{github.workspace}}/build/${{ matrix.config.preset }}/install/HDRView ${VERSION_NO_V}.app/Contents/MacOS/HDRView" --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
