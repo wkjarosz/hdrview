@@ -1486,8 +1486,8 @@ if(APPLE)
   install(TARGETS HDRView BUNDLE DESTINATION . COMPONENT Runtime)
   set(CPACK_GENERATOR "DragNDrop")
   
-  # Strip leading 'v' from VERSION if present for app naming
-  string(REGEX REPLACE "^v" "" VERSION_NO_V "${VERSION}")
+  # Strip leading 'v' from GIT_TAG to get full version with prerelease suffix
+  string(REGEX REPLACE "^v" "" VERSION_NO_V "${GIT_TAG}")
   
   # Rename app bundle to include version
   set(VERSIONED_APP_NAME "HDRView ${VERSION_NO_V}.app")
