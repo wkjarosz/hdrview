@@ -77,12 +77,12 @@ jobs:
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{env.BUILD_TYPE}} -G DragNDrop
 
-      - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}
-          path: |
-            ${{github.workspace}}/build/${{ matrix.config.preset }}
+      # - name: Archive build artifacts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}
+      #     path: |
+      #       ${{github.workspace}}/build/${{ matrix.config.preset }}
 
       - name: Release
         uses: softprops/action-gh-release@v2
