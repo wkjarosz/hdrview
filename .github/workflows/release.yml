@@ -25,7 +25,7 @@ jobs:
               name: "macOS Apple Silicon",
               os: macos-14,
               preset: "macos-arm64-cpm",
-              arch: "Apple Silicon",
+              arch: "Apple-Silicon",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
           - {
@@ -69,34 +69,13 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.config.preset }}-release
 
-      - name: Rename app bundle with version
-        run: |
-          cd ${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}
-          mv HDRView.app "HDRView ${VERSION_NO_V}.app"
+      - name: Package with CPack
+        working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
+        run: cpack -C ${{env.BUILD_TYPE}} -G DragNDrop
 
       - name: Checking that HDRView runs
         run: |
-          "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app/Contents/MacOS/HDRView" --help
-
-      - name: Bundle dependencies
-        run: |
-          dylibbundler -od -b -x "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app/Contents/MacOS/HDRView" -d "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app/Contents/libs/"
-
-      - name: Creating dmg
-        run: |
-          RESULT="${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${VERSION} (${{ matrix.config.arch }}).dmg"
-          test -f $RESULT && rm $RESULT
-          for i in 1 2 3; do
-            if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon "HDRView ${VERSION_NO_V}.app" 130 105 $RESULT "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView ${VERSION_NO_V}.app"; then
-              break
-            elif [ $i -eq 3 ]; then
-              echo "create-dmg failed after 3 attempts"
-              exit 1
-            else
-              echo "create-dmg failed, retrying ($i)..."
-              sleep 2
-            fi
-          done
+          "${{github.workspace}}/build/${{ matrix.config.preset }}/install/HDRView ${VERSION_NO_V}.app/Contents/MacOS/HDRView" --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
@@ -108,7 +87,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "${{github.workspace}}/build/${{ matrix.config.preset }}/${{env.BUILD_TYPE}}/HDRView-${{ env.VERSION }} (${{ matrix.config.arch }}).dmg"
+          files: "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-${{ env.VERSION }}-${{ matrix.config.arch }}.dmg"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

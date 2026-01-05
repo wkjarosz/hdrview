@@ -340,6 +340,9 @@ set(HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF)
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF)
 set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 
+# Prevent dependencies from installing their files
+set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
+
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY pthom/hello_imgui
@@ -348,6 +351,7 @@ CPMAddPackage(
   GIT_TAG v1.92.5
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
+  EXCLUDE_FROM_ALL YES
   SYSTEM YES
 )
 if(hello_imgui_ADDED)
@@ -1479,8 +1483,69 @@ set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
 
 if(APPLE)
-  install(TARGETS HDRView BUNDLE DESTINATION ${CMAKE_INSTALL_PREFIX})
+  install(TARGETS HDRView BUNDLE DESTINATION . COMPONENT Runtime)
   set(CPACK_GENERATOR "DragNDrop")
+  
+  # Strip leading 'v' from VERSION if present for app naming
+  string(REGEX REPLACE "^v" "" VERSION_NO_V "${VERSION}")
+  
+  # Rename app bundle to include version
+  set(VERSIONED_APP_NAME "HDRView ${VERSION_NO_V}.app")
+  install(CODE "
+    if(EXISTS \"\${CMAKE_INSTALL_PREFIX}/HDRView.app\")
+      file(RENAME 
+        \"\${CMAKE_INSTALL_PREFIX}/HDRView.app\"
+        \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}\")
+    endif()
+  " COMPONENT Runtime)
+  
+  # Bundle dependencies using dylibbundler when packaging
+  find_program(DYLIBBUNDLER_EXECUTABLE dylibbundler)
+  if(DYLIBBUNDLER_EXECUTABLE)
+    install(CODE "
+      execute_process(
+        COMMAND ${DYLIBBUNDLER_EXECUTABLE} -od -b 
+          -x \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}/Contents/MacOS/HDRView\"
+          -d \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}/Contents/libs/\"
+        RESULT_VARIABLE DYLIB_RESULT
+      )
+      if(NOT DYLIB_RESULT EQUAL 0)
+        message(WARNING \"dylibbundler failed with code \${DYLIB_RESULT}\")
+      endif()
+    " COMPONENT Runtime)
+  else()
+    message(STATUS "dylibbundler not found - DMG will not include bundled dependencies")
+  endif()
+  
+  # CPack DragNDrop settings
+  set(CPACK_DMG_VOLUME_NAME "HDRView Installer")
+  set(CPACK_DMG_FORMAT "UDBZ")
+  
+  # Determine architecture suffix for DMG filename
+  if(CMAKE_OSX_ARCHITECTURES MATCHES "arm64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+    set(ARCH_SUFFIX "Apple-Silicon")
+  elseif(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    set(ARCH_SUFFIX "Intel")
+  elseif(CMAKE_OSX_ARCHITECTURES MATCHES "arm64;x86_64|x86_64;arm64")
+    set(ARCH_SUFFIX "Universal")
+  else()
+    set(ARCH_SUFFIX "macOS")
+  endif()
+  
+  # Set custom DMG filename: e.g. HDRView-v2.7.0-Apple-Silicon.dmg
+  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION}-${ARCH_SUFFIX}")
+  
+  # Configure the AppleScript with the versioned app name
+  configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/DMGSetup.scpt.in"
+    "${CMAKE_BINARY_DIR}/DMGSetup.scpt"
+    @ONLY
+  )
+  set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "${CMAKE_BINARY_DIR}/DMGSetup.scpt")
+  
+  # Only install Runtime component to avoid dependency files
+  set(CPACK_COMPONENTS_ALL Runtime)
+  set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${PROJECT_NAME};Runtime;/")
 endif()
 
 include(CPack)
