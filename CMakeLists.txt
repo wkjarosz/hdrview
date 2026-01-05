@@ -1518,7 +1518,7 @@ if(APPLE)
   endif()
   
   # CPack DragNDrop settings
-  set(CPACK_DMG_VOLUME_NAME "HDRView Installer")
+  set(CPACK_DMG_VOLUME_NAME "HDRView-Installer")
   set(CPACK_DMG_FORMAT "UDBZ")
   
   # Determine architecture suffix for DMG filename

@@ -75,7 +75,22 @@ jobs:
 
       - name: Package with CPack
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
-        run: cpack -C ${{env.BUILD_TYPE}} -G DragNDrop
+        run: |
+          for i in 1 2 3; do
+            if cpack -C ${{env.BUILD_TYPE}} -G DragNDrop; then
+              break
+            elif [ $i -eq 3 ]; then
+              echo "cpack failed after 3 attempts"
+              exit 1
+            else
+              echo "cpack failed, retrying ($i)..."
+              # Clean up any leftover mounts
+              for vol in /Volumes/HDRView*; do
+                [ -d "$vol" ] && hdiutil detach "$vol" 2>/dev/null || true
+              done
+              sleep 2
+            fi
+          done
 
       - name: List files after CPack
         run: |
