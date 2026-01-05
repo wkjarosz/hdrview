@@ -1546,6 +1546,78 @@ if(APPLE)
   # Only install Runtime component to avoid dependency files
   set(CPACK_COMPONENTS_ALL Runtime)
   set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${PROJECT_NAME};Runtime;/")
+elseif(UNIX AND NOT EMSCRIPTEN)
+  # Linux AppImage generation
+  
+  # Strip leading 'v' from GIT_TAG to get full version
+  string(REGEX REPLACE "^v" "" VERSION_NO_V "${GIT_TAG}")
+  
+  # Determine architecture for package filename
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    set(ARCH_SUFFIX "x86_64")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+    set(ARCH_SUFFIX "aarch64")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
+    set(ARCH_SUFFIX "i686")
+  else()
+    set(ARCH_SUFFIX "${CMAKE_SYSTEM_PROCESSOR}")
+  endif()
+  
+  # AppImage generation
+  find_program(LINUXDEPLOY linuxdeploy PATHS $ENV{HOME}/.local/bin)
+  find_program(APPIMAGETOOL appimagetool PATHS $ENV{HOME}/.local/bin)
+  
+  if(LINUXDEPLOY AND APPIMAGETOOL)
+    message(STATUS "Found linuxdeploy: ${LINUXDEPLOY}")
+    message(STATUS "Found appimagetool: ${APPIMAGETOOL}")
+    
+    # Install desktop file and icon for AppImage
+    install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
+            DESTINATION share/applications)
+    install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/icon-256.png"
+            DESTINATION share/icons/hicolor/256x256/apps
+            RENAME HDRView.png)
+    
+    add_custom_target(appimage
+      COMMAND ${CMAKE_COMMAND} -E echo "Building AppImage..."
+      
+      # Create clean AppDir
+      COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/AppDir
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/AppDir
+      
+      # Install application to AppDir
+      COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${CMAKE_BINARY_DIR}/AppDir/usr --config $<CONFIG>
+      
+      # Run linuxdeploy to bundle dependencies
+      COMMAND ${LINUXDEPLOY}
+        --appdir=${CMAKE_BINARY_DIR}/AppDir
+        --executable=${CMAKE_BINARY_DIR}/AppDir/usr/bin/HDRView
+        --desktop-file=${CMAKE_BINARY_DIR}/AppDir/usr/share/applications/HDRView.desktop
+        --icon-file=${CMAKE_BINARY_DIR}/AppDir/usr/share/icons/hicolor/256x256/apps/HDRView.png
+        --output=appimage
+      
+      # Rename AppImage with version
+      COMMAND ${CMAKE_COMMAND} -E rename
+        ${CMAKE_BINARY_DIR}/HDRView-${ARCH_SUFFIX}.AppImage
+        ${CMAKE_BINARY_DIR}/HDRView-${VERSION_NO_V}-Linux-${ARCH_SUFFIX}.AppImage
+      
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+      DEPENDS HDRView
+      COMMENT "Creating AppImage package..."
+      VERBATIM
+    )
+    
+    message(STATUS "AppImage target added. Run 'cmake --build . --target appimage' to create AppImage")
+  else()
+    if(NOT LINUXDEPLOY)
+      message(STATUS "linuxdeploy not found - AppImage target not available")
+      message(STATUS "  Install with: wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH_SUFFIX}.AppImage -O ~/.local/bin/linuxdeploy && chmod +x ~/.local/bin/linuxdeploy")
+    endif()
+    if(NOT APPIMAGETOOL)
+      message(STATUS "appimagetool not found - AppImage target not available")
+      message(STATUS "  Install with: wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH_SUFFIX}.AppImage -O ~/.local/bin/appimagetool && chmod +x ~/.local/bin/appimagetool")
+    endif()
+  endif()
 endif()
 
 include(CPack)

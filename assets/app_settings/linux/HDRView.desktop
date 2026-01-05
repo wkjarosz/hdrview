@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=HDRView
+GenericName=HDR Image Viewer
+Comment=A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images
+Exec=HDRView %F
+Icon=HDRView
+Terminal=false
+Categories=Graphics;Viewer;Photography;
+MimeType=image/x-exr;image/x-hdr;image/x-portable-floatmap;image/png;image/jpeg;image/tiff;image/webp;image/avif;image/heic;image/jp2;image/jxl;image/bmp;image/x-dds;image/x-qoi;
+Keywords=image;viewer;hdr;exr;openexr;photography;
+StartupNotify=true

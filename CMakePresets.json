@@ -229,6 +229,22 @@
       }
     },
     {
+      "name": "linux-appimage",
+      "displayName": "Linux AppImage",
+      "description": "Linux build optimized for AppImage packaging with bundled dependencies",
+      "inherits": ["ninja-multi-base", "linux-cpm-base"],
+      "binaryDir": "${sourceDir}/build/linux-appimage",
+      "cacheVariables": {
+        "HDRVIEW_PORTABLE_INSTALL": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
       "name": "emscripten",
       "displayName": "Emscripten (WebAssembly)",
       "description": "Build for web using Emscripten (requires EMSDK environment variable)",
@@ -489,6 +505,30 @@
       "configurePreset": "linux-local"
     },
     {
+      "name": "linux-appimage-debug",
+      "displayName": "Debug",
+      "inherits": "build-base-debug",
+      "configurePreset": "linux-appimage"
+    },
+    {
+      "name": "linux-appimage-release",
+      "displayName": "Release",
+      "inherits": "build-base-release",
+      "configurePreset": "linux-appimage"
+    },
+    {
+      "name": "linux-appimage-minsizerel",
+      "displayName": "MinSizeRel",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "linux-appimage"
+    },
+    {
+      "name": "linux-appimage-relwithdebinfo",
+      "displayName": "RelWithDebInfo",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "linux-appimage"
+    },
+    {
       "name": "emscripten",
       "displayName": "Build",
       "configurePreset": "emscripten",
@@ -603,6 +643,20 @@
         {
           "type": "package",
           "name": "macos-universal-release"
+        }
+      ]
+    },
+    {
+      "name": "appimage",
+      "displayName": "Create AppImage - Linux",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "linux-appimage"
+        },
+        {
+          "type": "build",
+          "name": "linux-appimage-release"
         }
       ]
     }
