@@ -51,7 +51,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: "**/cpm_modules"
           key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
@@ -91,13 +91,6 @@ jobs:
               sleep 2
             fi
           done
-
-      - name: List files after CPack
-        run: |
-          echo "Contents of build directory:"
-          ls -la "${{github.workspace}}/build/${{ matrix.config.preset }}/"
-          echo "Looking for DMG files:"
-          find "${{github.workspace}}/build/${{ matrix.config.preset }}" -name "*.dmg" -type f
 
       # - name: Archive build artifacts
       #   uses: actions/upload-artifact@v4
@@ -157,14 +150,14 @@ jobs:
         uses: thedoctor0/zip-release@0.7.5
         with:
           type: "zip"
-          filename: "HDRView-${{ env.VERSION }}-windows.zip"
+          filename: "HDRView-${{ env.VERSION_NO_V }}-windows.zip"
           directory: ${{github.workspace}}/build/deploy
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{github.workspace}}/build/deploy/HDRView-${{ env.VERSION }}-windows.zip
+            ${{github.workspace}}/build/deploy/HDRView-${{ env.VERSION_NO_V }}-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -181,7 +174,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: "**/cpm_modules"
           key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
