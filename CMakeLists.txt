@@ -1532,8 +1532,8 @@ if(APPLE)
     set(ARCH_SUFFIX "macOS")
   endif()
   
-  # Set custom DMG filename: e.g. HDRView-v2.7.0-Apple-Silicon.dmg
-  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION}-${ARCH_SUFFIX}")
+  # Set custom DMG filename: e.g. HDRView-2.7.0-Apple-Silicon.dmg
+  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-${ARCH_SUFFIX}")
   
   # Configure the AppleScript with the versioned app name
   configure_file(

@@ -77,6 +77,13 @@ jobs:
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{env.BUILD_TYPE}} -G DragNDrop
 
+      - name: List files after CPack
+        run: |
+          echo "Contents of build directory:"
+          ls -la "${{github.workspace}}/build/${{ matrix.config.preset }}/"
+          echo "Looking for DMG files:"
+          find "${{github.workspace}}/build/${{ matrix.config.preset }}" -name "*.dmg" -type f
+
       # - name: Archive build artifacts
       #   uses: actions/upload-artifact@v4
       #   with:
