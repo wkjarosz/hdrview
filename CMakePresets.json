@@ -232,11 +232,26 @@
       "name": "linux-appimage",
       "displayName": "Linux AppImage",
       "description": "Linux build optimized for AppImage packaging with bundled dependencies",
-      "inherits": ["ninja-multi-base", "linux-cpm-base"],
+      "inherits": ["ninja-multi-base", "linux-local-base"],
       "binaryDir": "${sourceDir}/build/linux-appimage",
       "cacheVariables": {
         "HDRVIEW_PORTABLE_INSTALL": "OFF",
-        "CMAKE_INSTALL_PREFIX": "/usr"
+        "HDRVIEW_APPIMAGE_BUILD": "ON",
+        "HDRVIEW_ENABLE_LIBPNG": "OFF",
+        "HDRVIEW_ENABLE_LIBJPEG": "OFF",
+        "HDRVIEW_ENABLE_LIBUHDR": "OFF",
+        "HDRVIEW_ENABLE_LIBJXL": "OFF",
+        "HDRVIEW_ENABLE_J2K": "OFF",
+        "HDRVIEW_ENABLE_HTJ2K": "OFF",
+        "HDRVIEW_ENABLE_AVIF": "OFF",
+        "HDRVIEW_ENABLE_HEIC": "OFF",
+        "HDRVIEW_ENABLE_AVCI": "OFF",
+        "HDRVIEW_ENABLE_LIBWEBP": "OFF",
+        "HDRVIEW_ENABLE_LIBTIFF": "OFF",
+        "HDRVIEW_ENABLE_LIBRAW": "OFF",
+        "HDRVIEW_ENABLE_X3F": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr",
+        "ASSETS_LOCATION": ""
       },
       "condition": {
         "type": "equals",
