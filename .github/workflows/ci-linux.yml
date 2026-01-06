@@ -76,6 +76,11 @@ jobs:
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{ matrix.buildtype }} -G External
 
+      - name: Debug: Find AppImage file
+        run: |
+          echo "Searching for AppImage files in workspace..."
+          find ${{github.workspace}} -type f | grep -i appimage || echo "No AppImage found."
+
       - name: Archive package
         uses: actions/upload-artifact@v4
         with:
