@@ -86,7 +86,7 @@ jobs:
         with:
           name: Linux AppImage ${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build/*.appimage
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
