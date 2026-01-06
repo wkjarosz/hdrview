@@ -27,11 +27,11 @@
 // Return JSON describing libraw availability (disabled stub)
 json get_raw_info() { return {{"name", "libraw"}}; }
 
-bool is_raw_image(std::std::istream &is) noexcept { return false; }
+bool is_raw_image(std::istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_raw_image(std::std::istream &is, string_view filename, const ImageLoadOptions &opts)
+vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const ImageLoadOptions &opts)
 {
-    throw runtime_error("RAW support not enabled in this build.");
+    throw std::runtime_error("RAW support not enabled in this build.");
 }
 
 #else

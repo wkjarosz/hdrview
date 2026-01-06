@@ -7,15 +7,9 @@
 #include "png.h"
 #include "app.h"
 #include "colorspace.h"
-#include "common.h"
-#include "exif.h"
-#include "icc.h"
 #include "image.h"
-#include "timer.h"
-#include <optional>
 
-#include "fonts.h"
-#include "imgui_ext.h"
+#include <stdexcept>
 
 struct PNGSaveOptions
 {
@@ -29,6 +23,8 @@ struct PNGSaveOptions
 static PNGSaveOptions s_opts;
 
 #if !HDRVIEW_ENABLE_LIBPNG
+
+using namespace std;
 
 bool is_png_image(istream &is) noexcept { return false; }
 
@@ -55,10 +51,18 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
 #else
 
 #include <cstring>
+#include <optional>
 #include <png.h>
 #include <spdlog/fmt/fmt.h>
-#include <stdexcept>
 #include <vector>
+
+#include "common.h"
+#include "exif.h"
+#include "icc.h"
+#include "timer.h"
+
+#include "fonts.h"
+#include "imgui_ext.h"
 
 using namespace std;
 
@@ -607,9 +611,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 
         try
         {
-            exif                = Exif{reinterpret_cast<const uint8_t *>(exif_data.data()), exif_data.size()};
-            auto exif_json      = exif.to_json();
-            metadata["exif"]    = exif_json;
+            exif             = Exif{reinterpret_cast<const uint8_t *>(exif_data.data()), exif_data.size()};
+            auto exif_json   = exif.to_json();
+            metadata["exif"] = exif_json;
             spdlog::debug("EXIF metadata successfully parsed: {}", exif_json.dump(2));
         }
         catch (const std::exception &e)
