@@ -73,7 +73,8 @@ jobs:
           ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView --help
 
       - name: Package
-        run: cmake --build . --config ${{ matrix.buildtype }} --target package --verbose
+        working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
+        run: cpack -C ${{ matrix.buildtype }} -G External
 
       - name: Archive package
         uses: actions/upload-artifact@v4
