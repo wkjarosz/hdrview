@@ -1549,32 +1549,8 @@ if(APPLE)
 elseif(UNIX AND NOT EMSCRIPTEN)
   # Linux installation and AppImage generation
   
-  # Generate multiple icon resolutions from the master icon.png
-  find_package(Python3 COMPONENTS Interpreter)
-  if(Python3_FOUND)
-    set(LINUX_ICONS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/linux_icons")
-    set(MASTER_ICON "${CMAKE_SOURCE_DIR}/assets/app_settings/icon.png")
-    set(ICON_GENERATOR_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/linux_png_icon_to_multiple_sizes.py")
-    
-    # Generate icons at configure time
-    message(STATUS "Generating Linux icons from ${MASTER_ICON}")
-    execute_process(
-      COMMAND ${Python3_EXECUTABLE} ${ICON_GENERATOR_SCRIPT} ${MASTER_ICON} ${LINUX_ICONS_OUTPUT_DIR}
-      RESULT_VARIABLE ICON_GENERATION_RESULT
-      OUTPUT_VARIABLE ICON_GENERATION_OUTPUT
-      ERROR_VARIABLE ICON_GENERATION_ERROR
-    )
-    
-    if(NOT ${ICON_GENERATION_RESULT} EQUAL 0)
-      message(WARNING "Failed to generate Linux icons: ${ICON_GENERATION_ERROR}")
-      message(WARNING "Install the Pillow package: pip install Pillow")
-      message(WARNING "Falling back to manual icon installation")
-    else()
-      message(STATUS "${ICON_GENERATION_OUTPUT}")
-    endif()
-  else()
-    message(WARNING "Python3 not found. Cannot generate Linux icons automatically.")
-  endif()
+  # Prepare linux icons output directory (icon generation moved to packaging script)
+  set(LINUX_ICONS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/linux_icons")
   
   # Install desktop file and icons
   install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
