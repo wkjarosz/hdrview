@@ -346,9 +346,9 @@ set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY pthom/hello_imgui
+  GIT_TAG v1.92.5
   # URL https://github.com/pthom/hello_imgui/archive/refs/tags/v1.92.5.zip
   VERSION 1.92.5
-  GIT_TAG v1.92.5
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   EXCLUDE_FROM_ALL YES
@@ -1547,7 +1547,54 @@ if(APPLE)
   set(CPACK_COMPONENTS_ALL Runtime)
   set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${PROJECT_NAME};Runtime;/")
 elseif(UNIX AND NOT EMSCRIPTEN)
-  # Linux AppImage generation
+  # Linux installation and AppImage generation
+  
+  # Generate multiple icon resolutions from the master icon.png
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_FOUND)
+    set(LINUX_ICONS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/linux_icons")
+    set(MASTER_ICON "${CMAKE_SOURCE_DIR}/assets/app_settings/icon.png")
+    set(ICON_GENERATOR_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/linux_png_icon_to_multiple_sizes.py")
+    
+    # Generate icons at configure time
+    message(STATUS "Generating Linux icons from ${MASTER_ICON}")
+    execute_process(
+      COMMAND ${Python3_EXECUTABLE} ${ICON_GENERATOR_SCRIPT} ${MASTER_ICON} ${LINUX_ICONS_OUTPUT_DIR}
+      RESULT_VARIABLE ICON_GENERATION_RESULT
+      OUTPUT_VARIABLE ICON_GENERATION_OUTPUT
+      ERROR_VARIABLE ICON_GENERATION_ERROR
+    )
+    
+    if(NOT ${ICON_GENERATION_RESULT} EQUAL 0)
+      message(WARNING "Failed to generate Linux icons: ${ICON_GENERATION_ERROR}")
+      message(WARNING "Install the Pillow package: pip install Pillow")
+      message(WARNING "Falling back to manual icon installation")
+    else()
+      message(STATUS "${ICON_GENERATION_OUTPUT}")
+    endif()
+  else()
+    message(WARNING "Python3 not found. Cannot generate Linux icons automatically.")
+  endif()
+  
+  # Install desktop file and icons
+  install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
+          DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
+  
+  # Install icons at multiple resolutions
+  set(ICON_RESOLUTIONS "16;24;32;48;64;96;128;256;512")
+  foreach(RES IN LISTS ICON_RESOLUTIONS)
+    # Try generated icons first
+    if(EXISTS "${LINUX_ICONS_OUTPUT_DIR}/icon-${RES}.png")
+      install(FILES "${LINUX_ICONS_OUTPUT_DIR}/icon-${RES}.png"
+              DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${RES}x${RES}/apps"
+              RENAME HDRView.png)
+    # Fall back to source directory icons if they exist
+    elseif(EXISTS "${CMAKE_SOURCE_DIR}/assets/app_settings/icon-${RES}.png")
+      install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/icon-${RES}.png"
+              DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${RES}x${RES}/apps"
+              RENAME HDRView.png)
+    endif()
+  endforeach()
   
   # Strip leading 'v' from GIT_TAG to get full version
   string(REGEX REPLACE "^v" "" VERSION_NO_V "${GIT_TAG}")
@@ -1563,61 +1610,16 @@ elseif(UNIX AND NOT EMSCRIPTEN)
     set(ARCH_SUFFIX "${CMAKE_SYSTEM_PROCESSOR}")
   endif()
   
-  # AppImage generation
-  find_program(LINUXDEPLOY linuxdeploy PATHS $ENV{HOME}/.local/bin)
-  find_program(APPIMAGETOOL appimagetool PATHS $ENV{HOME}/.local/bin)
-  
-  if(LINUXDEPLOY AND APPIMAGETOOL)
-    message(STATUS "Found linuxdeploy: ${LINUXDEPLOY}")
-    message(STATUS "Found appimagetool: ${APPIMAGETOOL}")
-    
-    # Install desktop file and icon for AppImage
-    install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
-            DESTINATION share/applications)
-    install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/icon-256.png"
-            DESTINATION share/icons/hicolor/256x256/apps
-            RENAME HDRView.png)
-    
-    add_custom_target(appimage
-      COMMAND ${CMAKE_COMMAND} -E echo "Building AppImage..."
-      
-      # Create clean AppDir
-      COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/AppDir
-      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/AppDir
-      
-      # Install application to AppDir
-      COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${CMAKE_BINARY_DIR}/AppDir/usr --config $<CONFIG>
-      
-      # Run linuxdeploy to bundle dependencies
-      COMMAND ${LINUXDEPLOY}
-        --appdir=${CMAKE_BINARY_DIR}/AppDir
-        --executable=${CMAKE_BINARY_DIR}/AppDir/usr/bin/HDRView
-        --desktop-file=${CMAKE_BINARY_DIR}/AppDir/usr/share/applications/HDRView.desktop
-        --icon-file=${CMAKE_BINARY_DIR}/AppDir/usr/share/icons/hicolor/256x256/apps/HDRView.png
-        --output=appimage
-      
-      # Rename AppImage with version
-      COMMAND ${CMAKE_COMMAND} -E rename
-        ${CMAKE_BINARY_DIR}/HDRView-${ARCH_SUFFIX}.AppImage
-        ${CMAKE_BINARY_DIR}/HDRView-${VERSION_NO_V}-Linux-${ARCH_SUFFIX}.AppImage
-      
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-      DEPENDS HDRView
-      COMMENT "Creating AppImage package..."
-      VERBATIM
-    )
-    
-    message(STATUS "AppImage target added. Run 'cmake --build . --target appimage' to create AppImage")
-  else()
-    if(NOT LINUXDEPLOY)
-      message(STATUS "linuxdeploy not found - AppImage target not available")
-      message(STATUS "  Install with: wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH_SUFFIX}.AppImage -O ~/.local/bin/linuxdeploy && chmod +x ~/.local/bin/linuxdeploy")
-    endif()
-    if(NOT APPIMAGETOOL)
-      message(STATUS "appimagetool not found - AppImage target not available")
-      message(STATUS "  Install with: wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH_SUFFIX}.AppImage -O ~/.local/bin/appimagetool && chmod +x ~/.local/bin/appimagetool")
-    endif()
-  endif()
+  # CPack configuration for AppImage
+  list(APPEND CPACK_GENERATOR External)
+  set(CPACK_EXTERNAL_PACKAGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/create-appimage.cmake")
+  set(CPACK_EXTERNAL_ENABLE_STAGING YES)
+  # When packaging, instruct CPack to set DESTDIR so install uses a staging dir
+  set(CPACK_SET_DESTDIR ON)
+  # Place generated packages in the build directory instead of the source root
+  set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
+  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-Linux-${ARCH_SUFFIX}")
+  set(CPACK_PACKAGING_INSTALL_PREFIX /usr) # AppDir expects this
 endif()
 
 include(CPack)
