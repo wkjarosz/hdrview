@@ -81,7 +81,7 @@ jobs:
         with:
           name: Linux executable ${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
-            "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*-${{ matrix.config.arch }}.appimage"
+            "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.appimage"
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
