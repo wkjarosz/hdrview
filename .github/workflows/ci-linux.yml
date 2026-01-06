@@ -81,7 +81,7 @@ jobs:
         with:
           name: Linux executable ${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
-            "${{github.workspace}}/build/${{ matrix.config.preset }}
+            ${{github.workspace}}/build/${{ matrix.config.preset }}
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
