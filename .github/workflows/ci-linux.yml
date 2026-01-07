@@ -59,6 +59,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set version variables
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION_NO_V="${VERSION#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
+
       - uses: actions/cache@v4
         with:
           path: "**/cpm_modules"
@@ -92,7 +99,7 @@ jobs:
         if: matrix.config.preset == 'linux-appimage'
         uses: actions/upload-artifact@v4
         with:
-          name: Linux AppImage ${{ matrix.config.preset }}-${{ matrix.buildtype }}
+          name: ${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |
             ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage
 
