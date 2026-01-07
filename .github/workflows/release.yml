@@ -146,7 +146,7 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF
 
       - name: Build
         run: cmake --build --preset ${{ matrix.config.preset }}-release
