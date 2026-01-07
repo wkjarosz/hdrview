@@ -107,14 +107,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build_linux:
-    name: Build on ${{ matrix.config.name }} (${{ matrix.buildtype }})
+    name: Build on ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
       matrix:
         config:
-          - { name: "Ubuntu 24.04 AppImage", os: ubuntu-24.04, preset: "linux-appimage", arch: "x86_64" }
-          - { name: "Ubuntu 24.04 AppImage arm", os: ubuntu-24.04-arm, preset: "linux-appimage", arch: "arm" }
+          - { name: "Ubuntu 24.04 x86_64", os: ubuntu-24.04, preset: "linux-appimage", arch: "x86_64" }
+          - { name: "Ubuntu 24.04 arm64", os: ubuntu-24.04-arm, preset: "linux-appimage", arch: "arm" }
 
     steps:
       - name: Install dependencies
@@ -160,12 +160,12 @@ jobs:
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{ env.BUILD_TYPE }} -G External
 
-      - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
-          path: |
-            ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}
+      # - name: Archive build artifacts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ env.BUILD_TYPE }}
+      #     path: |
+      #       ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ env.BUILD_TYPE }}
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -189,7 +189,13 @@ jobs:
       - name: Set version variables
         run: |
           $VERSION = "${{ github.ref_name }}"
-          echo "VERSION=$VERSION" >> $env:GITHUB_ENV
+          if ($VERSION.StartsWith('v')) {
+            $VERSION_NO_V = $VERSION.Substring(1)
+          } else {
+            $VERSION_NO_V = $VERSION
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "VERSION=$VERSION"
+          Add-Content -Path $env:GITHUB_ENV -Value "VERSION_NO_V=$VERSION_NO_V"
 
       - name: Configure CMake
         run: cmake --preset windows -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF
