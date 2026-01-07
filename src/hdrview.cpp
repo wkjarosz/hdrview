@@ -172,6 +172,13 @@ until another channel selector is encountered.)")
 
         spdlog::info("Welcome to HDRView!");
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
+
+#ifdef ASSETS_LOCATION
+        spdlog::info("ASSETS_LOCATION = '{}'", ASSETS_LOCATION);
+#else
+        spdlog::info("ASSETS_LOCATION not defined.");
+#endif
+
         if (exposure.has_value())
             spdlog::info("Forcing exposure to {:f} (intensity scale of {:f})", *exposure, powf(2.0f, *exposure));
 

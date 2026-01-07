@@ -250,7 +250,7 @@
         "HDRVIEW_ENABLE_LIBRAW": "ON",
         "HDRVIEW_ENABLE_X3F": "ON",
         "CMAKE_INSTALL_PREFIX": "/usr",
-        "ASSETS_LOCATION": "/usr/share/HDRView/assets"
+        "ASSETS_LOCATION": "/usr/bin/assets"
       },
       "condition": {
         "type": "equals",
