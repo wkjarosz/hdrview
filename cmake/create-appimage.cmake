@@ -93,18 +93,7 @@ if(EXISTS "${SRC_ICON_DIR}/icon.png")
     file(INSTALL DESTINATION "${APPDIR}/usr/share/icons/hicolor/scalable/apps" TYPE FILE RENAME "HDRView.png" FILES "${SRC_ICON_DIR}/icon.png")
 endif()
 
-# Minimal fallback: copy the built `HDRView` into AppDir `usr/bin` if not staged
-set(BUILD_EXE_CANDIDATES
-    "${PROJECT_ROOT}/build/linux-local/Release/HDRView"
-    "${PROJECT_ROOT}/build/linux-local/RelWithDebInfo/HDRView"
-)
-foreach(E IN LISTS BUILD_EXE_CANDIDATES)
-    if(EXISTS "${E}")
-        file(MAKE_DIRECTORY "${APPDIR}/usr/bin")
-        file(INSTALL DESTINATION "${APPDIR}/usr/bin" TYPE FILE RENAME "HDRView" FILES "${E}")
-        break()
-    endif()
-endforeach()
+## No need to manually copy the executable; it is staged by CPack via install(TARGETS ...)
 
 execute_process(
     COMMAND

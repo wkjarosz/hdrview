@@ -30,6 +30,7 @@ jobs:
         config:
           - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm" }
           - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local" }
+          - { name: "Ubuntu 24.04 AppImage", os: ubuntu-24.04, preset: "linux-appimage" }
           - { name: "Ubuntu 22.04 CPM", os: ubuntu-22.04, preset: "linux-cpm" }
           # ubuntu 22.04 had openexr 2, but we require 3
           # - { name: "Ubuntu 22.04 Local", os: ubuntu-22.04, preset: "linux-local" }
@@ -43,6 +44,9 @@ jobs:
       - name: Install dependencies (Ubuntu 22.04)
         if: matrix.config.os == 'ubuntu-22.04'
         run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libde265-dev libx265-dev libcli11-dev libspdlog-dev libfmt-dev libwayland-dev wayland-protocols 
+        
+      - name: Install Python dependencies
+        run: pip install --upgrade pip && pip install Pillow
 
       - uses: actions/checkout@v4
         with:
@@ -73,15 +77,18 @@ jobs:
           ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView --help
 
       - name: Package
+        if: matrix.config.preset == 'linux-appimage'
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{ matrix.buildtype }} -G External
 
       - name: Find AppImage file
+        if: matrix.config.preset == 'linux-appimage'
         run: |
           echo "Searching for AppImage files in workspace..."
           find ${{github.workspace}} -type f | grep -i appimage || echo "No AppImage found."
 
       - name: Archive package
+        if: matrix.config.preset == 'linux-appimage'
         uses: actions/upload-artifact@v4
         with:
           name: Linux AppImage ${{ matrix.config.preset }}-${{ matrix.buildtype }}

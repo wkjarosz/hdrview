@@ -236,7 +236,6 @@
       "binaryDir": "${sourceDir}/build/linux-appimage",
       "cacheVariables": {
         "HDRVIEW_PORTABLE_INSTALL": "OFF",
-        "HDRVIEW_APPIMAGE_BUILD": "ON",
         "HDRVIEW_ENABLE_LIBPNG": "OFF",
         "HDRVIEW_ENABLE_LIBJPEG": "OFF",
         "HDRVIEW_ENABLE_LIBUHDR": "OFF",

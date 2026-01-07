@@ -1548,6 +1548,7 @@ if(APPLE)
   set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${PROJECT_NAME};Runtime;/")
 elseif(UNIX AND NOT EMSCRIPTEN)
   # Linux installation and AppImage generation
+  install(TARGETS HDRView)
   
   # Prepare linux icons output directory (icon generation moved to packaging script)
   set(LINUX_ICONS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/linux_icons")
