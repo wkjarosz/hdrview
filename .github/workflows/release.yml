@@ -106,6 +106,74 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build_linux:
+    name: Build on ${{ matrix.config.name }} (${{ matrix.buildtype }})
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { name: "Ubuntu 24.04 AppImage", os: ubuntu-24.04, preset: "linux-appimage", arch: "x86_64" }
+          - { name: "Ubuntu 24.04 AppImage arm", os: ubuntu-24.04-arm, preset: "linux-appimage", arch: "arm" }
+
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libimath-dev libopenexr-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libde265-dev libx265-dev libjxl-dev libcli11-dev libspdlog-dev libfmt-dev libexif-dev libwayland-dev wayland-protocols
+
+      - name: Install Python dependencies
+        run: pip install --upgrade pip && pip install Pillow
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version variables
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION_NO_V="${VERSION#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
+
+      - uses: actions/cache@v5
+        with:
+          path: "**/cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.config.os }}-${{ matrix.config.preset }}
+
+      - name: Configure CMake
+        run: |
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.config.preset }}-release
+
+      - name: Checking that HDRView runs
+        run: |
+          ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ env.BUILD_TYPE }}/HDRView --help
+
+      - name: Package
+        if: matrix.config.preset == 'linux-appimage'
+        working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
+        run: cpack -C ${{ env.BUILD_TYPE }} -G External
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
+          path: |
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build_windows:
     name: Build on Windows
     runs-on: windows-latest

@@ -99,7 +99,7 @@ jobs:
         if: matrix.config.preset == 'linux-appimage'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.config.os }}-${{ matrix.buildtype }}
+          name: appimage-${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |
             ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage
 

@@ -1579,7 +1579,7 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     set(ARCH_SUFFIX "x86_64")
   elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-    set(ARCH_SUFFIX "aarch64")
+    set(ARCH_SUFFIX "arm64")
   elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
     set(ARCH_SUFFIX "i686")
   else()
@@ -1594,7 +1594,7 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   set(CPACK_SET_DESTDIR ON)
   # Place generated packages in the build directory instead of the source root
   set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
-  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-Linux-${ARCH_SUFFIX}")
+  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-${ARCH_SUFFIX}")
   set(CPACK_PACKAGING_INSTALL_PREFIX /usr) # AppDir expects this
 endif()
 
