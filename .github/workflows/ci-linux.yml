@@ -28,10 +28,17 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm" }
-          - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local" }
-          - { name: "Ubuntu 24.04 AppImage", os: ubuntu-24.04, preset: "linux-appimage" }
-          - { name: "Ubuntu 22.04 CPM", os: ubuntu-22.04, preset: "linux-cpm" }
+          - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64"}
+          - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64"}
+
+          - { name: "Ubuntu 24.04 CPM arm", os: ubuntu-24.04-arm, preset: "linux-cpm", arch: "arm" }
+          - { name: "Ubuntu 24.04 Local arm", os: ubuntu-24.04-arm, preset: "linux-local", arch: "arm" }
+
+          - { name: "Ubuntu 24.04 AppImage", os: ubuntu-24.04, preset: "linux-appimage", arch: "x86_64" }
+          - { name: "Ubuntu 24.04 AppImage arm", os: ubuntu-24.04-arm, preset: "linux-appimage", arch: "arm" }
+
+          - { name: "Ubuntu 22.04 CPM", os: ubuntu-22.04, preset: "linux-cpm", arch: "x86_64" }
+          - { name: "Ubuntu 22.04 CPM arm", os: ubuntu-22.04-arm, preset: "linux-cpm", arch: "arm" }
           # ubuntu 22.04 had openexr 2, but we require 3
           # - { name: "Ubuntu 22.04 Local", os: ubuntu-22.04, preset: "linux-local" }
         buildtype: [Release, Debug]
@@ -44,7 +51,7 @@ jobs:
       - name: Install dependencies (Ubuntu 22.04)
         if: matrix.config.os == 'ubuntu-22.04'
         run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libde265-dev libx265-dev libcli11-dev libspdlog-dev libfmt-dev libwayland-dev wayland-protocols 
-        
+
       - name: Install Python dependencies
         run: pip install --upgrade pip && pip install Pillow
 
@@ -80,13 +87,7 @@ jobs:
         if: matrix.config.preset == 'linux-appimage'
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{ matrix.buildtype }} -G External
-
-      - name: Find AppImage file
-        if: matrix.config.preset == 'linux-appimage'
-        run: |
-          echo "Searching for AppImage files in workspace..."
-          find ${{github.workspace}} -type f | grep -i appimage || echo "No AppImage found."
-
+        
       - name: Archive package
         if: matrix.config.preset == 'linux-appimage'
         uses: actions/upload-artifact@v4

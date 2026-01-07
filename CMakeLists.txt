@@ -1464,9 +1464,24 @@ if(NOT HDRVIEW_PORTABLE_INSTALL)
   # cmake-format: on
   include(GNUInstallDirs)
   install(TARGETS HDRView DESTINATION ${CMAKE_INSTALL_BINDIR})
-  set(assets_install_dir ${CMAKE_INSTALL_DATADIR}/HDRView)
-  if(NOT IS_ABSOLUTE ${assets_install_dir})
-    set(assets_install_dir ${CMAKE_INSTALL_PREFIX}/${assets_install_dir})
+
+  if(DEFINED ASSETS_LOCATION)
+    message(STATUS "Using user-defined ASSETS_LOCATION: ${ASSETS_LOCATION}")
+    # Set assets_install_dir to the parent directory of ASSETS_LOCATION
+    get_filename_component(assets_install_dir "${ASSETS_LOCATION}" DIRECTORY)
+    if(NOT IS_ABSOLUTE "${assets_install_dir}")
+      set(assets_install_dir "${CMAKE_INSTALL_PREFIX}/${assets_install_dir}")
+    endif()
+    install(DIRECTORY assets DESTINATION ${assets_install_dir})
+    target_compile_definitions(HDRView PRIVATE ASSETS_LOCATION="${ASSETS_LOCATION}")
+  else()
+    message(STATUS "Installing assets to default location")
+    set(assets_install_dir ${CMAKE_INSTALL_DATADIR}/HDRView)
+    if(NOT IS_ABSOLUTE ${assets_install_dir})
+      set(assets_install_dir ${CMAKE_INSTALL_PREFIX}/${assets_install_dir})
+    endif()
+    install(DIRECTORY assets DESTINATION ${assets_install_dir})
+    set(ASSETS_LOCATION "${assets_install_dir}/assets")
   endif()
   install(DIRECTORY assets DESTINATION ${assets_install_dir})
   target_compile_definitions(HDRView PRIVATE ASSETS_LOCATION="${assets_install_dir}/assets")
@@ -1549,33 +1564,17 @@ if(APPLE)
 elseif(UNIX AND NOT EMSCRIPTEN)
   # Linux installation and AppImage generation
   install(TARGETS HDRView)
-  
+
   # Prepare linux icons output directory (icon generation moved to packaging script)
   set(LINUX_ICONS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/linux_icons")
-  
+
   # Install desktop file and icons
   install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
           DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
-  
-  # Install icons at multiple resolutions
-  set(ICON_RESOLUTIONS "16;24;32;48;64;96;128;256;512")
-  foreach(RES IN LISTS ICON_RESOLUTIONS)
-    # Try generated icons first
-    if(EXISTS "${LINUX_ICONS_OUTPUT_DIR}/icon-${RES}.png")
-      install(FILES "${LINUX_ICONS_OUTPUT_DIR}/icon-${RES}.png"
-              DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${RES}x${RES}/apps"
-              RENAME HDRView.png)
-    # Fall back to source directory icons if they exist
-    elseif(EXISTS "${CMAKE_SOURCE_DIR}/assets/app_settings/icon-${RES}.png")
-      install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/icon-${RES}.png"
-              DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${RES}x${RES}/apps"
-              RENAME HDRView.png)
-    endif()
-  endforeach()
-  
+
   # Strip leading 'v' from GIT_TAG to get full version
   string(REGEX REPLACE "^v" "" VERSION_NO_V "${GIT_TAG}")
-  
+
   # Determine architecture for package filename
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     set(ARCH_SUFFIX "x86_64")
@@ -1586,7 +1585,7 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   else()
     set(ARCH_SUFFIX "${CMAKE_SYSTEM_PROCESSOR}")
   endif()
-  
+
   # CPack configuration for AppImage
   list(APPEND CPACK_GENERATOR External)
   set(CPACK_EXTERNAL_PACKAGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/create-appimage.cmake")
