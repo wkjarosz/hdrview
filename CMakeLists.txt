@@ -314,6 +314,7 @@ if(APPLE AND NOT EMSCRIPTEN)
             "GLFW_INSTALL OFF"
             "GLFW_USE_CHDIR OFF"
             "BUILD_SHARED_LIBS OFF"
+    EXCLUDE_FROM_ALL YES
   )
 
   if(NOT glfw_ADDED)
@@ -427,6 +428,7 @@ CPMAddPackage(
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
   SYSTEM YES
+  EXCLUDE_FROM_ALL YES
 )
 if(spdlog_ADDED)
   message(STATUS "Will build spdlog library")
@@ -501,6 +503,7 @@ else()
     GITHUB_REPOSITORY wkjarosz/portable-file-dialogs
     GIT_TAG 1d755d814b77e546f544266bc24ac76029b8763b
     SYSTEM YES
+    EXCLUDE_FROM_ALL YES
   )
   if(NOT portable-file-dialogs_ADDED)
     message(FATAL_ERROR "Could not download portable-file-dialogs library.")
@@ -520,6 +523,7 @@ CPMAddPackage(
   OPTIONS "BUILD_SHARED_LIBS OFF"
   VERSION 0.6.24
   SYSTEM YES
+  EXCLUDE_FROM_ALL YES
 )
 
 if(libexif_ADDED AND TARGET exif_static)
@@ -563,6 +567,7 @@ if(HDRVIEW_ENABLE_LIBPNG OR HDRVIEW_ENABLE_LIBHEIF)
       #FIND_PACKAGE_ARGUMENTS "NAMES zlib ZLIB"
       OPTIONS "ZLIB_TEST OFF" "ZLIB_INSTALL ON"
       SYSTEM YES
+      EXCLUDE_FROM_ALL YES
     )
     if(zlib-cmake_ADDED)
       message(STATUS "Will build zlib library")
@@ -596,7 +601,7 @@ if(HDRVIEW_ENABLE_LIBPNG)
             "PNG_TOOLS OFF"
             "PNG_ARM_NEON off" # for now we disable NEON to avoid build issues on some CI machines
             "SKIP_INSTALL_ALL ON"
-            "EXCLUDE_FROM_ALL YES"
+    EXCLUDE_FROM_ALL YES
     SYSTEM YES
   )
   if(PNG_ADDED)
@@ -621,7 +626,7 @@ CPMAddPackage(
   # the git repo is incredibly large, so we download the archived include directory
   URL https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.12.zip
   OPTIONS "BUILD_SHARED_LIBS OFF" "IMATH_INSTALL OFF" "IMATH_INSTALL_PKG_CONFIG OFF" "BUILD_TESTING OFF"
-          "EXCLUDE_FROM_ALL YES"
+  EXCLUDE_FROM_ALL YES
 )
 if(Imath_ADDED)
   message(STATUS "Will build Imath library")
@@ -654,8 +659,8 @@ CPMAddPackage(
           "OPENEXR_INSTALL_TOOLS OFF"
           "OPENEXR_INSTALL_EXAMPLES OFF"
           "OPENEXR_INSTALL_PKG_CONFIG OFF"
-          "EXCLUDE_FROM_ALL YES"
           ${OPENEXR_THREADING_OPTIONS}
+  EXCLUDE_FROM_ALL YES
   SYSTEM YES
 )
 if(OpenEXR_ADDED)
@@ -881,6 +886,7 @@ if(HDRVIEW_ENABLE_LIBUHDR)
             "UHDR_BUILD_TESTS OFF"
             "UHDR_ENABLE_INSTALL OFF"
     SYSTEM YES
+    EXCLUDE_FROM_ALL YES
   )
   if(libuhdr_ADDED)
     message(STATUS "Will build uhdr library with UHDR_BUILD_DEPS=${UHDR_BUILD_DEPS}")
@@ -935,8 +941,8 @@ if(HDRVIEW_ENABLE_LIBJXL)
             "JPEGXL_BUNDLE_LIBPNG OFF"
             "JPEGXL_ENABLE_SJPEG OFF"
             # "JPEGXL_FORCE_SYSTEM_LCMS2 ON"
-            "EXCLUDE_FROM_ALL YES"
     SYSTEM YES
+    EXCLUDE_FROM_ALL YES
   )
   if(JXL_ADDED)
     message(STATUS "Will build JPEG-XL library")
@@ -1018,7 +1024,6 @@ if(HDRVIEW_ENABLE_LIBHEIF)
             "WITH_GDK_PIXBUF OFF"
             "WITH_INSTALL OFF"
             "CMAKE_COMPILE_WARNING_AS_ERROR OFF"
-            "EXCLUDE_FROM_ALL YES"
             # codecs
             "ENABLE_PLUGIN_LOADING OFF"
             "WITH_LIBSHARPYUV OFF"
@@ -1035,6 +1040,7 @@ if(HDRVIEW_ENABLE_LIBHEIF)
             "WITH_AOM_DECODER ${HDRVIEW_ENABLE_AVIF}"
             "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
     SYSTEM YES
+    EXCLUDE_FROM_ALL YES
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
@@ -1100,6 +1106,7 @@ if(HDRVIEW_ENABLE_LIBWEBP)
             "WEBP_NEAR_LOSSLESS ON"
             "WEBP_ENABLE_SWAP_16BIT_CSP ON"
     SYSTEM YES
+    EXCLUDE_FROM_ALL YES
   )
   if(libwebp_ADDED)
     message(STATUS "Will build libwebp library")
@@ -1133,6 +1140,7 @@ if(HDRVIEW_ENABLE_LIBTIFF)
             "lzma OFF"
             "zstd OFF" 
     SYSTEM YES
+    EXCLUDE_FROM_ALL YES
   )
   if(TIFF_ADDED)
     message(STATUS "Will build libtiff library")
@@ -1175,6 +1183,7 @@ if(HDRVIEW_ENABLE_LIBRAW)
               "LIBRAW_BUILD_EXAMPLES OFF"
               "LIBRAW_INSTALL OFF"
               "ENABLE_X3FTOOLS ${HDRVIEW_ENABLE_X3F}"
+      EXCLUDE_FROM_ALL YES
       SYSTEM YES
   )
   if(LibRaw_ADDED AND TARGET libraw::libraw_r)
