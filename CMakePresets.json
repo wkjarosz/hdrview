@@ -173,6 +173,7 @@
       "displayName": "macOS Universal Binary",
       "description": "Universal binary for both Apple Silicon and Intel",
       "inherits": ["ninja-multi-base", "macos-cpm"],
+      "toolchainFile": "${sourceDir}/cmake/ignore-brew.cmake",
       "binaryDir": "${sourceDir}/build/macos-universal",
       "cacheVariables": {
         "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
