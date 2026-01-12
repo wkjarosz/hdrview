@@ -7,6 +7,7 @@
 #include "app.h"
 #include "exif.h"
 #include "image.h"
+#include "xmp.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -899,15 +900,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
         }
     if (!xmp_buffer.empty())
     {
-        auto xmp = string(xmp_buffer.data(), xmp_buffer.data() + xmp_buffer.size());
-        spdlog::debug("XMP: {}", xmp);
         // assign xmp metadata to all images
-        for (auto &&image : images)
-        {
-            image->xmp_data                  = xmp_buffer;
-            image->metadata["header"]["XMP"] = {
-                {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
-        }
+        for (auto &&image : images) { image->xmp_data = xmp_buffer; }
     }
 
     return images;

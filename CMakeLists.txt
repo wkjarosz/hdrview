@@ -537,6 +537,32 @@ else()
   message(FATAL_ERROR "Could not find or download exif library.")
 endif()
 
+# TinyXML-2 for XMP parsing
+CPMAddPackage(
+  NAME tinyxml2
+  # GITHUB_REPOSITORY leethomason/tinyxml2
+  # GIT_TAG 9.0.0
+  URL https://github.com/leethomason/tinyxml2/archive/refs/tags/11.0.0.zip
+  VERSION 11.0.0
+  EXCLUDE_FROM_ALL YES
+  DOWNLOAD_ONLY YES
+  SYSTEM YES
+)
+if(NOT tinyxml2_ADDED)
+  message(FATAL_ERROR "Could not download tinyxml2 library.")
+endif()
+message(STATUS "tinyxml2 library added")
+add_library(
+  tinyxml2
+  "${tinyxml2_SOURCE_DIR}/tinyxml2.h"
+  "${tinyxml2_SOURCE_DIR}/tinyxml2.cpp"
+)
+target_compile_features(tinyxml2 PUBLIC cxx_std_17)
+target_include_directories(tinyxml2 PUBLIC "${tinyxml2_SOURCE_DIR}")
+disable_target_warnings(tinyxml2)
+mark_as_system_library(tinyxml2)
+list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2")
+
 
 if(HDRVIEW_ENABLE_LIBPNG OR HDRVIEW_ENABLE_LIBHEIF)
   # cmake-format: off
@@ -1361,6 +1387,7 @@ hello_imgui_add_app(
   src/imageio/image_loader.cpp
   src/imageio/dds.cpp
   src/imageio/exif.cpp
+  src/imageio/xmp.cpp
   src/imageio/exr.cpp
   src/imageio/heif.cpp
   src/imageio/icc.cpp
@@ -1374,6 +1401,7 @@ hello_imgui_add_app(
   src/imageio/tiff.cpp
   src/imageio/uhdr.cpp
   src/imageio/webp.cpp
+  src/imageio/xmp.cpp
   src/app-draw.cpp
   src/app-file-io.cpp
   src/app-gui.cpp

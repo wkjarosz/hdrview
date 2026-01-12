@@ -253,43 +253,6 @@ static auto chroma_name(heif_chroma ch)
     }
 }
 
-static std::vector<uint8_t> get_exif(const heif_image_handle *ihandle)
-{
-    std::vector<uint8_t> result;
-    if (!ihandle)
-        return result;
-
-    int num_blocks = heif_image_handle_get_number_of_metadata_blocks(ihandle, "Exif");
-    if (num_blocks <= 0)
-        return result;
-
-    spdlog::info("Found {} EXIF metadata block(s). Attempting to decode...", num_blocks);
-    std::vector<heif_item_id> block_IDs(num_blocks);
-    heif_image_handle_get_list_of_metadata_block_IDs(ihandle, "Exif", block_IDs.data(), num_blocks);
-    for (auto block_ID : block_IDs)
-    {
-        size_t data_size = heif_image_handle_get_metadata_size(ihandle, block_ID);
-        if (data_size <= 4)
-        {
-            spdlog::warn("Failed to get size of EXIF data.");
-            continue;
-        }
-        try
-        {
-            result.resize(data_size);
-            throw_on_error(heif_image_handle_get_metadata(ihandle, block_ID, result.data()),
-                           "Failed to get EXIF metadata block");
-            return result;
-        }
-        catch (const std::exception &e)
-        {
-            spdlog::warn(e.what());
-        }
-    }
-
-    return result;
-}
-
 // Helper: process decoded heif image (populate metadata, linearize and copy channels)
 // Process decoded heif image: create an Image, populate metadata, linearize and copy channels.
 // Returns a newly created ImagePtr.
@@ -428,8 +391,8 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                 (!nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
                            nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
 
-            spdlog::warn("prefer_icc: {}, nclx transfer function: {}", prefer_icc,
-                         nclx ? int(nclx->transfer_characteristics) : -1);
+            spdlog::debug("prefer_icc: {}, nclx transfer function: {}", prefer_icc,
+                          nclx ? int(nclx->transfer_characteristics) : -1);
             string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
             Chromaticities chr;
             // for SDR profiles, try to transform the interleaved data using the icc profile.
@@ -653,37 +616,73 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     {"type", "int"}};
 
                 // EXIF data block includes 4-byte length prefix that we need to skip
-                if (auto exif_data = get_exif(ihandle.get()); exif_data.size() > 4)
                 {
-                    try
-                    {
-                        image->exif             = Exif{exif_data.data() + 4, exif_data.size() - 4};
-                        image->metadata["exif"] = image->exif.to_json();
+                    std::vector<uint8_t> exif_data, xmp_data;
+                    int num_blocks = heif_image_handle_get_number_of_metadata_blocks(ihandle.get(), nullptr);
 
-                        // libheif already applies the orientation field, so we need to remove it from exif
-                        std::string orientation_key;
-                        for (auto &exif_entry : image->metadata["exif"].items())
+                    if (num_blocks > 0)
+                        spdlog::debug("Image has {} metadata block(s).", num_blocks);
+
+                    spdlog::info("Found {} metadata block(s). Attempting to decode...", num_blocks);
+                    std::vector<heif_item_id> block_IDs(num_blocks);
+                    heif_image_handle_get_list_of_metadata_block_IDs(ihandle.get(), nullptr, block_IDs.data(),
+                                                                     num_blocks);
+                    for (auto block_ID : block_IDs)
+                    {
+                        const string_view type = heif_image_handle_get_metadata_type(ihandle.get(), block_ID);
+                        const string_view content_type =
+                            heif_image_handle_get_metadata_content_type(ihandle.get(), block_ID);
+                        size_t data_size = heif_image_handle_get_metadata_size(ihandle.get(), block_ID);
+                        if (data_size <= 4)
                         {
-                            if (exif_entry.value().contains("orientation") ||
-                                exif_entry.value().contains("Orientation"))
+                            spdlog::warn("Failed to get size of EXIF data.");
+                            continue;
+                        }
+                        if (type != "Exif" && content_type != "application/rdf+xml")
+                            continue;
+
+                        try
+                        {
+                            std::vector<uint8_t> data(data_size);
+                            throw_on_error(heif_image_handle_get_metadata(ihandle.get(), block_ID, data.data()),
+                                           "Failed to get EXIF metadata block");
+
+                            if (type == "Exif")
                             {
-                                orientation_key = exif_entry.key();
-                                break;
+                                exif_data = std::move(data);
+                                spdlog::info("Successfully retrieved EXIF metadata block ({} bytes)", data_size);
+                            }
+                            else if (content_type == "application/rdf+xml")
+                            {
+                                xmp_data = std::move(data);
+                                spdlog::info("Successfully retrieved XMP metadata block ({} bytes)", data_size);
                             }
                         }
-                        if (!orientation_key.empty())
+                        catch (const std::exception &e)
                         {
-                            image->metadata["exif"][orientation_key].erase("orientation");
-                            image->metadata["exif"][orientation_key].erase("Orientation");
+                            spdlog::warn(fmt::format("Failed to read metadata block: {}", e.what()));
+                            continue;
                         }
+                    }
 
-                        spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
-                    }
-                    catch (const std::exception &e)
+                    if (exif_data.size() > 4)
                     {
-                        spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
-                        image->exif.reset();
+                        try
+                        {
+                            image->exif                = Exif{exif_data.data() + 4, exif_data.size() - 4};
+                            image->metadata["exif"]    = image->exif.to_json();
+                            image->orientation_applied = true;
+                            spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
+                        }
+                        catch (const std::exception &e)
+                        {
+                            spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+                            image->exif.reset();
+                        }
                     }
+
+                    if (xmp_data.size() > 4)
+                        image->xmp_data = std::move(xmp_data);
                 }
 
                 images.emplace_back(image);

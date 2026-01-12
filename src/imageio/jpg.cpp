@@ -10,6 +10,7 @@
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
+#include "xmp.h"
 #include <algorithm>
 #include <iostream>
 #include <spdlog/fmt/fmt.h>
@@ -291,10 +292,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
                      std::equal(marker->data, marker->data + xmp_hdr_sz, xmp_hdr))
             {
                 image->xmp_data.assign(marker->data + xmp_hdr_sz, marker->data + marker->data_length);
-                auto xmp = string(image->xmp_data.data(), image->xmp_data.data() + image->xmp_data.size());
-                image->metadata["header"]["XMP"] = {
-                    {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
-                spdlog::debug("XMP metadata successfully parsed: {}", xmp);
+                spdlog::debug("XMP metadata present ({} bytes)", image->xmp_data.size());
             }
             else if (marker->marker == JPEG_COM)
             {

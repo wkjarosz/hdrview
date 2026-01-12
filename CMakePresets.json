@@ -64,8 +64,7 @@
       "name": "macos-cpm",
       "hidden": true,
       "inherits": "macos-base",
-      "description": "macOS with CPM dependencies (ignoring brew)",
-      "toolchainFile": "${sourceDir}/cmake/ignore-brew.cmake",
+      "description": "macOS with CPM dependencies",
       "cacheVariables": {
         "UHDR_BUILD_DEPS": "ON"
       }

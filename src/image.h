@@ -302,6 +302,7 @@ public:
     Exif                 exif;     //!< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any
     std::vector<uint8_t> icc_data; //!< The raw ICC profile data from the file, if any
+    bool                 orientation_applied = false;
 
     fs::path           path;
     fs::file_time_type last_modified;

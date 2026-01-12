@@ -60,6 +60,7 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
 #include "exif.h"
 #include "icc.h"
 #include "timer.h"
+#include "xmp.h"
 
 #include "fonts.h"
 #include "imgui_ext.h"
@@ -154,7 +155,7 @@ int decode_ascii_hex_to_binary(uint8_t u8[], int length)
 
 string_view get_exif_text_as_binary(char *text, size_t len)
 {
-    spdlog::info("Found Raw EXIF data in text chunk");
+    spdlog::debug("Found Raw EXIF data in text chunk");
     try
     {
         uint8_t *u8         = reinterpret_cast<uint8_t *>(text);
@@ -332,8 +333,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     if (bit_depth != 8 && bit_depth != 16)
         throw invalid_argument{fmt::format("Requested bit depth to be either 8 or 16 now, but received {}", bit_depth)};
 
-    json        metadata = json::object();
-    string_view exif_data;
+    json            metadata = json::object();
+    string_view     exif_data;
+    vector<uint8_t> xmp_data;
 
     // Read PLTE palette chunk if present and expose it in metadata
     png_colorp palette     = nullptr;
@@ -517,21 +519,29 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     {
         for (int t = 0; t < num_text; ++t)
         {
+            size_t length;
+            if (text_ptr[t].compression == PNG_ITXT_COMPRESSION_NONE ||
+                text_ptr[t].compression == PNG_ITXT_COMPRESSION_zTXt)
+                // iTXt chunk - use itxt_length
+                length = text_ptr[t].itxt_length;
+            else
+                // tEXt or zTXt chunk - use text_length
+                length = text_ptr[t].text_length;
+
+            spdlog::debug("text with length {}:\n{}\n{}", length, text_ptr[t].key, text_ptr[t].text);
             if (string(text_ptr[t].key) == string("Raw profile type exif"))
-                exif_data = get_exif_text_as_binary(text_ptr[t].text, text_ptr[t].text_length);
-            else if (string(text_ptr[t].key) == string("XML:com.adobe.xmp"))
+                exif_data = get_exif_text_as_binary(text_ptr[t].text, length);
+            else if (string(text_ptr[t].key) == "XML:com.adobe.xmp")
             {
-                spdlog::info("Found XMP chunk in text data: {}", text_ptr[t].text);
-                metadata["header"]["XMP"] = {{"value", text_ptr[t].text},
-                                             {"string", text_ptr[t].text},
-                                             {"type", "string"},
-                                             {"description", "XMP metadata"}};
+                spdlog::debug("Found XMP chunk in text data: {} bytes", length);
+                xmp_data = vector<uint8_t>(text_ptr[t].text, text_ptr[t].text + length);
             }
             else
             {
                 spdlog::debug("text {} : {}", text_ptr[t].key, text_ptr[t].text);
-                metadata["header"][text_ptr[t].key] = {
-                    {"value", text_ptr[t].text}, {"string", text_ptr[t].text}, {"type", "string"}};
+                metadata["header"][text_ptr[t].key] = {{"value", string(text_ptr[t].text, length)},
+                                                       {"string", string(text_ptr[t].text, length)},
+                                                       {"type", "string"}};
             }
         }
     }
@@ -681,6 +691,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         image->metadata       = metadata;
         if (exif.valid())
             image->exif = exif;
+        if (!xmp_data.empty())
+            image->xmp_data = xmp_data;
 
         if (animation)
         {

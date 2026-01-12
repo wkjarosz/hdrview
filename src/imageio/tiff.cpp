@@ -1189,6 +1189,17 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
         }
     }
 
+    // Extract XMP metadata (usually in first IFD)
+    vector<uint8_t> xmp_blob;
+    uint32_t        xmp_size = 0;
+    void           *xmp_data = nullptr;
+    if (TIFFGetField(tif, TIFFTAG_XMLPACKET, &xmp_size, &xmp_data) && xmp_size > 0)
+    {
+        xmp_blob.resize(xmp_size);
+        memcpy(xmp_blob.data(), xmp_data, xmp_size);
+        spdlog::debug("Found XMP metadata of size {} bytes", xmp_size);
+    }
+
     vector<ImagePtr> images;
 
     // TIFF files can contain multiple directories (sub-images)
@@ -1200,6 +1211,8 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
         for (auto image : added_images)
         {
             image->filename = filename;
+            image->xmp_data = xmp_blob;
+
             // Use pre-parsed EXIF data
             if (exif.valid())
             {
@@ -1213,6 +1226,8 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
         for (auto sub_image : sub_images)
         {
             sub_image->filename = filename;
+            sub_image->xmp_data = xmp_blob;
+
             // Use pre-parsed EXIF data
             if (exif.valid())
             {

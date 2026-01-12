@@ -141,10 +141,16 @@ struct Exif::Impl
 
 Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<Impl>())
 {
+    if (data_size < FOURCC.size())
+    {
+        m_impl.reset();
+        return;
+    }
+
     try
     {
         // 1) Prepare data buffer and prepend FOURCC if missing
-        if (data_size < FOURCC.size() || memcmp(data_ptr, FOURCC.data(), FOURCC.size()) != 0)
+        if (memcmp(data_ptr, FOURCC.data(), FOURCC.size()) != 0)
         {
             m_impl->data.reserve(data_size + FOURCC.size());
             m_impl->data.insert(m_impl->data.end(), FOURCC.begin(), FOURCC.end());
@@ -219,7 +225,7 @@ Exif &Exif::operator=(const Exif &other)
 Exif &Exif::operator=(Exif &&) noexcept = default;
 Exif::~Exif()                           = default;
 
-bool           Exif::valid() const { return static_cast<bool>(m_impl) && static_cast<bool>(m_impl->exif_data); }
+bool           Exif::valid() const { return m_impl.get() && m_impl->exif_data.get(); }
 void           Exif::reset() { m_impl.reset(); }
 size_t         Exif::size() const { return m_impl ? m_impl->data.size() : 0; }
 const uint8_t *Exif::data() const { return m_impl ? m_impl->data.data() : nullptr; }

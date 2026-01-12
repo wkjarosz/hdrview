@@ -12,6 +12,7 @@
 #include "icc.h"
 #include "image.h"
 #include "jpg.h"
+#include "xmp.h"
 #include <sstream>
 
 #include <cstring>
@@ -845,10 +846,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 if (idata.idata.xmplen > 0)
                 {
                     image->xmp_data.assign(idata.idata.xmpdata, idata.idata.xmpdata + idata.idata.xmplen);
-                    auto xmp = string(image->xmp_data.data(), image->xmp_data.data() + image->xmp_data.size());
-                    image->metadata["header"]["XMP"] = {
-                        {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
-                    spdlog::debug("XMP metadata successfully parsed: {}", xmp);
+                    spdlog::debug("XMP metadata present ({} bytes)", image->xmp_data.size());
                 }
 
                 if (idata.color.profile)

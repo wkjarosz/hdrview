@@ -742,7 +742,7 @@ bool PE::TreeNode(const char *name, ImGuiTreeNodeFlags flags)
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
-    auto ret = ImGui::TreeNodeEx(name, flags | ImGuiTreeNodeFlags_SpanFullWidth);
+    auto ret = ImGui::TreeNodeEx(name, flags); // | ImGuiTreeNodeFlags_SpanAllColumns);
     // auto ret = ImGui::TreeNodeEx("##node", flags | ImGuiTreeNodeFlags_SpanFullWidth);
     // ImGui::SameLine(0.f, 0.f);
     // ImGui::TextAligned2(1.0f, -FLT_MIN, "%s", name);

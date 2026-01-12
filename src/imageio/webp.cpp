@@ -67,6 +67,7 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
 #include "icc.h"
 #include "imgui_ext.h"
 #include "timer.h"
+#include "xmp.h"
 
 using namespace std;
 
@@ -173,8 +174,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
                                            {"description", "Whether this is an animated WebP file"}};
 
     // Extract metadata (ICC, EXIF, XMP) - shared across all frames
-    vector<uint8_t> icc_data;
-    vector<uint8_t> exif_data;
+    vector<uint8_t> icc_data, exif_data, xmp_data;
     ICCProfile      icc_profile;
 
     WebPChunkIterator chunk_iter;
@@ -224,10 +224,8 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
         auto chunk_guard = ScopeGuard{[&chunk_iter] { WebPDemuxReleaseChunkIterator(&chunk_iter); }};
         try
         {
-            auto xmp                       = string_view{(const char *)chunk_iter.chunk.bytes, chunk_iter.chunk.size};
-            base_metadata["header"]["XMP"] = {
-                {"value", xmp}, {"string", xmp}, {"type", "string"}, {"description", "XMP metadata"}};
-            spdlog::debug("Found XMP chunk: {}", xmp);
+            xmp_data.assign(chunk_iter.chunk.bytes, chunk_iter.chunk.bytes + chunk_iter.chunk.size);
+            spdlog::debug("Found XMP chunk ({} bytes)", xmp_data.size());
         }
         catch (const exception &e)
         {
@@ -330,6 +328,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             frame_image->alpha_type     = has_alpha ? AlphaType_Straight : AlphaType_None;
             frame_image->icc_data       = icc_data;
             frame_image->exif           = Exif{exif_data};
+            frame_image->xmp_data       = xmp_data;
             frame_image->display_window = Box2i{int2{0, 0}, int2{canvas_width, canvas_height}};
             frame_image->data_window    = use_full_canvas
                                               ? frame_image->display_window

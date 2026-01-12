@@ -11,6 +11,7 @@
 #include "common.h"
 #include "dithermatrix256.h"
 #include "image.h"
+#include "imageio/xmp.h"
 #include "shader.h"
 #include "timer.h"
 
@@ -252,6 +253,9 @@ const std::set<std::string> &Image::loadable_formats()
         "cap",
         "iiq",
         "rwz",
+#endif
+#if HDRVIEW_ENABLE_LIBWEBP
+        "webp",
 #endif
     };
     return formats;
@@ -1024,6 +1028,7 @@ void Image::apply_exif_orientation()
             break;
         default: break;
         }
+        orientation_applied = true;
     }
 }
 
@@ -1040,6 +1045,60 @@ void Image::finalize()
     if (display_window.is_empty())
         display_window = Box2i{int2{0}, channels.front().size()};
 
+    // Centralized XMP parsing: if loaders stored raw XMP into image->xmp_data or into exif metadata,
+    // parse it once here and populate metadata["xmp"] with structured JSON.
+    if (!metadata.contains("xmp"))
+    {
+        // spdlog::warn("XMP metadata not yet parsed; attempting to parse from raw data.");
+        if (metadata.contains("exif") && metadata["exif"].is_object())
+        {
+            // Check EXIF entries for raw XMP stored by exif parser (tag 700)
+            for (auto &it : metadata["exif"].items())
+            {
+                auto &v = it.value();
+                if (!v.is_object())
+                    continue;
+
+                if (v.contains("XMP Metadata") && v["XMP Metadata"].is_object() && v["XMP Metadata"].contains("value"))
+                {
+                    std::string s = v["XMP Metadata"]["value"].get<std::string>();
+                    if (s.find("http://ns.adobe.com/xap/1.0/") != std::string::npos ||
+                        s.find("x:xmpmeta") != std::string::npos || s.find("<?xpacket") != std::string::npos)
+                    {
+                        if (xmp_data.empty())
+                        {
+                            xmp_data.assign(s.begin(), s.end());
+                            spdlog::debug("Reading XMP data from EXIF XMP Metadata tag.");
+                        }
+                        else
+                        {
+                            spdlog::warn("Image contains both xpacket XMP data ({} bytes) and an XMP EXIF tag; "
+                                         "prioritizing xpacket buffer.",
+                                         xmp_data.size());
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!xmp_data.empty())
+        {
+            spdlog::debug("Parsing XMP from {} byte buffer:\n{}", xmp_data.size(),
+                          std::string(reinterpret_cast<const char *>(xmp_data.data()), xmp_data.size()));
+            Xmp xmp(reinterpret_cast<const char *>(xmp_data.data()), xmp_data.size());
+            if (xmp.valid())
+            {
+                spdlog::debug("Successfully parsed XMP metadata.");
+                metadata["xmp"] = xmp.to_json();
+            }
+            else
+            {
+                spdlog::warn("Failed to parse XMP metadata from raw xmp_data buffer.");
+            }
+        }
+    }
+
     // sanity check all channels have the same size as the data window
     for (const auto &c : channels)
         if (c.size() != data_window.size())
@@ -1049,7 +1108,8 @@ void Image::finalize()
 
     build_layers_and_groups();
 
-    apply_exif_orientation();
+    if (!orientation_applied)
+        apply_exif_orientation();
 
     // sanity check layers, channels, and channel groups
     {
