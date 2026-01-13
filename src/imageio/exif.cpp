@@ -1,5 +1,5 @@
 #include "exif.h"
-#include "endian.h"
+#include "endian-utils.h"
 #include "fwd.h"
 #include "json.h"
 #include <cstdint>

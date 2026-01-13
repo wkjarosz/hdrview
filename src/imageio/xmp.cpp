@@ -46,21 +46,29 @@ json parse_xml_element(const XMLElement *element)
     {
         std::string attr_name  = attr->Name();
         std::string attr_value = attr->Value();
-        // Extract namespace prefix
-        size_t colon_pos = attr_name.find(':');
-        if (colon_pos != std::string::npos)
-        {
-            std::string ns_prefix  = attr_name.substr(0, colon_pos);
-            std::string local_name = attr_name.substr(colon_pos + 1);
-            if (!result.contains(ns_prefix))
-            {
-                result[ns_prefix] = json::object();
-            }
-            result[ns_prefix][local_name] = attr_value;
-        }
+        // Special-case: preserve the full "xml:lang" key and value instead of
+        // splitting into namespace/object. This keeps language tags as plain
+        // key/value pairs in the resulting JSON.
+        if (attr_name == "xml:lang")
+            result[attr_name] = attr_value;
         else
         {
-            result[attr_name] = attr_value;
+            // Extract namespace prefix
+            size_t colon_pos = attr_name.find(':');
+            if (colon_pos != std::string::npos)
+            {
+                std::string ns_prefix  = attr_name.substr(0, colon_pos);
+                std::string local_name = attr_name.substr(colon_pos + 1);
+                if (!result.contains(ns_prefix))
+                {
+                    result[ns_prefix] = json::object();
+                }
+                result[ns_prefix][local_name] = attr_value;
+            }
+            else
+            {
+                result[attr_name] = attr_value;
+            }
         }
         attr = attr->Next();
     }
@@ -148,7 +156,16 @@ json parse_xml_element(const XMLElement *element)
         }
 
         child_json = parse_xml_element(child);
-        if (colon_pos != std::string::npos)
+        // Special-case xml:lang: preserve the full key and use the XML value
+        // directly as the JSON value.
+        if (child_name == "xml:lang")
+        {
+            if (child_json.is_string())
+                result["xml:lang"] = child_json.get<std::string>();
+            else
+                result["xml:lang"] = child_json;
+        }
+        else if (colon_pos != std::string::npos)
         {
             std::string ns_prefix  = child_name.substr(0, colon_pos);
             std::string local_name = child_name.substr(colon_pos + 1);

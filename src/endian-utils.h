@@ -28,9 +28,6 @@ inline bool is_little_endian()
 
 inline Endian host_endian() { return is_little_endian() ? Endian::Little : Endian::Big; }
 
-template <typename T>
-inline T swap_bytes(T value)
-{
 #if defined(_MSC_VER)
 #pragma intrinsic(_byteswap_ushort)
 #pragma intrinsic(_byteswap_ulong)
@@ -45,6 +42,9 @@ inline T swap_bytes(T value)
 #define byte_swap_64 __builtin_bswap64
 #endif
 
+template <typename T>
+inline T swap_bytes(T value)
+{
     if constexpr (sizeof(T) == 1)
     {
         return value;
@@ -69,10 +69,11 @@ inline T swap_bytes(T value)
         static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8,
                       "Unsupported type size for byte swapping.");
     }
+}
+
 #undef byte_swap_16
 #undef byte_swap_32
 #undef byte_swap_64
-}
 
 /*!
  * @brief Read a value of type T from a byte array and convert to host endianness.

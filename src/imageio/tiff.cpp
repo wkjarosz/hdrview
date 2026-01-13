@@ -48,7 +48,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
 #else
 
 #include "colorspace.h"
-#include "endian.h"
+#include "endian-utils.h"
 #include "exif.h"
 #include "fonts.h"
 #include "icc.h"

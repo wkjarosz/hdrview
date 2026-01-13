@@ -697,7 +697,7 @@ void Image::draw_info()
                     ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase);
                     ImGui::InputTextMultiline("##source", &xmp_string,
                                               ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 16),
-                                              ImGuiInputTextFlags_ReadOnly);
+                                              ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_WordWrap);
                     ImGui::PopFont();
                     // ImGui::Unindent();
                 }

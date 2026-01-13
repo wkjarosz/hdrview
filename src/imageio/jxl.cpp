@@ -5,7 +5,7 @@
 //
 
 #include "app.h"
-#include "endian.h"
+#include "endian-utils.h"
 #include "exif.h"
 #include "image.h"
 #include <cstdint>

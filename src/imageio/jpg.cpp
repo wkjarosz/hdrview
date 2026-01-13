@@ -10,7 +10,6 @@
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
-#include "xmp.h"
 #include <algorithm>
 #include <iostream>
 #include <spdlog/fmt/fmt.h>
