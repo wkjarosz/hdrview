@@ -16,6 +16,7 @@
 #include "imgui_internal.h"
 #include "implot.h"
 #include "implot_internal.h"
+#include "misc/cpp/imgui_stdlib.h"
 #include "shader.h"
 #include "texture.h"
 #include <hello_imgui/dpi_aware.h>
@@ -373,29 +374,30 @@ void Image::draw_info()
     const ImVec2           button_size   = ImGui::IconButtonSize();
     bool                   filter_active = filter.IsActive(); // save here to avoid flicker
 
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SetNextItemAllowOverlap();
-    if (ImGui::InputTextWithHint("##metadata filter",
-                                 ICON_MY_FILTER "Filter (format: [include|-exclude][,...]; e.g. "
-                                                "\"include_this,-but_not_this,also_include_this\")",
-                                 filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf)))
-        filter.Build();
-    if (filter_active)
+    auto draw_filter_input = [&]()
     {
-        ImGui::SameLine(0.f, 0.f);
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::SetNextItemAllowOverlap();
+        if (ImGui::InputTextWithHint("##metadata filter",
+                                     ICON_MY_FILTER "Filter (format: [include|-exclude][,...]; e.g. "
+                                                    "\"include_this,-but_not_this,also_include_this\")",
+                                     filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf)))
+            filter.Build();
+        if (filter_active)
+        {
+            ImGui::SameLine(0.f, 0.f);
 
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
-        if (ImGui::IconButton(ICON_MY_DELETE))
-            filter.Clear();
-    }
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
+            if (ImGui::IconButton(ICON_MY_DELETE))
+                filter.Clear();
+        }
+    };
 
     auto filtered_property = [&](const string &property_name, const string &value, const string &tooltip = "")
     {
         if (filter.PassFilter((property_name + " " + value).c_str()))
             ImGui::PE::WrappedText(property_name, value, tooltip, bold_font);
     };
-
-    ImGui::BeginChild("Image info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
 
     static const ImGuiTableFlags table_flags =
         ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_NoBordersInBodyUntilResize;
@@ -484,7 +486,27 @@ void Image::draw_info()
             {
                 const auto &arr = field_val;
 
-                // ImGui::PE::Entry(key, fmt::format("[{} items]", arr.size()));
+                // If the array is all basic scalar types (string/number/bool), render it as a single
+                // wrapped text entry containing the dumped JSON for readability.
+                bool all_basic = true;
+                for (const auto &e : arr)
+                {
+                    if (e.is_object())
+                    {
+                        all_basic = false;
+                        break;
+                    }
+                }
+
+                if (all_basic)
+                {
+                    ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
+                    ImGui::PE::WrappedText(key, field_val.dump(), "", bold_font);
+                    ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
+                    continue;
+                }
+
+                // Otherwise, handle mixed or object arrays element-by-element as before.
                 auto open = ImGui::PE::TreeNode(key.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
                 ImGui::TableNextColumn();
                 ImGui::SetNextItemWidth(-FLT_MIN);
@@ -551,6 +573,8 @@ void Image::draw_info()
             // ImGui::PopStyleColor(3);
             // if (open)
             // {
+            draw_filter_input();
+            ImGui::BeginChild("General info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
             if (ImGui::PE::Begin("Image info", table_flags))
             {
                 ImGui::Indent(HelloImGui::EmSize(0.5f));
@@ -592,11 +616,14 @@ void Image::draw_info()
 
             ImGui::PE::End();
             // }
+            ImGui::EndChild();
             ImGui::EndTabItem();
         }
 
         if (metadata.contains("header") && metadata["header"].is_object() && ImGui::BeginTabItem("Header", nullptr))
         {
+            draw_filter_input();
+            ImGui::BeginChild("Header info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
             if (ImGui::PE::Begin("Image info", table_flags))
             {
                 ImGui::Indent(HelloImGui::EmSize(0.5f));
@@ -604,11 +631,14 @@ void Image::draw_info()
                 ImGui::Unindent(HelloImGui::EmSize(0.5f));
             }
             ImGui::PE::End();
+            ImGui::EndChild();
             ImGui::EndTabItem();
         }
 
         if (metadata.contains("exif") && metadata["exif"].is_object() && ImGui::BeginTabItem("EXIF", nullptr))
         {
+            draw_filter_input();
+            ImGui::BeginChild("EXIF info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
             for (auto &exif_entry : metadata["exif"].items())
             {
                 const auto &table_obj = exif_entry.value();
@@ -616,15 +646,15 @@ void Image::draw_info()
                     continue;
 
                 ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-                ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-                ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
+                // ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
+                // ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
                 ImGui::PushFont(bold_font, 0.f);
                 auto open = ImGui::CollapsingHeader(
                     exif_entry.key().c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
                                                   ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns |
                                                   ImGuiTreeNodeFlags_DefaultOpen);
                 ImGui::PopFont();
-                ImGui::PopStyleColor(3);
+                ImGui::PopStyleColor(1);
                 if (open)
                 {
                     if (ImGui::PE::Begin("Image info", table_flags))
@@ -636,11 +666,43 @@ void Image::draw_info()
                     ImGui::PE::End();
                 }
             }
+            ImGui::EndChild();
             ImGui::EndTabItem();
         }
 
         if (metadata.contains("xmp") && metadata["xmp"].is_object() && ImGui::BeginTabItem("XMP", nullptr))
         {
+            draw_filter_input();
+            ImGui::BeginChild("XMP info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+
+            // string x = string(xmp_data.begin(), xmp_data.end());
+            // spdlog::info("XMP metadata: {}", x);
+            auto xmp_string = string{xmp_data.begin(), xmp_data.end()};
+            {
+                ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
+                // ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
+                // ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
+                ImGui::PushFont(bold_font, 0.f);
+
+                auto open = ImGui::CollapsingHeader(
+                    fmt::format("Raw XMP data ({:.1h} bytes)", human_readible{xmp_data.size()}).c_str(),
+                    ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
+                        ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns);
+                ImGui::PopFont();
+                ImGui::PopStyleColor(1);
+
+                if (open)
+                {
+                    // ImGui::Indent();
+                    ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase);
+                    ImGui::InputTextMultiline("##source", &xmp_string,
+                                              ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 16),
+                                              ImGuiInputTextFlags_ReadOnly);
+                    ImGui::PopFont();
+                    // ImGui::Unindent();
+                }
+            }
+            // ImGui::PE::WrappedText("Raw XMP data", string(xmp_data.begin(), xmp_data.end()), "");
             json xmlns = metadata["xmp"]["xmlns"];
             for (auto &xmp_entry : metadata["xmp"].items())
             {
@@ -653,25 +715,28 @@ void Image::draw_info()
                 string uri  = xmlns[ns]["uri"];
 
                 ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-                ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-                ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
+                // ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
+                // ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
                 ImGui::PushFont(bold_font, 0.f);
 
+                // ImGui::TableNextRow();
+                // ImGui::TableNextColumn();
+                // ImGui::AlignTextToFramePadding();
                 auto open = ImGui::CollapsingHeader(
                     name.c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
                                       ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns |
                                       ImGuiTreeNodeFlags_DefaultOpen);
                 ImGui::Tooltip(fmt::format("URI: {}\nNamespace prefix: {}", uri, ns).c_str());
                 ImGui::PopFont();
-                ImGui::PopStyleColor(3);
+                ImGui::PopStyleColor(1);
 
                 if (open)
                 {
                     if (ImGui::PE::Begin("Image info", table_flags))
                     {
-                        ImGui::Indent(HelloImGui::EmSize(0.5f));
+                        // ImGui::Indent(HelloImGui::EmSize(0.5f));
                         add_xmp_fields(table_obj, 0, name + " " + ns);
-                        ImGui::Unindent(HelloImGui::EmSize(0.5f));
+                        // ImGui::Unindent(HelloImGui::EmSize(0.5f));
                     }
                     ImGui::PE::End();
                 }
@@ -706,6 +771,8 @@ void Image::draw_info()
                 //     ImGui::PE::End();
                 // }
             }
+
+            ImGui::EndChild();
             ImGui::EndTabItem();
         }
 
@@ -796,8 +863,6 @@ void Image::draw_info()
     //         }
     //     }
     // }
-
-    ImGui::EndChild();
 }
 
 void Image::draw_chromaticity_diagram()

@@ -1395,6 +1395,7 @@ hello_imgui_add_app(
   src/imageio/jxl.cpp
   src/imageio/pfm.cpp
   src/imageio/png.cpp
+  src/imageio/psd.cpp
   src/imageio/stb.cpp
   src/imageio/qoi.cpp
   src/imageio/raw.cpp

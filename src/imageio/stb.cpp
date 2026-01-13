@@ -19,6 +19,7 @@
 #include "fonts.h"
 #include "imgui.h"
 #include "imgui_ext.h"
+#include "psd.h"
 
 // these pragmas ignore warnings about unused static functions
 #if defined(__clang__)
@@ -187,6 +188,22 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     if (!supported_format(is, j))
         throw runtime_error{"loaded the image, but then couldn't figure out the format (this should never happen)."};
 
+    std::vector<uint8_t> psd_exif_data;
+    std::vector<uint8_t> psd_xmp_data;
+    if (j["format"] == "psd")
+    {
+        try
+        {
+            is.clear();
+            is.seekg(0);
+            extract_psd_exif_xmp(is, psd_exif_data, psd_xmp_data);
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::warn("Failed to extract EXIF/XMP from PSD: {}", e.what());
+        }
+    }
+
     TransferFunction tf = TransferFunction::Linear;
     ColorGamut_      cg = ColorGamut_Unspecified;
     if (!is_hdr && !opts.override_profile)
@@ -226,6 +243,15 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         image->metadata["color profile"] = color_profile_name(cg, tf);
         if (opts.override_profile)
             image->metadata["color profile"] += " (user override)";
+
+        image->xmp_data = psd_xmp_data;
+        if (!psd_exif_data.empty())
+        {
+            image->exif             = Exif{psd_exif_data};
+            auto exif_json          = image->exif.to_json();
+            image->metadata["exif"] = exif_json;
+            spdlog::debug("EXIF metadata successfully parsed: {}", exif_json.dump(2));
+        }
 
         // first convert+copy to float channels
         if (is_hdr)
