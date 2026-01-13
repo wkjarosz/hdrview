@@ -5,9 +5,9 @@
 //
 
 #include "app.h"
+#include "endian.h"
 #include "exif.h"
 #include "image.h"
-#include "xmp.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>

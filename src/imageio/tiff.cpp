@@ -6,15 +6,8 @@
 
 #include "tiff.h"
 #include "app.h"
-#include "colorspace.h"
 #include "common.h"
-#include "exif.h"
-#include "icc.h"
 #include "image.h"
-#include "timer.h"
-
-#include "fonts.h"
-#include "imgui_ext.h"
 
 using namespace std;
 
@@ -53,6 +46,14 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 #else
+
+#include "colorspace.h"
+#include "endian.h"
+#include "exif.h"
+#include "fonts.h"
+#include "icc.h"
+#include "imgui_ext.h"
+#include "timer.h"
 
 #include <cstring>
 #include <half.h>

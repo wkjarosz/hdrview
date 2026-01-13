@@ -57,10 +57,10 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
 #include <vector>
 
 #include "common.h"
+#include "endian.h"
 #include "exif.h"
 #include "icc.h"
 #include "timer.h"
-#include "xmp.h"
 
 #include "fonts.h"
 #include "imgui_ext.h"

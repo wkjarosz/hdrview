@@ -1,11 +1,11 @@
 #include "exif.h"
-#include "common.h"
+#include "endian.h"
+#include "fwd.h"
 #include "json.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring> // for memcmp
-#include <iomanip>
 #include <libexif/exif-byte-order.h>
 #include <libexif/exif-data.h>
 #include <libexif/exif-format.h>
@@ -13,7 +13,6 @@
 #include <libexif/exif-mnote-data.h>
 #include <libexif/exif-tag.h>
 #include <memory>
-#include <sstream>
 #include <stdexcept>
 #include <type_traits>
 

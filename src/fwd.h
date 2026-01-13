@@ -8,7 +8,7 @@
 
 // #define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 
-#include "linalg.h" // IWYU pragma: export
+#include <linalg.h>
 #include <memory>
 
 // Shortname for the linalg namespace
