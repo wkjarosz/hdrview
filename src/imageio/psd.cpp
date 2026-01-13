@@ -1,4 +1,5 @@
 #include "psd.h"
+#include <cstring>
 
 static uint16_t read_uint16_be(std::istream &stream)
 {
