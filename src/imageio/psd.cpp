@@ -36,7 +36,12 @@ static std::vector<uint8_t> read_bytes(std::istream &stream, size_t count)
     return data;
 }
 
-void extract_psd_exif_xmp(std::istream &stream, std::vector<uint8_t> &exif, std::vector<uint8_t> &xmp)
+const char *PSDMetadata::color_mode_names[10] = {
+    "Bitmap", "Grayscale", "Indexed", "RGB", "CMYK", "Invalid5", "Invalid6", "Multichannel", "Duotone", "Lab",
+};
+
+// See https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
+void PSDMetadata::read(std::istream &stream)
 {
     // Read and verify PSD signature
     char signature[4];
@@ -52,8 +57,12 @@ void extract_psd_exif_xmp(std::istream &stream, std::vector<uint8_t> &exif, std:
     // Skip reserved bytes (6 bytes) - must be zero
     skip_bytes(stream, 6);
 
-    // Skip channels (2), height (4), width (4), depth (2), color mode (2) = 14 bytes
-    skip_bytes(stream, 14);
+    // Channels (2), height (4), width (4), depth (2), color mode (2) = 14 bytes
+    num_channels = read_uint16_be(stream);
+    height       = read_uint32_be(stream);
+    width        = read_uint32_be(stream);
+    depth        = read_uint16_be(stream);
+    color_mode   = static_cast<ColorMode>(read_uint16_be(stream));
 
     // Read and skip Color Mode Data section
     uint32_t color_mode_data_length = read_uint32_be(stream);
@@ -107,20 +116,52 @@ void extract_psd_exif_xmp(std::istream &stream, std::vector<uint8_t> &exif, std:
         if (data_size > 100 * 1024 * 1024) // 100MB limit
             throw std::runtime_error("Resource data size too large");
 
-        // Check if this is EXIF or XMP
-        if (resource_id == 1058 && exif.empty()) // EXIF (0x0422 in hex)
+        // Extract metadata based on resource ID
+        if (resource_id == 1028 && iptc.empty()) // IPTC-NAA
+            iptc = read_bytes(stream, data_size);
+        else if (resource_id == 1034) // Copyright flag
+        {
+            if (data_size > 0)
+            {
+                uint8_t flag;
+                stream.read(reinterpret_cast<char *>(&flag), 1);
+                is_copyright = (flag != 0);
+                skip_bytes(stream, data_size - 1);
+            }
+        }
+        else if (resource_id == 1035) // URL
+        {
+            if (data_size > 0)
+            {
+                auto url_data = read_bytes(stream, data_size);
+                url           = std::string(url_data.begin(), url_data.end());
+            }
+        }
+        else if (resource_id == 1039 && icc_profile.empty()) // ICC Profile
+            icc_profile = read_bytes(stream, data_size);
+        else if (resource_id == 1041) // ICC Untagged
+        {
+            if (data_size >= 1)
+            {
+                uint8_t flag;
+                stream.read(reinterpret_cast<char *>(&flag), 1);
+                is_icc_untagged = (flag != 0);
+                skip_bytes(stream, data_size - 1);
+            }
+        }
+        else if (resource_id == 1036 && thumbnail.empty()) // Thumbnail
+            thumbnail = read_bytes(stream, data_size);
+        else if (resource_id == 1058 && exif.empty()) // EXIF data 1
             exif = read_bytes(stream, data_size);
+        else if (resource_id == 1059 && exif3.empty()) // EXIF data 3
+            exif3 = read_bytes(stream, data_size);
         else if (resource_id == 1060 && xmp.empty()) // XMP (0x0424 in hex)
             xmp = read_bytes(stream, data_size);
-        else // Skip this resource data
+        else
             skip_bytes(stream, data_size);
 
         // Resource data is padded to even length
         if (data_size % 2 == 1)
             skip_bytes(stream, 1);
-
-        // Early exit if we found both
-        if (!exif.empty() && !xmp.empty())
-            break;
     }
 }

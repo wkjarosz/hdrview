@@ -17,6 +17,7 @@
 #include "app.h"
 
 #include "fonts.h"
+#include "icc.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 #include "psd.h"
@@ -37,6 +38,7 @@
 // since other libraries might include old versions of stb headers, we declare stb static here
 // #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
+#define STBI_FAILURE_USERMSG
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
 // #undef STB_IMAGE_STATIC
@@ -188,19 +190,59 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     if (!supported_format(is, j))
         throw runtime_error{"loaded the image, but then couldn't figure out the format (this should never happen)."};
 
-    std::vector<uint8_t> psd_exif_data;
-    std::vector<uint8_t> psd_xmp_data;
+    PSDMetadata psd_metadata;
     if (j["format"] == "psd")
     {
         try
         {
             is.clear();
             is.seekg(0);
-            extract_psd_exif_xmp(is, psd_exif_data, psd_xmp_data);
+            psd_metadata.read(is);
+
+            auto &header = j["header"];
+
+            header["Color mode"] = {{"value", psd_metadata.color_mode},
+                                    {"string", PSDMetadata::color_mode_names[psd_metadata.color_mode]},
+                                    {"type", "enum"}};
+            if (psd_metadata.is_copyright != uint8_t(-1))
+                header["Copyright flag"] = {{"value", (bool)psd_metadata.is_copyright},
+                                            {"string", psd_metadata.is_copyright ? "yes" : "no"},
+                                            {"type", "boolean"}};
+            if (psd_metadata.is_icc_untagged != uint8_t(-1))
+                header["ICC Untagged flag"] = {{"value", (bool)psd_metadata.is_icc_untagged},
+                                               {"string", psd_metadata.is_icc_untagged ? "yes" : "no"},
+                                               {"type", "boolean"}};
+            if (!psd_metadata.url.empty())
+                header["URL"] = {{"value", psd_metadata.url}, {"string", psd_metadata.url}, {"type", "string"}};
+
+            // log what metadata we found
+            spdlog::debug("Num channels: {}", psd_metadata.num_channels);
+            spdlog::debug("Width: {}", psd_metadata.width);
+            spdlog::debug("Height: {}", psd_metadata.height);
+            spdlog::debug("Bits per channel: {}", psd_metadata.depth);
+            spdlog::debug("Color mode: {}", (uint16_t)psd_metadata.color_mode);
+            if (!psd_metadata.xmp.empty())
+                spdlog::debug("Found XMP metadata in PSD file.");
+            if (!psd_metadata.exif.empty())
+                spdlog::debug("Found EXIF data 1 metadata in PSD file.");
+            if (!psd_metadata.exif3.empty())
+                spdlog::debug("Found EXIF data 3 metadata in PSD file.");
+            if (!psd_metadata.iptc.empty())
+                spdlog::debug("Found IPTC metadata in PSD file.");
+            if (!psd_metadata.icc_profile.empty())
+                spdlog::debug("Found ICC profile in PSD file.");
+            if (!psd_metadata.thumbnail.empty())
+                spdlog::debug("Found thumbnail in PSD file.");
+            if (psd_metadata.is_copyright != uint8_t(-1))
+                spdlog::debug("Copyright flag in PSD file: {}", psd_metadata.is_copyright);
+            if (psd_metadata.is_icc_untagged != uint8_t(-1))
+                spdlog::debug("ICC Untagged flag in PSD file: {}", psd_metadata.is_icc_untagged);
+            if (!psd_metadata.url.empty())
+                spdlog::debug("Found URL metadata in PSD file: {}", psd_metadata.url);
         }
         catch (const std::exception &e)
         {
-            spdlog::warn("Failed to extract EXIF/XMP from PSD: {}", e.what());
+            spdlog::warn("Failed to extract metadata from PSD file: {}", e.what());
         }
     }
 
@@ -211,6 +253,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
         tf = TransferFunction::Unspecified;
     }
+
     if (opts.override_profile)
     {
         spdlog::info("Forcing color profile to {} gamut with {} transfer.", color_gamut_name(opts.gamut_override),
@@ -240,46 +283,95 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         else
             image->metadata["pixel format"] = fmt::format("{} bbp", 8);
 
-        image->metadata["color profile"] = color_profile_name(cg, tf);
-        if (opts.override_profile)
-            image->metadata["color profile"] += " (user override)";
+        if (j.contains("header"))
+            image->metadata["header"] = j["header"];
 
-        image->xmp_data = psd_xmp_data;
-        if (!psd_exif_data.empty())
+        image->xmp_data = psd_metadata.xmp;
+        if (!psd_metadata.exif.empty())
         {
-            image->exif             = Exif{psd_exif_data};
-            auto exif_json          = image->exif.to_json();
-            image->metadata["exif"] = exif_json;
-            spdlog::debug("EXIF metadata successfully parsed: {}", exif_json.dump(2));
+            try
+            {
+                image->exif             = Exif{psd_metadata.exif};
+                auto exif_json          = image->exif.to_json();
+                image->metadata["exif"] = exif_json;
+                spdlog::debug("EXIF metadata successfully parsed: {}", exif_json.dump(2));
+            }
+            catch (const std::exception &e)
+            {
+                spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+                image->exif.reset();
+            }
         }
 
         // first convert+copy to float channels
+        std::vector<float> float_pixels(size.x * size.y * size.z);
         if (is_hdr)
         {
-            for (int c = 0; c < size.z; ++c)
-                image->channels[c].copy_from_interleaved((float *)data_ptr, size.x, size.y, size.z, c,
-                                                         [](float v) { return v; });
+            memcpy(float_pixels.data(), data_ptr, size.x * size.y * size.z * sizeof(float));
+
             data_ptr = (float *)data_ptr + size.x * size.y * size.z;
         }
         else if (is_16_bit)
         {
-            for (int c = 0; c < size.z; ++c)
-                image->channels[c].copy_from_interleaved((uint16_t *)data_ptr, size.x, size.y, size.z, c,
-                                                         [](uint16_t v) { return dequantize_full(v); });
+            for (size_t i = 0; i < float_pixels.size(); ++i)
+                float_pixels[i] = dequantize_full(reinterpret_cast<const uint16_t *>(data_ptr)[i]);
+
             data_ptr = (uint16_t *)data_ptr + size.x * size.y * size.z;
         }
         else
         {
-            for (int c = 0; c < size.z; ++c)
-                image->channels[c].copy_from_interleaved((uint8_t *)data_ptr, size.x, size.y, size.z, c,
-                                                         [](uint8_t v) { return dequantize_full(v); });
+            for (size_t i = 0; i < float_pixels.size(); ++i)
+                float_pixels[i] = dequantize_full(reinterpret_cast<const uint8_t *>(data_ptr)[i]);
+
             data_ptr = (uint8_t *)data_ptr + size.x * size.y * size.z;
         }
 
-        // then apply transfer function
-        int num_color_channels = size.z >= 3 ? 3 : 1;
-        to_linear(image->channels[0].data(), size.z > 1 ? image->channels[1].data() : nullptr,
-                  size.z > 2 ? image->channels[2].data() : nullptr, size.x * size.y, num_color_channels, tf, 1);
+        if (!psd_metadata.icc_profile.empty())
+            image->icc_data = psd_metadata.icc_profile;
+
+        string profile_desc = color_profile_name(cg, tf);
+        if (opts.override_profile)
+        {
+            Chromaticities c;
+            if (linearize_pixels(float_pixels.data(), size.xyz(), gamut_chromaticities(opts.gamut_override),
+                                 opts.tf_override, opts.keep_primaries, &profile_desc, &c))
+                image->chromaticities = c;
+            profile_desc += " (user override)";
+        }
+        else
+        {
+            // try ICC profile if present, then fall back to default
+            Chromaticities c;
+            if (!image->icc_data.empty())
+            {
+                if (ICCProfile(image->icc_data)
+                        .linearize_pixels(float_pixels.data(), size.xyz(), opts.keep_primaries, &profile_desc, &c))
+                {
+                    spdlog::info("Linearizing colors using ICC profile.");
+                    image->chromaticities = c;
+                }
+            }
+            else if (tf.type != TransferFunction::Linear)
+            {
+                spdlog::info("Linearizing colors using color transfer function: {}", profile_desc);
+                if (linearize_pixels(float_pixels.data(), size.xyz(), gamut_chromaticities(cg), tf, opts.keep_primaries,
+                                     nullptr, &c))
+                    image->chromaticities = c;
+            }
+            else
+                spdlog::info("Image is already in linear color space.");
+        }
+
+        image->metadata["color profile"] = profile_desc;
+
+        for (int c = 0; c < size.z; ++c)
+            image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
+                                                     [](float v) { return v; });
+
+        // // then apply transfer function
+        // int num_color_channels = size.z >= 3 ? 3 : 1;
+        // to_linear(image->channels[0].data(), size.z > 1 ? image->channels[1].data() : nullptr,
+        //           size.z > 2 ? image->channels[2].data() : nullptr, size.x * size.y, num_color_channels, tf, 1);
     }
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 

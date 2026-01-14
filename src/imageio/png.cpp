@@ -779,9 +779,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             }
             else
                 spdlog::info("Image is already in linear color space.");
-
-            image->metadata["color profile"] = profile_desc;
         }
+
+        image->metadata["color profile"] = profile_desc;
 
         for (int c = 0; c < size.z; ++c)
             image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,

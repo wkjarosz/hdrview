@@ -770,6 +770,7 @@ void PE::Hyperlink(const char *name, const char *desc, const char *url /*= nullp
 void PE::WrappedText(const string &property_name, const string &value, const string &tooltip, ImFont *font,
                      float wrap_em)
 {
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.f));
     PE::Entry(
         property_name,
         [&]
@@ -814,6 +815,7 @@ void PE::WrappedText(const string &property_name, const string &value, const str
             return false; // no change
         },
         tooltip);
+    ImGui::PopStyleVar();
 }
 
 } // namespace ImGui

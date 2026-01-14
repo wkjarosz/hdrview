@@ -399,8 +399,7 @@ void Image::draw_info()
             ImGui::PE::WrappedText(property_name, value, tooltip, bold_font);
     };
 
-    static const ImGuiTableFlags table_flags =
-        ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_NoBordersInBodyUntilResize;
+    static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
 
     auto get_tooltip = [](const json &field_obj)
     {
@@ -624,6 +623,7 @@ void Image::draw_info()
         {
             draw_filter_input();
             ImGui::BeginChild("Header info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(0, 0));
             if (ImGui::PE::Begin("Image info", table_flags))
             {
                 ImGui::Indent(HelloImGui::EmSize(0.5f));
@@ -631,6 +631,7 @@ void Image::draw_info()
                 ImGui::Unindent(HelloImGui::EmSize(0.5f));
             }
             ImGui::PE::End();
+            ImGui::PopStyleVar();
             ImGui::EndChild();
             ImGui::EndTabItem();
         }
@@ -657,6 +658,7 @@ void Image::draw_info()
                 ImGui::PopStyleColor(1);
                 if (open)
                 {
+                    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(0, 0));
                     if (ImGui::PE::Begin("Image info", table_flags))
                     {
                         ImGui::Indent(HelloImGui::EmSize(0.5f));
@@ -664,6 +666,7 @@ void Image::draw_info()
                         ImGui::Unindent(HelloImGui::EmSize(0.5f));
                     }
                     ImGui::PE::End();
+                    ImGui::PopStyleVar();
                 }
             }
             ImGui::EndChild();
@@ -732,6 +735,7 @@ void Image::draw_info()
 
                 if (open)
                 {
+                    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(0, 0));
                     if (ImGui::PE::Begin("Image info", table_flags))
                     {
                         // ImGui::Indent(HelloImGui::EmSize(0.5f));
@@ -739,6 +743,7 @@ void Image::draw_info()
                         // ImGui::Unindent(HelloImGui::EmSize(0.5f));
                     }
                     ImGui::PE::End();
+                    ImGui::PopStyleVar();
                 }
 
                 // if (open)
@@ -1186,8 +1191,7 @@ void Image::draw_colorspace()
 
     float                        col2_w          = 0.f;
     float                        col2_big_enough = HelloImGui::EmSize(12.f);
-    static const ImGuiTableFlags table_flags =
-        ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_NoBordersInBodyUntilResize;
+    static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
         ImGui::Indent(HelloImGui::EmSize(0.5f));

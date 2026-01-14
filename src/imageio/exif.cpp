@@ -174,17 +174,17 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
             [](ExifLog *log, ExifLogCode kind, const char *domain, const char *format, va_list args, void *user_data)
             {
                 bool *error = static_cast<bool *>(user_data);
-                char  buf[1024];
-                vsnprintf(buf, sizeof(buf), format, args);
+                char  msg[1024];
+                vsnprintf(msg, sizeof(msg), format, args);
 
                 switch (kind)
                 {
-                case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, buf); break;
-                case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, buf); break;
+                case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, msg); break;
+                case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, msg); break;
                 case EXIF_LOG_CODE_NO_MEMORY:
                 case EXIF_LOG_CODE_CORRUPT_DATA:
                     *error = true;
-                    spdlog::error("log: {}: {}", domain, buf);
+                    spdlog::error("log: {}: {}", domain, msg);
                     break;
                 }
             },
@@ -195,7 +195,10 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
         // 3) Load the EXIF data from memory buffer
         exif_data_load_data(m_impl->exif_data.get(), m_impl->data.data(), m_impl->data.size());
 
-        if (!m_impl->exif_data || error)
+        if (error)
+            spdlog::warn("There were errors while loading EXIF data, but trying to continue.");
+
+        if (!m_impl->exif_data)
             throw std::invalid_argument{"Failed to decode EXIF data."};
     }
     catch (const std::exception &e)
