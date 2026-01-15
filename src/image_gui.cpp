@@ -399,8 +399,6 @@ void Image::draw_info()
             ImGui::PE::WrappedText(property_name, value, tooltip, bold_font);
     };
 
-    static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
-
     auto get_tooltip = [](const json &field_obj)
     {
         std::string tt;
@@ -469,14 +467,11 @@ void Image::draw_info()
             // Handle objects (nested structures)
             if (field_val.is_object())
             {
-                // ImGui::PE::Entry(key, "");
-                // ImGui::Indent();
                 if (ImGui::PE::TreeNode(key.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
                 {
                     add_xmp_fields(field_val, depth + 1, prefix + ":" + key);
                     ImGui::PE::TreePop();
                 }
-                // ImGui::Unindent();
                 continue;
             }
 
@@ -487,23 +482,23 @@ void Image::draw_info()
 
                 // If the array is all basic scalar types (string/number/bool), render it as a single
                 // wrapped text entry containing the dumped JSON for readability.
-                bool all_basic = true;
-                for (const auto &e : arr)
-                {
-                    if (e.is_object())
-                    {
-                        all_basic = false;
-                        break;
-                    }
-                }
+                // bool all_basic = true;
+                // for (const auto &e : arr)
+                // {
+                //     if (e.is_object())
+                //     {
+                //         all_basic = false;
+                //         break;
+                //     }
+                // }
 
-                if (all_basic)
-                {
-                    ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
-                    ImGui::PE::WrappedText(key, field_val.dump(), "", bold_font);
-                    ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
-                    continue;
-                }
+                // if (all_basic)
+                // {
+                //     ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
+                //     ImGui::PE::WrappedText(key, field_val.dump(), "", bold_font);
+                //     ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
+                //     continue;
+                // }
 
                 // Otherwise, handle mixed or object arrays element-by-element as before.
                 auto open = ImGui::PE::TreeNode(key.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
@@ -512,22 +507,16 @@ void Image::draw_info()
                 ImGui::TextUnformatted(fmt::format("[{} item{}]", arr.size(), arr.size() == 1 ? "" : "s").c_str());
                 if (open)
                 {
-                    // ImGui::Indent();
-                    // if (ImGui::PE::TreeNode(key.c_str()))
-                    // {
                     for (size_t i = 0; i < arr.size(); ++i)
                     {
-                        std::string idx = fmt::format("{}:", i);
+                        std::string idx = fmt::format("#{}", i + 1);
                         if (arr[i].is_object())
                         {
-                            // ImGui::PE::Entry(idx, "");
-                            // ImGui::Indent();
                             if (ImGui::PE::TreeNode(idx.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
                             {
                                 add_xmp_fields(arr[i], depth + 1, prefix + ":" + key);
                                 ImGui::PE::TreePop();
                             }
-                            // ImGui::Unindent();
                         }
                         else if (arr[i].is_string())
                         {
@@ -544,9 +533,6 @@ void Image::draw_info()
                     }
                     ImGui::PE::TreePop();
                 }
-                //     ImGui::PE::TreePop();
-                //     // ImGui::Unindent();
-                // }
                 continue;
             }
 
@@ -557,316 +543,180 @@ void Image::draw_info()
         }
     };
 
-    if (ImGui::BeginTabBar("Metadata"))
+    static int which_view = 0;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Combo("##Which view", &which_view, "General\0Header\0EXIF\0XMP\0Raw XMP data\0\0");
+
+    if (which_view == 0)
     {
-        if (ImGui::BeginTabItem("General", nullptr))
+        // draw_filter_input();
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+        if (ImGui::PE::Begin("Image info", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize |
+                                               ImGuiTableFlags_ScrollY))
         {
-            // ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-            // ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-            // ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
-            // ImGui::PushFont(bold_font, 0.f);
-            // auto open = ImGui::CollapsingHeader("General", ImGuiTreeNodeFlags_DefaultOpen |
-            // ImGuiTreeNodeFlags_SpanFullWidth |
-            //                                                 ImGuiTreeNodeFlags_SpanAllColumns);
-            // ImGui::PopFont();
-            // ImGui::PopStyleColor(3);
-            // if (open)
-            // {
-            draw_filter_input();
-            ImGui::BeginChild("General info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
-            if (ImGui::PE::Begin("Image info", table_flags))
-            {
-                ImGui::Indent(HelloImGui::EmSize(0.5f));
-                filtered_property("File name", filename);
-                filtered_property(
-                    "File size",
-                    fmt::format(std::locale("en_US.UTF-8"), "{:.1h} ({:L} bytes)", human_readible{size_bytes},
-                                size_bytes),
-                    "This is the size of the image file on disk. If the image consists of multiple parts, "
-                    "this is the size of the entire file.");
-                filtered_property("Last modified",
-                                  fmt::format("{:%b %d, %Y at %I:%M %p}", to_system_clock(last_modified)));
-                filtered_property("Part name", partname.empty() ? "<none>" : partname.c_str());
-                filtered_property("Channel selector", channel_selector.empty() ? "<none>" : channel_selector.c_str());
-                filtered_property("Loader", metadata.value<string>("loader", "unknown"));
-                filtered_property("Pixel format", metadata.value<string>("pixel format", "unknown"));
-                filtered_property("Resolution", fmt::format("{} {} {}", size().x, ICON_MY_TIMES, size().y));
-                filtered_property("Data window",
-                                  fmt::format("[{}, {}) {} [{}, {})", data_window.min.x, data_window.max.x,
-                                              ICON_MY_TIMES, data_window.min.y, data_window.max.y));
-                filtered_property("Display window",
-                                  fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
-                                              ICON_MY_TIMES, display_window.min.y, display_window.max.y));
-                filtered_property(
-                    "Alpha", alpha_type_name(alpha_type),
-                    "Type of alpha channel stored in the file. HDRView always converts the file's gamma to "
-                    "premultiplied alpha upon load.");
-                if (exif.valid())
-                    filtered_property("EXIF data", fmt::format("{:.0h}", human_readible{exif.size()}),
-                                      "Size of the EXIF metadata block embedded in the image file.");
-                if (!xmp_data.empty())
-                    filtered_property("XMP data", fmt::format("{:.0h}", human_readible{xmp_data.size()}),
-                                      "Size of the XMP metadata block embedded in the image file.");
-                if (!icc_data.empty())
-                    filtered_property("ICC data", fmt::format("{:.0h}", human_readible{icc_data.size()}),
-                                      "Size of the ICC profile embedded in the image file.");
-                ImGui::Unindent(HelloImGui::EmSize(0.5f));
-            }
-
-            ImGui::PE::End();
-            // }
-            ImGui::EndChild();
-            ImGui::EndTabItem();
+            ImGui::Indent(ImGui::GetStyle().CellPadding.x);
+            filtered_property("File name", filename);
+            filtered_property(
+                "File size",
+                fmt::format(std::locale("en_US.UTF-8"), "{:.1h} ({:L} bytes)", human_readible{size_bytes}, size_bytes),
+                "This is the size of the image file on disk. If the image consists of multiple parts, "
+                "this is the size of the entire file.");
+            filtered_property("Last modified", fmt::format("{:%b %d, %Y at %I:%M %p}", to_system_clock(last_modified)));
+            filtered_property("Part name", partname.empty() ? "<none>" : partname.c_str());
+            filtered_property("Channel selector", channel_selector.empty() ? "<none>" : channel_selector.c_str());
+            filtered_property("Loader", metadata.value<string>("loader", "unknown"));
+            filtered_property("Pixel format", metadata.value<string>("pixel format", "unknown"));
+            filtered_property("Resolution", fmt::format("{} {} {}", size().x, ICON_MY_TIMES, size().y));
+            filtered_property("Data window", fmt::format("[{}, {}) {} [{}, {})", data_window.min.x, data_window.max.x,
+                                                         ICON_MY_TIMES, data_window.min.y, data_window.max.y));
+            filtered_property("Display window",
+                              fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
+                                          ICON_MY_TIMES, display_window.min.y, display_window.max.y));
+            filtered_property("Alpha", alpha_type_name(alpha_type),
+                              "Type of alpha channel stored in the file. HDRView always converts the file's gamma to "
+                              "premultiplied alpha upon load.");
+            if (exif.valid())
+                filtered_property("EXIF data", fmt::format("{:.0h}", human_readible{exif.size()}),
+                                  "Size of the EXIF metadata block embedded in the image file.");
+            if (!xmp_data.empty())
+                filtered_property("XMP data", fmt::format("{:.0h}", human_readible{xmp_data.size()}),
+                                  "Size of the XMP metadata block embedded in the image file.");
+            if (!icc_data.empty())
+                filtered_property("ICC data", fmt::format("{:.0h}", human_readible{icc_data.size()}),
+                                  "Size of the ICC profile embedded in the image file.");
+            ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         }
 
-        if (metadata.contains("header") && metadata["header"].is_object() && ImGui::BeginTabItem("Header", nullptr))
+        ImGui::PE::End();
+        ImGui::PopStyleColor();
+    }
+    else if (which_view == 1)
+    {
+        if (metadata.contains("header") && metadata["header"].is_object())
         {
-            draw_filter_input();
-            ImGui::BeginChild("Header info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
-            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(0, 0));
-            if (ImGui::PE::Begin("Image info", table_flags))
+            // draw_filter_input();
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+            if (ImGui::PE::Begin("Header", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize |
+                                               ImGuiTableFlags_ScrollY))
             {
-                ImGui::Indent(HelloImGui::EmSize(0.5f));
+                ImGui::Indent(ImGui::GetStyle().CellPadding.x);
                 add_fields(metadata["header"]);
-                ImGui::Unindent(HelloImGui::EmSize(0.5f));
+                ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
             }
             ImGui::PE::End();
-            ImGui::PopStyleVar();
-            ImGui::EndChild();
-            ImGui::EndTabItem();
+            ImGui::PopStyleColor();
         }
-
-        if (metadata.contains("exif") && metadata["exif"].is_object() && ImGui::BeginTabItem("EXIF", nullptr))
+    }
+    else if (which_view == 2)
+    {
+        if (metadata.contains("exif") && metadata["exif"].is_object())
         {
             draw_filter_input();
-            ImGui::BeginChild("EXIF info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
-            for (auto &exif_entry : metadata["exif"].items())
+
+            if (ImGui::PE::Begin("EXIF info", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize |
+                                                  ImGuiTableFlags_BordersOuter | ImGuiTableFlags_ScrollY))
             {
-                const auto &table_obj = exif_entry.value();
-                if (!table_obj.is_object())
-                    continue;
+                ImGui::TableSetupColumn("Key");
+                ImGui::TableSetupColumn("Value");
+                ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
+                ImGui::TableHeadersRow();
 
-                ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-                // ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-                // ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
-                ImGui::PushFont(bold_font, 0.f);
-                auto open = ImGui::CollapsingHeader(
-                    exif_entry.key().c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-                                                  ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns |
-                                                  ImGuiTreeNodeFlags_DefaultOpen);
-                ImGui::PopFont();
-                ImGui::PopStyleColor(1);
-                if (open)
+                ImGui::PushStyleVarY(ImGuiStyleVar_CellPadding, 0);
+                for (auto &exif_entry : metadata["exif"].items())
                 {
-                    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(0, 0));
-                    if (ImGui::PE::Begin("Image info", table_flags))
-                    {
-                        ImGui::Indent(HelloImGui::EmSize(0.5f));
-                        add_fields(table_obj);
-                        ImGui::Unindent(HelloImGui::EmSize(0.5f));
-                    }
-                    ImGui::PE::End();
-                    ImGui::PopStyleVar();
-                }
-            }
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
+                    const auto &table_obj = exif_entry.value();
+                    if (!table_obj.is_object())
+                        continue;
 
-        if (metadata.contains("xmp") && metadata["xmp"].is_object() && ImGui::BeginTabItem("XMP", nullptr))
-        {
-            draw_filter_input();
-            ImGui::BeginChild("XMP info child", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
-
-            // string x = string(xmp_data.begin(), xmp_data.end());
-            // spdlog::info("XMP metadata: {}", x);
-            auto xmp_string = string{xmp_data.begin(), xmp_data.end()};
-            {
-                ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-                // ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-                // ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
-                ImGui::PushFont(bold_font, 0.f);
-
-                auto open = ImGui::CollapsingHeader(
-                    fmt::format("Raw XMP data ({:.1h} bytes)", human_readible{xmp_data.size()}).c_str(),
-                    ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-                        ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns);
-                ImGui::PopFont();
-                ImGui::PopStyleColor(1);
-
-                if (open)
-                {
-                    // ImGui::Indent();
-                    ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase);
-                    ImGui::InputTextMultiline("##source", &xmp_string,
-                                              ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 16),
-                                              ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_WordWrap);
+                    ImGui::PushFont(bold_font, 0.f);
+                    auto open = ImGui::PE::TreeNode(exif_entry.key().c_str(), ImGuiTreeNodeFlags_SpanFullWidth |
+                                                                                  ImGuiTreeNodeFlags_SpanAllColumns |
+                                                                                  ImGuiTreeNodeFlags_DefaultOpen |
+                                                                                  ImGuiTreeNodeFlags_DrawLinesFull);
                     ImGui::PopFont();
-                    // ImGui::Unindent();
-                }
-            }
-            // ImGui::PE::WrappedText("Raw XMP data", string(xmp_data.begin(), xmp_data.end()), "");
-            json xmlns = metadata["xmp"]["xmlns"];
-            for (auto &xmp_entry : metadata["xmp"].items())
-            {
-                const auto &table_obj = xmp_entry.value();
-                if (!table_obj.is_object() || xmp_entry.key() == "xmlns")
-                    continue;
-
-                string ns   = xmp_entry.key();
-                string name = xmlns[ns]["name"];
-                string uri  = xmlns[ns]["uri"];
-
-                ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-                // ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-                // ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
-                ImGui::PushFont(bold_font, 0.f);
-
-                // ImGui::TableNextRow();
-                // ImGui::TableNextColumn();
-                // ImGui::AlignTextToFramePadding();
-                auto open = ImGui::CollapsingHeader(
-                    name.c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-                                      ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns |
-                                      ImGuiTreeNodeFlags_DefaultOpen);
-                ImGui::Tooltip(fmt::format("URI: {}\nNamespace prefix: {}", uri, ns).c_str());
-                ImGui::PopFont();
-                ImGui::PopStyleColor(1);
-
-                if (open)
-                {
-                    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(0, 0));
-                    if (ImGui::PE::Begin("Image info", table_flags))
+                    if (open)
                     {
-                        // ImGui::Indent(HelloImGui::EmSize(0.5f));
-                        add_xmp_fields(table_obj, 0, name + " " + ns);
-                        // ImGui::Unindent(HelloImGui::EmSize(0.5f));
+                        ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
+                        add_fields(table_obj);
+                        ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
+                        ImGui::PE::TreePop();
                     }
-                    ImGui::PE::End();
-                    ImGui::PopStyleVar();
                 }
-
-                // if (open)
-                // {
-                //     json xmlns = metadata["xmp"]["xmlns"];
-                //     if (ImGui::PE::Begin("Image info", table_flags))
-                //     {
-                //         for (auto &xmp_entry : metadata["xmp"].items())
-                //         {
-                //             const auto &table_obj = xmp_entry.value();
-                //             if (!table_obj.is_object() || xmp_entry.key() == "xmlns")
-                //                 continue;
-
-                //             string ns   = xmp_entry.key();
-                //             string name = xmlns[ns]["name"];
-                //             string uri  = xmlns[ns]["uri"];
-
-                //             auto open = ImGui::PE::TreeNode(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen |
-                //                                                               ImGuiTreeNodeFlags_SpanAllColumns);
-                //             ImGui::TableNextColumn();
-                //             ImGui::SetNextItemWidth(-FLT_MIN);
-                //             ImGui::TextUnformatted(uri.c_str());
-                //             if (open)
-                //             {
-                //                 add_xmp_fields(table_obj, 0);
-                //                 ImGui::PE::TreePop();
-                //             }
-                //         }
-                //     }
-                //     ImGui::PE::End();
-                // }
+                ImGui::PopStyleVar();
             }
-
-            ImGui::EndChild();
-            ImGui::EndTabItem();
+            ImGui::PE::End();
         }
+    }
+    else if (which_view == 3)
+    {
+        if (metadata.contains("xmp") && metadata["xmp"].is_object())
+        {
+            draw_filter_input();
 
-        ImGui::EndTabBar();
+            json xmlns = metadata["xmp"]["xmlns"];
+
+            if (ImGui::PE::Begin("XMP info", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize |
+                                                 ImGuiTableFlags_BordersOuter | ImGuiTableFlags_ScrollY))
+            {
+                ImGui::TableSetupColumn("Key");
+                ImGui::TableSetupColumn("Value");
+                ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
+                ImGui::TableHeadersRow();
+
+                ImGui::PushStyleVarY(ImGuiStyleVar_CellPadding, 0);
+                for (auto &xmp_entry : metadata["xmp"].items())
+                {
+                    const auto &table_obj = xmp_entry.value();
+                    if (!table_obj.is_object() || xmp_entry.key() == "xmlns")
+                        continue;
+
+                    string ns   = xmp_entry.key();
+                    string name = xmlns[ns]["name"];
+                    string uri  = xmlns[ns]["uri"];
+
+                    ImGui::PushFont(bold_font, 0.f);
+                    auto open = ImGui::PE::TreeNode(
+                        name.c_str(), ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns |
+                                          ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull);
+                    ImGui::PopFont();
+                    if (open)
+                    {
+                        add_xmp_fields(table_obj, 0, name + " " + ns);
+                        ImGui::PE::TreePop();
+                    }
+                }
+                ImGui::PopStyleVar();
+            }
+            ImGui::PE::End();
+        }
+    }
+    else if (which_view == 4)
+    {
+        if (!xmp_data.empty())
+        {
+            ImGui::BeginChild("##xmp_scroll", ImVec2(-1, -1), ImGuiChildFlags_FrameStyle,
+                              ImGuiWindowFlags_HorizontalScrollbar);
+            ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase);
+            ImGui::TextUnformatted(reinterpret_cast<const char *>(xmp_data.data()),
+                                   reinterpret_cast<const char *>(xmp_data.data()) + xmp_data.size());
+            ImGui::PopFont();
+            ImGui::Tooltip("Click to copy to clipboard.");
+            if (ImGui::IsItemClicked())
+                ImGui::SetClipboardText(
+                    string(reinterpret_cast<const char *>(xmp_data.data()), xmp_data.size()).c_str());
+            if (ImGui::IsItemHovered())
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImGui::EndChild();
+        }
+        else
+        {
+            ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase);
+            ImGui::TextUnformatted("<no XMP data>");
+            ImGui::PopFont();
+        }
     }
 
-    // if (metadata.contains("header") && metadata["header"].is_object())
-    // {
-    //     ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-    //     ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-    //     ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
-    //     ImGui::PushFont(bold_font, 0.f);
-    //     auto open =
-    //         ImGui::CollapsingHeader("Header", ImGuiTreeNodeFlags_NoTreePushOnOpen |
-    //         ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-    //                                               ImGuiTreeNodeFlags_SpanFullWidth |
-    //                                               ImGuiTreeNodeFlags_SpanAllColumns);
-    //     ImGui::PopFont();
-    //     ImGui::PopStyleColor(3);
-    //     if (open)
-    //     {
-    //         if (ImGui::PE::Begin("Image info", table_flags))
-    //         {
-    //             ImGui::Indent(HelloImGui::EmSize(0.5f));
-    //             add_fields(metadata["header"]);
-    //             ImGui::Unindent(HelloImGui::EmSize(0.5f));
-    //         }
-    //         ImGui::PE::End();
-    //     }
-    // }
-
-    // if (metadata.contains("exif") && metadata["exif"].is_object())
-    // {
-    //     for (auto &exif_entry : metadata["exif"].items())
-    //     {
-    //         const auto &table_obj = exif_entry.value();
-    //         if (!table_obj.is_object())
-    //             continue;
-
-    //         ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-    //         ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-    //         ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
-    //         ImGui::PushFont(bold_font, 0.f);
-    //         auto open = ImGui::CollapsingHeader(
-    //             exif_entry.key().c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-    //                                           ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns);
-    //         ImGui::PopFont();
-    //         ImGui::PopStyleColor(3);
-    //         if (open)
-    //         {
-    //             if (ImGui::PE::Begin("Image info", table_flags))
-    //             {
-    //                 ImGui::Indent(HelloImGui::EmSize(0.5f));
-    //                 add_fields(table_obj);
-    //                 ImGui::Unindent(HelloImGui::EmSize(0.5f));
-    //             }
-    //             ImGui::PE::End();
-    //         }
-    //     }
-    // }
-
-    // if (metadata.contains("xmp") && metadata["xmp"].is_object())
-    // {
-    //     for (auto &xmp_entry : metadata["xmp"].items())
-    //     {
-    //         const auto &table_obj = xmp_entry.value();
-    //         if (!table_obj.is_object() || xmp_entry.key() == "xmlns")
-    //             continue;
-
-    //         ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-    //         ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32_BLACK_TRANS);
-    //         ImGui::PushStyleColor(ImGuiCol_BorderShadow, IM_COL32_BLACK_TRANS);
-    //         ImGui::PushFont(bold_font, 0.f);
-    //         auto open = ImGui::CollapsingHeader(
-    //             xmp_entry.key().c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-    //                                          ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns);
-    //         ImGui::PopFont();
-    //         ImGui::PopStyleColor(3);
-    //         if (open)
-    //         {
-    //             if (ImGui::PE::Begin("Image info", table_flags))
-    //             {
-    //                 ImGui::Indent(HelloImGui::EmSize(0.5f));
-    //                 add_xmp_fields(table_obj, 0);
-    //                 ImGui::Unindent(HelloImGui::EmSize(0.5f));
-    //             }
-    //             ImGui::PE::End();
-    //         }
-    //     }
+    //     ImGui::EndTabBar();
     // }
 }
 

@@ -726,7 +726,7 @@ bool PE::Entry(const std::string &property_name, const std::function<bool()> &co
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
-    ImGui::TextAligned2(0.f, -FLT_MIN, property_name.c_str());
+    ImGui::TextAligned2(0.f, -FLT_MIN, "%s", property_name.c_str());
     // ImGui::TextUnformatted(property_name.c_str());
     if (!tooltip.empty())
         Tooltip(tooltip.c_str());
@@ -739,16 +739,24 @@ bool PE::Entry(const std::string &property_name, const std::function<bool()> &co
 
 bool PE::TreeNode(const char *name, ImGuiTreeNodeFlags flags)
 {
+    ImGui::PushID(name);
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
-    auto ret = ImGui::TreeNodeEx(name, flags); // | ImGuiTreeNodeFlags_SpanAllColumns);
-    // auto ret = ImGui::TreeNodeEx("##node", flags | ImGuiTreeNodeFlags_SpanFullWidth);
-    // ImGui::SameLine(0.f, 0.f);
-    // ImGui::TextAligned2(1.0f, -FLT_MIN, "%s", name);
+    auto ret = ImGui::TreeNodeEx("##tree node arrow",
+                                 ImGuiTreeNodeFlags_SpanFullWidth | flags); // | ImGuiTreeNodeFlags_SpanAllColumns);
+    ImGui::SameLine(0.f, 0.f);
+    ImGui::TextAligned2(0.f, -FLT_MIN, "%s", name);
+
+    if (!ret)
+        ImGui::PopID();
     return ret;
 }
-void PE::TreePop() { ImGui::TreePop(); }
+void PE::TreePop()
+{
+    ImGui::TreePop();
+    ImGui::PopID();
+}
 
 void PE::Hyperlink(const char *name, const char *desc, const char *url /*= nullptr*/)
 {
@@ -775,43 +783,29 @@ void PE::WrappedText(const string &property_name, const string &value, const str
         property_name,
         [&]
         {
-            ImGui::PushFont(font, ImGui::GetStyle().FontSizeBase);
-            // Child 3: manual-resize
-            // ImGui::SeparatorText("Manual-resize");
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * 1),
+                                                ImVec2(FLT_MAX, ImGui::GetTextLineHeightWithSpacing() * 10));
+            if (ImGui::BeginChild("ResizableChild", ImVec2(-FLT_MIN, 0.f), ImGuiChildFlags_AutoResizeY))
             {
-                ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
-                ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * 1),
-                                                    ImVec2(FLT_MAX, ImGui::GetTextLineHeightWithSpacing() * 10));
-                if (ImGui::BeginChild("ResizableChild", ImVec2(-FLT_MIN, 0.f), ImGuiChildFlags_AutoResizeY))
-                {
-                    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x +
-                                           std::max(HelloImGui::EmSize(8.f), wrap_em <= 0.f
-                                                                                 ? ImGui::GetContentRegionAvail().x
-                                                                                 : HelloImGui::EmSize(wrap_em)));
-                    ImGui::AlignTextToFramePadding();
-                    ImGui::TextUnformatted(value);
-                    Tooltip("Click to copy to clipboard.");
-                    if (ImGui::IsItemClicked())
-                        ImGui::SetClipboardText(value.c_str());
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                ImGui::PushTextWrapPos(0.f); // wrap to end of window/column
+                ImGui::AlignTextToFramePadding();
 
-                    ImGui::PopTextWrapPos();
-                }
-                ImGui::PopStyleColor();
-                ImGui::EndChild();
+                ImGui::PushFont(font, ImGui::GetStyle().FontSizeBase);
+                ImGui::TextUnformatted(value);
+                ImGui::PopFont();
 
-                // ImGui::SetNextWindowSizeConstraints(
-                //     ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * 1),
-                //     ImVec2(FLT_MAX, ImGui::GetTextLineHeightWithSpacing() * max_height_in_lines));
-                // if (ImGui::BeginChild("ConstrainedChild", ImVec2(-FLT_MIN, 0.0f),
-                //                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY))
-                //     for (int n = 0; n < draw_lines; n++) ImGui::Text("Line %04d", n);
-                // ImGui::EndChild();
+                ImGui::PopTextWrapPos();
+
+                Tooltip("Click to copy to clipboard.");
+                if (ImGui::IsItemClicked())
+                    ImGui::SetClipboardText(value.c_str());
+                if (ImGui::IsItemHovered())
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
             }
+            ImGui::PopStyleColor();
+            ImGui::EndChild();
 
-            // ImGui::TextUnformatted(value);
-            ImGui::PopFont();
             return false; // no change
         },
         tooltip);

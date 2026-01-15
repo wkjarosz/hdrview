@@ -215,6 +215,8 @@ void add_xmlns_entries(const XMLElement *e, json &xmlns)
                 {"http://ns.adobe.com/xap/1.0/sType/ResourceEvent#", "Resource Event"},
                 {"http://ns.adobe.com/xap/1.0/sType/ResourceRef#", "Resource Reference"},
                 {"http://ns.adobe.com/hdr-metadata/1.0/", "HDR Metadata"},
+                {"http://ns.adobe.com/hdr-gain-map/1.0/", "HDR Gain Map"},
+                {"http://ns.adobe.com/xmp/1.0/DynamicMedia/", "Dynamic Media"},
 
                 // RDF namespace (always present in XMP)
                 {"http://www.w3.org/1999/02/22-rdf-syntax-ns#", "RDF"},
@@ -223,9 +225,10 @@ void add_xmlns_entries(const XMLElement *e, json &xmlns)
             std::string ns_prefix = attr_name.substr(6);
             spdlog::debug("XMP: found namespace '{}', prefix: '{}'", attr->Value(), ns_prefix);
             // map known namespace URIs to friendly names when available
-            std::string uri         = attr->Value();
-            xmlns[ns_prefix]["uri"] = uri;
-            auto it                 = xmp_namespace_names.find(uri);
+            xmlns[ns_prefix]["prefix"] = ns_prefix;
+            std::string uri            = attr->Value();
+            xmlns[ns_prefix]["uri"]    = uri;
+            auto it                    = xmp_namespace_names.find(uri);
             if (it != xmp_namespace_names.end())
                 xmlns[ns_prefix]["name"] = it->second;
             else

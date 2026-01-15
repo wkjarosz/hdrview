@@ -522,10 +522,9 @@ void HDRViewApp::draw_file_window()
         ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnDoubleClick |
         ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DrawLinesFull;
 
-    static constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate |
-                                                   ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit |
-                                                   ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg |
-                                                   ImGuiTableFlags_ScrollY;
+    static constexpr ImGuiTableFlags table_flags =
+        ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate | ImGuiTableFlags_NoSavedSettings |
+        ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY;
     if (ImGui::BeginTable("ImageList", 2, table_flags,
                           ImVec2(0.f, ImGui::GetContentRegionAvail().y - ImGui::IconButtonSize().y -
                                           ImGui::GetStyle().ItemSpacing.y)))
@@ -548,7 +547,7 @@ void HDRViewApp::draw_file_window()
                 direction = sort_specs->Specs[0].SortDirection;
                 if (sort_specs->SpecsDirty || m_request_sort)
                 {
-                    spdlog::info("Sorting {}", (int)direction);
+                    spdlog::debug("Sorting {}", (int)direction);
                     auto old_current   = current_image();
                     auto old_reference = reference_image();
                     sort(m_images.begin(), m_images.end(),
@@ -571,6 +570,7 @@ void HDRViewApp::draw_file_window()
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, icon_width);
+        ImGui::PushStyleVarY(ImGuiStyleVar_CellPadding, 0.f);
 
         int id             = 0;
         int hidden_groups  = 0;
@@ -796,7 +796,7 @@ void HDRViewApp::draw_file_window()
         if (image_to_close >= 0)
             close_image(image_to_close);
 
-        ImGui::PopStyleVar(2);
+        ImGui::PopStyleVar(3);
 
         ImGui::EndTable();
     }
