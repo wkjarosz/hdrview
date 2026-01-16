@@ -501,20 +501,33 @@ void Image::draw_info()
                 // }
 
                 // Otherwise, handle mixed or object arrays element-by-element as before.
-                auto open =
-                    ImGui::PE::TreeNode(key.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull);
-                ImGui::TableNextColumn();
-                ImGui::SetNextItemWidth(-FLT_MIN);
-                ImGui::TextUnformatted(fmt::format("[{} item{}]", arr.size(), arr.size() == 1 ? "" : "s").c_str());
+
+                // we special case arrays with one element to avoid an unnecessary nesting
+                bool open = true;
+                if (arr.size() > 1)
+                {
+                    open = ImGui::PE::TreeNode(key.c_str(),
+                                               ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull);
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::TextUnformatted(fmt::format("[{} item{}]", arr.size(), arr.size() == 1 ? "" : "s").c_str());
+                }
                 if (open)
                 {
                     for (size_t i = 0; i < arr.size(); ++i)
                     {
-                        std::string idx = fmt::format("#{}", i + 1);
+                        std::string idx = arr.size() > 1 ? fmt::format("#{}", i + 1) : key;
                         if (arr[i].is_object())
                         {
-                            if (ImGui::PE::TreeNode(idx.c_str(),
-                                                    ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull))
+                            bool open2 = ImGui::PE::TreeNode(idx.c_str(), ImGuiTreeNodeFlags_DefaultOpen |
+                                                                              ImGuiTreeNodeFlags_DrawLinesFull);
+                            if (arr.size() <= 1)
+                            {
+                                ImGui::TableNextColumn();
+                                ImGui::SetNextItemWidth(-FLT_MIN);
+                                ImGui::TextUnformatted("[1 item]");
+                            }
+                            if (open2)
                             {
                                 add_xmp_fields(arr[i], depth + 1, prefix + ":" + key);
                                 ImGui::PE::TreePop();
@@ -533,7 +546,8 @@ void Image::draw_info()
                             ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
                         }
                     }
-                    ImGui::PE::TreePop();
+                    if (arr.size() > 1)
+                        ImGui::PE::TreePop();
                 }
                 continue;
             }

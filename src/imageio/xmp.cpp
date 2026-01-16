@@ -37,9 +37,22 @@ static std::string_view extract_XMP_content(const string &xmp_blob)
     return sv.substr(first, last - first + 1);
 }
 
-json parse_xml_element(const XMLElement *element)
+json parse_xml_element(const XMLElement *element, const std::string &parent_ns = "")
 {
     json result;
+
+    // Determine this element's namespace
+    std::string element_name      = element->Name();
+    size_t      element_colon_pos = element_name.find(':');
+    std::string current_ns;
+
+    // Special case: rdf:Description and rdf:li don't establish a new namespace context
+    // They inherit the namespace from their parent
+    if (element_name == "rdf:Description" || element_name == "rdf:li" || element_colon_pos == std::string::npos)
+        current_ns = parent_ns;
+    else // if its not one of the above elements and it has a prefix, use it
+        current_ns = element_name.substr(0, element_colon_pos);
+
     // Parse attributes into the current object
     const XMLAttribute *attr = element->FirstAttribute();
     while (attr)
@@ -52,10 +65,8 @@ json parse_xml_element(const XMLElement *element)
         if (attr_name == "xml:lang")
             result[attr_name] = attr_value;
         else if (attr_name.find("stEvt:") == 0 || attr_name.find("stRef:") == 0)
-        {
             // Special case: Adobe event structure - keep as flat key/value pairs
             result[attr_name.substr(6)] = attr_value;
-        }
         else
         {
             // Extract namespace prefix
@@ -64,19 +75,26 @@ json parse_xml_element(const XMLElement *element)
             {
                 std::string ns_prefix  = attr_name.substr(0, colon_pos);
                 std::string local_name = attr_name.substr(colon_pos + 1);
-                if (!result.contains(ns_prefix))
+
+                // Flatten if attribute namespace matches current element's namespace (especially for crs)
+                if (ns_prefix == current_ns && !current_ns.empty())
+                    result[local_name] = attr_value;
+                else
                 {
-                    result[ns_prefix] = json::object();
+                    if (!result.contains(ns_prefix))
+                        result[ns_prefix] = json::object();
+                    result[ns_prefix][local_name] = attr_value;
                 }
-                result[ns_prefix][local_name] = attr_value;
             }
             else
-            {
                 result[attr_name] = attr_value;
-            }
         }
         attr = attr->Next();
     }
+
+    // Parse child elements
+    const XMLElement *child = element->FirstChildElement();
+
     // Handle text content
     const char *text = element->GetText();
     if (text && strlen(text) > 0)
@@ -97,16 +115,10 @@ json parse_xml_element(const XMLElement *element)
             // Otherwise just return the text
             return text_str;
         }
-    }
-    // Parse child elements
-    const XMLElement *child = element->FirstChildElement();
-    // If no children and no attributes, check for text again
-    if (!child && result.empty())
-    {
-        const char *text2 = element->GetText();
-        if (text2 && strlen(text2) > 0)
+        else if (!child && result.empty())
         {
-            return std::string(text2);
+            // All whitespace text, no children, no attributes: return untrimmed
+            return std::string(text);
         }
     }
 
@@ -121,7 +133,7 @@ json parse_xml_element(const XMLElement *element)
             const XMLElement *item      = child->FirstChildElement();
             while (item)
             {
-                json item_json = parse_xml_element(item);
+                json item_json = parse_xml_element(item, current_ns);
                 seq_array.push_back(item_json);
                 item = item->NextSiblingElement();
             }
@@ -133,7 +145,7 @@ json parse_xml_element(const XMLElement *element)
     {
         std::string child_name = child->Name();
         size_t      colon_pos  = child_name.find(':');
-        json        child_json = parse_xml_element(child);
+        json        child_json = parse_xml_element(child, current_ns);
 
         // Special handling for rdf:Description - skip the wrapper and merge contents directly
         if (child_name == "rdf:Description")
@@ -168,19 +180,10 @@ json parse_xml_element(const XMLElement *element)
         {
             std::string ns_prefix  = child_name.substr(0, colon_pos);
             std::string local_name = child_name.substr(colon_pos + 1);
-
-            // if (ns_prefix == "crs")
-            // {
-            //     // if (result.is_null())
-            //     //     result = json::object();
-
-            //     spdlog::info("Found crs element: {}:{}", ns_prefix, local_name);
-            //     if (child_json.is_string())
-            //         result[local_name] = child_json.get<std::string>();
-            //     else
-            //         result[local_name] = child_json;
-            // }
-            // else
+            // Flatten if child namespace matches current element's namespace (especially for crs)
+            if (ns_prefix == current_ns && !current_ns.empty())
+                result[local_name] = child_json;
+            else
             {
                 if (!result.contains(ns_prefix))
                     result[ns_prefix] = json::object();
