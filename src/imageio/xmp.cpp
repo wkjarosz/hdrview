@@ -8,9 +8,47 @@
 #include <spdlog/spdlog.h>
 #include <string_view>
 #include <tinyxml2.h>
+#include <unordered_map>
+#include <vector>
 
 using namespace tinyxml2;
 using std::string;
+
+static const std::vector<std::pair<std::string, std::string>> xmp_namespaces = {
+    // Core XMP namespaces
+    {"http://ns.adobe.com/xap/1.0/", "Basic"},
+    {"http://purl.org/dc/elements/1.1/", "Dublin Core"},
+    {"http://ns.adobe.com/xap/1.0/rights/", "Rights Management"},
+    {"http://ns.adobe.com/xap/1.0/mm/", "Media Management"},
+    // Media-specific namespaces
+    {"http://ns.adobe.com/exif/1.0/", "EXIF"},
+    {"http://ns.adobe.com/exif/1.0/aux/", "EXIF Auxiliary"},
+    {"http://cipa.jp/exif/1.0/", "EXIF 2.21 or later"},
+    {"http://ns.adobe.com/tiff/1.0/", "TIFF Rev. 6.0"},
+    {"http://ns.adobe.com/photoshop/1.0/", "Photoshop"},
+    {"http://ns.adobe.com/camera-raw-settings/1.0/", "Camera Raw Settings"},
+    // Other common namespaces
+    {"http://ns.adobe.com/pdf/1.3/", "PDF"},
+    {"http://ns.adobe.com/xap/1.0/t/pg/", "Paged-Text"},
+    {"http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/", "IPTC Core"},
+    {"http://ns.adobe.com/xap/1.0/bj/", "Basic Job Ticket"},
+    {"http://ns.adobe.com/xap/1.0/sType/ResourceEvent#", "Resource Event"},
+    {"http://ns.adobe.com/xap/1.0/sType/ResourceRef#", "Resource Reference"},
+    {"http://ns.adobe.com/hdr-metadata/1.0/", "HDR Metadata"},
+    {"http://ns.adobe.com/hdr-gain-map/1.0/", "HDR Gain Map"},
+    {"http://ns.adobe.com/xmp/1.0/DynamicMedia/", "Dynamic Media"},
+    // RDF namespace (always present in XMP)
+    {"http://www.w3.org/1999/02/22-rdf-syntax-ns#", "RDF"},
+    {"adobe:ns:meta/", "XMP Meta"}};
+
+static const std::map<std::string, std::string> xmp_namespace_names(xmp_namespaces.begin(), xmp_namespaces.end());
+
+static const std::unordered_map<std::string, size_t> uri_to_index = []()
+{
+    std::unordered_map<std::string, size_t> m;
+    for (size_t i = 0; i < xmp_namespaces.size(); ++i) { m[xmp_namespaces[i].first] = i; }
+    return m;
+}();
 
 static std::string_view extract_XMP_content(const string &xmp_blob)
 {
@@ -207,36 +245,6 @@ void add_xmlns_entries(const XMLElement *e, json &xmlns)
         std::string attr_name = attr->Name();
         if (attr_name.find("xmlns:") == 0)
         {
-            static const std::map<std::string, std::string> xmp_namespace_names = {
-                // Core XMP namespaces
-                {"http://ns.adobe.com/xap/1.0/", "Basic"},
-                {"http://purl.org/dc/elements/1.1/", "Dublin Core"},
-                {"http://ns.adobe.com/xap/1.0/rights/", "Rights Management"},
-                {"http://ns.adobe.com/xap/1.0/mm/", "Media Management"},
-
-                // Media-specific namespaces
-                {"http://ns.adobe.com/exif/1.0/", "EXIF"},
-                {"http://ns.adobe.com/exif/1.0/aux/", "EXIF Auxiliary"},
-                {"http://cipa.jp/exif/1.0/", "EXIF 2.21 or later"},
-                {"http://ns.adobe.com/tiff/1.0/", "TIFF Rev. 6.0"},
-                {"http://ns.adobe.com/photoshop/1.0/", "Photoshop"},
-                {"http://ns.adobe.com/camera-raw-settings/1.0/", "Camera Raw Settings"},
-
-                // Other common namespaces
-                {"http://ns.adobe.com/pdf/1.3/", "PDF"},
-                {"http://ns.adobe.com/xap/1.0/t/pg/", "Paged-Text"},
-                {"http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/", "IPTC Core"},
-                {"http://ns.adobe.com/xap/1.0/bj/", "Basic Job Ticket"},
-                {"http://ns.adobe.com/xap/1.0/sType/ResourceEvent#", "Resource Event"},
-                {"http://ns.adobe.com/xap/1.0/sType/ResourceRef#", "Resource Reference"},
-                {"http://ns.adobe.com/hdr-metadata/1.0/", "HDR Metadata"},
-                {"http://ns.adobe.com/hdr-gain-map/1.0/", "HDR Gain Map"},
-                {"http://ns.adobe.com/xmp/1.0/DynamicMedia/", "Dynamic Media"},
-
-                // RDF namespace (always present in XMP)
-                {"http://www.w3.org/1999/02/22-rdf-syntax-ns#", "RDF"},
-                {"adobe:ns:meta/", "XMP Meta"}};
-
             std::string ns_prefix = attr_name.substr(6);
             spdlog::debug("XMP: found namespace '{}', prefix: '{}'", attr->Value(), ns_prefix);
             // map known namespace URIs to friendly names when available
@@ -309,6 +317,34 @@ json xmp_to_json(const std::string &xmp_packet)
 
     if (!xmlns.empty())
         result["xmlns"] = xmlns;
+
+    // Add display_order for GUI
+    std::vector<std::string> sorted_keys;
+    for (auto &[key, value] : result.items())
+    {
+        if (key != "xmlns" && key != "display_order")
+        {
+            sorted_keys.push_back(key);
+        }
+    }
+    std::sort(sorted_keys.begin(), sorted_keys.end(),
+              [&](const std::string &a, const std::string &b)
+              {
+                  std::string uri_a = result["xmlns"].contains(a) && result["xmlns"][a].contains("uri")
+                                          ? result["xmlns"][a]["uri"].get<std::string>()
+                                          : "";
+                  std::string uri_b = result["xmlns"].contains(b) && result["xmlns"][b].contains("uri")
+                                          ? result["xmlns"][b]["uri"].get<std::string>()
+                                          : "";
+                  auto        it_a  = uri_to_index.find(uri_a);
+                  auto        it_b  = uri_to_index.find(uri_b);
+                  size_t      idx_a = it_a != uri_to_index.end() ? it_a->second : SIZE_MAX;
+                  size_t      idx_b = it_b != uri_to_index.end() ? it_b->second : SIZE_MAX;
+                  if (idx_a != idx_b)
+                      return idx_a < idx_b;
+                  return a < b; // alphabetical fallback
+              });
+    result["display_order"] = sorted_keys;
 
     return result;
 }

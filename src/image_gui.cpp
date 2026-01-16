@@ -446,11 +446,8 @@ void Image::draw_info()
     std::function<void(const json &, int, const string &)> add_xmp_fields =
         [&](const json &fields, int depth, const string &prefix)
     {
-        for (auto &field : fields.items())
+        for (const auto &[key, field_val] : fields.items())
         {
-            const std::string &key       = field.key();
-            const auto        &field_val = field.value();
-
             // Determine display value
             std::string disp;
             if (field_val.is_string())
@@ -680,15 +677,35 @@ void Image::draw_info()
                 ImGui::TableHeadersRow();
 
                 ImGui::PushStyleVarY(ImGuiStyleVar_CellPadding, 0);
-                for (auto &xmp_entry : metadata["xmp"].items())
-                {
-                    const auto &table_obj = xmp_entry.value();
-                    if (!table_obj.is_object() || xmp_entry.key() == "xmlns")
-                        continue;
 
-                    string ns   = xmp_entry.key();
-                    string name = xmlns[ns]["name"];
-                    string uri  = xmlns[ns]["uri"];
+                // get the namespaces in display order
+                std::vector<std::string> namespaces_to_display;
+                if (metadata["xmp"].contains("display_order") && metadata["xmp"]["display_order"].is_array())
+                {
+                    for (const auto &key_json : metadata["xmp"]["display_order"])
+                    {
+                        if (key_json.is_string())
+                        {
+                            std::string key = key_json.get<std::string>();
+                            if (metadata["xmp"].contains(key) && metadata["xmp"][key].is_object())
+                                namespaces_to_display.push_back(key);
+                        }
+                    }
+                }
+                else
+                {
+                    for (const auto &xmp_entry : metadata["xmp"].items())
+                    {
+                        if (xmp_entry.key() != "xmlns" && xmp_entry.value().is_object())
+                            namespaces_to_display.push_back(xmp_entry.key());
+                    }
+                }
+
+                for (const auto &ns : namespaces_to_display)
+                {
+                    const auto &table_obj = metadata["xmp"][ns];
+                    string      name      = xmlns[ns]["name"];
+                    string      uri       = xmlns[ns]["uri"];
 
                     ImGui::PushFont(bold_font, 0.f);
                     auto open = ImGui::PE::TreeNode(
