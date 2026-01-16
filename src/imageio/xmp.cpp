@@ -51,6 +51,11 @@ json parse_xml_element(const XMLElement *element)
         // key/value pairs in the resulting JSON.
         if (attr_name == "xml:lang")
             result[attr_name] = attr_value;
+        else if (attr_name.find("stEvt:") == 0 || attr_name.find("stRef:") == 0)
+        {
+            // Special case: Adobe event structure - keep as flat key/value pairs
+            result[attr_name.substr(6)] = attr_value;
+        }
         else
         {
             // Extract namespace prefix
@@ -128,13 +133,11 @@ json parse_xml_element(const XMLElement *element)
     {
         std::string child_name = child->Name();
         size_t      colon_pos  = child_name.find(':');
-        json        child_json;
+        json        child_json = parse_xml_element(child);
 
         // Special handling for rdf:Description - skip the wrapper and merge contents directly
         if (child_name == "rdf:Description")
         {
-            child_json = parse_xml_element(child);
-
             // Merge the contents directly into result (skip rdf:Description wrapper)
             for (auto &[key, value] : child_json.items())
             {
@@ -151,14 +154,10 @@ json parse_xml_element(const XMLElement *element)
                     result[key] = value;
                 }
             }
-            child = child->NextSiblingElement();
-            continue;
         }
-
-        child_json = parse_xml_element(child);
         // Special-case xml:lang: preserve the full key and use the XML value
         // directly as the JSON value.
-        if (child_name == "xml:lang")
+        else if (child_name == "xml:lang")
         {
             if (child_json.is_string())
                 result["xml:lang"] = child_json.get<std::string>();
@@ -169,11 +168,24 @@ json parse_xml_element(const XMLElement *element)
         {
             std::string ns_prefix  = child_name.substr(0, colon_pos);
             std::string local_name = child_name.substr(colon_pos + 1);
-            if (!result.contains(ns_prefix))
+
+            // if (ns_prefix == "crs")
+            // {
+            //     // if (result.is_null())
+            //     //     result = json::object();
+
+            //     spdlog::info("Found crs element: {}:{}", ns_prefix, local_name);
+            //     if (child_json.is_string())
+            //         result[local_name] = child_json.get<std::string>();
+            //     else
+            //         result[local_name] = child_json;
+            // }
+            // else
             {
-                result[ns_prefix] = json::object();
+                if (!result.contains(ns_prefix))
+                    result[ns_prefix] = json::object();
+                result[ns_prefix][local_name] = child_json;
             }
-            result[ns_prefix][local_name] = child_json;
         }
         else
         {
@@ -200,10 +212,10 @@ void add_xmlns_entries(const XMLElement *e, json &xmlns)
                 {"http://ns.adobe.com/xap/1.0/mm/", "Media Management"},
 
                 // Media-specific namespaces
-                {"http://ns.adobe.com/exif/1.0/", "EXIF 2.2 or earlier"},
+                {"http://ns.adobe.com/exif/1.0/", "EXIF"},
+                {"http://ns.adobe.com/exif/1.0/aux/", "EXIF Auxiliary"},
                 {"http://cipa.jp/exif/1.0/", "EXIF 2.21 or later"},
                 {"http://ns.adobe.com/tiff/1.0/", "TIFF Rev. 6.0"},
-                {"http://ns.adobe.com/exif/1.0/aux/", "EXIF Auxiliary"},
                 {"http://ns.adobe.com/photoshop/1.0/", "Photoshop"},
                 {"http://ns.adobe.com/camera-raw-settings/1.0/", "Camera Raw Settings"},
 

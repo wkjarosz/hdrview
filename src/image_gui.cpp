@@ -467,7 +467,7 @@ void Image::draw_info()
             // Handle objects (nested structures)
             if (field_val.is_object())
             {
-                if (ImGui::PE::TreeNode(key.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                if (ImGui::PE::TreeNode(key.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull))
                 {
                     add_xmp_fields(field_val, depth + 1, prefix + ":" + key);
                     ImGui::PE::TreePop();
@@ -501,7 +501,8 @@ void Image::draw_info()
                 // }
 
                 // Otherwise, handle mixed or object arrays element-by-element as before.
-                auto open = ImGui::PE::TreeNode(key.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+                auto open =
+                    ImGui::PE::TreeNode(key.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull);
                 ImGui::TableNextColumn();
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 ImGui::TextUnformatted(fmt::format("[{} item{}]", arr.size(), arr.size() == 1 ? "" : "s").c_str());
@@ -512,7 +513,8 @@ void Image::draw_info()
                         std::string idx = fmt::format("#{}", i + 1);
                         if (arr[i].is_object())
                         {
-                            if (ImGui::PE::TreeNode(idx.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                            if (ImGui::PE::TreeNode(idx.c_str(),
+                                                    ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull))
                             {
                                 add_xmp_fields(arr[i], depth + 1, prefix + ":" + key);
                                 ImGui::PE::TreePop();
