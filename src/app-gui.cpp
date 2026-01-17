@@ -1086,8 +1086,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
             ImGui::TextUnformatted(version());
             ImGui::PopFont();
             ImGui::PushFont(m_sans_regular, ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
-            ImGui::TextFmt("Built on {} using the {} backend with {}.", build_timestamp(), platform_backend,
-                           renderer_backend);
+            ImGui::TextFmt("Built on {} for {} using the {} backend with {}.", build_timestamp(), architecture(),
+                           platform_backend, renderer_backend);
             ImGui::PopFont();
 
             ImGui::Spacing();
@@ -1263,6 +1263,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     string info;
                     info += fmt::format("{:<16} : {}\n", "HDRView version", version());
                     info += fmt::format("{:<16} : {}\n", "Build timestamp", build_timestamp());
+                    info += fmt::format("{:<16} : {}\n", "Architecture", architecture());
                     info += fmt::format("{:<16} : {}\n", "Build type", HDRVIEW_BUILD_TYPE);
                     info += fmt::format("{:<16} : {}\n", "Platform backend", platform_backend);
                     info += fmt::format("{:<16} : {}\n", "Renderer backend", renderer_backend);

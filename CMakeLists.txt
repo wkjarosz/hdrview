@@ -116,12 +116,18 @@ foreach(MY_RESOURCE_FILE ${MY_RESOURCE_FILES})
   )
 endforeach()
 
+set(CMD ${CMAKE_COMMAND} -D SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src -D BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}/src -D
+        CMAKE_SIZEOF_VOID_P=${CMAKE_SIZEOF_VOID_P} -D CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} -D EMSCRIPTEN=${EMSCRIPTEN})
+if(DEFINED CMAKE_OSX_ARCHITECTURES AND CMAKE_OSX_ARCHITECTURES)
+  list(APPEND CMD -D CMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES})
+endif()
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp ${CMAKE_CURRENT_BINARY_DIR}/src/_version.cpp
-  COMMAND ${CMAKE_COMMAND} -D SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src -D BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}/src -D
-          CMAKE_SIZEOF_VOID_P=${CMAKE_SIZEOF_VOID_P} -P ${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake
+  COMMAND ${CMD} -P ${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake
   COMMENT "Generating git version file"
 )
+
+message(STATUS "Processor: ${CMAKE_SYSTEM_PROCESSOR}")
 
 include(sanitizers)
 
@@ -1418,7 +1424,7 @@ hello_imgui_add_app(
   src/hdrview.cpp
   src/image.cpp
   src/imgui_ext.cpp
-  src/image_gui.cpp
+  src/image-gui.cpp
   src/opengl_check.cpp
   src/shader.cpp
   src/shader_gl.cpp

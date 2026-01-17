@@ -16,4 +16,5 @@ std::string version();
 std::string git_hash();
 std::string git_describe();
 std::string build_timestamp();
+std::string architecture();
 std::string backend();

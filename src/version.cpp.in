@@ -19,6 +19,7 @@ string version() { return string("@VERSION_LONG@"); }
 string git_hash() { return string("@GIT_HASH@"); }
 string git_describe() { return string("@GIT_DESCRIBE@"); }
 string build_timestamp() { return string("@BUILD_TIME@"); }
+string architecture() { return string("@ARCHITECTURE@"); }
 string backend()
 {
 #if defined(HELLOIMGUI_USE_GLFW3)
