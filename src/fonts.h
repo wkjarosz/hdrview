@@ -123,6 +123,15 @@
 #define ICON_MY_INSPECTOR_WINDOW   ""
 #define ICON_MY_SETTINGS_WINDOW    ""
 #define ICON_MY_DEVELOPER_WINDOW   ""
+#define ICON_MY_DEMO_WINDOW        ""
+#define ICON_MY_PLAY_FORWARD       ""
+#define ICON_MY_PLAY_BACKWARD      ""
+#define ICON_MY_STOP               ""
+#define ICON_MY_ZEBRA_STRIPES      ""
+#define ICON_MY_OFFSET             ""
+#define ICON_MY_INVERT_COLORMAP    ""
+#define ICON_MY_EXPAND_ALL         ""
+#define ICON_MY_COLLAPSE_ALL       ""
 
 #elif defined(HDRVIEW_ICONSET_LC)
 
@@ -228,6 +237,15 @@
 #define ICON_MY_INSPECTOR_WINDOW   ""
 #define ICON_MY_SETTINGS_WINDOW    ""
 #define ICON_MY_DEVELOPER_WINDOW   ""
+#define ICON_MY_DEMO_WINDOW        ""
+#define ICON_MY_PLAY_FORWARD       ""
+#define ICON_MY_PLAY_BACKWARD      ""
+#define ICON_MY_STOP               ""
+#define ICON_MY_ZEBRA_STRIPES      ""
+#define ICON_MY_OFFSET             ""
+#define ICON_MY_INVERT_COLORMAP    ""
+#define ICON_MY_EXPAND_ALL         ""
+#define ICON_MY_COLLAPSE_ALL       ""
 
 #elif defined(HDRVIEW_ICONSET_MS)
 // https://fonts.google.com/icons?icon.set=Material+Symbols
@@ -345,6 +363,8 @@
 #define ICON_MY_ZEBRA_STRIPES      ICON_MS_TEXTURE
 #define ICON_MY_OFFSET             ICON_MS_TONALITY
 #define ICON_MY_INVERT_COLORMAP    ICON_MS_COMPARE_ARROWS
+#define ICON_MY_EXPAND_ALL         ICON_MS_EXPAND_ALL
+#define ICON_MY_COLLAPSE_ALL       ICON_MS_COLLAPSE_ALL
 
 #elif defined(HDRVIEW_ICONSET_MD)
 // https://fonts.google.com/icons?icon.set=Material+Icons
@@ -449,6 +469,15 @@
 #define ICON_MY_INSPECTOR_WINDOW   ""
 #define ICON_MY_SETTINGS_WINDOW    ""
 #define ICON_MY_DEVELOPER_WINDOW   ""
+#define ICON_MY_DEMO_WINDOW        ""
+#define ICON_MY_PLAY_FORWARD       ""
+#define ICON_MY_PLAY_BACKWARD      ""
+#define ICON_MY_STOP               ""
+#define ICON_MY_ZEBRA_STRIPES      ""
+#define ICON_MY_OFFSET             ""
+#define ICON_MY_INVERT_COLORMAP    ""
+#define ICON_MY_EXPAND_ALL         ""
+#define ICON_MY_COLLAPSE_ALL       ""
 
 #elif defined(HDRVIEW_ICONSET_MDI)
 // https://pictogrammers.com/library/mdi/
@@ -562,5 +591,14 @@
 #define ICON_MY_INSPECTOR_WINDOW   ""
 #define ICON_MY_SETTINGS_WINDOW    ""
 #define ICON_MY_DEVELOPER_WINDOW   ""
+#define ICON_MY_DEMO_WINDOW        ""
+#define ICON_MY_PLAY_FORWARD       ""
+#define ICON_MY_PLAY_BACKWARD      ""
+#define ICON_MY_STOP               ""
+#define ICON_MY_ZEBRA_STRIPES      ""
+#define ICON_MY_OFFSET             ""
+#define ICON_MY_INVERT_COLORMAP    ""
+#define ICON_MY_EXPAND_ALL         ""
+#define ICON_MY_COLLAPSE_ALL       ""
 
 #endif

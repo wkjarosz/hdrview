@@ -507,11 +507,16 @@ json Exif::to_json() const
 
     static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
 
+    spdlog::debug("Exif::to_json: Starting to process {} IFDs", (int)EXIF_IFD_COUNT);
+
     for (int ifd_idx = 0; ifd_idx < EXIF_IFD_COUNT; ++ifd_idx)
     {
         auto content = ed->ifd[ifd_idx];
         if (!content || !content->count)
             continue;
+
+        spdlog::debug("Exif::to_json: Processing IFD {} ('{}') with {} entries", ifd_idx, ExifIfdTable[ifd_idx],
+                      content->count);
 
         json &ifd_json = j[ExifIfdTable[ifd_idx]];
 
@@ -519,16 +524,29 @@ json Exif::to_json() const
         {
             ExifEntry *entry = content->entries[i];
             if (!entry)
+            {
+                spdlog::warn("Exif::to_json: Null entry at index {} in IFD {}", i, ifd_idx);
                 continue;
+            }
 
+            spdlog::debug("Exif::to_json: Processing entry {} (tag 0x{:04x}) in IFD {}", i, (int)entry->tag, ifd_idx);
             ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
         }
     }
 
     // Handle MakerNote
+    spdlog::debug("Exif::to_json: Processing MakerNote");
     if (auto mn = get_makernote(ed); !mn.is_null())
+    {
+        spdlog::debug("Exif::to_json: MakerNote found and processed");
         j["Maker notes"] = mn;
+    }
+    else
+    {
+        spdlog::debug("Exif::to_json: No MakerNote found");
+    }
 
+    spdlog::debug("Exif::to_json: Completed successfully");
     return j;
 }
 

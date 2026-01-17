@@ -159,8 +159,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                          if (auto img = current_image())
                                              return img->draw_colorspace();
                                      }};
-    colorspace_window.imGuiWindowFlags =
-        ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar;
+    colorspace_window.imGuiWindowFlags = ImGuiWindowFlags_HorizontalScrollbar;
 
     DockableWindow pixel_inspector_window{"Pixel inspector", "RightBottomSpace",
                                           [this] { draw_pixel_inspector_window(); }};

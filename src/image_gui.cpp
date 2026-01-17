@@ -556,13 +556,76 @@ void Image::draw_info()
         }
     };
 
-    static int which_view = 0;
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Combo("##Which view", &which_view, "General\0Header\0EXIF\0XMP\0Raw XMP data\0\0");
-
-    if (which_view == 0)
+    auto draw_no_metadata_message = [&](const char *message)
     {
-        // draw_filter_input();
+        ImGui::Indent(ImGui::GetStyle().CellPadding.x);
+        ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase);
+        ImGui::BeginDisabled();
+        ImGui::TextUnformatted(message);
+        ImGui::EndDisabled();
+        ImGui::PopFont();
+        ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
+    };
+
+    bool has_exif   = exif.valid() && metadata.contains("exif") && metadata["exif"].is_object();
+    bool has_xmp    = !xmp_data.empty() && metadata.contains("xmp") && metadata["xmp"].is_object();
+    bool has_header = metadata.contains("header") && metadata["header"].is_object();
+
+    bool has_view[] = {true, has_header, has_exif, has_xmp, has_xmp};
+
+    static int         selected_view    = 0;
+    static const char *views[]          = {"General", "Header", "EXIF", "XMP", "Raw XMP data"};
+    static const char *views_disabled[] = {"General", "Header", "EXIF (not present)", "XMP (not present)",
+                                           "Raw XMP data (not present)"};
+
+    float w = ImGui::GetContentRegionAvail().x - 1.f * (button_size.x + ImGui::GetStyle().ItemSpacing.x);
+
+    static bool expand_to_listbox = true;
+
+    auto show_view_options = [&]()
+    {
+        for (int n = 0; n < IM_ARRAYSIZE(views); n++)
+        {
+            const bool is_selected = (selected_view == n);
+            ImGui::PushStyleColor(ImGuiCol_Text, has_view[n] ? ImGui::GetStyleColorVec4(ImGuiCol_Text)
+                                                             : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            if (ImGui::Selectable(has_view[n] ? views[n] : views_disabled[n], is_selected))
+                selected_view = n;
+
+            // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+            ImGui::PopStyleColor();
+        }
+    };
+
+    if (!expand_to_listbox || ImGui::GetContentRegionAvail().y < EmSize(20.f))
+    {
+        ImGui::SetNextItemWidth(w);
+        if (ImGui::BeginCombo("##Which view combo",
+                              has_view[selected_view] ? views[selected_view] : views_disabled[selected_view]))
+        {
+            show_view_options();
+            ImGui::EndCombo();
+        }
+    }
+    else
+    {
+        // Custom size: use all width, 5 items tall
+        if (ImGui::BeginListBox("##Which view listbox", ImVec2(w, 5.0f * ImGui::GetTextLineHeightWithSpacing() +
+                                                                      ImGui::GetStyle().FramePadding.y)))
+        {
+            show_view_options();
+            ImGui::EndListBox();
+        }
+    }
+    ImGui::SameLine();
+    ImGui::IconButton(expand_to_listbox ? ICON_MY_EXPAND_ALL : ICON_MY_COLLAPSE_ALL, &expand_to_listbox);
+    ImGui::Tooltip(expand_to_listbox ? "Click to collapse info sections to a combobox."
+                                     : "Click to expand info sections to a listbox.");
+
+    if (selected_view == 0)
+    {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
         if (ImGui::PE::Begin("Image info", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize |
                                                ImGuiTableFlags_ScrollY))
@@ -598,16 +661,15 @@ void Image::draw_info()
                 filtered_property("ICC data", fmt::format("{:.0h}", human_readible{icc_data.size()}),
                                   "Size of the ICC profile embedded in the image file.");
             ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
+            ImGui::PE::End();
         }
 
-        ImGui::PE::End();
         ImGui::PopStyleColor();
     }
-    else if (which_view == 1)
+    else if (selected_view == 1)
     {
-        if (metadata.contains("header") && metadata["header"].is_object())
+        if (has_header)
         {
-            // draw_filter_input();
             ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
             if (ImGui::PE::Begin("Header", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize |
                                                ImGuiTableFlags_ScrollY))
@@ -615,14 +677,16 @@ void Image::draw_info()
                 ImGui::Indent(ImGui::GetStyle().CellPadding.x);
                 add_fields(metadata["header"]);
                 ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
+                ImGui::PE::End();
             }
-            ImGui::PE::End();
             ImGui::PopStyleColor();
         }
+        else
+            draw_no_metadata_message("No additional header data present in this image.");
     }
-    else if (which_view == 2)
+    else if (selected_view == 2)
     {
-        if (metadata.contains("exif") && metadata["exif"].is_object())
+        if (has_exif)
         {
             draw_filter_input();
 
@@ -656,13 +720,15 @@ void Image::draw_info()
                     }
                 }
                 ImGui::PopStyleVar();
+                ImGui::PE::End();
             }
-            ImGui::PE::End();
         }
+        else
+            draw_no_metadata_message("No XMP data present in this image.");
     }
-    else if (which_view == 3)
+    else if (selected_view == 3)
     {
-        if (metadata.contains("xmp") && metadata["xmp"].is_object())
+        if (has_xmp)
         {
             draw_filter_input();
 
@@ -719,13 +785,15 @@ void Image::draw_info()
                     }
                 }
                 ImGui::PopStyleVar();
+                ImGui::PE::End();
             }
-            ImGui::PE::End();
         }
+        else
+            draw_no_metadata_message("No XMP data present in this image.");
     }
-    else if (which_view == 4)
+    else if (selected_view == 4)
     {
-        if (!xmp_data.empty())
+        if (has_xmp)
         {
             ImGui::BeginChild("##xmp_scroll", ImVec2(-1, -1), ImGuiChildFlags_FrameStyle,
                               ImGuiWindowFlags_HorizontalScrollbar);
@@ -742,15 +810,8 @@ void Image::draw_info()
             ImGui::EndChild();
         }
         else
-        {
-            ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase);
-            ImGui::TextUnformatted("<no XMP data>");
-            ImGui::PopFont();
-        }
+            draw_no_metadata_message("No XMP data present in this image.");
     }
-
-    //     ImGui::EndTabBar();
-    // }
 }
 
 void Image::draw_chromaticity_diagram()
@@ -1074,10 +1135,12 @@ void Image::draw_colorspace()
 
     float                        col2_w          = 0.f;
     float                        col2_big_enough = HelloImGui::EmSize(12.f);
-    static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
+    static const ImGuiTableFlags table_flags =
+        ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize | ImGuiTableFlags_ScrollY;
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
-        ImGui::Indent(HelloImGui::EmSize(0.5f));
+        ImGui::Indent(ImGui::GetStyle().CellPadding.x);
 
         ImGui::PE::WrappedText(
             "Profile name",
@@ -1281,9 +1344,10 @@ void Image::draw_colorspace()
                                  return false;
                              });
 
-        ImGui::Unindent(HelloImGui::EmSize(0.5f));
+        ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         ImGui::PE::End();
     }
+    ImGui::PopStyleColor();
 
     if (col2_w <= col2_big_enough)
         draw_chromaticity_diagram();
