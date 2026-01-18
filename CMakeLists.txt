@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.13)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules" "${CMAKE_SOURCE_DIR}/cmake/")
 
 include(VersionFromGit)
-
 version_from_git(LOG ON TIMESTAMP "%Y-%m-%d-%H:%M:%S")
 
 project(
@@ -13,6 +12,10 @@ project(
   VERSION ${VERSION}
   LANGUAGES C CXX
 )
+
+# Defines HDRVIEW_TARGET_ARCHS, HDRVIEW_TARGET_ARCH, HDRVIEW_BITNESS, and HDRVIEW_IS_UNIVERSAL
+include(DetectArchitecture)
+detect_architecture()
 
 # By default, we install in a portable way (i.e. assets and executable are in the same folder)
 option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
@@ -116,18 +119,23 @@ foreach(MY_RESOURCE_FILE ${MY_RESOURCE_FILES})
   )
 endforeach()
 
-set(CMD ${CMAKE_COMMAND} -D SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src -D BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}/src -D
-        CMAKE_SIZEOF_VOID_P=${CMAKE_SIZEOF_VOID_P} -D CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR} -D EMSCRIPTEN=${EMSCRIPTEN})
-if(DEFINED CMAKE_OSX_ARCHITECTURES AND CMAKE_OSX_ARCHITECTURES)
-  list(APPEND CMD -D CMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES})
-endif()
+set(CMD "${CMAKE_COMMAND}")
+list(APPEND CMD "-D" "SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src")
+list(APPEND CMD "-D" "BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}/src")
+list(APPEND CMD "-D" "CMAKE_SIZEOF_VOID_P=${CMAKE_SIZEOF_VOID_P}")
+list(APPEND CMD "-D" "CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR}")
+list(APPEND CMD "-D" "EMSCRIPTEN=${EMSCRIPTEN}")
+list(APPEND CMD "-D" "HDRVIEW_TARGET_ARCH=${HDRVIEW_TARGET_ARCH}")
+list(APPEND CMD "-D" "HDRVIEW_BITNESS=${HDRVIEW_BITNESS}")
+list(APPEND CMD "-P" "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake")
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp ${CMAKE_CURRENT_BINARY_DIR}/src/_version.cpp
-  COMMAND ${CMD} -P ${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake
+  COMMAND ${CMD}
   COMMENT "Generating git version file"
 )
 
-message(STATUS "Processor: ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "CMAKE_OSX_ARCHITECTURES: ${CMAKE_OSX_ARCHITECTURES}")
 
 include(sanitizers)
 
@@ -1557,6 +1565,18 @@ if(APPLE)
         \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}\")
     endif()
   " COMPONENT Runtime)
+
+  # Clear extended attributes (resource forks/quarantine) from the bundle before bundling/signing
+  install(CODE "
+    execute_process(
+      COMMAND xattr -rc \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}\"
+      RESULT_VARIABLE _XATTR_RESULT
+      OUTPUT_QUIET ERROR_QUIET
+    )
+    if(NOT _XATTR_RESULT EQUAL 0)
+      message(WARNING \"xattr -rc returned \${_XATTR_RESULT} for ${VERSIONED_APP_NAME}\")
+    endif()
+  " COMPONENT Runtime)
   
   # Bundle dependencies using dylibbundler when packaging
   find_program(DYLIBBUNDLER_EXECUTABLE dylibbundler)
@@ -1580,19 +1600,8 @@ if(APPLE)
   set(CPACK_DMG_VOLUME_NAME "HDRView-Installer")
   set(CPACK_DMG_FORMAT "UDBZ")
   
-  # Determine architecture suffix for DMG filename
-  if(CMAKE_OSX_ARCHITECTURES MATCHES "arm64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
-    set(ARCH_SUFFIX "Apple-Silicon")
-  elseif(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-    set(ARCH_SUFFIX "Intel")
-  elseif(CMAKE_OSX_ARCHITECTURES MATCHES "arm64;x86_64|x86_64;arm64")
-    set(ARCH_SUFFIX "Universal")
-  else()
-    set(ARCH_SUFFIX "macOS")
-  endif()
-  
-  # Set custom DMG filename: e.g. HDRView-2.7.0-Apple-Silicon.dmg
-  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-${ARCH_SUFFIX}")
+  # Set custom DMG filename: e.g. HDRView-2.7.0-Universal.dmg
+  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-${HDRVIEW_TARGET_ARCH}")
   
   # Configure the AppleScript with the versioned app name
   configure_file(
@@ -1619,17 +1628,6 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   # Strip leading 'v' from GIT_TAG to get full version
   string(REGEX REPLACE "^v" "" VERSION_NO_V "${GIT_TAG}")
 
-  # Determine architecture for package filename
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-    set(ARCH_SUFFIX "x86_64")
-  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-    set(ARCH_SUFFIX "arm64")
-  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
-    set(ARCH_SUFFIX "i686")
-  else()
-    set(ARCH_SUFFIX "${CMAKE_SYSTEM_PROCESSOR}")
-  endif()
-
   # CPack configuration for AppImage
   list(APPEND CPACK_GENERATOR External)
   set(CPACK_EXTERNAL_PACKAGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/create-appimage.cmake")
@@ -1638,7 +1636,7 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   set(CPACK_SET_DESTDIR ON)
   # Place generated packages in the build directory instead of the source root
   set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
-  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-${ARCH_SUFFIX}")
+  set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-${HDRVIEW_TARGET_ARCH}")
   set(CPACK_PACKAGING_INSTALL_PREFIX /usr) # AppDir expects this
 endif()
 

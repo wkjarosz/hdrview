@@ -132,40 +132,6 @@ set(VERSION_PATCH ${version_patch})
 string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M")
 message(STATUS "Saving build timestamp: ${BUILD_TIME}")
 
-# Multiply CMAKE_SIZEOF_VOID_P by 8 to get the bitness
-math(EXPR BITNESS "${CMAKE_SIZEOF_VOID_P} * 8")
-
-# Determine architecture string
-if(EMSCRIPTEN)
-  set(ARCHITECTURE "wasm32")
-else()
-  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" SYSTEM_PROCESSOR_LOWER)
-
-  message(STATUS "System processor: ${CMAKE_SYSTEM_PROCESSOR}")
-
-  if(DEFINED CMAKE_OSX_ARCHITECTURES)
-    # macOS: Check for Universal binary or specific architecture
-    list(LENGTH CMAKE_OSX_ARCHITECTURES ARCH_COUNT)
-    if(ARCH_COUNT GREATER 1)
-      set(ARCHITECTURE "Universal")
-    else()
-      list(GET CMAKE_OSX_ARCHITECTURES 0 ARCHITECTURE)
-    endif()
-  elseif(SYSTEM_PROCESSOR_LOWER MATCHES "x86_64|amd64")
-    set(ARCHITECTURE "x86_64")
-  elseif(SYSTEM_PROCESSOR_LOWER MATCHES "aarch64|arm64")
-    set(ARCHITECTURE "arm64")
-  elseif(SYSTEM_PROCESSOR_LOWER MATCHES "i386|i686")
-    set(ARCHITECTURE "x86")
-  elseif(SYSTEM_PROCESSOR_LOWER MATCHES "armv7")
-    set(ARCHITECTURE "armv7")
-  else()
-    set(ARCHITECTURE "${CMAKE_SYSTEM_PROCESSOR}")
-  endif()
-
-  message(STATUS "Target architecture: ${ARCHITECTURE}")
-endif()
-
-set(VERSION_LONG "${GIT_DESCRIBE} (${BITNESS} bit)")
+set(VERSION_LONG "${GIT_DESCRIBE} (${HDRVIEW_BITNESS} bit)")
 
 configure_file("${SRC_DIR}/version.cpp.in" "${BIN_DIR}/version.cpp" @ONLY)

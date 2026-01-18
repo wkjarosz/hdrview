@@ -25,14 +25,12 @@ jobs:
               name: "macOS Apple Silicon",
               os: macos-14,
               preset: "macos-arm64-cpm",
-              arch: "Apple-Silicon",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
           - {
               name: "macOS Intel",
               os: macos-15-intel,
               preset: "macos-x86_64-cpm",
-              arch: "Intel",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
 
@@ -102,7 +100,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*-${{ matrix.config.arch }}.dmg"
+          files: "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.dmg"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -114,7 +112,7 @@ jobs:
       matrix:
         config:
           - { name: "Ubuntu 24.04 x86_64", os: ubuntu-24.04, preset: "linux-appimage", arch: "x86_64" }
-          - { name: "Ubuntu 24.04 arm64", os: ubuntu-24.04-arm, preset: "linux-appimage", arch: "arm" }
+          - { name: "Ubuntu 24.04 arm64", os: ubuntu-24.04-arm, preset: "linux-appimage", arch: "arm64" }
 
     steps:
       - name: Install dependencies
