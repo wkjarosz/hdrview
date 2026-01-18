@@ -156,7 +156,6 @@ jobs:
           ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ env.BUILD_TYPE }}/HDRView --help
 
       - name: Package
-        if: matrix.config.preset == 'linux-appimage'
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{ env.BUILD_TYPE }} -G External
 

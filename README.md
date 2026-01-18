@@ -35,44 +35,82 @@ This reduces apparent banding artifacts in smooth gradients compared to naively 
 
 ## Obtaining/running HDRView
 
-If you are running a recent version of macOS or Windows, you can download the pre-built binary installer DMG or zip file from the [releases page](https://github.com/wkjarosz/hdrview/releases). For Linux, you will need to build HDRView from source for now. Or, just run the [web app version](https://wkjarosz.github.io/hdrview/) directly in your browser.
+You can download pre-built binaries for macOS, Linux, and Windows from the [releases page](https://github.com/wkjarosz/hdrview/releases). You can also just run the [web app version](https://wkjarosz.github.io/hdrview/) directly in your browser from any platform.
 
-## Compiling
+## Building from source
 
-Compiling from scratch requires CMake and a recent version of the XCode build tools on macOS, Visual Studio on Windows, and GCC on Linux.
+Compiling from source requires:
+- CMake >= 3.13
+- A C++ toolchain for your platform (Xcode on macOS, Visual Studio on Windows, GCC/Clang on Linux)
+- Optional: `ninja` for faster builds; `emscripten` if building the web version
 
 Compiling should be as simple as:
 ```bash
-1 ~ % git clone https://github.com/wkjarosz/hdrview.git
-2 ~ % cd hdrview
-3 ~ % mkdir build
-4 ~ % cmake -B build
-5 ~ % cmake --build build/ --parallel 4
+git clone https://github.com/wkjarosz/hdrview.git
+cd hdrview
+cmake --preset default
+cmake --build --preset default-release
+```
+You can see all available presets (defined in `CMakePresets.json`) by running:
+```bash
+cmake --list-presets=configure
+cmake --list-presets=build
 ```
 
-On macOS and Linux you can add `-G Ninja` to line 4 (on Windows Ninja fails to build the OpenEXR dependency).
+For instance:
+- macOS:
+    ```bash
+	cmake --preset macos-arm64-cpm
+	cmake --build --preset macos-arm64-cpm-release
+    ```
 
-To support Ultra HDR JPEG images, you will either need to have the dependencies for `libultrahdr` (namely `libjpeg-turbo`) installed, or pass the option `-DUHDR_BUILD_DEPS=ON` in line 4.
+- Linux (use `linux-local` to prefer system-installed deps or `linux-cpm` to let CPM fetch/build them):
+    ```bash
+    cmake --preset linux-local
+    cmake --build --preset linux-local-release
+    ```
+
+- Windows (Visual Studio generator via presets):
+    ```bash
+	cmake --preset windows
+	cmake --build --preset windows-release
+    ```
+
+- Emscripten (web build):
+    ```bash
+	cmake --preset emscripten
+	cmake --build build/emscripten --parallel
+    ```
+
+By default HDRView uses CPM.cmake to download and build third-party dependencies automatically; however, you will still need to have several packages installed since those dependencies often try to find their own dependencies locally via `find_package`. You can check the GitHub Actions workflows under `.github/workflows/` to see which packages should be installed.
+
+If you want to rely entirely on system-installed libraries instead (often desirably on linux), pick one of the `-local` presets (for example `linux-local` or `macos-x86_64-local`). These presets enable CPM.cmake's `CPM_USE_LOCAL_PACKAGES` option, which instructs it to try to use local packages via `find_package` first.
+
+A number of options are available to control supported features (see the top of the `CMakeLists.txt` file).
 
 Alternatively, you should be able to do all this via VS Code if you have the CMake extension set up properly.
 
-Or, you can start via ``cmake-gui`` if you prefer. Run ``Configure`` and select your desired build system. Then click ``Generate``. Then open the solution/project/makefile in your IDE of choice.
-
-## Installation
-On macOS you can just copy the `HDRView.app` bundle to your `/Applications` folder. 
+### Installation
+On macOS you can just copy the `HDRView.app` bundle to your `/Applications` folder. Alternatively you can create a DMG installer using:
+```bash
+cpack -C Release -G DragNDrop
+```
+Recent version of macOS will complain that the app is unsigned and from an unknown developer. You will need to go to the Security and Privacy part of system Settings to allow HDRView to run.
 
 On Windows you'll need to copy `HDRView.exe` together with the accompanying `assets` folder to your desired installation location.
 
-Recent version of macOS will complain that the app is unsigned and from an unknown developer. You will need to go to the Security and Privacy part of system Settings to allow the app to run.
+HDRView provides an appimage installer. After configuring and building using the `linux-appimage` preset, you can create the appimage using:
+```bash
+cpack -C Release -G External
+```
 
 ## Running from the terminal
 
 You can also run HDRView from the terminal. Run ``HDRView --help`` to see the command-line options. On macOS the executable is stored within the app bundle in `HDRView.app/Contents/MacOS/HDRView`. You might want to add it, or a symlink, to your path.
 
 ## License
+- Copyright (c) Wojciech Jarosz
+- 3-clause BSD — see LICENSE.txt for details.
 
-Copyright (c) Wojciech Jarosz
-
-3-clause BSD. For details, see the ``LICENSE.txt`` file.
-
-HDRView builds on a number libraries. See the details in the Credits tab of the About dialog.
+## Credits
+- HDRView builds on a number of open-source libraries. See the About dialog (Credits) in the app for the full list.
