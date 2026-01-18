@@ -128,7 +128,7 @@ jobs:
         with:
           name: HDRView-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}.dmg
           path: |
-            "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*-${{ matrix.config.arch }}.dmg"
+            "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.dmg"
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
