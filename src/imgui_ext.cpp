@@ -386,9 +386,13 @@ void HyperlinkText(const char *label, const char *url)
     if (TextLink(label))
         if (g.PlatformIO.Platform_OpenInShellFn)
             g.PlatformIO.Platform_OpenInShellFn(&g, url);
-    PushFont(GetIO().FontDefault, ImGui::GetStyle().FontSizeBase);
-    SetItemTooltip("%s '%s'", ICON_MY_LINK, url);
+    auto prev_size = ImGui::GetStyle().FontSizeBase;
+    auto font      = ImGui::GetFont();
     PopFont();
+    // PushFont(GetIO().FontDefault, 12.f);
+    SetItemTooltip("%s '%s'", ICON_MY_LINK, url);
+    // PopFont();
+    PushFont(font, prev_size);
     if (BeginPopupContextItem())
     {
         if (MenuItem(LocalizeGetMsg(ImGuiLocKey_CopyLink)))

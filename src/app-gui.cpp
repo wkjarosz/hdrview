@@ -1019,17 +1019,26 @@ void HDRViewApp::draw_about_dialog(bool &open)
     ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * EmSize()), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 
     ImGui::SetNextWindowFocus();
-    constexpr float icon_size     = 128.f;
-    float2          col_width     = {icon_size + EmSize(), 32 * EmSize()};
-    float           content_width = col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x;
-    ImGui::SetNextWindowContentSize(float2{content_width, 0.f});
-    ImGui::SetNextWindowSizeConstraints(
-        ImVec2{2 * icon_size, icon_size},
-        float2{content_width + 2.f * ImGui::GetStyle().WindowPadding.x + ImGui::GetStyle().ScrollbarSize,
-               io.DisplaySize.y - 7.f * EmSize()});
+    constexpr float icon_size            = 128.f;
+    float           icon_col_width       = icon_size + EmSize();
+    constexpr float min_window_width     = 2.f * icon_size;
+    const float     desired_window_width = icon_size + 33 * EmSize();
 
-    if (ImGui::BeginPopup("About", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
-                                       ImGuiWindowFlags_AlwaysAutoResize))
+    // Choose a width for the About popup: prefer desired, but clamp to the
+    // application's display width (down to min_window_width). Also set
+    // window size constraints so ImGui lays out text properly and wrapping
+    // will occur at the window content width.
+    {
+        ImGuiStyle &style            = ImGui::GetStyle();
+        float       padding          = style.WindowPadding.x;
+        float       max_window_width = io.DisplaySize.x - 2.f * padding;
+        float       target_width     = clamp(desired_window_width, min_window_width, max_window_width);
+
+        ImGui::SetNextWindowSizeConstraints(ImVec2(min_window_width, 0.f), ImVec2(max_window_width, FLT_MAX));
+        ImGui::SetNextWindowSize(ImVec2(target_width, 0.f), ImGuiCond_Always);
+    }
+
+    if (ImGui::BeginPopup("About", ImGuiWindowFlags_NoSavedSettings))
     {
         open = false;
         ImGui::Spacing();
@@ -1065,8 +1074,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
 
         if (ImGui::BeginTable("about_table1", 2))
         {
-            ImGui::TableSetupColumn("icon", ImGuiTableColumnFlags_WidthFixed, col_width[0]);
-            ImGui::TableSetupColumn("description", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
+            ImGui::TableSetupColumn("icon", ImGuiTableColumnFlags_WidthFixed, icon_col_width);
+            ImGui::TableSetupColumn("description", ImGuiTableColumnFlags_WidthStretch, 1.f);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -1075,8 +1084,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
             ImageFromAsset("app_settings/icon-256.png", {icon_size, icon_size}); // show the app icon
 
             ImGui::TableNextColumn();
-            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1]);
 
+            ImGui::PushTextWrapPos(0.f);
             {
                 ImGui::ScopedFont sf{m_sans_bold, 30};
                 ImGui::HyperlinkText("HDRView", "https://github.com/wkjarosz/hdrview");
@@ -1089,9 +1098,14 @@ void HDRViewApp::draw_about_dialog(bool &open)
             ImGui::TextFmt("Built on {} for {} using the {} backend with {}.", build_timestamp(), architecture(),
                            platform_backend, renderer_backend);
             ImGui::PopFont();
+            ImGui::PopTextWrapPos();
+            ImGui::EndTable();
+        }
 
-            ImGui::Spacing();
+        ImGui::Spacing();
 
+        {
+            ImGui::PushTextWrapPos(0.f);
             ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
             ImGui::TextUnformatted(
                 "HDRView is a simple research-oriented tool for examining, comparing, manipulating, and "
@@ -1102,11 +1116,10 @@ void HDRViewApp::draw_about_dialog(bool &open)
 
             ImGui::TextUnformatted(
                 "It is developed by Wojciech Jarosz, and is available under a 3-clause BSD license.");
-
             ImGui::PopTextWrapPos();
-            ImGui::EndTable();
         }
 
+        // #if 0
         if (ImGui::BeginTabBar("AboutTabBar"))
         {
             if (ImGui::BeginTabItem("Keybindings", nullptr))
@@ -1115,8 +1128,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
                 ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_AlwaysUseWindowPadding);
 
-                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1] -
-                                       ImGui::GetStyle().ScrollbarSize);
+                ImGui::PushTextWrapPos(0.f);
 
                 ImGui::Spacing();
                 ImGui::TextAligned2(0.5f, -FLT_MIN, "The main keyboard shortcut to remember is:");
@@ -1150,19 +1162,25 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
                 ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_AlwaysUseWindowPadding);
 
-                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1] -
-                                       ImGui::GetStyle().ScrollbarSize);
+                ImGui::PushTextWrapPos(0.f);
+
                 ImGui::Spacing();
                 ImGui::TextUnformatted(
                     "HDRView additionally makes use of the following external libraries and techniques (in "
                     "alphabetical order):\n\n");
-                ImGui::PopTextWrapPos();
 
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+                // calculate left column based on the longest library name
+                ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
+#ifndef __EMSCRIPTEN__
+                float col_width = ImGui::CalcTextSize("portable-file-dialogs").x;
+#else
+                float col_width = ImGui::CalcTextSize("emscripten-browser-file").x;
+#endif
+                ImGui::PopFont();
+
                 if (ImGui::PE::Begin("about_table2", 0))
                 {
-                    ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed, col_width[0] * 0.85f);
-                    // ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
+                    ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed, col_width);
 
                     ImGui::PE::Hyperlink("Dear ImGui", "Omar Cornut's immediate-mode graphical user interface for C++.",
                                          "https://github.com/ocornut/imgui");
@@ -1243,7 +1261,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
 
                     ImGui::PE::End();
                 }
-                ImGui::PopStyleVar();
+                ImGui::PopTextWrapPos();
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
                 ImGui::EndTabItem();
@@ -1376,7 +1394,10 @@ void HDRViewApp::draw_about_dialog(bool &open)
 
                 ImVec2 child_size = ImVec2(0, EmSize(18.f));
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
-                ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_AlwaysUseWindowPadding);
+                ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_AlwaysUseWindowPadding,
+                                  ImGuiWindowFlags_HorizontalScrollbar);
+
+                // ImGui::PushTextWrapPos(0.f);
 
                 ImGui::PushFont(m_mono_regular, 0.f);
                 ImGui::TextUnformatted(build_info.c_str());
@@ -1387,12 +1408,14 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 if (ImGui::IsItemHovered())
                     ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
+                // ImGui::PopTextWrapPos();
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
         }
+        // #endif
 
         if (ImGui::Button("Dismiss", EmToVec2(8.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape) ||
             ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) ||
