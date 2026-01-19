@@ -113,7 +113,7 @@ You can also run HDRView from the terminal. Run ``HDRView --help`` to see the co
 
 ## License
 - Copyright (c) Wojciech Jarosz
-- 3-clause BSD — see LICENSE.txt for details.
+- 3-clause BSD — see [LICENSE.txt](https://github.com/wkjarosz/hdrview/blob/master/LICENSE.txt) for details.
 
 ## Credits
 - HDRView builds on a number of open-source libraries. See the About dialog (Credits) in the app for the full list.
