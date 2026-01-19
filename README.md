@@ -40,7 +40,7 @@ You can download pre-built binaries for macOS, Linux, and Windows from the [rele
 ## Building from source
 
 > [!IMPORTANT]  
-> If you want to build from source you should check out a [published release tag](tags) -- the master branch is used for development and may be broken between releases.
+> If you want to build from source you should check out a [published release tag](https://github.com/wkjarosz/hdrview/tags) -- the master branch is used for development and may be broken between releases.
 
 Compiling from source requires:
 - CMake >= 3.13
