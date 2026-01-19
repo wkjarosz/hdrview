@@ -1016,7 +1016,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
     auto &io = ImGui::GetIO();
 
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * EmSize()), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+    auto pos = ImVec2(io.DisplaySize.x / 2, min(5.f * EmSize(), 0.1f * io.DisplaySize.y));
+    ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 
     ImGui::SetNextWindowFocus();
     constexpr float icon_size            = 128.f;
@@ -1029,12 +1030,13 @@ void HDRViewApp::draw_about_dialog(bool &open)
     // window size constraints so ImGui lays out text properly and wrapping
     // will occur at the window content width.
     {
-        ImGuiStyle &style            = ImGui::GetStyle();
-        float       padding          = style.WindowPadding.x;
-        float       max_window_width = io.DisplaySize.x - 2.f * padding;
-        float       target_width     = clamp(desired_window_width, min_window_width, max_window_width);
+        ImGuiStyle &style             = ImGui::GetStyle();
+        float       padding           = style.WindowPadding.x;
+        float       max_window_width  = io.DisplaySize.x - 2.f * padding;
+        float       max_window_height = io.DisplaySize.y - 2.f * padding - pos.y;
+        float       target_width      = clamp(desired_window_width, min_window_width, max_window_width);
 
-        ImGui::SetNextWindowSizeConstraints(ImVec2(min_window_width, 0.f), ImVec2(max_window_width, FLT_MAX));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(min_window_width, 0.f), ImVec2(max_window_width, max_window_height));
         ImGui::SetNextWindowSize(ImVec2(target_width, 0.f), ImGuiCond_Always);
     }
 
@@ -1124,7 +1126,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
         {
             if (ImGui::BeginTabItem("Keybindings", nullptr))
             {
-                ImVec2 child_size = ImVec2(0, EmSize(13.f));
+                ImVec2 child_size = ImVec2(0, EmSize(14.f));
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
                 ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_AlwaysUseWindowPadding);
 

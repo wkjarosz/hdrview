@@ -627,9 +627,15 @@ void Image::draw_info()
     if (selected_view == 0)
     {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
-        if (ImGui::PE::Begin("Image info", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize |
-                                               ImGuiTableFlags_ScrollY))
+        if (ImGui::PE::Begin("Image info", ImGuiTableFlags_ScrollY))
         {
+            // calculate left column based on the longest property name
+            ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
+            float col_width = ImGui::CalcTextSize("Channel selector").x + ImGui::GetStyle().CellPadding.x;
+            ImGui::PopFont();
+
+            ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, col_width);
+
             ImGui::Indent(ImGui::GetStyle().CellPadding.x);
             filtered_property("File name", filename);
             filtered_property(
