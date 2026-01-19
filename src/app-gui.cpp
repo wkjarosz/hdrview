@@ -1235,6 +1235,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                                          "https://github.com/nothings/stb");
                     ImGui::PE::Hyperlink("tev", "Some code is adapted from Thomas Müller's tev.",
                                          "https://github.com/Tom94/tev");
+                    ImGui::PE::Hyperlink("TinyXML2", "For parsing XMP metadata.",
+                                         "https://github.com/leethomason/tinyxml2");
                     if (HDRVIEW_ENABLE_HEIC)
                         ImGui::PE::Hyperlink("x265", "For encoding HEIC/HEVC/H265 files.",
                                              "https://www.videolan.org/developers/x265.html");
