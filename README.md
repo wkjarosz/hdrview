@@ -54,7 +54,7 @@ cd hdrview
 cmake --preset default
 cmake --build --preset default-release
 ```
-You can see all available presets (defined in [`CMakePresets.json`](blob/master/CMakePresets.json)) by running:
+You can see all available presets (defined in [`CMakePresets.json`](https://github.com/wkjarosz/hdrview/blob/master/CMakePresets.json)) by running:
 ```bash
 cmake --list-presets=configure
 cmake --list-presets=build
@@ -85,11 +85,11 @@ For instance:
 	cmake --build build/emscripten --parallel
     ```
 
-By default HDRView uses [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) to download and build third-party dependencies automatically; however, you will still need to have several packages installed since those dependencies often try to find their own dependencies locally via `find_package`. You can check the GitHub Actions workflows under [`.github/workflows/`](tree/master/.github/workflows) to see which packages should be installed.
+By default HDRView uses [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) to download and build third-party dependencies automatically; however, you will still need to have several packages installed since those dependencies often try to find their own dependencies locally via `find_package`. You can check the GitHub Actions workflows under [`.github/workflows/`](https://github.com/wkjarosz/hdrview/tree/master/.github/workflows) to see which packages should be installed.
 
 If you want to rely entirely on system-installed libraries instead (often desirably on linux), pick one of the `-local` presets (for example `linux-local` or `macos-x86_64-local`). These presets enable CPM.cmake's `CPM_USE_LOCAL_PACKAGES` option, which instructs it to try to use local packages via `find_package` first.
 
-A number of options are available to control supported features (see the top of the [`CMakeLists.txt`](blob/master/CMakeLists.txt) file).
+A number of options are available to control supported features (see the top of the [`CMakeLists.txt`](https://github.com/wkjarosz/hdrview/blob/master/CMakeLists.txt) file).
 
 Alternatively, you should be able to do all this via VS Code if you have the CMake extension set up properly.
 
