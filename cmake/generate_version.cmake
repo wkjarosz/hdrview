@@ -132,6 +132,8 @@ set(VERSION_PATCH ${version_patch})
 string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M")
 message(STATUS "Saving build timestamp: ${BUILD_TIME}")
 
-set(VERSION_LONG "${GIT_DESCRIBE} (${HDRVIEW_BITNESS} bit)")
+# Multiply CMAKE_SIZEOF_VOID_P by 8 to get the bitness
+math(EXPR BITNESS "${CMAKE_SIZEOF_VOID_P} * 8")
+set(VERSION_LONG "${GIT_DESCRIBE} (${BITNESS} bit)")
 
 configure_file("${SRC_DIR}/version.cpp.in" "${BIN_DIR}/version.cpp" @ONLY)

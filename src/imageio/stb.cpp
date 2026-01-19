@@ -367,11 +367,6 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         for (int c = 0; c < size.z; ++c)
             image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
                                                      [](float v) { return v; });
-
-        // // then apply transfer function
-        // int num_color_channels = size.z >= 3 ? 3 : 1;
-        // to_linear(image->channels[0].data(), size.z > 1 ? image->channels[1].data() : nullptr,
-        //           size.z > 2 ? image->channels[2].data() : nullptr, size.x * size.y, num_color_channels, tf, 1);
     }
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 

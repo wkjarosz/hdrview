@@ -580,7 +580,7 @@ void Image::draw_info()
 
     float w = ImGui::GetContentRegionAvail().x - 1.f * (button_size.x + ImGui::GetStyle().ItemSpacing.x);
 
-    static bool expand_to_listbox = true;
+    static bool expand_to_listbox = false;
 
     auto show_view_options = [&]()
     {

@@ -1101,6 +1101,22 @@ void HDRViewApp::draw_about_dialog(bool &open)
                            platform_backend, renderer_backend);
             ImGui::PopFont();
             ImGui::PopTextWrapPos();
+
+            ImGui::Spacing();
+
+            {
+                ImGui::PushTextWrapPos(0.f);
+                ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
+                ImGui::TextUnformatted(
+                    "HDRView is a simple research-oriented tool for examining, comparing, manipulating, and "
+                    "converting high-dynamic range images.");
+                ImGui::PopFont();
+
+                ImGui::PopTextWrapPos();
+            }
+
+            ImGui::Spacing();
+
             ImGui::EndTable();
         }
 
@@ -1108,20 +1124,13 @@ void HDRViewApp::draw_about_dialog(bool &open)
 
         {
             ImGui::PushTextWrapPos(0.f);
-            ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
-            ImGui::TextUnformatted(
-                "HDRView is a simple research-oriented tool for examining, comparing, manipulating, and "
-                "converting high-dynamic range images.");
-            ImGui::PopFont();
-
-            ImGui::Spacing();
-
             ImGui::TextUnformatted(
                 "It is developed by Wojciech Jarosz, and is available under a 3-clause BSD license.");
             ImGui::PopTextWrapPos();
         }
 
-        // #if 0
+        ImGui::Spacing();
+
         if (ImGui::BeginTabBar("AboutTabBar"))
         {
             if (ImGui::BeginTabItem("Keybindings", nullptr))
@@ -1179,6 +1188,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 float col_width = ImGui::CalcTextSize("emscripten-browser-file").x;
 #endif
                 ImGui::PopFont();
+
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
 
                 if (ImGui::PE::Begin("about_table2", 0))
                 {
@@ -1263,11 +1274,14 @@ void HDRViewApp::draw_about_dialog(bool &open)
 
                     ImGui::PE::End();
                 }
+
+                ImGui::PopStyleVar();
                 ImGui::PopTextWrapPos();
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
                 ImGui::EndTabItem();
             }
+
             if (ImGui::BeginTabItem("Build info"))
             {
                 // Build the info text string for display and clipboard
@@ -1417,7 +1431,6 @@ void HDRViewApp::draw_about_dialog(bool &open)
             }
             ImGui::EndTabBar();
         }
-        // #endif
 
         if (ImGui::Button("Dismiss", EmToVec2(8.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape) ||
             ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) ||
