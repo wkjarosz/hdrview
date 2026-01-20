@@ -74,7 +74,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install --quiet ninja create-dmg dylibbundler jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif zlib libpng imath openexr cli11 spdlog fmt aom libde265 x265 libexif libraw
+        run: brew install --quiet ninja create-dmg dylibbundler jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif zlib libpng imath openexr cli11 spdlog fmt aom libde265 x265 libexif libraw openjpeg openh264
 
       - uses: actions/checkout@v4
         with:
