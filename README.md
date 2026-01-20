@@ -5,11 +5,30 @@ Master branch:
 [![Linux build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml)
 [![Windows build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml)
 
-HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images. HDRView currently supports reading (EXR, HDR, PFM, and Ultra HDR JPEG) and writing (EXR, HDR, PFM) several HDR image formats, as well as reading (PNG, TGA, BMP, JPG, GIF, PNM, and PSD) and writing (PNG, TGA, PPM, PFM, and BMP) standard LDR images.
+HDRView is a simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range images (but supporting common image formats too). It runs on macOS, Linux, Windows, and directly in your browser -- just go to [wkjarosz.github.io/hdrview/](https://wkjarosz.github.io/hdrview/) for the latest release version and [wkjarosz.github.io/hdrview/dev](https://wkjarosz.github.io/hdrview/dev) for the development version. This even works on an iPhone or iPad!
 
-HDRView can display images in true HDR on Apple extended dynamic range (EDR) and 10-bit displays.
+On a Mac with an extended dynamic range (EDR) or 10-bit display, HDRView can display images in true HDR.
 
-HDRView runs on macOS, Linux, Windows, and directly in your browser -- just go to [wkjarosz.github.io/hdrview/](https://wkjarosz.github.io/hdrview/) for the latest release version and [wkjarosz.github.io/hdrview/dev](https://wkjarosz.github.io/hdrview/dev) for the development version. This even works on an iPhone or iPad! Try it out.
+HDRView currently supports the following image formats while being careful to properly interpret and display colors:
+
+| Format | Description | Read | Write |
+|---|---|:--:|:--:|
+| OpenEXR (.exr) | High-dynamic-range image format by Industrial Light & Magic, including multichannel, multi-part, and arbitrary metadata attributes  (via [OpenEXR](https://github.com/AcademySoftwareFoundation/openexr)) | ✓ | ✓ |
+| Portable Float Map (.pfm) | Dead simple HDR floating-point image format | ✓ | ✓ |
+| UltraHDR (.jpeg) | HDR images from recent Android phones (via [libultrahdr](https://github.com/google/libultrahdr)) | ✓ | ✓ |
+| JPEG (.jpg, .jpeg) | (via [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo)) | ✓ | ✓ |
+| PNG (.png) | Including animated PNGs and HDR PNGs with CICP (via [libpng](https://github.com/pnggroup/libpng)) | ✓ | ✓ |
+| TIFF (.tif, .tiff) | Including SGI LogLuv and Pixar Log HDR formats (via [libtiff](https://gitlab.com/libtiff/libtiff)) | ✓ | ✓ |
+| JPEG-XL (.jxl) | Including lossless, lossy, animation/burst, and HDR support (via [libjxl](https://github.com/libjxl/libjxl)) | ✓ | ✓ |
+| HEIF, AVIF (.heif, .avif) | Including lossless, lossy, animation/burst, and HDR support (via [libheif](https://github.com/strukturag/libheif) and various codec libraries) | ✓ | ✓ |
+| WebP (.webp) | Google's image format supporting lossy/lossless and animation (via [libwebp](https://chromium.googlesource.com/webm/libwebp)) | ✓ | ✓ |
+| QOI (.qoi) | Quite OK Image — simple, fast lossless format (via [qoi](https://github.com/phoboslab/qoi)) | ✓ | ✓ |
+| DDS (.dds) | DirectX GPU/compressed texture formats (via [smalldds](https://github.com/wkjarosz/smalldds)) | ✓ |  |
+| RAW (camera raw) | Various camera raw formats (via [LibRaw](https://github.com/LibRaw/LibRaw)) | ✓ |  |
+| PSD (.psd) | Adobe Photoshop files (via [stb_image](https://github.com/nothings/stb) + metadata extraction) | ✓ |  |
+| BMP (.bmp) | Bitmap (via [stb_image](https://github.com/nothings/stb)) | ✓ | ✓ |
+| TGA (.tga) | Targa raster image (via [stb_image](https://github.com/nothings/stb)) | ✓ | ✓ |
+| HDR (.hdr / Radiance) | Radiance HDR images (via [stb_image](https://github.com/nothings/stb)) | ✓ | ✓ |
 
 ## Example screenshots
 Here's a screenshot of HDRView viewing a JPEG on macOS:
@@ -102,7 +121,7 @@ Recent version of macOS will complain that the app is unsigned and from an unkno
 
 On Windows you'll need to copy `HDRView.exe` together with the accompanying `assets` folder to your desired installation location.
 
-HDRView provides an appimage installer. After configuring and building using the `linux-appimage` preset, you can create the appimage using:
+For Linux there is an appimage installer. After configuring and building using the `linux-appimage` preset, you can create the appimage using:
 ```bash
 cpack -C Release -G External
 ```
