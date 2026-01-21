@@ -1,6 +1,5 @@
 #include "exif.h"
 #include "endian-utils.h"
-#include "fwd.h"
 #include "json.h"
 #include <cstdint>
 #include <cstdio>
@@ -96,8 +95,9 @@ static json get_value(int format, size_t components, const uint8_t *data, Endian
         vector<double> vals;
         for (unsigned int i = 0; i < components; i++)
         {
-            auto r = read_as<uint2>(&data[sizeof(uint2) * i], data_endian);
-            vals.push_back(double(r.x) / r.y);
+            auto num = read_as<uint32_t>(&data[sizeof(uint32_t) * (2 * i + 0)], data_endian);
+            auto den = read_as<uint32_t>(&data[sizeof(uint32_t) * (2 * i + 1)], data_endian);
+            vals.push_back(double(num) / den);
         }
         return vals.size() == 1 ? json(vals[0]) : json(vals);
     }
@@ -107,8 +107,9 @@ static json get_value(int format, size_t components, const uint8_t *data, Endian
         vector<double> vals;
         for (unsigned int i = 0; i < components; i++)
         {
-            auto r = read_as<int2>(&data[sizeof(int2) * i], data_endian);
-            vals.push_back(double(r.x) / r.y);
+            auto num = read_as<int32_t>(&data[sizeof(int32_t) * (2 * i + 0)], data_endian);
+            auto den = read_as<int32_t>(&data[sizeof(int32_t) * (2 * i + 1)], data_endian);
+            vals.push_back(double(num) / den);
         }
         return vals.size() == 1 ? json(vals[0]) : json(vals);
     }

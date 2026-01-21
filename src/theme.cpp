@@ -17,8 +17,6 @@ static void apply_hdrview_dark_theme()
     ImGuiStyle &style = ImGui::GetStyle();
     style             = ImGuiStyle(); // resets all fields to default values
 
-    style.FontSizeBase = 14.0f; // base font size
-    // style._NextFrameFontSizeBase = style.FontSizeBase; // FIXME: Temporary hack until we finish remaining work.
     // make things like radio buttons look nice and round
     style.CircleTessellationMaxError = 0.1f;
 
@@ -109,8 +107,6 @@ static void apply_hdrview_light_theme()
     ImGuiStyle &style = ImGui::GetStyle();
     style             = ImGuiStyle(); // resets all fields to default values
 
-    style.FontSizeBase = 14.0f; // base font size
-    // style._NextFrameFontSizeBase = style.FontSizeBase; // FIXME: Temporary hack until we finish remaining work.
     // make things like radio buttons look nice and round
     style.CircleTessellationMaxError = 0.1f;
 

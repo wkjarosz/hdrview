@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 
 //! Endianness indicator
 enum class Endian
@@ -46,24 +47,39 @@ inline Endian host_endian() { return is_little_endian() ? Endian::Little : Endia
 template <typename T>
 inline T swap_bytes(T value)
 {
+    static_assert(std::is_trivially_copyable_v<T>, "swap_bytes requires trivially copyable types");
+
     if constexpr (sizeof(T) == 1)
     {
         return value;
     }
+
     else if constexpr (sizeof(T) == 2)
     {
-        uint16_t swapped = byte_swap_16(*reinterpret_cast<uint16_t *>(&value));
-        return *reinterpret_cast<T *>(&swapped);
+        uint16_t tmp = 0;
+        std::memcpy(&tmp, &value, sizeof(tmp));
+        tmp = byte_swap_16(tmp);
+        T out;
+        std::memcpy(&out, &tmp, sizeof(tmp));
+        return out;
     }
     else if constexpr (sizeof(T) == 4)
     {
-        uint32_t swapped = byte_swap_32(*reinterpret_cast<uint32_t *>(&value));
-        return *reinterpret_cast<T *>(&swapped);
+        uint32_t tmp = 0;
+        std::memcpy(&tmp, &value, sizeof(tmp));
+        tmp = byte_swap_32(tmp);
+        T out;
+        std::memcpy(&out, &tmp, sizeof(tmp));
+        return out;
     }
     else if constexpr (sizeof(T) == 8)
     {
-        uint64_t swapped = byte_swap_64(*reinterpret_cast<uint64_t *>(&value));
-        return *reinterpret_cast<T *>(&swapped);
+        uint64_t tmp = 0;
+        std::memcpy(&tmp, &value, sizeof(tmp));
+        tmp = byte_swap_64(tmp);
+        T out;
+        std::memcpy(&out, &tmp, sizeof(tmp));
+        return out;
     }
     else
     {
