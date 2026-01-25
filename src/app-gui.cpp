@@ -281,7 +281,6 @@ void HDRViewApp::draw_status_bar()
 
 void HDRViewApp::draw_menus()
 {
-    HelloImGui::ShowViewMenu(m_params);
     if (ImGui::BeginMenu("File"))
     {
         MenuItem(action("Open image..."));
