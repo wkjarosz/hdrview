@@ -891,7 +891,7 @@ inline float blend(float top, float bottom, BlendMode_ blend_mode)
     case BlendMode_Difference: return abs(diff);
     case BlendMode_Relative_Difference: return abs(diff) / (bottom + 0.01f);
     }
-    return float(0.f);
+    // return float(0.f);
 }
 
 inline float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
@@ -911,7 +911,7 @@ inline float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
     case BlendMode_Difference: return float4(abs(diff), alpha);
     case BlendMode_Relative_Difference: return float4(abs(diff) / (bottom.xyz() + float3(0.01f)), alpha);
     }
-    return float4(0.f);
+    // return float4(0.f);
 }
 
 //! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL

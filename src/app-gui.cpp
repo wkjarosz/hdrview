@@ -281,6 +281,7 @@ void HDRViewApp::draw_status_bar()
 
 void HDRViewApp::draw_menus()
 {
+    HelloImGui::ShowViewMenu(m_params);
     if (ImGui::BeginMenu("File"))
     {
         MenuItem(action("Open image..."));
@@ -312,8 +313,8 @@ void HDRViewApp::draw_menus()
         ImGui::BeginDisabled(m_image_loader.recent_files().empty());
         if (ImGui::BeginMenuEx("Open recent", ICON_MY_OPEN_IMAGE))
         {
-            auto   recents = m_image_loader.recent_files_short(47, 50);
-            size_t i       = 0;
+            auto recents = m_image_loader.recent_files_short(47, 50);
+            int  i       = 0;
             for (auto f = recents.begin(); f != recents.end(); ++f, ++i)
             {
                 if (ImGui::MenuItem(fmt::format("{}##File{}", *f, i).c_str()))
@@ -544,11 +545,11 @@ void HDRViewApp::draw_top_toolbar()
     static const char *items[] = {ICON_MY_TONEMAPPING ": γ", ICON_MY_TONEMAPPING ": +", ICON_MY_TONEMAPPING ": ±"};
     if (ImGui::BeginCombo("##Tonemapping", items[m_tonemap]))
     {
-        static const char *items[] = {"Gamma", "Colormap [0,1]", "Colormap [-1,1]"};
-        for (int n = 0; n < IM_ARRAYSIZE(items); n++)
+        static const char *items2[] = {"Gamma", "Colormap [0,1]", "Colormap [-1,1]"};
+        for (int n = 0; n < IM_ARRAYSIZE(items2); n++)
         {
             const bool is_selected = (m_tonemap == n);
-            if (ImGui::Selectable(items[n], is_selected))
+            if (ImGui::Selectable(items2[n], is_selected))
                 m_tonemap = (Tonemap_)n;
 
             // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
@@ -615,7 +616,7 @@ void HDRViewApp::draw_top_toolbar()
                                                                          ? ImGui::GetStyle().FrameRounding
                                                                          : ImGui::GetFrameHeight(),
                                                                      ImGui::GetStyle().FrameRounding);
-        const float cmap_size = Colormap::values(colormap).size();
+        const float cmap_size = (float)Colormap::values(colormap).size();
         ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)Colormap::texture(colormap)->texture_handle(),
                                              bb_min, bb_max, ImVec2(0.5f / cmap_size, 0.5f),
                                              ImVec2((cmap_size - 0.5f) / cmap_size, 0.5f));

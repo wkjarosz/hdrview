@@ -370,10 +370,10 @@ public:
                            bool short_names, int &visible_group, float &scroll_to);
     void draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
                          int &visible_group, float &scroll_to);
-    int  draw_channel_tree(int img_idx, int &id, bool is_current, bool is_reference, float &scroll_to)
+    int  draw_channel_tree(int img_idx, int &_id, bool is_current, bool is_reference, float &scroll_to)
     {
         int visible_group = 0;
-        draw_layer_node(root, img_idx, id, is_current, is_reference, visible_group, scroll_to);
+        draw_layer_node(root, img_idx, _id, is_current, is_reference, visible_group, scroll_to);
         return visible_group;
     }
 

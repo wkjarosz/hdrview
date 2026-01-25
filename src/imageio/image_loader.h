@@ -53,7 +53,7 @@ struct BackgroundImageLoader
                          ImagePtr to_replace = nullptr, const ImageLoadOptions &opts = {});
     void load_recent_file(int index);
     void get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback);
-    int  num_pending_images() const { return pending_images.size(); }
+    int  num_pending_images() const { return (int)pending_images.size(); }
 
     const set<fs::path> &watched_directories() const { return m_directories; }
     bool                 add_watched_directory(const fs::path &dir, bool ignore_existing);

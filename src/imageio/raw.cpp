@@ -156,7 +156,7 @@ struct ExifContext
 };
 
 // LibRaw EXIF callback handler
-void exif_handler(void *context, int tag, int type, int len, unsigned int ord, void *ifp, INT64 base)
+void exif_handler(void *context, int tag, int type, int len, unsigned int ord, void *ifp, INT64 /*base*/)
 {
     ExifContext &exif = *(ExifContext *)context;
 
@@ -771,25 +771,6 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
 
-    string pixel_format;
-    if (idata.idata.is_foveon)
-        pixel_format = fmt::format("{}-bit Foveon (X3)", idata.color.raw_bps);
-    else
-    {
-        bool is_xtrans = false;
-        for (int i = 0; i < 6 && !is_xtrans; ++i)
-            for (int j = 0; j < 6 && !is_xtrans; ++j)
-                if (idata.idata.xtrans[i][j] != 0)
-                    is_xtrans = true;
-        if (is_xtrans)
-            pixel_format = fmt::format("{}-bit X-Trans CFA", idata.color.raw_bps);
-        else if (idata.idata.filters)
-            // Bayer CFA
-            pixel_format = fmt::format("{}-bit Bayer CFA ({})", idata.color.raw_bps, idata.idata.cdesc);
-        else
-            pixel_format = fmt::format("{}-bit Unknown CFA", idata.color.raw_bps);
-    }
-
     bool pass_main_filter = filter.PassFilter("main");
     bool pass_cfa_filter  = filter.PassFilter("CFA");
 
@@ -869,7 +850,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 constexpr float scale = 2.0f / 65535.0f;
 
                 stp::parallel_for(stp::blocked_range<int>(0, size.x * size.y, 1024),
-                                  [&](int begin, int end, int unit_index, int thread_index)
+                                  [&](int begin, int end, int /*unit_index*/, int /*thread_index*/)
                                   {
                                       for (int i = begin; i < end; ++i)
                                       {
@@ -935,7 +916,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
 
                     constexpr float scale = 1.0f / 65535.0f;
                     stp::parallel_for(stp::blocked_range<int>(0, raw_w * raw_h, 1024),
-                                      [&](int begin, int end, int unit_index, int thread_index)
+                                      [&](int begin, int end, int /*unit_index*/, int /*thread_index*/)
                                       {
                                           for (int i = begin; i < end; ++i) cfa_pixels[i] = rawp[i] * scale;
                                       });
@@ -1027,7 +1008,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 auto               data8  = reinterpret_cast<uint8_t *>(thumb->data);
                 auto               data16 = reinterpret_cast<uint16_t *>(thumb->data);
                 stp::parallel_for(stp::blocked_range<int>(0, w * h, 1024),
-                                  [&](int begin, int end, int unit_index, int thread_index)
+                                  [&](int begin, int end, int /*unit_index*/, int /*thread_index*/)
                                   {
                                       for (int i = begin; i < end; ++i)
                                       {

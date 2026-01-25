@@ -792,7 +792,7 @@ void PE::WrappedText(const string &property_name, const string &value, const str
                                                 ImVec2(FLT_MAX, ImGui::GetTextLineHeightWithSpacing() * 10));
             if (ImGui::BeginChild("ResizableChild", ImVec2(-FLT_MIN, 0.f), ImGuiChildFlags_AutoResizeY))
             {
-                ImGui::PushTextWrapPos(0.f); // wrap to end of window/column
+                ImGui::PushTextWrapPos(wrap_em); // wrap_em==0.f: wrap to end of window/column
                 ImGui::AlignTextToFramePadding();
 
                 ImGui::PushFont(font, ImGui::GetStyle().FontSizeBase);
