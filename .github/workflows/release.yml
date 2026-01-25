@@ -189,6 +189,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: ilammy/msvc-dev-cmd@v1
+
       - name: Set version variables
         run: |
           $VERSION = "${{ github.ref_name }}"

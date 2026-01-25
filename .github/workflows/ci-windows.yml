@@ -37,6 +37,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure CMake
         run: cmake --preset ${{ matrix.config.preset }}
 
