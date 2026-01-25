@@ -26,7 +26,8 @@ jobs:
       matrix:
         buildtype: [Release, Debug]
         config:
-          - { name: "Windows", os: windows-latest, preset: "windows" }
+          - { name: "Windows MSVC", os: windows-latest, preset: "windows-msvc" }
+          - { name: "Windows Ninja", os: windows-latest, preset: "windows-ninja" }
 
     steps:
       - name: Install dependencies
@@ -46,10 +47,10 @@ jobs:
 
       - name: Checking that HDRView runs
         working-directory: ${{github.workspace}}
-        run: ./build/${{ matrix.buildtype }}/HDRView.exe --help
+        run: ./build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.exe --help
 
       - name: Copy files for archiving
-        working-directory: ${{github.workspace}}/build
+        working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: |
           cmake -E copy_directory assets deploy/assets/
           cmake -E copy ${{ matrix.buildtype }}/HDRView.exe deploy/
@@ -57,6 +58,6 @@ jobs:
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
+          name: build-artifacts-${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build/deploy
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy

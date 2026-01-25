@@ -173,7 +173,13 @@ jobs:
 
   build_windows:
     name: Build on Windows
-    runs-on: windows-latest
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        buildtype: [Release]
+        config:
+          - { name: "Windows MSVC", os: windows-latest, preset: "windows-msvc" }
 
     steps:
       - name: Install dependencies
@@ -195,40 +201,42 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "VERSION_NO_V=$VERSION_NO_V"
 
       - name: Configure CMake
-        run: cmake --preset windows -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF
+        run: cmake --preset ${{ matrix.config.preset }} -DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF
 
       - name: Build
-        run: cmake --build --preset windows-release --verbose
+        run: |
+          $buildtype_lower = "${{ matrix.buildtype }}".ToLower()
+          cmake --build --preset ${{ matrix.config.preset }}-$buildtype_lower --verbose
 
       - name: Checking that HDRView runs
         working-directory: ${{github.workspace}}
-        run: ./build/${{env.BUILD_TYPE}}/HDRView.exe --help
+        run: ./build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.exe --help
 
       - name: Copy files for archiving and release
-        working-directory: ${{github.workspace}}/build
+        working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: |
           cmake -E copy_directory assets deploy/assets/
-          cmake -E copy ${{env.BUILD_TYPE}}/HDRView.exe deploy/
+          cmake -E copy ${{ matrix.buildtype }}/HDRView.exe deploy/
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-windows-latest
+          name: build-artifacts-${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build/deploy
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy
 
       - name: Archive Release
         uses: thedoctor0/zip-release@0.7.5
         with:
           type: "zip"
           filename: "HDRView-${{ env.VERSION_NO_V }}-windows.zip"
-          directory: ${{github.workspace}}/build/deploy
+          directory: ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{github.workspace}}/build/deploy/HDRView-${{ env.VERSION_NO_V }}-windows.zip
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy/HDRView-${{ env.VERSION_NO_V }}-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

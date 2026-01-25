@@ -5,8 +5,10 @@
       "name": "base",
       "hidden": true,
       "description": "Base preset with common settings",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo",
+        "UHDR_BUILD_DEPS": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
         "CMAKE_POLICY_DEFAULT_CMP0077": "NEW",
@@ -15,36 +17,40 @@
       }
     },
     {
+      "name": "emscripten",
+      "displayName": "Emscripten (WebAssembly)",
+      "description": "Build for web using Emscripten (requires EMSDK environment variable)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{EMSDK}/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/deploy",
+        "HDRVIEW_ENABLE_J2K": "OFF",
+        "HDRVIEW_ENABLE_HTJ2K": "OFF",
+        "HDRVIEW_ENABLE_AVIF": "OFF",
+        "HDRVIEW_ENABLE_HEIC": "OFF",
+        "HDRVIEW_ENABLE_AVCI": "OFF",
+        "UHDR_BUILD_DEPS": "ON"
+      }
+    },
+    {
       "name": "ninja-multi-base",
       "hidden": true,
       "inherits": "base",
       "description": "Base for Ninja Multi-Config builds",
-      "generator": "Ninja Multi-Config",
-      "condition": {
-        "type": "notEquals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
+      "generator": "Ninja Multi-Config"
     },
     {
       "name": "msvc-base",
       "hidden": true,
       "inherits": "base",
       "description": "Base for Visual Studio builds",
-      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
-      }
-    },
-    {
-      "name": "ccache",
-      "hidden": true,
-      "description": "Enable ccache for faster rebuilds",
-      "cacheVariables": {
-        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
       }
     },
     {
@@ -64,10 +70,7 @@
       "name": "macos-cpm",
       "hidden": true,
       "inherits": "macos-base",
-      "description": "macOS with CPM dependencies",
-      "cacheVariables": {
-        "UHDR_BUILD_DEPS": "ON"
-      }
+      "description": "macOS with CPM dependencies"
     },
     {
       "name": "macos-local",
@@ -76,7 +79,6 @@
       "description": "macOS using Homebrew dependencies",
       "cacheVariables": {
         "CPM_USE_LOCAL_PACKAGES": "ON",
-        "UHDR_BUILD_DEPS": "ON",
         "CMAKE_PREFIX_PATH": "/opt/homebrew;/usr/local"
       }
     },
@@ -98,10 +100,7 @@
       "name": "linux-cpm-base",
       "hidden": true,
       "inherits": "linux-base",
-      "description": "Linux with CPM dependencies",
-      "cacheVariables": {
-        "UHDR_BUILD_DEPS": "ON"
-      }
+      "description": "Linux with CPM dependencies"
     },
     {
       "name": "linux-local-base",
@@ -109,23 +108,14 @@
       "inherits": "linux-base",
       "description": "Linux using system dependencies",
       "cacheVariables": {
-        "CPM_USE_LOCAL_PACKAGES": "ON",
-        "UHDR_BUILD_DEPS": "ON"
+        "CPM_USE_LOCAL_PACKAGES": "ON"
       }
-    },
-    {
-      "name": "default",
-      "displayName": "Default",
-      "description": "Default build (auto-detects platform)",
-      "inherits": ["ninja-multi-base", "msvc-base"],
-      "binaryDir": "${sourceDir}/build"
     },
     {
       "name": "macos-arm64-cpm",
       "displayName": "macOS Apple Silicon (CPM)",
       "description": "Native Apple Silicon build using CPM for dependencies",
       "inherits": ["ninja-multi-base", "macos-cpm"],
-      "binaryDir": "${sourceDir}/build/macos-arm64-cpm",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -137,7 +127,6 @@
       "displayName": "macOS Apple Silicon (Local)",
       "description": "Native Apple Silicon build using Homebrew dependencies",
       "inherits": ["ninja-multi-base", "macos-local"],
-      "binaryDir": "${sourceDir}/build/macos-arm64-local",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -149,7 +138,6 @@
       "displayName": "macOS Intel (CPM)",
       "description": "Native Intel build using CPM for dependencies",
       "inherits": ["ninja-multi-base", "macos-cpm"],
-      "binaryDir": "${sourceDir}/build/macos-x86_64-cpm",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -161,7 +149,6 @@
       "displayName": "macOS Intel (Local)",
       "description": "Native Intel build using Homebrew dependencies",
       "inherits": ["ninja-multi-base", "macos-local"],
-      "binaryDir": "${sourceDir}/build/macos-x86_64-local",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -174,7 +161,6 @@
       "description": "Universal binary for both Apple Silicon and Intel",
       "inherits": ["ninja-multi-base", "macos-cpm"],
       "toolchainFile": "${sourceDir}/cmake/ignore-brew.cmake",
-      "binaryDir": "${sourceDir}/build/macos-universal",
       "cacheVariables": {
         "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
         "HDRVIEW_ENABLE_LIBWEBP": "OFF",
@@ -190,13 +176,24 @@
       }
     },
     {
-      "name": "windows",
-      "displayName": "Windows",
+      "name": "windows-msvc",
+      "displayName": "Windows (MSVC)",
       "description": "Windows build with Visual Studio",
       "inherits": "msvc-base",
-      "binaryDir": "${sourceDir}/build",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-ninja",
+      "displayName": "Windows (Ninja)",
+      "description": "Windows build with Ninja",
+      "inherits": "ninja-multi-base",
       "cacheVariables": {
-        "UHDR_BUILD_DEPS": "ON"
+        "CMAKE_C_COMPILER": "cl.exe",
+        "CMAKE_CXX_COMPILER": "cl.exe"
       },
       "condition": {
         "type": "equals",
@@ -209,7 +206,6 @@
       "displayName": "Linux (CPM)",
       "description": "Linux build using CPM for dependencies",
       "inherits": ["ninja-multi-base", "linux-cpm-base"],
-      "binaryDir": "${sourceDir}/build/linux-cpm",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -221,7 +217,6 @@
       "displayName": "Linux (Local)",
       "description": "Linux build using system dependencies",
       "inherits": ["ninja-multi-base", "linux-local-base"],
-      "binaryDir": "${sourceDir}/build/linux-local",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -233,7 +228,6 @@
       "displayName": "Linux AppImage",
       "description": "Linux build optimized for AppImage packaging with bundled dependencies",
       "inherits": ["ninja-multi-base", "linux-cpm-base"],
-      "binaryDir": "${sourceDir}/build/linux-appimage",
       "cacheVariables": {
         "HDRVIEW_PORTABLE_INSTALL": "OFF",
         "HDRVIEW_ENABLE_LIBPNG": "ON",
@@ -256,24 +250,6 @@
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Linux"
-      }
-    },
-    {
-      "name": "emscripten",
-      "displayName": "Emscripten (WebAssembly)",
-      "description": "Build for web using Emscripten (requires EMSDK environment variable)",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/emscripten",
-      "toolchainFile": "$env{EMSDK}/cmake/Modules/Platform/Emscripten.cmake",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "MinSizeRel",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/emscripten/deploy",
-        "HDRVIEW_ENABLE_J2K": "OFF",
-        "HDRVIEW_ENABLE_HTJ2K": "OFF",
-        "HDRVIEW_ENABLE_AVIF": "OFF",
-        "HDRVIEW_ENABLE_HEIC": "OFF",
-        "HDRVIEW_ENABLE_AVCI": "OFF",
-        "UHDR_BUILD_DEPS": "ON"
       }
     }
   ],
@@ -301,30 +277,6 @@
       "hidden": true,
       "configuration": "RelWithDebInfo",
       "jobs": 0
-    },
-    {
-      "name": "default-debug",
-      "displayName": "Debug",
-      "inherits": "build-base-debug",
-      "configurePreset": "default"
-    },
-    {
-      "name": "default-release",
-      "displayName": "Release",
-      "inherits": "build-base-release",
-      "configurePreset": "default"
-    },
-    {
-      "name": "default-minsizerel",
-      "displayName": "MinSizeRel",
-      "inherits": "build-base-minsizerel",
-      "configurePreset": "default"
-    },
-    {
-      "name": "default-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
-      "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "default"
     },
     {
       "name": "macos-arm64-cpm-debug",
@@ -447,28 +399,52 @@
       "configurePreset": "macos-universal"
     },
     {
-      "name": "windows-debug",
-      "displayName": "Debug",
+      "name": "windows-msvc-debug",
+      "displayName": "Debug (MSVC)",
       "inherits": "build-base-debug",
-      "configurePreset": "windows"
+      "configurePreset": "windows-msvc"
     },
     {
-      "name": "windows-release",
-      "displayName": "Release",
+      "name": "windows-msvc-release",
+      "displayName": "Release (MSVC)",
       "inherits": "build-base-release",
-      "configurePreset": "windows"
+      "configurePreset": "windows-msvc"
     },
     {
-      "name": "windows-minsizerel",
-      "displayName": "MinSizeRel",
+      "name": "windows-msvc-minsizerel",
+      "displayName": "MinSizeRel (MSVC)",
       "inherits": "build-base-minsizerel",
-      "configurePreset": "windows"
+      "configurePreset": "windows-msvc"
     },
     {
-      "name": "windows-relwithdebinfo",
-      "displayName": "RelWithDebInfo",
+      "name": "windows-msvc-relwithdebinfo",
+      "displayName": "RelWithDebInfo (MSVC)",
       "inherits": "build-base-relwithdebinfo",
-      "configurePreset": "windows"
+      "configurePreset": "windows-msvc"
+    },
+    {
+      "name": "windows-ninja-debug",
+      "displayName": "Debug (Ninja)",
+      "inherits": "build-base-debug",
+      "configurePreset": "windows-ninja"
+    },
+    {
+      "name": "windows-ninja-release",
+      "displayName": "Release (Ninja)",
+      "inherits": "build-base-release",
+      "configurePreset": "windows-ninja"
+    },
+    {
+      "name": "windows-ninja-minsizerel",
+      "displayName": "MinSizeRel (Ninja)",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "windows-ninja"
+    },
+    {
+      "name": "windows-ninja-relwithdebinfo",
+      "displayName": "RelWithDebInfo (Ninja)",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "windows-ninja"
     },
     {
       "name": "linux-cpm-debug",
