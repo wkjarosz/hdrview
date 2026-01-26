@@ -128,7 +128,7 @@ list(APPEND CMD "-D" "EMSCRIPTEN=${EMSCRIPTEN}")
 list(APPEND CMD "-D" "HDRVIEW_TARGET_ARCH=${HDRVIEW_TARGET_ARCH}")
 list(APPEND CMD "-P" "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake")
 add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
   COMMAND ${CMD}
   COMMENT "Generating git version file"
 )
