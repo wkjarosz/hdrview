@@ -123,7 +123,7 @@ bool is_uhdr_image(istream &is) noexcept
                 fmt::format("Failed to read : {} bytes, read : {} bytes", size, (size_t)is.gcount())};
 
         // we could just call ::is_uhdr_image now, but we want to report the error in case this is not a uhdr image
-        return ::is_uhdr_image(data.get(), size);
+        return ::is_uhdr_image(data.get(), (int)size);
 
         // auto throw_if_error = [](uhdr_error_info_t status)
         // {
@@ -148,7 +148,7 @@ bool is_uhdr_image(istream &is) noexcept
 
         // ret = true;
     }
-    catch (const exception &e)
+    catch (...)
     {
         // spdlog::debug("Cannot load image with UltraHDR: {}", e.what());
         ret = false;

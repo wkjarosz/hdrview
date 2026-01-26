@@ -606,7 +606,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                              float4 bilerp = c00 * (1 - u) * (1 - v) + c10 * u * (1 - v) +
                                                              c01 * (1 - u) * v + c11 * u * v;
 
-                                             for (size_t c = 0; c < img->channels.size(); ++c)
+                                             for (int c = 0; c < (int)img->channels.size(); ++c)
                                                  img->channels[c](x, y) =
                                                      levels > 1 ? dither_quantize(bilerp[c], levels, x, y, dither) /
                                                                       (levels - 1.f)

@@ -333,7 +333,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         if (croi.size() != rroi.size())
             spdlog::error("Image and reference channel ROIs are not the same size!");
 
-        auto pixel_value = [&img, ref, &croi, &rroi, this](size_t i)
+        auto pixel_value = [&img, ref, &croi, &rroi, this](int i)
         {
             int2 i2d(i % croi.size().x, i / croi.size().x); // convert to 2D coordinates
             if (i2d.y >= croi.size().y)
@@ -376,7 +376,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
                         if (canceled)
                             throw std::runtime_error("canceling summary stats");
 
-                        float val = pixel_value(i);
+                        float val = pixel_value((int)i);
 
                         if (isnan(val))
                             ++partial.nan_pixels;
@@ -480,7 +480,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         hist_y_limits[0] = settings.y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0];
         // for upper y-limit, accumulate bins in descending order until reaching perc% of total area
 
-        float total_area    = croi.volume();
+        float total_area    = (float)croi.volume();
         float required_area = 0.99f * total_area; // percentage of total area to accumulate
 
         double accum_area = 0.0;
@@ -724,7 +724,7 @@ map<string, int> Image::channels_in_layer(const string &layer) const
 {
     map<string, int> result;
 
-    for (size_t i = 0; i < channels.size(); ++i)
+    for (int i = 0; i < (int)channels.size(); ++i)
         // if the channel starts with the layer name, and there is no dot afterwards, then this channel is in the layer
         if (starts_with(channels[i].name, layer) && channels[i].name.substr(layer.length()).find(".") == string::npos)
             result.insert({channels[i].name, i});
@@ -794,9 +794,9 @@ void Image::build_layers_and_groups()
 
         LayerTreeNode *node = &root;
         {
-            auto path = Channel::split_to_path(layer.name);
+            auto path_ = Channel::split_to_path(layer.name);
 
-            for (auto d : path)
+            for (auto d : path_)
             {
                 auto it = node->children.find(d);
                 if (it != node->children.end())
@@ -814,7 +814,7 @@ void Image::build_layers_and_groups()
             if (node->leaf_layer >= 0)
                 spdlog::info("node '{}' already contains a leaf layer", node->name);
 
-            node->leaf_layer = layers.size() - 1;
+            node->leaf_layer = (int)layers.size() - 1;
         }
 
         // add all the layer's channels
@@ -841,13 +841,13 @@ void Image::build_layers_and_groups()
             {
                 MY_ASSERT(found.size() <= 4, "ChannelGroups can have at most 4 channels!");
                 int4 group_channels;
-                for (size_t i2 = 0; i2 < found.size(); ++i2)
+                for (int i2 = 0; i2 < (int)found.size(); ++i2)
                 {
                     group_channels[i2] = found[i2]->second;
                     spdlog::debug("Found channel '{}': {}", group_channel_names[i2], found[i2]->second);
                 }
 
-                layer.groups.emplace_back(groups.size());
+                layer.groups.emplace_back((int)groups.size());
                 groups.push_back(ChannelGroup{fmt::format("{}", fmt::join(group_channel_names, ",")), group_channels,
                                               (int)found.size(), group_type});
                 spdlog::debug("Created channel group '{}' of type {} with {} channels", groups.back().name,
@@ -863,7 +863,7 @@ void Image::build_layers_and_groups()
             spdlog::debug("Still have {} ungrouped channels", layer_channels.size());
             for (auto i : layer_channels)
             {
-                layer.groups.emplace_back(groups.size());
+                layer.groups.emplace_back((int)groups.size());
                 groups.push_back(
                     ChannelGroup{Channel::tail(i.first), int4{i.second, 0, 0, 0}, 1, ChannelGroup::Single_Channel});
                 spdlog::info("\tcreating channel group with single channel '{}' in layer '{}'", groups.back().name,
@@ -1186,7 +1186,7 @@ string Image::to_string() const
     if (M_to_sRGB != float3x3{la::identity})
     {
         string l = "Color matrix to Rec 709 RGB: ";
-        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_sRGB), false, l.length());
+        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_sRGB), false, (int)l.length());
     }
 
     out += fmt::format("Channels ({}):\n", channels.size());

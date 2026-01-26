@@ -152,7 +152,7 @@ struct TiffOutput
 
     explicit TiffOutput(ostream *os) : os(os) {}
 
-    static tsize_t read(thandle_t handle, tdata_t data, tsize_t size) { return 0; }
+    static tsize_t read(thandle_t /*handle*/, tdata_t /*data*/, tsize_t /*size*/) { return 0; }
 
     static tsize_t write(thandle_t handle, tdata_t data, tsize_t size)
     {
@@ -210,8 +210,7 @@ inline void throw_if_error(int status, const string_view msg)
         throw invalid_argument(fmt::format("Failed to read {}'. LibTiff error code {}'", msg, status));
 }
 
-vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_id, int sub_chain_id,
-                            const ImageLoadOptions &opts)
+vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id, const ImageLoadOptions &opts)
 {
     Timer timer;
 
@@ -425,7 +424,8 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
 
         // Check for transfer function tag
         uint16_t *tf_r = nullptr, *tf_g = nullptr, *tf_b = nullptr;
-        if (TIFFGetField(tif, TIFFTAG_TRANSFERFUNCTION, &tf_r, &tf_g, &tf_b) && tf_r)
+        bool      has_transfer_function = TIFFGetField(tif, TIFFTAG_TRANSFERFUNCTION, &tf_r, &tf_g, &tf_b);
+        if (has_transfer_function && tf_r && tf_g && tf_b)
         {
             image->metadata["header"]["Transfer function"] = {{"value", true},
                                                               {"string", "Present"},
@@ -583,9 +583,9 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
 
             // Treat scanlines as tiles with width = image width. This unifies the code path.
             // Use TIFFReadEncodedTile for tiled images and TIFFReadEncodedStrip for scanline-based images.
-            const bool      is_tiled = TIFFIsTiled(tif);
-            uint32_t        tile_width, tile_height, num_tiles_x, num_tiles_y;
-            uint64_t        tile_size, tile_row_size, strip_height, num_strips;
+            const bool      is_tiled   = TIFFIsTiled(tif);
+            uint32_t        tile_width = 0, tile_height = 0, num_tiles_x = 0, num_tiles_y = 0;
+            uint64_t        tile_size = 0, tile_row_size = 0, strip_height = 0, num_strips = 0;
             vector<uint8_t> tile_buffer;
 
             // Function pointer to read tile/strip data - both have the same signature
@@ -803,7 +803,7 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
         // 3. TRANSFERFUNCTION + PRIMARYCHROMATICITIES + WHITEPOINT tags
         // 4. Defaults
         string         profile_desc;
-        Chromaticities c;
+        Chromaticities chr;
 
         if (opts.override_profile)
         {
@@ -814,26 +814,23 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
             Chromaticities file_chr = gamut_chromaticities(opts.gamut_override);
 
             if (linearize_pixels(float_pixels.data(), size, file_chr, opts.tf_override, opts.keep_primaries,
-                                 &profile_desc, &c))
-                image->chromaticities = c;
+                                 &profile_desc, &chr))
+                image->chromaticities = chr;
         }
         else if (!image->icc_data.empty())
         {
             // Priority 2: ICC profile
             if (ICCProfile(image->icc_data)
-                    .linearize_pixels(float_pixels.data(), size, opts.keep_primaries, &profile_desc, &c))
+                    .linearize_pixels(float_pixels.data(), size, opts.keep_primaries, &profile_desc, &chr))
             {
                 spdlog::info("Linearizing colors using ICC profile.");
-                image->chromaticities = c;
+                image->chromaticities = chr;
             }
         }
         else
         {
             // Priority 3: TRANSFERFUNCTION tag + chromaticities
-            uint16_t *tf_r = nullptr, *tf_g = nullptr, *tf_b = nullptr;
-            bool      has_transfer_function = TIFFGetField(tif, TIFFTAG_TRANSFERFUNCTION, &tf_r, &tf_g, &tf_b);
-
-            if (has_transfer_function && tf_r)
+            if (has_transfer_function && tf_r && tf_g && tf_b)
             {
                 spdlog::debug("Applying TRANSFERFUNCTION tag for linearization");
                 // Apply the transfer function LUT to linearize the pixels
@@ -871,8 +868,8 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                 {
                     // Pixels are already linear from TRANSFERFUNCTION, just convert color space
                     if (linearize_pixels(float_pixels.data(), size, file_chr, TransferFunction::Linear,
-                                         opts.keep_primaries, &profile_desc, &c))
-                        image->chromaticities = c;
+                                         opts.keep_primaries, &profile_desc, &chr))
+                        image->chromaticities = chr;
                 }
             }
             else
@@ -901,8 +898,8 @@ vector<ImagePtr> load_image(TIFF *tif, bool reverse_endian, tdir_t dir, int sub_
                 if (whitePoint)
                     file_chr.white = {whitePoint[0], whitePoint[1]};
 
-                if (linearize_pixels(float_pixels.data(), size, file_chr, tf, opts.keep_primaries, &profile_desc, &c))
-                    image->chromaticities = c;
+                if (linearize_pixels(float_pixels.data(), size, file_chr, tf, opts.keep_primaries, &profile_desc, &chr))
+                    image->chromaticities = chr;
             }
         }
 
@@ -1074,7 +1071,7 @@ vector<uint8_t> extract_tiff_exif_blob(const vector<uint8_t> &data, bool reverse
     }
 }
 
-vector<ImagePtr> load_sub_images(TIFF *tif, bool reverse_endian, tdir_t dir, const ImageLoadOptions &opts)
+vector<ImagePtr> load_sub_images(TIFF *tif, tdir_t dir, const ImageLoadOptions &opts)
 {
     vector<ImagePtr> images;
 
@@ -1092,8 +1089,9 @@ vector<ImagePtr> load_sub_images(TIFF *tif, bool reverse_endian, tdir_t dir, con
                 throw invalid_argument{"Failed to read sub IFD."};
 
             int j = 0;
-            do {
-                auto sub_images = load_image(tif, reverse_endian, dir, i, j, opts);
+            do
+            {
+                auto sub_images = load_image(tif, dir, i, j, opts);
                 for (auto sub_image : sub_images) images.push_back(sub_image);
                 ++j;
             } while (TIFFReadDirectory(tif));
@@ -1204,11 +1202,12 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
     vector<ImagePtr> images;
 
     // TIFF files can contain multiple directories (sub-images)
-    do {
+    do
+    {
 
         tdir_t dir = TIFFCurrentDirectory(tif);
 
-        auto added_images = load_image(tif, reverse_endian, dir, -1, -1, opts);
+        auto added_images = load_image(tif, dir, -1, -1, opts);
         for (auto image : added_images)
         {
             image->filename = filename;
@@ -1223,7 +1222,7 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
             images.push_back(image);
         }
 
-        auto sub_images = load_sub_images(tif, reverse_endian, dir, opts);
+        auto sub_images = load_sub_images(tif, dir, opts);
         for (auto sub_image : sub_images)
         {
             sub_image->filename = filename;

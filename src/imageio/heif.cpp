@@ -460,7 +460,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
         filter.Build();
 
         std::vector<heif_item_id> item_ids(heif_context_get_number_of_top_level_images(ctx.get()));
-        heif_context_get_list_of_top_level_image_IDs(ctx.get(), item_ids.data(), item_ids.size());
+        heif_context_get_list_of_top_level_image_IDs(ctx.get(), item_ids.data(), (int)item_ids.size());
 
         if (!item_ids.empty())
         {
@@ -803,7 +803,7 @@ bool is_heif_image(istream &is) noexcept
         if (filetype_check == heif_filetype_yes_unsupported)
             spdlog::warn("This is an unsupported HEIF/AVIF file. Reading will probably fail.");
     }
-    catch (const exception &e)
+    catch (...)
     {
         // spdlog::debug("Cannot load image with libheif: {}", e.what());
         ret = false;

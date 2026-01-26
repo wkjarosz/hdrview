@@ -146,7 +146,7 @@ void HDRViewApp::draw_developer_windows()
                             if (spectrum.values.empty())
                                 continue;
                             string name{white_point_name(wp)};
-                            ImPlot::PlotLine(name.c_str(), spectrum.values.data(), spectrum.values.size(),
+                            ImPlot::PlotLine(name.c_str(), spectrum.values.data(), (int)spectrum.values.size(),
                                              (spectrum.max_wavelength - spectrum.min_wavelength) /
                                                  (spectrum.values.size() - 1),
                                              spectrum.min_wavelength);
@@ -169,11 +169,11 @@ void HDRViewApp::draw_developer_windows()
 
                         auto &xyz       = CIE_XYZ_spectra();
                         auto  increment = (xyz.max_wavelength - xyz.min_wavelength) / xyz.values.size();
-                        ImPlot::PlotLine("X", (const float *)&xyz.values[0].x, xyz.values.size(), increment,
+                        ImPlot::PlotLine("X", (const float *)&xyz.values[0].x, (int)xyz.values.size(), increment,
                                          xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
-                        ImPlot::PlotLine("Y", (const float *)&xyz.values[0].y, xyz.values.size(), increment,
+                        ImPlot::PlotLine("Y", (const float *)&xyz.values[0].y, (int)xyz.values.size(), increment,
                                          xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
-                        ImPlot::PlotLine("Z", (const float *)&xyz.values[0].z, xyz.values.size(), increment,
+                        ImPlot::PlotLine("Z", (const float *)&xyz.values[0].z, (int)xyz.values.size(), increment,
                                          xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
 
                         ImPlot::PopStyleVar(3);
@@ -580,16 +580,16 @@ void HDRViewApp::draw_file_window()
         bool             use_clipper = m_file_list_mode == 0;
         ImGuiListClipper clipper;
         if (use_clipper)
-            clipper.Begin(m_visible_images.size());
+            clipper.Begin((int)m_visible_images.size());
         // the loop conditions here are to execute this outer loop once if we are not using the clipper, and execute it
         // as long as clipper.Step() returns true otherwise
         for (int iter = 0; (!use_clipper && iter < 1) || (use_clipper && clipper.Step()); ++iter)
         {
             int start = use_clipper ? clipper.DisplayStart : 0;
-            int end   = use_clipper ? clipper.DisplayEnd : m_visible_images.size();
+            int end   = use_clipper ? clipper.DisplayEnd : (int)m_visible_images.size();
             for (int vi = start; vi < end; ++vi)
             {
-                int   i            = m_visible_images[vi];
+                int   i            = (int)m_visible_images[vi];
                 auto &img          = m_images[i];
                 bool  is_current   = m_current == i;
                 bool  is_reference = m_reference == i;
@@ -640,9 +640,9 @@ void HDRViewApp::draw_file_window()
                     std::string menu_label = fmt::format(reveal_in_file_manager_text(), file_manager_name());
                     if (ImGui::MenuItem(menu_label.c_str()))
                     {
-                        string filename, entry_fn;
-                        split_zip_entry(img->filename, filename, entry_fn);
-                        show_in_file_manager(filename.c_str());
+                        string fn, entry_fn;
+                        split_zip_entry(img->filename, fn, entry_fn);
+                        show_in_file_manager(fn.c_str());
                     }
 #endif
                     // Select as current image

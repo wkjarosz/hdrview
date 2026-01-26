@@ -197,18 +197,18 @@ void Image::draw_histogram()
         if (ImPlot::DragLineX(0, &xrange.min.x, ImVec4(0, 0, 0, 1), 2,
                               ImPlotDragToolFlags_NoFit | ImPlotDragToolFlags_Delayed, &released.x))
         {
-            double range               = max(xrange.size().x, 1e-10);
-            hdrview()->exposure_live() = -log2(range);
+            float range                = max((float)xrange.size().x, 1e-10f);
+            hdrview()->exposure_live() = -log2((float)range);
             // if invalid, drag white handle with black handle
-            hdrview()->offset_live() = -xrange.min.x / range;
+            hdrview()->offset_live() = -(float)xrange.min.x / range;
         }
         if (ImPlot::DragLineX(1, &xrange.max.x, ImVec4(1, 1, 1, 1), 2,
                               ImPlotDragToolFlags_NoFit | ImPlotDragToolFlags_Delayed, &released.y))
         {
-            double range               = max(xrange.size().x, 1e-10);
-            hdrview()->exposure_live() = -log2(range);
+            float range                = max((float)xrange.size().x, 1e-10f);
+            hdrview()->exposure_live() = -log2((float)range);
             // if invalid, drag black handle with white handle
-            hdrview()->offset_live() = -(xrange.max.x - range) / range;
+            hdrview()->offset_live() = -((float)xrange.max.x - range) / range;
         }
         if (la::any(released))
             hdrview()->exposure() = hdrview()->exposure_live();
@@ -224,9 +224,9 @@ void Image::draw_histogram()
             auto gain       = pow(2.f, hdrview()->exposure_live());
             auto clip_range = double2(hdrview()->clip_range() / gain);
             if (ImPlot::DragLineX(2, &clip_range.x, ImVec4(0, 0, 0, 1), 1, ImPlotDragToolFlags_Delayed))
-                hdrview()->clip_range().x = clip_range.x * gain;
+                hdrview()->clip_range().x = (float)clip_range.x * gain;
             if (ImPlot::DragLineX(3, &clip_range.y, ImVec4(1, 1, 1, 1), 1, ImPlotDragToolFlags_Delayed))
-                hdrview()->clip_range().y = clip_range.y * gain;
+                hdrview()->clip_range().y = (float)clip_range.y * gain;
             ImPlot::TagX(clip_range.x, ImVec4(0, 0, 0, 1), "clip");
             ImPlot::TagX(clip_range.y, ImVec4(1, 1, 1, 1), "clip");
         }
@@ -238,7 +238,7 @@ void Image::draw_histogram()
     ImGui::PopFont();
 }
 
-void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
+void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is_current, bool is_reference,
                               bool short_names, int &visible_group, float &scroll_to)
 {
     static constexpr ImGuiTreeNodeFlags tree_node_flags =
@@ -271,7 +271,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
             // ImGui::TextAligned2(0.0f, -FLT_MIN, is_selected_channel ? ICON_MY_VISIBILITY : "");
 
             ImGui::TableNextColumn();
-            ImGui::TreeNodeEx((void *)(intptr_t)id++,
+            ImGui::TreeNodeEx((void *)(intptr_t)id_++,
                               tree_node_flags |
                                   (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected
                                                                                : ImGuiTreeNodeFlags_None),
@@ -318,7 +318,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
 /*!
 
 */
-void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
+void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id_, bool is_current, bool is_reference,
                             int &visible_group, float &scroll_to)
 {
     static constexpr ImGuiTreeNodeFlags tree_node_flags =
@@ -326,7 +326,7 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, boo
 
     if (node.leaf_layer >= 0)
         // draw this node's leaf channel groups
-        draw_layer_groups(layers[node.leaf_layer], img_idx, id, is_current, is_reference, true, visible_group,
+        draw_layer_groups(layers[node.leaf_layer], img_idx, id_, is_current, is_reference, true, visible_group,
                           scroll_to);
 
     for (auto &c : node.children)
@@ -340,12 +340,12 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, boo
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGuiCol_Header);
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGuiCol_Header);
-        bool open = ImGui::TreeNodeEx((void *)(intptr_t)id++, tree_node_flags, "%s %s", ICON_MY_OPEN_IMAGE,
+        bool open = ImGui::TreeNodeEx((void *)(intptr_t)id_++, tree_node_flags, "%s %s", ICON_MY_OPEN_IMAGE,
                                       child_node.name.c_str());
         ImGui::PopStyleColor(3);
         if (open)
         {
-            draw_layer_node(child_node, img_idx, id, is_current, is_reference, visible_group, scroll_to);
+            draw_layer_node(child_node, img_idx, id_, is_current, is_reference, visible_group, scroll_to);
             ImGui::TreePop();
         }
         else
@@ -356,11 +356,11 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, boo
     }
 }
 
-int Image::draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference, float &scroll_to)
+int Image::draw_channel_rows(int img_idx, int &id_, bool is_current, bool is_reference, float &scroll_to)
 {
     int visible_group = 0;
     for (size_t l = 0; l < layers.size(); ++l)
-        draw_layer_groups(layers[l], img_idx, id, is_current, is_reference, false, visible_group, scroll_to);
+        draw_layer_groups(layers[l], img_idx, id_, is_current, is_reference, false, visible_group, scroll_to);
 
     return visible_group;
 }
@@ -874,7 +874,7 @@ void Image::draw_chromaticity_diagram()
             float2 tangent_px    = float2(ImPlot::PlotToPixels(tangent.x, tangent.y)) - p0;
             float2 normal_px     = pixel_length * normalize(float2{-tangent_px.y, tangent_px.x});
             auto   plot_tick_end = ImPlot::PixelsToPlot(p0 + normal_px);
-            return float2(plot_tick_end.x, plot_tick_end.y);
+            return float2((float)plot_tick_end.x, (float)plot_tick_end.y);
         };
 
         //
@@ -884,10 +884,10 @@ void Image::draw_chromaticity_diagram()
         float pixels_per_plot_unit = 1.f;
         float scale_factor         = 1.f;
         {
-            float2 plot_size = ImPlot::GetPlotSize();
-            auto   plot_rect = ImPlot::GetPlotLimits();
-            pixels_per_plot_unit =
-                length(plot_size / float2(plot_rect.X.Max - plot_rect.X.Min, plot_rect.Y.Max - plot_rect.Y.Min));
+            float2 plot_size     = ImPlot::GetPlotSize();
+            auto   plot_rect     = ImPlot::GetPlotLimits();
+            pixels_per_plot_unit = length(plot_size / float2((float)plot_rect.X.Max - (float)plot_rect.X.Min,
+                                                             (float)plot_rect.Y.Max - (float)plot_rect.Y.Min));
             // compute width in pixels of a chromaticity texture texel
             pixels_per_texel = 1.f / 256.f * pixels_per_plot_unit;
             scale_factor     = std::clamp(pixels_per_texel * 1.2f, 1.f, 4.f);
@@ -1073,10 +1073,10 @@ void Image::draw_chromaticity_diagram()
                 if (ImPlot::DragPoint(i, &primaries[i].x, &primaries[i].y, colors[i], 1.5f * scale_factor,
                                       ImPlotDragToolFlags_Delayed, &clicked[i], &hovered[i], &held[i]))
                 {
-                    gamut_chr.red   = float2(primaries[0].x, primaries[0].y);
-                    gamut_chr.green = float2(primaries[1].x, primaries[1].y);
-                    gamut_chr.blue  = float2(primaries[2].x, primaries[2].y);
-                    gamut_chr.white = float2(primaries[3].x, primaries[3].y);
+                    gamut_chr.red   = float2((float)primaries[0].x, (float)primaries[0].y);
+                    gamut_chr.green = float2((float)primaries[1].x, (float)primaries[1].y);
+                    gamut_chr.blue  = float2((float)primaries[2].x, (float)primaries[2].y);
+                    gamut_chr.white = float2((float)primaries[3].x, (float)primaries[3].y);
                     chromaticities  = gamut_chr;
                     compute_color_transform();
                 }

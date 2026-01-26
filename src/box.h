@@ -15,14 +15,14 @@
 /*!
     Box is an N-D interval.
 */
-template <typename Vec_, typename Value_, size_t Dims_>
+template <typename Vec_, typename Value_, int Dims_>
 class Box
 {
 public:
-    static constexpr size_t Dims = Dims_;
-    using Value                  = Value_;
-    using Vec                    = Vec_;
-    using BoxT                   = Box<Vec, Value, Dims>;
+    static constexpr int Dims = Dims_;
+    using Value               = Value_;
+    using Vec                 = Vec_;
+    using BoxT                = Box<Vec, Value, Dims>;
 
     Vec min; //!< The lower-bound of the interval
     Vec max; //!< The upper-bound of the interval
@@ -66,7 +66,7 @@ public:
     /// Ensures that min[i] <= max[i] for each dimension i.
     BoxT &make_valid()
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < Dims; ++i)
             if (min[i] > max[i])
                 std::swap(min[i], max[i]);
         return *this;
@@ -96,7 +96,7 @@ public:
     }
     BoxT &enclose(const Vec &point)
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < Dims; ++i)
         {
             min[i] = std::min(point[i], min[i]);
             max[i] = std::max(point[i], max[i]);
@@ -105,7 +105,7 @@ public:
     }
     BoxT &enclose(const BoxT &box)
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < Dims; ++i)
         {
             min[i] = std::min(box.min[i], min[i]);
             max[i] = std::max(box.max[i], max[i]);
@@ -114,7 +114,7 @@ public:
     }
     BoxT &intersect(const BoxT &box)
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < Dims; ++i)
         {
             min[i] = std::max(box.min[i], min[i]);
             max[i] = std::min(box.max[i], max[i]);
@@ -150,7 +150,7 @@ public:
     Vec center() const { return (max + min) / Value(2); }
     Vec clamp(Vec point) const
     {
-        for (size_t i = 0; i < Dims; ++i) point[i] = std::min(std::max(point[i], min[i]), max[i]);
+        for (int i = 0; i < Dims; ++i) point[i] = std::min(std::max(point[i], min[i]), max[i]);
         return point;
     }
     template <bool Inclusive = false>
@@ -158,14 +158,14 @@ public:
     {
         if constexpr (Inclusive)
         {
-            for (size_t i = 0; i < Dims; ++i)
+            for (int i = 0; i < Dims; ++i)
                 if (point[i] <= min[i] || point[i] >= max[i])
                     return false;
             return true;
         }
         else
         {
-            for (size_t i = 0; i < Dims; ++i)
+            for (int i = 0; i < Dims; ++i)
                 if (point[i] < min[i] || point[i] > max[i])
                     return false;
             return true;
@@ -176,14 +176,14 @@ public:
     {
         if constexpr (Inclusive)
         {
-            for (size_t i = 0; i < Dims; ++i)
+            for (int i = 0; i < Dims; ++i)
                 if (box.max[i] <= min[i] || box.min[i] >= max[i])
                     return false;
             return true;
         }
         else
         {
-            for (size_t i = 0; i < Dims; ++i)
+            for (int i = 0; i < Dims; ++i)
                 if (box.max[i] < min[i] || box.min[i] > max[i])
                     return false;
             return true;
@@ -193,23 +193,23 @@ public:
     {
         Value ret_val(1);
         Vec   s = size();
-        for (size_t i = 0; i < Dims; ++i) ret_val *= s[i];
+        for (int i = 0; i < Dims; ++i) ret_val *= s[i];
         return ret_val;
     }
     Value area() const
     {
         Value ret_val(0);
         Vec   s = size();
-        for (size_t i = 0; i < Dims; ++i)
-            for (size_t j = i + 1; j < Dims; j++) ret_val += s[i] * s[j];
+        for (int i = 0; i < Dims; ++i)
+            for (int j = i + 1; j < Dims; j++) ret_val += s[i] * s[j];
         return 2 * ret_val;
     }
-    size_t major_axis() const
+    int major_axis() const
     {
-        size_t major = 0;
-        Vec    s     = size();
+        int major = 0;
+        Vec s     = size();
 
-        for (size_t i = 1; i < Dims; ++i)
+        for (int i = 1; i < Dims; ++i)
             if (s[i] > s[major])
                 major = i;
         return major;
@@ -226,14 +226,14 @@ public:
     //-----------------------------------------------------------------------
     bool has_volume() const
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < Dims; ++i)
             if (max[i] <= min[i])
                 return false;
         return true;
     }
     bool is_empty() const
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < Dims; ++i)
             if (max[i] < min[i])
                 return true;
         return false;
@@ -241,7 +241,7 @@ public:
     //@}
 };
 
-template <typename Vec, typename Value, size_t Dims>
+template <typename Vec, typename Value, int Dims>
 inline std::ostream &operator<<(std::ostream &o, const Box<Vec, Value, Dims> &b)
 {
     return o << "[(" << b.min << "),(" << b.max << ")]";

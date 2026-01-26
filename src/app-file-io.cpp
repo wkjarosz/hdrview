@@ -591,7 +591,7 @@ void HDRViewApp::close_image(int index)
     {
         parent_path = fs::weakly_canonical(parent_path);
     }
-    catch (const std::exception &e)
+    catch (const std::exception &)
     {
         // path probably doesn't exist anymore
         parent_path = fs::path();
@@ -677,6 +677,6 @@ void HDRViewApp::close_all_images()
     m_current   = -1;
     m_reference = -1;
     m_active_directories.clear();
-    m_image_loader.remove_watched_directories([](const fs::path &path) { return true; });
+    m_image_loader.remove_watched_directories([](const fs::path &) { return true; });
     update_visibility(); // this also calls set_image_textures();
 }

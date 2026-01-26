@@ -109,7 +109,7 @@ int find_exif_signature_offset(const char *data, int len)
 }
 
 // returns new size of decoded buffer
-int decode_ascii_hex_to_binary(uint8_t u8[], int length)
+int decode_ascii_hex_to_binary(uint8_t u8[], size_t length)
 {
     int     r     = 0; // resulting length
     int     t     = 0; // temporary
@@ -117,23 +117,23 @@ int decode_ascii_hex_to_binary(uint8_t u8[], int length)
     bool    valid[256];
     uint8_t value[256];
     for (int i = 0; i < 256; i++) valid[i] = false;
-    for (int i = '0'; i <= '9'; i++)
+    for (char i = '0'; i <= '9'; i++)
     {
         valid[i] = true;
         value[i] = i - '0';
     }
-    for (int i = 'a'; i <= 'f'; i++)
+    for (char i = 'a'; i <= 'f'; i++)
     {
         valid[i] = true;
         value[i] = 10 + i - 'a';
     }
-    for (int i = 'A'; i <= 'F'; i++)
+    for (char i = 'A'; i <= 'F'; i++)
     {
         valid[i] = true;
         value[i] = 10 + i - 'A';
     }
 
-    for (int i = 0; i < length; i++)
+    for (size_t i = 0; i < length; i++)
     {
         unsigned char x = u8[i];
         if (valid[x])
@@ -146,7 +146,7 @@ int decode_ascii_hex_to_binary(uint8_t u8[], int length)
             else
             {
                 first   = true;
-                u8[r++] = t + value[x];
+                u8[r++] = uint8_t(t + value[x]);
             }
         }
     }
@@ -286,9 +286,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         throw runtime_error("Failed to create PNG read struct");
 
     png_set_error_fn(
-        png_ptr, nullptr, [](png_structp png_ptr, png_const_charp error_msg)
+        png_ptr, nullptr, [](png_structp /*png_ptr*/, png_const_charp error_msg)
         { throw invalid_argument{fmt::format("PNG error: {}", error_msg)}; },
-        [](png_structp png_ptr, png_const_charp warning_msg) { spdlog::warn("PNG warning: {}", warning_msg); });
+        [](png_structp /*png_ptr*/, png_const_charp warning_msg) { spdlog::warn("PNG warning: {}", warning_msg); });
 
     std::unique_ptr<png_info, PngInfoPtrDeleter<true>> info_ptr{png_create_info_struct(png_ptr),
                                                                 PngInfoPtrDeleter<true>{png_ptr}};
@@ -424,7 +424,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     {
         spdlog::info("Found chromaticities chunk: R({:.4f},{:.4f}) G({:.4f},{:.4f}) B({:.4f},{:.4f}) W({:.4f},{:.4f})",
                      rx, ry, gx, gy, bx, by, wx, wy);
-        *chr                       = Chromaticities{float2(rx, ry), float2(gx, gy), float2(bx, by), float2(wx, wy)};
+        *chr = Chromaticities{float2((float)rx, (float)ry), float2((float)gx, (float)gy), float2((float)bx, (float)by),
+                              float2((float)wx, (float)wy)};
         metadata["header"]["cHRM"] = {
             {"value", {rx, ry, gx, gy, bx, by, wx, wy}},
             {"string", fmt::format("R: ({:.4f},{:.4f})\nG: ({:.4f},{:.4f})\nB: ({:.4f},{:.4f})\nW: ({:.4f},{:.4f})", rx,
@@ -791,7 +792,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     return images;
 }
 
-void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool dither, bool interlaced,
+void save_png_image(const Image &img, ostream &os, string_view /*filename*/, float gain, bool dither, bool interlaced,
                     bool sixteen_bit, TransferFunction tf)
 {
     Timer                       timer;
@@ -836,9 +837,9 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
         throw runtime_error("Failed to create PNG write struct");
 
     png_set_error_fn(
-        png_ptr, nullptr, [](png_structp png_ptr, png_const_charp error_msg)
+        png_ptr, nullptr, [](png_structp /*png_ptr*/, png_const_charp error_msg)
         { throw invalid_argument{fmt::format("PNG error: {}", error_msg)}; },
-        [](png_structp png_ptr, png_const_charp warning_msg) { spdlog::warn("PNG warning: {}", warning_msg); });
+        [](png_structp /*png_ptr*/, png_const_charp warning_msg) { spdlog::warn("PNG warning: {}", warning_msg); });
 
     std::unique_ptr<png_info, PngInfoPtrDeleter<false>> info_ptr{png_create_info_struct(png_ptr),
                                                                  PngInfoPtrDeleter<false>{png_ptr}};
@@ -882,10 +883,11 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
 
 #ifdef PNG_cICP_SUPPORTED
     // if cicp_primaries are unrecognized (< 0), we already converted values to sRGB/BT.709
-    png_byte color_primaries     = cicp_primaries < 0 ? 1 : cicp_primaries; // e.g. 1 for BT.709, 9 for BT.2020
-    png_byte transfer_function   = transfer_function_to_CICP(tf); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
-    png_byte matrix_coefficients = 0;                             // e.g. 0 for RGB
-    png_byte video_full_range    = 1;                             // 1 for full range, 0 for limited
+    png_byte color_primaries = png_byte(cicp_primaries < 0 ? 1 : cicp_primaries); // e.g. 1 for BT.709, 9 for BT.2020
+    png_byte transfer_function =
+        (png_byte)transfer_function_to_CICP(tf); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
+    png_byte matrix_coefficients = 0;            // e.g. 0 for RGB
+    png_byte video_full_range    = 1;            // 1 for full range, 0 for limited
 
     png_set_cICP(png_ptr, info_ptr.get(), color_primaries, transfer_function, matrix_coefficients, video_full_range);
 #endif

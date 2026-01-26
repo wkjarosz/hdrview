@@ -184,7 +184,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
                     for (int bit_idx = 0; bit_idx < 8 && (x * 8 + bit_idx) < w; ++bit_idx)
                     {
                         int idx                 = y * w + (x * 8 + bit_idx);
-                        image->channels[0](idx) = (byte >> (7 - bit_idx)) & 0x1;
+                        image->channels[0](idx) = float((byte >> (7 - bit_idx)) & 0x1);
                     }
                 }
             }
@@ -257,7 +257,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
     }
     else
     {
-        int file_nc = (dds.bpp == 0) ? dds.num_channels : dds.bpp / 8 / DDSFile::data_type_size(type);
+        int file_nc = (dds.bpp == 0) ? dds.num_channels : dds.bpp / 8 / (int)DDSFile::data_type_size(type);
         for (int c = 0; c < nc; ++c)
         {
             Channel &ch = image->channels[c];
@@ -631,7 +631,7 @@ bool is_dds_image(std::istream &is) noexcept
     }
 }
 
-vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLoadOptions &opts)
+vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLoadOptions & /*opts*/)
 {
     ScopedMDC mdc{"IO", "DDS"};
     DDSFile   dds;

@@ -172,7 +172,8 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
 
         exif_log_set_func(
             m_impl->exif_log.get(),
-            [](ExifLog *log, ExifLogCode kind, const char *domain, const char *format, va_list args, void *user_data)
+            [](ExifLog * /*log*/, ExifLogCode kind, const char *domain, const char *format, va_list args,
+               void *user_data)
             {
                 bool *error = static_cast<bool *>(user_data);
                 char  msg[1024];
@@ -194,7 +195,7 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
         exif_data_log(m_impl->exif_data.get(), m_impl->exif_log.get());
 
         // 3) Load the EXIF data from memory buffer
-        exif_data_load_data(m_impl->exif_data.get(), m_impl->data.data(), m_impl->data.size());
+        exif_data_load_data(m_impl->exif_data.get(), m_impl->data.data(), (unsigned)m_impl->data.size());
 
         if (error)
             spdlog::warn("There were errors while loading EXIF data, but trying to continue.");

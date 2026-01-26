@@ -92,13 +92,13 @@ struct PixelStats
 
     struct Summary
     {
-        float minimum      = std::numeric_limits<float>::infinity();
-        float maximum      = -std::numeric_limits<float>::infinity();
-        float average      = 0.0f;
-        float stddev       = 0.0f;
-        int   nan_pixels   = 0;
-        int   inf_pixels   = 0;
-        int   valid_pixels = 0;
+        float  minimum      = std::numeric_limits<float>::infinity();
+        float  maximum      = -std::numeric_limits<float>::infinity();
+        double average      = 0.0;
+        double stddev       = 0.0;
+        int    nan_pixels   = 0;
+        int    inf_pixels   = 0;
+        int    valid_pixels = 0;
     };
 
     Summary summary;

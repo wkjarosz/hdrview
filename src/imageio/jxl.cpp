@@ -23,7 +23,7 @@ struct JXLSaveOptions
 {
     float            gain            = 1.f;
     bool             lossless        = false;
-    int              quality         = 95;
+    float            quality         = 95.0f;
     int              data_type_index = 0;
     TransferFunction tf              = TransferFunction::BT2100_PQ;
 };
@@ -222,7 +222,7 @@ bool is_jxl_image(istream &is) noexcept
         if (signature == JXL_SIG_CODESTREAM || signature == JXL_SIG_CONTAINER)
             ret = true;
         else
-            invalid_argument{"Not a JPEG XL file"};
+            throw invalid_argument{"Not a JPEG XL file"};
     }
     catch (const exception &e)
     {
@@ -237,10 +237,10 @@ bool is_jxl_image(istream &is) noexcept
 
 static Chromaticities file_chromaticities(const JxlColorEncoding &enc)
 {
-    return Chromaticities{float2(enc.primaries_red_xy[0], enc.primaries_red_xy[1]),
-                          float2(enc.primaries_green_xy[0], enc.primaries_green_xy[1]),
-                          float2(enc.primaries_blue_xy[0], enc.primaries_blue_xy[1]),
-                          float2(enc.white_point_xy[0], enc.white_point_xy[1])};
+    return Chromaticities{float2((float)enc.primaries_red_xy[0], (float)enc.primaries_red_xy[1]),
+                          float2((float)enc.primaries_green_xy[0], (float)enc.primaries_green_xy[1]),
+                          float2((float)enc.primaries_blue_xy[0], (float)enc.primaries_blue_xy[1]),
+                          float2((float)enc.white_point_xy[0], (float)enc.white_point_xy[1])};
 }
 
 // wrapper to linearize_pixels that uses the JPEG-XL encoded color profile
@@ -298,8 +298,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
 
     std::vector<float>               pixels;
-    JxlColorEncoding                 file_enc;
-    JxlBasicInfo                     info;
+    JxlColorEncoding                 file_enc{};
+    JxlBasicInfo                     info{};
     std::vector<uint8_t>             icc_profile;
     bool                             has_encoded_profile = false;
     std::vector<JxlExtraChannelInfo> extra_channel_infos;
@@ -888,10 +888,10 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             spdlog::debug("JPEG-XL: EXIF metadata successfully parsed: {}", j.dump(2));
 
             // assign exif metadata to all images
-            for (auto &&image : images)
+            for (auto &&i : images)
             {
-                image->metadata["exif"] = j;
-                image->exif             = Exif{exif_buffer};
+                i->metadata["exif"] = j;
+                i->exif             = Exif{exif_buffer};
             }
         }
         catch (const std::exception &e)
@@ -901,7 +901,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
     if (!xmp_buffer.empty())
     {
         // assign xmp metadata to all images
-        for (auto &&image : images) { image->xmp_data = xmp_buffer; }
+        for (auto &&i : images) { i->xmp_data = xmp_buffer; }
     }
 
     return images;
@@ -939,8 +939,9 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     format.align      = 0;
 
     format.data_type = (JxlDataType)data_type;
-    switch (data_type)
+    switch (format.data_type)
     {
+    default: [[fallthrough]];
     case JXL_TYPE_UINT8:
         info.bits_per_sample          = 8;
         info.exponent_bits_per_sample = 0;
@@ -1125,7 +1126,8 @@ JXLSaveOptions *jxl_parameters_gui()
             "If enabled, the image will be saved using lossless compression. Quality setting will be ignored.");
 
         ImGui::BeginDisabled(s_opts.lossless);
-        ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0, "Quality level for lossy compression.");
+        ImGui::PE::SliderFloat("Quality", &s_opts.quality, 1.f, 100.f, "%.0f", 0,
+                               "Quality level for lossy compression.");
         ImGui::EndDisabled();
 
         ImGui::PE::End();

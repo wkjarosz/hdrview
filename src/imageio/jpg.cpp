@@ -396,8 +396,8 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     }
 }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool sRGB, bool dither,
-                    int quality, bool progressive)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filename*/, float gain, bool sRGB,
+                    bool dither, int quality, bool progressive)
 {
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;

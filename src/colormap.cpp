@@ -22,7 +22,7 @@ void Colormap::initialize()
     {
         s_values[cmap].resize(ImPlot::GetColormapSize(cmap));
         for (size_t i = 0; i < s_values[cmap].size(); ++i)
-            s_values[cmap][i] = ImGui::ColorConvertFloat4ToU32(ImPlot::GetColormapColor(i, cmap));
+            s_values[cmap][i] = ImGui::ColorConvertFloat4ToU32(ImPlot::GetColormapColor((int)i, cmap));
     }
 
     cmap           = Colormap_Inferno;
@@ -113,7 +113,7 @@ void Colormap::initialize()
         IM_COL32(245, 248, 145, 255), IM_COL32(246, 250, 149, 255), IM_COL32(247, 251, 153, 255),
         IM_COL32(249, 252, 157, 255), IM_COL32(250, 253, 160, 255), IM_COL32(252, 254, 164, 255),
     };
-    ImPlot::AddColormap("Inferno", (const ImU32 *)s_values[cmap].data(), s_values[cmap].size(), false);
+    ImPlot::AddColormap("Inferno", (const ImU32 *)s_values[cmap].data(), (int)s_values[cmap].size(), false);
 
     cmap           = Colormap_Turbo;
     s_values[cmap] = vector<ImU32>{
@@ -203,7 +203,7 @@ void Colormap::initialize()
         IM_COL32(139, 9, 1, 255),     IM_COL32(135, 8, 1, 255),    IM_COL32(132, 7, 1, 255),
         IM_COL32(129, 6, 2, 255),     IM_COL32(125, 5, 2, 255),    IM_COL32(122, 4, 2, 255),
     };
-    ImPlot::AddColormap("Turbo", (const ImU32 *)s_values[cmap].data(), s_values[cmap].size(), false);
+    ImPlot::AddColormap("Turbo", (const ImU32 *)s_values[cmap].data(), (int)s_values[cmap].size(), false);
 
     cmap           = Colormap_IceFire;
     s_values[cmap] = vector<ImU32>{
@@ -293,7 +293,7 @@ void Colormap::initialize()
         IM_COL32(252, 198, 153, 255), IM_COL32(252, 200, 157, 255), IM_COL32(253, 203, 161, 255),
         IM_COL32(253, 206, 164, 255), IM_COL32(254, 209, 168, 255), IM_COL32(254, 211, 172, 255),
     };
-    ImPlot::AddColormap("IceFire", (const ImU32 *)s_values[cmap].data(), s_values[cmap].size(), false);
+    ImPlot::AddColormap("IceFire", (const ImU32 *)s_values[cmap].data(), (int)s_values[cmap].size(), false);
 
     cmap           = Colormap_CoolWarm;
     s_values[cmap] = {
@@ -383,16 +383,16 @@ void Colormap::initialize()
         IM_COL32(187, 26, 43, 255),   IM_COL32(185, 22, 42, 255),   IM_COL32(184, 17, 41, 255),
         IM_COL32(182, 13, 40, 255),   IM_COL32(181, 8, 39, 255),    IM_COL32(179, 3, 38, 255),
     };
-    ImPlot::AddColormap("CoolWarm", (const ImU32 *)s_values[cmap].data(), s_values[cmap].size(), false);
+    ImPlot::AddColormap("CoolWarm", (const ImU32 *)s_values[cmap].data(), (int)s_values[cmap].size(), false);
 
     cmap           = Colormap_AbsGreys;
     s_values[cmap] = {IM_COL32(255, 255, 255, 255), IM_COL32(0, 0, 0, 255), IM_COL32(255, 255, 255, 255)};
-    ImPlot::AddColormap("Abs Grey", (const ImU32 *)s_values[cmap].data(), s_values[cmap].size(), false);
+    ImPlot::AddColormap("Abs Grey", (const ImU32 *)s_values[cmap].data(), (int)s_values[cmap].size(), false);
 
     for (cmap = 0; cmap < Colormap_COUNT; ++cmap)
     {
         s_textures[cmap] = std::make_unique<Texture>(
-            Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, int2(s_values[cmap].size(), 1),
+            Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, int2((int)s_values[cmap].size(), 1),
             Texture::InterpolationMode::Nearest,
             cmap <= ImPlotColormap_Paired ? Texture::InterpolationMode::Nearest : Texture::InterpolationMode::Bilinear,
             Texture::WrapMode::ClampToEdge, 1, Texture::TextureFlags::ShaderRead);
@@ -420,6 +420,6 @@ const std::vector<ImU32> &Colormap::values(Colormap_ idx)
 
 ImVec4 Colormap::sample(Colormap_ idx, float t)
 {
-    float cmap_size = Colormap::values(idx).size();
+    float cmap_size = (float)Colormap::values(idx).size();
     return ImPlot::SampleColormap(saturate(lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, t)), idx);
 }

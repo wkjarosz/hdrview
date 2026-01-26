@@ -28,7 +28,7 @@ using namespace la::aliases;
 
 // forward declarations
 template <typename Vec_, typename Value_ = typename la::scalar_t<Vec_>,
-          size_t Dims_ = la::detail::apply<la::detail::op_pos, void, Vec_>::size>
+          int Dims_ = la::detail::apply<la::detail::op_pos, void, Vec_>::size>
 class Box;
 using Color3 = float3;
 using Color4 = float4;
