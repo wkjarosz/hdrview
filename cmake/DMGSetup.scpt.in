@@ -14,7 +14,7 @@ on run argv
             set text size of viewOptions to 14
             
             -- Position the app bundle on the left
-            set position of item "HDRView @VERSION_NO_V@.app" of container window to {130, 105}
+            set position of item "HDRView.app" of container window to {130, 105}
             
             -- Position the Applications symlink on the right
             set position of item "Applications" of container window to {360, 105}
