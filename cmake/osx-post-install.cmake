@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
 
 # Add a symlink to /usr/local/bin so we can launch HDRView from the commandline
 execute_process(COMMAND rm -f /usr/local/bin/hdrview)
