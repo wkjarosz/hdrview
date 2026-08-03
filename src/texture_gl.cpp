@@ -271,6 +271,16 @@ void Texture::resize(const int2 &size)
     upload(nullptr);
 }
 
+int Texture::max_size()
+{
+    // Cached after the first call. That first call must happen on the main/render thread while a GL context is
+    // current (see HDRViewApp::setup_rendering()); afterwards this is just a plain read, safe from any thread.
+    static GLint s_max_size = 0;
+    if (s_max_size == 0)
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &s_max_size);
+    return (int)s_max_size;
+}
+
 void Texture::generate_mipmap()
 {
     spdlog::info("Generating mipmap");

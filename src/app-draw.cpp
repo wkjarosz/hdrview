@@ -414,6 +414,10 @@ void HDRViewApp::setup_rendering()
 {
     try
     {
+        // Query (and cache) the backend's max texture size while a graphics context is guaranteed to be current on
+        // this (the main) thread. Image::finalize() relies on the cached value from background loader threads.
+        spdlog::info("Maximum supported texture size: {}", Texture::max_size());
+
         m_render_pass = new RenderPass(false, true);
         m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
         m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);

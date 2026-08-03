@@ -312,6 +312,32 @@ void Texture::resize(const int2 &size)
     m_texture_handle       = (__bridge_retained void *)texture;
 }
 
+int Texture::max_size()
+{
+    // Requesting a texture larger than the GPU's max 2D texture dimension doesn't fail gracefully: MTLTextureDescriptor
+    // validation calls abort() directly, which is why this must be checked before ever constructing a Texture of this
+    // size (see Image::finalize()). Max size depends on GPU family and isn't exposed as a simple property, so we
+    // check supportsFamily: from the highest (newest) tier down; families are cumulative, so a device supporting a
+    // higher family also supports all lower ones in the same group.
+    //   Apple10 (M5, A19+): 32768
+    //   Apple3-Apple9 (A9-M4) and Mac1/Mac2 (all other Apple Silicon and Intel Macs): 16384
+    //   Apple1/Apple2 (oldest, pre-A9): 8192
+    // MTLGPUFamilyApple10 (raw value 1010) is referenced by its integer value rather than the symbolic name, since it
+    // is only defined in very recent SDKs; supportsFamily: safely returns NO for any family value the running
+    // OS/SDK/hardware doesn't recognize, so this degrades correctly on older toolchains and devices.
+    // Sources:
+    //   https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf
+    //   https://ikyle.me/blog/2026/metal-texture-tiling
+    auto         &gMetalGlobals = GetMetalGlobals();
+    id<MTLDevice> device        = gMetalGlobals.caMetalLayer.device;
+
+    if ([device supportsFamily:(MTLGPUFamily)1010]) // MTLGPUFamilyApple10
+        return 32768;
+    if ([device supportsFamily:MTLGPUFamilyApple3] || [device supportsFamily:MTLGPUFamilyMac2])
+        return 16384;
+    return 8192;
+}
+
 void Texture::generate_mipmap()
 {
     auto &gMetalGlobals = GetMetalGlobals();

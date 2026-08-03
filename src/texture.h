@@ -138,6 +138,16 @@ public:
     /// Generates the mipmap. Done automatically upon upload if manual mipmapping is disabled.
     void generate_mipmap();
 
+    /**
+        Maximum supported width or height for a 2D texture on the active graphics backend.
+
+        \note
+            On the OpenGL backend this queries the driver and requires a current GL context on the calling thread; it
+            is cached after the first call, which must happen on the main/render thread (e.g. during \ref
+            HDRViewApp::setup_rendering()) before any other thread relies on the cached value.
+    */
+    static int max_size();
+
 #if defined(HELLOIMGUI_HAS_OPENGL)
     uint32_t texture_handle() const { return m_texture_handle; }
     uint32_t renderbuffer_handle() const { return m_renderbuffer_handle; }
