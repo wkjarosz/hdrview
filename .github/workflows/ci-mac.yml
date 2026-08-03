@@ -83,7 +83,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          restore-keys: |
+            ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
