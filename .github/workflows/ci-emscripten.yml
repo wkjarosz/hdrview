@@ -42,10 +42,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # path/hashFiles are scoped (not "**"-prefixed from the workspace root) to avoid walking into build/ - on
+      # macOS this glob has walked through CPack's DragNDrop staging symlink into every Xcode install's SDK
+      # frameworks, causing multi-hour cache-save hangs (confirmed via debug logs). CPM_SOURCE_CACHE above pins
+      # cpm_modules to the workspace root, so no "**" is needed for path.
       - uses: actions/cache@v4
         with:
-          path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          path: "cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-
 

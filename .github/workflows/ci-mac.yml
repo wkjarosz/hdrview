@@ -98,10 +98,19 @@ jobs:
       # several minutes archiving a large cpm_modules tree only to have the save rejected. restore-keys is left
       # scoped to the preset only (no buildtype) so either buildtype's cache can still seed a warm start for the
       # other, even though each buildtype now saves its own copy.
+      #
+      # Both path and hashFiles patterns are deliberately scoped (not "**"-prefixed from the workspace root):
+      # a leading "**" walks the whole workspace, including build/, which by this point in the job contains
+      # CPack's DragNDrop staging tree with its conventional "Applications -> /Applications" symlink. Following
+      # that lands on the runner's real /Applications, which has multiple full Xcode installs, each with SDK
+      # frameworks (e.g. Ruby.framework) that alias themselves via versioned symlinks - a combinatorial glob
+      # walk that has caused multi-hour hangs in this step (confirmed via ACTIONS_STEP_DEBUG logs showing
+      # "Symlink cycle detected" across several Xcode_15.*.app SDK trees during this exact evaluation).
+      # CPM_SOURCE_CACHE above pins cpm_modules to the workspace root, so no "**" is needed for path either.
       - uses: actions/cache@v4
         with:
-          path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          path: "cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
 
