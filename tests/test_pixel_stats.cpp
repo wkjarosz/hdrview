@@ -82,3 +82,75 @@ TEST_CASE("PixelStats::calculate offsets a non-zero image data origin correctly"
     CHECK(stats.summary.minimum == doctest::Approx(33.f));
     CHECK(stats.summary.maximum == doctest::Approx(44.f));
 }
+
+TEST_CASE("PixelStats::calculate counts NaN/Inf pixels separately and excludes them from min/max/average")
+{
+    // 4x4 channel, values 0..15 (x + 4*y), except three pixels replaced with NaN/+Inf/-Inf. Pixels (0,0)=0 and
+    // (3,3)=15 are left untouched, so min/max staying exactly 0/15 confirms NaN/Inf didn't corrupt them.
+    Channel img("test", int2{4, 4});
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x) img(x, y) = float(x + 4 * y);
+    img(1, 1) = std::numeric_limits<float>::quiet_NaN();     // value 5
+    img(2, 2) = std::numeric_limits<float>::infinity();      // value 10
+    img(3, 0) = -std::numeric_limits<float>::infinity();     // value 3
+
+    PixelStats::Settings settings; // whole image
+
+    PixelStats        stats;
+    std::atomic<bool> canceled{false};
+    stats.calculate(img, int2{0, 0}, nullptr, int2{0, 0}, settings, canceled);
+
+    CHECK(stats.summary.nan_pixels == 1);
+    CHECK(stats.summary.inf_pixels == 2);
+    CHECK(stats.summary.valid_pixels == 13); // 16 - 1 NaN - 2 Inf
+    CHECK(stats.summary.minimum == doctest::Approx(0.f));
+    CHECK(stats.summary.maximum == doctest::Approx(15.f));
+}
+
+TEST_CASE("PixelStats::calculate applies each blend mode against a reference image")
+{
+    // Both channels are constant-valued, so every pixel's blended result is identical and known exactly.
+    Channel img("img", int2{2, 2});
+    Channel ref("ref", int2{2, 2});
+    img.apply([](float, int, int) { return 10.f; });
+    ref.apply([](float, int, int) { return 4.f; });
+
+    auto blended_value = [&](BlendMode_ mode)
+    {
+        PixelStats::Settings settings;
+        settings.blend_mode = mode;
+
+        PixelStats        stats;
+        std::atomic<bool> canceled{false};
+        stats.calculate(img, int2{0, 0}, &ref, int2{0, 0}, settings, canceled);
+
+        CHECK(stats.summary.valid_pixels == 4);
+        // constant inputs -> every blended pixel is identical -> zero spread
+        CHECK(stats.summary.minimum == doctest::Approx(stats.summary.maximum));
+        CHECK(stats.summary.stddev == doctest::Approx(0.0));
+        return stats.summary.average;
+    };
+
+    CHECK(blended_value(BlendMode_Add) == doctest::Approx(14.0));
+    CHECK(blended_value(BlendMode_Multiply) == doctest::Approx(40.0));
+    CHECK(blended_value(BlendMode_Subtract) == doctest::Approx(6.0));
+    CHECK(blended_value(BlendMode_Divide) == doctest::Approx(2.5));
+    CHECK(blended_value(BlendMode_Average) == doctest::Approx(7.0));
+    CHECK(blended_value(BlendMode_Difference) == doctest::Approx(6.0));
+}
+
+TEST_CASE("PixelStats::calculate resets to the default, uncomputed state when canceled")
+{
+    auto img = make_identifiable_channel(4, 4);
+
+    PixelStats::Settings settings;
+
+    PixelStats        stats;
+    std::atomic<bool> canceled{true}; // already canceled before calculate() even starts
+    stats.calculate(img, int2{0, 0}, nullptr, int2{0, 0}, settings, canceled);
+
+    CHECK_FALSE(stats.computed);
+    CHECK(stats.summary.valid_pixels == 0);
+    CHECK(stats.summary.minimum == std::numeric_limits<float>::infinity());
+    CHECK(stats.summary.maximum == -std::numeric_limits<float>::infinity());
+}
