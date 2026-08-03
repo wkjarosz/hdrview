@@ -360,9 +360,9 @@ set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY pthom/hello_imgui
-  GIT_TAG v1.92.5
-  # URL https://github.com/pthom/hello_imgui/archive/refs/tags/v1.92.5.zip
-  VERSION 1.92.5
+  GIT_TAG v1.92.700
+  # URL https://github.com/pthom/hello_imgui/archive/refs/tags/v1.92.700.zip
+  VERSION 1.92.700
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   EXCLUDE_FROM_ALL YES

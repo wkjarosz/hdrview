@@ -277,7 +277,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     {
         setup_imgui_clipboard();
 
-        spdlog::info("Loading user settings from '{}'", IniSettingsLocation(m_params));
+        spdlog::info("Loading user settings from '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
 
         auto s = LoadUserPref("UserSettings");
         if (!s.empty())
@@ -349,7 +349,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         Image::cleanup_default_textures();
         Colormap::cleanup();
 
-        spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params));
+        spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
 
         json j;
         j["recent files"]            = m_image_loader.recent_files();
@@ -868,7 +868,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    ICON_MY_DEVELOPER_WINDOW,
                    0,
                    0,
-                   [this]() { show_in_file_manager(IniSettingsLocation(m_params).c_str()); },
+                   [this]()
+                   {
+                       if (auto loc = IniSettingsLocation(m_params))
+                           show_in_file_manager(loc->c_str());
+                   },
                    always_enabled,
                    false});
 
