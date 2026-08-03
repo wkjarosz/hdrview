@@ -66,19 +66,13 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
 
-      # Keyed per buildtype too (not just preset): the ccache key right below already varies by buildtype, but
-      # cpm_modules didn't, so the Debug and Release jobs for the same preset raced to save an identical cache
-      # under one shared key. actions/cache treats the loser as a soft failure, not a hard one, but it still burns
-      # several minutes archiving a large cpm_modules tree only to have the save rejected. restore-keys is left
-      # scoped to the preset only (no buildtype) so either buildtype's cache can still seed a warm start for the
-      # other, even though each buildtype now saves its own copy.
+      # Buildtype is part of the key (ccache below already varies by buildtype) so Debug and Release don't race
+      # to overwrite one shared cache entry; restore-keys stays preset-only so either buildtype can seed the other.
       #
-      # Both path and hashFiles patterns are deliberately scoped (not "**"-prefixed from the workspace root):
-      # a leading "**" walks the whole workspace, including build/. On macOS this has walked into CPack's
-      # DragNDrop staging tree's "Applications -> /Applications" symlink and from there into every Xcode
-      # install's SDK frameworks, causing multi-hour hangs (confirmed via debug logs); scoping the same way
-      # here too for consistency across workflows and to avoid the same class of bug if this job ever grows a
-      # similar symlink. CPM_SOURCE_CACHE above pins cpm_modules to the workspace root, so no "**" is needed.
+      # path and hashFiles avoid a workspace-root "**": on macOS that walks into build/'s CPack staging symlink
+      # and every installed Xcode SDK - prohibitively expensive to glob. Scoped the same way here for consistency
+      # and to stay safe if this job ever grows a similar symlink. cpm_modules is always at the workspace root
+      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
       - uses: actions/cache@v4
         with:
           path: "cpm_modules"
