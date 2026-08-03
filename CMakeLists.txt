@@ -1,5 +1,21 @@
 cmake_minimum_required(VERSION 3.13)
 
+if(APPLE)
+  # On macOS, package managers like Homebrew (particularly on Intel, where the install prefix /usr/local is one of
+  # AppleClang's implicit default header/library search locations) can leak CPATH/LIBRARY_PATH-style environment
+  # variables into every compiler invocation. When CPM builds a dependency from source that a user also happens to
+  # have installed system-wide (e.g. jpeg-xl, spdlog), this can silently shadow CPM's own fetched headers with the
+  # system copy, causing incomplete-type or ABI-mismatch build failures that depend on what's installed locally.
+  # Wrap the compiler invocation to clear these variables so CPM builds are reproducible regardless of what
+  # package managers are present, without requiring anyone to uninstall anything.
+  foreach(_hdrview_lang C CXX OBJC)
+    set(CMAKE_${_hdrview_lang}_COMPILER_LAUNCHER
+        "${CMAKE_COMMAND};-E;env;CPATH=;C_INCLUDE_PATH=;CPLUS_INCLUDE_PATH=;OBJC_INCLUDE_PATH=;LIBRARY_PATH=;${CMAKE_${_hdrview_lang}_COMPILER_LAUNCHER}"
+        CACHE STRING "" FORCE
+    )
+  endforeach()
+endif()
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules" "${CMAKE_SOURCE_DIR}/cmake/")
 
 include(VersionFromGit)
