@@ -53,6 +53,12 @@ jobs:
               name: "macOS 15 Apple Silicon CPM",
               os: macos-15,
               preset: "macos-arm64-cpm",
+              # Only this one preset/os combo builds and runs hdrview_tests (Release only, see the Configure CMake
+              # and Run unit tests steps below) - CPM always fetches OpenEXR/PNG from source for -cpm/-universal
+              # presets, which is what the vendored-test-image-backed tests in tests/test_exr_io.cpp and
+              # tests/test_png_io.cpp conditionally compile against. Running the same suite across every preset in
+              # this ~36-combination matrix would be redundant.
+              run_tests: true,
             }
           - {
               name: "macOS 15 Apple Silicon Local",
@@ -113,7 +119,11 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          EXTRA_FLAGS=""
+          if [ "${{ matrix.config.run_tests }}" = "true" ] && [ "${{ matrix.buildtype }}" = "Release" ]; then
+            EXTRA_FLAGS="-DHDRVIEW_BUILD_TESTS=ON"
+          fi
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache $EXTRA_FLAGS
 
       - name: Build
         run: |
@@ -123,6 +133,11 @@ jobs:
       - name: Checking that HDRView runs
         run: |
           ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView --help
+
+      - name: Run unit tests
+        if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
+        working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}
+        run: ctest -C ${{ matrix.buildtype }} --output-on-failure
 
       - name: Package with CPack
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
