@@ -74,7 +74,19 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install --quiet ninja create-dmg dylibbundler jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif zlib libpng imath openexr cli11 spdlog fmt aom libde265 x265 libexif libraw openjpeg openh264
+        run: brew install --quiet ninja create-dmg dylibbundler libjpeg-turbo little-cms2 zlib aom libde265 x265 openjpeg openh264
+
+      # The packages below are each also built from source by CPM for -cpm/-universal presets (which don't set
+      # CPM_USE_LOCAL_PACKAGES, so CPM always fetches regardless of what's installed system-wide). Installing them
+      # via Homebrew unconditionally is not just redundant for those presets but actively breaks the build: on
+      # Intel runners, /usr/local/include is one of AppleClang's implicit default header search locations (unlike
+      # /opt/homebrew on Apple Silicon), so the Homebrew copy's headers can silently shadow CPM's own fetched
+      # copies mid-build, causing incomplete-type/ABI-mismatch failures (seen with jpeg-xl and spdlog/fmt) that
+      # depend on what happens to be installed. -local presets, on the other hand, explicitly want these to come
+      # from Homebrew (that's the whole point of CPM_USE_LOCAL_PACKAGES=ON there), so only install them there.
+      - name: Install dependencies also built by CPM (local presets only)
+        if: contains(matrix.config.preset, 'local')
+        run: brew install --quiet jpeg-xl libultrahdr libheif libpng imath openexr cli11 spdlog fmt libexif libraw
 
       - uses: actions/checkout@v4
         with:
