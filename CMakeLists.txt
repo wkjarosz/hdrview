@@ -1554,26 +1554,16 @@ if(APPLE)
   
   # Strip leading 'v' from GIT_TAG to get full version with prerelease suffix
   string(REGEX REPLACE "^v" "" VERSION_NO_V "${GIT_TAG}")
-  
-  # Rename app bundle to include version
-  set(VERSIONED_APP_NAME "HDRView ${VERSION_NO_V}.app")
-  install(CODE "
-    if(EXISTS \"\${CMAKE_INSTALL_PREFIX}/HDRView.app\")
-      file(RENAME 
-        \"\${CMAKE_INSTALL_PREFIX}/HDRView.app\"
-        \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}\")
-    endif()
-  " COMPONENT Runtime)
 
   # Clear extended attributes (resource forks/quarantine) from the bundle before bundling/signing
   install(CODE "
     execute_process(
-      COMMAND xattr -rc \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}\"
+      COMMAND xattr -rc \"\${CMAKE_INSTALL_PREFIX}/HDRView.app\"
       RESULT_VARIABLE _XATTR_RESULT
       OUTPUT_QUIET ERROR_QUIET
     )
     if(NOT _XATTR_RESULT EQUAL 0)
-      message(WARNING \"xattr -rc returned \${_XATTR_RESULT} for ${VERSIONED_APP_NAME}\")
+      message(WARNING \"xattr -rc returned \${_XATTR_RESULT} for HDRView.app\")
     endif()
   " COMPONENT Runtime)
   
@@ -1583,8 +1573,8 @@ if(APPLE)
     install(CODE "
       execute_process(
         COMMAND ${DYLIBBUNDLER_EXECUTABLE} -od -b 
-          -x \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}/Contents/MacOS/HDRView\"
-          -d \"\${CMAKE_INSTALL_PREFIX}/${VERSIONED_APP_NAME}/Contents/libs/\"
+          -x \"\${CMAKE_INSTALL_PREFIX}/HDRView.app/Contents/MacOS/HDRView\"
+          -d \"\${CMAKE_INSTALL_PREFIX}/HDRView.app/Contents/libs/\"
         RESULT_VARIABLE DYLIB_RESULT
       )
       if(NOT DYLIB_RESULT EQUAL 0)
