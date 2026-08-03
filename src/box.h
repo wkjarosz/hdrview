@@ -244,6 +244,11 @@ public:
 template <typename Vec, typename Value, int Dims>
 inline std::ostream &operator<<(std::ostream &o, const Box<Vec, Value, Dims> &b)
 {
+    // linalg.h deliberately scopes its vec/mat operator<< overloads inside linalg::ostream_overloads rather than
+    // the plain linalg namespace, so merely including linalg.h doesn't inject them into every consumer's ADL
+    // lookup. Opt in here, scoped to just this function body, so b.min/b.max stream correctly regardless of
+    // whether the calling translation unit has separately opted in.
+    using namespace linalg::ostream_overloads;
     return o << "[(" << b.min << "),(" << b.max << ")]";
 }
 
