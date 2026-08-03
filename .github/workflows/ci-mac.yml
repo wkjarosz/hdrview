@@ -74,7 +74,17 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install --quiet ninja create-dmg dylibbundler jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif zlib libpng imath openexr cli11 spdlog fmt aom libde265 x265 libexif libraw openjpeg openh264
+        run: brew install --quiet ninja create-dmg dylibbundler libjpeg-turbo little-cms2 libultrahdr libheif zlib libpng imath openexr cli11 spdlog fmt aom libde265 x265 libexif libraw openjpeg openh264
+
+      # jpeg-xl is only needed as a system package for -local presets (which link against it via
+      # find_package); -cpm/-universal presets build it from source via CPM. Installing it
+      # unconditionally leaks /usr/local/include/jxl/decode.h into the CPM build's implicit
+      # compiler search path on Intel runners (where /usr/local/include is a default system
+      # include dir, unlike /opt/homebrew on Apple Silicon), shadowing CPM's own internal jxl
+      # headers and breaking the build.
+      - name: Install jpeg-xl (local presets only)
+        if: contains(matrix.config.preset, 'local')
+        run: brew install --quiet jpeg-xl
 
       - uses: actions/checkout@v4
         with:
