@@ -54,10 +54,13 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
 
+      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink and
+      # every installed Xcode SDK - prohibitively expensive to glob. cpm_modules is always at the workspace root
+      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
       - uses: actions/cache@v5
         with:
-          path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          path: "cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
 
@@ -139,13 +142,17 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
 
+      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink and
+      # every installed Xcode SDK - prohibitively expensive to glob. cpm_modules is always at the workspace root
+      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
       - uses: actions/cache@v5
         with:
-          path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          path: "cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
 
+      # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -264,10 +271,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink and
+      # every installed Xcode SDK - prohibitively expensive to glob. cpm_modules is always at the workspace root
+      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
       - uses: actions/cache@v5
         with:
-          path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          path: "cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-
 

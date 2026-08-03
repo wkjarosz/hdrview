@@ -92,16 +92,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Keyed per buildtype too (not just preset): the ccache key right below already varies by buildtype, but
-      # cpm_modules didn't, so the Debug and Release jobs for the same preset raced to save an identical cache
-      # under one shared key. actions/cache treats the loser as a soft failure, not a hard one, but it still burns
-      # several minutes archiving a large cpm_modules tree only to have the save rejected. restore-keys is left
-      # scoped to the preset only (no buildtype) so either buildtype's cache can still seed a warm start for the
-      # other, even though each buildtype now saves its own copy.
-      - uses: actions/cache@v4
+      # Buildtype is part of the key (ccache below already varies by buildtype) so Debug and Release don't race
+      # to overwrite one shared cache entry; restore-keys stays preset-only so either buildtype can seed the other.
+      #
+      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink and
+      # every installed Xcode SDK - prohibitively expensive to glob. cpm_modules is always at the workspace root
+      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
+      - uses: actions/cache@v5
         with:
-          path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          path: "cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
 
