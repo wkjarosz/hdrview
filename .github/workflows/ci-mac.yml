@@ -92,10 +92,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Keyed per buildtype too (not just preset): the ccache key right below already varies by buildtype, but
+      # cpm_modules didn't, so the Debug and Release jobs for the same preset raced to save an identical cache
+      # under one shared key. actions/cache treats the loser as a soft failure, not a hard one, but it still burns
+      # several minutes archiving a large cpm_modules tree only to have the save rejected. restore-keys is left
+      # scoped to the preset only (no buildtype) so either buildtype's cache can still seed a warm start for the
+      # other, even though each buildtype now saves its own copy.
       - uses: actions/cache@v4
         with:
           path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
 
