@@ -333,7 +333,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         if (croi.size() != rroi.size())
             spdlog::error("Image and reference channel ROIs are not the same size!");
 
-        auto pixel_value = [&img, ref, &croi, &rroi, this](int i)
+        auto pixel_value = [&img, img_data_origin, ref, &croi, &rroi, this](int i)
         {
             int2 i2d(i % croi.size().x, i / croi.size().x); // convert to 2D coordinates
             if (i2d.y >= croi.size().y)
@@ -341,7 +341,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
                 // spdlog::error("Pixel index {} ({}) out of bounds for ROI {}..{}", i, i2d, croi.min, croi.max);
                 return std::numeric_limits<float>::quiet_NaN(); // out of bounds
             }
-            float val = img(i2d);
+            float val = img(i2d + croi.min - img_data_origin);
             if (ref)
                 val = blend(val, (*ref)(i2d + croi.min - rroi.min), settings.blend_mode);
             return val;

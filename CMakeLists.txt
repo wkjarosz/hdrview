@@ -1394,55 +1394,54 @@ if(NOT HDRVIEW_PORTABLE_INSTALL)
   )
 endif()
 
-hello_imgui_add_app(
-  HDRView
-  ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
-  src/imageio/image_loader.cpp
-  src/imageio/dds.cpp
-  src/imageio/exif.cpp
-  src/imageio/xmp.cpp
-  src/imageio/exr.cpp
-  src/imageio/heif.cpp
-  src/imageio/icc.cpp
-  src/imageio/jpg.cpp
-  src/imageio/jxl.cpp
-  src/imageio/pfm.cpp
-  src/imageio/png.cpp
-  src/imageio/psd.cpp
-  src/imageio/stb.cpp
-  src/imageio/qoi.cpp
-  src/imageio/raw.cpp
-  src/imageio/tiff.cpp
-  src/imageio/uhdr.cpp
-  src/imageio/webp.cpp
-  src/imageio/xmp.cpp
-  src/app-draw.cpp
-  src/app-file-io.cpp
-  src/app-gui.cpp
-  src/app-windows.cpp
-  src/app-zoom.cpp
-  src/app.cpp
-  src/colormap.cpp
-  src/colorspace.cpp
-  src/common.cpp
-  src/dithermatrix256.cpp
-  src/platform_utils.cpp
-  src/fonts.cpp
-  src/hdrview.cpp
-  src/image.cpp
-  src/imgui_ext.cpp
-  src/image-gui.cpp
-  src/opengl_check.cpp
-  src/shader.cpp
-  src/shader_gl.cpp
-  src/renderpass_gl.cpp
-  src/texture_gl.cpp
-  src/texture.cpp
-  src/theme.cpp
-  ${EXTRA_SOURCES}
-  ASSETS_LOCATION
-  ${CMAKE_CURRENT_BINARY_DIR}/assets
+set(HDRVIEW_SOURCES
+    ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+    src/imageio/image_loader.cpp
+    src/imageio/dds.cpp
+    src/imageio/exif.cpp
+    src/imageio/xmp.cpp
+    src/imageio/exr.cpp
+    src/imageio/heif.cpp
+    src/imageio/icc.cpp
+    src/imageio/jpg.cpp
+    src/imageio/jxl.cpp
+    src/imageio/pfm.cpp
+    src/imageio/png.cpp
+    src/imageio/psd.cpp
+    src/imageio/stb.cpp
+    src/imageio/qoi.cpp
+    src/imageio/raw.cpp
+    src/imageio/tiff.cpp
+    src/imageio/uhdr.cpp
+    src/imageio/webp.cpp
+    src/imageio/xmp.cpp
+    src/app-draw.cpp
+    src/app-file-io.cpp
+    src/app-gui.cpp
+    src/app-windows.cpp
+    src/app-zoom.cpp
+    src/app.cpp
+    src/colormap.cpp
+    src/colorspace.cpp
+    src/common.cpp
+    src/dithermatrix256.cpp
+    src/platform_utils.cpp
+    src/fonts.cpp
+    src/hdrview.cpp
+    src/image.cpp
+    src/imgui_ext.cpp
+    src/image-gui.cpp
+    src/opengl_check.cpp
+    src/shader.cpp
+    src/shader_gl.cpp
+    src/renderpass_gl.cpp
+    src/texture_gl.cpp
+    src/texture.cpp
+    src/theme.cpp
+    ${EXTRA_SOURCES}
 )
+
+hello_imgui_add_app(HDRView ${HDRVIEW_SOURCES} ASSETS_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
@@ -1464,6 +1463,31 @@ if(APPLE)
   target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
   target_compile_definitions(HDRView PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
 endif(APPLE)
+
+# Unit tests. Off by default: reuses the same HDRVIEW_SOURCES/HDRVIEW_DEPENDENCIES/HDRVIEW_DEFINITIONS as the main
+# app (minus src/hdrview.cpp, which defines main() — doctest provides its own), since the sources under test
+# (e.g. image.cpp) aren't separated from the rest of the app's dependency graph.
+option(HDRVIEW_BUILD_TESTS "Build unit tests (requires doctest, fetched via CPM)" OFF)
+if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
+  CPMAddPackage("gh:doctest/doctest@2.4.11")
+
+  list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
+  add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp)
+  target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
+  target_compile_definitions(hdrview_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
+  target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui doctest::doctest)
+
+  if(APPLE)
+    target_compile_options(hdrview_tests PRIVATE "-fobjc-arc")
+    target_link_libraries(hdrview_tests PRIVATE "-framework ApplicationServices")
+    target_compile_definitions(hdrview_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+  endif()
+
+  include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
+  enable_testing()
+  doctest_discover_tests(hdrview_tests)
+endif()
 
 if(EMSCRIPTEN)
   target_link_options(
