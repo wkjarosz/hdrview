@@ -9,10 +9,16 @@ if(APPLE)
   # Wrap the compiler invocation to clear these variables so CPM builds are reproducible regardless of what
   # package managers are present, without requiring anyone to uninstall anything.
   foreach(_hdrview_lang C CXX OBJC)
-    set(CMAKE_${_hdrview_lang}_COMPILER_LAUNCHER
-        "${CMAKE_COMMAND};-E;env;CPATH=;C_INCLUDE_PATH=;CPLUS_INCLUDE_PATH=;OBJC_INCLUDE_PATH=;LIBRARY_PATH=;${CMAKE_${_hdrview_lang}_COMPILER_LAUNCHER}"
-        CACHE STRING "" FORCE
-    )
+    set(_hdrview_env_launcher "${CMAKE_COMMAND};-E;env;CPATH=;C_INCLUDE_PATH=;CPLUS_INCLUDE_PATH=;OBJC_INCLUDE_PATH=;LIBRARY_PATH=")
+    # Only append the existing launcher (e.g. ccache) if one is actually set: an unconditional trailing
+    # ${CMAKE_${_hdrview_lang}_COMPILER_LAUNCHER} leaves a trailing empty list element when it's unset (as it is
+    # for OBJC, since CI only sets a launcher for C/CXX), which CMake then passes to `cmake -E env` as a literal
+    # empty-string argument, breaking the compiler invocation entirely ("permission denied").
+    if(CMAKE_${_hdrview_lang}_COMPILER_LAUNCHER)
+      list(APPEND _hdrview_env_launcher ${CMAKE_${_hdrview_lang}_COMPILER_LAUNCHER})
+    endif()
+    set(CMAKE_${_hdrview_lang}_COMPILER_LAUNCHER "${_hdrview_env_launcher}" CACHE STRING "" FORCE)
+    unset(_hdrview_env_launcher)
   endforeach()
 endif()
 
