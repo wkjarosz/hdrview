@@ -7,6 +7,7 @@
 #include "exr.h"
 #include "colorspace.h"
 #include "common.h" // for lerp, mod, clamp, getExtension
+#include "exr_save_options.h"
 #include "exr_std_streams.h"
 #include "image.h"
 #include "imgui.h"
@@ -391,18 +392,14 @@ json exr_header_to_json(const Imf::Header &header)
 
 } // namespace
 
-struct EXRSaveOptions
-{
-    std::vector<bool> group_enabled;                      // size = img.groups.size()
-    int               pixel_type  = 1;                    // 0 = Imf::FLOAT, 1 = Imf::HALF
-    Imf::Compression  compression = Imf::PIZ_COMPRESSION; // Default compression
-    bool              tiled       = false;
-    int               tile_width  = 64;
-    int               tile_height = 64;
-    float             dwa_quality = 45.0f; // Only for DWAA/DWAB
-};
-
 static EXRSaveOptions s_opts{};
+
+EXRSaveOptions exr_default_save_options(const Image &img)
+{
+    EXRSaveOptions opts;
+    opts.group_enabled.assign(img.groups.size(), true);
+    return opts;
+}
 
 bool is_exr_image(istream &is_, string_view filename) noexcept
 {

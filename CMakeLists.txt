@@ -1472,7 +1472,9 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   CPMAddPackage("gh:doctest/doctest@2.4.11")
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
-  add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp)
+  add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
+                                tests/test_exr_io.cpp tests/test_png_io.cpp
+  )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
   target_compile_definitions(hdrview_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
@@ -1482,6 +1484,34 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_compile_options(hdrview_tests PRIVATE "-fobjc-arc")
     target_link_libraries(hdrview_tests PRIVATE "-framework ApplicationServices")
     target_compile_definitions(hdrview_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+  endif()
+
+  # -cpm/-universal presets fetch OpenEXR from source via CPM, which vendors a compact, permissively-licensed set
+  # of real-world test images (OpenEXR's own test suite fixtures) at src/test/bin/test_images. -local presets
+  # never fetch OpenEXR's source at all (it comes from find_package/system install instead), so this is only
+  # available conditionally; tests relying on it are compiled out entirely when it's absent (see
+  # HDRVIEW_TEST_OPENEXR_DIR guards in tests/test_exr_io.cpp) rather than failing or silently skipping at runtime.
+  if(DEFINED OpenEXR_SOURCE_DIR AND EXISTS "${OpenEXR_SOURCE_DIR}/src/test/bin/test_images")
+    target_compile_definitions(
+      hdrview_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${OpenEXR_SOURCE_DIR}/src/test/bin/test_images"
+    )
+  else()
+    message(STATUS "OpenEXR test images not available (not a -cpm/-universal preset); "
+                    "skipping tests/test_exr_io.cpp's vendored-data tests"
+    )
+  endif()
+
+  # Same idea as OpenEXR above, but for libpng's two vendored test image sets: contrib/pngsuite (the well-known
+  # PngSuite conformance set - bit depth/color type matrix, plus interlaced/non-interlaced pairs) and
+  # contrib/testpngs (a matrix of color-signaling methods: sRGB chunk, gAMA chunk at various gammas, no chunk at
+  # all, plus a dedicated cICP/Display-P3 example).
+  if(DEFINED PNG_SOURCE_DIR AND EXISTS "${PNG_SOURCE_DIR}/contrib/pngsuite" AND EXISTS "${PNG_SOURCE_DIR}/contrib/testpngs"
+  )
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_PNG_CONTRIB_DIR="${PNG_SOURCE_DIR}/contrib")
+  else()
+    message(STATUS "libpng test images not available (not a -cpm/-universal preset); "
+                    "skipping tests/test_png_io.cpp's vendored-data tests"
+    )
   endif()
 
   include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
