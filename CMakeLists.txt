@@ -1163,9 +1163,9 @@ endif()
 if(HDRVIEW_ENABLE_LIBTIFF)
   CPMAddPackage(
     NAME TIFF
-    VERSION 4.5.1 # version in ubuntu 24.04
+    VERSION 4.7.1
     GITHUB_REPOSITORY Tom94/libtiff
-    GIT_TAG b6446af165a5a4177eb9a4f6834bb948d4f89d39
+    GIT_TAG 392d93518a813fe407e119aeb8596eb4891f3fd1
     OPTIONS "BUILD_SHARED_LIBS OFF"
             # "HAVE_JPEGTURBO_DUAL_MODE_8_12 TRUE"
             "tiff-tools OFF"

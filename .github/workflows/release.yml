@@ -35,8 +35,13 @@ jobs:
             }
 
     steps:
+      # jpeg-xl/libultrahdr/libheif/libpng/imath/cli11/spdlog/fmt are deliberately not installed here: both
+      # configs in this matrix use -cpm presets, which build them from source via CPM regardless. Installing the
+      # Homebrew packages leaks /usr/local/include into the CPM build's implicit compiler search path on the
+      # Intel runner (where /usr/local/include is a default system include dir, unlike /opt/homebrew on Apple
+      # Silicon), shadowing CPM's own internal headers for those packages and breaking the build.
       - name: Install dependencies
-        run: brew install ninja create-dmg dylibbundler jpeg-xl little-cms2 libultrahdr libheif libpng imath cli11 spdlog fmt aom libde265 x265
+        run: brew install ninja create-dmg dylibbundler little-cms2 aom libde265 x265
 
       - uses: actions/checkout@v4
         with:
