@@ -1106,6 +1106,13 @@ void Image::finalize()
                 fmt::format("All channels must have the same size as the data window. ({}:{}x{} != {}x{})", c.name,
                             c.size().x, c.size().y, data_window.size().x, data_window.size().y)};
 
+    // reject images whose channels can't be uploaded as a texture on this graphics backend (e.g. Metal aborts
+    // outright rather than failing gracefully when asked to create an oversized texture)
+    if (int lim = Texture::max_size(); data_window.size().x > lim || data_window.size().y > lim)
+        throw runtime_error{fmt::format("Image dimensions {}x{} exceed the maximum texture size ({}) supported by "
+                                        "your graphics hardware.",
+                                        data_window.size().x, data_window.size().y, lim)};
+
     build_layers_and_groups();
 
     if (!orientation_applied)
