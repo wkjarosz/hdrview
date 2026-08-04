@@ -452,7 +452,7 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "spdlog::spdlog")
 
-CPMAddPackage("gh:wkjarosz/smallthreadpool#386dc5d7d5eaf60cb00b34345170548a0c0f3ef9")
+CPMAddPackage("gh:wkjarosz/smallthreadpool#fbec7d1a5f20ae592281ec355e419a86b11a692d")
 if(NOT smallthreadpool_ADDED)
   message(FATAL_ERROR "Could not download smallthreadpool library.")
 endif()
@@ -463,6 +463,12 @@ add_library(stp STATIC "${CMAKE_CURRENT_BINARY_DIR}/stp_impl.cpp")
 target_include_directories(stp PUBLIC "${smallthreadpool_SOURCE_DIR}")
 target_link_libraries(stp PRIVATE spdlog::spdlog)
 target_compile_features(stp PUBLIC cxx_std_17)
+# stp doesn't link against hello_imgui (which is where HELLOIMGUI_EMSCRIPTEN_PTHREAD is normally defined, as a
+# PUBLIC compile definition propagated to whatever links against it), so translate it into smallthreadpool's own,
+# HelloImGui-agnostic macro name directly here rather than relying on it being visible in stp_impl.cpp.in.
+if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+  target_compile_definitions(stp PRIVATE STP_EMSCRIPTEN_PTHREAD)
+endif()
 # add_library(stp INTERFACE IMPORTED)
 # target_include_directories(stp INTERFACE "${smallthreadpool_SOURCE_DIR}")
 list(APPEND HDRVIEW_DEPENDENCIES "stp")
