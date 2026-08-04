@@ -380,6 +380,13 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         m_theme.save(j, m_params.dpiAwareParams.dpiWindowSizeFactor);
 
         SaveUserPref("UserSettings", j.dump(4));
+
+        // Stop the thread pool explicitly here rather than relying on its static destructor: that destructor's
+        // ordering relative to other statics (e.g. spdlog's logger registry, which worker threads touch) is
+        // unspecified, so a still-shutting-down worker could otherwise race the destruction of globals it
+        // depends on. try_singleton() is a no-op if the pool was never used.
+        if (auto *pool = stp::ThreadPool::try_singleton())
+            pool->stop();
     };
 
     // Change style

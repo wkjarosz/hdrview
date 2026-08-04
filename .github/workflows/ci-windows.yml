@@ -26,7 +26,12 @@ jobs:
       matrix:
         buildtype: [Release, Debug]
         config:
-          - { name: "Windows MSVC", os: windows-latest, preset: "windows-msvc" }
+          # Only this preset builds and runs hdrview_tests (Release only, see the Configure CMake and Run unit
+          # tests steps below) - windows-msvc/windows-ninja have no CPM_USE_LOCAL_PACKAGES option, so they always
+          # fetch OpenEXR/PNG from source via CPM, which is what the vendored-test-image-backed tests in
+          # tests/test_exr_io.cpp and tests/test_png_io.cpp conditionally compile against. Running the same suite
+          # on both Windows presets would be redundant.
+          - { name: "Windows MSVC", os: windows-latest, preset: "windows-msvc", run_tests: true }
           - { name: "Windows Ninja", os: windows-latest, preset: "windows-ninja" }
 
     steps:
@@ -40,7 +45,12 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure CMake
-        run: cmake --preset ${{ matrix.config.preset }}
+        run: |
+          $extraFlags = @()
+          if ("${{ matrix.config.run_tests }}" -eq "true" -and "${{ matrix.buildtype }}" -eq "Release") {
+            $extraFlags += "-DHDRVIEW_BUILD_TESTS=ON"
+          }
+          cmake --preset ${{ matrix.config.preset }} @extraFlags
 
       - name: Build
         run: |
@@ -50,6 +60,11 @@ jobs:
       - name: Checking that HDRView runs
         working-directory: ${{github.workspace}}
         run: ./build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.exe --help
+
+      - name: Run unit tests
+        if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
+        working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}
+        run: ctest -C ${{ matrix.buildtype }} --output-on-failure
 
       - name: Copy files for archiving
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}

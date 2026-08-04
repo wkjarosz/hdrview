@@ -5,6 +5,7 @@
 
 #include "texture.h"
 #include <cstring>
+#include <limits>
 
 #include <spdlog/spdlog.h>
 
@@ -277,7 +278,15 @@ int Texture::max_size()
     // current (see HDRViewApp::setup_rendering()); afterwards this is just a plain read, safe from any thread.
     static GLint s_max_size = 0;
     if (s_max_size == 0)
+    {
+#if defined(HELLOIMGUI_USE_GLAD)
+        // glGetIntegerv is a GLAD function pointer that stays null until a GL context exists and gladLoadGL() has
+        // run (e.g. no window was ever created, as in headless unit tests). Report "no limit" instead of crashing.
+        if (!glGetIntegerv)
+            return std::numeric_limits<int>::max();
+#endif
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &s_max_size);
+    }
     return (int)s_max_size;
 }
 

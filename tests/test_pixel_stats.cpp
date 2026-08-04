@@ -4,10 +4,31 @@
 // be found in the LICENSE.txt file.
 //
 
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#define DOCTEST_CONFIG_IMPLEMENT
 #include <doctest/doctest.h>
 
 #include "image.h"
+
+// PixelStats::calculate() (exercised by the tests below) lazily spins up stp::ThreadPool::singleton()'s
+// worker threads. If we let them be torn down via the pool's own static destructor, their exit-time
+// ordering relative to other statics (e.g. spdlog's logger registry, which the workers touch on startup)
+// is unspecified, and a still-shutting-down worker can end up racing the destruction of globals it
+// depends on. Stopping the pool explicitly here, before any static destructors run, sidesteps that
+// entirely.
+int main(int argc, char **argv)
+{
+    doctest::Context ctx;
+    ctx.applyCommandLine(argc, argv);
+    int res = ctx.run();
+
+    // try_singleton() (unlike singleton()) never creates the pool as a side effect, so tests that never
+    // touched PixelStats::calculate() (and thus never spun up any worker threads) don't pay for spinning
+    // up a pool here just to immediately tear it down.
+    if (auto *pool = stp::ThreadPool::try_singleton())
+        pool->stop();
+
+    return res;
+}
 
 namespace
 {

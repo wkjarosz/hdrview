@@ -28,7 +28,12 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64"}
+          # Only this one preset/arch combo builds and runs hdrview_tests (Release only, see the Configure CMake
+          # and Run unit tests steps below) - CPM always fetches OpenEXR/PNG from source for -cpm/-universal
+          # presets, which is what the vendored-test-image-backed tests in tests/test_exr_io.cpp and
+          # tests/test_png_io.cpp conditionally compile against. Running the same suite across every preset in
+          # this matrix would be redundant.
+          - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true}
           - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64"}
 
           - { name: "Ubuntu 24.04 CPM arm", os: ubuntu-24.04-arm, preset: "linux-cpm", arch: "arm" }
@@ -88,7 +93,11 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          EXTRA_FLAGS=""
+          if [ "${{ matrix.config.run_tests }}" = "true" ] && [ "${{ matrix.buildtype }}" = "Release" ]; then
+            EXTRA_FLAGS="-DHDRVIEW_BUILD_TESTS=ON"
+          fi
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache $EXTRA_FLAGS
 
       - name: Build
         run: |
@@ -98,6 +107,11 @@ jobs:
       - name: Checking that HDRView runs
         run: |
           ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView --help
+
+      - name: Run unit tests
+        if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
+        working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}
+        run: ctest -C ${{ matrix.buildtype }} --output-on-failure
 
       - name: Package
         if: matrix.config.preset == 'linux-appimage'
