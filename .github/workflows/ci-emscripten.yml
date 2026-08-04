@@ -24,6 +24,10 @@ jobs:
   build_emscripten:
     name: Build and deploy emscripten webapp
     runs-on: macos-14
+    # Shared with release.yml's prerelease deploy (same destination_dir: dev), to avoid two runs racing
+    # to push gh-pages.
+    concurrency:
+      group: gh-pages-deploy-dev
 
     steps:
       - name: Install dependencies

@@ -111,6 +111,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.dmg"
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -184,6 +185,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: "${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage"
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -255,12 +257,17 @@ jobs:
         with:
           files: |
             ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy/HDRView-${{ env.VERSION_NO_V }}-windows.zip
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build_emscripten:
     name: Build and deploy emscripten webapp
     runs-on: macos-14
+    # Prerelease tags share ci-emscripten.yml's /dev group (same destination_dir); final releases get
+    # their own, since /release is never touched by anything else.
+    concurrency:
+      group: gh-pages-deploy-${{ contains(github.ref_name, '-') && 'dev' || 'release' }}
 
     steps:
       - name: Install dependencies
@@ -305,9 +312,41 @@ jobs:
           cmake --install .
           mv deploy/HDRView.html deploy/index.html
 
-      - name: Publish
+      # Final releases and prereleases (tags with a SemVer -suffix) each get their own destination_dir,
+      # so peaceiris/actions-gh-pages' default "wipe the deploy scope first" behavior can't delete the
+      # other's files.
+
+      - name: Publish final release to /release
+        if: ${{ !contains(github.ref_name, '-') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           personal_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
+          destination_dir: release
           publish_dir: ${{github.workspace}}/build/emscripten/deploy
+
+      - name: Publish prerelease to /dev
+        if: ${{ contains(github.ref_name, '-') }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          destination_dir: dev
+          publish_dir: ${{github.workspace}}/build/emscripten/deploy
+
+      # Root is just a static redirect to /release/, redeployed each final release. keep_files: true
+      # since its destination_dir is the branch root, unlike the steps above.
+      - name: Stage root redirect
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: |
+          mkdir -p "${{github.workspace}}/build/emscripten/root_redirect"
+          cp resources/gh-pages-redirect.html "${{github.workspace}}/build/emscripten/root_redirect/index.html"
+
+      - name: Publish root redirect
+        if: ${{ !contains(github.ref_name, '-') }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ${{github.workspace}}/build/emscripten/root_redirect
+          keep_files: true
