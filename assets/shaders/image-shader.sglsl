@@ -42,8 +42,6 @@
 @end
 
 @vs vs
-@include_block constants
-
 layout(binding=0) uniform vs_params {
     vec2 primary_scale;
     vec2 primary_pos;
