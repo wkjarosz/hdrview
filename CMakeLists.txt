@@ -223,6 +223,20 @@ include(FindPkgConfig)
 # =====================================================================================
 include(cmake/CPM.cmake)
 
+# =====================================================================================
+# Shader cross-compilation via sokol-shdc (experimental, see experiment/sokol-shdc branch)
+# =====================================================================================
+include(cmake/SokolShaderCompiler.cmake)
+
+# Phase A spike: prove the CMake/CPM plumbing works end-to-end before any real shader is converted.
+# Generated output is scratch (not the runtime asset dir) and unused by the app.
+sokol_shdc_generate(
+  INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/_sokol_shdc_spike.sglsl
+  OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/sokol_shdc_spike
+  NAME spike
+  SLANG glsl300es metal_macos
+)
+
 # Function to mark a library's includes as SYSTEM to suppress compiler warnings
 # Usage: mark_as_system_library(target_name)
 function(mark_as_system_library target_name)

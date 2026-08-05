@@ -1,0 +1,37 @@
+// Throwaway shader proving the sokol-shdc CMake/CPM pipeline end-to-end (Phase A of the
+// experiment/sokol-shdc branch). Not wired into the app; delete once Phase A is validated.
+@vs vs
+layout(binding=0) uniform vs_params {
+    vec2 primary_scale;
+    vec2 primary_pos;
+} vsp;
+
+in vec2 position;
+out vec2 primary_uv;
+
+void main() {
+    primary_uv = (position / 2.0 - vsp.primary_pos + 0.5) / vsp.primary_scale;
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+@end
+
+@fs fs
+layout(binding=1) uniform fs_params {
+    float gain;
+    float gamma;
+    int tonemap_mode;
+} fsp;
+
+layout(binding=0) uniform texture2D primary_0_texture;
+layout(binding=0) uniform sampler primary_0_sampler;
+
+in vec2 primary_uv;
+out vec4 frag_color;
+
+void main() {
+    vec4 c = texture(sampler2D(primary_0_texture, primary_0_sampler), primary_uv);
+    frag_color = vec4(pow(c.rgb * fsp.gain, vec3(1.0 / fsp.gamma)), c.a);
+}
+@end
+
+@program spike vs fs
