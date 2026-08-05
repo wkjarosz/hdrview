@@ -1,0 +1,278 @@
+// Main image-view vertex+fragment shader, written once and cross-compiled to GLSL/GLES/Metal via sokol-shdc.
+// Replaces the hand-maintained image-shader_{vert,frag}.{glsl,metal} pair. See the experiment/sokol-shdc
+// branch plan for the CMake wiring and app-draw.cpp call-site changes this requires.
+//
+// GLSL uniform blocks cannot contain `bool` members (glslang rejects it), so booleans below are `int`
+// (0/1); C++ call sites pass 0/1 and shader code compares with `!= 0`.
+
+@include colorspaces.sglsl
+
+@block constants
+// These need to stay in sync with the various enums in fwd.h
+#define Channels_RGBA   0
+#define Channels_RGB    1
+#define Channels_Red    2
+#define Channels_Green  3
+#define Channels_Blue   4
+#define Channels_Alpha  5
+#define Channels_Y      6
+
+#define Tonemap_Gamma            0
+#define Tonemap_FalseColor       1
+#define Tonemap_PositiveNegative 2
+
+#define BlendMode_Normal              0
+#define BlendMode_Multiply            1
+#define BlendMode_Divide              2
+#define BlendMode_Add                 3
+#define BlendMode_Average             4
+#define BlendMode_Subtract            5
+#define BlendMode_Relative_Subtract   6
+#define BlendMode_Difference          7
+#define BlendMode_Relative_Difference 8
+
+#define BGMode_Black         0
+#define BGMode_White         1
+#define BGMode_Dark_Checker  2
+#define BGMode_Light_Checker 3
+#define BGMode_Custom_Color  4
+
+#define YCA_Channels    4
+#define YC_Channels     5
+@end
+
+@vs vs
+@include_block constants
+
+layout(binding=0) uniform vs_params {
+    vec2 primary_scale;
+    vec2 primary_pos;
+    vec2 secondary_scale;
+    vec2 secondary_pos;
+} vsp;
+
+in vec2 position;
+
+out vec2 primary_uv;
+out vec2 secondary_uv;
+
+void main()
+{
+    primary_uv   = (position / 2.0 - vsp.primary_pos + 0.5) / vsp.primary_scale;
+    secondary_uv = (position / 2.0 - vsp.secondary_pos + 0.5) / vsp.secondary_scale;
+    gl_Position  = vec4(position.x, -position.y, 0.0, 1.0);
+}
+@end
+
+@fs fs
+@include_block constants
+@include_block colorspaces
+
+layout(binding=1) uniform fs_params {
+    int   has_reference;
+    int   do_dither;
+    vec2  randomness;
+    int   blend_mode;
+    int   channel;
+    float gain;
+    float offset;
+    float gamma;
+    int   tonemap_mode;
+    int   clamp_to_LDR;
+    int   bg_mode;
+    vec4  bg_color;
+    int   reverse_colormap;
+    vec3  primary_yw;
+    int   primary_channels_type;
+    mat4  primary_M_to_sRGB;
+    vec3  secondary_yw;
+    int   secondary_channels_type;
+    mat4  secondary_M_to_sRGB;
+    float time;
+    int   draw_clip_warnings;
+    vec2  clip_range;
+} fsp;
+
+layout(binding=0) uniform texture2D colormap;
+layout(binding=0) uniform sampler   colormap_sampler;
+
+layout(binding=1) uniform texture2D dither_texture;
+layout(binding=1) uniform sampler   dither_sampler;
+
+layout(binding=2) uniform texture2D primary_0_texture;
+layout(binding=3) uniform texture2D primary_1_texture;
+layout(binding=4) uniform texture2D primary_2_texture;
+layout(binding=5) uniform texture2D primary_3_texture;
+layout(binding=2) uniform sampler   primary_0_sampler;
+layout(binding=3) uniform sampler   primary_1_sampler;
+layout(binding=4) uniform sampler   primary_2_sampler;
+layout(binding=5) uniform sampler   primary_3_sampler;
+
+layout(binding=6) uniform texture2D secondary_0_texture;
+layout(binding=7) uniform texture2D secondary_1_texture;
+layout(binding=8) uniform texture2D secondary_2_texture;
+layout(binding=9) uniform texture2D secondary_3_texture;
+layout(binding=6) uniform sampler   secondary_0_sampler;
+layout(binding=7) uniform sampler   secondary_1_sampler;
+layout(binding=8) uniform sampler   secondary_2_sampler;
+layout(binding=9) uniform sampler   secondary_3_sampler;
+
+in vec2 primary_uv;
+in vec2 secondary_uv;
+
+out vec4 frag_color;
+
+vec4 tonemap(vec4 color)
+{
+    switch (fsp.tonemap_mode)
+    {
+    default:
+    case Tonemap_Gamma: return vec4(sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / fsp.gamma)), color.a);
+    case Tonemap_FalseColor:
+    {
+        float cmap_size = float(textureSize(sampler2D(colormap, colormap_sampler), 0).x);
+        float t         = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, dot(color.rgb, vec3(1.0 / 3.0)));
+        if (fsp.reverse_colormap != 0)
+            t = 1.0 - t;
+        return vec4(sRGBToLinear(texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb) * color.a, color.a);
+    }
+    case Tonemap_PositiveNegative:
+    {
+        float cmap_size = float(textureSize(sampler2D(colormap, colormap_sampler), 0).x);
+        float t = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, 0.5 * dot(color.rgb, vec3(1.0 / 3.0)) + 0.5);
+        if (fsp.reverse_colormap != 0)
+            t = 1.0 - t;
+        return vec4(sRGBToLinear(texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb) * color.a, color.a);
+    }
+    }
+}
+
+float rand_box(vec2 xy)
+{
+    // Result is in range (-0.5, 0.5)
+    return (texture(sampler2D(dither_texture, dither_sampler), xy / vec2(256, 256)).r + 0.5) / 65536.0 - 0.5;
+}
+
+float rand_tent(vec2 xy)
+{
+    float r = rand_box(xy);
+
+    // Convert uniform distribution into triangle-shaped distribution
+    // Result is in range (-0.5,0.5)
+    float rp = sqrt(2.0 * r);             // positive triangle
+    float rn = sqrt(2.0 * r + 1.0) - 1.0; // negative triangle
+    return (r < 0.0) ? 0.5 * rn : 0.5 * rp;
+}
+
+vec4 choose_channel(vec4 rgba)
+{
+    switch (fsp.channel)
+    {
+    case Channels_RGBA: return rgba;
+    case Channels_RGB: return vec4(rgba.rgb, 1.0);
+    case Channels_Red: return vec4(rgba.rrr, 1.0);
+    case Channels_Green: return vec4(rgba.ggg, 1.0);
+    case Channels_Blue: return vec4(rgba.bbb, 1.0);
+    case Channels_Alpha: return vec4(rgba.aaa, 1.0);
+    case Channels_Y: return vec4(vec3(dot(rgba.rgb, fsp.primary_yw)), rgba.a);
+    }
+    return rgba;
+}
+
+vec4 blend(vec4 top, vec4 bottom)
+{
+    vec3  diff  = top.rgb - bottom.rgb;
+    float alpha = top.a + bottom.a * (1.0 - top.a);
+    switch (fsp.blend_mode)
+    {
+    case BlendMode_Normal: return vec4(top.rgb + bottom.rgb * (1.0 - top.a), alpha);
+    case BlendMode_Multiply: return vec4(top.rgb * bottom.rgb, alpha);
+    case BlendMode_Divide: return vec4(top.rgb / bottom.rgb, alpha);
+    case BlendMode_Add: return vec4(top.rgb + bottom.rgb, alpha);
+    case BlendMode_Average: return 0.5 * (top + bottom);
+    case BlendMode_Subtract: return vec4(diff, alpha);
+    case BlendMode_Relative_Subtract: return vec4(diff / (bottom.rgb + vec3(0.01)), alpha);
+    case BlendMode_Difference: return vec4(abs(diff), alpha);
+    case BlendMode_Relative_Difference: return vec4(abs(diff) / (bottom.rgb + vec3(0.01)), alpha);
+    }
+    return vec4(0.0);
+}
+
+vec4 dither(vec4 color)
+{
+    if (fsp.do_dither == 0)
+        return color;
+
+    return color + vec4(vec3(rand_tent(gl_FragCoord.xy + fsp.randomness) / 256.0), 0.0);
+}
+
+float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
+{
+    return within_image ? texture(sampler2D(tex, smp), uv).r : 0.0;
+}
+
+void main()
+{
+    vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
+    vec4 background = vec4(fsp.bg_color.rgb, 1.0);
+    if (fsp.bg_mode == BGMode_Black)
+        background.rgb = vec3(0.0);
+    else if (fsp.bg_mode == BGMode_White)
+        background.rgb = vec3(1.0);
+    else if (fsp.bg_mode == BGMode_Dark_Checker || fsp.bg_mode == BGMode_Light_Checker)
+    {
+        float dark_gray    = (fsp.bg_mode == BGMode_Dark_Checker) ? 0.1 : 0.5;
+        float light_gray   = (fsp.bg_mode == BGMode_Dark_Checker) ? 0.2 : 0.55;
+        float checkerboard = mod(floor(pixel.x / 8.0) + floor(pixel.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
+        background.rgb     = sRGBToLinear(vec3(checkerboard));
+    }
+
+    float zebra1 = (mod(float(int(floor((pixel.x + pixel.y - 30.0 * fsp.time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
+    float zebra2 = (mod(float(int(floor((pixel.x - pixel.y - 30.0 * fsp.time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
+
+    bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
+    bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;
+
+    vec4 value = vec4(
+        sample_channel(primary_0_texture, primary_0_sampler, primary_uv, in_img),
+        sample_channel(primary_1_texture, primary_1_sampler, primary_uv, in_img),
+        sample_channel(primary_2_texture, primary_2_sampler, primary_uv, in_img),
+        sample_channel(primary_3_texture, primary_3_sampler, primary_uv, in_img));
+
+    if (fsp.primary_channels_type == YCA_Channels || fsp.primary_channels_type == YC_Channels)
+        value.xyz = YC_to_RGB(value.xyz, fsp.primary_yw);
+
+    value = fsp.primary_M_to_sRGB * value;
+
+    if (fsp.has_reference != 0)
+    {
+        vec4 reference_val = vec4(sample_channel(secondary_0_texture, secondary_0_sampler, secondary_uv, in_ref),
+                                  sample_channel(secondary_1_texture, secondary_1_sampler, secondary_uv, in_ref),
+                                  sample_channel(secondary_2_texture, secondary_2_sampler, secondary_uv, in_ref),
+                                  sample_channel(secondary_3_texture, secondary_3_sampler, secondary_uv, in_ref));
+
+        if (fsp.secondary_channels_type == YCA_Channels || fsp.secondary_channels_type == YC_Channels)
+            reference_val.xyz = YC_to_RGB(reference_val.xyz, fsp.secondary_yw);
+
+        reference_val = fsp.secondary_M_to_sRGB * reference_val;
+
+        value = blend(value, reference_val);
+    }
+
+    vec4  foreground = choose_channel(value) * vec4(vec3(fsp.gain), 1.0) + vec4(vec3(fsp.offset * value.a), 0.0);
+    vec4  tonemapped = tonemap(foreground) + background * (1.0 - foreground.a);
+    bvec3 clipped    = greaterThan(foreground.rgb, fsp.clip_range.yyy);
+    bvec3 crushed    = lessThan(foreground.rgb, fsp.clip_range.xxx);
+    vec4  blended    = linearToSRGB(tonemapped);
+    vec4  dithered   = dither(blended);
+    dithered         = clamp(dithered, fsp.clamp_to_LDR != 0 ? 0.0 : -64.0, fsp.clamp_to_LDR != 0 ? 1.0 : 64.0);
+    if (fsp.draw_clip_warnings != 0)
+    {
+        dithered.rgb = mix(dithered.rgb, vec3(zebra1), clipped);
+        dithered.rgb = mix(dithered.rgb, vec3(zebra2), crushed);
+    }
+    frag_color = vec4(dithered.rgb, 1.0);
+}
+@end
+
+@program image_shader vs fs

@@ -333,10 +333,26 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
 
 void Shader::set_texture(const std::string &name, Texture *texture)
 {
-    auto it = m_buffers.find(name);
+    // Vulkan-style GLSL sources (see image-shader.sglsl) declare textures and samplers separately, but GL has
+    // no first-class sampler object in this pipeline: SPIRV-Cross fuses them into one combined `sampler2D`
+    // uniform literally named "<texture>_<sampler>". Call sites still address the texture by its own logical
+    // name, so if that name isn't found directly, retry against the combined name, deriving the companion
+    // sampler name the same way shader_metal.mm does (strip a trailing "_texture", append "_sampler").
+    std::string lookup_name = name;
+    if (m_buffers.find(lookup_name) == m_buffers.end())
+    {
+        std::string sampler_name;
+        if (name.length() > 8 && name.compare(name.length() - 8, 8, "_texture") == 0)
+            sampler_name = name.substr(0, name.length() - 8) + "_sampler";
+        else
+            sampler_name = name + "_sampler";
+        lookup_name = name + "_" + sampler_name;
+    }
+
+    auto it = m_buffers.find(lookup_name);
     if (it == m_buffers.end())
         throw std::invalid_argument("Shader::set_texture(): could not find argument named \"" + name + "\"");
-    Buffer &buf = m_buffers[name];
+    Buffer &buf = m_buffers[lookup_name];
     if (!(buf.type == VertexTexture || buf.type == FragmentTexture))
         throw std::invalid_argument("Shader::set_texture(): argument named \"" + name + "\" is not a texture!");
 

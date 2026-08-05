@@ -228,13 +228,26 @@ include(cmake/CPM.cmake)
 # =====================================================================================
 include(cmake/SokolShaderCompiler.cmake)
 
-# Phase A spike: prove the CMake/CPM plumbing works end-to-end before any real shader is converted.
-# Generated output is scratch (not the runtime asset dir) and unused by the app.
+# Generates the actual image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime
+# (see src/app-draw.cpp), replacing the old hand-maintained pair plus colorspaces.{glsl,metal} (colorspaces.sglsl
+# is @include_block'd directly into this program's compiled output, not shipped standalone -- see
+# assets/shaders/colorspaces.sglsl). Written directly into the same ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders/
+# tree that hello_imgui_add_app(... ASSETS_LOCATION ...) below already treats as the runtime asset root, so no
+# additional copy step is needed.
+#
+# Only glsl300es + metal_macos are generated/validated locally this session (macOS + Emscripten); desktop Linux/
+# Windows GL (glsl410/glsl430) is untested here -- see the experiment/sokol-shdc branch plan's Phase D notes.
 sokol_shdc_generate(
-  INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/_sokol_shdc_spike.sglsl
-  OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/sokol_shdc_spike
-  NAME spike
+  INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/image-shader.sglsl
+  OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders
+  NAME image-shader
+  PROGRAM image_shader
   SLANG glsl300es metal_macos
+  EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
+  RENAME image-shader_image_shader_glsl300es_vertex.glsl image-shader_vert.glsl
+         image-shader_image_shader_glsl300es_fragment.glsl image-shader_frag.glsl
+         image-shader_image_shader_metal_macos_vertex.metal image-shader_vert.metal
+         image-shader_image_shader_metal_macos_fragment.metal image-shader_frag.metal
 )
 
 # Function to mark a library's includes as SYSTEM to suppress compiler warnings
@@ -1462,6 +1475,9 @@ set(HDRVIEW_SOURCES
 )
 
 hello_imgui_add_app(HDRView ${HDRVIEW_SOURCES} ASSETS_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
+if(HDRVIEW_SOKOL_SHDC_TARGETS)
+  add_dependencies(HDRView ${HDRVIEW_SOKOL_SHDC_TARGETS})
+endif()
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})

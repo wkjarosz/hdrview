@@ -60,11 +60,15 @@ set(HDRVIEW_SOKOL_SHDC_TARGETS
 #   INPUT <path/to/source.sglsl>
 #   OUTPUT_DIR <dir>       # generated files are written as <OUTPUT_DIR>/<NAME>_<program>_<slang>_<stage>.<ext>
 #   NAME <basename>
+#   PROGRAM <program-name> # the name after @program in the .sglsl source
 #   SLANG <slang1> [<slang2> ...]   # e.g. glsl300es metal_macos
+#   RENAME <from1> <to1> [<from2> <to2> ...]   # optional: rename sokol-shdc's own <program>_<slang>_<stage>.<ext>
+#                                               # output (relative to OUTPUT_DIR) to the filenames Shader::from_asset()
+#                                               # expects, e.g. image_shader_glsl300es_vertex.glsl -> image-shader_vert.glsl
 # )
 function(sokol_shdc_generate)
-  set(oneValueArgs INPUT OUTPUT_DIR NAME)
-  set(multiValueArgs SLANG)
+  set(oneValueArgs INPUT OUTPUT_DIR NAME PROGRAM)
+  set(multiValueArgs SLANG RENAME EXTRA_DEPENDS)
   cmake_parse_arguments(ARG "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   if(NOT ARG_INPUT OR NOT ARG_OUTPUT_DIR OR NOT ARG_NAME OR NOT ARG_SLANG)
@@ -80,6 +84,24 @@ function(sokol_shdc_generate)
       --format=bare --no-log-cmdline
   )
 
+  # sokol-shdc always names bare-format output "<output>_<program>_<slang>_<stage>.<ext>"; rename to whatever
+  # Shader::from_asset() expects. list(LENGTH ...) guards odd-length RENAME lists (a from without a matching to).
+  set(_rename_commands "")
+  list(LENGTH ARG_RENAME _rename_len)
+  math(EXPR _rename_pairs "${_rename_len} / 2")
+  math(EXPR _rename_last_idx "${_rename_pairs} - 1")
+  if(_rename_pairs GREATER 0)
+    foreach(_i RANGE 0 ${_rename_last_idx})
+      math(EXPR _from_idx "${_i} * 2")
+      math(EXPR _to_idx "${_from_idx} + 1")
+      list(GET ARG_RENAME ${_from_idx} _from)
+      list(GET ARG_RENAME ${_to_idx} _to)
+      list(APPEND _rename_commands COMMAND ${CMAKE_COMMAND} -E rename "${ARG_OUTPUT_DIR}/${_from}"
+           "${ARG_OUTPUT_DIR}/${_to}"
+      )
+    endforeach()
+  endif()
+
   # Run once now (configure time) so outputs exist before any configure-time consumer looks for them.
   execute_process(
     COMMAND ${_sokol_shdc_command}
@@ -90,13 +112,24 @@ function(sokol_shdc_generate)
   if(NOT _sokol_shdc_result EQUAL 0)
     message(FATAL_ERROR "sokol-shdc failed on ${ARG_INPUT}:\n${_sokol_shdc_log}")
   endif()
+  # Renames run as separate execute_process() calls (not one call with multiple COMMANDs, which would pipe
+  # each command's stdout into the next rather than running them as an independent sequence).
+  if(_rename_pairs GREATER 0)
+    foreach(_i RANGE 0 ${_rename_last_idx})
+      math(EXPR _from_idx "${_i} * 2")
+      math(EXPR _to_idx "${_from_idx} + 1")
+      list(GET ARG_RENAME ${_from_idx} _from)
+      list(GET ARG_RENAME ${_to_idx} _to)
+      execute_process(COMMAND ${CMAKE_COMMAND} -E rename "${ARG_OUTPUT_DIR}/${_from}" "${ARG_OUTPUT_DIR}/${_to}")
+    endforeach()
+  endif()
 
   # Also re-run at build time, so `cmake --build` alone (no reconfigure) picks up .sglsl edits.
   add_custom_command(
     OUTPUT "${_out_base}.stamp"
-    COMMAND ${_sokol_shdc_command}
+    COMMAND ${_sokol_shdc_command} ${_rename_commands}
     COMMAND ${CMAKE_COMMAND} -E touch "${_out_base}.stamp"
-    DEPENDS "${ARG_INPUT}"
+    DEPENDS "${ARG_INPUT}" ${ARG_EXTRA_DEPENDS}
     COMMENT "sokol-shdc: compiling ${ARG_NAME}"
     VERBATIM
   )

@@ -7,6 +7,7 @@
 #include "traits.h"
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 class RenderPass;
 class Texture;
@@ -284,5 +285,13 @@ protected:
 #endif
 #elif defined(HELLOIMGUI_HAS_METAL)
     void *m_pipeline_state = nullptr;
+    // sokol-shdc compiles a named uniform block (e.g. "fs_params { float gain; ... } fsp;") to a single
+    // Metal `constant fs_params& fsp [[buffer(N)]]` argument, not one argument per member. To let call sites
+    // keep setting one named parameter at a time (set_uniform("fsp.gain", ...)), maps a dotted
+    // "block.member" name to the block's own name (an entry in m_buffers, pre-sized to the whole struct at
+    // construction time) and the member's byte offset within it; set_buffer() memcpy's into that offset
+    // instead of replacing the whole buffer. GL needs no equivalent: dotted names already resolve directly
+    // via glGetUniformLocation() on struct-typed uniforms, so this stays Metal-only.
+    std::unordered_map<std::string, std::pair<std::string, size_t>> m_metal_struct_members;
 #endif
 };
