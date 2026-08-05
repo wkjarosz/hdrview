@@ -436,6 +436,11 @@ void HDRViewApp::setup_rendering()
         const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
 
         m_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
+        // vsp._pad is unused padding that only exists to keep vs_params compiling to a real struct instead of
+        // being flattened into an unaddressable array (see the comment on vs_params in image-shader.sglsl).
+        // Its value never matters; set once so it doesn't show up as a perpetually "unbound argument" every
+        // frame.
+        m_shader->set_uniform("vsp._pad", 0);
         m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
 
         Image::make_default_textures();

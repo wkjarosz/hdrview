@@ -248,6 +248,10 @@ sokol_shdc_generate(
          image-shader_image_shader_glsl300es_fragment.glsl image-shader_frag.glsl
          image-shader_image_shader_metal_macos_vertex.metal image-shader_vert.metal
          image-shader_image_shader_metal_macos_fragment.metal image-shader_frag.metal
+  # shader_gl.cpp prepends its own #version line at runtime based on the detected GL/GLES context; sokol-shdc's
+  # generated .glsl files already start with their own, which would otherwise collide with it (two back-to-back
+  # #version lines -- GLSL rejects that). Metal has no equivalent runtime prepend, so .metal files are untouched.
+  STRIP_VERSION_LINE image-shader_vert.glsl image-shader_frag.glsl
 )
 
 # Function to mark a library's includes as SYSTEM to suppress compiler warnings

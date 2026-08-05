@@ -49,6 +49,14 @@ layout(binding=0) uniform vs_params {
     vec2 primary_pos;
     vec2 secondary_scale;
     vec2 secondary_pos;
+    // Unused padding, deliberately not vec2/vec4-homogeneous with the members above: verified empirically that
+    // when every member of a uniform block packs cleanly into whole vec4 slots (as 4 vec2's do), SPIRV-Cross's
+    // glsl300es output flattens the block into a plain `uniform vec4 vs_params[2];` array (using the block's
+    // *type* name, not its instance name) instead of a real struct -- unlike fs_params below, which stays a
+    // struct because its mixed float/int/vec3/mat4 members can't be packed that way. The flattened form has no
+    // per-member names at all (each vec4 slot packs two vec2 members together), which set_buffer("vsp.*", ...)
+    // can't address. Adding one non-vec2 member is the simplest way to force the struct form uniformly.
+    int _pad;
 } vsp;
 
 in vec2 position;

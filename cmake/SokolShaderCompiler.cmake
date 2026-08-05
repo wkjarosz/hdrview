@@ -48,6 +48,8 @@ endif()
 
 message(STATUS "SokolShaderCompiler: using sokol-shdc at ${SOKOL_SHDC_EXECUTABLE}")
 
+set(SOKOL_SHDC_STRIP_VERSION_LINE_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/StripLeadingVersionLine.cmake")
+
 # Running list of custom targets created by sokol_shdc_generate(), so callers can make the main app
 # target depend on all of them once it exists (hello_imgui_add_app() is called much later in the
 # top-level CMakeLists.txt than the shader sources are declared).
@@ -65,10 +67,14 @@ set(HDRVIEW_SOKOL_SHDC_TARGETS
 #   RENAME <from1> <to1> [<from2> <to2> ...]   # optional: rename sokol-shdc's own <program>_<slang>_<stage>.<ext>
 #                                               # output (relative to OUTPUT_DIR) to the filenames Shader::from_asset()
 #                                               # expects, e.g. image_shader_glsl300es_vertex.glsl -> image-shader_vert.glsl
+#   STRIP_VERSION_LINE <file1> [<file2> ...]   # optional: remove a leading `#version ...` line from these files
+#                                               # (paths relative to OUTPUT_DIR, applied after RENAME), since
+#                                               # shader_gl.cpp prepends its own at runtime -- see
+#                                               # StripLeadingVersionLine.cmake for why this is needed
 # )
 function(sokol_shdc_generate)
   set(oneValueArgs INPUT OUTPUT_DIR NAME PROGRAM)
-  set(multiValueArgs SLANG RENAME EXTRA_DEPENDS)
+  set(multiValueArgs SLANG RENAME EXTRA_DEPENDS STRIP_VERSION_LINE)
   cmake_parse_arguments(ARG "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   if(NOT ARG_INPUT OR NOT ARG_OUTPUT_DIR OR NOT ARG_NAME OR NOT ARG_SLANG)
@@ -102,6 +108,13 @@ function(sokol_shdc_generate)
     endforeach()
   endif()
 
+  set(_strip_commands "")
+  foreach(_f ${ARG_STRIP_VERSION_LINE})
+    list(APPEND _strip_commands COMMAND ${CMAKE_COMMAND} "-DFILE=${ARG_OUTPUT_DIR}/${_f}" -P
+         "${SOKOL_SHDC_STRIP_VERSION_LINE_SCRIPT}"
+    )
+  endforeach()
+
   # Run once now (configure time) so outputs exist before any configure-time consumer looks for them.
   execute_process(
     COMMAND ${_sokol_shdc_command}
@@ -123,11 +136,16 @@ function(sokol_shdc_generate)
       execute_process(COMMAND ${CMAKE_COMMAND} -E rename "${ARG_OUTPUT_DIR}/${_from}" "${ARG_OUTPUT_DIR}/${_to}")
     endforeach()
   endif()
+  foreach(_f ${ARG_STRIP_VERSION_LINE})
+    execute_process(COMMAND ${CMAKE_COMMAND} "-DFILE=${ARG_OUTPUT_DIR}/${_f}" -P
+                    "${SOKOL_SHDC_STRIP_VERSION_LINE_SCRIPT}"
+    )
+  endforeach()
 
   # Also re-run at build time, so `cmake --build` alone (no reconfigure) picks up .sglsl edits.
   add_custom_command(
     OUTPUT "${_out_base}.stamp"
-    COMMAND ${_sokol_shdc_command} ${_rename_commands}
+    COMMAND ${_sokol_shdc_command} ${_rename_commands} ${_strip_commands}
     COMMAND ${CMAKE_COMMAND} -E touch "${_out_base}.stamp"
     DEPENDS "${ARG_INPUT}" ${ARG_EXTRA_DEPENDS}
     COMMENT "sokol-shdc: compiling ${ARG_NAME}"
