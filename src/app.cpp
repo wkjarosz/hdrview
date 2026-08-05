@@ -251,7 +251,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         // ignore it and rely on that mechanism to load the files
         if (in_files.empty())
         {
-            const char *const *opened_files = glfwGetCocoaOpenedFilenames();
+            const char *const *opened_files = glfwGetOpenedFilenames();
             if (opened_files)
             {
                 spdlog::debug("Passing files in through the NS api...");
@@ -266,7 +266,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         //    b) launches HDRView with files (either from the command line or Finder) when another instance is
         //    already
         //       running
-        glfwSetCocoaOpenedFilenamesCallback(
+        glfwSetOpenedFilenamesCallback(
             [](const char *image_file)
             {
                 spdlog::debug("Receiving an app drag-drop event through the NS api for file '{}'", image_file);

@@ -37,6 +37,8 @@ option(HDRVIEW_ENABLE_LIBWEBP "Enable LIBWEBP support" ON)
 option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
 option(HDRVIEW_ENABLE_X3F "Enable LibRaw X3F support" ON)
+option(HDRVIEW_ENABLE_HDR_DISPLAY
+       "Use a patched GLFW fork (Tom94/glfw) for true HDR/EDR display output on macOS/Windows" ON)
 
 set(HDRVIEW_ENABLE_LIBHEIF OFF)
 if(HDRVIEW_ENABLE_J2K
@@ -364,15 +366,24 @@ if(APPLE AND NOT EMSCRIPTEN)
 
   list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm)
 
-  # on macOS, download a fork of glfw that allows dragging files onto app icon.
-
-  # need to enable OBJC language for the custom glfw fork
+  # need to enable OBJC language for the custom glfw fork below
   enable_language(OBJC)
+endif()
+
+if((APPLE OR WIN32) AND NOT EMSCRIPTEN AND HDRVIEW_ENABLE_HDR_DISPLAY)
+  # Use https://github.com/Tom94/glfw, the fork that adds true HDR/EDR display output (proven in production
+  # by tev, https://github.com/Tom94/tev) and also happens to already carry macOS drag-files-onto-app-icon
+  # support (previously HDRView's own small glfw fork's only patch, now subsumed by this one -- see
+  # glfwGetOpenedFilenames/glfwSetOpenedFilenamesCallback usage in src/app.cpp). Only Tom94/glfw's Windows
+  # (WGL float pixel format) and macOS (Cocoa/EDR) paths are relied on today; its Wayland color-management
+  # work is not yet wired up for Linux. Hello ImGui's own patched fork detects this GLFW fork via the
+  # GLFW_FLOATBUFFER window-hint macro and degrades to today's SDR-only behavior when it's absent, so
+  # disabling this option (or building on Linux, which isn't covered by this block) is always safe.
   set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
   CPMAddPackage(
     NAME glfw
-    GITHUB_REPOSITORY wkjarosz/glfw
-    GIT_TAG 7a3f5df970fda02a1b6b6a4115eb9df30676a0dc
+    GITHUB_REPOSITORY Tom94/glfw
+    GIT_TAG 2cc924c234423f635aee654073e5bb5a216392dd
     OPTIONS "GLFW_BUILD_EXAMPLES OFF"
             "GLFW_BUILD_TESTS OFF"
             "GLFW_BUILD_DOCS OFF"
@@ -384,9 +395,9 @@ if(APPLE AND NOT EMSCRIPTEN)
   )
 
   if(NOT glfw_ADDED)
-    message(FATAL_ERROR "Could not download custom fork of glfw library.")
+    message(FATAL_ERROR "Could not download HDR-enabled fork of glfw library.")
   endif()
-  message(STATUS "Using custom fork of glfw on macOS")
+  message(STATUS "Using HDR-enabled fork of glfw (Tom94/glfw)")
   mark_as_advanced(
     GLFW_BUILD_DOCS
     GLFW_BUILD_EXAMPLES
@@ -410,12 +421,14 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 # Prevent dependencies from installing their files
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
+# Fork of pthom/hello_imgui (v1.92.700 + one commit) that adds optional HDR/EDR support for the GLFW3+OpenGL
+# backend, gated behind the HDR-enabling GLFW fork pinned above (see that CPMAddPackage's comment) -- a
+# vanilla-GLFW build of this fork behaves identically to upstream hello_imgui. Propose this upstream once
+# validated on real Windows HDR hardware; re-point at pthom/hello_imgui directly if/when it's merged there.
 CPMAddPackage(
   NAME hello_imgui
-  GITHUB_REPOSITORY pthom/hello_imgui
-  GIT_TAG v1.92.700
-  # URL https://github.com/pthom/hello_imgui/archive/refs/tags/v1.92.700.zip
-  VERSION 1.92.700
+  GITHUB_REPOSITORY wkjarosz/hello_imgui
+  GIT_TAG 5e59893ffdba4daf83cf63efaf0f489dc2e2d3c6
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   EXCLUDE_FROM_ALL YES
