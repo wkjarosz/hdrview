@@ -17,7 +17,14 @@ project(
 include(DetectArchitecture)
 detect_architecture()
 
-# By default, we install in a portable way (i.e. assets and executable are in the same folder)
+# Controls `cmake --install`/packaging layout only, not build-tree asset lookup (see
+# HDRVIEW_BUILD_TREE_ASSETS_DIR below for that).
+#   ON  (default): HelloImGui's own install() keeps the exe and assets/ together in one relocatable
+#        prefix.
+#   OFF: HDRView installs the exe to CMAKE_INSTALL_BINDIR and assets to a separate FHS location (or
+#        a caller-supplied ASSETS_LOCATION), baked into the binary as a compile definition. Used by
+#        the linux-appimage preset, whose AppDir layout needs a fixed path rather than a relocatable
+#        pair.
 option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 option(HDRVIEW_ENABLE_LIBJPEG "Enable libjpeg(-turbo) support" ON)
@@ -94,6 +101,16 @@ elseif(WIN32)
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.glsl
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
+  )
+  list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
+elseif(UNIX)
+  # Linux/other non-Apple Unix: sokol-shdc already writes generated shaders directly into
+  # ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders (see SokolShaderCompiler.cmake), so only Roboto and
+  # the top-level *.png (e.g. dither-texture-256.png) need copying here, unlike the branches above.
+  file(
+    GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
 endif()
@@ -1507,6 +1524,16 @@ message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")
 target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES})
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
+if(NOT EMSCRIPTEN)
+  # HelloImGui's build-time asset copy targets the parent binary dir, but multi-config generators
+  # (e.g. Ninja Multi-Config, used by every preset here) build the exe into a per-config
+  # Debug/Release subdirectory -- and HelloImGui's own runtime fallback for that mismatch is
+  # compiled in only for MSVC. This gives every other compiler an equivalent fallback, consumed
+  # additively via HelloImGui::AddAssetsSearchPath() in hdrview.cpp. Distinct from ASSETS_LOCATION
+  # below, which is an absolute *installed* path baked in only for non-portable builds.
+  target_compile_definitions(HDRView PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
+endif()
+
 if(APPLE)
   target_compile_options(HDRView PRIVATE "-fobjc-arc")
   target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
@@ -1636,9 +1663,8 @@ if(NOT HDRVIEW_PORTABLE_INSTALL)
     endif()
     install(DIRECTORY assets DESTINATION ${assets_install_dir})
     set(ASSETS_LOCATION "${assets_install_dir}/assets")
+    target_compile_definitions(HDRView PRIVATE ASSETS_LOCATION="${assets_install_dir}/assets")
   endif()
-  install(DIRECTORY assets DESTINATION ${assets_install_dir})
-  target_compile_definitions(HDRView PRIVATE ASSETS_LOCATION="${assets_install_dir}/assets")
 endif()
 
 set(CPACK_PACKAGE_VENDOR "Wojciech Jarosz")

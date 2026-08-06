@@ -87,8 +87,7 @@
       "hidden": true,
       "description": "Base settings for Linux builds",
       "cacheVariables": {
-        "HELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED": "ON",
-        "ASSETS_LOCATION": "/usr/share/HDRView/assets"
+        "HELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED": "ON"
       },
       "condition": {
         "type": "equals",
