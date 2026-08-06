@@ -750,8 +750,8 @@ CPMAddPackage(
   FIND_PACKAGE_ARGUMENTS "REQUIRED"
   # NOTE: OpenEXR v3.3.0 broke subsampled channel loading, but it seems to be fixed starting with v3.4
   VERSION 3.1.5 # this is the version available in ubuntu 24.04
-  GIT_TAG v3.4.4
-  URL https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.4.4.zip
+  GIT_TAG v3.4.13
+  URL https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.4.13.zip
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "BUILD_TESTING OFF"
           "OPENEXR_FORCE_INTERNAL_DEFLATE ON"
