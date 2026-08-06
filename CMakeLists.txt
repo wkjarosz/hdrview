@@ -1549,11 +1549,14 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
-                                tests/test_exr_io.cpp tests/test_png_io.cpp
+                                tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_assets.cpp
   )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
   target_compile_definitions(hdrview_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
+  # Mirrors HDRView's own HDRVIEW_BUILD_TREE_ASSETS_DIR definition above, so tests/test_assets.cpp
+  # can exercise the same asset lookup the app uses.
+  target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
   target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui doctest::doctest)
 
   if(APPLE)
