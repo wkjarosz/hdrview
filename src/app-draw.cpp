@@ -444,6 +444,9 @@ void HDRViewApp::setup_rendering()
     }
     catch (const exception &e)
     {
-        spdlog::error("Shader initialization failed!:\n\t{}.", e.what());
+        // m_shader would be left null; every draw call downstream dereferences it unconditionally
+        // with no null check, so continuing here just trades this error for a later segfault.
+        spdlog::critical("Shader initialization failed!:\n\t{}.", e.what());
+        exit(EXIT_FAILURE);
     }
 }
