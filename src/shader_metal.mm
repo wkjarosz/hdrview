@@ -360,6 +360,19 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
     buf.size  = size;
 }
 
+std::vector<std::string> Shader::block_member_names(const std::string &block_name) const
+{
+    // A named uniform block compiles to a single struct-typed buffer argument here, whose members were recorded
+    // as dotted "block.member" keys by register_struct_members() in the constructor above.
+    const std::string prefix = block_name + ".";
+
+    std::vector<std::string> names;
+    for (const auto &[key, entry] : m_metal_struct_members)
+        if (key.size() > prefix.size() && key.compare(0, prefix.size(), prefix) == 0)
+            names.push_back(key.substr(prefix.size()));
+    return names;
+}
+
 void Shader::set_texture(const std::string &name, Texture *texture)
 {
     auto it = m_buffers.find(name);

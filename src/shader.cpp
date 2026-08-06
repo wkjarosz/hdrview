@@ -1,5 +1,6 @@
 #include "shader.h"
 
+#include <algorithm>        // for find
 #include <spdlog/fmt/fmt.h> // for format, make_format_args, vformat_to
 #include <spdlog/spdlog.h>  // for error, info
 #include <sstream>          // for basic_ostringstream, bas...
@@ -78,6 +79,40 @@ string Shader::prepend_includes(string_view shader_string, const std::vector<str
     // spdlog::trace("GLSL #includes: {};\n MERGED: {}", includes, oss.str());
 
     return oss.str();
+}
+
+void Shader::set_uniform_block(const string                                              &block_name,
+                               std::initializer_list<std::pair<const char *, UniformValue>> values)
+{
+    std::vector<string> written;
+    written.reserve(values.size());
+
+    for (const auto &[member_name, value] : values)
+    {
+        set_buffer(block_name + "." + member_name, value.type, value.ndim, value.shape, value.data);
+        written.push_back(member_name);
+    }
+
+    // Zero-fill reserved/padding members the caller didn't (and shouldn't have to) name. Members not named here
+    // and not underscore-prefixed are deliberately left alone, so begin() still warns about them.
+    static const uint8_t zeros[UniformValue::max_size]{};
+    for (const auto &member_name : block_member_names(block_name))
+    {
+        if (member_name.empty() || member_name[0] != '_')
+            continue;
+        if (std::find(written.begin(), written.end(), member_name) != written.end())
+            continue;
+
+        // Only the GL backend registers block members as individually-settable entries in m_buffers (as dotted
+        // "block.member" uniforms), and only there does an unset member trigger begin()'s warning. Metal keeps
+        // one buffer for the whole block, allocated zero-filled at construction, so its padding is already 0.
+        auto it = m_buffers.find(block_name + "." + member_name);
+        if (it == m_buffers.end())
+            continue;
+
+        const Buffer &buf = it->second;
+        set_buffer(block_name + "." + member_name, buf.dtype, buf.ndim, buf.shape, zeros);
+    }
 }
 
 void Shader::set_buffer_divisor(const string &name, size_t divisor)

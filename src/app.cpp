@@ -83,6 +83,18 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                      hasEdrSupport() ? "would otherwise" : "would not anyway");
 
     m_params.rendererBackendOptions.requestFloatBuffer = use_edr;
+
+#if defined(HELLOIMGUI_HAS_OPENGL) && !defined(__EMSCRIPTEN__)
+    // Our generated desktop shaders are GLSL 4.10 (see sokol_shdc_generate() in CMakeLists.txt), so request a
+    // matching context explicitly rather than relying on the driver to hand back something newer than Hello
+    // ImGui's default request of 3.3 core. GL 4.1 core is available on essentially every desktop GPU and Mesa
+    // since ~2011. These options are documented as not applying to GLES, hence the Emscripten guard; macOS uses
+    // Metal, not GL. GlslVersion is deliberately left alone -- it configures ImGui's *own* shaders, and its
+    // default is still valid under a 4.1 core context.
+    m_params.rendererBackendOptions.openGlOptions.MajorVersion = 4;
+    m_params.rendererBackendOptions.openGlOptions.MinorVersion = 1;
+#endif
+
     spdlog::info("Launching GUI with {} display support.", use_edr ? "EDR" : "SDR");
     spdlog::info("Creating a {} framebuffer.", m_params.rendererBackendOptions.requestFloatBuffer
                                                    ? "floating-point precision"

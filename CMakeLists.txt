@@ -235,23 +235,32 @@ include(cmake/SokolShaderCompiler.cmake)
 # tree that hello_imgui_add_app(... ASSETS_LOCATION ...) below already treats as the runtime asset root, so no
 # additional copy step is needed.
 #
-# Only glsl300es + metal_macos are generated/validated locally this session (macOS + Emscripten); desktop Linux/
-# Windows GL (glsl410/glsl430) is untested here -- see the experiment/sokol-shdc branch plan's Phase D notes.
+# sokol-shdc writes one shader dialect, chosen to match the rendering backend used, and includes
+# a #version line at the top of the generated file. Desktop GL targets glsl410, and src/app.cpp
+# correspondingly requests a GL 4.1 core context.
+if(EMSCRIPTEN)
+  set(HDRVIEW_SHADER_SLANG glsl300es)
+  set(HDRVIEW_SHADER_EXT glsl)
+elseif(APPLE)
+  # macOS is Metal-only (see the renderpass_metal.mm/shader_metal.mm sources added further below)
+  set(HDRVIEW_SHADER_SLANG metal_macos)
+  set(HDRVIEW_SHADER_EXT metal)
+else()
+  set(HDRVIEW_SHADER_SLANG glsl410)
+  set(HDRVIEW_SHADER_EXT glsl)
+endif()
+
 sokol_shdc_generate(
   INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/image-shader.sglsl
   OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders
   NAME image-shader
   PROGRAM image_shader
-  SLANG glsl300es metal_macos
+  SLANG ${HDRVIEW_SHADER_SLANG}
   EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
-  RENAME image-shader_image_shader_glsl300es_vertex.glsl image-shader_vert.glsl
-         image-shader_image_shader_glsl300es_fragment.glsl image-shader_frag.glsl
-         image-shader_image_shader_metal_macos_vertex.metal image-shader_vert.metal
-         image-shader_image_shader_metal_macos_fragment.metal image-shader_frag.metal
-  # shader_gl.cpp prepends its own #version line at runtime based on the detected GL/GLES context; sokol-shdc's
-  # generated .glsl files already start with their own, which would otherwise collide with it (two back-to-back
-  # #version lines -- GLSL rejects that). Metal has no equivalent runtime prepend, so .metal files are untouched.
-  STRIP_VERSION_LINE image-shader_vert.glsl image-shader_frag.glsl
+  RENAME image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_vertex.${HDRVIEW_SHADER_EXT}
+         image-shader_vert.${HDRVIEW_SHADER_EXT}
+         image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_fragment.${HDRVIEW_SHADER_EXT}
+         image-shader_frag.${HDRVIEW_SHADER_EXT}
 )
 
 # Function to mark a library's includes as SYSTEM to suppress compiler warnings

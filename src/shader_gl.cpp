@@ -24,14 +24,8 @@ static GLuint compile_gl_shader(GLenum type, string_view name, string_view shade
 
     GLuint id;
     CHK(id = glCreateShader(type));
-    const GLchar *files[] = {
-#ifdef __EMSCRIPTEN__
-        "#version 300 es\n",
-#else
-        "#version 330 core\n",
-#endif
-        shader_string.data()};
-    CHK(glShaderSource(id, 2, files, nullptr));
+    const GLchar *files[] = {shader_string.data()};
+    CHK(glShaderSource(id, 1, files, nullptr));
     CHK(glCompileShader(id));
 
     GLint status;
@@ -329,6 +323,19 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
     buf.ndim  = ndim;
     buf.size  = size;
     buf.dirty = true;
+}
+
+std::vector<std::string> Shader::block_member_names(const std::string &block_name) const
+{
+    // SPIRV-Cross emits a named uniform block as a struct-typed uniform, whose members glGetActiveUniform()
+    // reports individually as dotted "block.member" names (see the constructor's uniform loop above).
+    const std::string prefix = block_name + ".";
+
+    std::vector<std::string> names;
+    for (const auto &[key, buf] : m_buffers)
+        if (key.size() > prefix.size() && key.compare(0, prefix.size(), prefix) == 0)
+            names.push_back(key.substr(prefix.size()));
+    return names;
 }
 
 void Shader::set_texture(const std::string &name, Texture *texture)

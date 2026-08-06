@@ -230,7 +230,10 @@ void HDRViewApp::draw_image() const
 {
     auto set_color = [this](Target_ target, ConstImagePtr img)
     {
-        auto t = target_name(target);
+        float4x4 M_to_sRGB{la::identity};
+        int      channels_type = (int)ChannelGroup::Single_Channel;
+        float3   yw            = sRGB_Yw();
+
         if (img)
         {
             int                 group_idx = target == Target_Primary ? img->selected_group : img->reference_group;
@@ -238,19 +241,20 @@ void HDRViewApp::draw_image() const
 
             // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
             // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
-            m_shader->set_uniform(fmt::format("fsp.{}_M_to_sRGB", t), float4x4{{img->M_to_sRGB[0], 0.f},
-                                                                                {img->M_to_sRGB[1], 0.f},
-                                                                                {img->M_to_sRGB[2], 0.f},
-                                                                                {0.f, 0.f, 0.f, 1.f}});
-            m_shader->set_uniform(fmt::format("fsp.{}_channels_type", t), (int)group.type);
-            m_shader->set_uniform(fmt::format("fsp.{}_yw", t), img->luminance_weights);
+            M_to_sRGB = float4x4{
+                {img->M_to_sRGB[0], 0.f}, {img->M_to_sRGB[1], 0.f}, {img->M_to_sRGB[2], 0.f}, {0.f, 0.f, 0.f, 1.f}};
+            channels_type = (int)group.type;
+            yw            = img->luminance_weights;
         }
+
+        if (target == Target_Primary)
+            m_shader->set_uniform_block(
+                "fsp",
+                {{"primary_M_to_sRGB", M_to_sRGB}, {"primary_channels_type", channels_type}, {"primary_yw", yw}});
         else
-        {
-            m_shader->set_uniform(fmt::format("fsp.{}_M_to_sRGB", t), float4x4{la::identity});
-            m_shader->set_uniform(fmt::format("fsp.{}_channels_type", t), (int)ChannelGroup::Single_Channel);
-            m_shader->set_uniform(fmt::format("fsp.{}_yw", t), sRGB_Yw());
-        }
+            m_shader->set_uniform_block(
+                "fsp",
+                {{"secondary_M_to_sRGB", M_to_sRGB}, {"secondary_channels_type", channels_type}, {"secondary_yw", yw}});
     };
 
     set_color(Target_Primary, current_image());
@@ -261,42 +265,35 @@ void HDRViewApp::draw_image() const
         static mt19937 rng(53);
         float2         randomness(generate_canonical<float, 10>(rng) * 255, generate_canonical<float, 10>(rng) * 255);
 
+        const bool   has_reference   = (bool)reference_image();
+        const float2 secondary_pos   = has_reference ? image_position(reference_image()) : float2{0.f};
+        const float2 secondary_scale = has_reference ? image_scale(reference_image()) : float2{1.f};
+
         // fs_params/vs_params are GLSL uniform blocks (see image-shader.sglsl); booleans are `int` there
         // since GLSL uniform blocks cannot contain `bool` members.
-        m_shader->set_uniform("fsp.time", (float)ImGui::GetTime());
-        m_shader->set_uniform("fsp.draw_clip_warnings", (int)m_draw_clip_warnings);
-        m_shader->set_uniform("fsp.clip_range", m_clip_range);
-        m_shader->set_uniform("fsp.randomness", randomness);
-        m_shader->set_uniform("fsp.gain", powf(2.0f, m_exposure_live));
-        m_shader->set_uniform("fsp.offset", m_offset_live);
-        m_shader->set_uniform("fsp.gamma", m_gamma_live);
-        m_shader->set_uniform("fsp.tonemap_mode", (int)m_tonemap);
-        m_shader->set_uniform("fsp.clamp_to_LDR", (int)m_clamp_to_LDR);
-        m_shader->set_uniform("fsp.do_dither", (int)m_dither);
+        m_shader->set_uniform_block("fsp", {{"time", (float)ImGui::GetTime()},
+                                            {"draw_clip_warnings", (int)m_draw_clip_warnings},
+                                            {"clip_range", m_clip_range},
+                                            {"randomness", randomness},
+                                            {"gain", powf(2.0f, m_exposure_live)},
+                                            {"offset", m_offset_live},
+                                            {"gamma", m_gamma_live},
+                                            {"tonemap_mode", (int)m_tonemap},
+                                            {"clamp_to_LDR", (int)m_clamp_to_LDR},
+                                            {"do_dither", (int)m_dither},
+                                            {"blend_mode", (int)m_blend_mode},
+                                            {"channel", (int)m_channel},
+                                            {"bg_mode", (int)m_bg_mode},
+                                            {"bg_color", m_bg_color},
+                                            {"reverse_colormap", (int)m_reverse_colormap},
+                                            {"has_reference", (int)has_reference}});
 
-        m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
-        m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
-
-        m_shader->set_uniform("fsp.blend_mode", (int)m_blend_mode);
-        m_shader->set_uniform("fsp.channel", (int)m_channel);
-        m_shader->set_uniform("fsp.bg_mode", (int)m_bg_mode);
-        m_shader->set_uniform("fsp.bg_color", m_bg_color);
+        m_shader->set_uniform_block("vsp", {{"primary_pos", image_position(current_image())},
+                                            {"primary_scale", image_scale(current_image())},
+                                            {"secondary_pos", secondary_pos},
+                                            {"secondary_scale", secondary_scale}});
 
         m_shader->set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
-        m_shader->set_uniform("fsp.reverse_colormap", (int)m_reverse_colormap);
-
-        if (reference_image())
-        {
-            m_shader->set_uniform("fsp.has_reference", 1);
-            m_shader->set_uniform("vsp.secondary_pos", image_position(reference_image()));
-            m_shader->set_uniform("vsp.secondary_scale", image_scale(reference_image()));
-        }
-        else
-        {
-            m_shader->set_uniform("fsp.has_reference", 0);
-            m_shader->set_uniform("vsp.secondary_pos", float2{0.f});
-            m_shader->set_uniform("vsp.secondary_scale", float2{1.f});
-        }
 
         m_shader->begin();
         m_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
@@ -436,11 +433,6 @@ void HDRViewApp::setup_rendering()
         const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
 
         m_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
-        // vsp._pad is unused padding that only exists to keep vs_params compiling to a real struct instead of
-        // being flattened into an unaddressable array (see the comment on vs_params in image-shader.sglsl).
-        // Its value never matters; set once so it doesn't show up as a perpetually "unbound argument" every
-        // frame.
-        m_shader->set_uniform("vsp._pad", 0);
         m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
 
         Image::make_default_textures();
