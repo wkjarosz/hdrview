@@ -344,7 +344,7 @@ void HDRViewApp::draw_background()
 {
     using namespace literals;
 
-    // If m_linear_output, redirect this frame's rendering (this call, and the ImGui rendering that follows
+    // If m_color_managed, redirect this frame's rendering (this call, and the ImGui rendering that follows
     // it) into an offscreen target instead of the real framebuffer; end_colorpass_frame() converts and blits
     // it to the real framebuffer right before the frame is presented. No-op otherwise.
     begin_colorpass_frame();
@@ -469,17 +469,17 @@ void HDRViewApp::setup_rendering()
 }
 
 //
-// The colorpass: on Windows' scRGB HDR framebuffer (m_linear_output == true), everything HDRView draws --
-// the image content (draw_background()) *and* Dear ImGui's own UI -- keeps emitting ordinary sRGB-encoded
-// colors exactly as it always has (Dear ImGui has no notion of display color space). Both are instead
-// redirected into an offscreen texture, and a single full-screen pass converts that to genuinely linear
-// values for the real framebuffer right before the frame is presented. This mirrors how tev/nanogui solve
-// the same problem (see nanogui-1's Screen::m_wants_color_management / ColorPass). Entirely inert (and these
-// three functions are all no-ops) when m_linear_output is false, i.e. everywhere except Windows HDR mode.
+// The colorpass: when m_color_managed is true, everything HDRView draws -- the image content
+// (draw_background()) and Dear ImGui's own UI alike -- keeps emitting HDRView's usual extended-sRGB colors
+// (Dear ImGui has no notion of display color space). Both are redirected into an offscreen texture, and a
+// single full-screen pass converts that to whatever the real framebuffer needs, right before the frame is
+// presented -- mirrors nanogui-1's Screen::m_wants_color_management / ColorPass. Inert (all three functions
+// no-op) when m_color_managed is false, including on macOS EDR, which consumes HDRView's extended-sRGB
+// output directly.
 void HDRViewApp::setup_colorpass()
 {
 #if defined(HELLOIMGUI_HAS_OPENGL)
-    if (!m_linear_output)
+    if (!m_color_managed)
         return;
 
     try
@@ -501,7 +501,7 @@ void HDRViewApp::setup_colorpass()
         spdlog::error("HDR colorpass initialization failed, falling back to direct (non-color-managed) "
                       "rendering:\n\t{}.",
                       e.what());
-        m_linear_output = false;
+        m_color_managed = false;
     }
 #endif
 }
@@ -509,7 +509,7 @@ void HDRViewApp::setup_colorpass()
 void HDRViewApp::begin_colorpass_frame()
 {
 #if defined(HELLOIMGUI_HAS_OPENGL)
-    if (!m_linear_output)
+    if (!m_color_managed)
         return;
 
     float2 fbscale = ImGui::GetIO().DisplayFramebufferScale;
@@ -537,7 +537,7 @@ void HDRViewApp::begin_colorpass_frame()
 void HDRViewApp::end_colorpass_frame()
 {
 #if defined(HELLOIMGUI_HAS_OPENGL)
-    if (!m_linear_output)
+    if (!m_color_managed)
         return;
 
     CHK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
@@ -546,21 +546,26 @@ void HDRViewApp::end_colorpass_frame()
     int2   fb_size = int2(float2{ImGui::GetIO().DisplaySize} * fbscale);
     CHK(glViewport(0, 0, fb_size.x, fb_size.y));
 
-    // Windows' scRGB convention fixes 1.0 (linear) == 80 nits, but the user's actual configured "SDR content
-    // brightness" (Settings > Display > HDR) is very often set well above that -- query it fresh each frame
-    // (matching nanogui-1's ColorPass, which does the same so it live-updates if the user adjusts that
-    // slider while the app is running) so our output isn't dimmer than plain SDR mode, which isn't subject
-    // to this scRGB reference-white convention at all.
-    float sdr_white_level = 80.f;
+    // scRGB fixes 1.0 == 80 nits, but the user's configured SDR white level (Windows' "SDR content
+    // brightness", or the Wayland compositor's reference luminance) often exceeds that -- query fresh each
+    // frame so output tracks live changes and isn't dimmer than plain SDR when it's raised. 0.0 from GLFW
+    // means "unknown", not "no limit" -- only clamp luminance when a limit is actually reported.
+    float sdr_white_level = 80.f, min_luminance = 0.f, max_luminance = 0.f;
 #if defined(GLFW_FLOATBUFFER)
-    sdr_white_level = glfwGetWindowSdrWhiteLevel((GLFWwindow *)m_params.backendPointers.glfwWindow);
+    auto *window       = (GLFWwindow *)m_params.backendPointers.glfwWindow;
+    sdr_white_level = glfwGetWindowSdrWhiteLevel(window);
     if (sdr_white_level <= 0.f)
         sdr_white_level = 80.f;
+    min_luminance = glfwGetWindowMinLuminance(window);
+    max_luminance = glfwGetWindowMaxLuminance(window);
 #endif
 
     m_colorpass_shader->set_texture("color_texture", m_color_texture);
-    m_colorpass_shader->set_uniform("linear_output", m_linear_output);
+    m_colorpass_shader->set_uniform("transfer", (int)m_display_transfer);
+    m_colorpass_shader->set_uniform("primaries", (int)m_display_primaries);
     m_colorpass_shader->set_uniform("sdr_white_level", sdr_white_level);
+    m_colorpass_shader->set_uniform("min_luminance", min_luminance);
+    m_colorpass_shader->set_uniform("max_luminance", max_luminance);
     m_colorpass_shader->begin();
     m_colorpass_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
     m_colorpass_shader->end();
