@@ -230,7 +230,10 @@ void HDRViewApp::draw_image() const
 {
     auto set_color = [this](Target_ target, ConstImagePtr img)
     {
-        auto t = target_name(target);
+        float4x4 M_to_sRGB{la::identity};
+        int      channels_type = (int)ChannelGroup::Single_Channel;
+        float3   yw            = sRGB_Yw();
+
         if (img)
         {
             int                 group_idx = target == Target_Primary ? img->selected_group : img->reference_group;
@@ -238,19 +241,20 @@ void HDRViewApp::draw_image() const
 
             // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
             // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
-            m_shader->set_uniform(fmt::format("{}_M_to_sRGB", t), float4x4{{img->M_to_sRGB[0], 0.f},
-                                                                           {img->M_to_sRGB[1], 0.f},
-                                                                           {img->M_to_sRGB[2], 0.f},
-                                                                           {0.f, 0.f, 0.f, 1.f}});
-            m_shader->set_uniform(fmt::format("{}_channels_type", t), (int)group.type);
-            m_shader->set_uniform(fmt::format("{}_yw", t), img->luminance_weights);
+            M_to_sRGB = float4x4{
+                {img->M_to_sRGB[0], 0.f}, {img->M_to_sRGB[1], 0.f}, {img->M_to_sRGB[2], 0.f}, {0.f, 0.f, 0.f, 1.f}};
+            channels_type = (int)group.type;
+            yw            = img->luminance_weights;
         }
+
+        if (target == Target_Primary)
+            m_shader->set_uniform_block(
+                "fsp",
+                {{"primary_M_to_sRGB", M_to_sRGB}, {"primary_channels_type", channels_type}, {"primary_yw", yw}});
         else
-        {
-            m_shader->set_uniform(fmt::format("{}_M_to_sRGB", t), float4x4{la::identity});
-            m_shader->set_uniform(fmt::format("{}_channels_type", t), (int)ChannelGroup::Single_Channel);
-            m_shader->set_uniform(fmt::format("{}_yw", t), sRGB_Yw());
-        }
+            m_shader->set_uniform_block(
+                "fsp",
+                {{"secondary_M_to_sRGB", M_to_sRGB}, {"secondary_channels_type", channels_type}, {"secondary_yw", yw}});
     };
 
     set_color(Target_Primary, current_image());
@@ -261,40 +265,35 @@ void HDRViewApp::draw_image() const
         static mt19937 rng(53);
         float2         randomness(generate_canonical<float, 10>(rng) * 255, generate_canonical<float, 10>(rng) * 255);
 
-        m_shader->set_uniform("time", (float)ImGui::GetTime());
-        m_shader->set_uniform("draw_clip_warnings", m_draw_clip_warnings);
-        m_shader->set_uniform("clip_range", m_clip_range);
-        m_shader->set_uniform("randomness", randomness);
-        m_shader->set_uniform("gain", powf(2.0f, m_exposure_live));
-        m_shader->set_uniform("offset", m_offset_live);
-        m_shader->set_uniform("gamma", m_gamma_live);
-        m_shader->set_uniform("tonemap_mode", (int)m_tonemap);
-        m_shader->set_uniform("clamp_to_LDR", m_clamp_to_LDR);
-        m_shader->set_uniform("do_dither", m_dither);
+        const bool   has_reference   = (bool)reference_image();
+        const float2 secondary_pos   = has_reference ? image_position(reference_image()) : float2{0.f};
+        const float2 secondary_scale = has_reference ? image_scale(reference_image()) : float2{1.f};
 
-        m_shader->set_uniform("primary_pos", image_position(current_image()));
-        m_shader->set_uniform("primary_scale", image_scale(current_image()));
+        // fs_params/vs_params are GLSL uniform blocks (see image-shader.sglsl); booleans are `int` there
+        // since GLSL uniform blocks cannot contain `bool` members.
+        m_shader->set_uniform_block("fsp", {{"time", (float)ImGui::GetTime()},
+                                            {"draw_clip_warnings", (int)m_draw_clip_warnings},
+                                            {"clip_range", m_clip_range},
+                                            {"randomness", randomness},
+                                            {"gain", powf(2.0f, m_exposure_live)},
+                                            {"offset", m_offset_live},
+                                            {"gamma", m_gamma_live},
+                                            {"tonemap_mode", (int)m_tonemap},
+                                            {"clamp_to_LDR", (int)m_clamp_to_LDR},
+                                            {"do_dither", (int)m_dither},
+                                            {"blend_mode", (int)m_blend_mode},
+                                            {"channel", (int)m_channel},
+                                            {"bg_mode", (int)m_bg_mode},
+                                            {"bg_color", m_bg_color},
+                                            {"reverse_colormap", (int)m_reverse_colormap},
+                                            {"has_reference", (int)has_reference}});
 
-        m_shader->set_uniform("blend_mode", (int)m_blend_mode);
-        m_shader->set_uniform("channel", (int)m_channel);
-        m_shader->set_uniform("bg_mode", (int)m_bg_mode);
-        m_shader->set_uniform("bg_color", m_bg_color);
+        m_shader->set_uniform_block("vsp", {{"primary_pos", image_position(current_image())},
+                                            {"primary_scale", image_scale(current_image())},
+                                            {"secondary_pos", secondary_pos},
+                                            {"secondary_scale", secondary_scale}});
 
         m_shader->set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
-        m_shader->set_uniform("reverse_colormap", m_reverse_colormap);
-
-        if (reference_image())
-        {
-            m_shader->set_uniform("has_reference", true);
-            m_shader->set_uniform("secondary_pos", image_position(reference_image()));
-            m_shader->set_uniform("secondary_scale", image_scale(reference_image()));
-        }
-        else
-        {
-            m_shader->set_uniform("has_reference", false);
-            m_shader->set_uniform("secondary_pos", float2{0.f});
-            m_shader->set_uniform("secondary_scale", float2{1.f});
-        }
 
         m_shader->begin();
         m_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
@@ -423,12 +422,13 @@ void HDRViewApp::setup_rendering()
         m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);
         m_render_pass->set_clear_color(float4(0.15f, 0.15f, 0.15f, 1.f));
 
-        m_shader = new Shader(
-            m_render_pass,
-            /* An identifying name */
-            "ImageView", Shader::from_asset("shaders/image-shader_vert"),
-            Shader::prepend_includes(Shader::from_asset("shaders/image-shader_frag"), {"shaders/colorspaces"}),
-            Shader::BlendMode::AlphaBlend);
+        // colorspaces.sglsl's shared functions are baked directly into image-shader_frag's generated text at
+        // sokol-shdc compile time (see assets/shaders/image-shader.sglsl), so no runtime prepend_includes()
+        // is needed here anymore, unlike the old hand-maintained image-shader_frag.{glsl,metal}.
+        m_shader = new Shader(m_render_pass,
+                              /* An identifying name */
+                              "ImageView", Shader::from_asset("shaders/image-shader_vert"),
+                              Shader::from_asset("shaders/image-shader_frag"), Shader::BlendMode::AlphaBlend);
 
         const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
 
@@ -444,6 +444,9 @@ void HDRViewApp::setup_rendering()
     }
     catch (const exception &e)
     {
-        spdlog::error("Shader initialization failed!:\n\t{}.", e.what());
+        // m_shader would be left null; every draw call downstream dereferences it unconditionally
+        // with no null check, so continuing here just trades this error for a later segfault.
+        spdlog::critical("Shader initialization failed!:\n\t{}.", e.what());
+        exit(EXIT_FAILURE);
     }
 }

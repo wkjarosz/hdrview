@@ -17,7 +17,11 @@ project(
 include(DetectArchitecture)
 detect_architecture()
 
-# By default, we install in a portable way (i.e. assets and executable are in the same folder)
+# Controls `cmake --install`/packaging layout only, not build-tree asset lookup (see
+# HDRVIEW_BUILD_TREE_ASSETS_DIR below for that).
+#   ON  (default): exe and assets/ install together in one relocatable prefix.
+#   OFF: exe installs to CMAKE_INSTALL_BINDIR, assets to a separate FHS location (or a caller-supplied
+#        ASSETS_LOCATION) baked in as a compile definition. Used by the linux-appimage preset.
 option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 option(HDRVIEW_ENABLE_LIBJPEG "Enable libjpeg(-turbo) support" ON)
@@ -94,6 +98,16 @@ elseif(WIN32)
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.glsl
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
+  )
+  list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
+elseif(UNIX)
+  # Linux/other non-Apple Unix: sokol-shdc already writes generated shaders directly into
+  # ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders (see SokolShaderCompiler.cmake), so only Roboto and
+  # the top-level *.png (e.g. dither-texture-256.png) need copying here, unlike the branches above.
+  file(
+    GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
 endif()
@@ -303,6 +317,45 @@ function(disable_target_warnings target_name)
     message(WARNING "Target ${target_name} does not exist, cannot disable warnings")
   endif()
 endfunction()
+
+# =====================================================================================
+# Shader cross-compilation via sokol-shdc
+# =====================================================================================
+include(cmake/SokolShaderCompiler.cmake)
+
+# Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime (see
+# src/app-draw.cpp). colorspaces.sglsl is @include_block'd directly into the compiled output, so it has
+# no separate build step of its own. Written straight into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders,
+# the same tree hello_imgui_add_app(... ASSETS_LOCATION ...) below already treats as the runtime asset
+# root, so no additional copy step is needed.
+#
+# sokol-shdc writes one shader dialect, chosen to match the rendering backend used, and includes a
+# #version line at the top of the generated file. Desktop GL targets glsl410, and src/app.cpp
+# correspondingly requests a GL 4.1 core context.
+if(EMSCRIPTEN)
+  set(HDRVIEW_SHADER_SLANG glsl300es)
+  set(HDRVIEW_SHADER_EXT glsl)
+elseif(APPLE)
+  # macOS is Metal-only (see the renderpass_metal.mm/shader_metal.mm sources added further below)
+  set(HDRVIEW_SHADER_SLANG metal_macos)
+  set(HDRVIEW_SHADER_EXT metal)
+else()
+  set(HDRVIEW_SHADER_SLANG glsl410)
+  set(HDRVIEW_SHADER_EXT glsl)
+endif()
+
+sokol_shdc_generate(
+  INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/image-shader.sglsl
+  OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders
+  NAME image-shader
+  PROGRAM image_shader
+  SLANG ${HDRVIEW_SHADER_SLANG}
+  EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
+  RENAME image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_vertex.${HDRVIEW_SHADER_EXT}
+         image-shader_vert.${HDRVIEW_SHADER_EXT}
+         image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_fragment.${HDRVIEW_SHADER_EXT}
+         image-shader_frag.${HDRVIEW_SHADER_EXT}
+)
 
 if(APPLE AND NOT EMSCRIPTEN)
   # default to GLFW+Metal on macOS
@@ -567,20 +620,27 @@ CPMAddPackage(
   DOWNLOAD_ONLY YES
   SYSTEM YES
 )
-if(NOT tinyxml2_ADDED)
-  message(FATAL_ERROR "Could not download tinyxml2 library.")
+if(tinyxml2_ADDED)
+  message(STATUS "tinyxml2 library added")
+  add_library(
+    tinyxml2
+    "${tinyxml2_SOURCE_DIR}/tinyxml2.h"
+    "${tinyxml2_SOURCE_DIR}/tinyxml2.cpp"
+  )
+  target_compile_features(tinyxml2 PUBLIC cxx_std_17)
+  target_include_directories(tinyxml2 PUBLIC "${tinyxml2_SOURCE_DIR}")
+  disable_target_warnings(tinyxml2)
+  mark_as_system_library(tinyxml2)
+  list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2")
+elseif(TARGET tinyxml2::tinyxml2)
+  # When CPM_USE_LOCAL_PACKAGES finds a system tinyxml2 via its own Config.cmake, CPM's
+  # find_package() result (tinyxml2_FOUND) is scoped to CPM's internal function and never
+  # reaches this scope, but the imported target it creates is global, so check for that instead.
+  message(STATUS "Using system-installed tinyxml2 library")
+  list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2::tinyxml2")
+else()
+  message(FATAL_ERROR "Could not find or download tinyxml2 library.")
 endif()
-message(STATUS "tinyxml2 library added")
-add_library(
-  tinyxml2
-  "${tinyxml2_SOURCE_DIR}/tinyxml2.h"
-  "${tinyxml2_SOURCE_DIR}/tinyxml2.cpp"
-)
-target_compile_features(tinyxml2 PUBLIC cxx_std_17)
-target_include_directories(tinyxml2 PUBLIC "${tinyxml2_SOURCE_DIR}")
-disable_target_warnings(tinyxml2)
-mark_as_system_library(tinyxml2)
-list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2")
 
 
 if(HDRVIEW_ENABLE_LIBPNG OR HDRVIEW_ENABLE_LIBHEIF)
@@ -693,8 +753,8 @@ CPMAddPackage(
   FIND_PACKAGE_ARGUMENTS "REQUIRED"
   # NOTE: OpenEXR v3.3.0 broke subsampled channel loading, but it seems to be fixed starting with v3.4
   VERSION 3.1.5 # this is the version available in ubuntu 24.04
-  GIT_TAG v3.4.4
-  URL https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.4.4.zip
+  GIT_TAG v3.4.13
+  URL https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.4.13.zip
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "BUILD_TESTING OFF"
           "OPENEXR_FORCE_INTERNAL_DEFLATE ON"
@@ -1448,6 +1508,9 @@ set(HDRVIEW_SOURCES
 )
 
 hello_imgui_add_app(HDRView ${HDRVIEW_SOURCES} ASSETS_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
+if(HDRVIEW_SOKOL_SHDC_TARGETS)
+  add_dependencies(HDRView ${HDRVIEW_SOKOL_SHDC_TARGETS})
+endif()
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
@@ -1464,6 +1527,15 @@ message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")
 target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES})
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
+if(NOT EMSCRIPTEN)
+  # Multi-config generators (e.g. Ninja Multi-Config, used by every preset here) build the exe into
+  # a per-config Debug/Release subdirectory, below where HelloImGui's build-time asset copy lands;
+  # HelloImGui's own fallback for that mismatch is MSVC-only. This gives every other compiler an
+  # equivalent fallback, consumed via HelloImGui::AddAssetsSearchPath() in hdrview.cpp. Distinct
+  # from ASSETS_LOCATION below, which is an absolute *installed* path for non-portable builds.
+  target_compile_definitions(HDRView PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
+endif()
+
 if(APPLE)
   target_compile_options(HDRView PRIVATE "-fobjc-arc")
   target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
@@ -1479,11 +1551,14 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
-                                tests/test_exr_io.cpp tests/test_png_io.cpp
+                                tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_assets.cpp
   )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
   target_compile_definitions(hdrview_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
+  # Mirrors HDRView's own HDRVIEW_BUILD_TREE_ASSETS_DIR definition above, so tests/test_assets.cpp
+  # can exercise the same asset lookup the app uses.
+  target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
   target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui doctest::doctest)
 
   if(APPLE)
@@ -1593,9 +1668,8 @@ if(NOT HDRVIEW_PORTABLE_INSTALL)
     endif()
     install(DIRECTORY assets DESTINATION ${assets_install_dir})
     set(ASSETS_LOCATION "${assets_install_dir}/assets")
+    target_compile_definitions(HDRView PRIVATE ASSETS_LOCATION="${assets_install_dir}/assets")
   endif()
-  install(DIRECTORY assets DESTINATION ${assets_install_dir})
-  target_compile_definitions(HDRView PRIVATE ASSETS_LOCATION="${assets_install_dir}/assets")
 endif()
 
 set(CPACK_PACKAGE_VENDOR "Wojciech Jarosz")

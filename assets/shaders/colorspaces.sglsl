@@ -1,8 +1,8 @@
-precision mediump float;
-
-#ifndef saturate
-#define saturate(v) clamp(v, 0.0, 1.0)
-#endif
+// Shared colorspace math, written once and cross-compiled to GLSL/GLES/Metal via sokol-shdc.
+// This is a @block, not a standalone program: it only produces output once @include_block'd into
+// a @vs/@fs section of a real @program (see image-shader.sglsl). See SokolShaderCompiler.cmake
+// and CMakeLists.txt for the CMake wiring.
+@block colorspaces
 
 // Luminance-chroma to RGB conversion
 // assumes `input: {RY, Y, BY}`
@@ -61,3 +61,5 @@ vec3 XYZToRGB(vec3 xyz)
         mat3(3.240479, -0.969256, 0.055648, -1.537150, 1.875992, -0.204043, -0.498535, 0.041556, 1.057311);
     return XYZ2RGB * xyz;
 }
+
+@end

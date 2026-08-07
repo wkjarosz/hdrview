@@ -10,7 +10,7 @@
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
-#ifdef ASSETS_LOCATION
+#if defined(ASSETS_LOCATION) || defined(HDRVIEW_BUILD_TREE_ASSETS_DIR)
 #include <hello_imgui/hello_imgui_assets.h>
 #endif
 
@@ -59,6 +59,11 @@ int main(int argc, char **argv)
 
 #ifdef ASSETS_LOCATION
     HelloImGui::SetAssetsFolder(ASSETS_LOCATION);
+#endif
+#ifdef HDRVIEW_BUILD_TREE_ASSETS_DIR
+    // Fallback for a freshly built, uninstalled binary; see HDRVIEW_BUILD_TREE_ASSETS_DIR's
+    // definition in CMakeLists.txt for why this is needed on non-MSVC multi-config builds.
+    HelloImGui::AddAssetsSearchPath(HDRVIEW_BUILD_TREE_ASSETS_DIR);
 #endif
 
     constexpr spdlog::level::level_enum default_verbosity = spdlog::level::info;

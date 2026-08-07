@@ -1,6 +1,7 @@
 #include "fonts.h"
 #include "app.h"
 #include "timer.h"
+#include <cstdlib>
 #include <hello_imgui/hello_imgui_assets.h>
 #include <hello_imgui/hello_imgui_font.h>
 
@@ -28,13 +29,23 @@ void HDRViewApp::load_fonts()
     auto load_font = [](const string &font_path, float size = 14.f)
     {
         if (!AssetExists(font_path))
-            spdlog::critical("Cannot find the font asset '{}'!");
+        {
+            spdlog::critical("Cannot find the font asset '{}'!", font_path);
+            // std::_Exit, not exit: this runs before setup_rendering() creates a GL context, and
+            // exit()'s static destructors tear down a Texture with a real GL handle, segfaulting
+            // since GL isn't current yet. Nothing meaningful exists yet to clean up either way.
+            std::_Exit(EXIT_FAILURE);
+        }
 
         LoadFont(font_path, size);
 
         // merge in icon font
         if (!AssetExists(FONT_ICON_FILE_NAME_MY))
+        {
             spdlog::critical("Cannot find the icon font '{}'", FONT_ICON_FILE_NAME_MY);
+            // std::_Exit, not exit -- see the comment on the identical check above.
+            std::_Exit(EXIT_FAILURE);
+        }
 
         FontLoadingParams iconFontParams;
         iconFontParams.mergeToLastFont       = true;

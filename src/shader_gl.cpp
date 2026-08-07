@@ -24,14 +24,8 @@ static GLuint compile_gl_shader(GLenum type, string_view name, string_view shade
 
     GLuint id;
     CHK(id = glCreateShader(type));
-    const GLchar *files[] = {
-#ifdef __EMSCRIPTEN__
-        "#version 300 es\n",
-#else
-        "#version 330 core\n",
-#endif
-        shader_string.data()};
-    CHK(glShaderSource(id, 2, files, nullptr));
+    const GLchar *files[] = {shader_string.data()};
+    CHK(glShaderSource(id, 1, files, nullptr));
     CHK(glCompileShader(id));
 
     GLint status;
@@ -331,12 +325,39 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
     buf.dirty = true;
 }
 
+std::vector<std::string> Shader::block_member_names(const std::string &block_name) const
+{
+    // SPIRV-Cross emits a named uniform block as a struct-typed uniform, whose members glGetActiveUniform()
+    // reports individually as dotted "block.member" names (see the constructor's uniform loop above).
+    const std::string prefix = block_name + ".";
+
+    std::vector<std::string> names;
+    for (const auto &[key, buf] : m_buffers)
+        if (key.size() > prefix.size() && key.compare(0, prefix.size(), prefix) == 0)
+            names.push_back(key.substr(prefix.size()));
+    return names;
+}
+
 void Shader::set_texture(const std::string &name, Texture *texture)
 {
-    auto it = m_buffers.find(name);
+    // Vulkan-style GLSL sources declare textures and samplers separately, but GL has no first-class sampler
+    // object here: SPIRV-Cross fuses them into one combined `sampler2D` uniform named "<texture>_<sampler>".
+    // If the logical texture name isn't found directly, retry against that combined name.
+    std::string lookup_name = name;
+    if (m_buffers.find(lookup_name) == m_buffers.end())
+    {
+        std::string sampler_name;
+        if (name.length() > 8 && name.compare(name.length() - 8, 8, "_texture") == 0)
+            sampler_name = name.substr(0, name.length() - 8) + "_sampler";
+        else
+            sampler_name = name + "_sampler";
+        lookup_name = name + "_" + sampler_name;
+    }
+
+    auto it = m_buffers.find(lookup_name);
     if (it == m_buffers.end())
         throw std::invalid_argument("Shader::set_texture(): could not find argument named \"" + name + "\"");
-    Buffer &buf = m_buffers[name];
+    Buffer &buf = m_buffers[lookup_name];
     if (!(buf.type == VertexTexture || buf.type == FragmentTexture))
         throw std::invalid_argument("Shader::set_texture(): argument named \"" + name + "\" is not a texture!");
 

@@ -83,6 +83,15 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                      hasEdrSupport() ? "would otherwise" : "would not anyway");
 
     m_params.rendererBackendOptions.requestFloatBuffer = use_edr;
+
+#if defined(HELLOIMGUI_HAS_OPENGL) && !defined(__EMSCRIPTEN__)
+    // Our generated desktop shaders are GLSL 4.10 (see sokol_shdc_generate() in CMakeLists.txt), so
+    // request a matching context instead of Hello ImGui's default 3.3 core. GlslVersion is left
+    // alone: it configures ImGui's own shaders, whose default is still valid under 4.1 core.
+    m_params.rendererBackendOptions.openGlOptions.MajorVersion = 4;
+    m_params.rendererBackendOptions.openGlOptions.MinorVersion = 1;
+#endif
+
     spdlog::info("Launching GUI with {} display support.", use_edr ? "EDR" : "SDR");
     spdlog::info("Creating a {} framebuffer.", m_params.rendererBackendOptions.requestFloatBuffer
                                                    ? "floating-point precision"
