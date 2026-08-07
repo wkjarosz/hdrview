@@ -218,8 +218,8 @@ private:
     //-----------------------------------------------------------------------------
 
     RenderPass      *m_render_pass = nullptr;
-    /// Offscreen HDR color target + final conversion shader; only used when m_linear_output is true (Windows
-    /// scRGB). See setup_colorpass()/begin_colorpass_frame()/end_colorpass_frame() in app-draw.cpp.
+    /// Offscreen HDR color target + final conversion shader; only used when m_color_managed is true. See
+    /// setup_colorpass()/begin_colorpass_frame()/end_colorpass_frame() in app-draw.cpp.
     Texture *m_color_texture    = nullptr;
     Shader  *m_colorpass_shader = nullptr;
 #if defined(HELLOIMGUI_HAS_OPENGL)
@@ -240,9 +240,13 @@ private:
     bool      m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
          m_draw_clip_warnings = false, m_show_FPS = false;
-    /// True when the display's HDR/EDR framebuffer expects genuinely linear values (e.g. Windows scRGB) rather
-    /// than sRGB-encoded ones extended past [0,1] (e.g. macOS EDR); queried from GLFW once the window exists.
-    bool m_linear_output = false;
+    /// True when the display needs the colorpass to convert away from HDRView's extended-sRGB working
+    /// convention (e.g. Windows/Linux scRGB or Linux/Wayland PQ). Only meaningful on the OpenGL/GLFW
+    /// backend; macOS EDR consumes the extended-sRGB output directly. Queried from GLFW once the window
+    /// exists (see app.cpp).
+    bool     m_color_managed      = false;
+    uint32_t m_display_transfer   = 2; ///< wp_color_manager_v1 transfer_function code point; 2 == gamma 2.2
+    uint32_t m_display_primaries  = 1; ///< wp_color_manager_v1 primaries code point; 1 == sRGB/BT.709
     float2 m_clip_range{0.f, 1.f}; ///< Values outside this range will have zebra stripes if m_draw_clip_warnings = true
     Box2i  m_roi{int2{0}}, m_roi_live{int2{0}};
 

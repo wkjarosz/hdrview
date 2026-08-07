@@ -373,15 +373,14 @@ if(APPLE AND NOT EMSCRIPTEN)
   enable_language(OBJC)
 endif()
 
-if((APPLE OR WIN32) AND NOT EMSCRIPTEN AND HDRVIEW_ENABLE_HDR_DISPLAY)
+if((APPLE OR WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND NOT EMSCRIPTEN AND HDRVIEW_ENABLE_HDR_DISPLAY)
   # Use https://github.com/Tom94/glfw, the fork that adds true HDR/EDR display output (proven in production
-  # by tev, https://github.com/Tom94/tev) and also happens to already carry macOS drag-files-onto-app-icon
-  # support (previously HDRView's own small glfw fork's only patch, now subsumed by this one -- see
-  # glfwGetOpenedFilenames/glfwSetOpenedFilenamesCallback usage in src/app.cpp). Only Tom94/glfw's Windows
-  # (WGL float pixel format) and macOS (Cocoa/EDR) paths are relied on today; its Wayland color-management
-  # work is not yet wired up for Linux. Hello ImGui's own patched fork detects this GLFW fork via the
-  # GLFW_FLOATBUFFER window-hint macro and degrades to today's SDR-only behavior when it's absent, so
-  # disabling this option (or building on Linux, which isn't covered by this block) is always safe.
+  # by tev, https://github.com/Tom94/tev) and also carries macOS drag-files-onto-app-icon support (see
+  # glfwGetOpenedFilenames/glfwSetOpenedFilenamesCallback usage in src/app.cpp). Covers Windows (WGL float
+  # pixel format), macOS (Cocoa/EDR), and Linux/Wayland (wp_color_manager_v1, negotiated at runtime between
+  # scRGB and PQ depending on compositor/driver support). Hello ImGui's own patched fork detects this GLFW
+  # fork via the GLFW_FLOATBUFFER window-hint macro and degrades to plain SDR behavior when it's absent, so
+  # disabling this option is always safe (falls back to system/vanilla GLFW).
   set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
   CPMAddPackage(
     NAME glfw
@@ -424,15 +423,16 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 # Prevent dependencies from installing their files
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
-# Fork of pthom/hello_imgui (v1.92.700 + two commits) that adds optional HDR/EDR support for the GLFW3+OpenGL
-# backend, gated behind the HDR-enabling GLFW fork pinned above (see that CPMAddPackage's comment), plus a
-# small BeforeSwap render-loop hook HDRView uses for a final HDR color-management pass -- a vanilla-GLFW
-# build of this fork behaves identically to upstream hello_imgui. Propose this upstream once validated on
-# real Windows HDR hardware; re-point at pthom/hello_imgui directly if/when it's merged there.
+# Fork of pthom/hello_imgui (v1.92.700 + three commits) that adds optional HDR/EDR support for the
+# GLFW3+OpenGL backend, gated behind the HDR-enabling GLFW fork pinned above (see that CPMAddPackage's
+# comment), a small BeforeSwap render-loop hook HDRView uses for a final HDR color-management pass, and
+# Wayland color-management wiring -- a vanilla-GLFW build of this fork behaves identically to upstream
+# hello_imgui. Propose this upstream once validated on real Windows HDR hardware; re-point at
+# pthom/hello_imgui directly if/when it's merged there.
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY wkjarosz/hello_imgui
-  GIT_TAG 3adaf6717f205fd9141339b9eeabfcd0eecab687
+  GIT_TAG a4b7dd684cfc35585c9bb74e4a26300387cc7d50
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   EXCLUDE_FROM_ALL YES

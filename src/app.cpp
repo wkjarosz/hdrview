@@ -240,19 +240,27 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                             });
 
 #if defined(GLFW_FLOATBUFFER)
-        // Only the HDR-enabling GLFW fork exposes glfwGetWindowTransfer(), and it is window-scoped (needs
-        // the real window/context, unlike hasEdrSupport()'s optimistic pre-window guess), so query it here.
-        // Windows' scRGB floating-point framebuffer expects genuinely linear values (transfer == 5), whereas
-        // macOS EDR expects sRGB-encoded values simply left unclamped past [0,1] (transfer == 10, "EXT
-        // sRGB") -- which is what the shader already produces. Only Windows needs to skip the sRGB encode.
-        if (m_params.rendererBackendOptions.requestFloatBuffer)
-        {
-            auto    *window   = (GLFWwindow *)m_params.backendPointers.glfwWindow;
-            uint32_t transfer = glfwGetWindowTransfer(window);
-            m_linear_output   = transfer == 5;
-            spdlog::info("GLFW reports the window's transfer function as {} ({}encoding before output).",
-                         transfer, m_linear_output ? "linear -- skipping sRGB " : "non-linear -- keeping sRGB ");
-        }
+        // glfwGetWindowTransfer()/glfwGetWindowPrimaries() are window-scoped (need the real window/context,
+        // unlike hasEdrSupport()'s pre-window guess) and only meaningful on the OpenGL/GLFW backend: the
+        // colorpass that consumes this is HELLOIMGUI_HAS_OPENGL-gated and never runs on Metal, since macOS
+        // EDR consumes HDRView's extended-sRGB shader output directly. (2, 1, 80 nits) -- gamma 2.2, sRGB
+        // primaries, default white level -- is GLFW's "no color management needed" combination; anything
+        // else (Windows/Linux scRGB, Linux/Wayland PQ+BT.2020, or a raised SDR white level) needs the
+        // colorpass. See colorpass_frag.glsl for the transfer/primaries encoders.
+        //
+        // Query even though the Wayland color-management init hint is itself gated on requestFloatBuffer
+        // (runner_glfw3.cpp): if float-buffer window creation fails and falls back to a non-float window
+        // after that hint already took effect, the compositor can still have tagged the surface with a
+        // non-default color space.
+        auto *window        = (GLFWwindow *)m_params.backendPointers.glfwWindow;
+        m_display_transfer  = glfwGetWindowTransfer(window);
+        m_display_primaries = glfwGetWindowPrimaries(window);
+        float sdr_white     = glfwGetWindowSdrWhiteLevel(window);
+        m_color_managed = m_display_transfer != 2 || m_display_primaries != 1 || (sdr_white > 0.f && sdr_white != 80.f);
+        spdlog::info("GLFW reports the window's transfer function as {}, primaries as {}, and SDR white level "
+                     "as {} nits ({}).",
+                     m_display_transfer, m_display_primaries, sdr_white,
+                     m_color_managed ? "colorpass active" : "no color management needed");
 #endif
 #ifdef __APPLE__
         // On macOS, the mechanism for opening an application passes filenames
