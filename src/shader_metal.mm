@@ -74,15 +74,12 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
     pipeline_desc.vertexFunction               = vertex_func;
     pipeline_desc.fragmentFunction             = fragment_func;
 
-    // sokol-shdc's generated Metal vertex shaders take their `in` attributes via a [[stage_in]] struct (the
-    // standard SPIRV-Cross-generated style), unlike the old hand-written vertex shader here, which read
-    // straight from a `const device float2 *position` buffer indexed by [[vertex_id]] and so never needed a
-    // MTLVertexDescriptor. [[stage_in]] requires one to be set explicitly, or pipeline creation fails with
-    // "Vertex function has input attributes but no vertex descriptor was set." Reserve a buffer-index range
-    // (30 downward) for these attributes, comfortably clear of the low single-digit indices sokol-shdc assigns
-    // to uniform blocks/textures/samplers via @vs/@fs `layout(binding=N)`. Each attribute is also registered
-    // in m_buffers below (stage_in attributes don't appear in the MTLArgument-based reflection used for
-    // ordinary buffer/texture/sampler arguments further down), so e.g. set_buffer("position", ...) still works.
+    // sokol-shdc's generated Metal vertex shaders take their `in` attributes via a [[stage_in]] struct, which
+    // requires an explicit MTLVertexDescriptor or pipeline creation fails ("Vertex function has input
+    // attributes but no vertex descriptor was set."). Buffer indices count down from 30 to stay clear of the
+    // low single-digit indices sokol-shdc assigns to uniform blocks/textures/samplers via `layout(binding=N)`.
+    // stage_in attributes don't appear in the MTLArgument reflection used below for ordinary buffer/texture/
+    // sampler arguments, so each is also registered in m_buffers here, keeping set_buffer("position", ...) working.
     MTLVertexDescriptor *vertex_desc = [MTLVertexDescriptor vertexDescriptor];
     for (MTLVertexAttribute *attr in vertex_func.vertexAttributes)
     {
@@ -162,15 +159,12 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
     m_pipeline_state = (__bridge_retained void *)pipeline_state;
 
     // Pre-size and zero-fill a struct-typed buffer argument (a named uniform block compiled by sokol-shdc,
-    // e.g. "constant fs_params& fsp [[buffer(N)]]"), and register each of its members in
-    // m_metal_struct_members so set_buffer("fsp.member", ...) can later memcpy into the right byte offset.
-    // See the m_metal_struct_members declaration in shader.h for why this exists.
-    // Mirrors the size-based small(raw array)-vs-large(id<MTLBuffer>) split that set_buffer()/begin()/~Shader()
-    // already use for ordinary buffers (see METAL_BUFFER_THRESHOLD), so those unmodified code paths upload and
-    // free a struct block exactly like any other buffer once this pre-allocates buf.buffer/buf.size correctly.
-    // Large blocks use MTLResourceStorageModeShared (not the Private+blit path used elsewhere in this file for
-    // write-once buffers) because members are written individually via CPU memcpy at arbitrary times, which
-    // requires a CPU-visible .contents pointer.
+    // e.g. "constant fs_params& fsp [[buffer(N)]]"), and register its members in m_metal_struct_members so
+    // set_buffer("fsp.member", ...) can later memcpy into the right byte offset (see shader.h). Uses the same
+    // small(raw array)-vs-large(id<MTLBuffer>) split as ordinary buffers (METAL_BUFFER_THRESHOLD) so
+    // set_buffer()/begin()/~Shader() upload and free a struct block like any other. Large blocks use
+    // MTLResourceStorageModeShared, not the Private+blit path used elsewhere, since members are written via
+    // CPU memcpy at arbitrary times and need a CPU-visible .contents pointer.
     auto register_struct_members = [this, device](const std::string &block_name, MTLArgument *arg, Buffer &buf)
     {
         if (!arg.bufferStructType)
@@ -196,11 +190,9 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
     {
         std::string name = [arg.name UTF8String];
 
-        // Metal's own pipeline reflection additionally reports a synthetic "vertexBuffer.<index>" entry for
-        // each [[stage_in]] buffer slot (on top of the real per-attribute names already registered above via
-        // vertex_func.vertexAttributes), representing an implementation detail of stage_in binding rather than
-        // a parameter the app should address. Left unfiltered, it's a harmless but permanently-unbound extra
-        // Buffer entry that spams "unbound argument" warnings every frame in begin() below.
+        // Metal's pipeline reflection also reports a synthetic "vertexBuffer.<index>" entry per [[stage_in]]
+        // buffer slot, an implementation detail of stage_in binding, not a parameter the app should set.
+        // Left unfiltered it's a permanently-unbound Buffer entry that spams begin()'s warnings every frame.
         if (name.rfind("vertexBuffer.", 0) == 0)
             continue;
 
@@ -284,10 +276,9 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
 {
     auto &gMetalGlobals = GetMetalGlobals();
 
-    // A dotted "block.member" name addresses one member of a uniform block that sokol-shdc compiled to a
-    // single struct-typed buffer argument (see register_struct_members() in the constructor above and the
-    // m_metal_struct_members declaration in shader.h). Write just that member's bytes into the block's
-    // already-fully-sized backing buffer instead of replacing the whole buffer.
+    // A dotted "block.member" name addresses one member of a uniform block compiled to a single struct-typed
+    // buffer argument (see register_struct_members() above and m_metal_struct_members in shader.h). Write
+    // just that member's bytes into the block's already-sized backing buffer, not the whole buffer.
     auto member_it = m_metal_struct_members.find(name);
     if (member_it != m_metal_struct_members.end())
     {

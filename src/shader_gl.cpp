@@ -340,11 +340,9 @@ std::vector<std::string> Shader::block_member_names(const std::string &block_nam
 
 void Shader::set_texture(const std::string &name, Texture *texture)
 {
-    // Vulkan-style GLSL sources (see image-shader.sglsl) declare textures and samplers separately, but GL has
-    // no first-class sampler object in this pipeline: SPIRV-Cross fuses them into one combined `sampler2D`
-    // uniform literally named "<texture>_<sampler>". Call sites still address the texture by its own logical
-    // name, so if that name isn't found directly, retry against the combined name, deriving the companion
-    // sampler name the same way shader_metal.mm does (strip a trailing "_texture", append "_sampler").
+    // Vulkan-style GLSL sources declare textures and samplers separately, but GL has no first-class sampler
+    // object here: SPIRV-Cross fuses them into one combined `sampler2D` uniform named "<texture>_<sampler>".
+    // If the logical texture name isn't found directly, retry against that combined name.
     std::string lookup_name = name;
     if (m_buffers.find(lookup_name) == m_buffers.end())
     {

@@ -19,12 +19,9 @@ detect_architecture()
 
 # Controls `cmake --install`/packaging layout only, not build-tree asset lookup (see
 # HDRVIEW_BUILD_TREE_ASSETS_DIR below for that).
-#   ON  (default): HelloImGui's own install() keeps the exe and assets/ together in one relocatable
-#        prefix.
-#   OFF: HDRView installs the exe to CMAKE_INSTALL_BINDIR and assets to a separate FHS location (or
-#        a caller-supplied ASSETS_LOCATION), baked into the binary as a compile definition. Used by
-#        the linux-appimage preset, whose AppDir layout needs a fixed path rather than a relocatable
-#        pair.
+#   ON  (default): exe and assets/ install together in one relocatable prefix.
+#   OFF: exe installs to CMAKE_INSTALL_BINDIR, assets to a separate FHS location (or a caller-supplied
+#        ASSETS_LOCATION) baked in as a compile definition. Used by the linux-appimage preset.
 option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 option(HDRVIEW_ENABLE_LIBJPEG "Enable libjpeg(-turbo) support" ON)
@@ -240,46 +237,6 @@ include(FindPkgConfig)
 # =====================================================================================
 include(cmake/CPM.cmake)
 
-# =====================================================================================
-# Shader cross-compilation via sokol-shdc (experimental, see experiment/sokol-shdc branch)
-# =====================================================================================
-include(cmake/SokolShaderCompiler.cmake)
-
-# Generates the actual image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime
-# (see src/app-draw.cpp), replacing the old hand-maintained pair plus colorspaces.{glsl,metal} (colorspaces.sglsl
-# is @include_block'd directly into this program's compiled output, not shipped standalone -- see
-# assets/shaders/colorspaces.sglsl). Written directly into the same ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders/
-# tree that hello_imgui_add_app(... ASSETS_LOCATION ...) below already treats as the runtime asset root, so no
-# additional copy step is needed.
-#
-# sokol-shdc writes one shader dialect, chosen to match the rendering backend used, and includes
-# a #version line at the top of the generated file. Desktop GL targets glsl410, and src/app.cpp
-# correspondingly requests a GL 4.1 core context.
-if(EMSCRIPTEN)
-  set(HDRVIEW_SHADER_SLANG glsl300es)
-  set(HDRVIEW_SHADER_EXT glsl)
-elseif(APPLE)
-  # macOS is Metal-only (see the renderpass_metal.mm/shader_metal.mm sources added further below)
-  set(HDRVIEW_SHADER_SLANG metal_macos)
-  set(HDRVIEW_SHADER_EXT metal)
-else()
-  set(HDRVIEW_SHADER_SLANG glsl410)
-  set(HDRVIEW_SHADER_EXT glsl)
-endif()
-
-sokol_shdc_generate(
-  INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/image-shader.sglsl
-  OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders
-  NAME image-shader
-  PROGRAM image_shader
-  SLANG ${HDRVIEW_SHADER_SLANG}
-  EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
-  RENAME image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_vertex.${HDRVIEW_SHADER_EXT}
-         image-shader_vert.${HDRVIEW_SHADER_EXT}
-         image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_fragment.${HDRVIEW_SHADER_EXT}
-         image-shader_frag.${HDRVIEW_SHADER_EXT}
-)
-
 # Function to mark a library's includes as SYSTEM to suppress compiler warnings
 # Usage: mark_as_system_library(target_name)
 function(mark_as_system_library target_name)
@@ -360,6 +317,45 @@ function(disable_target_warnings target_name)
     message(WARNING "Target ${target_name} does not exist, cannot disable warnings")
   endif()
 endfunction()
+
+# =====================================================================================
+# Shader cross-compilation via sokol-shdc
+# =====================================================================================
+include(cmake/SokolShaderCompiler.cmake)
+
+# Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime (see
+# src/app-draw.cpp). colorspaces.sglsl is @include_block'd directly into the compiled output, so it has
+# no separate build step of its own. Written straight into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders,
+# the same tree hello_imgui_add_app(... ASSETS_LOCATION ...) below already treats as the runtime asset
+# root, so no additional copy step is needed.
+#
+# sokol-shdc writes one shader dialect, chosen to match the rendering backend used, and includes a
+# #version line at the top of the generated file. Desktop GL targets glsl410, and src/app.cpp
+# correspondingly requests a GL 4.1 core context.
+if(EMSCRIPTEN)
+  set(HDRVIEW_SHADER_SLANG glsl300es)
+  set(HDRVIEW_SHADER_EXT glsl)
+elseif(APPLE)
+  # macOS is Metal-only (see the renderpass_metal.mm/shader_metal.mm sources added further below)
+  set(HDRVIEW_SHADER_SLANG metal_macos)
+  set(HDRVIEW_SHADER_EXT metal)
+else()
+  set(HDRVIEW_SHADER_SLANG glsl410)
+  set(HDRVIEW_SHADER_EXT glsl)
+endif()
+
+sokol_shdc_generate(
+  INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/image-shader.sglsl
+  OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders
+  NAME image-shader
+  PROGRAM image_shader
+  SLANG ${HDRVIEW_SHADER_SLANG}
+  EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
+  RENAME image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_vertex.${HDRVIEW_SHADER_EXT}
+         image-shader_vert.${HDRVIEW_SHADER_EXT}
+         image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_fragment.${HDRVIEW_SHADER_EXT}
+         image-shader_frag.${HDRVIEW_SHADER_EXT}
+)
 
 if(APPLE AND NOT EMSCRIPTEN)
   # default to GLFW+Metal on macOS
@@ -1532,12 +1528,11 @@ target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES})
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
 if(NOT EMSCRIPTEN)
-  # HelloImGui's build-time asset copy targets the parent binary dir, but multi-config generators
-  # (e.g. Ninja Multi-Config, used by every preset here) build the exe into a per-config
-  # Debug/Release subdirectory -- and HelloImGui's own runtime fallback for that mismatch is
-  # compiled in only for MSVC. This gives every other compiler an equivalent fallback, consumed
-  # additively via HelloImGui::AddAssetsSearchPath() in hdrview.cpp. Distinct from ASSETS_LOCATION
-  # below, which is an absolute *installed* path baked in only for non-portable builds.
+  # Multi-config generators (e.g. Ninja Multi-Config, used by every preset here) build the exe into
+  # a per-config Debug/Release subdirectory, below where HelloImGui's build-time asset copy lands;
+  # HelloImGui's own fallback for that mismatch is MSVC-only. This gives every other compiler an
+  # equivalent fallback, consumed via HelloImGui::AddAssetsSearchPath() in hdrview.cpp. Distinct
+  # from ASSETS_LOCATION below, which is an absolute *installed* path for non-portable builds.
   target_compile_definitions(HDRView PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
 endif()
 

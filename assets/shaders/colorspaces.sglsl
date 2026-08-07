@@ -1,7 +1,7 @@
 // Shared colorspace math, written once and cross-compiled to GLSL/GLES/Metal via sokol-shdc.
 // This is a @block, not a standalone program: it only produces output once @include_block'd into
-// a @vs/@fs section of a real @program (see image-shader.sglsl). See assets/shaders/README.md
-// (once it exists) or the experiment/sokol-shdc branch plan for the CMake wiring.
+// a @vs/@fs section of a real @program (see image-shader.sglsl). See SokolShaderCompiler.cmake
+// and CMakeLists.txt for the CMake wiring.
 @block colorspaces
 
 // Luminance-chroma to RGB conversion

@@ -1,6 +1,6 @@
 // Main image-view vertex+fragment shader, written once and cross-compiled to GLSL/GLES/Metal via sokol-shdc.
-// Replaces the hand-maintained image-shader_{vert,frag}.{glsl,metal} pair. See the experiment/sokol-shdc
-// branch plan for the CMake wiring and app-draw.cpp call-site changes this requires.
+// See SokolShaderCompiler.cmake and CMakeLists.txt for the CMake wiring, and app-draw.cpp for how the
+// compiled output is loaded and its uniforms set.
 //
 // GLSL uniform blocks cannot contain `bool` members (glslang rejects it), so booleans below are `int`
 // (0/1); C++ call sites pass 0/1 and shader code compares with `!= 0`.

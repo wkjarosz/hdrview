@@ -215,15 +215,14 @@ public:
     /**
         Upload several members of a uniform block at once, addressing each by its bare member name.
 
-        Callers name members only; the std140 layout of the block (member offsets, alignment padding, and whether
-        the backend represents the block as a struct or a flattened array) stays an implementation detail of this
-        class. \ref set_uniform() with a dotted `"block.member"` name still works, but prefer this.
+        Callers name members only; block layout (offsets, padding, whether a backend represents it as a struct
+        or a flattened array) stays an implementation detail. \ref set_uniform() with a dotted `"block.member"`
+        name still works, but prefer this.
 
-        Any member of \p block_name that is *not* named by the caller is left untouched, so \ref begin()'s
-        unbound-argument warning still catches a genuinely forgotten uniform -- with one exception: members whose
-        name begins with an underscore are treated as reserved padding and are zero-filled automatically. Such
-        members exist purely to control how the shader cross-compiler lays the block out (see the `_pad` member of
-        `vs_params` in `assets/shaders/image-shader.sglsl`) and carry no value the app could meaningfully set.
+        A member not named here is left untouched, so \ref begin()'s unbound-argument warning still catches a
+        genuinely forgotten uniform -- except members whose name starts with an underscore, which exist only to
+        control the cross-compiler's block layout (e.g. `_pad` in `vs_params`, see image-shader.sglsl) and are
+        zero-filled automatically.
 
         \param block_name
             The block's GLSL *instance* name (e.g. `"vsp"`), which is what both backends' reflection reports.
@@ -351,13 +350,11 @@ protected:
 #endif
 #elif defined(HELLOIMGUI_HAS_METAL)
     void *m_pipeline_state = nullptr;
-    // sokol-shdc compiles a named uniform block (e.g. "fs_params { float gain; ... } fsp;") to a single
-    // Metal `constant fs_params& fsp [[buffer(N)]]` argument, not one argument per member. To let call sites
-    // keep setting one named parameter at a time (set_uniform("fsp.gain", ...)), maps a dotted
-    // "block.member" name to the block's own name (an entry in m_buffers, pre-sized to the whole struct at
-    // construction time) and the member's byte offset within it; set_buffer() memcpy's into that offset
-    // instead of replacing the whole buffer. GL needs no equivalent: dotted names already resolve directly
-    // via glGetUniformLocation() on struct-typed uniforms, so this stays Metal-only.
+    // sokol-shdc compiles a named uniform block to a single Metal `constant fs_params& fsp [[buffer(N)]]`
+    // argument, not one argument per member. Maps a dotted "block.member" name to the block's name (an
+    // entry in m_buffers, pre-sized to the whole struct) and the member's byte offset, so set_buffer()
+    // can memcpy into that offset instead of replacing the whole buffer. GL needs no equivalent: dotted
+    // names already resolve directly via glGetUniformLocation() on struct-typed uniforms.
     std::unordered_map<std::string, std::pair<std::string, size_t>> m_metal_struct_members;
 #endif
 };
