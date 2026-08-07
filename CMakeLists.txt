@@ -424,14 +424,15 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 # Prevent dependencies from installing their files
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
-# Fork of pthom/hello_imgui (v1.92.700 + one commit) that adds optional HDR/EDR support for the GLFW3+OpenGL
-# backend, gated behind the HDR-enabling GLFW fork pinned above (see that CPMAddPackage's comment) -- a
-# vanilla-GLFW build of this fork behaves identically to upstream hello_imgui. Propose this upstream once
-# validated on real Windows HDR hardware; re-point at pthom/hello_imgui directly if/when it's merged there.
+# Fork of pthom/hello_imgui (v1.92.700 + two commits) that adds optional HDR/EDR support for the GLFW3+OpenGL
+# backend, gated behind the HDR-enabling GLFW fork pinned above (see that CPMAddPackage's comment), plus a
+# small BeforeSwap render-loop hook HDRView uses for a final HDR color-management pass -- a vanilla-GLFW
+# build of this fork behaves identically to upstream hello_imgui. Propose this upstream once validated on
+# real Windows HDR hardware; re-point at pthom/hello_imgui directly if/when it's merged there.
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY wkjarosz/hello_imgui
-  GIT_TAG 5e59893ffdba4daf83cf63efaf0f489dc2e2d3c6
+  GIT_TAG 3adaf6717f205fd9141339b9eeabfcd0eecab687
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   EXCLUDE_FROM_ALL YES

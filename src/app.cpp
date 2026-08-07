@@ -238,6 +238,22 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                 for (int i = 0; i < count; ++i) arg[i] = filenames[i];
                                 hdrview()->load_images(arg);
                             });
+
+#if defined(GLFW_FLOATBUFFER)
+        // Only the HDR-enabling GLFW fork exposes glfwGetWindowTransfer(), and it is window-scoped (needs
+        // the real window/context, unlike hasEdrSupport()'s optimistic pre-window guess), so query it here.
+        // Windows' scRGB floating-point framebuffer expects genuinely linear values (transfer == 5), whereas
+        // macOS EDR expects sRGB-encoded values simply left unclamped past [0,1] (transfer == 10, "EXT
+        // sRGB") -- which is what the shader already produces. Only Windows needs to skip the sRGB encode.
+        if (m_params.rendererBackendOptions.requestFloatBuffer)
+        {
+            auto    *window   = (GLFWwindow *)m_params.backendPointers.glfwWindow;
+            uint32_t transfer = glfwGetWindowTransfer(window);
+            m_linear_output   = transfer == 5;
+            spdlog::info("GLFW reports the window's transfer function as {} ({}encoding before output).",
+                         transfer, m_linear_output ? "linear -- skipping sRGB " : "non-linear -- keeping sRGB ");
+        }
+#endif
 #ifdef __APPLE__
         // On macOS, the mechanism for opening an application passes filenames
         // through the NS api rather than CLI arguments, which means we need
@@ -470,6 +486,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         draw_developer_windows();
     };
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
+    m_params.callbacks.BeforeSwap               = [this]() { end_colorpass_frame(); };
     m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
 
     m_dialogs["About"] = make_unique<PopupDialog>([this](bool &open) { draw_about_dialog(open); }, in_files.empty());
