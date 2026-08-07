@@ -1647,7 +1647,7 @@ if(APPLE)
   
   # CPack DragNDrop settings
   set(CPACK_DMG_VOLUME_NAME "HDRView-Installer")
-  set(CPACK_DMG_FORMAT "UDBZ")
+  set(CPACK_DMG_FORMAT "UDZO")
   
   # Set custom DMG filename: e.g. HDRView-2.7.0-Universal.dmg
   set(CPACK_PACKAGE_FILE_NAME "HDRView-${VERSION_NO_V}-${HDRVIEW_TARGET_ARCH}")
