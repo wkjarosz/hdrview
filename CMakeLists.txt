@@ -624,20 +624,27 @@ CPMAddPackage(
   DOWNLOAD_ONLY YES
   SYSTEM YES
 )
-if(NOT tinyxml2_ADDED)
-  message(FATAL_ERROR "Could not download tinyxml2 library.")
+if(tinyxml2_ADDED)
+  message(STATUS "tinyxml2 library added")
+  add_library(
+    tinyxml2
+    "${tinyxml2_SOURCE_DIR}/tinyxml2.h"
+    "${tinyxml2_SOURCE_DIR}/tinyxml2.cpp"
+  )
+  target_compile_features(tinyxml2 PUBLIC cxx_std_17)
+  target_include_directories(tinyxml2 PUBLIC "${tinyxml2_SOURCE_DIR}")
+  disable_target_warnings(tinyxml2)
+  mark_as_system_library(tinyxml2)
+  list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2")
+elseif(TARGET tinyxml2::tinyxml2)
+  # When CPM_USE_LOCAL_PACKAGES finds a system tinyxml2 via its own Config.cmake, CPM's
+  # find_package() result (tinyxml2_FOUND) is scoped to CPM's internal function and never
+  # reaches this scope, but the imported target it creates is global, so check for that instead.
+  message(STATUS "Using system-installed tinyxml2 library")
+  list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2::tinyxml2")
+else()
+  message(FATAL_ERROR "Could not find or download tinyxml2 library.")
 endif()
-message(STATUS "tinyxml2 library added")
-add_library(
-  tinyxml2
-  "${tinyxml2_SOURCE_DIR}/tinyxml2.h"
-  "${tinyxml2_SOURCE_DIR}/tinyxml2.cpp"
-)
-target_compile_features(tinyxml2 PUBLIC cxx_std_17)
-target_include_directories(tinyxml2 PUBLIC "${tinyxml2_SOURCE_DIR}")
-disable_target_warnings(tinyxml2)
-mark_as_system_library(tinyxml2)
-list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2")
 
 
 if(HDRVIEW_ENABLE_LIBPNG OR HDRVIEW_ENABLE_LIBHEIF)
