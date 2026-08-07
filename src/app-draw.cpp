@@ -4,12 +4,22 @@
 #include "common.h"
 #include "fonts.h"
 #include "image.h"
+#include "opengl_check.h"
+#include "texture.h"
 
 #include <random>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 #endif
+
+// glad (via hello_imgui_include_opengl.h) must be included before GLFW/glfw3.h, and GLFW_INCLUDE_NONE keeps
+// glfw3.h from also pulling in the system OpenGL headers itself, which glad refuses to build alongside.
+#if defined(HELLOIMGUI_HAS_OPENGL)
+#include <hello_imgui/hello_imgui_include_opengl.h>
+#define GLFW_INCLUDE_NONE
+#endif
+#include <GLFW/glfw3.h>
 
 using namespace std;
 
@@ -334,6 +344,11 @@ void HDRViewApp::draw_background()
 {
     using namespace literals;
 
+    // If m_linear_output, redirect this frame's rendering (this call, and the ImGui rendering that follows
+    // it) into an offscreen target instead of the real framebuffer; end_colorpass_frame() converts and blits
+    // it to the real framebuffer right before the frame is presented. No-op otherwise.
+    begin_colorpass_frame();
+
     static auto prev_frame                   = chrono::steady_clock::now();
     static auto last_file_changes_check_time = chrono::steady_clock::now();
     auto        this_frame                   = chrono::steady_clock::now();
@@ -449,4 +464,105 @@ void HDRViewApp::setup_rendering()
         spdlog::critical("Shader initialization failed!:\n\t{}.", e.what());
         exit(EXIT_FAILURE);
     }
+
+    setup_colorpass();
+}
+
+//
+// The colorpass: on Windows' scRGB HDR framebuffer (m_linear_output == true), everything HDRView draws --
+// the image content (draw_background()) *and* Dear ImGui's own UI -- keeps emitting ordinary sRGB-encoded
+// colors exactly as it always has (Dear ImGui has no notion of display color space). Both are instead
+// redirected into an offscreen texture, and a single full-screen pass converts that to genuinely linear
+// values for the real framebuffer right before the frame is presented. This mirrors how tev/nanogui solve
+// the same problem (see nanogui-1's Screen::m_wants_color_management / ColorPass). Entirely inert (and these
+// three functions are all no-ops) when m_linear_output is false, i.e. everywhere except Windows HDR mode.
+void HDRViewApp::setup_colorpass()
+{
+#if defined(HELLOIMGUI_HAS_OPENGL)
+    if (!m_linear_output)
+        return;
+
+    try
+    {
+        m_colorpass_shader = new Shader(
+            m_render_pass, "ColorPass", Shader::from_asset("shaders/colorpass_vert"),
+            Shader::prepend_includes(Shader::from_asset("shaders/colorpass_frag"), {"shaders/colorspaces"}),
+            Shader::BlendMode::None);
+
+        const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
+        m_colorpass_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
+
+        CHK(glGenFramebuffers(1, &m_color_fbo));
+
+        spdlog::info("Initialized the HDR colorpass (offscreen target + final linear-output conversion).");
+    }
+    catch (const exception &e)
+    {
+        spdlog::error("HDR colorpass initialization failed, falling back to direct (non-color-managed) "
+                      "rendering:\n\t{}.",
+                      e.what());
+        m_linear_output = false;
+    }
+#endif
+}
+
+void HDRViewApp::begin_colorpass_frame()
+{
+#if defined(HELLOIMGUI_HAS_OPENGL)
+    if (!m_linear_output)
+        return;
+
+    float2 fbscale = ImGui::GetIO().DisplayFramebufferScale;
+    int2   fb_size = int2(float2{ImGui::GetIO().DisplaySize} * fbscale);
+
+    if (!m_color_texture || m_color_texture->size() != fb_size)
+    {
+        delete m_color_texture;
+        m_color_texture =
+            new Texture(Texture::PixelFormat::RGBA, Texture::ComponentFormat::Float16, fb_size,
+                       Texture::InterpolationMode::Nearest, Texture::InterpolationMode::Nearest,
+                       Texture::WrapMode::ClampToEdge, 1,
+                       Texture::TextureFlags::ShaderRead | Texture::TextureFlags::RenderTarget);
+    }
+
+    CHK(glBindFramebuffer(GL_FRAMEBUFFER, m_color_fbo));
+    CHK(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_color_texture->texture_handle(),
+                               0));
+    CHK(glViewport(0, 0, fb_size.x, fb_size.y));
+    CHK(glClearColor(0.f, 0.f, 0.f, 1.f));
+    CHK(glClear(GL_COLOR_BUFFER_BIT));
+#endif
+}
+
+void HDRViewApp::end_colorpass_frame()
+{
+#if defined(HELLOIMGUI_HAS_OPENGL)
+    if (!m_linear_output)
+        return;
+
+    CHK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+
+    float2 fbscale = ImGui::GetIO().DisplayFramebufferScale;
+    int2   fb_size = int2(float2{ImGui::GetIO().DisplaySize} * fbscale);
+    CHK(glViewport(0, 0, fb_size.x, fb_size.y));
+
+    // Windows' scRGB convention fixes 1.0 (linear) == 80 nits, but the user's actual configured "SDR content
+    // brightness" (Settings > Display > HDR) is very often set well above that -- query it fresh each frame
+    // (matching nanogui-1's ColorPass, which does the same so it live-updates if the user adjusts that
+    // slider while the app is running) so our output isn't dimmer than plain SDR mode, which isn't subject
+    // to this scRGB reference-white convention at all.
+    float sdr_white_level = 80.f;
+#if defined(GLFW_FLOATBUFFER)
+    sdr_white_level = glfwGetWindowSdrWhiteLevel((GLFWwindow *)m_params.backendPointers.glfwWindow);
+    if (sdr_white_level <= 0.f)
+        sdr_white_level = 80.f;
+#endif
+
+    m_colorpass_shader->set_texture("color_texture", m_color_texture);
+    m_colorpass_shader->set_uniform("linear_output", m_linear_output);
+    m_colorpass_shader->set_uniform("sdr_white_level", sdr_white_level);
+    m_colorpass_shader->begin();
+    m_colorpass_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
+    m_colorpass_shader->end();
+#endif
 }

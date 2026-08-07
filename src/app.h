@@ -205,6 +205,9 @@ private:
     void update_visibility();
 
     void setup_rendering();
+    void setup_colorpass();
+    void begin_colorpass_frame();
+    void end_colorpass_frame();
 
     void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
                             float width = 0.f) const;
@@ -215,6 +218,13 @@ private:
     //-----------------------------------------------------------------------------
 
     RenderPass      *m_render_pass = nullptr;
+    /// Offscreen HDR color target + final conversion shader; only used when m_linear_output is true (Windows
+    /// scRGB). See setup_colorpass()/begin_colorpass_frame()/end_colorpass_frame() in app-draw.cpp.
+    Texture *m_color_texture    = nullptr;
+    Shader  *m_colorpass_shader = nullptr;
+#if defined(HELLOIMGUI_HAS_OPENGL)
+    uint32_t m_color_fbo = 0;
+#endif
     Shader          *m_shader      = nullptr;
     vector<ImagePtr> m_images;
     set<fs::path>    m_active_directories; ///< Set of directories containing the currently loaded images
@@ -230,6 +240,9 @@ private:
     bool      m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
          m_draw_clip_warnings = false, m_show_FPS = false;
+    /// True when the display's HDR/EDR framebuffer expects genuinely linear values (e.g. Windows scRGB) rather
+    /// than sRGB-encoded ones extended past [0,1] (e.g. macOS EDR); queried from GLFW once the window exists.
+    bool m_linear_output = false;
     float2 m_clip_range{0.f, 1.f}; ///< Values outside this range will have zebra stripes if m_draw_clip_warnings = true
     Box2i  m_roi{int2{0}}, m_roi_live{int2{0}};
 
