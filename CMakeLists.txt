@@ -141,10 +141,14 @@ list(APPEND CMD "-D" "CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR}")
 list(APPEND CMD "-D" "EMSCRIPTEN=${EMSCRIPTEN}")
 list(APPEND CMD "-D" "HDRVIEW_TARGET_ARCH=${HDRVIEW_TARGET_ARCH}")
 list(APPEND CMD "-P" "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake")
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+# ALL reruns this every build (an add_custom_command OUTPUT rule would only run once per build tree, missing
+# later commits/branch switches). configure_file() only rewrites version.cpp when content changes, so this
+# doesn't force a relink unless the git info actually did.
+add_custom_target(
+  hdrview_check_version ALL
   COMMAND ${CMD}
-  COMMENT "Generating git version file"
+  BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+  COMMENT "Checking git version"
 )
 
 message(STATUS "CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
@@ -1461,7 +1465,6 @@ if(NOT HDRVIEW_PORTABLE_INSTALL)
 endif()
 
 set(HDRVIEW_SOURCES
-    ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
     src/imageio/image_loader.cpp
     src/imageio/dds.cpp
     src/imageio/exif.cpp
@@ -1507,6 +1510,14 @@ set(HDRVIEW_SOURCES
     ${EXTRA_SOURCES}
 )
 
+# Compiled once here and linked into HDRView and hdrview_tests below, rather than listing version.cpp directly
+# in both: the Visual Studio generator duplicates a shared generated source's build rule into every consuming
+# .vcxproj, and parallel MSBuild can then race to regenerate it (windows-msvc preset only, the one Windows job
+# that builds both targets).
+add_library(hdrview_version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
+add_dependencies(hdrview_version hdrview_check_version)
+target_link_libraries(hdrview_version PRIVATE hello_imgui)
+
 hello_imgui_add_app(HDRView ${HDRVIEW_SOURCES} ASSETS_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 if(HDRVIEW_SOKOL_SHDC_TARGETS)
   add_dependencies(HDRView ${HDRVIEW_SOKOL_SHDC_TARGETS})
@@ -1524,7 +1535,7 @@ endif()
 message(STATUS "HDRView build dependencies: ${HDRVIEW_DEPENDENCIES}")
 message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")
 
-target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES})
+target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES} hdrview_version)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
 if(NOT EMSCRIPTEN)
@@ -1559,7 +1570,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   # Mirrors HDRView's own HDRVIEW_BUILD_TREE_ASSETS_DIR definition above, so tests/test_assets.cpp
   # can exercise the same asset lookup the app uses.
   target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
-  target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui doctest::doctest)
+  target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version doctest::doctest)
 
   if(APPLE)
     target_compile_options(hdrview_tests PRIVATE "-fobjc-arc")
