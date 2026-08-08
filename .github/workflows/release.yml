@@ -66,7 +66,7 @@ jobs:
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
         with:
           key: ${{ matrix.config.os }}-${{ matrix.config.preset }}
 
@@ -101,14 +101,14 @@ jobs:
           done
 
       # - name: Archive build artifacts
-      #   uses: actions/upload-artifact@v4
+      #   uses: actions/upload-artifact@v6
       #   with:
       #     name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}
       #     path: |
       #       ${{github.workspace}}/build/${{ matrix.config.preset }}
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: "${{github.workspace}}/build/${{ matrix.config.preset }}/HDRView-*.dmg"
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -155,7 +155,7 @@ jobs:
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
         with:
           key: ${{ matrix.config.os }}-${{ matrix.config.preset }}
 
@@ -175,14 +175,14 @@ jobs:
         run: cpack -C ${{ env.BUILD_TYPE }} -G External
 
       # - name: Archive build artifacts
-      #   uses: actions/upload-artifact@v4
+      #   uses: actions/upload-artifact@v6
       #   with:
       #     name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ env.BUILD_TYPE }}
       #     path: |
       #       ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ env.BUILD_TYPE }}
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: "${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage"
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -239,7 +239,7 @@ jobs:
           cmake -E copy ${{ matrix.buildtype }}/HDRView.exe deploy/
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-artifacts-${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
@@ -253,7 +253,7 @@ jobs:
           directory: ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy/HDRView-${{ env.VERSION_NO_V }}-windows.zip
@@ -290,7 +290,7 @@ jobs:
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
 
       - name: Configure CMake
         run: |
@@ -300,7 +300,7 @@ jobs:
         run: cmake --build ${{github.workspace}}/build/emscripten --parallel
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-artifacts-emscripten
           path: |

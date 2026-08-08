@@ -58,7 +58,7 @@ jobs:
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
 
       - name: Configure CMake
         run: |
@@ -68,7 +68,7 @@ jobs:
         run: cmake --build ${{github.workspace}}/build/emscripten --parallel
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-artifacts-emscripten
           path: |

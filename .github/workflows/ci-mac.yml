@@ -113,7 +113,7 @@ jobs:
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
         with:
           key: ${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
 
@@ -159,13 +159,13 @@ jobs:
           done
 
       - name: Archive dmg (macOS)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: HDRView-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}.dmg
           path: ${{ github.workspace }}/build/${{ matrix.config.preset }}/HDRView-*.dmg
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
           path: |
