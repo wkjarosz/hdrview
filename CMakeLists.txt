@@ -383,6 +383,19 @@ if((APPLE OR WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND NOT EMSCRIPTEN AN
   if(NOT APPLE)
     # macOS selects Metal above; Windows/Linux render through OpenGL/GLES.
     set(HELLOIMGUI_HAS_OPENGL3 ON)
+
+    # The final HDR/EDR display color-management pass (see colorpass.sglsl) -- only ever needed on the
+    # desktop OpenGL backend, so a single glsl410 target suffices (no metal_macos, no glsl300es).
+    sokol_shdc_generate(
+      INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorpass.sglsl
+      OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders
+      NAME colorpass
+      PROGRAM colorpass
+      SLANG glsl410
+      EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
+      RENAME colorpass_colorpass_glsl410_vertex.glsl colorpass_vert.glsl
+             colorpass_colorpass_glsl410_fragment.glsl colorpass_frag.glsl
+    )
   endif()
   CPMAddPackage(
     NAME glfw

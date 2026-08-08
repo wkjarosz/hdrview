@@ -1,0 +1,97 @@
+// Final HDR/EDR display color-management pass, written once and cross-compiled via sokol-shdc. See
+// SokolShaderCompiler.cmake and CMakeLists.txt for the CMake wiring, and app-draw.cpp's setup_colorpass()/
+// end_colorpass_frame() for how the compiled output is loaded and its uniforms set.
+//
+// Only ever built for the desktop OpenGL backend (glsl410) -- never Metal (macOS EDR consumes HDRView's
+// extended-sRGB shader output directly, no colorpass needed) and never Emscripten (the whole HDR-enabling
+// GLFW fork is excluded there). See CMakeLists.txt's sokol_shdc_generate() call for this file.
+
+@include colorspaces.sglsl
+
+@block colorpass_constants
+// wp_color_manager_v1 code points this shader knows how to produce -- the reachable subset across
+// Windows/Linux. Everything else in the protocol (HLG, BT.1886, ST.240, log100/316, xvYCC, gamma 2.8,
+// Display-P3/DCI-P3/Adobe RGB primaries) is unreachable through any GLFW backend HDRView links against.
+#define TRANSFER_GAMMA22    2
+#define TRANSFER_EXT_LINEAR 5
+#define TRANSFER_PQ         11
+#define PRIMARIES_SRGB      1
+#define PRIMARIES_BT2020    6
+@end
+
+@vs vs
+in vec2 position;
+out vec2 uv;
+
+void main()
+{
+    uv          = position * 0.5 + 0.5;
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+@end
+
+@fs fs
+@include_block colorpass_constants
+@include_block colorspaces
+@include_block hdr_transfer
+
+layout(binding=0) uniform colorpass_params {
+    int   transfer;         // wp_color_manager_v1 transfer_function code point
+    int   primaries;        // wp_color_manager_v1 primaries code point
+    float sdr_white_level;  // display's configured SDR reference white, in nits
+    float min_luminance;    // display's reported minimum luminance, in nits (0.0 == unknown)
+    float max_luminance;    // display's reported maximum luminance, in nits (0.0 == unknown)
+    mat3  gamut_matrix;     // Rec.709 -> display primaries conversion; only applied when primaries == PRIMARIES_BT2020
+} cpp;
+
+layout(binding=0) uniform texture2D color_texture;
+layout(binding=0) uniform sampler   color_sampler;
+
+in vec2 uv;
+
+out vec4 frag_color;
+
+// scRGB's fixed convention: 1.0 (linear) == 80 nits.
+const float SCRGB_REFERENCE_WHITE_NITS = 80.0;
+
+void main()
+{
+    vec4 color = texture(sampler2D(color_texture, color_sampler), uv);
+
+    if (cpp.transfer == TRANSFER_GAMMA22 && cpp.primaries == PRIMARIES_SRGB &&
+        cpp.sdr_white_level == SCRGB_REFERENCE_WHITE_NITS)
+    {
+        // Identity: the display wants exactly HDRView's own extended-sRGB convention. Reached via
+        // X11/no-color-management; app.cpp already keeps the colorpass inactive there, but this is cheap.
+        frag_color = color;
+        return;
+    }
+
+    // Decode HDRView's extended-sRGB convention (1.0 == sdr_white_level nits) to absolute nits, sign
+    // preserved (out-of-gamut colors can be negative).
+    vec3 nits = cpp.sdr_white_level * sRGBToLinear(color.rgb);
+
+    if (cpp.primaries == PRIMARIES_BT2020)
+        nits = cpp.gamut_matrix * nits;
+
+    // Some displays perform unwanted tonemapping on out-of-range values; hard-clip to the display's own
+    // reported luminance limits instead, matching nanogui-1's ColorPass. 0.0 means "unknown", not "no
+    // limit" -- only clamp when a limit is actually reported.
+    if (cpp.max_luminance > 0.0)
+        nits = clamp(nits, vec3(cpp.min_luminance), vec3(cpp.max_luminance));
+
+    vec3 encoded;
+    if (cpp.transfer == TRANSFER_PQ)
+        encoded = pq_encode(nits);
+    else if (cpp.transfer == TRANSFER_GAMMA22)
+        // Reached when sdr_white_level != 80 (see identity check above) -- needs the gamma curve re-applied
+        // after the reference-white-relative scaling, not a linear pass-through.
+        encoded = gamma22_encode(nits, SCRGB_REFERENCE_WHITE_NITS);
+    else // TRANSFER_EXT_LINEAR, or an unrecognized value -- scRGB-style linear is the safest fallback
+        encoded = nits / SCRGB_REFERENCE_WHITE_NITS;
+
+    frag_color = vec4(encoded, color.a);
+}
+@end
+
+@program colorpass vs fs

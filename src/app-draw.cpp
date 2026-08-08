@@ -484,10 +484,11 @@ void HDRViewApp::setup_colorpass()
 
     try
     {
-        m_colorpass_shader = new Shader(
-            m_render_pass, "ColorPass", Shader::from_asset("shaders/colorpass_vert"),
-            Shader::prepend_includes(Shader::from_asset("shaders/colorpass_frag"), {"shaders/colorspaces"}),
-            Shader::BlendMode::None);
+        // colorspaces.sglsl's shared functions are baked directly into colorpass_frag's generated text at
+        // sokol-shdc compile time (see assets/shaders/colorpass.sglsl), so no runtime prepend_includes() is
+        // needed here, matching how setup_rendering() loads the main image shader.
+        m_colorpass_shader = new Shader(m_render_pass, "ColorPass", Shader::from_asset("shaders/colorpass_vert"),
+                                        Shader::from_asset("shaders/colorpass_frag"), Shader::BlendMode::None);
 
         const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
         m_colorpass_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
@@ -560,12 +561,20 @@ void HDRViewApp::end_colorpass_frame()
     max_luminance = glfwGetWindowMaxLuminance(window);
 #endif
 
+    // Rec.709 (HDRView's working primaries) -> BT.2020, needed only when m_display_primaries == 6
+    // (PRIMARIES_BT2020, see colorpass.sglsl) but cheap enough to always compute; color_conversion_matrix()
+    // leaves gamut_matrix untouched when no conversion is needed, so default it to identity first.
+    float3x3 gamut_matrix{la::identity};
+    color_conversion_matrix(gamut_matrix, gamut_chromaticities(ColorGamut_sRGB_BT709),
+                            gamut_chromaticities(ColorGamut_BT2020_2100));
+
     m_colorpass_shader->set_texture("color_texture", m_color_texture);
-    m_colorpass_shader->set_uniform("transfer", (int)m_display_transfer);
-    m_colorpass_shader->set_uniform("primaries", (int)m_display_primaries);
-    m_colorpass_shader->set_uniform("sdr_white_level", sdr_white_level);
-    m_colorpass_shader->set_uniform("min_luminance", min_luminance);
-    m_colorpass_shader->set_uniform("max_luminance", max_luminance);
+    m_colorpass_shader->set_uniform_block("cpp", {{"transfer", (int)m_display_transfer},
+                                                  {"primaries", (int)m_display_primaries},
+                                                  {"sdr_white_level", sdr_white_level},
+                                                  {"min_luminance", min_luminance},
+                                                  {"max_luminance", max_luminance},
+                                                  {"gamut_matrix", gamut_matrix}});
     m_colorpass_shader->begin();
     m_colorpass_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
     m_colorpass_shader->end();
