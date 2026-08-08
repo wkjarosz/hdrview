@@ -116,3 +116,23 @@ TEST_CASE("RGB_to_XYZ/XYZ_to_RGB are inverses for the default (sRGB/BT.709) prim
         CHECK(approx_equal(round_tripped, rgb, 1e-4f));
     }
 }
+
+TEST_CASE("color_conversion_matrix's Rec.709->BT.2020 matches the published ITU-R BT.2087 reference matrix")
+{
+    // The HDR colorpass shader needs a linear-light Rec.709 -> BT.2020 primaries conversion. Confirms
+    // color_conversion_matrix() (computed from this codebase's own Chromaticities tables) agrees with the
+    // commonly published ITU-R BT.2087 reference matrix, so the shader can use the former (computed in C++,
+    // uploaded as a uniform) instead of hardcoding the latter.
+    float3x3 M;
+    bool     needs_conversion = color_conversion_matrix(M, gamut_chromaticities(ColorGamut_sRGB_BT709),
+                                                         gamut_chromaticities(ColorGamut_BT2020_2100));
+    CHECK(needs_conversion);
+
+    float3x3 reference{float3{0.627403926658f, 0.069097233123f, 0.016391587664f},
+                       float3{0.329282097415f, 0.919541035593f, 0.088013255546f},
+                       float3{0.043313797587f, 0.011361189924f, 0.895595009604f}};
+
+    INFO("computed M = ", M);
+    INFO("reference  = ", reference);
+    CHECK(approx_equal(M, reference, 1e-4f));
+}
