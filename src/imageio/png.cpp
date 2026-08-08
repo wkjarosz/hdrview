@@ -117,17 +117,17 @@ int decode_ascii_hex_to_binary(uint8_t u8[], size_t length)
     bool    valid[256];
     uint8_t value[256];
     for (int i = 0; i < 256; i++) valid[i] = false;
-    for (char i = '0'; i <= '9'; i++)
+    for (int i = '0'; i <= '9'; i++)
     {
         valid[i] = true;
         value[i] = i - '0';
     }
-    for (char i = 'a'; i <= 'f'; i++)
+    for (int i = 'a'; i <= 'f'; i++)
     {
         valid[i] = true;
         value[i] = 10 + i - 'a';
     }
-    for (char i = 'A'; i <= 'F'; i++)
+    for (int i = 'A'; i <= 'F'; i++)
     {
         valid[i] = true;
         value[i] = 10 + i - 'A';
@@ -424,8 +424,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     {
         spdlog::info("Found chromaticities chunk: R({:.4f},{:.4f}) G({:.4f},{:.4f}) B({:.4f},{:.4f}) W({:.4f},{:.4f})",
                      rx, ry, gx, gy, bx, by, wx, wy);
-        *chr = Chromaticities{float2((float)rx, (float)ry), float2((float)gx, (float)gy), float2((float)bx, (float)by),
-                              float2((float)wx, (float)wy)};
+        chr = Chromaticities{float2((float)rx, (float)ry), float2((float)gx, (float)gy), float2((float)bx, (float)by),
+                             float2((float)wx, (float)wy)};
         metadata["header"]["cHRM"] = {
             {"value", {rx, ry, gx, gy, bx, by, wx, wy}},
             {"string", fmt::format("R: ({:.4f},{:.4f})\nG: ({:.4f},{:.4f})\nB: ({:.4f},{:.4f})\nW: ({:.4f},{:.4f})", rx,
