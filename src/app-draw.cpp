@@ -561,12 +561,15 @@ void HDRViewApp::end_colorpass_frame()
     max_luminance = glfwGetWindowMaxLuminance(window);
 #endif
 
-    // Rec.709 (HDRView's working primaries) -> BT.2020, needed only when m_display_primaries == 6
-    // (PRIMARIES_BT2020, see colorpass.sglsl) but cheap enough to always compute; color_conversion_matrix()
-    // leaves gamut_matrix untouched when no conversion is needed, so default it to identity first.
-    float3x3 gamut_matrix{la::identity};
-    color_conversion_matrix(gamut_matrix, gamut_chromaticities(ColorGamut_sRGB_BT709),
-                            gamut_chromaticities(ColorGamut_BT2020_2100));
+    // Rec.709 -> BT.2020 is a fixed conversion between two constant gamuts, not dependent on any runtime
+    // state, so a function-local static computes it once (lazily, on first use) rather than per-instance.
+    static const float3x3 rec709_to_bt2020 = []
+    {
+        float3x3 M{la::identity};
+        color_conversion_matrix(M, gamut_chromaticities(ColorGamut_sRGB_BT709),
+                                gamut_chromaticities(ColorGamut_BT2020_2100));
+        return M;
+    }();
 
     m_colorpass_shader->set_texture("color_texture", m_color_texture);
     m_colorpass_shader->set_uniform_block("cpp", {{"transfer", (int)m_display_transfer},
@@ -574,7 +577,7 @@ void HDRViewApp::end_colorpass_frame()
                                                   {"sdr_white_level", sdr_white_level},
                                                   {"min_luminance", min_luminance},
                                                   {"max_luminance", max_luminance},
-                                                  {"gamut_matrix", gamut_matrix}});
+                                                  {"gamut_matrix", rec709_to_bt2020}});
     m_colorpass_shader->begin();
     m_colorpass_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
     m_colorpass_shader->end();
