@@ -380,6 +380,10 @@ if((APPLE OR WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND NOT EMSCRIPTEN AN
   # disabling this option is always safe (falls back to system/vanilla GLFW).
   set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
   set(HELLOIMGUI_USE_GLFW3 ON)
+  if(NOT APPLE)
+    # macOS selects Metal above; Windows/Linux render through OpenGL/GLES.
+    set(HELLOIMGUI_HAS_OPENGL3 ON)
+  endif()
   CPMAddPackage(
     NAME glfw
     GITHUB_REPOSITORY Tom94/glfw
