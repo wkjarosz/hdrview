@@ -36164,525 +36164,416 @@ unlock_altbullseyeellipsis_horizontalellipsis_vertical_303	play_signticket
 level_down
 check_sign	edit_sign_312
 share_signcompasscollapsecollapse_top_317eurgbpusdinrjpyrubkrwbtcfile	file_textsort_by_alphabet_329sort_by_attributessort_by_attributes_altsort_by_ordersort_by_order_alt_334_335youtube_signyoutubexing	xing_signyoutube_playdropboxstackexchange	instagramflickradnf171bitbucket_signtumblrtumblr_signlong_arrow_downlong_arrow_uplong_arrow_leftlong_arrow_rightwindowsandroidlinuxdribbleskype
-foursquaretrellofemalemalegittipsun_366archivebugvkweiborenren_372stack_exchange_374arrow_circle_alt_left_376dot_circle_alt_378vimeo_square_380plus_square_o_382_383_384_385_386_387_388_389uniF1A0f1a1_392_393f1a4_395_396_397_398_399_400f1ab_402_403_404uniF1B1_406_407_408_409_410_411_412_413_414_415_416_417_418_419uniF1C0uniF1C1_422_423_424_425_426_427_428_429_430_431_432_433_434uniF1D0uniF1D1uniF1D2_438_439uniF1D5uniF1D6uniF1D7_443_444_445_446_447_448_449uniF1E0_451_452_453_454_455_456_457_458_459_460_461_462_463_464uniF1F0_466_467f1f3_469_470_471_472_473_474_475_476f1fc_478_479_480_481_482_483_484_485_486_487_488_489_490_491_492_493_494f210_496f212_498_499_500_501_502_503_504_505_506_507_508_509venus_511_512_513_514_515_516_517_518_519_520_521_522_523_524_525_526_527_528_529_530_531_532_533_534_535_536_537_538_539_540_541_542_543_544_545_546_547_548_549_550_551_552_553_554_555_556_557_558_559_560_561_562_563_564_565_566_567_568_569f260f261_572f263_574_575_576_577_578_579_580_581_582_583_584_585_586_587_588_589_590_591_592_593_594_595_596_597_598f27euniF280uniF281_602_603_604uniF285uniF286_607_608_609_610_611_612_613_614_615_616_617_618_619_620_621_622_623_624_625_626_627_628_629uniF2A0uniF2A1uniF2A2uniF2A3uniF2A4uniF2A5uniF2A6uniF2A7uniF2A8uniF2A9uniF2AAuniF2ABuniF2ACuniF2ADuniF2AEuniF2B0uniF2B1uniF2B2uniF2B3uniF2B4uniF2B5uniF2B6uniF2B7uniF2B8uniF2B9uniF2BAuniF2BBuniF2BCuniF2BDuniF2BEuniF2C0uniF2C1uniF2C2uniF2C3uniF2C4uniF2C5uniF2C6uniF2C7uniF2C8uniF2C9uniF2CAuniF2CBuniF2CCuniF2CDuniF2CEuniF2D0uniF2D1uniF2D2uniF2D3uniF2D4uniF2D5uniF2D6uniF2D7uniF2D8uniF2D9uniF2DAuniF2DBuniF2DCuniF2DDuniF2DEuniF2E0uniF2E1uniF2E2uniF2E3uniF2E4uniF2E5uniF2E6uniF2E7_698uniF2E9uniF2EAuniF2EBuniF2ECuniF2EDuniF2EE      ÿÿ               Â              Ì=¢Ï    ËO<0    Ô1h¹#version 300 es
+foursquaretrellofemalemalegittipsun_366archivebugvkweiborenren_372stack_exchange_374arrow_circle_alt_left_376dot_circle_alt_378vimeo_square_380plus_square_o_382_383_384_385_386_387_388_389uniF1A0f1a1_392_393f1a4_395_396_397_398_399_400f1ab_402_403_404uniF1B1_406_407_408_409_410_411_412_413_414_415_416_417_418_419uniF1C0uniF1C1_422_423_424_425_426_427_428_429_430_431_432_433_434uniF1D0uniF1D1uniF1D2_438_439uniF1D5uniF1D6uniF1D7_443_444_445_446_447_448_449uniF1E0_451_452_453_454_455_456_457_458_459_460_461_462_463_464uniF1F0_466_467f1f3_469_470_471_472_473_474_475_476f1fc_478_479_480_481_482_483_484_485_486_487_488_489_490_491_492_493_494f210_496f212_498_499_500_501_502_503_504_505_506_507_508_509venus_511_512_513_514_515_516_517_518_519_520_521_522_523_524_525_526_527_528_529_530_531_532_533_534_535_536_537_538_539_540_541_542_543_544_545_546_547_548_549_550_551_552_553_554_555_556_557_558_559_560_561_562_563_564_565_566_567_568_569f260f261_572f263_574_575_576_577_578_579_580_581_582_583_584_585_586_587_588_589_590_591_592_593_594_595_596_597_598f27euniF280uniF281_602_603_604uniF285uniF286_607_608_609_610_611_612_613_614_615_616_617_618_619_620_621_622_623_624_625_626_627_628_629uniF2A0uniF2A1uniF2A2uniF2A3uniF2A4uniF2A5uniF2A6uniF2A7uniF2A8uniF2A9uniF2AAuniF2ABuniF2ACuniF2ADuniF2AEuniF2B0uniF2B1uniF2B2uniF2B3uniF2B4uniF2B5uniF2B6uniF2B7uniF2B8uniF2B9uniF2BAuniF2BBuniF2BCuniF2BDuniF2BEuniF2C0uniF2C1uniF2C2uniF2C3uniF2C4uniF2C5uniF2C6uniF2C7uniF2C8uniF2C9uniF2CAuniF2CBuniF2CCuniF2CDuniF2CEuniF2D0uniF2D1uniF2D2uniF2D3uniF2D4uniF2D5uniF2D6uniF2D7uniF2D8uniF2D9uniF2DAuniF2DBuniF2DCuniF2DDuniF2DEuniF2E0uniF2E1uniF2E2uniF2E3uniF2E4uniF2E5uniF2E6uniF2E7_698uniF2E9uniF2EAuniF2EBuniF2ECuniF2EDuniF2EE      ÿÿ               Â              Ì=¢Ï    ËO<0    Ô1h¹precision mediump float;
+
+in vec2 uv;
+
+uniform sampler2D color_texture;
+uniform int       transfer;  // wp_color_manager_v1 transfer_function code point (2=gamma22, 5=ext_linear, 11=PQ)
+uniform int       primaries; // wp_color_manager_v1 primaries code point (1=sRGB/BT.709, 6=BT.2020)
+uniform float     sdr_white_level;
+uniform float     min_luminance;
+uniform float     max_luminance;
+
+out vec4 frag_color;
+
+// scRGB's fixed convention: 1.0 (linear) == 80 nits.
+const float SCRGB_REFERENCE_WHITE_NITS = 80.0;
+
+// wp_color_manager_v1 code points this shader knows how to produce -- the reachable subset across
+// Windows/Linux (macOS EDR consumes HDRView's extended-sRGB shader output directly and never reaches this
+// shader; see app.cpp). Everything else in the protocol (HLG, BT.1886, ST.240, log100/316, xvYCC, gamma
+// 2.8, Display-P3/DCI-P3/Adobe RGB primaries) is unreachable through any GLFW backend HDRView links against.
+const int TRANSFER_GAMMA22    = 2;
+const int TRANSFER_EXT_LINEAR = 5;
+const int TRANSFER_PQ         = 11;
+const int PRIMARIES_SRGB      = 1;
+const int PRIMARIES_BT2020    = 6;
+
+// Recommendation ITU-R BT.2100-2 PQ inverse EOTF (absolute nits -> PQ code value), ported from
+// inverse_EOTF_BT2100_PQ() in src/colorspace.h -- keep the constants in sync with that source of truth.
+// PQ has no negative representation, so clip below zero first.
+float pq_encode(float nits)
+{
+    const float m1  = 0.1593017578125;
+    const float m2  = 78.84375;
+    const float c1  = 0.8359375;
+    const float c2  = 18.8515625;
+    const float c3  = 18.6875;
+    float       Y   = max(nits, 0.0) / 10000.0;
+    float       Ym1 = pow(Y, m1);
+    return pow((c1 + c2 * Ym1) / (1.0 + c3 * Ym1), m2);
+}
+vec3 pq_encode(vec3 nits) { return vec3(pq_encode(nits.r), pq_encode(nits.g), pq_encode(nits.b)); }
+
+// wp_color_manager_v1's gamma22 transfer is a literal power curve (not HDRView's own piecewise sRGB OETF),
+// sign-extended the same way as HDRView's other curves so out-of-gamut (negative) values survive the pass.
+vec3 gamma22_encode(vec3 nits) { return sign(nits) * pow(abs(nits) / SCRGB_REFERENCE_WHITE_NITS, vec3(1.0 / 2.2)); }
+
+// Rec.709 (HDRView's/sRGB's working primaries) -> BT.2020, linear light. Standard ITU-R BT.2087 matrix.
+const mat3 REC709_TO_BT2020 =
+    mat3(0.627403926658, 0.069097233123, 0.016391587664, 0.329282097415, 0.919541035593, 0.088013255546,
+        0.043313797587, 0.011361189924, 0.895595009604);
+
+void main()
+{
+    vec4 color = texture(color_texture, uv);
+
+    if (transfer == TRANSFER_GAMMA22 && primaries == PRIMARIES_SRGB && sdr_white_level == SCRGB_REFERENCE_WHITE_NITS)
+    {
+        // Identity: the display wants exactly HDRView's own extended-sRGB convention. Reached via
+        // X11/no-color-management; app.cpp already keeps the colorpass inactive there, but this is cheap.
+        frag_color = color;
+        return;
+    }
+
+    // Decode HDRView's extended-sRGB convention (1.0 == sdr_white_level nits) to absolute nits, sign
+    // preserved (out-of-gamut colors can be negative).
+    vec3 nits = sdr_white_level * sRGBToLinear(color.rgb);
+
+    if (primaries == PRIMARIES_BT2020)
+        nits = REC709_TO_BT2020 * nits;
+
+    // Some displays perform unwanted tonemapping on out-of-range values; hard-clip to the display's own
+    // reported luminance limits instead, matching nanogui-1's ColorPass. 0.0 means "unknown", not "no
+    // limit" -- only clamp when a limit is actually reported.
+    if (max_luminance > 0.0)
+        nits = clamp(nits, vec3(min_luminance), vec3(max_luminance));
+
+    vec3 encoded;
+    if (transfer == TRANSFER_PQ)
+        encoded = pq_encode(nits);
+    else if (transfer == TRANSFER_GAMMA22)
+        // Reached when sdr_white_level != 80 (see identity check above) -- needs the gamma curve re-applied
+        // after the reference-white-relative scaling, not a linear pass-through.
+        encoded = gamma22_encode(nits);
+    else // TRANSFER_EXT_LINEAR, or an unrecognized value -- scRGB-style linear is the safest fallback
+        encoded = nits / SCRGB_REFERENCE_WHITE_NITS;
+
+    frag_color = vec4(encoded, color.a);
+}
 precision mediump float;
-precision highp int;
 
-struct fs_params
+in vec2 position;
+
+out vec2 uv;
+
+void main()
 {
-    int has_reference;
-    int do_dither;
-    highp vec2 randomness;
-    int blend_mode;
-    int channel;
-    highp float gain;
-    highp float offset;
-    highp float gamma;
-    int tonemap_mode;
-    int clamp_to_LDR;
-    int bg_mode;
-    highp vec4 bg_color;
-    int reverse_colormap;
-    highp vec3 primary_yw;
-    int primary_channels_type;
-    highp mat4 primary_M_to_sRGB;
-    highp vec3 secondary_yw;
-    int secondary_channels_type;
-    highp mat4 secondary_M_to_sRGB;
-    highp float time;
-    int draw_clip_warnings;
-    highp vec2 clip_range;
-};
+    uv          = position * 0.5 + 0.5;
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+precision mediump float;
 
-uniform fs_params fsp;
+#ifndef saturate
+#define saturate(v) clamp(v, 0.0, 1.0)
+#endif
 
-uniform highp sampler2D primary_0_texture_primary_0_sampler;
-uniform highp sampler2D primary_1_texture_primary_1_sampler;
-uniform highp sampler2D primary_2_texture_primary_2_sampler;
-uniform highp sampler2D primary_3_texture_primary_3_sampler;
-uniform highp sampler2D secondary_0_texture_secondary_0_sampler;
-uniform highp sampler2D secondary_1_texture_secondary_1_sampler;
-uniform highp sampler2D secondary_2_texture_secondary_2_sampler;
-uniform highp sampler2D secondary_3_texture_secondary_3_sampler;
-uniform highp sampler2D colormap_colormap_sampler;
-uniform highp sampler2D dither_texture_dither_sampler;
-
-in highp vec2 primary_uv;
-in highp vec2 secondary_uv;
-layout(location = 0) out highp vec4 frag_color;
-
-highp float sToLinear(inout highp float a)
+// Luminance-chroma to RGB conversion
+// assumes `input: {RY, Y, BY}`
+vec3 YC_to_RGB(vec3 c, vec3 Yw)
 {
-    highp float _192 = a;
-    highp float _193 = sign(_192);
-    a = abs(a);
-    highp float _199;
-    if (a < 0.040449999272823333740234375)
-    {
-        _199 = (_193 * 0.077399380505084991455078125) * a;
-    }
-    else
-    {
-        _199 = _193 * pow((a + 0.054999999701976776123046875) * 0.94786727428436279296875, 2.400000095367431640625);
-    }
-    return _199;
+    if (c[0] == 0.0 && c[2] == 0.0)
+        //
+        // Special case -- both chroma channels are 0.  To avoid
+        // rounding errors, we explicitly set the output R, G and B
+        // channels equal to the input luminance.
+        //
+        return vec3(c.g, c.g, c.g);
+
+    float Y = c.g;
+    float r = (c.r + 1.0) * c.g;
+    float b = (c.b + 1.0) * c.g;
+    float g = (Y - r * Yw.x - b * Yw.z) / Yw.y;
+
+    return vec3(r, g, b);
 }
 
-highp vec3 sRGBToLinear(highp vec3 color)
+float linearToS(float a)
 {
-    highp float param = color.x;
-    highp float _222 = sToLinear(param);
-    highp float param_1 = color.y;
-    highp float _226 = sToLinear(param_1);
-    highp float param_2 = color.z;
-    highp float _230 = sToLinear(param_2);
-    return vec3(_222, _226, _230);
+    float old_sign = sign(a);
+    a              = abs(a);
+    return a < 0.0031308 ? old_sign * 12.92 * a : old_sign * 1.055 * pow(a, 1.0 / 2.4) - 0.055;
 }
 
-highp float sample_channel(highp vec2 uv, bool within_image, highp sampler2D SPIRV_Cross_Combinedtexsmp)
+vec3 linearToSRGB(vec3 color) { return vec3(linearToS(color.r), linearToS(color.g), linearToS(color.b)); }
+vec4 linearToSRGB(vec4 color) { return vec4(linearToSRGB(color.rgb), color.a); }
+
+float sToLinear(float a)
 {
-    highp float _639;
-    if (within_image)
-    {
-        _639 = texture(SPIRV_Cross_Combinedtexsmp, uv).x;
-    }
-    else
-    {
-        _639 = 0.0;
-    }
-    return _639;
+    float old_sign = sign(a);
+    a              = abs(a);
+    return a < 0.04045 ? old_sign * (1.0 / 12.92) * a : old_sign * pow((a + 0.055) * (1.0 / 1.055), 2.4);
 }
 
-highp vec3 YC_to_RGB(highp vec3 c, highp vec3 Yw)
+vec3 sRGBToLinear(vec3 color) { return vec3(sToLinear(color.r), sToLinear(color.g), sToLinear(color.b)); }
+vec4 sRGBToLinear(vec4 color) { return vec4(sRGBToLinear(color.rgb), color.a); }
+
+// returns the luminance of a linear rgb color
+float RGBToY(vec3 rgb, vec3 weights) { return dot(weights, rgb); }
+
+// Converts a color from linear RGB to XYZ space
+vec3 RGBToXYZ(vec3 rgb)
 {
-    bool _76 = c.x == 0.0;
-    bool _83;
-    if (_76)
-    {
-        _83 = c.z == 0.0;
-    }
-    else
-    {
-        _83 = _76;
-    }
-    if (_83)
-    {
-        return vec3(c.y, c.y, c.y);
-    }
-    highp float _105 = (c.x + 1.0) * c.y;
-    highp float _112 = (c.z + 1.0) * c.y;
-    return vec3(_105, ((c.y - (_105 * Yw.x)) - (_112 * Yw.z)) / Yw.y, _112);
+    const mat3 RGB2XYZ = mat3(0.412453, 0.212671, 0.019334, 0.357580, 0.715160, 0.119193, 0.180423, 0.072169, 0.950227);
+    return RGB2XYZ * rgb;
 }
 
-highp vec4 blend(highp vec4 top, highp vec4 bottom)
+// Converts a color from XYZ to linear RGB space
+vec3 XYZToRGB(vec3 xyz)
 {
-    highp vec3 _488 = top.xyz - bottom.xyz;
-    highp float _498 = top.w + (bottom.w * (1.0 - top.w));
-    switch (fsp.blend_mode)
+    const mat3 XYZ2RGB =
+        mat3(3.240479, -0.969256, 0.055648, -1.537150, 1.875992, -0.204043, -0.498535, 0.041556, 1.057311);
+    return XYZ2RGB * xyz;
+}
+precision mediump float;
+
+// These need to stay in sync with the various enums in fwd.h
+#define Channels_RGBA   0
+#define Channels_RGB    1
+#define Channels_Red    2
+#define Channels_Green  3
+#define Channels_Blue   4
+#define Channels_Alpha  5
+#define Channels_Y      6
+
+#define Tonemap_Gamma            0
+#define Tonemap_FalseColor       1
+#define Tonemap_PositiveNegative 2
+
+#define BlendMode_Normal              0
+#define BlendMode_Multiply            1
+#define BlendMode_Divide              2
+#define BlendMode_Add                 3
+#define BlendMode_Average             4
+#define BlendMode_Subtract            5
+#define BlendMode_Relative_Subtract   6
+#define BlendMode_Difference          7
+#define BlendMode_Relative_Difference 8
+
+#define BGMode_Black         0
+#define BGMode_White         1
+#define BGMode_Dark_Checker  2
+#define BGMode_Light_Checker 3
+#define BGMode_Custom_Color  4
+
+#define RGBA_Channels   0
+#define RGB_Channels    1
+#define XYZA_Channels   2
+#define XYZ_Channels    3
+#define YCA_Channels    4
+#define YC_Channels     5
+#define YA_Channels     6
+#define UVorXY_Channels 7
+#define Z_Channel       8
+#define Single_Channel  9
+
+in vec2 primary_uv;
+in vec2 secondary_uv;
+// in highp in vec4 gl_FragCoord;
+
+uniform bool  has_reference;
+uniform bool  do_dither;
+uniform vec2  randomness;
+uniform int   blend_mode;
+uniform int   channel;
+uniform float gain;
+uniform float offset;
+uniform float gamma;
+uniform int   tonemap_mode;
+uniform bool  clamp_to_LDR;
+uniform int   bg_mode;
+uniform vec4  bg_color;
+
+uniform sampler2D colormap;
+uniform bool      reverse_colormap;
+
+uniform sampler2D dither_texture;
+
+uniform sampler2D primary_0_texture;
+uniform sampler2D primary_1_texture;
+uniform sampler2D primary_2_texture;
+uniform sampler2D primary_3_texture;
+uniform vec3      primary_yw;
+uniform int       primary_channels_type;
+uniform mat4      primary_M_to_sRGB;
+
+uniform sampler2D secondary_0_texture;
+uniform sampler2D secondary_1_texture;
+uniform sampler2D secondary_2_texture;
+uniform sampler2D secondary_3_texture;
+uniform vec3      secondary_yw;
+uniform int       secondary_channels_type;
+uniform mat4      secondary_M_to_sRGB;
+
+uniform float time;
+uniform bool  draw_clip_warnings;
+uniform vec2  clip_range;
+
+out vec4 frag_color;
+
+vec4 tonemap(vec4 color)
+{
+    switch (tonemap_mode)
     {
-        case 0:
-        {
-            return vec4(top.xyz + (bottom.xyz * (1.0 - top.w)), _498);
-        }
-        case 1:
-        {
-            return vec4(top.xyz * bottom.xyz, _498);
-        }
-        case 2:
-        {
-            return vec4(top.xyz / bottom.xyz, _498);
-        }
-        case 3:
-        {
-            return vec4(top.xyz + bottom.xyz, _498);
-        }
-        case 4:
-        {
-            return (top + bottom) * 0.5;
-        }
-        case 5:
-        {
-            return vec4(_488, _498);
-        }
-        case 6:
-        {
-            return vec4(_488 / (bottom.xyz + vec3(0.00999999977648258209228515625)), _498);
-        }
-        case 7:
-        {
-            return vec4(abs(_488), _498);
-        }
-        case 8:
-        {
-            return vec4(abs(_488) / (bottom.xyz + vec3(0.00999999977648258209228515625)), _498);
-        }
+    default:
+    case Tonemap_Gamma: return vec4(sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / gamma)), color.a);
+    case Tonemap_FalseColor:
+    {
+        float cmap_size = float(textureSize(colormap, 0).x);
+        float t         = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, dot(color.rgb, vec3(1.0 / 3.0)));
+        if (reverse_colormap)
+            t = 1.f - t;
+        return vec4(sRGBToLinear(texture(colormap, vec2(t, 0.5)).rgb) * color.a, color.a);
     }
-    return vec4(0.0);
+    case Tonemap_PositiveNegative:
+    {
+        float cmap_size = float(textureSize(colormap, 0).x);
+        float t = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, 0.5 * dot(color.rgb, vec3(1.0 / 3.0)) + 0.5);
+        if (reverse_colormap)
+            t = 1.f - t;
+        return vec4(sRGBToLinear(texture(colormap, vec2(t, 0.5)).rgb) * color.a, color.a);
+    }
+    }
 }
 
-highp vec4 choose_channel(highp vec4 rgba)
+float rand_box(vec2 xy)
 {
-    switch (fsp.channel)
+    // Result is in range (-0.5, 0.5)
+    return (texture(dither_texture, xy / vec2(256, 256)).r + 0.5) / 65536.0 - 0.5;
+}
+
+float rand_tent(vec2 xy)
+{
+    float r = rand_box(xy);
+
+    // Convert uniform distribution into triangle-shaped distribution
+    // Result is in range (-0.5,0.5)
+    float rp = sqrt(2.0 * r);             // positive triangle
+    float rn = sqrt(2.0 * r + 1.0) - 1.0; // negative triangle
+    return (r < 0.0) ? 0.5 * rn : 0.5 * rp;
+}
+
+vec4 choose_channel(vec4 rgba)
+{
+    switch (channel)
     {
-        case 0:
-        {
-            return rgba;
-        }
-        case 1:
-        {
-            return vec4(rgba.xyz, 1.0);
-        }
-        case 2:
-        {
-            return vec4(rgba.xxx, 1.0);
-        }
-        case 3:
-        {
-            return vec4(rgba.yyy, 1.0);
-        }
-        case 4:
-        {
-            return vec4(rgba.zzz, 1.0);
-        }
-        case 5:
-        {
-            return vec4(rgba.www, 1.0);
-        }
-        case 6:
-        {
-            highp float _470 = dot(rgba.xyz, fsp.primary_yw);
-            return vec4(_470, _470, _470, rgba.w);
-        }
+    case Channels_RGBA: return rgba;
+    case Channels_RGB: return vec4(rgba.rgb, 1.0);
+    case Channels_Red: return vec4(rgba.rrr, 1.0);
+    case Channels_Green: return vec4(rgba.ggg, 1.0);
+    case Channels_Blue: return vec4(rgba.bbb, 1.0);
+    case Channels_Alpha: return vec4(rgba.aaa, 1.0);
+    case Channels_Y: return vec4(vec3(dot(rgba.rgb, primary_yw)), rgba.a);
     }
     return rgba;
 }
 
-highp vec4 tonemap(highp vec4 color)
+vec4 blend(vec4 top, vec4 bottom)
 {
-    switch (fsp.tonemap_mode)
+    vec3  diff  = top.rgb - bottom.rgb;
+    float alpha = top.a + bottom.a * (1.0 - top.a);
+    switch (blend_mode)
     {
-        case 1:
-        {
-            highp float _280 = float(textureSize(colormap_colormap_sampler, 0).x);
-            highp float t = mix(0.5 / _280, (_280 - 0.5) / _280, dot(color.xyz, vec3(0.3333333432674407958984375)));
-            if (fsp.reverse_colormap != 0)
-            {
-                t = 1.0 - t;
-            }
-            highp vec3 param = texture(colormap_colormap_sampler, vec2(t, 0.5)).xyz;
-            return vec4(sRGBToLinear(param) * color.w, color.w);
-        }
-        case 2:
-        {
-            highp float _329 = float(textureSize(colormap_colormap_sampler, 0).x);
-            highp float t_1 = mix(0.5 / _329, (_329 - 0.5) / _329, (0.5 * dot(color.xyz, vec3(0.3333333432674407958984375))) + 0.5);
-            if (fsp.reverse_colormap != 0)
-            {
-                t_1 = 1.0 - t_1;
-            }
-            highp vec3 param_1 = texture(colormap_colormap_sampler, vec2(t_1, 0.5)).xyz;
-            return vec4(sRGBToLinear(param_1) * color.w, color.w);
-        }
-        default:
-        {
-            return vec4(sign(color.xyz) * pow(abs(color.xyz), vec3(1.0 / fsp.gamma)), color.w);
-        }
+    case BlendMode_Normal: return vec4(top.rgb + bottom.rgb * (1.0 - top.a), alpha);
+    case BlendMode_Multiply: return vec4(top.rgb * bottom.rgb, alpha);
+    case BlendMode_Divide: return vec4(top.rgb / bottom.rgb, alpha);
+    case BlendMode_Add: return vec4(top.rgb + bottom.rgb, alpha);
+    case BlendMode_Average: return 0.5 * (top + bottom);
+    case BlendMode_Subtract: return vec4(diff, alpha);
+    case BlendMode_Relative_Subtract: return vec4(diff / (bottom.rgb + vec3(0.01)), alpha);
+    case BlendMode_Difference: return vec4(abs(diff), alpha);
+    case BlendMode_Relative_Difference: return vec4(abs(diff) / (bottom.rgb + vec3(0.01)), alpha);
     }
+    return vec4(0.0);
 }
 
-highp float linearToS(inout highp float a)
+vec4 dither(vec4 color)
 {
-    highp float _135 = a;
-    highp float _136 = sign(_135);
-    a = abs(a);
-    highp float _142;
-    if (a < 0.003130800090730190277099609375)
-    {
-        _142 = (_136 * 12.9200000762939453125) * a;
-    }
-    else
-    {
-        _142 = ((_136 * 1.05499994754791259765625) * pow(a, 0.4166666567325592041015625)) - 0.054999999701976776123046875;
-    }
-    return _142;
-}
-
-highp vec3 linearToSRGB(highp vec3 color)
-{
-    highp float param = color.x;
-    highp float _166 = linearToS(param);
-    highp float param_1 = color.y;
-    highp float _170 = linearToS(param_1);
-    highp float param_2 = color.z;
-    highp float _174 = linearToS(param_2);
-    return vec3(_166, _170, _174);
-}
-
-highp vec4 linearToSRGB(highp vec4 color)
-{
-    highp vec3 param = color.xyz;
-    return vec4(linearToSRGB(param), color.w);
-}
-
-highp float rand_box(highp vec2 xy)
-{
-    return ((texture(dither_texture_dither_sampler, xy * vec2(0.00390625)).x + 0.5) * 1.52587890625e-05) - 0.5;
-}
-
-highp float rand_tent(highp vec2 xy)
-{
-    highp vec2 param = xy;
-    highp float _391 = rand_box(param);
-    highp float _395 = 2.0 * _391;
-    highp float _405;
-    if (_391 < 0.0)
-    {
-        _405 = 0.5 * (sqrt(_395 + 1.0) - 1.0);
-    }
-    else
-    {
-        _405 = 0.5 * sqrt(_395);
-    }
-    return _405;
-}
-
-highp vec4 dither(highp vec4 color)
-{
-    if (fsp.do_dither == 0)
-    {
+    if (!do_dither)
         return color;
-    }
-    highp vec2 param = gl_FragCoord.xy + fsp.randomness;
-    highp float _629 = rand_tent(param) * 0.00390625;
-    return color + vec4(_629, _629, _629, 0.0);
+
+    return color + vec4(vec3(rand_tent(gl_FragCoord.xy + randomness) / 256.0), 0.0);
+}
+
+float sample_channel(sampler2D sampler, vec2 uv, bool within_image)
+{
+    return within_image ? texture(sampler, uv).r : 0.0;
 }
 
 void main()
 {
-    highp float _658 = -gl_FragCoord.y;
-    highp vec4 background = vec4(fsp.bg_color.xyz, 1.0);
-    if (fsp.bg_mode == 0)
+    vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
+    vec4 background = vec4(bg_color.rgb, 1.0);
+    if (bg_mode == BGMode_Black)
+        background.rgb = vec3(0.0);
+    else if (bg_mode == BGMode_White)
+        background.rgb = vec3(1.0);
+    else if (bg_mode == BGMode_Dark_Checker || bg_mode == BGMode_Light_Checker)
     {
-        highp vec4 _1078 = background;
-        _1078.x = 0.0;
-        _1078.y = 0.0;
-        _1078.z = 0.0;
-        background = _1078;
+        float dark_gray    = (bg_mode == BGMode_Dark_Checker) ? 0.1 : 0.5;
+        float light_gray   = (bg_mode == BGMode_Dark_Checker) ? 0.2 : 0.55;
+        float checkerboard = mod(floor(pixel.x / 8.0) + floor(pixel.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
+        background.rgb     = sRGBToLinear(vec3(checkerboard));
     }
-    else
-    {
-        if (fsp.bg_mode == 1)
-        {
-            highp vec4 _1084 = background;
-            _1084.x = 1.0;
-            _1084.y = 1.0;
-            _1084.z = 1.0;
-            background = _1084;
-        }
-        else
-        {
-            bool _699 = fsp.bg_mode == 2;
-            bool _706;
-            if (!_699)
-            {
-                _706 = fsp.bg_mode == 3;
-            }
-            else
-            {
-                _706 = _699;
-            }
-            if (_706)
-            {
-                highp vec3 param = vec3((mod(floor(gl_FragCoord.x * 0.125) + floor(gl_FragCoord.y * (-0.125)), 2.0) == 0.0) ? (_699 ? 0.100000001490116119384765625 : 0.5) : (_699 ? 0.20000000298023223876953125 : 0.550000011920928955078125));
-                highp vec3 _741 = sRGBToLinear(param);
-                highp vec4 _1092 = background;
-                _1092.x = _741.x;
-                _1092.y = _741.y;
-                _1092.z = _741.z;
-                background = _1092;
-            }
-        }
-    }
-    highp float _758 = 30.0 * fsp.time;
-    bool _789 = primary_uv.x < 1.0;
-    bool _795;
-    if (_789)
-    {
-        _795 = primary_uv.y < 1.0;
-    }
-    else
-    {
-        _795 = _789;
-    }
-    bool _801;
-    if (_795)
-    {
-        _801 = primary_uv.x > 0.0;
-    }
-    else
-    {
-        _801 = _795;
-    }
-    bool _807;
-    if (_801)
-    {
-        _807 = primary_uv.y > 0.0;
-    }
-    else
-    {
-        _807 = _801;
-    }
-    bool _812 = secondary_uv.x < 1.0;
-    bool _818;
-    if (_812)
-    {
-        _818 = secondary_uv.y < 1.0;
-    }
-    else
-    {
-        _818 = _812;
-    }
-    bool _824;
-    if (_818)
-    {
-        _824 = secondary_uv.x > 0.0;
-    }
-    else
-    {
-        _824 = _818;
-    }
-    bool _830;
-    if (_824)
-    {
-        _830 = secondary_uv.y > 0.0;
-    }
-    else
-    {
-        _830 = _824;
-    }
-    highp vec2 param_1 = primary_uv;
-    bool param_2 = _807;
-    highp vec2 param_3 = primary_uv;
-    bool param_4 = _807;
-    highp vec2 param_5 = primary_uv;
-    bool param_6 = _807;
-    highp vec2 param_7 = primary_uv;
-    bool param_8 = _807;
-    highp vec4 value = vec4(sample_channel(param_1, param_2, primary_0_texture_primary_0_sampler), sample_channel(param_3, param_4, primary_1_texture_primary_1_sampler), sample_channel(param_5, param_6, primary_2_texture_primary_2_sampler), sample_channel(param_7, param_8, primary_3_texture_primary_3_sampler));
-    bool _864 = fsp.primary_channels_type == 4;
-    bool _872;
-    if (!_864)
-    {
-        _872 = fsp.primary_channels_type == 5;
-    }
-    else
-    {
-        _872 = _864;
-    }
-    if (_872)
-    {
-        highp vec3 param_9 = value.xyz;
-        highp vec3 param_10 = fsp.primary_yw;
-        highp vec3 _881 = YC_to_RGB(param_9, param_10);
-        highp vec4 _1102 = value;
-        _1102.x = _881.x;
-        _1102.y = _881.y;
-        _1102.z = _881.z;
-        value = _1102;
-    }
-    value = fsp.primary_M_to_sRGB * value;
-    if (fsp.has_reference != 0)
-    {
-        highp vec2 param_11 = secondary_uv;
-        bool param_12 = _830;
-        highp vec2 param_13 = secondary_uv;
-        bool param_14 = _830;
-        highp vec2 param_15 = secondary_uv;
-        bool param_16 = _830;
-        highp vec2 param_17 = secondary_uv;
-        bool param_18 = _830;
-        highp vec4 reference_val = vec4(sample_channel(param_11, param_12, secondary_0_texture_secondary_0_sampler), sample_channel(param_13, param_14, secondary_1_texture_secondary_1_sampler), sample_channel(param_15, param_16, secondary_2_texture_secondary_2_sampler), sample_channel(param_17, param_18, secondary_3_texture_secondary_3_sampler));
-        bool _932 = fsp.secondary_channels_type == 4;
-        bool _939;
-        if (!_932)
-        {
-            _939 = fsp.secondary_channels_type == 5;
-        }
-        else
-        {
-            _939 = _932;
-        }
-        if (_939)
-        {
-            highp vec3 param_19 = reference_val.xyz;
-            highp vec3 param_20 = fsp.secondary_yw;
-            highp vec3 _949 = YC_to_RGB(param_19, param_20);
-            highp vec4 _1108 = reference_val;
-            _1108.x = _949.x;
-            _1108.y = _949.y;
-            _1108.z = _949.z;
-            reference_val = _1108;
-        }
-        highp vec4 _959 = reference_val;
-        highp vec4 _960 = fsp.secondary_M_to_sRGB * _959;
-        reference_val = _960;
-        highp vec4 param_21 = value;
-        highp vec4 param_22 = _960;
-        value = blend(param_21, param_22);
-    }
-    highp vec4 param_23 = value;
-    highp float _983 = fsp.offset * value.w;
-    highp vec4 _989 = (choose_channel(param_23) * vec4(fsp.gain, fsp.gain, fsp.gain, 1.0)) + vec4(_983, _983, _983, 0.0);
-    highp vec4 param_24 = _989;
-    highp vec3 _1004 = _989.xyz;
-    bvec3 _1009 = greaterThan(_1004, fsp.clip_range.yyy);
-    bvec3 _1016 = lessThan(_1004, fsp.clip_range.xxx);
-    highp vec4 param_25 = tonemap(param_24) + (background * (1.0 - _989.w));
-    highp vec4 param_26 = linearToSRGB(param_25);
-    bool _1029 = fsp.clamp_to_LDR != 0;
-    highp vec4 dithered = clamp(dither(param_26), vec4(_1029 ? 0.0 : (-64.0)), vec4(_1029 ? 1.0 : 64.0));
-    if (fsp.draw_clip_warnings != 0)
-    {
-        highp vec4 _1046 = dithered;
-        highp vec3 _1049 = vec3((mod(float(int(floor(((gl_FragCoord.x + _658) - _758) * 0.125))), 2.0) == 0.0) ? 0.0 : 1.0);
-        highp vec3 _1051 = vec3(_1009.x ? _1049.x : _1046.xyz.x, _1009.y ? _1049.y : _1046.xyz.y, _1009.z ? _1049.z : _1046.xyz.z);
-        highp vec4 _1117 = _1046;
-        _1117.x = _1051.x;
-        _1117.y = _1051.y;
-        _1117.z = _1051.z;
-        highp vec3 _1061 = vec3((mod(float(int(floor(((gl_FragCoord.x - _658) - _758) * 0.125))), 2.0) == 0.0) ? 0.0 : 1.0);
-        highp vec3 _1063 = vec3(_1016.x ? _1061.x : _1117.xyz.x, _1016.y ? _1061.y : _1117.xyz.y, _1016.z ? _1061.z : _1117.xyz.z);
-        highp vec4 _1123 = _1117;
-        _1123.x = _1063.x;
-        _1123.y = _1063.y;
-        _1123.z = _1063.z;
-        dithered = _1123;
-    }
-    frag_color = vec4(dithered.xyz, 1.0);
-}
 
-#version 300 es
+    float zebra1 = (mod(float(int(floor((pixel.x + pixel.y - 30.0 * time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
+    float zebra2 = (mod(float(int(floor((pixel.x - pixel.y - 30.0 * time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
 
-struct vs_params
-{
-    vec2 primary_scale;
-    vec2 primary_pos;
-    vec2 secondary_scale;
-    vec2 secondary_pos;
-    int _pad;
-};
+    bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
+    bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;
 
-uniform vs_params vsp;
+    vec4 value = vec4(
+        sample_channel(primary_0_texture, primary_uv, in_img), sample_channel(primary_1_texture, primary_uv, in_img),
+        sample_channel(primary_2_texture, primary_uv, in_img), sample_channel(primary_3_texture, primary_uv, in_img));
+
+    if (primary_channels_type == YCA_Channels || primary_channels_type == YC_Channels)
+        value.xyz = YC_to_RGB(value.xyz, primary_yw);
+
+    value = primary_M_to_sRGB * value;
+
+    if (has_reference)
+    {
+        vec4 reference_val = vec4(sample_channel(secondary_0_texture, secondary_uv, in_ref),
+                                  sample_channel(secondary_1_texture, secondary_uv, in_ref),
+                                  sample_channel(secondary_2_texture, secondary_uv, in_ref),
+                                  sample_channel(secondary_3_texture, secondary_uv, in_ref));
+
+        if (secondary_channels_type == YCA_Channels || secondary_channels_type == YC_Channels)
+            reference_val.xyz = YC_to_RGB(reference_val.xyz, secondary_yw);
+
+        reference_val = secondary_M_to_sRGB * reference_val;
+
+        value = blend(value, reference_val);
+    }
+
+    vec4  foreground = choose_channel(value) * vec4(vec3(gain), 1.0) + vec4(vec3(offset*value.a), 0.0);
+    vec4  tonemapped = tonemap(foreground) + background * (1.0 - foreground.a);
+    bvec3 clipped    = greaterThan(foreground.rgb, clip_range.yyy);
+    bvec3 crushed    = lessThan(foreground.rgb, clip_range.xxx);
+    vec4  blended    = linearToSRGB(tonemapped);
+    vec4  dithered   = dither(blended);
+    dithered         = clamp(dithered, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
+    if (draw_clip_warnings)
+    {
+        dithered.rgb = mix(dithered.rgb, vec3(zebra1), clipped);
+        dithered.rgb = mix(dithered.rgb, vec3(zebra2), crushed);
+    }
+    frag_color = vec4(dithered.rgb, 1.0);
+}precision mediump float;
+in vec2   position;
 
 out vec2 primary_uv;
-layout(location = 0) in vec2 position;
 out vec2 secondary_uv;
+
+uniform vec2 primary_scale;
+uniform vec2 primary_pos;
+uniform vec2 secondary_scale;
+uniform vec2 secondary_pos;
 
 void main()
 {
-    vec2 _15 = position * vec2(0.5);
-    primary_uv = ((_15 - vsp.primary_pos) + vec2(0.5)) / vsp.primary_scale;
-    secondary_uv = ((_15 - vsp.secondary_pos) + vec2(0.5)) / vsp.secondary_scale;
-    gl_Position = vec4(position.x, -position.y, 0.0, 1.0);
+    primary_uv   = (position / 2.0 - primary_pos + 0.5) / primary_scale;
+    secondary_uv = (position / 2.0 - secondary_pos + 0.5) / secondary_scale;
+    gl_Position  = vec4(position.x, -position.y, 0.0, 1.0);
 }
-
