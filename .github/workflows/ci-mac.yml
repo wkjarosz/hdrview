@@ -94,7 +94,7 @@ jobs:
         if: contains(matrix.config.preset, 'local')
         run: brew install --quiet jpeg-xl libultrahdr libheif libpng imath openexr cli11 spdlog fmt libexif libraw
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
