@@ -1461,7 +1461,6 @@ if(NOT HDRVIEW_PORTABLE_INSTALL)
 endif()
 
 set(HDRVIEW_SOURCES
-    ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
     src/imageio/image_loader.cpp
     src/imageio/dds.cpp
     src/imageio/exif.cpp
@@ -1507,6 +1506,15 @@ set(HDRVIEW_SOURCES
     ${EXTRA_SOURCES}
 )
 
+# Built once as its own object library and linked into HDRView and (if enabled) hdrview_tests below, rather than
+# listed directly in HDRVIEW_SOURCES: with the Visual Studio generator, a custom command's OUTPUT listed as a
+# source in two different targets gets its rule duplicated into both .vcxproj files, and parallel MSBuild can
+# then race to regenerate version.cpp, intermittently failing generate_version.cmake's configure_file with
+# "No such file or directory" (only ever observed on the windows-msvc preset, the only Windows preset that also
+# builds hdrview_tests alongside HDRView).
+add_library(hdrview_version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
+target_link_libraries(hdrview_version PRIVATE hello_imgui)
+
 hello_imgui_add_app(HDRView ${HDRVIEW_SOURCES} ASSETS_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 if(HDRVIEW_SOKOL_SHDC_TARGETS)
   add_dependencies(HDRView ${HDRVIEW_SOKOL_SHDC_TARGETS})
@@ -1524,7 +1532,7 @@ endif()
 message(STATUS "HDRView build dependencies: ${HDRVIEW_DEPENDENCIES}")
 message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")
 
-target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES})
+target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES} hdrview_version)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
 if(NOT EMSCRIPTEN)
@@ -1559,7 +1567,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   # Mirrors HDRView's own HDRVIEW_BUILD_TREE_ASSETS_DIR definition above, so tests/test_assets.cpp
   # can exercise the same asset lookup the app uses.
   target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
-  target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui doctest::doctest)
+  target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version doctest::doctest)
 
   if(APPLE)
     target_compile_options(hdrview_tests PRIVATE "-fobjc-arc")
