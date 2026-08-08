@@ -141,10 +141,16 @@ list(APPEND CMD "-D" "CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR}")
 list(APPEND CMD "-D" "EMSCRIPTEN=${EMSCRIPTEN}")
 list(APPEND CMD "-D" "HDRVIEW_TARGET_ARCH=${HDRVIEW_TARGET_ARCH}")
 list(APPEND CMD "-P" "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake")
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+# ALL + no DEPENDS makes this custom target unconditionally re-run every build (unlike an add_custom_command
+# OUTPUT rule, which Ninja/Make/MSBuild only re-run when a listed dependency is newer, and which never fires
+# again once version.cpp exists -- checking out a different commit/branch wouldn't be picked up without a clean
+# build). configure_file() inside generate_version.cmake only rewrites version.cpp when its content actually
+# changed, so this doesn't force a relink on every build, only when the git-derived info really changes.
+add_custom_target(
+  hdrview_check_version ALL
   COMMAND ${CMD}
-  COMMENT "Generating git version file"
+  BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+  COMMENT "Checking git version"
 )
 
 message(STATUS "CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
@@ -1507,12 +1513,15 @@ set(HDRVIEW_SOURCES
 )
 
 # Built once as its own object library and linked into HDRView and (if enabled) hdrview_tests below, rather than
-# listed directly in HDRVIEW_SOURCES: with the Visual Studio generator, a custom command's OUTPUT listed as a
-# source in two different targets gets its rule duplicated into both .vcxproj files, and parallel MSBuild can
-# then race to regenerate version.cpp, intermittently failing generate_version.cmake's configure_file with
-# "No such file or directory" (only ever observed on the windows-msvc preset, the only Windows preset that also
-# builds hdrview_tests alongside HDRView).
+# listed directly in HDRVIEW_SOURCES: with the Visual Studio generator, listing the same generated source (or
+# custom-command OUTPUT) in two different targets duplicates the generating rule into both .vcxproj files, and
+# parallel MSBuild can then race to (re)generate version.cpp, intermittently failing generate_version.cmake's
+# configure_file with "No such file or directory" (only ever observed on the windows-msvc preset, the only
+# Windows preset that also builds hdrview_tests alongside HDRView). Depending on hdrview_check_version here,
+# rather than each consumer depending on it independently, means only this one target's project reruns the
+# version check, and downstream targets just get an ordinary (race-free) build-order dependency on it.
 add_library(hdrview_version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
+add_dependencies(hdrview_version hdrview_check_version)
 target_link_libraries(hdrview_version PRIVATE hello_imgui)
 
 hello_imgui_add_app(HDRView ${HDRVIEW_SOURCES} ASSETS_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
