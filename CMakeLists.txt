@@ -37,8 +37,11 @@ option(HDRVIEW_ENABLE_LIBWEBP "Enable LIBWEBP support" ON)
 option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
 option(HDRVIEW_ENABLE_X3F "Enable LibRaw X3F support" ON)
-option(HDRVIEW_ENABLE_HDR_DISPLAY
-       "Use a patched GLFW fork (Tom94/glfw) for true HDR/EDR display output on macOS/Windows" ON)
+option(
+  HDRVIEW_ENABLE_HDR_DISPLAY
+  "Enable true HDR/EDR display output on Windows and Linux/Wayland, via a patched GLFW fork (Tom94/glfw). No effect on macOS, which always uses that fork and gets EDR through Metal."
+  ON
+)
 
 set(HDRVIEW_ENABLE_LIBHEIF OFF)
 if(HDRVIEW_ENABLE_J2K
@@ -359,6 +362,22 @@ sokol_shdc_generate(
          image-shader_frag.${HDRVIEW_SHADER_EXT}
 )
 
+# The final HDR/EDR display color-management pass (see colorpass.sglsl). Only ever needed on the desktop
+# OpenGL backend -- macOS/Metal EDR consumes HDRView's extended-sRGB output directly, and Emscripten has no
+# HDR path at all -- so a single glsl410 target suffices (no metal_macos, no glsl300es).
+if(NOT APPLE AND NOT EMSCRIPTEN)
+  sokol_shdc_generate(
+    INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorpass.sglsl
+    OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders
+    NAME colorpass
+    PROGRAM colorpass
+    SLANG glsl410
+    EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
+    RENAME colorpass_colorpass_glsl410_vertex.glsl colorpass_vert.glsl
+           colorpass_colorpass_glsl410_fragment.glsl colorpass_frag.glsl
+  )
+endif()
+
 if(APPLE AND NOT EMSCRIPTEN)
   # default to GLFW+Metal on macOS
   set(HELLOIMGUI_HAS_METAL ON)
@@ -370,32 +389,30 @@ if(APPLE AND NOT EMSCRIPTEN)
   enable_language(OBJC)
 endif()
 
-if((APPLE OR WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND NOT EMSCRIPTEN AND HDRVIEW_ENABLE_HDR_DISPLAY)
-  # Use https://github.com/Tom94/glfw, the fork that adds true HDR/EDR display output (proven in production
-  # by tev, https://github.com/Tom94/tev) and also carries macOS drag-files-onto-app-icon support (see
-  # glfwGetOpenedFilenames/glfwSetOpenedFilenamesCallback usage in src/app.cpp). Covers Windows (WGL float
-  # pixel format), macOS (Cocoa/EDR), and Linux/Wayland (wp_color_manager_v1, negotiated at runtime between
-  # scRGB and PQ depending on compositor/driver support). Hello ImGui's own patched fork detects this GLFW
-  # fork via the GLFW_FLOATBUFFER window-hint macro and degrades to plain SDR behavior when it's absent, so
-  # disabling this option is always safe (falls back to system/vanilla GLFW).
+# Use https://github.com/Tom94/glfw, the fork that adds true HDR/EDR display output (proven in production by
+# tev, https://github.com/Tom94/tev) and also carries the macOS drag-files-onto-app-icon support (see
+# glfwGetOpenedFilenames/glfwSetOpenedFilenamesCallback usage in src/app.cpp). Covers Windows (WGL float
+# pixel format), macOS (Cocoa/EDR), and Linux/Wayland (wp_color_manager_v1, negotiated at runtime between
+# scRGB and PQ depending on compositor/driver support).
+#
+# Mandatory on macOS regardless of HDRVIEW_ENABLE_HDR_DISPLAY: src/app.cpp's Apple-only opened-filenames
+# handling has no vanilla-GLFW equivalent, so dropping the fork there would fail to link.
+#
+# The commit is pinned deliberately: it is the tip of the fork's master/tev branches, but a divergent
+# `tev-rebased` branch exists that is not an ancestor of it. Upstreaming to glfw/glfw has no timeline
+# (glfw/glfw#890 has been open since 2016 and glfw/glfw#1907 since 2021, with at least three competing
+# color-management forks), so every use of the fork's API in HDRView is guarded by `#if
+# defined(GLFW_FLOATBUFFER)` / `#if defined(GLFW_WAYLAND_COLOR_MANAGEMENT)` and degrades to plain SDR against
+# stock GLFW. Those guards are load-bearing, not temporary scaffolding.
+#
+# Note the fork also pulls in a hard dbus-1 dependency on Linux (for sandboxed Wayland file drop), which is
+# why libdbus-1-dev and libxkbcommon-dev appear in .github/workflows/ci-linux.yml.
+if((APPLE OR ((WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND HDRVIEW_ENABLE_HDR_DISPLAY)) AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
   set(HELLOIMGUI_USE_GLFW3 ON)
   if(NOT APPLE)
     # macOS selects Metal above; Windows/Linux render through OpenGL/GLES.
     set(HELLOIMGUI_HAS_OPENGL3 ON)
-
-    # The final HDR/EDR display color-management pass (see colorpass.sglsl) -- only ever needed on the
-    # desktop OpenGL backend, so a single glsl410 target suffices (no metal_macos, no glsl300es).
-    sokol_shdc_generate(
-      INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorpass.sglsl
-      OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders
-      NAME colorpass
-      PROGRAM colorpass
-      SLANG glsl410
-      EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
-      RENAME colorpass_colorpass_glsl410_vertex.glsl colorpass_vert.glsl
-             colorpass_colorpass_glsl410_fragment.glsl colorpass_frag.glsl
-    )
   endif()
   CPMAddPackage(
     NAME glfw
@@ -438,16 +455,26 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 # Prevent dependencies from installing their files
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
-# Fork of pthom/hello_imgui (v1.92.700 + three commits) that adds optional HDR/EDR support for the
-# GLFW3+OpenGL backend, gated behind the HDR-enabling GLFW fork pinned above (see that CPMAddPackage's
-# comment), a small BeforeSwap render-loop hook HDRView uses for a final HDR color-management pass, and
-# Wayland color-management wiring -- a vanilla-GLFW build of this fork behaves identically to upstream
-# hello_imgui. Propose this upstream once validated on real Windows HDR hardware; re-point at
-# pthom/hello_imgui directly if/when it's merged there.
+# Fork of pthom/hello_imgui (v1.92.700 + two commits) carrying the two changes HDRView needs for HDR
+# display output. Both are written to be proposed upstream as independent PRs, and are kept on separate
+# branches in the fork so they can be submitted that way:
+#
+#   before-swap-callback       Adds RunnerCallbacks::BeforeSwap, the only point in the render loop where an
+#                              app can run a final full-screen pass over the whole frame (ImGui's UI
+#                              included) and still have it presented. No HDR-specific code.
+#   glfw-opengl-float-buffer   Makes the *existing* RendererBackendOptions::requestFloatBuffer work on the
+#                              GLFW3+OpenGL backend, not just Metal. Probes with a throwaway hidden window
+#                              and writes back what was actually obtained.
+#
+# The `hdr-display` branch pinned here is just a merge of the two, for HDRView's own use. Both changes are
+# guarded by `#if defined(GLFW_FLOATBUFFER)`, so built against a vanilla GLFW this fork is byte-identical to
+# upstream hello_imgui (verified: the probe is compiled out entirely).
+#
+# Re-point at pthom/hello_imgui directly if/when the PRs are merged there.
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY wkjarosz/hello_imgui
-  GIT_TAG a4b7dd684cfc35585c9bb74e4a26300387cc7d50
+  GIT_TAG 85c9cc45addafc85e494bdee1dc361de379bc769
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   EXCLUDE_FROM_ALL YES
@@ -1522,6 +1549,7 @@ set(HDRVIEW_SOURCES
     src/colormap.cpp
     src/colorspace.cpp
     src/common.cpp
+    src/display_colorspace.cpp
     src/dithermatrix256.cpp
     src/platform_utils.cpp
     src/fonts.cpp

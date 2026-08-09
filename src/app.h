@@ -6,6 +6,7 @@
 
 #include "box.h"
 #include "colormap.h"
+#include "display_colorspace.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
 #include "renderpass.h"
@@ -205,9 +206,17 @@ private:
     void update_visibility();
 
     void setup_rendering();
-    void setup_colorpass();
+    /// Re-query the display's color space and (re)create colorpass resources if it now needs them. Called
+    /// once per frame, before either colorpass half runs.
+    void update_colorpass();
     void begin_colorpass_frame();
     void end_colorpass_frame();
+    void cleanup_colorpass();
+
+    /// True when this display can actually show more than standard dynamic range, i.e. when the HDR-only UI
+    /// (the "Clamp to LDR" control) is meaningful. Combines the framebuffer we were actually granted with
+    /// what the display reports about itself.
+    bool supports_hdr() const;
 
     void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
                             float width = 0.f) const;
@@ -217,18 +226,18 @@ private:
     // Private data members
     //-----------------------------------------------------------------------------
 
-    RenderPass      *m_render_pass = nullptr;
-    /// Offscreen HDR color target + final conversion shader; only used when m_color_managed is true. See
-    /// setup_colorpass()/begin_colorpass_frame()/end_colorpass_frame() in app-draw.cpp.
-    Texture *m_color_texture    = nullptr;
-    Shader  *m_colorpass_shader = nullptr;
-#if defined(HELLOIMGUI_HAS_OPENGL)
-    uint32_t m_color_fbo = 0;
-#endif
-    Shader          *m_shader      = nullptr;
-    vector<ImagePtr> m_images;
-    set<fs::path>    m_active_directories; ///< Set of directories containing the currently loaded images
-    int              m_current = -1, m_reference = -1;
+    RenderPass *m_render_pass = nullptr;
+    /// Offscreen HDR color target, the pass that renders into it, the pass that resolves it to the window's
+    /// framebuffer, and the conversion shader. All null unless the display needs color management. See
+    /// update_colorpass()/begin_colorpass_frame()/end_colorpass_frame() in app-draw.cpp.
+    std::unique_ptr<Texture>    m_color_texture;
+    std::unique_ptr<RenderPass> m_colorpass_target;
+    std::unique_ptr<RenderPass> m_resolve_pass;
+    std::unique_ptr<Shader>     m_colorpass_shader;
+    Shader                     *m_shader = nullptr;
+    vector<ImagePtr>            m_images;
+    set<fs::path>               m_active_directories; ///< Set of directories containing the currently loaded images
+    int                         m_current = -1, m_reference = -1;
 
     BackgroundImageLoader m_image_loader;
 
@@ -240,13 +249,23 @@ private:
     bool      m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
          m_draw_clip_warnings = false, m_show_FPS = false;
+    /// The color space the display currently wants, re-queried once per frame by update_colorpass() so that
+    /// moving the window between monitors, or toggling the OS's HDR mode, takes effect live.
+    DisplayColorSpace m_display_cs;
+    /// Rec.709 -> m_display_cs.chroma, recomputed only when m_display_cs changes.
+    float3x3 m_gamut_matrix{la::identity};
     /// True when the display needs the colorpass to convert away from HDRView's extended-sRGB working
-    /// convention (e.g. Windows/Linux scRGB or Linux/Wayland PQ). Only meaningful on the OpenGL/GLFW
-    /// backend; macOS EDR consumes the extended-sRGB output directly. Queried from GLFW once the window
-    /// exists (see app.cpp).
-    bool     m_color_managed      = false;
-    uint32_t m_display_transfer   = 2; ///< wp_color_manager_v1 transfer_function code point; 2 == gamma 2.2
-    uint32_t m_display_primaries  = 1; ///< wp_color_manager_v1 primaries code point; 1 == sRGB/BT.709
+    /// convention (e.g. Windows/Linux scRGB or Linux/Wayland PQ). Only ever true on the OpenGL/GLFW backend;
+    /// macOS EDR consumes the extended-sRGB output directly.
+    bool m_color_managed = false;
+    /// True once we've given up on the colorpass (shader or FBO creation failed), so we don't retry forever.
+    bool m_colorpass_failed = false;
+    /// True when the float framebuffer we asked for was actually granted (hello_imgui clears the request
+    /// when it can't be satisfied). Drives the HDR-related UI, replacing hasEdrSupport() off of macOS.
+    bool m_float_buffer = false;
+    /// The --sdr command-line flag: behave as if the display were plain SDR, whatever it actually is.
+    /// Checked by supports_hdr(), so it also hides the HDR-only UI.
+    bool   m_force_sdr = false;
     float2 m_clip_range{0.f, 1.f}; ///< Values outside this range will have zebra stripes if m_draw_clip_warnings = true
     Box2i  m_roi{int2{0}}, m_roi_live{int2{0}};
 

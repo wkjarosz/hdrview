@@ -395,7 +395,7 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Reset tonemapping"));
-        if (m_params.rendererBackendOptions.requestFloatBuffer)
+        if (supports_hdr())
             MenuItem(action("Clamp to LDR"));
         MenuItem(action("Dither"));
 
@@ -633,7 +633,7 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine();
 
-    if (m_params.rendererBackendOptions.requestFloatBuffer)
+    if (supports_hdr())
     {
         IconButton(action("Clamp to LDR"));
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
@@ -1305,7 +1305,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info += fmt::format("{:<16} : {}\n", "Renderer backend", renderer_backend);
 
                     info += fmt::format("{:<16} : {}\n", "ImGui version", ImGui::GetVersion());
-                    info += fmt::format("{:<16} : {}\n", "EDR support", hasEdrSupport() ? "yes" : "no");
+                    info += fmt::format("{:<16} : {}\n", "HDR support", supports_hdr() ? "yes" : "no");
+                    info += fmt::format("{:<16} : {}\n", "Display", m_display_cs.name());
 
                     info += fmt::format("{:<16} : {}\n", "__EMSCRIPTEN__",
 #ifdef __EMSCRIPTEN__

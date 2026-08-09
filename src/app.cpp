@@ -76,13 +76,37 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     // m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
 #endif
 
-    bool use_edr = hasEdrSupport() && !force_sdr;
+    // Whether it is worth asking for a floating-point framebuffer at all.
+    //
+    // On macOS this is genuinely knowable up front: hasEdrSupport() inspects the attached NSScreens' EDR
+    // headroom. Everywhere else it is not -- the display's capabilities are window-scoped and there is no
+    // window yet -- so we simply ask, and find out afterwards whether we got one (see m_float_buffer, set
+    // in PostInit_AddPlatformBackendCallbacks below). Hello ImGui clears the request when it cannot be
+    // satisfied, so an optimistic ask costs nothing on a plain SDR setup.
+    m_force_sdr = force_sdr.value_or(false);
+    if (m_force_sdr)
+        spdlog::info("Forcing SDR display mode.");
 
-    if (force_sdr)
-        spdlog::info("Forcing SDR display mode (display {} support EDR mode)",
-                     hasEdrSupport() ? "would otherwise" : "would not anyway");
+#if defined(__APPLE__)
+    const bool want_float_buffer = hasEdrSupport() && !m_force_sdr;
+#else
+    const bool want_float_buffer = !m_force_sdr;
+#endif
 
-    m_params.rendererBackendOptions.requestFloatBuffer = use_edr;
+    m_params.rendererBackendOptions.requestFloatBuffer = want_float_buffer;
+
+#if defined(GLFW_WAYLAND_COLOR_MANAGEMENT)
+    // Wayland only negotiates a color space for our surface if color management is enabled before
+    // glfwInit(), and it defaults off. Init hints are written to a file-static that glfwInit() copies in, so
+    // setting it here -- before HelloImGui::Run() -- is the documented way to do this from an application
+    // and needs no cooperation from Hello ImGui.
+    //
+    // Gated on wanting a float buffer: once color management is on, the compositor tags every surface's
+    // color space, not just float-buffer ones, so an ordinary SDR window could get negotiated into a
+    // non-default color space for no benefit.
+    if (want_float_buffer)
+        glfwInitHint(GLFW_WAYLAND_COLOR_MANAGEMENT, GLFW_TRUE);
+#endif
 
 #if defined(HELLOIMGUI_HAS_OPENGL) && !defined(__EMSCRIPTEN__)
     // Our generated desktop shaders are GLSL 4.10 (see sokol_shdc_generate() in CMakeLists.txt), so
@@ -92,10 +116,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     m_params.rendererBackendOptions.openGlOptions.MinorVersion = 1;
 #endif
 
-    spdlog::info("Launching GUI with {} display support.", use_edr ? "EDR" : "SDR");
-    spdlog::info("Creating a {} framebuffer.", m_params.rendererBackendOptions.requestFloatBuffer
-                                                   ? "floating-point precision"
-                                                   : "standard precision");
+    spdlog::info("Requesting a {} framebuffer.", want_float_buffer ? "floating-point precision" : "standard precision");
 
     // set up HelloImGui parameters
     m_params.appWindowParams.windowGeometry.size     = {1200, 800};
@@ -239,29 +260,28 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                 hdrview()->load_images(arg);
                             });
 
-#if defined(GLFW_FLOATBUFFER)
-        // glfwGetWindowTransfer()/glfwGetWindowPrimaries() are window-scoped (need the real window/context,
-        // unlike hasEdrSupport()'s pre-window guess) and only meaningful on the OpenGL/GLFW backend: the
-        // colorpass that consumes this is HELLOIMGUI_HAS_OPENGL-gated and never runs on Metal, since macOS
-        // EDR consumes HDRView's extended-sRGB shader output directly. (2, 1, 80 nits) -- gamma 2.2, sRGB
-        // primaries, default white level -- is GLFW's "no color management needed" combination; anything
-        // else (Windows/Linux scRGB, Linux/Wayland PQ+BT.2020, or a raised SDR white level) needs the
-        // colorpass. See colorpass_frag.glsl for the transfer/primaries encoders.
+        // Our patched Hello ImGui clears requestFloatBuffer when the request could not be satisfied, so by
+        // now this is the *achieved* framebuffer, not the one we asked for. It drives the HDR-related UI
+        // below; the display's actual color space is queried separately, and per frame, by
+        // update_colorpass().
+        m_float_buffer = m_params.rendererBackendOptions.requestFloatBuffer;
+#if !defined(__APPLE__) && !defined(GLFW_FLOATBUFFER)
+        // ...but only our patched version does that. Stock Hello ImGui ignores requestFloatBuffer entirely
+        // on this backend and leaves it set, so trusting the read-back above would claim a float buffer we
+        // never got (this is the Emscripten build, and any desktop build with HDRVIEW_ENABLE_HDR_DISPLAY
+        // off). Without GLFW_FLOATBUFFER no float framebuffer is obtainable here in the first place.
         //
-        // Query even though the Wayland color-management init hint is itself gated on requestFloatBuffer
-        // (runner_glfw3.cpp): if float-buffer window creation fails and falls back to a non-float window
-        // after that hint already took effect, the compositor can still have tagged the surface with a
-        // non-default color space.
-        auto *window        = (GLFWwindow *)m_params.backendPointers.glfwWindow;
-        m_display_transfer  = glfwGetWindowTransfer(window);
-        m_display_primaries = glfwGetWindowPrimaries(window);
-        float sdr_white     = glfwGetWindowSdrWhiteLevel(window);
-        m_color_managed = m_display_transfer != 2 || m_display_primaries != 1 || (sdr_white > 0.f && sdr_white != 80.f);
-        spdlog::info("GLFW reports the window's transfer function as {}, primaries as {}, and SDR white level "
-                     "as {} nits ({}).",
-                     m_display_transfer, m_display_primaries, sdr_white,
-                     m_color_managed ? "colorpass active" : "no color management needed");
+        // Once the upstream PR (see the hello_imgui pin in CMakeLists.txt) is merged, delete this block and
+        // just rely on the documented contract: Hello ImGui resets the field when it cannot satisfy it.
+        m_float_buffer = false;
 #endif
+        spdlog::info("Got a {} framebuffer.", m_float_buffer ? "floating-point precision" : "standard precision");
+
+        // Seed the display color space before the first frame so startup logs and the UI are right from the
+        // outset; update_colorpass() re-queries it every frame from here on.
+        m_display_cs = query_display_colorspace(m_params.backendPointers.glfwWindow);
+        spdlog::info("Display color space is {} ({} HDR).", m_display_cs.name(),
+                     supports_hdr() ? "supports" : "does not support");
 #ifdef __APPLE__
         // On macOS, the mechanism for opening an application passes filenames
         // through the NS api rather than CLI arguments, which means we need
@@ -381,6 +401,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     {
         Image::cleanup_default_textures();
         Colormap::cleanup();
+        cleanup_colorpass();
 
         spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
 
@@ -494,7 +515,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         draw_developer_windows();
     };
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
-    m_params.callbacks.BeforeSwap               = [this]() { end_colorpass_frame(); };
+    m_params.callbacks.BeforeSwap              = [this]() { end_colorpass_frame(); };
     m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
 
     m_dialogs["About"] = make_unique<PopupDialog>([this](bool &open) { draw_about_dialog(open); }, in_files.empty());
@@ -950,15 +971,17 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    "Reset the exposure and blackpoint offset to 0."});
         add(Action{
             {"Reverse colormap"}, ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false, &m_reverse_colormap});
-        if (m_params.rendererBackendOptions.requestFloatBuffer)
-            add(Action{{"Clamp to LDR"},
-                       ICON_MY_CLAMP_TO_LDR,
-                       ImGuiMod_Ctrl | ImGuiKey_L,
-                       0,
-                       []() {},
-                       always_enabled,
-                       false,
-                       &m_clamp_to_LDR});
+        // Registered unconditionally -- whether the display can actually show HDR isn't known yet here (the
+        // window doesn't exist), and can change while running when the window moves between monitors. The
+        // enabled predicate and the menu/toolbar sites consult supports_hdr() live instead.
+        add(Action{{"Clamp to LDR"},
+                   ICON_MY_CLAMP_TO_LDR,
+                   ImGuiMod_Ctrl | ImGuiKey_L,
+                   0,
+                   []() {},
+                   [this]() { return supports_hdr(); },
+                   false,
+                   &m_clamp_to_LDR});
         add(Action{{"Dither"}, ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
         add(Action{{"Clip warnings", "Zebra stripes"},
                    ICON_MY_ZEBRA_STRIPES,

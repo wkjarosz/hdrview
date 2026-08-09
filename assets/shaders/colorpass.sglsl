@@ -9,14 +9,15 @@
 @include colorspaces.sglsl
 
 @block colorpass_constants
-// wp_color_manager_v1 code points this shader knows how to produce -- the reachable subset across
-// Windows/Linux. Everything else in the protocol (HLG, BT.1886, ST.240, log100/316, xvYCC, gamma 2.8,
-// Display-P3/DCI-P3/Adobe RGB primaries) is unreachable through any GLFW backend HDRView links against.
-#define TRANSFER_GAMMA22    2
-#define TRANSFER_EXT_LINEAR 5
-#define TRANSFER_PQ         11
-#define PRIMARIES_SRGB      1
-#define PRIMARIES_BT2020    6
+// Mirrors TransferFunction::Type_ in src/colorspace.h -- the display's wanted transfer function arrives here
+// already translated out of wp_color_manager_v1's numbering by query_display_colorspace()
+// (src/display_colorspace.cpp), so no Wayland protocol code points appear in this shader.
+#define TF_LINEAR       1
+#define TF_GAMMA        2
+#define TF_SRGB         3
+#define TF_ITU          4
+#define TF_BT2100_PQ    5
+#define TF_IEC61966_2_4 10
 @end
 
 @vs vs
@@ -36,12 +37,13 @@ void main()
 @include_block hdr_transfer
 
 layout(binding=0) uniform colorpass_params {
-    int   transfer;         // wp_color_manager_v1 transfer_function code point
-    int   primaries;        // wp_color_manager_v1 primaries code point
-    float sdr_white_level;  // display's configured SDR reference white, in nits
-    float min_luminance;    // display's reported minimum luminance, in nits (0.0 == unknown)
-    float max_luminance;    // display's reported maximum luminance, in nits (0.0 == unknown)
-    mat3  gamut_matrix;     // Rec.709 -> display primaries conversion; only applied when primaries == PRIMARIES_BT2020
+    int   tf_type;        // TransferFunction::Type_ the display wants
+    float tf_gamma;       // the exponent, when tf_type == TF_GAMMA
+    float tf_white_nits;  // reference white of tf_type itself, in nits; 0.0 for absolute transfers (PQ)
+    float sdr_white_nits; // display's configured SDR reference white, in nits
+    float min_nits;       // display's reported minimum luminance, in nits (0.0 == unknown)
+    float max_nits;       // display's reported maximum luminance, in nits (0.0 == unknown)
+    mat3  gamut_matrix;   // Rec.709 -> display primaries; identity when they already match
 } cpp;
 
 layout(binding=0) uniform texture2D color_texture;
@@ -51,44 +53,40 @@ in vec2 uv;
 
 out vec4 frag_color;
 
-// scRGB's fixed convention: 1.0 (linear) == 80 nits.
-const float SCRGB_REFERENCE_WHITE_NITS = 80.0;
-
 void main()
 {
     vec4 color = texture(sampler2D(color_texture, color_sampler), uv);
 
-    if (cpp.transfer == TRANSFER_GAMMA22 && cpp.primaries == PRIMARIES_SRGB &&
-        cpp.sdr_white_level == SCRGB_REFERENCE_WHITE_NITS)
-    {
-        // Identity: the display wants exactly HDRView's own extended-sRGB convention. Reached via
-        // X11/no-color-management; app.cpp already keeps the colorpass inactive there, but this is cheap.
-        frag_color = color;
-        return;
-    }
-
-    // Decode HDRView's extended-sRGB convention (1.0 == sdr_white_level nits) to absolute nits, sign
-    // preserved (out-of-gamut colors can be negative).
-    vec3 nits = cpp.sdr_white_level * sRGBToLinear(color.rgb);
-
-    if (cpp.primaries == PRIMARIES_BT2020)
-        nits = cpp.gamut_matrix * nits;
+    // Decode HDRView's extended-sRGB convention (1.0 == sdr_white_nits) to absolute nits, sign preserved
+    // (out-of-gamut colors are genuinely negative), then move to the display's primaries.
+    vec3 nits = cpp.gamut_matrix * (cpp.sdr_white_nits * sRGBToLinear(color.rgb));
 
     // Some displays perform unwanted tonemapping on out-of-range values; hard-clip to the display's own
     // reported luminance limits instead, matching nanogui-1's ColorPass. 0.0 means "unknown", not "no
     // limit" -- only clamp when a limit is actually reported.
-    if (cpp.max_luminance > 0.0)
-        nits = clamp(nits, vec3(cpp.min_luminance), vec3(cpp.max_luminance));
+    if (cpp.max_nits > 0.0)
+        nits = clamp(nits, vec3(cpp.min_nits), vec3(cpp.max_nits));
 
     vec3 encoded;
-    if (cpp.transfer == TRANSFER_PQ)
+    if (cpp.tf_type == TF_BT2100_PQ)
+        // PQ is absolute: it consumes nits directly and does its own normalization. Do not divide by
+        // tf_white_nits first -- see the note on pq_encode() in colorspaces.sglsl.
         encoded = pq_encode(nits);
-    else if (cpp.transfer == TRANSFER_GAMMA22)
-        // Reached when sdr_white_level != 80 (see identity check above) -- needs the gamma curve re-applied
-        // after the reference-white-relative scaling, not a linear pass-through.
-        encoded = gamma22_encode(nits, SCRGB_REFERENCE_WHITE_NITS);
-    else // TRANSFER_EXT_LINEAR, or an unrecognized value -- scRGB-style linear is the safest fallback
-        encoded = nits / SCRGB_REFERENCE_WHITE_NITS;
+    else
+    {
+        // Everything below is defined relative to a reference white.
+        vec3 relative = nits / cpp.tf_white_nits;
+        if (cpp.tf_type == TF_GAMMA)
+            encoded = gamma_encode(relative, cpp.tf_gamma);
+        else if (cpp.tf_type == TF_SRGB)
+            // Also covers wp_color_manager_v1's ext_srgb, which shares the curve and which our sRGB
+            // encoders sign-extend. Reachable on Windows with advanced color on but only 8 bits/channel.
+            encoded = linearToSRGB(relative);
+        else if (cpp.tf_type == TF_ITU || cpp.tf_type == TF_IEC61966_2_4)
+            encoded = itu_encode(relative);
+        else // TF_LINEAR, or a transfer we don't implement -- scRGB-style linear is the safest fallback
+            encoded = relative;
+    }
 
     frag_color = vec4(encoded, color.a);
 }

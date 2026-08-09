@@ -28,7 +28,10 @@ float linearToS(float a)
 {
     float old_sign = sign(a);
     a              = abs(a);
-    return a < 0.0031308 ? old_sign * 12.92 * a : old_sign * 1.055 * pow(a, 1.0 / 2.4) - 0.055;
+    // The whole curve must be sign-extended, so the -0.055 offset has to be inside the multiplication by
+    // old_sign, not outside it. Extended sRGB carries genuinely negative (out-of-gamut) values, and the
+    // colorpass decodes what this encodes -- getting the sign wrong here breaks that round-trip.
+    return a < 0.0031308 ? old_sign * 12.92 * a : old_sign * (1.055 * pow(a, 1.0 / 2.4) - 0.055);
 }
 
 vec3 linearToSRGB(vec3 color) { return vec3(linearToS(color.r), linearToS(color.g), linearToS(color.b)); }
@@ -68,24 +71,46 @@ vec3 XYZToRGB(vec3 xyz)
 // @block above so image-shader.sglsl, which doesn't need them, doesn't pull them in.
 @block hdr_transfer
 
-// Recommendation ITU-R BT.2100-2 PQ inverse EOTF (absolute nits -> PQ code value). Constants kept in sync
-// with inverse_EOTF_BT2100_PQ() in src/colorspace.h. PQ has no negative representation, so clip below zero.
+// Recommendation ITU-R BT.2100-2 PQ inverse EOTF. PQ is an *absolute* transfer function: it maps luminance
+// in nits straight to a code value, so unlike the encoders below it takes absolute nits and does its own
+// 10000-nit normalization rather than a caller-supplied reference white. PQ has no negative representation,
+// so clip below zero.
+//
+// The five constants below are the decimal expansions of the exact rationals in inverse_EOTF_BT2100_PQ() in
+// src/colorspace.h. Nothing in the build enforces that -- tests/test_colorspace.cpp does, in
+// "colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_PQ", which also pins the fact that
+// this function takes absolute nits while colorspace.h's from_linear() applies a 219x broadcast scaling
+// first. Edit both sides together.
 float pq_encode(float nits)
 {
-    const float m1  = 0.1593017578125;
-    const float m2  = 78.84375;
-    const float c1  = 0.8359375;
-    const float c2  = 18.8515625;
-    const float c3  = 18.6875;
+    const float m1  = 0.1593017578125; // 2610 / 16384
+    const float m2  = 78.84375;        // 2523 * 128 / 4096
+    const float c1  = 0.8359375;       // 3424 / 4096
+    const float c2  = 18.8515625;      // 2413 * 32 / 4096
+    const float c3  = 18.6875;         // 2392 * 32 / 4096
     float       Y   = max(nits, 0.0) / 10000.0;
     float       Ym1 = pow(Y, m1);
     return pow((c1 + c2 * Ym1) / (1.0 + c3 * Ym1), m2);
 }
 vec3 pq_encode(vec3 nits) { return vec3(pq_encode(nits.r), pq_encode(nits.g), pq_encode(nits.b)); }
 
-// wp_color_manager_v1's gamma22 transfer is a literal power curve (not the piecewise sRGB OETF above),
-// sign-extended so out-of-gamut (negative) values survive the pass. `white_nits` is the display's reference
-// white in nits (e.g. 80 for scRGB); nits is scaled relative to it before applying the curve.
-vec3 gamma22_encode(vec3 nits, float white_nits) { return sign(nits) * pow(abs(nits) / white_nits, vec3(1.0 / 2.2)); }
+// A literal power curve (not the piecewise sRGB OETF above), sign-extended so out-of-gamut (negative)
+// values survive the pass. Takes a value already normalized by the transfer function's reference white.
+vec3 gamma_encode(vec3 relative, float gamma) { return sign(relative) * pow(abs(relative), vec3(1.0 / gamma)); }
+
+// The ITU-T BT.601/BT.709/BT.2020 OETF, sign-extended. Mirrors OETF_ITU() in src/colorspace.h; sign-extended
+// it is also exactly IEC 61966-2-4 (xvYCC), which colorspace.h defines as copysign(OETF_ITU(abs(x)), x).
+float itu_encode(float relative)
+{
+    const float alpha = 1.09929682680944;
+    const float beta  = 0.018053968510807;
+    float       s     = sign(relative);
+    float       a     = abs(relative);
+    return a < beta ? s * 4.5 * a : s * (alpha * pow(a, 0.45) - (alpha - 1.0));
+}
+vec3 itu_encode(vec3 relative)
+{
+    return vec3(itu_encode(relative.r), itu_encode(relative.g), itu_encode(relative.b));
+}
 
 @end
