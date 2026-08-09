@@ -161,3 +161,26 @@ new cross-cutting enum or type alias.
 false-color palettes (Viridis, Turbo, etc., listed in `HDRViewApp::m_colormaps`) for the `Tonemap_FalseColor`
 mode. `dithermatrix256.*` supplies blue-noise dithering used when downconverting HDR to an SDR display or
 file format.
+
+**Working color space and the HDR display "colorpass".** Everything HDRView draws — image content *and*
+Dear ImGui's own UI, which has no notion of display color space — is emitted in **extended sRGB**: sRGB
+encoding over an unbounded signed range, with `1.0` meaning the display's SDR reference white (see the tail
+of `assets/shaders/image-shader.sglsl`). How that reaches the display differs by platform:
+- **macOS**: Metal consumes it directly. `requestFloatBuffer` makes Hello ImGui set up a `CAMetalLayer`
+  with `RGBA16Float` + `kCGColorSpaceExtendedSRGB`, which *is* this convention. No extra pass.
+- **Windows/Linux (GLFW+OpenGL)**: the display may instead want scRGB linear, a power curve, or PQ, possibly
+  over a wider gamut. So the whole frame is redirected into an offscreen `RGBA16F` target and a final
+  full-screen "colorpass" converts it — `update_colorpass()`/`begin_colorpass_frame()`/`end_colorpass_frame()`
+  in `app-draw.cpp`, plus `assets/shaders/colorpass.sglsl`. The two halves straddle Dear ImGui's rendering
+  (`CustomBackground` … `BeforeSwap`), which is why `update_colorpass()` makes the decision once per frame
+  up front rather than letting each half decide.
+
+`display_colorspace.{h,cpp}` is the boundary: it is the **only** place `wp_color_manager_v1` protocol
+integers (what the GLFW fork reports) exist, translating them once into `colorspace.h`'s `TransferFunction`
+and `Chromaticities`. Everything downstream — including the shader — speaks HDRView's own vocabulary, and
+the gamut conversion is just `color_conversion_matrix()` uploaded as a uniform. When adding display-side
+color handling, extend that translation rather than plumbing protocol code points further in.
+
+HDR display output requires a patched GLFW (`Tom94/glfw`, pinned in `CMakeLists.txt`); every use of its API
+is guarded by `#if defined(GLFW_FLOATBUFFER)` / `#if defined(GLFW_WAYLAND_COLOR_MANAGEMENT)` and degrades to
+plain SDR against stock GLFW. Keep it that way — upstreaming to glfw/glfw has no timeline.
