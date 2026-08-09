@@ -460,7 +460,8 @@ set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
 # Fork of pthom/hello_imgui (v1.92.700 + two commits) carrying the two changes HDRView needs for HDR
 # display output. Both are written to be proposed upstream as independent PRs, and are kept on separate
-# branches in the fork so they can be submitted that way:
+# branches in the fork -- rebased onto upstream master, which is where they will be submitted -- so they
+# can go up that way:
 #
 #   before-swap-callback       Adds RunnerCallbacks::BeforeSwap, the only point in the render loop where an
 #                              app can run a final full-screen pass over the whole frame (ImGui's UI
@@ -469,7 +470,10 @@ set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 #                              GLFW3+OpenGL backend, not just Metal. Probes with a throwaway hidden window
 #                              and writes back what was actually obtained.
 #
-# The `hdr-display` branch pinned here is just a merge of the two, for HDRView's own use. Both changes are
+# The `hdr-display` branch pinned here carries the same two commits, but based on v1.92.700 rather than
+# upstream master: master has since removed DpiFontLoadingFactor() (upstream f5b94f3, "Scale fonts for
+# HighDPI via style.FontScaleDpi"), which HDRView still uses in fonts.cpp and app-zoom.cpp. Moving HDRView
+# to upstream master is a separate font-DPI migration, unrelated to HDR. Both changes are
 # guarded by `#if defined(GLFW_FLOATBUFFER)`, so built against a vanilla GLFW this fork is byte-identical to
 # upstream hello_imgui (verified: the probe is compiled out entirely).
 #
@@ -477,7 +481,7 @@ set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY wkjarosz/hello_imgui
-  GIT_TAG 85c9cc45addafc85e494bdee1dc361de379bc769
+  GIT_TAG 74ef58fc219476685624c9cca6847c9792dd83da
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
   EXCLUDE_FROM_ALL YES
