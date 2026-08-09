@@ -2,18 +2,47 @@
 
 #include "opengl_check.h"
 #include "renderpass.h"
+#include "texture.h"
 #include <hello_imgui/hello_imgui_include_opengl.h> // cross-platform way to include OpenGL headers
 
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
-RenderPass::RenderPass(bool write_depth, bool clear) :
-    m_clear(clear), m_depth_test(write_depth ? DepthTest::Less : DepthTest::Always), m_depth_write(write_depth),
-    m_cull_mode(CullMode::Back)
+RenderPass::RenderPass(bool write_depth, bool clear, Texture *color_target) :
+    m_color_target(color_target), m_clear(clear), m_depth_test(write_depth ? DepthTest::Less : DepthTest::Always),
+    m_depth_write(write_depth), m_cull_mode(CullMode::Back)
 {
+    if (!m_color_target)
+        return;
+
+    CHK(glGenFramebuffers(1, &m_framebuffer_handle));
+    attach_color_target();
 }
 
-RenderPass::~RenderPass() {}
+RenderPass::~RenderPass()
+{
+    if (m_framebuffer_handle)
+        CHK(glDeleteFramebuffers(1, &m_framebuffer_handle));
+}
+
+void RenderPass::attach_color_target()
+{
+    GLint fbo_backup = 0;
+    CHK(glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &fbo_backup));
+
+    CHK(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_framebuffer_handle));
+    CHK(glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                               m_color_target->texture_handle(), 0));
+
+    GLenum status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+    CHK(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)fbo_backup));
+
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+        throw std::runtime_error(
+            fmt::format("RenderPass: could not attach color target; glCheckFramebufferStatus returned 0x{:04x}. "
+                        "The driver most likely cannot render to this texture format.",
+                        (unsigned)status));
+}
 
 void RenderPass::begin()
 {
@@ -22,6 +51,12 @@ void RenderPass::begin()
         throw std::runtime_error("RenderPass::begin(): render pass is already active!");
 #endif
     m_active = true;
+
+    // Save whatever was bound rather than assuming the default framebuffer, so passes can nest: the
+    // colorpass target stays bound across the whole frame while the image pass begins and ends inside it.
+    CHK(glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &m_framebuffer_backup));
+    if (m_color_target)
+        CHK(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_framebuffer_handle));
 
     CHK(glGetIntegerv(GL_VIEWPORT, &m_viewport_backup[0]));
     CHK(glGetIntegerv(GL_SCISSOR_BOX, &m_scissor_backup[0]));
@@ -90,6 +125,9 @@ void RenderPass::end()
     else
         CHK(glDisable(GL_BLEND));
 
+    if (m_color_target)
+        CHK(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)m_framebuffer_backup));
+
     m_active = false;
 }
 
@@ -98,6 +136,14 @@ void RenderPass::resize(const int2 &size)
     m_framebuffer_size = size;
     m_viewport_offset  = int2(0, 0);
     m_viewport_size    = size;
+
+    if (m_color_target && m_color_target->size() != size)
+    {
+        // Texture::resize() keeps the same GL name, but the attachment still has to be revalidated since
+        // the storage behind it was reallocated.
+        m_color_target->resize(size);
+        attach_color_target();
+    }
 }
 
 void RenderPass::set_clear_color(const float4 &color) { m_clear_color = color; }

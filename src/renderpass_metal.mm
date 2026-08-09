@@ -8,15 +8,22 @@
 #include "shader.h"
 #include <hello_imgui/internal/backend_impls/rendering_metal.h>
 
+#include <cassert>
 #include <spdlog/fmt/fmt.h>
 
 using HelloImGui::GetMetalGlobals;
 
-RenderPass::RenderPass(bool write_depth, bool clear) :
-    m_clear(clear), m_depth_test(write_depth ? DepthTest::Less : DepthTest::Always), m_depth_write(write_depth),
-    m_cull_mode(CullMode::Back),
+RenderPass::RenderPass(bool write_depth, bool clear, Texture *color_target) :
+    m_color_target(color_target), m_clear(clear), m_depth_test(write_depth ? DepthTest::Less : DepthTest::Always),
+    m_depth_write(write_depth), m_cull_mode(CullMode::Back),
     m_pass_descriptor((__bridge_retained void *)[MTLRenderPassDescriptor renderPassDescriptor])
 {
+    // The Metal backend always renders to the swapchain drawable (see begin()). Nothing on macOS asks for an
+    // offscreen target: EDR there consumes HDRView's extended-sRGB output directly, so the colorpass -- the
+    // only user of color targets -- is OpenGL-only.
+    (void)m_color_target;
+    assert(!color_target && "RenderPass: offscreen color targets are not supported on the Metal backend");
+
     set_clear_color(m_clear_color);
     set_clear_depth(m_clear_depth);
 }
