@@ -45,15 +45,22 @@ public:
     };
 
     /**
-     * Create a new render pass for rendering to the main color and (optionally) depth buffer.
+     * Create a new render pass for rendering to the main color and (optionally) depth buffer, or to an
+     * offscreen texture.
      *
      * \param write_depth
      *     Should we write to the depth buffer?
      *
      * \param clear
-     *     Should \ref enter() begin by clearing all buffers?
+     *     Should \ref begin() begin by clearing all buffers?
+     *
+     * \param color_target
+     *     If non-null, render into this texture instead of the window's framebuffer. The texture must have
+     *     been created with \ref Texture::TextureFlags::RenderTarget. The render pass does not take
+     *     ownership of it, but does resize it from \ref resize(). Only supported on the OpenGL backend --
+     *     the Metal backend always renders to the swapchain drawable.
      */
-    RenderPass(bool write_depth = true, bool clear = true);
+    RenderPass(bool write_depth = true, bool clear = true, Texture *color_target = nullptr);
 
     ~RenderPass();
 
@@ -102,12 +109,22 @@ public:
     /// Resize all texture targets attached to the render pass
     void resize(const int2 &size);
 
+    /// The offscreen color target, or nullptr when rendering to the window's framebuffer
+    Texture *color_target() const { return m_color_target; }
+
 #if defined(HELLOIMGUI_HAS_METAL)
     void *command_encoder() const { return m_command_encoder; }
     void *command_buffer() const { return m_command_buffer; }
 #endif
 
 protected:
+#if defined(HELLOIMGUI_HAS_OPENGL)
+    /// (Re)attach m_color_target to m_framebuffer_handle; throws if the result is not a complete framebuffer
+    void attach_color_target();
+#endif
+
+    /// Offscreen render target, or nullptr to render to the window's framebuffer. Not owned.
+    Texture  *m_color_target = nullptr;
     bool      m_clear;
     float4    m_clear_color      = float4{0, 0, 0, 0};
     float     m_clear_depth      = 1.f;
@@ -120,12 +137,16 @@ protected:
     bool      m_active = false;
 
 #if defined(HELLOIMGUI_HAS_OPENGL)
-    int4 m_viewport_backup, m_scissor_backup;
-    bool m_depth_test_backup;
-    bool m_depth_write_backup;
-    bool m_scissor_test_backup;
-    bool m_cull_face_backup;
-    bool m_blend_backup;
+    /// FBO wrapping m_color_target; 0 when rendering to the window's framebuffer
+    uint32_t m_framebuffer_handle = 0;
+    /// Whatever framebuffer was bound when begin() ran, restored by end() so passes can nest
+    int32_t m_framebuffer_backup = 0;
+    int4    m_viewport_backup, m_scissor_backup;
+    bool    m_depth_test_backup;
+    bool    m_depth_write_backup;
+    bool    m_scissor_test_backup;
+    bool    m_cull_face_backup;
+    bool    m_blend_backup;
 #elif defined(HELLOIMGUI_HAS_METAL)
     void                   *m_command_buffer;
     void                   *m_command_encoder;
