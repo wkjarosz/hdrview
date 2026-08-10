@@ -193,7 +193,7 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
 
     os << (little_endian ? "-1.0000000\n" : "1.0000000\n");
 
-    os.write((const char *)data, width * height * sizeof(float) * num_channels);
+    os.write((const char *)data, (std::streamsize)((size_t)width * height * num_channels * sizeof(float)));
 }
 
 void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction::Type_ tf,

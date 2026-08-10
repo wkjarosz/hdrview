@@ -723,7 +723,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 size_t alpha_channel_idx = size.z - 1;
                 float *black_data        = image->channels[size.z + first_black_channel].data();
                 // Allocate and copy the alpha channel into alpha_copy
-                alpha_copy.resize(size.x * size.y);
+                alpha_copy.resize((size_t)size.x * size.y);
                 for (int y = 0; y < size.y; ++y)
                 {
                     for (int x = 0; x < size.x; ++x)

@@ -356,7 +356,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         float bpc_div = 1.f / ((1 << bpc) - 1);
 
         // copy pixels into a contiguous float buffer and normalize values to [0,1]
-        vector<float> float_pixels(size.x * size.y * cpp);
+        vector<float> float_pixels((size_t)size.x * size.y * cpp);
         bool          is_16bit = (bpp_storage == cpp * 16);
         for (int y = 0; y < size.y; ++y)
         {

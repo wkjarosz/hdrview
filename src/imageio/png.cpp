@@ -708,12 +708,12 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             }
         }
 
-        const auto             num_pixels        = size_t(size.x * size.y);
+        const auto             num_pixels        = size_t(size.x) * size.y;
         const auto             bytes_per_channel = size_t(bit_depth / 8);
         const auto             bytes_per_pixel   = bytes_per_channel * image->channels.size();
         std::vector<png_byte>  imagedata(num_pixels * bytes_per_pixel);
         std::vector<png_bytep> row_pointers(size.y);
-        for (int y = 0; y < size.y; ++y) row_pointers[y] = &imagedata[y * size.x * bytes_per_pixel];
+        for (int y = 0; y < size.y; ++y) row_pointers[y] = &imagedata[size_t(y) * size.x * bytes_per_pixel];
         png_read_image(png_ptr, row_pointers.data());
 
         // process and copy over the pixel data
@@ -812,7 +812,7 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, flo
         if (is_little_endian())
         {
             // Swap bytes for each 16-bit pixel (big-endian required by PNG)
-            for (int i = 0; i < w * h * n; ++i)
+            for (size_t i = 0, num_samples = (size_t)w * h * n; i < num_samples; ++i)
             {
                 uint16_t v  = pixels16[i];
                 pixels16[i] = (v >> 8) | (v << 8);

@@ -332,7 +332,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         }
 
         std::vector<uint8_t> row_buffer(size.x * size.z);
-        std::vector<float>   float_pixels(size.x * size.y * size.z);
+        std::vector<float>   float_pixels((size_t)size.x * size.y * size.z);
         for (int y = 0; y < size.y; ++y)
         {
             JSAMPROW row_pointer = row_buffer.data();
@@ -410,8 +410,8 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
     if (n > 3)
     {
         // Remove alpha channel: convert RGBA to RGB in-place
-        std::unique_ptr<uint8_t[]> rgb_pixels(new uint8_t[w * h * 3]);
-        for (int i = 0, j = 0; i < w * h; ++i, j += n)
+        std::unique_ptr<uint8_t[]> rgb_pixels(new uint8_t[(size_t)w * h * 3]);
+        for (size_t i = 0, j = 0, num_pixels = (size_t)w * h; i < num_pixels; ++i, j += n)
         {
             rgb_pixels[i * 3 + 0] = pixels[j + 0];
             rgb_pixels[i * 3 + 1] = pixels[j + 1];

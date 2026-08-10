@@ -328,7 +328,7 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
 
     // If CMYK, lcms expects floating-point values in the range [0, 100]
     if (is_cmyk)
-        for (int i = 0; i < size.x * size.y * size.z; ++i) pixels[i] = (1.0f - pixels[i]) * 100.0f;
+        for (size_t i = 0, n = (size_t)size.x * size.y * size.z; i < n; ++i) pixels[i] = (1.0f - pixels[i]) * 100.0f;
 
     auto flags = (((size.z == 4 || size.z == 2) && !is_cmyk) ? cmsFLAGS_COPY_ALPHA : 0) | cmsFLAGS_HIGHRESPRECALC |
                  cmsFLAGS_NOCACHE;

@@ -335,7 +335,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
         Timer timer;
 
         // copy half-float pixel data into a float buffer first
-        std::vector<float> pixels(size.x * size.y * 4);
+        std::vector<float> pixels((size_t)size.x * size.y * 4);
         parallel_for(
             blocked_range<int>(0, size.y, 512),
             [pixels_ptr = pixels.data(), half_data = reinterpret_cast<half *>(decoded_image->planes[UHDR_PLANE_PACKED]),

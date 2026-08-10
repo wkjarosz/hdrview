@@ -304,26 +304,26 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         }
 
         // first convert+copy to float channels
-        std::vector<float> float_pixels(size.x * size.y * size.z);
+        const size_t       num_samples = (size_t)size.x * size.y * size.z;
+        std::vector<float> float_pixels(num_samples);
         if (is_hdr)
         {
-            memcpy(float_pixels.data(), data_ptr, size.x * size.y * size.z * sizeof(float));
-
-            data_ptr = (float *)data_ptr + size.x * size.y * size.z;
+            memcpy(float_pixels.data(), data_ptr, num_samples * sizeof(float));
+            data_ptr = (float *)data_ptr + num_samples;
         }
         else if (is_16_bit)
         {
             for (size_t i = 0; i < float_pixels.size(); ++i)
                 float_pixels[i] = dequantize_full(reinterpret_cast<const uint16_t *>(data_ptr)[i]);
 
-            data_ptr = (uint16_t *)data_ptr + size.x * size.y * size.z;
+            data_ptr = (uint16_t *)data_ptr + num_samples;
         }
         else
         {
             for (size_t i = 0; i < float_pixels.size(); ++i)
                 float_pixels[i] = dequantize_full(reinterpret_cast<const uint8_t *>(data_ptr)[i]);
 
-            data_ptr = (uint8_t *)data_ptr + size.x * size.y * size.z;
+            data_ptr = (uint8_t *)data_ptr + num_samples;
         }
 
         if (!psd_metadata.icc_profile.empty())

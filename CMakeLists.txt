@@ -141,9 +141,8 @@ list(APPEND CMD "-D" "CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR}")
 list(APPEND CMD "-D" "EMSCRIPTEN=${EMSCRIPTEN}")
 list(APPEND CMD "-D" "HDRVIEW_TARGET_ARCH=${HDRVIEW_TARGET_ARCH}")
 list(APPEND CMD "-P" "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake")
-# ALL reruns this every build (an add_custom_command OUTPUT rule would only run once per build tree, missing
-# later commits/branch switches). configure_file() only rewrites version.cpp when content changes, so this
-# doesn't force a relink unless the git info actually did.
+# Runs on every build so version.cpp tracks the current commit and branch. configure_file() rewrites the file
+# only when the git-derived contents change, so this does not force a relink every build.
 add_custom_target(
   hdrview_check_version ALL
   COMMAND ${CMD}
@@ -1510,10 +1509,9 @@ set(HDRVIEW_SOURCES
     ${EXTRA_SOURCES}
 )
 
-# Compiled once here and linked into HDRView and hdrview_tests below, rather than listing version.cpp directly
-# in both: the Visual Studio generator duplicates a shared generated source's build rule into every consuming
-# .vcxproj, and parallel MSBuild can then race to regenerate it (windows-msvc preset only, the one Windows job
-# that builds both targets).
+# Compiled once here and linked into both HDRView and hdrview_tests: listing a shared generated source directly
+# in multiple targets makes the Visual Studio generator emit its build rule into every consuming .vcxproj, where
+# parallel MSBuild can regenerate it concurrently.
 add_library(hdrview_version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
 add_dependencies(hdrview_version hdrview_check_version)
 target_link_libraries(hdrview_version PRIVATE hello_imgui)
