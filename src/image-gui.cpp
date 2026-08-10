@@ -154,7 +154,9 @@ void Image::draw_histogram()
             int         px1        = (int)std::ceil(plot_pos.x + plot_size.x);
             ImDrawList *draw_list  = ImPlot::GetPlotDrawList();
 
-            auto sample_height = [bin_type](const PixelStats *s, float x) -> float
+            // bin_type is a function-static local, so it has static (not automatic) storage duration and
+            // must not be captured -- it's directly accessible from the lambda body regardless.
+            auto sample_height = [](const PixelStats *s, float x) -> float
             {
                 const auto &xs = s->hist_xs;
                 const auto &ys = s->hist_ys;
