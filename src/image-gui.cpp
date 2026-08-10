@@ -146,29 +146,40 @@ void Image::draw_histogram()
             // band. That way only one ordinary alpha-over (against the plot background) is ever needed,
             // which is exact rather than an approximation.
             const int   n_channels = std::min(4, group.num_channels);
-            const float fill_alpha = 0.5f;
+            const float fill_alpha = 0.75f;
             ImVec2      plot_pos   = ImPlot::GetPlotPos();
             ImVec2      plot_size  = ImPlot::GetPlotSize();
             int         px0        = (int)std::floor(plot_pos.x);
             int         px1        = (int)std::ceil(plot_pos.x + plot_size.x);
             ImDrawList *draw_list  = ImPlot::GetPlotDrawList();
 
-            // The histogram is piecewise-constant (a count per bin), not piecewise-linear, so sample the
-            // step function directly: the height across bin i's range is simply hist_ys[i].
+            // The histogram is piecewise-constant (one count per bin): the height across bin i's range is
+            // simply hist_ys[i]. Bins are uniform in the (nonlinear) asinh-transformed value space, not in
+            // raw pixel-value space, so finding the containing bin needs value_to_bin()'s asinh transform
+            // rather than a linear fraction of x's position in the range.
             auto sample_height = [](const PixelStats *s, float x) -> float
             {
-                const auto &ys = s->hist_ys;
-                float       x0 = (float)s->bin_to_value(0), x1 = (float)s->bin_to_value(PixelStats::NUM_BINS);
-                if (x < x0 || x >= x1)
+                int i = s->value_to_bin((double)x);
+                if (i < 0 || i >= PixelStats::NUM_BINS)
                     return 0.f;
-                int i = std::clamp((int)((x - x0) / (x1 - x0) * PixelStats::NUM_BINS), 0, PixelStats::NUM_BINS - 1);
-                return ys[i];
+                return s->hist_ys[i];
             };
 
-            // Raw ImDrawList calls (unlike ImPlot's own PlotShaded/PlotLine/PlotStairs items) aren't
+            // Raw ImDrawList calls (unlike ImPlot's own Plot* items, e.g. PlotStairs below) aren't
             // automatically clipped to the plot's data rectangle, so scope them explicitly -- same as the
             // CIE-diagram code further below in this file does around its own manual AddPolyline calls.
             ImPlot::PushPlotClipRect();
+
+            // This fill isn't a real ImPlot item, so it doesn't participate in ImPlot's legend-driven
+            // show/hide on its own. Mirror each channel's outline item (registered under the same label by
+            // PlotStairs below) so a channel hidden via the legend also drops out of the fill; an item that
+            // hasn't been registered yet (e.g. the very first frame) defaults to shown.
+            std::array<bool, 4> shown{true, true, true, true};
+            for (int c = 0; c < n_channels; ++c)
+            {
+                auto *item = ImPlot::GetItem(names[c].c_str());
+                shown[c]   = !item || item->Show;
+            }
 
             std::array<int, 4>   order;
             std::array<float, 4> heights;
@@ -178,7 +189,7 @@ void Image::draw_histogram()
 
                 for (int c = 0; c < n_channels; ++c)
                 {
-                    heights[c] = std::max(0.f, sample_height(stats[c], (float)x));
+                    heights[c] = shown[c] ? std::max(0.f, sample_height(stats[c], (float)x)) : 0.f;
                     order[c]   = c;
                 }
                 std::sort(order.begin(), order.begin() + n_channels,
@@ -211,9 +222,8 @@ void Image::draw_histogram()
         }
         for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
-            // The histogram is piecewise-constant, so plot it as a step function using each bin's left
-            // edge (PlotStairs holds each x[i]'s y value constant across [x[i], x[i+1])), rather than
-            // linearly interpolating between bin centers.
+            // PlotStairs holds each x[i]'s y-value constant across [x[i], x[i+1)), so its x values must be
+            // bin left edges, not bin centers, to align the steps with the true bin boundaries.
             std::array<float, PixelStats::NUM_BINS> left_edges;
             for (int i = 0; i < PixelStats::NUM_BINS; ++i) left_edges[i] = (float)stats[c]->bin_to_value(i);
 
