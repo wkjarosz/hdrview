@@ -138,17 +138,73 @@ void Image::draw_histogram()
         // now do the actual plotting
         //
 
-        for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
-            ImPlot::PushStyleColor(ImPlotCol_Fill, colors[c]);
-            ImPlot::PushStyleColor(ImPlotCol_Line, float4{0.f});
-            if (bin_type != 0)
-                ImPlot::PlotShaded(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                                   PixelStats::NUM_BINS);
-            else
-                ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                                   PixelStats::NUM_BINS, ImPlotStairsFlags_Shaded);
-            ImPlot::PopStyleColor(2);
+            // ImPlot/Dear ImGui only ever composites with straight-alpha "over", so overlapping translucent
+            // fills can't reproduce true additive blending (e.g. red+green overlap should read as yellow,
+            // and red+green+blue as white). Instead, rasterize the fill ourselves one screen pixel column at
+            // a time: sample every channel's histogram height at that column, sum the colors of whichever
+            // channels reach into each height band, and hand ImGui a single already-blended rectangle per
+            // band. That way only one ordinary alpha-over (against the plot background) is ever needed,
+            // which is exact rather than an approximation.
+            const int   n_channels = std::min(4, group.num_channels);
+            const float fill_alpha = 0.5f;
+            ImVec2      plot_pos   = ImPlot::GetPlotPos();
+            ImVec2      plot_size  = ImPlot::GetPlotSize();
+            int         px0        = (int)std::floor(plot_pos.x);
+            int         px1        = (int)std::ceil(plot_pos.x + plot_size.x);
+            ImDrawList *draw_list  = ImPlot::GetPlotDrawList();
+
+            auto sample_height = [bin_type](const PixelStats *s, float x) -> float
+            {
+                const auto &xs = s->hist_xs;
+                const auto &ys = s->hist_ys;
+                if (x <= xs.front() || x >= xs.back())
+                    return 0.f;
+                auto it = std::lower_bound(xs.begin(), xs.end(), x);
+                int  i1 = (int)(it - xs.begin());
+                int  i0 = std::max(0, i1 - 1);
+                if (bin_type == 0 || i0 == i1)
+                    return ys[i0]; // stairs: step function using the left bin's value
+                float t = (x - xs[i0]) / std::max(1e-20f, xs[i1] - xs[i0]);
+                return lerp(ys[i0], ys[i1], t);
+            };
+
+            std::array<int, 4>   order;
+            std::array<float, 4> heights;
+            for (int px = px0; px < px1; ++px)
+            {
+                double x = ImPlot::PixelsToPlot(ImVec2((float)px + 0.5f, plot_pos.y)).x;
+
+                for (int c = 0; c < n_channels; ++c)
+                {
+                    heights[c] = std::max(0.f, sample_height(stats[c], (float)x));
+                    order[c]   = c;
+                }
+                std::sort(order.begin(), order.begin() + n_channels,
+                          [&](int a, int b) { return heights[a] < heights[b]; });
+
+                // Sweep bands from the baseline upward; the channels active in a band are exactly those
+                // whose height reaches into it, so their colors sum additively.
+                float prev_h = 0.f;
+                for (int k = 0; k < n_channels; ++k)
+                {
+                    float h = heights[order[k]];
+                    if (h <= prev_h)
+                        continue;
+
+                    float3 col{0.f};
+                    for (int j = k; j < n_channels; ++j) col += colors[order[j]].xyz();
+                    col = clamp(col, 0.f, 1.f);
+
+                    ImVec2 py0 = ImPlot::PlotToPixels(x, prev_h);
+                    ImVec2 py1 = ImPlot::PlotToPixels(x, h);
+                    draw_list->AddRectFilled(ImVec2((float)px, std::min(py0.y, py1.y)),
+                                             ImVec2((float)px + 1.f, std::max(py0.y, py1.y)),
+                                             ImGui::GetColorU32(float4{col, fill_alpha}));
+
+                    prev_h = h;
+                }
+            }
         }
         for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
