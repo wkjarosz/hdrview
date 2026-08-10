@@ -222,14 +222,12 @@ void Image::draw_histogram()
         }
         for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
-            // PlotStairs holds each x[i]'s y-value constant across [x[i], x[i+1)), so its x values must be
-            // bin left edges, not bin centers, to align the steps with the true bin boundaries.
-            std::array<float, PixelStats::NUM_BINS> left_edges;
-            for (int i = 0; i < PixelStats::NUM_BINS; ++i) left_edges[i] = (float)stats[c]->bin_to_value(i);
-
+            // PlotStairs holds each x[i]'s y-value constant across [x[i], x[i+1)), so hist_xs (each bin's
+            // left edge) rather than a bin center is what aligns the steps with the true bin boundaries.
             ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
-            ImPlot::PlotStairs(names[c].c_str(), left_edges.data(), stats[c]->hist_ys.data(), PixelStats::NUM_BINS);
+            ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
+                               PixelStats::NUM_BINS);
             ImPlot::PopStyleColor(2);
         }
 

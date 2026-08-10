@@ -109,6 +109,7 @@ struct PixelStats
     float2 hist_y_limits      = {0.f, 1.f};
     float2 hist_normalization = {0.f, 1.f};
 
+    std::array<float, NUM_BINS> hist_xs{}; // left edge of each bin's range; {}: value-initialized to zeros
     std::array<float, NUM_BINS> hist_ys{}; // {}: value-initialized to zeros
 
     PixelStats() = default;

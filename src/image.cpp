@@ -449,6 +449,8 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         hist_normalization[0]        = (float)axis_scale_fwd_xform(summary.minimum, (void *)&x_scale);
         hist_normalization[1] = (float)axis_scale_fwd_xform(summary.maximum, (void *)&x_scale) - hist_normalization[0];
 
+        for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = (float)bin_to_value(i);
+
         // accumulate bin counts
         for (int i = 0; i < croi.volume(); ++i)
         {
