@@ -717,7 +717,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         png_read_image(png_ptr, row_pointers.data());
 
         // process and copy over the pixel data
-        std::vector<float> float_pixels(size.x * size.y * size.z);
+        std::vector<float> float_pixels((size_t)size.x * size.y * size.z);
         if (video_full_range_flag)
             for (size_t i = 0; i < float_pixels.size(); ++i)
                 float_pixels[i] = bit_depth == 16
