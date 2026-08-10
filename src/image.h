@@ -389,7 +389,7 @@ public:
     */
     int  draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference, float &scroll_to);
     void draw_info();
-    void draw_chromaticity_diagram();
+    void draw_chromaticity_diagram(float width);
     void draw_colorspace();
     void draw_channel_stats();
 

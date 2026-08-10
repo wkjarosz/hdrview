@@ -223,6 +223,11 @@ bool Begin(const char     *label = "PE::Table",
            ImGuiTableFlags flag  = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable);
 void End();
 bool Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip = {});
+//! An unlabeled row whose content spans both columns. content_fct receives the available width, since a cell's
+//! content region only reports its own column.
+bool FullWidthEntry(const char *id, const std::function<bool(float)> &content_fct);
+//! Width in pixels of a column of the innermost table, or 0 outside one. Valid between Begin and End.
+float       ColumnWidth(int column_n);
 inline void Entry(const std::string &property_name, const std::string &value)
 {
     Entry(property_name,

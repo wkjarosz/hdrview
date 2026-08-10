@@ -723,6 +723,29 @@ void TextAligned2(float align_x, float size_x, const char *fmt, ...)
     va_end(args);
 }
 
+float PE::ColumnWidth(int column_n)
+{
+    const ImGuiTable *table = ImGui::GetCurrentTable();
+    return table && column_n < table->ColumnsCount ? table->Columns[column_n].WidthGiven : 0.f;
+}
+
+bool PE::FullWidthEntry(const char *id, const std::function<bool(float)> &content_fct)
+{
+    ImGui::PushID(id);
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+
+    // Tables clip each cell to its own column, so widen the clip rect to cover both before drawing across them.
+    const float  width = ColumnWidth(0) + ColumnWidth(1);
+    const ImVec2 p0    = ImGui::GetCursorScreenPos();
+    ImGui::PushClipRect(p0, ImVec2(p0.x + width, ImGui::GetCurrentWindow()->ClipRect.Max.y), false);
+    bool result = content_fct(width);
+    ImGui::PopClipRect();
+
+    ImGui::PopID();
+    return result;
+}
+
 // Generic entry, the lambda function should return true if the widget changed
 bool PE::Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip)
 {
