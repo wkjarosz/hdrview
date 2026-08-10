@@ -36,7 +36,6 @@ static std::chrono::system_clock::time_point to_system_clock(std::filesystem::fi
 
 void Image::draw_histogram()
 {
-    static int        bin_type  = 1;
     static ImPlotCond plot_cond = ImPlotCond_Always;
     float combo_width = std::max(EmSize(5.f), 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
                                                       2.f * ImGui::GetStyle().ItemSpacing.x) -
@@ -138,28 +137,97 @@ void Image::draw_histogram()
         // now do the actual plotting
         //
 
-        for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
-            ImPlot::PushStyleColor(ImPlotCol_Fill, colors[c]);
-            ImPlot::PushStyleColor(ImPlotCol_Line, float4{0.f});
-            if (bin_type != 0)
-                ImPlot::PlotShaded(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                                   PixelStats::NUM_BINS);
-            else
-                ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                                   PixelStats::NUM_BINS, ImPlotStairsFlags_Shaded);
-            ImPlot::PopStyleColor(2);
+            // ImPlot/Dear ImGui only ever composites with straight-alpha "over", so overlapping translucent
+            // fills can't reproduce true additive blending (e.g. red+green overlap should read as yellow,
+            // and red+green+blue as white). Instead, rasterize the fill ourselves one screen pixel column at
+            // a time: sample every channel's histogram height at that column, sum the colors of whichever
+            // channels reach into each height band, and hand ImGui a single already-blended rectangle per
+            // band. That way only one ordinary alpha-over (against the plot background) is ever needed,
+            // which is exact rather than an approximation.
+            const int   n_channels = std::min(4, group.num_channels);
+            const float fill_alpha = 0.75f;
+            ImVec2      plot_pos   = ImPlot::GetPlotPos();
+            ImVec2      plot_size  = ImPlot::GetPlotSize();
+            int         px0        = (int)std::floor(plot_pos.x);
+            int         px1        = (int)std::ceil(plot_pos.x + plot_size.x);
+            ImDrawList *draw_list  = ImPlot::GetPlotDrawList();
+
+            // The histogram is piecewise-constant (one count per bin): the height across bin i's range is
+            // simply hist_ys[i]. Bins are uniform in the (nonlinear) asinh-transformed value space, not in
+            // raw pixel-value space, so finding the containing bin needs value_to_bin()'s asinh transform
+            // rather than a linear fraction of x's position in the range.
+            auto sample_height = [](const PixelStats *s, float x) -> float
+            {
+                int i = s->value_to_bin((double)x);
+                if (i < 0 || i >= PixelStats::NUM_BINS)
+                    return 0.f;
+                return s->hist_ys[i];
+            };
+
+            // Raw ImDrawList calls (unlike ImPlot's own Plot* items, e.g. PlotStairs below) aren't
+            // automatically clipped to the plot's data rectangle, so scope them explicitly -- same as the
+            // CIE-diagram code further below in this file does around its own manual AddPolyline calls.
+            ImPlot::PushPlotClipRect();
+
+            // This fill isn't a real ImPlot item, so it doesn't participate in ImPlot's legend-driven
+            // show/hide on its own. Mirror each channel's outline item (registered under the same label by
+            // PlotStairs below) so a channel hidden via the legend also drops out of the fill; an item that
+            // hasn't been registered yet (e.g. the very first frame) defaults to shown.
+            std::array<bool, 4> shown{true, true, true, true};
+            for (int c = 0; c < n_channels; ++c)
+            {
+                auto *item = ImPlot::GetItem(names[c].c_str());
+                shown[c]   = !item || item->Show;
+            }
+
+            std::array<int, 4>   order;
+            std::array<float, 4> heights;
+            for (int px = px0; px < px1; ++px)
+            {
+                double x = ImPlot::PixelsToPlot(ImVec2((float)px + 0.5f, plot_pos.y)).x;
+
+                for (int c = 0; c < n_channels; ++c)
+                {
+                    heights[c] = shown[c] ? std::max(0.f, sample_height(stats[c], (float)x)) : 0.f;
+                    order[c]   = c;
+                }
+                std::sort(order.begin(), order.begin() + n_channels,
+                          [&](int a, int b) { return heights[a] < heights[b]; });
+
+                // Sweep bands from the baseline upward; the channels active in a band are exactly those
+                // whose height reaches into it, so their colors sum additively.
+                float prev_h = 0.f;
+                for (int k = 0; k < n_channels; ++k)
+                {
+                    float h = heights[order[k]];
+                    if (h <= prev_h)
+                        continue;
+
+                    float3 col{0.f};
+                    for (int j = k; j < n_channels; ++j) col += colors[order[j]].xyz();
+                    col = clamp(col, 0.f, 1.f);
+
+                    ImVec2 py0 = ImPlot::PlotToPixels(x, prev_h);
+                    ImVec2 py1 = ImPlot::PlotToPixels(x, h);
+                    draw_list->AddRectFilled(ImVec2((float)px, std::min(py0.y, py1.y)),
+                                             ImVec2((float)px + 1.f, std::max(py0.y, py1.y)),
+                                             ImGui::GetColorU32(float4{col, fill_alpha}));
+
+                    prev_h = h;
+                }
+            }
+
+            ImPlot::PopPlotClipRect();
         }
         for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
+            // PlotStairs holds each x[i]'s y-value constant across [x[i], x[i+1)), so hist_xs (each bin's
+            // left edge) rather than a bin center is what aligns the steps with the true bin boundaries.
             ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
-            if (bin_type != 0)
-                ImPlot::PlotLine(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                                 PixelStats::NUM_BINS);
-            else
-                ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                                   PixelStats::NUM_BINS);
+            ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
+                               PixelStats::NUM_BINS);
             ImPlot::PopStyleColor(2);
         }
 

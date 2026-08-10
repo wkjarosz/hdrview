@@ -449,8 +449,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         hist_normalization[0]        = (float)axis_scale_fwd_xform(summary.minimum, (void *)&x_scale);
         hist_normalization[1] = (float)axis_scale_fwd_xform(summary.maximum, (void *)&x_scale) - hist_normalization[0];
 
-        // compute bin center values
-        for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = (float)bin_to_value(i + 0.5);
+        for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = (float)bin_to_value(i);
 
         // accumulate bin counts
         for (int i = 0; i < croi.volume(); ++i)
@@ -519,12 +518,11 @@ float4x4 ChannelGroup::colors() const
     case RGBA_Channels:
     case RGB_Channels:
     case UVorXY_Channels:
-        // We'd ideally like to do additive blending, but dear imgui seemingly doesn't support it.
-        // Setting the alpha values to 1/(c+1) would ensure that where all three R,G,B histograms overlap we get a
-        // neutral gray, but then red is fully opaque, while blue is 2/3 transparent. We instead manually choose values
-        // where all three are 0.5 transparent while producing neutral gray when composited using the over operator.
-        return float4x4{
-            {1.f, 0.15f, 0.1f, 0.5f}, {.45f, 0.75f, 0.02f, 0.5f}, {.25f, 0.333f, 0.7f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}};
+        // The histogram fill is composited additively in software (see Image::draw_histogram), so these are
+        // true emission colors: R+G+B sums to exactly white where all three channels overlap, R+G sums to
+        // yellow, etc. The alpha channel is unused by the fill (a single overall wash alpha is applied
+        // instead); it stays around only for the outline/hover-marker code paths that reuse this table.
+        return float4x4{{1.f, 0.f, 0.f, 0.5f}, {0.f, 1.f, 0.f, 0.5f}, {0.f, 0.f, 1.f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}};
     case YCA_Channels:
     case YC_Channels:
         return float4x4{{1.f, 0.35133642f, 0.5f, 0.5f},
