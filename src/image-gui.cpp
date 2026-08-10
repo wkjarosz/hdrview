@@ -888,17 +888,14 @@ void Image::draw_info()
     }
 }
 
-void Image::draw_chromaticity_diagram()
+void Image::draw_chromaticity_diagram(float width)
 {
     static float2 vMin{-0.05f, -0.05f};
     static float2 vMax{0.75f, 0.9f};
     static float2 vSize  = vMax - vMin;
     static float  aspect = vSize.x / vSize.y;
 
-    // property_name("Diagram");
-    // ImGui::SameLine(label_size);
-    // ImGui::Indent();
-    float const size = ImMax(ImGui::GetContentRegionAvail().x, EmSize(8.f));
+    float const size = ImMax(width, EmSize(8.f));
 
     ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase);
 
@@ -1057,6 +1054,9 @@ void Image::draw_chromaticity_diagram()
                             ImGui::GetStyle().FontSizeBase * label_font_scale * scale / 2.f);
 
             constexpr int temp_step = 1000;
+            // Tracks the last tick actually drawn, so labels that would overlap it are skipped. Starts far
+            // off-plot so the first tick always draws.
+            float2 prev_tick_end = {-100000.f, -100000.f};
             for (int temp = 2000; temp <= 25000; temp += temp_step)
             {
                 float2 xy = Kelvin_to_xy((float)temp);
@@ -1072,8 +1072,7 @@ void Image::draw_chromaticity_diagram()
                 float2 tick[2] = {xy, xy + normal};
 
                 // Only draw this tick if it doesn't overlap with the previous tick
-                static float2 prev_tick_end = {-100000.f, -100000.f}; // large negative to ensure first tick is drawn
-                const float   min_dist      = 5.0f;                   // minimum pixel distance between ticks
+                const float min_dist = 5.0f; // minimum pixel distance between ticks
 
                 float2 tick_end_px      = ImPlot::PlotToPixels(ImPlotPoint(tick[1].x, tick[1].y));
                 float2 prev_tick_end_px = ImPlot::PlotToPixels(ImPlotPoint(prev_tick_end.x, prev_tick_end.y));
@@ -1135,7 +1134,7 @@ void Image::draw_chromaticity_diagram()
             // ImPlotScatterFlags_None,
             //                     0, sizeof(double2));
 
-            ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase * scale_factor / 2.f);
+            ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
             for (int i = 0; i < 4; ++i)
             {
                 if (ImPlot::DragPoint(i, &primaries[i].x, &primaries[i].y, colors[i], 1.5f * scale_factor,
@@ -1207,13 +1206,17 @@ void Image::draw_colorspace()
 {
     auto bold_font = hdrview()->font("sans bold");
 
-    float                        col2_w          = 0.f;
-    float                        col2_big_enough = HelloImGui::EmSize(12.f);
-    static const ImGuiTableFlags table_flags =
-        ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize | ImGuiTableFlags_ScrollY;
+    static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+    // Scroll this child rather than the table: a table's own ScrollY has no way to reserve scrollbar space
+    // unconditionally, so toggling it in and out changes the available width, which changes the height of the
+    // width-locked chromaticity diagram below, which can toggle the scrollbar again every frame.
+    ImGui::BeginChild("##ColorspaceScroll", ImVec2(0, 0), ImGuiChildFlags_None,
+                      ImGuiWindowFlags_AlwaysVerticalScrollbar);
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
+        // The diagram gets its own full-width row when the value column alone is too narrow to render it legibly.
+        const bool diagram_fits_in_value_column = ImGui::PE::ColumnWidth(1) > HelloImGui::EmSize(12.f);
         ImGui::Indent(ImGui::GetStyle().CellPadding.x);
 
         ImGui::PE::WrappedText(
@@ -1229,7 +1232,6 @@ void Image::draw_colorspace()
         ImGui::PE::Entry("Color gamut",
                          [&]
                          {
-                             col2_w        = ImGui::GetContentRegionAvail().x;
                              bool modified = false;
                              auto csn      = color_gamut_names();
                              auto open_combo =
@@ -1410,21 +1412,26 @@ void Image::draw_colorspace()
                 return modified;
             });
 
-        if (col2_w > col2_big_enough)
+        if (diagram_fits_in_value_column)
             ImGui::PE::Entry("Diagram",
                              [this]()
                              {
-                                 draw_chromaticity_diagram();
+                                 draw_chromaticity_diagram(ImGui::GetContentRegionAvail().x);
                                  return false;
                              });
+        else
+            ImGui::PE::FullWidthEntry("Diagram",
+                                      [this](float width)
+                                      {
+                                          draw_chromaticity_diagram(width);
+                                          return false;
+                                      });
 
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         ImGui::PE::End();
     }
+    ImGui::EndChild();
     ImGui::PopStyleColor();
-
-    if (col2_w <= col2_big_enough)
-        draw_chromaticity_diagram();
 }
 
 void Image::draw_channel_stats()

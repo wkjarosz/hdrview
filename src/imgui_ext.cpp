@@ -723,6 +723,43 @@ void TextAligned2(float align_x, float size_x, const char *fmt, ...)
     va_end(args);
 }
 
+float PE::ColumnWidth(int column_n)
+{
+    const ImGuiTable *table = ImGui::GetCurrentTable();
+    return table && column_n < table->ColumnsCount ? table->Columns[column_n].WidthGiven : 0.f;
+}
+
+bool PE::FullWidthEntry(const char *id, const std::function<bool(float)> &content_fct)
+{
+    ImGui::PushID(id);
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    // Advance into column 1 before drawing. The content below visually spans both columns (via the cursor/clip
+    // rect override), but ImGui's per-column auto-fit width tracking has no notion of "spans columns" — it
+    // attributes whatever the cursor reaches to whichever column is current. Landing on column 1 keeps that
+    // tracking out of column 0, which is the column double-clicking the (only) resize border auto-fits.
+    ImGui::TableNextColumn();
+
+    // WidthGiven excludes each column's cell padding and inter-column spacing, so summing per-column widths
+    // falls short of the row's real span; read the bounds directly off the table instead. Also reset the cursor
+    // to column 0's true left edge, undoing any ambient Indent() a caller applied for ordinary column-0 rows
+    // (column 0 has ImGuiTableColumnFlags_IndentEnable on by default).
+    const ImGuiTable *table   = ImGui::GetCurrentTable();
+    const float       left_x  = table ? table->Columns[0].WorkMinX : ImGui::GetCursorScreenPos().x;
+    const float       right_x = table && table->ColumnsCount > 1 ? table->Columns[1].WorkMaxX : left_x;
+    ImGui::SetCursorScreenPos(ImVec2(left_x, ImGui::GetCursorScreenPos().y));
+
+    // Tables clip each cell to its own column, so widen the clip rect to cover both before drawing across them.
+    const float  width = right_x - left_x;
+    const ImVec2 p0    = ImGui::GetCursorScreenPos();
+    ImGui::PushClipRect(p0, ImVec2(p0.x + width, ImGui::GetCurrentWindow()->ClipRect.Max.y), false);
+    bool result = content_fct(width);
+    ImGui::PopClipRect();
+
+    ImGui::PopID();
+    return result;
+}
+
 // Generic entry, the lambda function should return true if the widget changed
 bool PE::Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip)
 {
