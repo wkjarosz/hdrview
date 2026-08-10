@@ -1261,6 +1261,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
 #endif
                     ImGui::PE::Hyperlink("smalldds", "Single-header library for loading DDS images.",
                                          "https://github.com/wkjarosz/smalldds");
+                    ImGui::PE::Hyperlink("sokol-shdc", "For cross-compiling shaders from a single source.",
+                                         "https://github.com/floooh/sokol-tools");
                     ImGui::PE::Hyperlink("stb_image/write",
                                          "Single-header libraries for loading/saving various image formats.",
                                          "https://github.com/nothings/stb");
