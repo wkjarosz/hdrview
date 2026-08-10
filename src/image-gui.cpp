@@ -1138,9 +1138,13 @@ void Image::draw_colorspace()
 {
     auto bold_font = hdrview()->font("sans bold");
 
-    static const ImGuiTableFlags table_flags =
-        ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize | ImGuiTableFlags_ScrollY;
+    static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+    // Scroll this child rather than the table: a table's own ScrollY has no way to reserve scrollbar space
+    // unconditionally, so toggling it in and out changes the available width, which changes the height of the
+    // width-locked chromaticity diagram below, which can toggle the scrollbar again every frame.
+    ImGui::BeginChild("##ColorspaceScroll", ImVec2(0, 0), ImGuiChildFlags_None,
+                      ImGuiWindowFlags_AlwaysVerticalScrollbar);
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
         // The diagram gets its own full-width row when the value column alone is too narrow to render it legibly.
@@ -1358,6 +1362,7 @@ void Image::draw_colorspace()
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         ImGui::PE::End();
     }
+    ImGui::EndChild();
     ImGui::PopStyleColor();
 }
 
