@@ -588,7 +588,9 @@ TransferFunction transfer_function_from_CICP(int tc)
     case 2: return TransferFunction::Unspecified;
     case 1: [[fallthrough]];
     case 6: [[fallthrough]];
-    case 12: [[fallthrough]]; // FIXME: is this actually the same?
+    // 12 is BT.1361 extended colour gamut, which shares this curve for 1.33 > L >= -0.0045 and departs from it
+    // only for more negative values. Mapping it to ITU is therefore exact except deep into negative linear.
+    case 12: [[fallthrough]];
     case 14: [[fallthrough]];
     case 15: return TransferFunction::ITU;
     case 4: return {TransferFunction::Gamma, 2.2f};
@@ -1055,9 +1057,9 @@ void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, T
                          for (int i = start; i < end; ++i)
                          {
                              auto rgb      = EOTF_BT2100_HLG(float3{r[i * stride], g[i * stride], b[i * stride]});
-                             r[i * stride] = rgb[0] / 219.f;
-                             g[i * stride] = rgb[1] / 219.f;
-                             b[i * stride] = rgb[2] / 219.f;
+                             r[i * stride] = rgb[0] / HDR_REFERENCE_WHITE_NITS;
+                             g[i * stride] = rgb[1] / HDR_REFERENCE_WHITE_NITS;
+                             b[i * stride] = rgb[2] / HDR_REFERENCE_WHITE_NITS;
                          }
                      });
     }
@@ -1083,7 +1085,8 @@ void from_linear(float *pixels, int3 size, TransferFunction tf)
             parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
                          [rgb = reinterpret_cast<float3 *>(pixels)](int start, int end, int, int)
                          {
-                             for (int i = start; i < end; ++i) rgb[i] = inverse_EOTF_BT2100_HLG(rgb[i] * 219.f);
+                             for (int i = start; i < end; ++i)
+                                 rgb[i] = inverse_EOTF_BT2100_HLG(rgb[i] * HDR_REFERENCE_WHITE_NITS);
                          });
         else // size.z == 4
             // don't modify the alpha channel
@@ -1091,7 +1094,7 @@ void from_linear(float *pixels, int3 size, TransferFunction tf)
                          [rgba = reinterpret_cast<float4 *>(pixels)](int start, int end, int, int)
                          {
                              for (int i = start; i < end; ++i)
-                                 rgba[i].xyz() = inverse_EOTF_BT2100_HLG(rgba[i].xyz() * 219.f);
+                                 rgba[i].xyz() = inverse_EOTF_BT2100_HLG(rgba[i].xyz() * HDR_REFERENCE_WHITE_NITS);
                          });
     }
     else

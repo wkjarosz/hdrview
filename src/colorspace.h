@@ -396,6 +396,16 @@ Real OETF_ITU(Real linear)
         return alpha * std::pow(linear, Real(0.45)) - Real(alpha - 1.0);
 }
 
+/*! HDR reference (diffuse) white luminance in cd/m^2, per Recommendation ITU-R BT.2408.
+
+    The PQ and HLG EOTFs produce absolute luminance in cd/m^2, whereas HDRView works in values relative to
+    diffuse white. Dividing EOTF output by this constant (and multiplying before the inverse EOTF) maps
+    reference white to 1.0.
+
+    see: https://www.itu.int/pub/R-REP-BT.2408
+*/
+inline constexpr float HDR_REFERENCE_WHITE_NITS = 203.f;
+
 /*! Defines Recommendation ITU-R BT.2100-2 Reference PQ electro-optical transfer function (EOTF).
 
     \param E_p Denotes a non-linear color value R', G', B' in PQ space.
@@ -526,12 +536,25 @@ inline Real inverse_OOTF_BT2100_HLG(Real E_D, Real Y_D, Real alpha = Real(1.0), 
     return (E_D / alpha) * std::pow(Y_D / alpha, Real(1.0) / gamma - Real(1.0));
 }
 
+/*! Recommendation ITU-R BT.2100-2 HLG reference system gamma for a given display peak luminance.
+
+    \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
+
+    \returns The system gamma, which is 1.2 at the nominal peak luminance of 1000 cd/m^2.
+
+    see: https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+*/
+template <typename Real>
+inline Real HLG_system_gamma(Real L_W)
+{
+    return Real(1.2) + Real(0.42) * std::log10(L_W / Real(1000));
+}
+
 /*! Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
 
     \param E_p Denotes a non-linear color value R', G', B' in HLG space.
     \param L_B Display luminance for black in cd/m^2.
     \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
-    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
 
     \returns Luminance of a displayed linear component {R_D, G_D, or B_D} in cd/m^2/.
 
@@ -540,8 +563,9 @@ inline Real inverse_OOTF_BT2100_HLG(Real E_D, Real Y_D, Real alpha = Real(1.0), 
     https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
 */
 template <typename Real>
-inline Real EOTF_BT2100_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000), Real gamma = Real(1.2))
+inline Real EOTF_BT2100_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000))
 {
+    const Real gamma = HLG_system_gamma(L_W);
     const Real alpha = L_W - L_B;
     const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
     auto       E_s   = inverse_OETF_BT2100_HLG(std::max(Real(0), (Real(1) - beta) * E_p + beta));
@@ -553,7 +577,6 @@ inline Real EOTF_BT2100_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000),
     \param E_p A non-linear color value {R', G', B'} in HLG space.
     \param L_B Display luminance for black in cd/m^2.
     \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
-    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
 
     \returns Displayed linear color {R_D, G_D, B_D} in cd/m^2.
 
@@ -562,9 +585,9 @@ inline Real EOTF_BT2100_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000),
     https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
 */
 template <typename Real>
-inline la::vec<Real, 3> EOTF_BT2100_HLG(const la::vec<Real, 3> &E_p, Real L_B = Real(0), Real L_W = Real(1000),
-                                        Real gamma = Real(1.2))
+inline la::vec<Real, 3> EOTF_BT2100_HLG(const la::vec<Real, 3> &E_p, Real L_B = Real(0), Real L_W = Real(1000))
 {
+    const Real gamma = HLG_system_gamma(L_W);
     const Real alpha = L_W - L_B;
     const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
 
@@ -585,7 +608,6 @@ inline la::vec<Real, 3> EOTF_BT2100_HLG(const la::vec<Real, 3> &E_p, Real L_B = 
     \param E_D Displayed linear value (R'_D, G'_D, B'_D) in cd/m^2
     \param L_B Display luminance for black in cd/m^2.
     \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
-    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
 
     \returns Non-linear HLG signal value {R'_S, G'_S, B'_S} in [0,1].
 
@@ -593,8 +615,9 @@ inline la::vec<Real, 3> EOTF_BT2100_HLG(const la::vec<Real, 3> &E_p, Real L_B = 
     https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
 */
 template <typename Real>
-inline Real inverse_EOTF_BT2100_HLG(Real E_D, Real L_B = Real(0), Real L_W = Real(1000), Real gamma = Real(1.2))
+inline Real inverse_EOTF_BT2100_HLG(Real E_D, Real L_B = Real(0), Real L_W = Real(1000))
 {
+    const Real gamma = HLG_system_gamma(L_W);
     const Real alpha = L_W - L_B;
     const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
 
@@ -602,9 +625,9 @@ inline Real inverse_EOTF_BT2100_HLG(Real E_D, Real L_B = Real(0), Real L_W = Rea
 }
 
 template <typename Real>
-inline la::vec<Real, 3> inverse_EOTF_BT2100_HLG(const la::vec<Real, 3> &E_D, Real L_B = Real(0), Real L_W = Real(1000),
-                                                Real gamma = Real(1.2))
+inline la::vec<Real, 3> inverse_EOTF_BT2100_HLG(const la::vec<Real, 3> &E_D, Real L_B = Real(0), Real L_W = Real(1000))
 {
+    const Real gamma = HLG_system_gamma(L_W);
     const Real alpha = L_W - L_B;
     const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
 
@@ -749,8 +772,8 @@ inline float from_linear(float linear, const TransferFunction tf)
     case TransferFunction::sRGB: return linear_to_sRGB(linear);
     case TransferFunction::Gamma: return linear_to_gamma(linear, 1.f / tf.gamma);
     case TransferFunction::ITU: return OETF_ITU(linear);
-    case TransferFunction::BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * 219.f);
-    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
+    case TransferFunction::BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * HDR_REFERENCE_WHITE_NITS);
+    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
     case TransferFunction::ST240: return OETF_ST240(linear);
     case TransferFunction::Log100: return OETF_log100(linear);
     case TransferFunction::Log100_Sqrt10: return OETF_log100_sqrt10(linear);
@@ -769,8 +792,9 @@ inline float3 from_linear(float3 linear, const TransferFunction tf)
     case TransferFunction::sRGB: return linear_to_sRGB(linear);
     case TransferFunction::Gamma: return linear_to_gamma(linear, float3{1.f / tf.gamma});
     case TransferFunction::ITU: return la::apply(OETF_ITU<float>, linear);
-    case TransferFunction::BT2100_PQ: return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * 219.f);
-    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
+    case TransferFunction::BT2100_PQ:
+        return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * HDR_REFERENCE_WHITE_NITS);
+    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
     case TransferFunction::ST240: return la::apply(OETF_ST240<float>, linear);
     case TransferFunction::Log100: return la::apply(OETF_log100<float>, linear);
     case TransferFunction::Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, linear);
@@ -789,8 +813,8 @@ inline float to_linear(float encoded, const TransferFunction tf)
     case TransferFunction::sRGB: return sRGB_to_linear(encoded);
     case TransferFunction::Gamma: return linear_to_gamma(encoded, tf.gamma);
     case TransferFunction::ITU: return inverse_OETF_ITU(encoded);
-    case TransferFunction::BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 219.f;
-    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
+    case TransferFunction::BT2100_PQ: return EOTF_BT2100_PQ(encoded) / HDR_REFERENCE_WHITE_NITS;
+    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
     case TransferFunction::ST240: return EOTF_ST240(encoded);
     case TransferFunction::Log100: return EOTF_log100(encoded);
     case TransferFunction::Log100_Sqrt10: return EOTF_log100_sqrt10(encoded);
@@ -809,8 +833,8 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf)
     case TransferFunction::sRGB: return sRGB_to_linear(encoded);
     case TransferFunction::Gamma: return linear_to_gamma(encoded, float3{tf.gamma});
     case TransferFunction::ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
-    case TransferFunction::BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / 219.f;
-    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
+    case TransferFunction::BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / HDR_REFERENCE_WHITE_NITS;
+    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
     case TransferFunction::ST240: return la::apply(EOTF_ST240<float>, encoded);
     case TransferFunction::Log100: return la::apply(EOTF_log100<float>, encoded);
     case TransferFunction::Log100_Sqrt10: return la::apply(EOTF_log100_sqrt10<float>, encoded);
