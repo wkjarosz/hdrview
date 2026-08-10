@@ -109,7 +109,6 @@ struct PixelStats
     float2 hist_y_limits      = {0.f, 1.f};
     float2 hist_normalization = {0.f, 1.f};
 
-    std::array<float, NUM_BINS> hist_xs{}; // {}: value-initialized to zeros
     std::array<float, NUM_BINS> hist_ys{}; // {}: value-initialized to zeros
 
     PixelStats() = default;
@@ -119,7 +118,6 @@ struct PixelStats
                    const Settings &desired, std::atomic<bool> &canceled);
 
     int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
-    float &bin_x(int i) { return hist_xs[clamp_idx(i)]; }
     float &bin_y(int i) { return hist_ys[clamp_idx(i)]; }
 
     int value_to_bin(double value) const
@@ -129,7 +127,7 @@ struct PixelStats
                               hist_normalization[1] * NUM_BINS));
     }
 
-    double bin_to_value(double value)
+    double bin_to_value(double value) const
     {
         static constexpr int   x_scale  = AxisScale_Asinh;
         static constexpr float inv_bins = 1.f / NUM_BINS;

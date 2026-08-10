@@ -36,7 +36,6 @@ static std::chrono::system_clock::time_point to_system_clock(std::filesystem::fi
 
 void Image::draw_histogram()
 {
-    static int        bin_type  = 1;
     static ImPlotCond plot_cond = ImPlotCond_Always;
     float combo_width = std::max(EmSize(5.f), 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
                                                       2.f * ImGui::GetStyle().ItemSpacing.x) -
@@ -154,21 +153,16 @@ void Image::draw_histogram()
             int         px1        = (int)std::ceil(plot_pos.x + plot_size.x);
             ImDrawList *draw_list  = ImPlot::GetPlotDrawList();
 
-            // bin_type is a function-static local, so it has static (not automatic) storage duration and
-            // must not be captured -- it's directly accessible from the lambda body regardless.
+            // The histogram is piecewise-constant (a count per bin), not piecewise-linear, so sample the
+            // step function directly: the height across bin i's range is simply hist_ys[i].
             auto sample_height = [](const PixelStats *s, float x) -> float
             {
-                const auto &xs = s->hist_xs;
                 const auto &ys = s->hist_ys;
-                if (x <= xs.front() || x >= xs.back())
+                float       x0 = (float)s->bin_to_value(0), x1 = (float)s->bin_to_value(PixelStats::NUM_BINS);
+                if (x < x0 || x >= x1)
                     return 0.f;
-                auto it = std::lower_bound(xs.begin(), xs.end(), x);
-                int  i1 = (int)(it - xs.begin());
-                int  i0 = std::max(0, i1 - 1);
-                if (bin_type == 0 || i0 == i1)
-                    return ys[i0]; // stairs: step function using the left bin's value
-                float t = (x - xs[i0]) / std::max(1e-20f, xs[i1] - xs[i0]);
-                return lerp(ys[i0], ys[i1], t);
+                int i = std::clamp((int)((x - x0) / (x1 - x0) * PixelStats::NUM_BINS), 0, PixelStats::NUM_BINS - 1);
+                return ys[i];
             };
 
             // Raw ImDrawList calls (unlike ImPlot's own PlotShaded/PlotLine/PlotStairs items) aren't
@@ -217,14 +211,15 @@ void Image::draw_histogram()
         }
         for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
+            // The histogram is piecewise-constant, so plot it as a step function using each bin's left
+            // edge (PlotStairs holds each x[i]'s y value constant across [x[i], x[i+1])), rather than
+            // linearly interpolating between bin centers.
+            std::array<float, PixelStats::NUM_BINS> left_edges;
+            for (int i = 0; i < PixelStats::NUM_BINS; ++i) left_edges[i] = (float)stats[c]->bin_to_value(i);
+
             ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
-            if (bin_type != 0)
-                ImPlot::PlotLine(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                                 PixelStats::NUM_BINS);
-            else
-                ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                                   PixelStats::NUM_BINS);
+            ImPlot::PlotStairs(names[c].c_str(), left_edges.data(), stats[c]->hist_ys.data(), PixelStats::NUM_BINS);
             ImPlot::PopStyleColor(2);
         }
 
