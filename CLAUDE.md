@@ -86,6 +86,17 @@ manual/CLI smoke check.
 `clang-format` before committing. `.cmake-format`/`.cmake-format.json` similarly govern `CMakeLists.txt`
 formatting.
 
+### Comments
+Keep comments concise and describe what the code currently does and why. A comment should read the same
+whether written with the file or years later — a reader should not be able to tell that a bug was just fixed
+here. Avoid changelog notes ("previously X", "this used to race"), justifying a line by contrasting it with a
+version that no longer exists, and restating an investigation that belongs in the commit message. Prefer a
+short note on a non-obvious constraint, invariant, or the reason a surprising approach is necessary.
+
+Comments accumulate cruft across multi-step edits, so at the end of a multi-iteration editing session re-read
+every touched file as a whole — not just the diffs — and revise for clean design and concise, logically
+ordered comments.
+
 ## Architecture
 
 ### Application core: the `HDRViewApp` god-object

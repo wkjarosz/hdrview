@@ -42,6 +42,47 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
     }
 }
 
+// The round-trip test above passes for any choice of normalization constant, since to_linear and from_linear
+// scale by it symmetrically. These cases pin the absolute mapping against the values BT.2100/BT.2408 specify.
+TEST_CASE("PQ maps absolute luminance relative to BT.2408 reference white")
+{
+    // The PQ EOTF is defined over 0 to 10000 cd/m^2.
+    CHECK(EOTF_BT2100_PQ(1.0f) == doctest::Approx(10000.f));
+    CHECK(EOTF_BT2100_PQ(0.0f) == doctest::Approx(0.f));
+
+    // to_linear additionally normalizes so that reference white lands at 1.0. These expectations spell out 203
+    // rather than referring to HDR_REFERENCE_WHITE_NITS, so that they pin the constant instead of tracking it.
+    CHECK(to_linear(1.0f, TransferFunction::BT2100_PQ) == doctest::Approx(10000.f / 203.f));
+
+    const float reference_white_signal = inverse_EOTF_BT2100_PQ(203.f);
+    CHECK(to_linear(reference_white_signal, TransferFunction::BT2100_PQ) == doctest::Approx(1.f));
+}
+
+TEST_CASE("HLG maps its 75% reference level to BT.2408 reference white")
+{
+    // BT.2408 places HLG reference white at 75% signal, which the 1000 cd/m^2 reference display renders at
+    // approximately 203 cd/m^2.
+    CHECK(EOTF_BT2100_HLG(0.75f) == doctest::Approx(203.f).epsilon(0.002));
+    CHECK(to_linear(0.75f, TransferFunction::BT2100_HLG) == doctest::Approx(1.f).epsilon(0.002));
+}
+
+TEST_CASE("HLG system gamma follows display peak luminance")
+{
+    CHECK(HLG_system_gamma(1000.f) == doctest::Approx(1.2f));
+    CHECK(HLG_system_gamma(2000.f) == doctest::Approx(1.2f + 0.42f * std::log10(2.f)));
+    CHECK(HLG_system_gamma(500.f) == doctest::Approx(1.2f - 0.42f * std::log10(2.f)));
+}
+
+// Narrow (studio) range packs luma into 16..235, a span of 219. This 219 is unrelated to the HDR reference
+// white above; the two must not be conflated.
+TEST_CASE("narrow-range dequantization maps the studio range to [0,1]")
+{
+    CHECK(dequantize_narrow<uint8_t>(16) == doctest::Approx(0.f));
+    CHECK(dequantize_narrow<uint8_t>(235) == doctest::Approx(1.f));
+    CHECK(dequantize_narrow<uint16_t>(16 * 256) == doctest::Approx(0.f));
+    CHECK(dequantize_narrow<uint16_t>(235 * 256) == doctest::Approx(1.f));
+}
+
 TEST_CASE("quantize_full/dequantize_full round-trip within quantization error, undithered")
 {
     for (float x : {0.0f, 0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f})
