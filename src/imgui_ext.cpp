@@ -735,8 +735,17 @@ bool PE::FullWidthEntry(const char *id, const std::function<bool(float)> &conten
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
 
+    // WidthGiven excludes each column's cell padding and inter-column spacing, so summing per-column widths
+    // falls short of the row's real span; read the bounds directly off the table instead. Also reset the cursor
+    // to column 0's true left edge, undoing any ambient Indent() a caller applied for ordinary column-0 rows
+    // (column 0 has ImGuiTableColumnFlags_IndentEnable on by default).
+    const ImGuiTable *table   = ImGui::GetCurrentTable();
+    const float       left_x  = table ? table->Columns[0].WorkMinX : ImGui::GetCursorScreenPos().x;
+    const float       right_x = table && table->ColumnsCount > 1 ? table->Columns[1].WorkMaxX : left_x;
+    ImGui::SetCursorScreenPos(ImVec2(left_x, ImGui::GetCursorScreenPos().y));
+
     // Tables clip each cell to its own column, so widen the clip rect to cover both before drawing across them.
-    const float  width = ColumnWidth(0) + ColumnWidth(1);
+    const float  width = right_x - left_x;
     const ImVec2 p0    = ImGui::GetCursorScreenPos();
     ImGui::PushClipRect(p0, ImVec2(p0.x + width, ImGui::GetCurrentWindow()->ClipRect.Max.y), false);
     bool result = content_fct(width);
