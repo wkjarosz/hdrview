@@ -169,6 +169,11 @@ void Image::draw_histogram()
                 return lerp(ys[i0], ys[i1], t);
             };
 
+            // Raw ImDrawList calls (unlike ImPlot's own PlotShaded/PlotLine/PlotStairs items) aren't
+            // automatically clipped to the plot's data rectangle, so scope them explicitly -- same as the
+            // CIE-diagram code further below in this file does around its own manual AddPolyline calls.
+            ImPlot::PushPlotClipRect();
+
             std::array<int, 4>   order;
             std::array<float, 4> heights;
             for (int px = px0; px < px1; ++px)
@@ -205,6 +210,8 @@ void Image::draw_histogram()
                     prev_h = h;
                 }
             }
+
+            ImPlot::PopPlotClipRect();
         }
         for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
