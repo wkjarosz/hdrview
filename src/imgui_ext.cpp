@@ -734,6 +734,11 @@ bool PE::FullWidthEntry(const char *id, const std::function<bool(float)> &conten
     ImGui::PushID(id);
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
+    // Advance into column 1 before drawing. The content below visually spans both columns (via the cursor/clip
+    // rect override), but ImGui's per-column auto-fit width tracking has no notion of "spans columns" — it
+    // attributes whatever the cursor reaches to whichever column is current. Landing on column 1 keeps that
+    // tracking out of column 0, which is the column double-clicking the (only) resize border auto-fits.
+    ImGui::TableNextColumn();
 
     // WidthGiven excludes each column's cell padding and inter-column spacing, so summing per-column widths
     // falls short of the row's real span; read the bounds directly off the table instead. Also reset the cursor
