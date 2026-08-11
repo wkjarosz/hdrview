@@ -33,6 +33,16 @@ jobs:
           # on both Windows presets would be redundant.
           - { name: "Windows MSVC", os: windows-latest, preset: "windows-msvc", run_tests: true }
           - { name: "Windows Ninja", os: windows-latest, preset: "windows-ninja" }
+          # Native ARM64 build on GitHub's hosted windows-11-arm runner (see issue #166). HEIC/AVCI are
+          # disabled to match the x64 release build (build_windows in release.yml) until libheif's
+          # AOM/dav1d dependencies are confirmed to build cleanly for Windows ARM64.
+          - {
+              name: "Windows ARM64 MSVC",
+              os: windows-11-arm,
+              preset: "windows-arm64-msvc",
+              msvc_arch: "arm64",
+              flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
+            }
 
     steps:
       - name: Install dependencies
@@ -43,12 +53,17 @@ jobs:
           fetch-depth: 0
 
       - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.config.msvc_arch || 'x64' }}
 
       - name: Configure CMake
         run: |
           $extraFlags = @()
           if ("${{ matrix.config.run_tests }}" -eq "true" -and "${{ matrix.buildtype }}" -eq "Release") {
             $extraFlags += "-DHDRVIEW_BUILD_TESTS=ON"
+          }
+          if ("${{ matrix.config.flags }}") {
+            $extraFlags += "${{ matrix.config.flags }}" -split " "
           }
           cmake --preset ${{ matrix.config.preset }} @extraFlags
 
