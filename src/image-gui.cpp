@@ -231,7 +231,7 @@ void Image::draw_histogram()
             ImPlot::PopStyleColor(2);
         }
 
-        if (contains(hovered_pixel) && hdrview()->app_pos_in_viewport(ImGui::GetIO().MousePos))
+        if (contains(hovered_pixel) && hdrview()->mouse_over_viewport())
         {
             for (int c = 0; c < std::min(4, group.num_channels); ++c)
             {
@@ -1177,7 +1177,7 @@ void Image::draw_chromaticity_diagram(float width)
             auto  rgb2xyz = mul(M_RGB_to_XYZ, inverse(M_to_sRGB));
             ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4{0.f, 0.f, 0.f, 1.0f});
             ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-            if (hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_app_pos(io.MousePos)))
+            if (hdrview()->mouse_over_viewport())
             {
                 auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
                 float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);

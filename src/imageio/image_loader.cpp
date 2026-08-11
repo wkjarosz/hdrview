@@ -590,17 +590,20 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
 void BackgroundImageLoader::load_new_and_modified_files()
 {
     // reload any modified files
-    bool any_reloaded = false;
     for (int i = 0; i < hdrview()->num_images(); ++i)
     {
         auto img = hdrview()->image(i);
         if (!fs::exists(img->path))
         {
-            spdlog::warn("File[{}] '{}' no longer exists, skipping reload.", i, img->path.u8string());
+            // this loop revisits every loaded image on each poll regardless of whether anything
+            // changed, so m_missing_files_warned is what limits the warning to once per disappearance
+            if (m_missing_files_warned.insert(img->path).second)
+                spdlog::warn("File[{}] '{}' no longer exists, skipping reload.", i, img->path.u8string());
             if (auto it = m_existing_files.find(img->path); it != m_existing_files.end())
                 m_existing_files.erase(it);
             continue;
         }
+        m_missing_files_warned.erase(img->path);
 
         fs::file_time_type last_modified;
         try
@@ -618,12 +621,8 @@ void BackgroundImageLoader::load_new_and_modified_files()
             // fails.
             img->last_modified = last_modified;
             hdrview()->reload_image(img);
-            any_reloaded = true;
         }
     }
-
-    if (!any_reloaded)
-        spdlog::debug("No modified files found to reload.");
 
     // load new files
     std::error_code ec;

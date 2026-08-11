@@ -11,6 +11,7 @@
 #include "imgui.h"
 #include "ringbuffer_color_sink.h"
 
+#include <optional>
 #include <string>
 
 namespace ImGui
@@ -33,6 +34,8 @@ public:
 class SpdLogWindow
 {
 public:
+    using BadgeState = spdlog::sinks::ringbuffer_color_sink_mt::BadgeState;
+
     SpdLogWindow(int max_items = 1024);
 
     void draw(ImFont *console_font = nullptr, float size = 0.f);
@@ -48,6 +51,15 @@ public:
     void  set_level_color(spdlog::level::level_enum level, ImU32 color);
     ImU32 get_level_color(spdlog::level::level_enum level);
 
+    /// snapshot of the highest-severity activity logged since the last mark_log_seen()
+    BadgeState badge_state() { return m_ringbuffer_sink->badge_state(); }
+    /// clears the badge state; called automatically once this window regains focus
+    void mark_log_seen() { m_ringbuffer_sink->mark_badge_seen(); }
+
+    /// scrolls the log view to the item with the given seq (see ringbuffer_color_sink::LogItem::seq)
+    /// the next time draw() is called
+    void scroll_to(uint64_t seq) { m_scroll_to_seq = seq; }
+
 protected:
     std::shared_ptr<spdlog::sinks::dup_filter_sink_mt>       m_filter_sink;
     std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> m_ringbuffer_sink;
@@ -55,14 +67,26 @@ protected:
     ImGuiTextFilter                                          m_filter;
     bool                                                     m_auto_scroll = true;
     bool                                                     m_wrap_text   = false;
+    std::optional<uint64_t>                                  m_scroll_to_seq;
 };
 
 // reference to a global SpdLogWindow instance
 SpdLogWindow &GlobalSpdLogWindow();
 
+// icon representing a given spdlog level, from the app's active icon set
+const char *LogLevelIcon(spdlog::level::level_enum level);
+
 ImVec2 IconSize();
 ImVec2 IconButtonSize();
 bool   IconButton(const char *icon, bool *v = nullptr, const ImVec2 &size = ImVec2(-1, -1));
+
+// A button with no background/border in its resting state (just a hover/press highlight), sized to fit
+// its label rather than forced into a fixed square like IconButton. Useful for compact status/toolbar
+// controls where the label itself (icon, text, or both) should be the only visible element. When
+// active is true, the resting state is filled with ImGuiCol_FrameBg instead of being transparent, for
+// a persistent toggled-on look (matching IconButton's toggle-pointer variant), without affecting the
+// return value based on the click that happened this frame.
+bool FlatButton(const char *label, bool active = false, const ImVec2 &size = ImVec2(0, 0));
 
 //! A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
 struct Action

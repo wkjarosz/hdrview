@@ -67,6 +67,8 @@ SpdLogWindow &GlobalSpdLogWindow()
     return s_log;
 }
 
+const char *LogLevelIcon(spdlog::level::level_enum level) { return s_level_icons[int(level)].c_str(); }
+
 SpdLogWindow::SpdLogWindow(int max_items) :
     m_filter_sink(make_shared<spdlog::sinks::dup_filter_sink_mt>(std::chrono::seconds(5))),
     m_ringbuffer_sink(make_shared<spdlog::sinks::ringbuffer_color_sink_mt>(max_items)),
@@ -85,6 +87,11 @@ void SpdLogWindow::set_pattern(const string &pattern)
 
 void SpdLogWindow::draw(ImFont *console_font, float size)
 {
+    // Being focused (as opposed to merely visible, e.g. an inactive docked tab) is what counts as
+    // the user having seen the log, so this is what clears the status-bar badge.
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+        mark_log_seen();
+
     static const spdlog::string_view_t level_names[] = SPDLOG_LEVEL_NAMES;
 
     auto         current_level = m_ringbuffer_sink->level();
@@ -152,16 +159,24 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
         auto default_font = ImGui::GetFont();
         ImGui::PushFont(console_font, size);
 
-        int  item_num = 0;
-        bool did_copy = false;
+        int  item_num           = 0;
+        bool did_copy           = false;
+        bool scrolled_to_target = false;
         m_ringbuffer_sink->iterate(
-            [this, &item_num, &did_copy,
+            [this, &item_num, &did_copy, &scrolled_to_target,
              default_font](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
             {
                 ++item_num;
+                bool is_scroll_target = m_scroll_to_seq && msg.seq == *m_scroll_to_seq;
                 if (!m_ringbuffer_sink->should_log(msg.level) ||
                     !m_filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
+                {
+                    // the requested item exists but is filtered out of view; drop the request rather
+                    // than waiting forever for a match that will never render
+                    if (is_scroll_target)
+                        m_scroll_to_seq.reset();
                     return true;
+                }
 
                 bool invalid_color_range = msg.color_range_end <= msg.color_range_start ||
                                            std::min(msg.color_range_start, msg.color_range_end) >= msg.message.length();
@@ -220,6 +235,13 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
                         ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_end);
                 }
 
+                if (is_scroll_target)
+                {
+                    ImGui::SetScrollHereY(0.5f);
+                    m_scroll_to_seq.reset();
+                    scrolled_to_target = true;
+                }
+
                 return true;
             });
 
@@ -229,7 +251,10 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
 
         // ImGui::PopStyleColor();
 
-        if (m_ringbuffer_sink->has_new_items() && m_auto_scroll)
+        // still consume has_new_items() every frame so it doesn't report a stale batch once autoscroll
+        // resumes; just don't act on it the same frame we scrolled to an explicit target above
+        bool has_new = m_ringbuffer_sink->has_new_items();
+        if (!scrolled_to_target && has_new && m_auto_scroll)
             ImGui::SetScrollHereY(1.f);
 
         ImGui::PopFont();
@@ -300,6 +325,20 @@ bool IconButton(const char *icon, bool *v, const ImVec2 &size)
     if (toggle)
         ImGui::PopStyleColor(3);
 
+    return ret;
+}
+
+bool FlatButton(const char *label, bool active, const ImVec2 &size)
+{
+    // clearing ImGuiCol_Button alone isn't enough: the theme sets a nonzero FrameBorderSize, which
+    // Button() draws unconditionally in ImGuiCol_Border regardless of the fill color
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, active ? ImGui::GetColorU32(ImGuiCol_FrameBg) : IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetColorU32(ImGuiCol_ButtonHovered, active ? 0.75f : 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetColorU32(ImGuiCol_ButtonActive, 0.75f));
+    bool ret = ImGui::Button(label, size);
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
     return ret;
 }
 
