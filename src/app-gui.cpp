@@ -593,16 +593,15 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    auto  a      = action("Show Log window");
+    auto  a      = action("Show help");
     float text_w = ImGui::CalcTextSize(a.icon.c_str()).x;
 
-    auto pos_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2.f * text_w -
-                 3.5f * ImGui::GetStyle().ItemSpacing.x + 0.5f * ImGui::GetStyle().WindowPadding.x - 2.f;
+    auto pos_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 1.f * text_w -
+                 2.0f * ImGui::GetStyle().ItemSpacing.x + ImGui::GetStyle().WindowPadding.x - 2.f;
     if (pos_x > ImGui::GetCursorPosX())
         ImGui::SetCursorPosX(pos_x);
 
     ImGui::MenuItem(a, false);
-    ImGui::MenuItem(action("Show help"), false);
 }
 
 void HDRViewApp::draw_top_toolbar()
