@@ -39,8 +39,8 @@ public:
 
     void run();
 
-    RenderPass *renderpass() { return m_render_pass; }
-    Shader     *shader() { return m_shader; }
+    RenderPass *renderpass() { return m_render_pass.get(); }
+    Shader     *shader() { return m_shader.get(); }
 
     //-----------------------------------------------------------------------------
     // loading, saving, and closing images
@@ -223,32 +223,61 @@ private:
 
 private:
     //-----------------------------------------------------------------------------
-    // Private data members
+    // Constructor setup, broken into named phases called in order from HDRViewApp(); see app.cpp.
     //-----------------------------------------------------------------------------
+    struct DockableWindowExtraInfo
+    {
+        ImGuiKeyChord chord = ImGuiKey_None;
+        const char   *icon  = nullptr;
+    };
+    struct WindowSetupInfo
+    {
+        ImGuiKey                        mod_key;
+        vector<DockableWindowExtraInfo> window_info;
+    };
 
-    RenderPass *m_render_pass = nullptr;
-    /// Offscreen HDR color target, the pass that renders into it, the pass that resolves it to the window's
-    /// framebuffer, and the conversion shader. All null unless the display needs color management. See
-    /// update_colorpass()/begin_colorpass_frame()/end_colorpass_frame() in app-draw.cpp.
-    std::unique_ptr<Texture>    m_color_texture;
-    std::unique_ptr<RenderPass> m_colorpass_target;
-    std::unique_ptr<RenderPass> m_resolve_pass;
-    std::unique_ptr<Shader>     m_colorpass_shader;
-    Shader                     *m_shader = nullptr;
-    vector<ImagePtr>            m_images;
-    set<fs::path>               m_active_directories; ///< Set of directories containing the currently loaded images
-    int                         m_current = -1, m_reference = -1;
+    void            setup_window_and_backend(optional<bool> force_sdr);
+    void            setup_hello_imgui_params();
+    WindowSetupInfo setup_dockable_windows();
+    void            setup_platform_backend_callbacks(vector<string> in_files);
+    void            setup_persistence_callbacks(optional<float> force_exposure, optional<float> force_gamma,
+                                                optional<bool> force_dither, optional<bool> force_apple_keys);
+    void            setup_imgui_style_callbacks();
+    void            setup_frame_callbacks();
+    void            setup_dialogs(const vector<string> &in_files);
+    void            setup_actions(ImGuiKey modKey, const vector<DockableWindowExtraInfo> &window_info);
+
+    //-----------------------------------------------------------------------------
+    // Loaded images and the background loader
+    //-----------------------------------------------------------------------------
+    vector<ImagePtr> m_images;
+    set<fs::path>    m_active_directories; ///< Set of directories containing the currently loaded images
+    int              m_current = -1, m_reference = -1;
 
     BackgroundImageLoader m_image_loader;
 
     int m_remaining_download = 0;
 
-    float m_exposure = 0.f, m_exposure_live = 0.f, m_offset = 0.f, m_offset_live = 0.f, m_gamma = 1.0f,
-          m_gamma_live  = 1.0f;
-    AxisScale m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
-    bool      m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
-         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
-         m_draw_clip_warnings = false, m_show_FPS = false;
+    ImGuiTextFilter m_file_filter, m_channel_filter;
+    vector<size_t>  m_visible_images;
+
+    //-----------------------------------------------------------------------------
+    // GPU render resources for drawing the main image; the colorpass block below owns a
+    // separate set of resources for the HDR display color-management pass.
+    //-----------------------------------------------------------------------------
+    std::unique_ptr<RenderPass> m_render_pass;
+    std::unique_ptr<Shader>     m_shader;
+
+    //-----------------------------------------------------------------------------
+    // The colorpass: offscreen HDR color target, the pass that renders into it, the pass that resolves it to
+    // the window's framebuffer, the conversion shader, and the bookkeeping that decides whether it's needed.
+    // All null/inert unless the display needs color management. See
+    // update_colorpass()/begin_colorpass_frame()/end_colorpass_frame() in app-colorpass.cpp.
+    //-----------------------------------------------------------------------------
+    std::unique_ptr<Texture>    m_color_texture;
+    std::unique_ptr<RenderPass> m_colorpass_pass;
+    std::unique_ptr<RenderPass> m_resolve_pass;
+    std::unique_ptr<Shader>     m_colorpass_shader;
     /// The color space the display currently wants, re-queried once per frame by update_colorpass() so that
     /// moving the window between monitors, or toggling the OS's HDR mode, takes effect live.
     DisplayColorSpace m_display_cs;
@@ -265,23 +294,22 @@ private:
     bool m_float_buffer = false;
     /// The --sdr command-line flag: behave as if the display were plain SDR, whatever it actually is.
     /// Checked by supports_hdr(), so it also hides the HDR-only UI.
-    bool   m_force_sdr = false;
+    bool m_force_sdr = false;
+
+    //-----------------------------------------------------------------------------
+    // Exposure/gamma/tonemap and viewport overlay display flags
+    //-----------------------------------------------------------------------------
+    float m_exposure = 0.f, m_exposure_live = 0.f, m_offset = 0.f, m_offset_live = 0.f, m_gamma = 1.0f,
+          m_gamma_live  = 1.0f;
+    AxisScale m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
+
+    bool m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
+         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
+         m_draw_clip_warnings = false, m_show_FPS = false;
     float2 m_clip_range{0.f, 1.f}; ///< Values outside this range will have zebra stripes if m_draw_clip_warnings = true
     Box2i  m_roi{int2{0}}, m_roi_live{int2{0}};
 
-    void cancel_autofit() { m_auto_fit_selection = m_auto_fit_display = m_auto_fit_data = false; }
-
-    // Image display parameters.
-    float m_zoom_sensitivity = 1.0717734625f;
-
-    bool      m_auto_fit_display   = false; ///< Continually keep the image display window fit within the viewport
-    bool      m_auto_fit_data      = false; ///< Continually keep the image data window fit within the viewport
-    bool      m_auto_fit_selection = false; ///< Continually keep the selection box fit within the viewport
-    bool2     m_flip               = {false, false}; ///< Whether to flip the image horizontally and/or vertically
-    float     m_zoom               = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
-    float2    m_translate          = {0.f, 0.f};     ///< The panning offset of the image
-    Channels_ m_channel            = Channels_::Channels_RGBA; ///< Which channel to display
-    Tonemap_  m_tonemap            = Tonemap_Gamma;
+    Tonemap_                   m_tonemap     = Tonemap_Gamma;
     static constexpr Colormap_ m_colormaps[] = {
         Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,      Colormap_Cool,    Colormap_Pink,
         Colormap_Jet,     Colormap_Spectral, Colormap_Turbo,    Colormap_Twilight, Colormap_RdBu,    Colormap_BrBG,
@@ -293,24 +321,40 @@ private:
         BackgroundMode_::BGMode_Dark_Checker;     ///< How the background around the image should be rendered
     float4 m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BGMode_Custom_Color
 
+    //-----------------------------------------------------------------------------
+    // Pan/zoom/flip and the viewport's on-screen extent
+    //-----------------------------------------------------------------------------
+    void cancel_autofit() { m_auto_fit_selection = m_auto_fit_display = m_auto_fit_data = false; }
+
+    float m_zoom_sensitivity = 1.0717734625f;
+
+    bool      m_auto_fit_display   = false; ///< Continually keep the image display window fit within the viewport
+    bool      m_auto_fit_data      = false; ///< Continually keep the image data window fit within the viewport
+    bool      m_auto_fit_selection = false; ///< Continually keep the selection box fit within the viewport
+    bool2     m_flip               = {false, false}; ///< Whether to flip the image horizontally and/or vertically
+    float     m_zoom               = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
+    float2    m_translate          = {0.f, 0.f};     ///< The panning offset of the image
+    Channels_ m_channel            = Channels_::Channels_RGBA; ///< Which channel to display
+
     float2 m_viewport_min, m_viewport_size;
 
-    HelloImGui::RunnerParams m_params;
+    MouseMode m_mouse_mode = MouseMode_PanZoom;
 
-    ImGuiTextFilter m_file_filter, m_channel_filter;
-    vector<size_t>  m_visible_images;
+    //-----------------------------------------------------------------------------
+    // Hello ImGui / app framework state
+    //-----------------------------------------------------------------------------
+    HelloImGui::RunnerParams m_params;
 
     ImFont *m_sans_regular = nullptr, *m_sans_bold = nullptr, *m_mono_regular = nullptr, *m_mono_bold = nullptr;
 
     map<string, ImGui::Action>     m_actions;
     HelloImGui::EdgeToolbarOptions m_top_toolbar_options;
 
-    bool m_watch_files_for_changes = false; ///< Whether to watch files for changes
-
     Theme m_theme;
 
-    MouseMode m_mouse_mode = MouseMode_PanZoom;
-
+    //-----------------------------------------------------------------------------
+    // Pixel inspector / watched pixels
+    //-----------------------------------------------------------------------------
     struct WatchedPixel
     {
         int2 pixel;
@@ -319,10 +363,18 @@ private:
     vector<WatchedPixel> m_watched_pixels;
     int                  m_status_color_mode = 0;
 
+    //-----------------------------------------------------------------------------
+    // Playback
+    //-----------------------------------------------------------------------------
     bool  m_play_forward   = false;
     bool  m_play_backward  = false;
     bool  m_play_stopped   = true;
     float m_playback_speed = 24.f;
+
+    //-----------------------------------------------------------------------------
+    // GUI/dev-window visibility and file-list state
+    //-----------------------------------------------------------------------------
+    bool m_watch_files_for_changes = false; ///< Whether to watch files for changes
 
     bool  m_show_developer_menu  = false;
     bool  m_show_demo_window     = false;
@@ -333,6 +385,9 @@ private:
     int   m_file_list_mode       = 1;    // 0: images only; 1: list; 2: tree;
     float m_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
 
+    //-----------------------------------------------------------------------------
+    // Popup dialogs
+    //-----------------------------------------------------------------------------
     struct PopupDialog
     {
         std::function<void(bool &)> draw;

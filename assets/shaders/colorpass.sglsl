@@ -1,5 +1,5 @@
 // Final HDR/EDR display color-management pass, written once and cross-compiled via sokol-shdc. See
-// SokolShaderCompiler.cmake and CMakeLists.txt for the CMake wiring, and app-draw.cpp's setup_colorpass()/
+// SokolShaderCompiler.cmake and CMakeLists.txt for the CMake wiring, and app-colorpass.cpp's update_colorpass()/
 // end_colorpass_frame() for how the compiled output is loaded and its uniforms set.
 //
 // Only ever built for the desktop OpenGL backend (glsl410) -- never Metal (macOS EDR consumes HDRView's

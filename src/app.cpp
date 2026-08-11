@@ -54,6 +54,22 @@ HDRViewApp *hdrview() { return g_hdrview; }
 HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gamma, optional<bool> force_dither,
                        optional<bool> force_sdr, optional<bool> force_apple_keys, vector<string> in_files)
 {
+    setup_window_and_backend(force_sdr);
+    setup_hello_imgui_params();
+    auto window_setup = setup_dockable_windows();
+    setup_platform_backend_callbacks(in_files);
+    setup_persistence_callbacks(force_exposure, force_gamma, force_dither, force_apple_keys);
+    setup_imgui_style_callbacks();
+    setup_frame_callbacks();
+    setup_dialogs(in_files);
+    setup_actions(window_setup.mod_key, window_setup.window_info);
+
+    // load any passed-in images
+    load_images(in_files);
+}
+
+void HDRViewApp::setup_window_and_backend(optional<bool> force_sdr)
+{
 #if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
     // if threading is disabled, create no threads
     unsigned threads = 0;
@@ -117,7 +133,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 #endif
 
     spdlog::info("Requesting a {} framebuffer.", want_float_buffer ? "floating-point precision" : "standard precision");
+}
 
+void HDRViewApp::setup_hello_imgui_params()
+{
     // set up HelloImGui parameters
     m_params.appWindowParams.windowGeometry.size     = {1200, 800};
     m_params.appWindowParams.windowTitle             = "HDRView";
@@ -161,7 +180,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     m_params.imGuiWindowParams.showStatusBar  = false;
     m_params.imGuiWindowParams.showStatus_Fps = false;
     m_params.callbacks.ShowStatus             = [this]() { draw_status_bar(); };
+}
 
+HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
+{
     //
     // Dockable windows
     //
@@ -208,12 +230,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 #endif
 
     // docking layouts
-    struct DockableWindowExtraInfo
-    {
-        ImGuiKeyChord chord = ImGuiKey_None;
-        const char   *icon  = nullptr;
-    };
-
     m_params.dockingParams.layoutName      = "Standard";
     m_params.dockingParams.dockableWindows = {histogram_window,
                                               channel_stats_window,
@@ -227,16 +243,16 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                               watched_folders_window
 #endif
     };
-    DockableWindowExtraInfo window_info[] = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
-                                             {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
-                                             {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
-                                             {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
-                                             {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
-                                             {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
-                                             {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
+    vector<DockableWindowExtraInfo> window_info = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
+                                                   {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
+                                                   {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
+                                                   {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
+                                                   {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
+                                                   {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
+                                                   {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
 #if !defined(__EMSCRIPTEN__)
-                                             ,
-                                             {ImGuiKey_None, ICON_MY_ADD_WATCHED_FOLDER}
+                                                   ,
+                                                   {ImGuiKey_None, ICON_MY_ADD_WATCHED_FOLDER}
 #endif
     };
 
@@ -245,7 +261,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                             DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
                                             DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
                                             DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.5f}};
+    return {modKey, window_info};
+}
 
+void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
+{
 #if defined(HELLOIMGUI_USE_GLFW3)
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this, in_files]
     {
@@ -319,7 +339,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 #endif
     };
 #endif
+}
 
+void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, optional<float> force_gamma,
+                                             optional<bool> force_dither, optional<bool> force_apple_keys)
+{
     //
     // Load user settings at `PostInit` and save them at `BeforeExit`
     //
@@ -402,6 +426,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         Image::cleanup_default_textures();
         Colormap::cleanup();
         cleanup_colorpass();
+        m_shader.reset();
+        m_render_pass.reset();
 
         spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
 
@@ -442,7 +468,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         if (auto *pool = stp::ThreadPool::try_singleton())
             pool->stop();
     };
+}
 
+void HDRViewApp::setup_imgui_style_callbacks()
+{
     // Change style
     m_params.callbacks.SetupImGuiStyle = [this]()
     {
@@ -467,7 +496,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     };
+}
 
+void HDRViewApp::setup_frame_callbacks()
+{
     m_params.callbacks.ShowGui = [this]()
     {
         process_shortcuts();
@@ -517,7 +549,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
     m_params.callbacks.BeforeSwap              = [this]() { end_colorpass_frame(); };
     m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
+}
 
+void HDRViewApp::setup_dialogs(const vector<string> &in_files)
+{
     m_dialogs["About"] = make_unique<PopupDialog>([this](bool &open) { draw_about_dialog(open); }, in_files.empty());
     m_dialogs["Command palette..."] = make_unique<PopupDialog>([this](bool &open) { draw_command_palette(open); });
     m_dialogs["Save as..."]         = make_unique<PopupDialog>([this](bool &open) { draw_save_as_dialog(open); });
@@ -690,7 +725,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                 ImGui::EndPopup();
             }
         });
+}
 
+void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtraInfo> &window_info)
+{
     //
     // Actions and command palette
     //
@@ -1532,7 +1570,28 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add(Action{{"Flip horizontally"}, ICON_MY_FLIP_HORIZ, ImGuiKey_H, 0, []() {}, if_img, false, &m_flip.x});
         add(Action{{"Flip vertically"}, ICON_MY_FLIP_VERT, ImGuiKey_V, 0, []() {}, if_img, false, &m_flip.y});
     }
+}
 
-    // load any passed-in images
-    load_images(in_files);
+void HDRViewApp::process_shortcuts()
+{
+    // spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
+
+    for (auto &a : m_actions)
+        if (a.second.chord)
+            if (a.second.enabled() && !ImGui::GetIO().NavVisible &&
+                ImGui::GlobalShortcut(a.second.chord, a.second.flags))
+            {
+                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.names[0],
+                              ImGui::GetFrameCount());
+                if (a.second.p_selected)
+                    *a.second.p_selected = !*a.second.p_selected;
+                a.second.callback();
+#ifdef __EMSCRIPTEN__
+                ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
+                                                 // modifiers) needs to be pressed before this chord is detected again
+#endif
+                break;
+            }
+
+    set_image_textures();
 }

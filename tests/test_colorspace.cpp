@@ -184,8 +184,9 @@ TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_
 
     // Second, and more important: the shader's *calling convention*. pq_encode() consumes absolute nits and
     // does its own /10000 normalization, matching inverse_EOTF_BT2100_PQ() one-for-one. This is deliberately
-    // NOT the convention of colorspace.h's from_linear(), which pre-multiplies by 219 (see below) -- feeding
-    // the shader a from_linear()-style value would silently shift everything on screen by ~2.7 stops.
+    // NOT the convention of colorspace.h's from_linear(), which pre-multiplies by HDR_REFERENCE_WHITE_NITS
+    // (see below) -- feeding the shader a from_linear()-style value would silently shift everything on
+    // screen by ~2.7 stops.
     auto glsl_pq_encode = [](float nits)
     {
         // Transcribed literally from pq_encode() in assets/shaders/colorspaces.sglsl.
@@ -214,8 +215,10 @@ TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_
     CHECK(inverse_EOTF_BT2100_PQ(0.f) == doctest::Approx(0.f));
     CHECK(inverse_EOTF_BT2100_PQ(203.f) == doctest::Approx(0.5806f).epsilon(1e-3));
 
-    // Pin the 219x divergence itself: from_linear() treats 1.0 as 219 nits (the broadcast convention), so it
-    // is NOT interchangeable with the shader's absolute-nits input.
-    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) == doctest::Approx(inverse_EOTF_BT2100_PQ(219.f)));
+    // Pin the reference-white divergence itself: from_linear() treats 1.0 as HDR_REFERENCE_WHITE_NITS (203
+    // cd/m^2, the BT.2408 reference white), so it is NOT interchangeable with the shader's absolute-nits
+    // input.
+    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) ==
+          doctest::Approx(inverse_EOTF_BT2100_PQ(HDR_REFERENCE_WHITE_NITS)));
     CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(inverse_EOTF_BT2100_PQ(1.f)));
 }

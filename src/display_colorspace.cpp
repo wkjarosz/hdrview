@@ -168,6 +168,8 @@ DisplayColorSpace query_display_colorspace([[maybe_unused]] void *window)
     // On Windows this goes through QueryDisplayConfig, which is far too expensive to call every frame
     // (nanogui gives up and caches it once at startup). Re-query a few times a second instead: still fast
     // enough to follow the "SDR content brightness" slider live, without the per-frame cost.
+    // These are function-local statics rather than per-window state because HDRView only ever has one
+    // window; if that ever changes, this cache would need to move to a per-window key.
     static auto  last_query       = std::chrono::steady_clock::now() - std::chrono::hours(1);
     static float cached_sdr_white = 0.f;
 

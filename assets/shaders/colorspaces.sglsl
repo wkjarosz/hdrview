@@ -79,8 +79,8 @@ vec3 XYZToRGB(vec3 xyz)
 // The five constants below are the decimal expansions of the exact rationals in inverse_EOTF_BT2100_PQ() in
 // src/colorspace.h. Nothing in the build enforces that -- tests/test_colorspace.cpp does, in
 // "colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_PQ", which also pins the fact that
-// this function takes absolute nits while colorspace.h's from_linear() applies a 219x broadcast scaling
-// first. Edit both sides together.
+// this function takes absolute nits while colorspace.h's from_linear() applies its HDR_REFERENCE_WHITE_NITS
+// (203 cd/m^2, BT.2408) scaling first. Edit both sides together.
 float pq_encode(float nits)
 {
     const float m1  = 0.1593017578125; // 2610 / 16384

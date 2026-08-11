@@ -332,7 +332,7 @@ endfunction()
 include(cmake/SokolShaderCompiler.cmake)
 
 # Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime (see
-# src/app-draw.cpp). colorspaces.sglsl is @include_block'd directly into the compiled output, so it has
+# src/app-colorpass.cpp). colorspaces.sglsl is @include_block'd directly into the compiled output, so it has
 # no separate build step of its own. Written straight into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders,
 # the same tree hello_imgui_add_app(... ASSETS_LOCATION ...) below already treats as the runtime asset
 # root, so no additional copy step is needed.
@@ -1546,6 +1546,7 @@ set(HDRVIEW_SOURCES
     src/imageio/uhdr.cpp
     src/imageio/webp.cpp
     src/imageio/xmp.cpp
+    src/app-colorpass.cpp
     src/app-draw.cpp
     src/app-file-io.cpp
     src/app-gui.cpp
