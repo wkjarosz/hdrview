@@ -191,10 +191,13 @@ void HDRViewApp::draw_developer_windows()
     }
 }
 
-void HDRViewApp::draw_pixel_inspector_window()
+void HDRViewApp::draw_statistics_window()
 {
     if (!current_image())
+    {
+        ImGui::TextDisabled("No image loaded.");
         return;
+    }
 
     auto PixelHeader = [](const string &title, int2 &pixel, bool *p_visible = nullptr)
     {
@@ -235,6 +238,9 @@ void HDRViewApp::draw_pixel_inspector_window()
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_roi = m_roi_live;
     ImGui::SetItemTooltip("W x H: (%d x %d)", m_roi_live.size().x, m_roi_live.size().y);
+
+    if (auto img = current_image())
+        img->draw_channel_stats();
 
     ImGui::SeparatorText("Watched pixels:");
 

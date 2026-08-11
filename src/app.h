@@ -201,8 +201,7 @@ private:
     float2 image_scale(ConstImagePtr img) const;
 
     void draw_background();
-    void draw_channel_stats_window();
-    void draw_pixel_inspector_window();
+    void draw_statistics_window();
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);

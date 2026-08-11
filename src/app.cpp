@@ -152,11 +152,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                         if (auto img = current_image())
                                             img->draw_histogram();
                                     }};
-    DockableWindow channel_stats_window{"Channel statistics", "HistogramSpace", [this]
-                                        {
-                                            if (auto img = current_image())
-                                                return img->draw_channel_stats();
-                                        }};
+    DockableWindow statistics_window{"Statistics", "HistogramSpace", [this] { draw_statistics_window(); }};
     DockableWindow file_window{"Images", "ImagesSpace", [this] { draw_file_window(); }};
     file_window.focusWindowAtNextFrame = true;
 
@@ -172,8 +168,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                      }};
     colorspace_window.imGuiWindowFlags = ImGuiWindowFlags_HorizontalScrollbar;
 
-    DockableWindow pixel_inspector_window{"Pixel inspector", "RightBottomSpace",
-                                          [this] { draw_pixel_inspector_window(); }};
     DockableWindow log_window{
         "Log", "LogSpace",
         [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
@@ -197,11 +191,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
     m_params.dockingParams.layoutName      = "Standard";
     m_params.dockingParams.dockableWindows = {histogram_window,
-                                              channel_stats_window,
+                                              statistics_window,
                                               file_window,
                                               info_window,
                                               colorspace_window,
-                                              pixel_inspector_window,
                                               log_window
 #if !defined(__EMSCRIPTEN__)
                                               ,
@@ -218,7 +211,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                              {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
                                              {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                              {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
-                                             {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
                                              {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
 #if !defined(__EMSCRIPTEN__)
                                              ,
@@ -229,8 +221,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     m_params.dockingParams.dockingSplits = {DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
                                             DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
                                             DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-                                            DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
-                                            DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.5f}};
+                                            DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
 
 #if defined(HELLOIMGUI_USE_GLFW3)
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this, in_files]
