@@ -46,7 +46,6 @@
       "hidden": true,
       "inherits": "base",
       "description": "Base for Visual Studio builds",
-      "architecture": "x64",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -179,6 +178,19 @@
       "displayName": "Windows (MSVC)",
       "description": "Windows build with Visual Studio",
       "inherits": "msvc-base",
+      "architecture": "x64",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-arm64-msvc",
+      "displayName": "Windows ARM64 (MSVC)",
+      "description": "Native Windows ARM64 build with Visual Studio",
+      "inherits": "msvc-base",
+      "architecture": "arm64",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -420,6 +432,30 @@
       "displayName": "RelWithDebInfo (MSVC)",
       "inherits": "build-base-relwithdebinfo",
       "configurePreset": "windows-msvc"
+    },
+    {
+      "name": "windows-arm64-msvc-debug",
+      "displayName": "Debug (ARM64 MSVC)",
+      "inherits": "build-base-debug",
+      "configurePreset": "windows-arm64-msvc"
+    },
+    {
+      "name": "windows-arm64-msvc-release",
+      "displayName": "Release (ARM64 MSVC)",
+      "inherits": "build-base-release",
+      "configurePreset": "windows-arm64-msvc"
+    },
+    {
+      "name": "windows-arm64-msvc-minsizerel",
+      "displayName": "MinSizeRel (ARM64 MSVC)",
+      "inherits": "build-base-minsizerel",
+      "configurePreset": "windows-arm64-msvc"
+    },
+    {
+      "name": "windows-arm64-msvc-relwithdebinfo",
+      "displayName": "RelWithDebInfo (ARM64 MSVC)",
+      "inherits": "build-base-relwithdebinfo",
+      "configurePreset": "windows-arm64-msvc"
     },
     {
       "name": "windows-ninja-debug",
