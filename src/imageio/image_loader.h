@@ -83,4 +83,8 @@ private:
     // don't treat these files as new (they are either currently loaded, or we've previously loaded them from a watched
     // directory and manually closed them, so don't want to automatically reload them)
     set<fs::path> m_existing_files;
+
+    // loaded images whose backing file is currently missing on disk, so load_new_and_modified_files()
+    // only warns once per disappearance instead of on every watch-loop poll
+    set<fs::path> m_missing_files_warned;
 };

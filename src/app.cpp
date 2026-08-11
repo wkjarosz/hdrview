@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include <algorithm>
+
 #include "dithermatrix256.h"
 #include "fonts.h"
 #include "image.h"
@@ -206,6 +208,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                               watched_folders_window
 #endif
     };
+    auto log_window_it =
+        std::find_if(m_params.dockingParams.dockableWindows.begin(), m_params.dockingParams.dockableWindows.end(),
+                     [](const DockableWindow &w) { return w.label == "Log"; });
+    m_log_window = log_window_it != m_params.dockingParams.dockableWindows.end() ? &*log_window_it : nullptr;
+
     DockableWindowExtraInfo window_info[] = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
                                              {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
                                              {ImGuiKey_F7, ICON_MY_FILES_WINDOW},

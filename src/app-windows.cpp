@@ -228,8 +228,6 @@ void HDRViewApp::draw_pixel_inspector_window()
         return open;
     };
 
-    auto &io = ImGui::GetIO();
-
     ImGui::SeparatorText("Selection:");
     // float sz = ImGui::GetContentRegionAvail().x * 0.65f + ImGui::GetFrameHeight();
     ImGui::SetNextItemWidth(-ImGui::CalcTextSize(" Min,Max ").x);
@@ -240,27 +238,35 @@ void HDRViewApp::draw_pixel_inspector_window()
 
     ImGui::SeparatorText("Watched pixels:");
 
-    auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
-    if (PixelHeader(ICON_MY_CURSOR_ARROW "##hovered pixel", hovered_pixel))
+    // last_hovered_pixel() freezes at the last real hover instead of clearing when the mouse leaves the
+    // viewport, so the color widgets below stay reachable (e.g. to click their dropdowns) instead of
+    // vanishing out from under the cursor on the way to them
+    if (auto hp = last_hovered_pixel())
     {
-        static int3 color_mode = {0, 0, 0};
-        ImGui::PushID("Current");
-        pixel_color_widget(hovered_pixel, color_mode.x, 0);
-        ImGui::SetItemTooltip("Hovered pixel values in current channel.");
-        ImGui::PopID();
+        auto hovered_pixel = *hp;
+        if (PixelHeader(ICON_MY_CURSOR_ARROW "##hovered pixel", hovered_pixel))
+        {
+            static int3 color_mode = {0, 0, 0};
+            ImGui::PushID("Current");
+            pixel_color_widget(hovered_pixel, color_mode.x, 0);
+            ImGui::SetItemTooltip("Hovered pixel values in current channel.");
+            ImGui::PopID();
 
-        ImGui::PushID("Reference");
-        pixel_color_widget(hovered_pixel, color_mode.y, 1);
-        ImGui::SetItemTooltip("Hovered pixel values in reference channel.");
-        ImGui::PopID();
+            ImGui::PushID("Reference");
+            pixel_color_widget(hovered_pixel, color_mode.y, 1);
+            ImGui::SetItemTooltip("Hovered pixel values in reference channel.");
+            ImGui::PopID();
 
-        ImGui::PushID("Composite");
-        pixel_color_widget(hovered_pixel, color_mode.z, 2);
-        ImGui::SetItemTooltip("Hovered pixel values in composite.");
-        ImGui::PopID();
+            ImGui::PushID("Composite");
+            pixel_color_widget(hovered_pixel, color_mode.z, 2);
+            ImGui::SetItemTooltip("Hovered pixel values in composite.");
+            ImGui::PopID();
 
-        ImGui::Spacing();
+            ImGui::Spacing();
+        }
     }
+    else
+        ImGui::TextDisabled("Hover over the image to inspect a pixel.");
 
     ImGui::Checkbox("Show " ICON_MY_WATCHED_PIXEL "s in viewport", &m_draw_watched_pixels);
 

@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include <algorithm>
+
 #include "colormap.h"
 #include "fonts.h"
 #include "image.h"
@@ -187,25 +189,120 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
 
 void HDRViewApp::draw_status_bar()
 {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
-    if (auto num = m_image_loader.num_pending_images())
+    // HelloImGui applies the theme's default WindowPadding.y (8px, see theme.cpp) to this window before
+    // this callback runs; override the starting cursor position with a smaller explicit top margin
+    // instead of accepting that default. Tune this constant directly to adjust the bar's top margin.
+    const float top_margin = HelloImGui::EmSize(0.25f);
+    ImGui::SetCursorPosY(top_margin);
+
+    const float item_spacing = ImGui::GetStyle().ItemSpacing.x;
+    float       badge_x, reserved_w; // set inside the badge block below, used by the zones that follow it
+
     {
-        // ImGui::PushFont(m_sans_regular, 8.f);
-        ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), EmToVec2(15.f, 0.f),
-                           fmt::format("Loading {} image{}", num, num > 1 ? "s" : "").c_str());
-        ImGui::SameLine();
-        // ImGui::PopFont();
+        // drawn first so it always sits at a fixed position at the far left, regardless of whatever
+        // transient content (progress bars, etc.) follows
+        auto badge       = ImGui::GlobalSpdLogWindow().badge_state();
+        bool has_badge   = badge.count > 0;
+        bool log_visible = m_log_window && m_log_window->isVisible;
+
+        // the leading icon always identifies this as "the log" (matching the Log window's menu-bar
+        // toggle icon), reads as an ordinary active button since clicking it always does something
+        // (open/close the Log window); only the message that follows, when present, is colored and
+        // iconed by severity
+        const string open_icon  = ICON_MY_LOG_WINDOW;
+        const ImU32  open_color = ImGui::GetColorU32(ImGuiCol_Text);
+
+        const float inner_spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float max_msg_w     = EmSize(15.f);
+
+        string message;
+        ImU32  msg_color = 0;
+        if (has_badge)
+        {
+            msg_color = ImGui::GlobalSpdLogWindow().get_level_color(badge.level);
+
+            // truncated against its own fixed budget (not the space remaining on the line), so the
+            // message's width, and thus everything derived from it below, only ever depends on the
+            // badge's own state, never on where it happens to sit or what's drawn around it
+            string shown = badge.message;
+            string ellipsis;
+            while (!shown.empty() && ImGui::CalcTextSize((shown + ellipsis).c_str()).x > max_msg_w)
+            {
+                shown.pop_back();
+                ellipsis = "...";
+            }
+            message = fmt::format("{} {}{}", ImGui::LogLevelIcon(badge.level), badge.count,
+                                  shown.empty() ? "" : (" " + shown + ellipsis));
+        }
+
+        // laid out and drawn manually (rather than via a single-colored FlatButton label) since the
+        // leading icon and the message need different colors within one clickable region
+        const ImVec2 open_size = ImGui::CalcTextSize(open_icon.c_str());
+        const ImVec2 msg_size  = has_badge ? ImGui::CalcTextSize(message.c_str()) : ImVec2(0.f, 0.f);
+        const ImVec2 btn_size(open_size.x + (has_badge ? inner_spacing + msg_size.x : 0.f) +
+                                  2 * ImGui::GetStyle().FramePadding.x,
+                              ImGui::GetFrameHeight());
+
+        // whatever follows (the progress bar, etc.) always lands at the same fixed x: reserve room for
+        // the worst case (an icon-prefixed count plus a full-width message) rather than the button's
+        // actual current width, which varies with the badge's state
+        badge_x    = ImGui::GetCursorPosX();
+        reserved_w = open_size.x + inner_spacing + ImGui::CalcTextSize(ICON_MY_LOG_LEVEL_ERROR " 999").x + max_msg_w +
+                     2 * ImGui::GetStyle().FramePadding.x;
+
+        bool clicked = ImGui::FlatButton("##log_badge", log_visible, btn_size);
+
+        ImVec2       btn_min = ImGui::GetItemRectMin();
+        const float2 left    = {btn_min.x + ImGui::GetStyle().FramePadding.x,
+                                (btn_min.y + ImGui::GetItemRectMax().y) * 0.5f};
+        ImGui::AddTextAligned(ImGui::GetWindowDrawList(), left, open_color, open_icon, {0.f, 0.5f});
+        if (has_badge)
+            ImGui::AddTextAligned(ImGui::GetWindowDrawList(), left + float2{open_size.x + inner_spacing, 0.f},
+                                  msg_color, message, {0.f, 0.5f});
+
+        ImGui::Tooltip(has_badge ? fmt::format("{} unseen log message{}. Click to view in the Log window.", badge.count,
+                                               badge.count > 1 ? "s" : "")
+                                       .c_str()
+                                 : "No new log messages. Click to open the Log window.");
+
+        if (clicked && m_log_window)
+        {
+            if (log_visible)
+                m_log_window->isVisible = false;
+            else
+            {
+                m_log_window->isVisible              = true;
+                m_log_window->focusWindowAtNextFrame = true;
+                if (has_badge)
+                    ImGui::GlobalSpdLogWindow().scroll_to(badge.seq);
+            }
+        }
+
+        ImGui::SameLine(badge_x + reserved_w);
     }
+
+    // fixed zone right after the badge, reserved whether or not a progress bar is actually active, so
+    // whatever follows never has to move depending on it
+    const float progress_w = EmSize(15.f);
+    const float progress_x = badge_x + reserved_w + item_spacing;
+    ImGui::SetCursorPosX(progress_x);
+    if (auto num = m_image_loader.num_pending_images())
+        ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(progress_w, 0.f),
+                           fmt::format("Loading {} image{}", num, num > 1 ? "s" : "").c_str());
     else if (m_remaining_download > 0)
     {
         ImGui::ScopedFont f{nullptr, 4.0f};
-        ImGui::ProgressBar((100 - m_remaining_download) / 100.f, EmToVec2(15.f, 0.f), "Downloading image");
-        ImGui::SameLine();
+        ImGui::ProgressBar((100 - m_remaining_download) / 100.f, ImVec2(progress_w, 0.f), "Downloading image");
     }
 
-    float x = ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x;
+    // fixed zone right after the progress bar; drawn only if it fits before the right-aligned zone below
+    // (otherwise it would overlap it on a narrow window) rather than always being drawn on top of it
+    const float hover_x = progress_x + progress_w + item_spacing;
 
-    auto sized_text = [&](float em_size, const string &text, float align = 1.f)
+    // right-aligned zone: zoom info, plus (if shown) the idling checkbox and FPS counter
+    const float right_zone_x = ImGui::GetIO().DisplaySize.x - EmSize(11.f) - (m_show_FPS ? EmSize(14.f) : EmSize(0.f));
+
+    auto sized_text = [&](float &x, float em_size, const string &text, float align = 1.f)
     {
         float item_width = EmSize(em_size);
         float text_width = ImGui::CalcTextSize(text.c_str()).x;
@@ -219,52 +316,66 @@ void HDRViewApp::draw_status_bar()
 
     if (auto img = current_image())
     {
-        auto &io          = ImGui::GetIO();
-        auto  ref         = reference_image();
-        bool  in_viewport = vp_pos_in_viewport(vp_pos_at_app_pos(io.MousePos));
+        // sized_text() right-aligns the zoom text within its reserved EmSize(10.f) column (see the call
+        // below), so the column's own start (right_zone_x) sits to the left of the text's actual visual
+        // start whenever the text is narrower than the column; use that real visual start, not the
+        // column's nominal one, as the boundary hover info must clear
+        float  real_zoom     = m_zoom * pixel_ratio();
+        int    numer         = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
+        int    denom         = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
+        string zoom_str      = fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom);
+        float  zoom_visual_x = right_zone_x + EmSize(10.f) - ImGui::CalcTextSize(zoom_str.c_str()).x;
 
-        auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
+        const float drag_size = EmSize(5.f);
+        const float inner_sp  = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float hover_w   = 2.f * drag_size + 2.f * inner_sp + EmSize(0.5f) + inner_sp + EmSize(25.f);
 
-        float4 top   = img->raw_pixel(hovered_pixel);
-        float4 pixel = top;
-        if (ref && ref->data_window.contains(hovered_pixel))
+        // last_hovered_pixel() freezes at the last real hover instead of clearing when the mouse leaves
+        // the viewport, so the color widget below stays reachable (e.g. to click its dropdown) instead
+        // of vanishing out from under the cursor on the way to it
+        if (hover_x + hover_w + item_spacing <= zoom_visual_x)
         {
-            float4 bottom = ref->raw_pixel(hovered_pixel);
-            // blend with reference image if available
-            pixel = float4{blend(top.x, bottom.x, m_blend_mode), blend(top.y, bottom.y, m_blend_mode),
-                           blend(top.z, bottom.z, m_blend_mode), blend(top.w, bottom.w, m_blend_mode)};
+            if (auto hp = last_hovered_pixel())
+            {
+                auto   hovered_pixel = *hp;
+                auto   ref           = reference_image();
+                float4 top           = img->raw_pixel(hovered_pixel);
+                float4 pixel         = top;
+                if (ref && ref->data_window.contains(hovered_pixel))
+                {
+                    float4 bottom = ref->raw_pixel(hovered_pixel);
+                    // blend with reference image if available
+                    pixel = float4{blend(top.x, bottom.x, m_blend_mode), blend(top.y, bottom.y, m_blend_mode),
+                                   blend(top.z, bottom.z, m_blend_mode), blend(top.w, bottom.w, m_blend_mode)};
+                }
+
+                ImGui::SameLine(hover_x);
+                auto fpy = ImGui::GetStyle().FramePadding.y;
+                ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+                auto y = ImGui::GetCursorPosY();
+                ImGui::SetCursorPosY(y + fpy);
+                ImGui::SetNextItemWidth(drag_size);
+                ImGui::DragInt("##pixel x coordinates", &hovered_pixel.x, 1.f, 0, 0, "X: %d",
+                               ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine(0.f, inner_sp);
+                ImGui::SetCursorPosY(y + fpy);
+                ImGui::SetNextItemWidth(drag_size);
+                ImGui::DragInt("##pixel y coordinates", &hovered_pixel.y, 1.f, 0, 0, "Y: %d",
+                               ImGuiInputTextFlags_ReadOnly);
+                ImGui::PopStyleVar();
+
+                float x = hover_x + 2.f * drag_size + 2.f * inner_sp;
+                sized_text(x, 0.5f, "=", 0.5f);
+
+                ImGui::PushID("Current");
+                ImGui::SameLine(x);
+                pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, EmSize(25.f));
+                ImGui::PopID();
+            }
         }
 
-        ImGui::BeginDisabled(!in_viewport);
-        ImGui::SameLine();
-        auto  fpy       = ImGui::GetStyle().FramePadding.y;
-        float drag_size = EmSize(5.f);
-        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-        auto y = ImGui::GetCursorPosY();
-        ImGui::SetCursorPosY(y + fpy);
-        ImGui::SetNextItemWidth(drag_size);
-        ImGui::DragInt("##pixel x coordinates", &hovered_pixel.x, 1.f, 0, 0, "X: %d", ImGuiInputTextFlags_ReadOnly);
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::SetCursorPosY(y + fpy);
-        ImGui::SetNextItemWidth(drag_size);
-        ImGui::DragInt("##pixel y coordinates", &hovered_pixel.y, 1.f, 0, 0, "Y: %d", ImGuiInputTextFlags_ReadOnly);
-        ImGui::PopStyleVar();
-        ImGui::EndDisabled();
-
-        x += 2.f * drag_size + 2.f * ImGui::GetStyle().ItemInnerSpacing.x;
-
-        sized_text(0.5f, "=", 0.5f);
-
-        ImGui::PushID("Current");
-        ImGui::SameLine(x);
-        pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, EmSize(25.f));
-        ImGui::PopID();
-
-        float real_zoom = m_zoom * pixel_ratio();
-        int   numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
-        int   denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
-        x               = ImGui::GetIO().DisplaySize.x - EmSize(11.f) - (m_show_FPS ? EmSize(14.f) : EmSize(0.f));
-        sized_text(10.f, fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom));
+        float zoom_x = right_zone_x;
+        sized_text(zoom_x, 10.f, zoom_str);
     }
 
     if (m_show_FPS)
@@ -275,8 +386,6 @@ void HDRViewApp::draw_status_bar()
         ImGui::AlignTextToFramePadding();
         ImGui::Text("FPS: %.1f%s", FrameRate(), m_params.fpsIdling.isIdling ? " (Idling)" : "");
     }
-
-    ImGui::PopStyleVar();
 }
 
 void HDRViewApp::draw_menus()
@@ -484,16 +593,15 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    auto  a      = action("Show Log window");
+    auto  a      = action("Show help");
     float text_w = ImGui::CalcTextSize(a.icon.c_str()).x;
 
-    auto pos_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2.f * text_w -
-                 3.5f * ImGui::GetStyle().ItemSpacing.x + 0.5f * ImGui::GetStyle().WindowPadding.x - 2.f;
+    auto pos_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 1.f * text_w -
+                 2.0f * ImGui::GetStyle().ItemSpacing.x + ImGui::GetStyle().WindowPadding.x - 2.f;
     if (pos_x > ImGui::GetCursorPosX())
         ImGui::SetCursorPosX(pos_x);
 
     ImGui::MenuItem(a, false);
-    ImGui::MenuItem(action("Show help"), false);
 }
 
 void HDRViewApp::draw_top_toolbar()

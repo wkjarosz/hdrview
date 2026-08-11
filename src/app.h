@@ -114,6 +114,25 @@ public:
     }
     bool app_pos_in_viewport(float2 app_pos) const { return vp_pos_in_viewport(vp_pos_at_app_pos(app_pos)); }
     bool pixel_in_viewport(float2 pixel) const { return vp_pos_in_viewport(vp_pos_at_pixel(pixel)); }
+
+    /// True when the mouse is over the visible image viewport and nothing else (a panel, a popup, ...)
+    /// is currently claiming the mouse. The geometric *_in_viewport() checks above don't account for
+    /// occlusion by other windows, so hover-based pixel displays should gate on this instead.
+    bool mouse_over_viewport() const
+    {
+        return app_pos_in_viewport(ImGui::GetIO().MousePos) && !ImGui::GetIO().WantCaptureMouse;
+    }
+
+    /// The most recently hovered image pixel while the mouse was over the viewport, held (not cleared)
+    /// once the mouse moves elsewhere so that hover-driven widgets (e.g. the pixel-color button) stay
+    /// interactable instead of disappearing as soon as the mouse leaves the viewport to reach them.
+    /// Returns nullopt only if the viewport has never been hovered this session.
+    optional<int2> last_hovered_pixel()
+    {
+        if (mouse_over_viewport())
+            m_last_hovered_pixel = int2{pixel_at_app_pos(ImGui::GetIO().MousePos)};
+        return m_last_hovered_pixel;
+    }
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -257,9 +276,11 @@ private:
         BackgroundMode_::BGMode_Dark_Checker;     ///< How the background around the image should be rendered
     float4 m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BGMode_Custom_Color
 
-    float2 m_viewport_min, m_viewport_size;
+    float2         m_viewport_min, m_viewport_size;
+    optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
-    HelloImGui::RunnerParams m_params;
+    HelloImGui::RunnerParams    m_params;
+    HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
 
     ImGuiTextFilter m_file_filter, m_channel_filter;
     vector<size_t>  m_visible_images;
