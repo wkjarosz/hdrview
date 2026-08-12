@@ -680,7 +680,24 @@ void HDRViewApp::draw_file_window()
         bool             use_clipper = m_file_list_mode == 0;
         ImGuiListClipper clipper;
         if (use_clipper)
+        {
             clipper.Begin((int)m_visible_images.size());
+
+            // A pending scroll-to-selection request is consumed inside the per-row loop below, which the
+            // clipper only enters for rows it decided to draw. Without this, a request made while the
+            // target is scrolled out of view (e.g. a next/prev-image shortcut) would never reach its
+            // SetScrollHereY() call, and -- since the clipper computes the same range again next frame --
+            // would stay pending forever, until the user manually scrolled the target back into view.
+            if (m_scroll_to_next_frame >= -0.5f && is_valid(m_current))
+            {
+                auto it = find(m_visible_images.begin(), m_visible_images.end(), (size_t)m_current);
+                if (it != m_visible_images.end())
+                {
+                    int vi = int(it - m_visible_images.begin());
+                    clipper.IncludeItemsByIndex(vi, vi + 1);
+                }
+            }
+        }
         // the loop conditions here are to execute this outer loop once if we are not using the clipper, and execute it
         // as long as clipper.Step() returns true otherwise
         for (int iter = 0; (!use_clipper && iter < 1) || (use_clipper && clipper.Step()); ++iter)
