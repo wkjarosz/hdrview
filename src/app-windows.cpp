@@ -11,6 +11,11 @@
 
 #include "platform_utils.h"
 
+#ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+#include "imgui_test_engine/imgui_te_context.h"
+#include "imgui_test_engine/imgui_te_engine.h"
+#endif
+
 using namespace std;
 using namespace HelloImGui;
 
@@ -20,6 +25,39 @@ void HDRViewApp::run()
     Run(m_params);
     ImPlot::DestroyContext();
 }
+
+#ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *))
+{
+    m_params.useImGuiTestEngine      = true;
+    m_params.callbacks.RegisterTests = [register_tests]()
+    {
+        ImGuiTestEngine   *engine = GetImGuiTestEngine();
+        ImGuiTestEngineIO &io     = ImGuiTestEngine_GetIO(engine);
+        // Defaults to off, since it's meant for the interactive Test Engine UI; this binary has no other way
+        // to report *why* a test failed when run in headless/CI (-nogui) mode.
+        io.ConfigLogToTTY            = true;
+        io.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
+        register_tests(engine);
+        ImGuiTestEngine_QueueTests(engine, ImGuiTestGroup_Tests, nullptr, ImGuiTestRunFlags_RunFromCommandLine);
+    };
+    // HelloImGui's own PostSwap hook steps the running test forward each frame; here we just watch for the
+    // queue draining and ask the app to exit once every queued test has finished, the same way a window-close
+    // request does (via m_params.appShallExit) rather than forcing an abrupt process exit.
+    m_params.callbacks.AfterSwap = [this]()
+    {
+        ImGuiTestEngine *engine = GetImGuiTestEngine();
+        if (engine && m_params.callbacks.registerTestsCalled && ImGuiTestEngine_IsTestQueueEmpty(engine))
+        {
+            ImGuiTestEngineResultSummary summary;
+            ImGuiTestEngine_GetResultSummary(engine, &summary);
+            m_test_engine_tested    = summary.CountTested;
+            m_test_engine_succeeded = summary.CountSuccess;
+            m_params.appShallExit   = true;
+        }
+    };
+}
+#endif
 
 void HDRViewApp::draw_tweak_window()
 {

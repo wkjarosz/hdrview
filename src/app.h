@@ -18,7 +18,12 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
+
+#ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+struct ImGuiTestEngine;
+#endif
 
 namespace fs = std::filesystem;
 
@@ -37,6 +42,17 @@ public:
                optional<bool> force_apple_keys, vector<string> in_files = {});
 
     void run();
+
+#ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+    /// Turns on Dear ImGui Test Engine for this app instance. `register_tests` is invoked once the engine is
+    /// ready and should call IM_REGISTER_TEST(engine, ...) for every test; all registered tests are then queued
+    /// automatically. run() exits once the queue is empty, after which test_engine_result() reports how many of
+    /// the queued tests passed. Must be called before run(). Only ever compiled into the hdrview_gui_tests
+    /// target — the production HDRView binary and hdrview_tests never define HDRVIEW_ENABLE_GUI_TEST_ENGINE.
+    void enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *));
+    /// Valid only after run() returns; {tested, succeeded} counts from the Test Engine queue.
+    std::pair<int, int> test_engine_result() const { return {m_test_engine_tested, m_test_engine_succeeded}; }
+#endif
 
     RenderPass *renderpass() { return m_render_pass; }
     Shader     *shader() { return m_shader; }
@@ -281,6 +297,10 @@ private:
 
     HelloImGui::RunnerParams    m_params;
     HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
+
+#ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+    int m_test_engine_tested = 0, m_test_engine_succeeded = 0; ///< see test_engine_result()
+#endif
 
     ImGuiTextFilter m_file_filter, m_channel_filter;
     vector<size_t>  m_visible_images;
