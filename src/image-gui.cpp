@@ -311,127 +311,44 @@ void Image::draw_histogram()
     ImGui::PopFont();
 }
 
-void Image::flatten_channel_rows(int img_idx, unsigned int image_id, vector<ImageListRow> &out) const
+void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is_current, bool is_reference,
+                              bool short_names, int &visible_group, float &scroll_to)
 {
-    int shortcut_index = 0;
-    for (auto &layer : layers)
-        for (int g : layer.groups)
-        {
-            auto &group = groups[g];
-            if (!group.visible)
-                continue;
-
-            string group_name = group.num_channels == 1 ? group.name : "(" + group.name + ")";
-
-            ImageListRow row;
-            row.kind           = ImageListRow::Kind_Group;
-            row.img_idx        = img_idx;
-            row.name           = string(ICON_MY_CHANNEL_GROUP) + " " + layer.name + group_name;
-            row.group_idx      = g;
-            row.depth          = 1;
-            row.shortcut_index = shortcut_index++;
-            row.id             = ImGui::GetIDWithSeed(g, (ImGuiID)image_id);
-            out.push_back(std::move(row));
-        }
-}
-
-void Image::flatten_layer_node(int img_idx, const LayerTreeNode &node, unsigned int parent_id, int depth,
-                               int &shortcut_index, vector<ImageListRow> &out) const
-{
-    if (node.leaf_layer >= 0)
-        for (int g : layers[node.leaf_layer].groups)
-        {
-            auto &group = groups[g];
-            if (!group.visible)
-                continue;
-
-            string group_name = group.num_channels == 1 ? group.name : "(" + group.name + ")";
-
-            ImageListRow row;
-            row.kind           = ImageListRow::Kind_Group;
-            row.img_idx        = img_idx;
-            row.name           = string(ICON_MY_CHANNEL_GROUP) + " " + group_name;
-            row.group_idx      = g;
-            row.depth          = depth;
-            row.shortcut_index = shortcut_index++;
-            row.id             = ImGui::GetIDWithSeed(g, (ImGuiID)parent_id);
-            out.push_back(std::move(row));
-        }
-
-    for (auto &c : node.children)
-    {
-        const LayerTreeNode &child = c.second;
-        if (child.visible_groups == 0)
-            continue;
-
-        ImGuiID child_id =
-            ImGui::GetIDWithSeed(child.name.c_str(), child.name.c_str() + child.name.size(), (ImGuiID)parent_id);
-
-        ImageListRow row;
-        row.kind    = ImageListRow::Kind_Node;
-        row.img_idx = img_idx;
-        row.name    = fmt::format("{} {}", ICON_MY_OPEN_IMAGE, child.name);
-        row.node    = &child;
-        row.depth   = depth;
-        row.id      = child_id;
-        out.push_back(row);
-
-        // Peeked, not drawn: matches ImGuiTreeNodeFlags_DefaultOpen's own default for a node id ImGui
-        // hasn't seen yet, without needing to actually call TreeNodeBehavior for this (possibly clipped)
-        // row just to find out.
-        bool open = ImGui::GetStateStorage()->GetBool(child_id, true);
-        if (open)
-            flatten_layer_node(img_idx, child, child_id, depth + 1, shortcut_index, out);
-    }
-}
-
-void Image::flatten_channel_tree(int img_idx, unsigned int image_id, vector<ImageListRow> &out) const
-{
-    int shortcut_index = 0;
-    flatten_layer_node(img_idx, root, image_id, 1, shortcut_index, out);
-}
-
-bool Image::draw_channel_list_row(const ImageListRow &row, bool is_current, bool is_reference, float &scroll_to)
-{
-    static constexpr ImGuiTreeNodeFlags group_flags =
+    static constexpr ImGuiTreeNodeFlags tree_node_flags =
         ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Leaf |
         ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_DrawLinesFull | ImGuiTreeNodeFlags_Bullet;
-    static constexpr ImGuiTreeNodeFlags node_flags =
-        ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull;
-
-    // Rows are drawn independently of one another (no recursive nesting), so indentation -- which would
-    // otherwise accumulate automatically from nested TreeNodeEx/TreePop calls -- is applied and undone
-    // entirely within this one row, self-contained, based on the depth flatten_channel_tree() recorded.
-    float spacing = ImGui::GetTreeNodeToLabelSpacing();
-    if (row.depth > 0)
-        ImGui::Indent(row.depth * spacing);
-
-    bool open = true;
-    if (row.kind == ImageListRow::Kind_Group)
+    for (size_t g = 0; g < layer.groups.size(); ++g)
     {
-        int  g                    = row.group_idx;
-        bool is_selected_channel  = is_current && selected_group == g;
-        bool is_reference_channel = is_reference && reference_group == g;
+        auto  &group      = groups[layer.groups[g]];
+        string group_name = group.num_channels == 1 ? group.name : "(" + group.name + ")";
+        string name       = string(ICON_MY_CHANNEL_GROUP) + " " + (short_names ? group_name : layer.name + group_name);
+
+        // check if any of the contained channels pass the channel filter
+        if (!group.visible)
+            continue;
+
+        bool is_selected_channel  = is_current && selected_group == layer.groups[g];
+        bool is_reference_channel = is_reference && reference_group == layer.groups[g];
 
         ImGuiTreeNodeFlags flags =
-            group_flags |
+            tree_node_flags |
             (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_None);
-        ImGui::TreeRow(
-            row.id, flags, row.name.c_str(),
-            [&]
-            {
-                string shortcut = is_current && row.shortcut_index < 10
-                                      ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(row.shortcut_index + 1, 10))
-                                      : "";
-                ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
-            },
-            [&] { ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift); });
+        ImGui::TreeRow((void *)(intptr_t)id_++, flags, name.c_str(),
+                       [&]
+                       {
+                           string shortcut = is_current && visible_group < 10
+                                                 ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(visible_group + 1, 10))
+                                                 : "";
+                           ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
+                       },
+                       [&]
+                       { ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift); });
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
             if (ImGui::GetIO().KeyShift)
             {
-                spdlog::trace("Shift-clicked on {}", row.name);
+                spdlog::trace("Shift-clicked on {}", name);
                 // check if we are already the reference channel group
                 if (is_reference_channel)
                 {
@@ -441,16 +358,16 @@ bool Image::draw_channel_list_row(const ImageListRow &row, bool is_current, bool
                 }
                 else
                 {
-                    spdlog::trace("Setting reference image to {}", row.img_idx);
-                    hdrview()->set_reference_image_index(row.img_idx);
-                    reference_group = g;
+                    spdlog::trace("Setting reference image to {}", img_idx);
+                    hdrview()->set_reference_image_index(img_idx);
+                    reference_group = layer.groups[g];
                 }
                 set_as_texture(Target_Secondary);
             }
             else
             {
-                hdrview()->set_current_image_index(row.img_idx);
-                selected_group = g;
+                hdrview()->set_current_image_index(img_idx);
+                selected_group = layer.groups[g];
                 set_as_texture(Target_Primary);
             }
         }
@@ -460,28 +377,60 @@ bool Image::draw_channel_list_row(const ImageListRow &row, bool is_current, bool
                 ImGui::SetScrollHereY(scroll_to);
             scroll_to = -1.f;
         }
+
+        ++visible_group;
     }
-    else // Kind_Node
+}
+
+/*!
+
+*/
+void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id_, bool is_current, bool is_reference,
+                            int &visible_group, float &scroll_to)
+{
+    static constexpr ImGuiTreeNodeFlags tree_node_flags =
+        ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull;
+
+    if (node.leaf_layer >= 0)
+        // draw this node's leaf channel groups
+        draw_layer_groups(layers[node.leaf_layer], img_idx, id_, is_current, is_reference, true, visible_group,
+                          scroll_to);
+
+    for (auto &c : node.children)
     {
-        open = ImGui::TreeRow(row.id, node_flags, row.name.c_str(), nullptr,
-                              [&]
-                              {
-                                  ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-                                  ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGuiCol_Header);
-                                  ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGuiCol_Header);
-                              });
-        // TreeNodeBehavior pushes `row.id` onto the window's ID stack whenever it reports open (matching
-        // ordinary TreeNodeEx semantics for a non-NoTreePushOnOpen node) -- unlike the recursive drawing
-        // this replaced, nothing here relies on that push (children are separate, independently-idâ€‘ed
-        // rows), but it still must be balanced or the next row's ID computations desync.
+        const LayerTreeNode &child_node = c.second;
+        if (child_node.visible_groups == 0)
+            continue;
+
+        bool open =
+            ImGui::TreeRow((void *)(intptr_t)id_++, tree_node_flags,
+                           fmt::format("{} {}", ICON_MY_OPEN_IMAGE, child_node.name).c_str(), nullptr,
+                           [&]
+                           {
+                               ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                               ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGuiCol_Header);
+                               ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGuiCol_Header);
+                           });
         if (open)
+        {
+            draw_layer_node(child_node, img_idx, id_, is_current, is_reference, visible_group, scroll_to);
             ImGui::TreePop();
+        }
+        else
+        {
+            // still account for visible groups within the closed tree node
+            visible_group += child_node.visible_groups;
+        }
     }
+}
 
-    if (row.depth > 0)
-        ImGui::Unindent(row.depth * spacing);
+int Image::draw_channel_rows(int img_idx, int &id_, bool is_current, bool is_reference, float &scroll_to)
+{
+    int visible_group = 0;
+    for (size_t l = 0; l < layers.size(); ++l)
+        draw_layer_groups(layers[l], img_idx, id_, is_current, is_reference, false, visible_group, scroll_to);
 
-    return open;
+    return visible_group;
 }
 
 void Image::draw_info()

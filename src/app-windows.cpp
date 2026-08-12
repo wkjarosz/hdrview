@@ -672,92 +672,32 @@ void HDRViewApp::draw_file_window()
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, icon_width);
         ImGui::PushStyleVarY(ImGuiStyleVar_CellPadding, 0.f);
 
-        // Flatten the whole visible row list -- every visible image, plus (in flat/tree mode) each
-        // visible image's currently-expanded channel rows -- before drawing anything, so a single
-        // ImGuiListClipper can span all three list modes uniformly instead of only "images only" mode
-        // getting clipped (the rest drew every row every frame regardless of scroll position). Pure
-        // bookkeeping over already-known visibility/tree-open state; no ImGui item calls happen here, so
-        // it's cheap even though it runs every frame.
-        ImGuiID              list_id = ImGui::GetID("ImageList");
-        vector<ImageListRow> flat_rows;
-        flat_rows.reserve(m_visible_images.size());
-        int hidden_groups = 0;
-        for (size_t vi = 0; vi < m_visible_images.size(); ++vi)
-        {
-            int   i   = (int)m_visible_images[vi];
-            auto &img = m_images[i];
-
-            // Independent of file_list_mode or the image row's own open/closed state below: how many of
-            // this image's groups the active filter is hiding, full stop.
-            hidden_groups += (int)img->groups.size() - img->root.visible_groups;
-
-            ImageListRow row;
-            row.kind           = ImageListRow::Kind_Image;
-            row.img_idx        = i;
-            row.shortcut_index = (int)vi; // 0-based position among visible images, for the row-number column
-            row.id             = ImGui::GetIDWithSeed(i, list_id);
-            flat_rows.push_back(row);
-
-            if (m_file_list_mode == 0)
-                continue; // leaf: no channel rows are ever shown
-
-            // Peeked, not drawn -- see flatten_layer_node()'s matching comment in image-gui.cpp.
-            if (!ImGui::GetStateStorage()->GetBool(row.id, true))
-                continue;
-
-            if (m_file_list_mode == 1)
-                img->flatten_channel_rows(i, row.id, flat_rows);
-            else
-                img->flatten_channel_tree(i, row.id, flat_rows);
-        }
-
-        // Locate the pending scroll-to-selection target's flat index, if any, so it can be forced into
-        // the clipper's visible range below even when it's currently scrolled out of view -- fixing the
-        // pre-existing bug where a target outside the clipper's natural [DisplayStart, DisplayEnd) window
-        // (e.g. right after a next/prev-image or next/prev-channel-group shortcut while scrolled away
-        // from it) never got its SetScrollHereY() call, since that call only ran inside the per-row loop
-        // body below, which the clipper -- by design -- only enters for rows it decided to draw.
-        int scroll_target = -1;
-        if (m_scroll_to_next_frame >= -0.5f && is_valid(m_current))
-        {
-            int wanted_group = m_file_list_mode == 0 ? -1 : m_images[m_current]->selected_group;
-            for (int r = 0; r < (int)flat_rows.size() && scroll_target < 0; ++r)
-            {
-                const ImageListRow &fr = flat_rows[r];
-                if (m_file_list_mode == 0 ? (fr.kind == ImageListRow::Kind_Image && fr.img_idx == m_current)
-                                          : (fr.kind == ImageListRow::Kind_Group && fr.img_idx == m_current &&
-                                             fr.group_idx == wanted_group))
-                    scroll_target = r;
-            }
-        }
-
+        int id             = 0;
+        int hidden_groups  = 0;
         int image_to_close = -1;
 
-        ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
-
+        // currently we only support the clipper when each image is one row
+        bool             use_clipper = m_file_list_mode == 0;
         ImGuiListClipper clipper;
-        clipper.Begin((int)flat_rows.size());
-        if (scroll_target >= 0)
-            clipper.IncludeItemsByIndex(scroll_target, scroll_target + 1);
-        while (clipper.Step())
+        if (use_clipper)
+            clipper.Begin((int)m_visible_images.size());
+        // the loop conditions here are to execute this outer loop once if we are not using the clipper, and execute it
+        // as long as clipper.Step() returns true otherwise
+        for (int iter = 0; (!use_clipper && iter < 1) || (use_clipper && clipper.Step()); ++iter)
         {
-            for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; ++r)
+            int start = use_clipper ? clipper.DisplayStart : 0;
+            int end   = use_clipper ? clipper.DisplayEnd : (int)m_visible_images.size();
+            for (int vi = start; vi < end; ++vi)
             {
-                const ImageListRow &row          = flat_rows[r];
-                int                 i            = row.img_idx;
-                auto               &img          = m_images[i];
-                bool                is_current   = m_current == i;
-                bool                is_reference = m_reference == i;
-
-                if (row.kind != ImageListRow::Kind_Image)
-                {
-                    ImGui::PushFont(m_sans_regular, 0.f);
-                    img->draw_channel_list_row(row, is_current, is_reference, m_scroll_to_next_frame);
-                    ImGui::PopFont();
-                    continue;
-                }
+                int   i            = (int)m_visible_images[vi];
+                auto &img          = m_images[i];
+                bool  is_current   = m_current == i;
+                bool  is_reference = m_reference == i;
 
                 ImGuiTreeNodeFlags node_flags = base_node_flags;
+
+                ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
+
                 if (is_current || is_reference)
                     node_flags |= ImGuiTreeNodeFlags_Selected;
                 if (m_file_list_mode == 0)
@@ -774,15 +714,14 @@ void HDRViewApp::draw_file_window()
 
                 // Drawn with an empty label -- SpanAllColumns still makes this the row's click target -- so
                 // the icon and front-truncated filename below can be laid out and drawn by hand afterward.
-                bool open = ImGui::TreeRow(
-                    row.id, node_flags, "",
-                    [&] { ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", row.shortcut_index + 1).c_str()); },
-                    [&]
-                    {
-                        if (m_file_list_mode == 0)
-                            ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
-                        ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
-                    });
+                bool open = ImGui::TreeRow((void *)(intptr_t)i, node_flags, "", [&]
+                                           { ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str()); },
+                                           [&]
+                                           {
+                                               if (m_file_list_mode == 0)
+                                                   ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
+                                               ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
+                                           });
                 auto icon = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
                 ImGui::SameLine(0.f, 0.f);
                 string the_text = ImGui::TruncatedText(filename, icon);
@@ -850,7 +789,7 @@ void HDRViewApp::draw_file_window()
 
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", row.shortcut_index + 1).c_str());
+                        ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str());
                         ImGui::TableNextColumn();
                         ImGui::Text(the_text);
                         ImGui::EndTable();
@@ -885,18 +824,48 @@ void HDRViewApp::draw_file_window()
                 ImGui::SameLine(0.f, 0.f);
                 ImGui::TextAligned2(1.0f, -FLT_MIN, the_text.c_str());
 
-                if (m_file_list_mode == 0 && is_current && m_scroll_to_next_frame >= -0.5f)
+                if (open)
                 {
-                    if (!ImGui::IsItemVisible())
-                        ImGui::SetScrollHereY(m_scroll_to_next_frame);
-                    m_scroll_to_next_frame = -1.f;
+                    ImGui::PushFont(m_sans_regular, 0.f);
+                    int visible_groups = 1;
+                    if (m_file_list_mode == 0)
+                    {
+                        ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
+                        if (is_current && m_scroll_to_next_frame >= -0.5f)
+                        {
+                            if (!ImGui::IsItemVisible())
+                                ImGui::SetScrollHereY(m_scroll_to_next_frame);
+                            m_scroll_to_next_frame = -1.f;
+                        }
+                    }
+                    else if (m_file_list_mode == 1)
+                    {
+                        visible_groups =
+                            img->draw_channel_rows(i, id, is_current, is_reference, m_scroll_to_next_frame);
+                        MY_ASSERT(visible_groups == img->root.visible_groups,
+                                  "Unexpected number of visible groups; {} != {}", visible_groups,
+                                  img->root.visible_groups);
+                    }
+                    else
+                    {
+                        visible_groups =
+                            img->draw_channel_tree(i, id, is_current, is_reference, m_scroll_to_next_frame);
+                        MY_ASSERT(visible_groups == img->root.visible_groups,
+                                  "Unexpected number of visible groups; {} != {}", visible_groups,
+                                  img->root.visible_groups);
+                    }
+
+                    hidden_groups += (int)img->groups.size() - visible_groups;
+
+                    ImGui::PopFont();
+
+                    if (open)
+                        ImGui::TreePop();
                 }
 
-                if (open)
-                    ImGui::TreePop();
+                ImGui::PopFont();
             }
         }
-        ImGui::PopFont();
 
         int hidden_images = num_images() - num_visible_images();
         if (hidden_images || hidden_groups)

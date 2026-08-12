@@ -437,7 +437,7 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, reference_mod ? (is_current ? active_avg : active_c) : active);
 }
 
-bool TreeRow(ImGuiID id, ImGuiTreeNodeFlags flags, const char *label, const std::function<void()> &leading_column,
+bool TreeRow(const void *id, ImGuiTreeNodeFlags flags, const char *label, const std::function<void()> &leading_column,
              const std::function<void()> &before_node)
 {
     ImGui::TableNextRow();
@@ -447,7 +447,7 @@ bool TreeRow(ImGuiID id, ImGuiTreeNodeFlags flags, const char *label, const std:
 
     ImGui::TableNextColumn();
     before_node();
-    bool open = ImGui::TreeNodeBehavior(id, flags, label);
+    bool open = ImGui::TreeNodeEx(id, flags, "%s", label);
     ImGui::PopStyleColor(3);
     return open;
 }

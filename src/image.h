@@ -267,34 +267,6 @@ struct LayerTreeNode
     void calculate_visibility(const Image *img);
 };
 
-//! One flattened row of the image-list window (any of its three list modes: images-only, flat, tree),
-//! built without drawing anything by Image::flatten_channel_rows()/flatten_channel_tree() below -- so
-//! the total row count and each row's kind/identity are known up front, before an ImGuiListClipper
-//! decides which of them to actually draw this frame. `id` (an ImGuiID, typed as unsigned int here to
-//! avoid pulling imgui.h into this header) is stable and order-independent -- chained via
-//! ImGui::GetIDWithSeed() from the owning image's own id -- rather than the sequential counter the
-//! row-drawing code used before the clipper existed: since the clipper can skip a row's ancestor (its
-//! enclosing image or layer-tree node) while still drawing the row itself, an id can't depend on
-//! whether ancestors happened to be drawn this frame.
-struct ImageListRow
-{
-    enum Kind_ : int
-    {
-        Kind_Image, //!< A top-level image row; drawn directly by HDRViewApp::draw_file_window(), not by
-                    //!< Image::draw_channel_list_row() below (which only ever sees Kind_Group/Kind_Node).
-        Kind_Group, //!< A leaf channel-group row; `group_idx` indexes `Image::groups`.
-        Kind_Node   //!< A tree-mode intermediate layer-path row; `node` points into `Image::root`.
-    } kind;
-    int                  img_idx = -1;             //!< Index into HDRViewApp's image list.
-    std::string          name;                     //!< Pre-formatted icon + label (unused for Kind_Image).
-    int                  group_idx      = -1;      //!< Kind_Group only.
-    const LayerTreeNode *node           = nullptr; //!< Kind_Node only.
-    int                  depth          = 0;       //!< Indent level, relative to the image row.
-    int                  shortcut_index = 0;       //!< Kind_Group only: this group's 0-based order
-                                                   //!< among the image's currently-drawn groups.
-    unsigned int id = 0;                           //!< ImGuiID.
-};
-
 struct Image
 {
 public:
@@ -404,22 +376,28 @@ public:
                                         bool unpremultiply = true, bool convert_to_sRGB = true) const;
 
     void draw_histogram();
+    void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
+                           bool short_names, int &visible_group, float &scroll_to);
+    void draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
+                         int &visible_group, float &scroll_to);
+    int  draw_channel_tree(int img_idx, int &_id, bool is_current, bool is_reference, float &scroll_to)
+    {
+        int visible_group = 0;
+        draw_layer_node(root, img_idx, _id, is_current, is_reference, visible_group, scroll_to);
+        return visible_group;
+    }
 
-    //! Appends flat-mode rows (every visible channel group, no tree nesting) for this image to `out`, in
-    //! the same order they'd be drawn in. Pure bookkeeping over already-known data (Layer::groups,
-    //! ChannelGroup::visible) -- no ImGui widget calls.
-    void flatten_channel_rows(int img_idx, unsigned int image_id, std::vector<ImageListRow> &out) const;
-    //! Appends tree-mode rows (layer-path nodes and their leaf channel groups) for this image to `out`,
-    //! recursing into a child node only if it's currently open, per ImGui's own persisted tree-node state
-    //! at that node's id (queried via ImGui::GetStateStorage(), not drawn) -- so a collapsed branch simply
-    //! doesn't contribute rows, exactly as if it had been drawn and skipped.
-    void flatten_channel_tree(int img_idx, unsigned int image_id, std::vector<ImageListRow> &out) const;
+    /*!
+        For each visible channel in the image, draw a row into an imgui table.
 
-    //! Draws one row previously produced by flatten_channel_rows()/flatten_channel_tree() (always
-    //! Kind_Group or Kind_Node -- Kind_Image rows are drawn directly by draw_file_window()). Returns
-    //! whether a Kind_Node row is open (always true for Kind_Group, which has no children of its own).
-    bool draw_channel_list_row(const ImageListRow &row, bool is_current, bool is_reference, float &scroll_to);
-
+        \param img_idx The index of the image in HDRViewApp's list of images (or -1). If non-negative, will be used to
+                       set HDRViewApp's current image upon clicking on the row.
+        \param id A unique integer id for imgui purposes. Is incremented for each added clickable row.
+        \param is_current Is this the current image in HDRViewApp?
+        \param is_reference Is this the reference image in HDRViewApp?
+        \returns The number of displayed channel groups.
+    */
+    int  draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference, float &scroll_to);
     void draw_info();
     void draw_chromaticity_diagram(float width);
     void draw_colorspace();
@@ -433,16 +411,6 @@ private:
     std::map<std::string, int> channels_in_layer(const std::string &layer) const;
     void traverse_tree(const LayerTreeNode *node, std::function<void(const LayerTreeNode *, int)> callback,
                        int level = 0) const;
-
-    // Recursive helper behind flatten_channel_tree(): walks `node`'s children (skipping any whose
-    // precomputed visible_groups is 0), appending a Kind_Node row for each -- and, if it's currently
-    // open, recursing into it -- plus a Kind_Group row for each visible channel group in `node`'s own
-    // leaf layer, if any. `parent_id` seeds each child's id (ImGui::GetIDWithSeed(name, parent_id)) so
-    // sibling subtrees with same-named branches (e.g. "diffuse" under both "beauty" and "specular") don't
-    // collide. `shortcut_index` is threaded through by reference: it's this image's single running count
-    // of Kind_Group rows appended so far, across the whole tree, for the Ctrl+N hint.
-    void flatten_layer_node(int img_idx, const LayerTreeNode &node, unsigned int parent_id, int depth,
-                            int &shortcut_index, std::vector<ImageListRow> &out) const;
 };
 
 template <typename T>
