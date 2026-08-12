@@ -416,20 +416,28 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
     float4 header  = GetStyleColorVec4(ImGuiCol_Header);
     float4 hovered = GetStyleColorVec4(ImGuiCol_HeaderHovered);
 
-    // "complementary" color (for reference image/channel group) is shifted by 2/3 in hue
-    constexpr float3 hsv_adjust = float3{0.67f, 0.f, -0.2f};
-    float4           hovered_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust), hovered.w};
-    float4           header_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust), header.w};
-    float4           active_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust), active.w};
+    // The derived colors below depend only on those three theme colors, but this is called once per
+    // visible row per frame, so they're cached and rederived only when the theme actually changes --
+    // comparing three colors is much cheaper than six HSV<->RGB conversions.
+    static float4 cached_hovered{-1.f}, cached_header{-1.f}, cached_active{-1.f};
+    static float4 hovered_c, header_c, active_c, hovered_avg, header_avg, active_avg;
+    if (hovered != cached_hovered || header != cached_header || active != cached_active)
+    {
+        cached_hovered = hovered;
+        cached_header  = header;
+        cached_active  = active;
 
-    // the average between the two is used when a row is both current and reference
-    float4 hovered_avg = 0.5f * (hovered_c + hovered);
-    float4 header_avg  = 0.5f * (header_c + header);
-    float4 active_avg  = 0.5f * (active_c + active);
-    // constexpr float3 hsv_adjust2 = float3{0.33f, 0.f, -0.2f};
-    // float4           hovered_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust2), hovered.w};
-    // float4           header_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust2), header.w};
-    // float4           active_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust2), active.w};
+        // "complementary" color (for reference image/channel group) is shifted by 2/3 in hue
+        constexpr float3 hsv_adjust = float3{0.67f, 0.f, -0.2f};
+        hovered_c = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust), hovered.w};
+        header_c  = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust), header.w};
+        active_c  = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust), active.w};
+
+        // the average between the two is used when a row is both current and reference
+        hovered_avg = 0.5f * (hovered_c + hovered);
+        header_avg  = 0.5f * (header_c + header);
+        active_avg  = 0.5f * (active_c + active);
+    }
 
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, reference_mod ? (is_current ? hovered_avg : hovered_c)
                                                                 : (is_reference ? hovered_avg : hovered));

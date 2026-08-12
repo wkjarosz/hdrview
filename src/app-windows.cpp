@@ -676,6 +676,11 @@ void HDRViewApp::draw_file_window()
         int hidden_groups  = 0;
         int image_to_close = -1;
 
+        // The image rows' font depends only on the list mode, so it's pushed once around the whole list
+        // rather than per row. Pushed before the clipper is set up so that the row height it measures is
+        // the height rows are actually drawn at.
+        ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
+
         // currently we only support the clipper when each image is one row
         bool             use_clipper = m_file_list_mode == 0;
         ImGuiListClipper clipper;
@@ -712,8 +717,6 @@ void HDRViewApp::draw_file_window()
                 bool  is_reference = m_reference == i;
 
                 ImGuiTreeNodeFlags node_flags = base_node_flags;
-
-                ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
 
                 if (is_current || is_reference)
                     node_flags |= ImGuiTreeNodeFlags_Selected;
@@ -876,13 +879,11 @@ void HDRViewApp::draw_file_window()
 
                     ImGui::PopFont();
 
-                    if (open)
-                        ImGui::TreePop();
+                    ImGui::TreePop();
                 }
-
-                ImGui::PopFont();
             }
         }
+        ImGui::PopFont();
 
         int hidden_images = num_images() - num_visible_images();
         if (hidden_images || hidden_groups)
