@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include <algorithm>
+
 #include "dithermatrix256.h"
 #include "fonts.h"
 #include "image.h"
@@ -188,16 +190,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
     // Dockable windows
     //
 
-    DockableWindow histogram_window{"Histogram", "HistogramSpace", [this]
-                                    {
-                                        if (auto img = current_image())
-                                            img->draw_histogram();
-                                    }};
-    DockableWindow channel_stats_window{"Channel statistics", "HistogramSpace", [this]
-                                        {
-                                            if (auto img = current_image())
-                                                return img->draw_channel_stats();
-                                        }};
+    DockableWindow statistics_window{"Pixel statistics", "RightSpace", [this] { draw_statistics_window(); }};
     DockableWindow file_window{"Images", "ImagesSpace", [this] { draw_file_window(); }};
     file_window.focusWindowAtNextFrame = true;
 
@@ -213,14 +206,13 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                      }};
     colorspace_window.imGuiWindowFlags = ImGuiWindowFlags_HorizontalScrollbar;
 
-    DockableWindow pixel_inspector_window{"Pixel inspector", "RightBottomSpace",
-                                          [this] { draw_pixel_inspector_window(); }};
     DockableWindow log_window{
         "Log", "LogSpace",
         [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
 
 #if !defined(__EMSCRIPTEN__)
-    DockableWindow watched_folders_window{"Watched Folders", "ImagesSpace", [this] { m_image_loader.draw_gui(); }};
+    DockableWindow watched_folders_window{"Watched Folders", "WatchedFoldersSpace",
+                                          [this] { m_image_loader.draw_gui(); }};
 #endif
 
 #ifdef _WIN32
@@ -230,25 +222,27 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
 #endif
 
     // docking layouts
-    m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window,
-                                              channel_stats_window,
+    m_params.dockingParams.layoutName      = "Pixel peeper";
+    m_params.dockingParams.dockableWindows = {statistics_window,
                                               file_window,
                                               info_window,
                                               colorspace_window,
-                                              pixel_inspector_window,
                                               log_window
 #if !defined(__EMSCRIPTEN__)
                                               ,
                                               watched_folders_window
 #endif
     };
-    vector<DockableWindowExtraInfo> window_info = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
-                                                   {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
+    auto log_window_it =
+        std::find_if(m_params.dockingParams.dockableWindows.begin(), m_params.dockingParams.dockableWindows.end(),
+                     [](const DockableWindow &w) { return w.label == "Log"; });
+    m_log_window = log_window_it != m_params.dockingParams.dockableWindows.end() ? &*log_window_it : nullptr;
+
+    // Order here must match the order of dockableWindows above.
+    vector<DockableWindowExtraInfo> window_info = {{ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
                                                    {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
                                                    {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                                    {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
-                                                   {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
                                                    {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
 #if !defined(__EMSCRIPTEN__)
                                                    ,
@@ -256,11 +250,54 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
 #endif
     };
 
-    m_params.dockingParams.dockingSplits = {DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
-                                            DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
-                                            DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-                                            DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
-                                            DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.5f}};
+    // Left column: "Images" occupies the top 80%, "Watched Folders" the bottom 20%. Each dock space holds a
+    // single window, so auto-hide their tab bars.
+    std::vector<DockingSplit> docking_splits = {
+        DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
+        DockingSplit{"ImagesSpace", "WatchedFoldersSpace", ImGuiDir_Down, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
+        DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
+        DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
+    m_params.dockingParams.dockingSplits = docking_splits;
+
+    // Builds an alternate layout that starts from the same dockable windows as the default layout, letting
+    // `customize` override each copy's dockSpaceName/isVisible/etc. (e.g. to re-tab or hide windows without
+    // redeclaring them from scratch).
+    auto make_layout = [&](string name, vector<DockingSplit> splits, auto &&customize)
+    {
+        DockingParams p;
+        p.layoutName      = std::move(name);
+        p.dockingSplits   = std::move(splits);
+        p.dockableWindows = m_params.dockingParams.dockableWindows;
+        for (auto &w : p.dockableWindows) customize(w);
+        return p;
+    };
+
+    // "Image browser": same panel geometry as "Pixel peeper", but only the Images/Watched Folders panels start
+    // open -- a minimal layout for browsing/culling images without the inspector panels.
+    DockingParams image_browser_layout =
+        make_layout("Image browser", docking_splits,
+                    [](DockableWindow &w) { w.isVisible = (w.label == "Images" || w.label == "Watched Folders"); });
+
+    // "Metadata": Images and Watched Folders tabbed together atop the left column, with Info below them (both
+    // share the left column here, unlike the other layouts); Log spans the full width along the bottom. Only
+    // Images/Watched Folders/Info start open, for a view focused on browsing images and inspecting their metadata.
+    DockingParams metadata_layout =
+        make_layout("Metadata",
+                    {DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f},
+                     DockingSplit{"ImagesSpace", "InfoSpace", ImGuiDir_Down, 0.54f, ImGuiDockNodeFlags_AutoHideTabBar},
+                     DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
+                     DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}},
+                    [](DockableWindow &w)
+                    {
+                        if (w.label == "Watched Folders")
+                            w.dockSpaceName = "ImagesSpace";
+                        else if (w.label == "Info")
+                            w.dockSpaceName = "InfoSpace";
+                        w.isVisible = (w.label == "Images" || w.label == "Info" || w.label == "Watched Folders");
+                    });
+
+    m_params.alternativeDockingLayouts = {image_browser_layout, metadata_layout};
+
     return {modKey, window_info};
 }
 

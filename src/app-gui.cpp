@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include <algorithm>
+
 #include "colormap.h"
 #include "fonts.h"
 #include "image.h"
@@ -37,175 +39,175 @@
 using namespace std;
 using namespace HelloImGui;
 
-void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy,
-                                    float width) const
+void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy, float width,
+                                    const string &trailing_label) const
 {
-    float4   color32         = pixel_value(pixel, true, which_image);
-    float4   displayed_color = linear_to_sRGB(pixel_value(pixel, false, which_image));
-    uint32_t hex             = color_f128_to_u32(color_u32_to_f128(color_f128_to_u32(displayed_color)));
-    int4     ldr_color       = int4{float4{color_u32_to_f128(hex)} * 255.f};
-    bool3    inside          = {false, false, false};
+    // Shares ImGui::ChannelValuesRow with Image::draw_channel_stats() -- both use the exact same row shape,
+    // including its Copy/Display-as popup. Pixel rows always offer the full mode set: unlike stats, a
+    // "displayed color" is well-defined for any channel selection here (rgba_pixel() already does a
+    // sensible per-group reconstruction before tonemapping), not just literal RGB(A) groups.
+    float4 raw           = pixel_value(pixel, true, which_image);
+    float4 displayed     = linear_to_sRGB(pixel_value(pixel, false, which_image));
+    float  exposure_gain = powf(2.f, m_exposure_live);
 
-    float start_x = ImGui::GetCursorPosX();
-
-    int    components       = 4;
-    string channel_names[4] = {"R", "G", "B", "A"};
-    if (which_image != 2)
+    int  components  = 4;
+    bool show_swatch = true;
+    bool inside      = false;
+    if (which_image == 0)
     {
-        ConstImagePtr img;
-        ChannelGroup  group;
-        if (which_image == 0)
-        {
-            if (!current_image())
-                return;
-            img        = current_image();
-            components = color_mode == 0 ? img->groups[img->selected_group].num_channels : 4;
-            group      = img->groups[img->selected_group];
-            inside[0]  = img->contains(pixel);
-        }
-        else if (which_image == 1)
-        {
-            if (!reference_image())
-                return;
-            img        = reference_image();
-            components = color_mode == 0 ? img->groups[img->reference_group].num_channels : 4;
-            group      = img->groups[img->reference_group];
-            inside[1]  = img->contains(pixel);
-        }
-
-        if (color_mode == 0)
-            for (int c = 0; c < components; ++c)
-                channel_names[c] = Channel::tail(img->channels[group.channels[c]].name);
+        if (!current_image())
+            return;
+        auto &group = current_image()->groups[current_image()->selected_group];
+        components  = group.num_channels;
+        show_swatch = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
+        inside      = current_image()->contains(pixel);
     }
-    inside[2] = inside[0] || inside[1];
-
-    ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf;
-    if (ImGui::ColorButton("colorbutton", displayed_color, color_flags))
-        ImGui::OpenPopup("dropdown");
-    ImGui::SetItemTooltip("Click to change value format%s", allow_copy ? " or copy to clipboard." : ".");
-
-    // ImGui::PushFont(sans_font);
-    if (ImGui::BeginPopup("dropdown"))
+    else if (which_image == 1)
     {
-        if (allow_copy && ImGui::Selectable("Copy to clipboard"))
+        // Unlike Current, this doesn't early-return when absent: the row stays visible (via the caller's
+        // label, e.g. "Reference"), just disabled -- reference_image() being null already makes `inside`
+        // false below, same mechanism as an out-of-bounds pixel.
+        if (reference_image())
         {
-            string buf;
-            if (color_mode == 0)
-            {
-                if (components == 4)
-                    buf = fmt::format("({:g}, {:g}, {:g}, {:g})", color32.x, color32.y, color32.z, color32.w);
-                else if (components == 3)
-                    buf = fmt::format("({:g}, {:g}, {:g})", color32.x, color32.y, color32.z);
-                else if (components == 2)
-                    buf = fmt::format("({:g}, {:g})", color32.x, color32.y);
-                else
-                    buf = fmt::format("{:g}", color32.x);
-            }
-            else if (color_mode == 1)
-                buf = fmt::format("({:g}, {:g}, {:g}, {:g})", displayed_color.x, displayed_color.y, displayed_color.z,
-                                  displayed_color.w);
-            else if (color_mode == 2)
-                buf = fmt::format("({:d}, {:d}, {:d}, {:d})", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
-            else if (color_mode == 3)
-                buf = fmt::format("#{:02X}{:02X}{:02X}{:02X}", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
-            ImGui::SetClipboardText(buf.c_str());
+            auto &group = reference_image()->groups[reference_image()->active_group_index(Target_Secondary)];
+            components  = group.num_channels;
+            show_swatch = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
+            inside      = reference_image()->contains(pixel);
         }
-        ImGui::SeparatorText("Display as:");
-        if (ImGui::Selectable("Raw values", color_mode == 0))
-            color_mode = 0;
-        if (ImGui::Selectable("Displayed color (32-bit)", color_mode == 1))
-            color_mode = 1;
-        if (ImGui::Selectable("Displayed color (8-bit)", color_mode == 2))
-            color_mode = 2;
-        if (ImGui::Selectable("Displayed color (hex)", color_mode == 3))
-            color_mode = 3;
-
-        ImGui::EndPopup();
+        else
+            show_swatch = false;
     }
+    else
+        // Composite is always the 4-channel blended visualization buffer, independent of the current
+        // image's channel-group semantics.
+        inside = (current_image() && current_image()->contains(pixel)) ||
+                 (reference_image() && reference_image()->contains(pixel));
 
-    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-
-    float w_full = (width == 0.f) ? ImGui::GetContentRegionAvail().x : width - (ImGui::GetCursorPosX() - start_x);
-    // width available to all items (without spacing)
-    float w_items    = w_full - ImGui::GetStyle().ItemInnerSpacing.x * (components - 1);
-    float prev_split = w_items;
-    // distributes the available width without jitter during resize
-    auto set_item_width = [&prev_split, w_items, components](int c)
-    {
-        float next_split = ImMax(IM_TRUNC(w_items * (components - 1 - c) / components), 1.f);
-        ImGui::SetNextItemWidth(ImMax(prev_split - next_split, 1.0f));
-        prev_split = next_split;
-    };
-
-    ImGui::BeginDisabled(!inside[which_image]);
-    ImGui::BeginGroup();
-    if (color_mode == 0)
-    {
-        for (int c = 0; c < components; ++c)
-        {
-            if (c > 0)
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-
-            set_item_width(c);
-            ImGui::InputFloat(fmt::format("##component {}", c).c_str(), &color32[c], 0.f, 0.f,
-                              fmt::format("{}: %g", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
-        }
-    }
-    else if (color_mode == 1)
-    {
-        for (int c = 0; c < components; ++c)
-        {
-            if (c > 0)
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-
-            set_item_width(c);
-            ImGui::InputFloat(fmt::format("##component {}", c).c_str(), &displayed_color[c], 0.f, 0.f,
-                              fmt::format("{}: %g", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
-        }
-    }
-    else if (color_mode == 2)
-    {
-        for (int c = 0; c < components; ++c)
-        {
-            if (c > 0)
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-
-            set_item_width(c);
-            ImGui::InputScalarN(fmt::format("##component {}", c).c_str(), ImGuiDataType_S32, &ldr_color[c], 1, nullptr,
-                                nullptr, fmt::format("{}: %d", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
-        }
-    }
-    else if (color_mode == 3)
-    {
-        ImGui::SetNextItemWidth(IM_TRUNC(w_full));
-        ImGui::InputScalar("##hex color", ImGuiDataType_S32, &hex, nullptr, nullptr, "#%08X",
-                           ImGuiInputTextFlags_ReadOnly);
-    }
-    ImGui::EndGroup();
-    ImGui::EndDisabled();
+    // content_disabled (not an outer BeginDisabled around the whole call): the row's popup -- mode
+    // switching, copy -- stays clickable even when the sample itself is meaningless (out of bounds, or no
+    // reference image), only the displayed values gray out.
+    ImGui::ChannelValuesRow(fmt::format("##pixel_color_{}", which_image).c_str(), &raw.x, &displayed.x, components,
+                            ImGuiDataType_Float, "%g", exposure_gain, &color_mode, ImGui::ChannelDisplayMode_AllMask,
+                            allow_copy, show_swatch, ImVec4{displayed.x, displayed.y, displayed.z, displayed.w},
+                            trailing_label, width, /*content_disabled=*/!inside);
 }
 
 void HDRViewApp::draw_status_bar()
 {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
-    if (auto num = m_image_loader.num_pending_images())
+    // HelloImGui applies the theme's default WindowPadding.y (8px, see theme.cpp) to this window before
+    // this callback runs; override the starting cursor position with a smaller explicit top margin
+    // instead of accepting that default. Tune this constant directly to adjust the bar's top margin.
+    const float top_margin = HelloImGui::EmSize(0.25f);
+    ImGui::SetCursorPosY(top_margin);
+
+    const float item_spacing = ImGui::GetStyle().ItemSpacing.x;
+    float       badge_x, reserved_w; // set inside the badge block below, used by the zones that follow it
+
     {
-        // ImGui::PushFont(m_sans_regular, 8.f);
-        ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), EmToVec2(15.f, 0.f),
-                           fmt::format("Loading {} image{}", num, num > 1 ? "s" : "").c_str());
-        ImGui::SameLine();
-        // ImGui::PopFont();
+        // drawn first so it always sits at a fixed position at the far left, regardless of whatever
+        // transient content (progress bars, etc.) follows
+        auto badge       = ImGui::GlobalSpdLogWindow().badge_state();
+        bool has_badge   = badge.count > 0;
+        bool log_visible = m_log_window && m_log_window->isVisible;
+
+        // the leading icon always identifies this as "the log" (matching the Log window's menu-bar
+        // toggle icon), reads as an ordinary active button since clicking it always does something
+        // (open/close the Log window); only the message that follows, when present, is colored and
+        // iconed by severity
+        const string open_icon  = ICON_MY_LOG_WINDOW;
+        const ImU32  open_color = ImGui::GetColorU32(ImGuiCol_Text);
+
+        const float inner_spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float max_msg_w     = EmSize(15.f);
+
+        string message;
+        ImU32  msg_color = 0;
+        if (has_badge)
+        {
+            msg_color = ImGui::GlobalSpdLogWindow().get_level_color(badge.level);
+
+            // truncated against its own fixed budget (not the space remaining on the line), so the
+            // message's width, and thus everything derived from it below, only ever depends on the
+            // badge's own state, never on where it happens to sit or what's drawn around it
+            string shown = badge.message;
+            string ellipsis;
+            while (!shown.empty() && ImGui::CalcTextSize((shown + ellipsis).c_str()).x > max_msg_w)
+            {
+                shown.pop_back();
+                ellipsis = "...";
+            }
+            message = fmt::format("{} {}{}", ImGui::LogLevelIcon(badge.level), badge.count,
+                                  shown.empty() ? "" : (" " + shown + ellipsis));
+        }
+
+        // laid out and drawn manually (rather than via a single-colored FlatButton label) since the
+        // leading icon and the message need different colors within one clickable region
+        const ImVec2 open_size = ImGui::CalcTextSize(open_icon.c_str());
+        const ImVec2 msg_size  = has_badge ? ImGui::CalcTextSize(message.c_str()) : ImVec2(0.f, 0.f);
+        const ImVec2 btn_size(open_size.x + (has_badge ? inner_spacing + msg_size.x : 0.f) +
+                                  2 * ImGui::GetStyle().FramePadding.x,
+                              ImGui::GetFrameHeight());
+
+        // whatever follows (the progress bar, etc.) always lands at the same fixed x: reserve room for
+        // the worst case (an icon-prefixed count plus a full-width message) rather than the button's
+        // actual current width, which varies with the badge's state
+        badge_x    = ImGui::GetCursorPosX();
+        reserved_w = open_size.x + inner_spacing + ImGui::CalcTextSize(ICON_MY_LOG_LEVEL_ERROR " 999").x + max_msg_w +
+                     2 * ImGui::GetStyle().FramePadding.x;
+
+        bool clicked = ImGui::FlatButton("##log_badge", log_visible, btn_size);
+
+        ImVec2       btn_min = ImGui::GetItemRectMin();
+        const float2 left    = {btn_min.x + ImGui::GetStyle().FramePadding.x,
+                                (btn_min.y + ImGui::GetItemRectMax().y) * 0.5f};
+        ImGui::AddTextAligned(ImGui::GetWindowDrawList(), left, open_color, open_icon, {0.f, 0.5f});
+        if (has_badge)
+            ImGui::AddTextAligned(ImGui::GetWindowDrawList(), left + float2{open_size.x + inner_spacing, 0.f},
+                                  msg_color, message, {0.f, 0.5f});
+
+        ImGui::Tooltip(has_badge ? fmt::format("{} unseen log message{}. Click to view in the Log window.", badge.count,
+                                               badge.count > 1 ? "s" : "")
+                                       .c_str()
+                                 : "No new log messages. Click to open the Log window.");
+
+        if (clicked && m_log_window)
+        {
+            if (log_visible)
+                m_log_window->isVisible = false;
+            else
+            {
+                m_log_window->isVisible              = true;
+                m_log_window->focusWindowAtNextFrame = true;
+                if (has_badge)
+                    ImGui::GlobalSpdLogWindow().scroll_to(badge.seq);
+            }
+        }
+
+        ImGui::SameLine(badge_x + reserved_w);
     }
+
+    // fixed zone right after the badge, reserved whether or not a progress bar is actually active, so
+    // whatever follows never has to move depending on it
+    const float progress_w = EmSize(15.f);
+    const float progress_x = badge_x + reserved_w + item_spacing;
+    ImGui::SetCursorPosX(progress_x);
+    if (auto num = m_image_loader.num_pending_images())
+        ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(progress_w, 0.f),
+                           fmt::format("Loading {} image{}", num, num > 1 ? "s" : "").c_str());
     else if (m_remaining_download > 0)
     {
         ImGui::ScopedFont f{nullptr, 4.0f};
-        ImGui::ProgressBar((100 - m_remaining_download) / 100.f, EmToVec2(15.f, 0.f), "Downloading image");
-        ImGui::SameLine();
+        ImGui::ProgressBar((100 - m_remaining_download) / 100.f, ImVec2(progress_w, 0.f), "Downloading image");
     }
 
-    float x = ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x;
+    // fixed zone right after the progress bar; drawn only if it fits before the right-aligned zone below
+    // (otherwise it would overlap it on a narrow window) rather than always being drawn on top of it
+    const float hover_x = progress_x + progress_w + item_spacing;
 
-    auto sized_text = [&](float em_size, const string &text, float align = 1.f)
+    // right-aligned zone: zoom info, plus (if shown) the idling checkbox and FPS counter
+    const float right_zone_x = ImGui::GetIO().DisplaySize.x - EmSize(11.f) - (m_show_FPS ? EmSize(14.f) : EmSize(0.f));
+
+    auto sized_text = [&](float &x, float em_size, const string &text, float align = 1.f)
     {
         float item_width = EmSize(em_size);
         float text_width = ImGui::CalcTextSize(text.c_str()).x;
@@ -219,52 +221,75 @@ void HDRViewApp::draw_status_bar()
 
     if (auto img = current_image())
     {
-        auto &io          = ImGui::GetIO();
-        auto  ref         = reference_image();
-        bool  in_viewport = vp_pos_in_viewport(vp_pos_at_app_pos(io.MousePos));
+        // sized_text() right-aligns the zoom text within its reserved EmSize(10.f) column (see the call
+        // below), so the column's own start (right_zone_x) sits to the left of the text's actual visual
+        // start whenever the text is narrower than the column; use that real visual start, not the
+        // column's nominal one, as the boundary hover info must clear
+        float  real_zoom     = m_zoom * pixel_ratio();
+        int    numer         = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
+        int    denom         = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
+        string zoom_str      = fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom);
+        float  zoom_visual_x = right_zone_x + EmSize(10.f) - ImGui::CalcTextSize(zoom_str.c_str()).x;
 
-        auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
+        const float drag_size = EmSize(5.f);
+        const float inner_sp  = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float hover_w   = 2.f * drag_size + 2.f * inner_sp + EmSize(0.5f) + inner_sp + EmSize(25.f);
 
-        float4 top   = img->raw_pixel(hovered_pixel);
-        float4 pixel = top;
-        if (ref && ref->data_window.contains(hovered_pixel))
+        // last_hovered_pixel() freezes at the last real hover instead of clearing when the mouse leaves
+        // the viewport, so the color widget below stays reachable (e.g. to click its dropdown) instead
+        // of vanishing out from under the cursor on the way to it
+        if (hover_x + hover_w + item_spacing <= zoom_visual_x)
         {
-            float4 bottom = ref->raw_pixel(hovered_pixel);
-            // blend with reference image if available
-            pixel = float4{blend(top.x, bottom.x, m_blend_mode), blend(top.y, bottom.y, m_blend_mode),
-                           blend(top.z, bottom.z, m_blend_mode), blend(top.w, bottom.w, m_blend_mode)};
+            if (auto hp = last_hovered_pixel())
+            {
+                auto   hovered_pixel = *hp;
+                auto   ref           = reference_image();
+                float4 top           = img->raw_pixel(hovered_pixel);
+                float4 pixel         = top;
+                if (ref && ref->data_window.contains(hovered_pixel))
+                {
+                    float4 bottom = ref->raw_pixel(hovered_pixel);
+                    // blend with reference image if available
+                    pixel = float4{blend(top.x, bottom.x, m_blend_mode), blend(top.y, bottom.y, m_blend_mode),
+                                   blend(top.z, bottom.z, m_blend_mode), blend(top.w, bottom.w, m_blend_mode)};
+                }
+
+                ImGui::SameLine(hover_x);
+                auto fpy = ImGui::GetStyle().FramePadding.y;
+                ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+                auto y = ImGui::GetCursorPosY();
+                // ReadOnly alone doesn't block DragInt's drag gesture, only keyboard entry -- these
+                // coordinates track the live hover position and were never meant to be draggable at all.
+                ImGui::BeginDisabled();
+                ImGui::SetCursorPosY(y + fpy);
+                ImGui::SetNextItemWidth(drag_size);
+                ImGui::DragInt("##pixel x coordinates", &hovered_pixel.x, 1.f, 0, 0, "X: %d",
+                               ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine(0.f, inner_sp);
+                ImGui::SetCursorPosY(y + fpy);
+                ImGui::SetNextItemWidth(drag_size);
+                ImGui::DragInt("##pixel y coordinates", &hovered_pixel.y, 1.f, 0, 0, "Y: %d",
+                               ImGuiInputTextFlags_ReadOnly);
+                ImGui::EndDisabled();
+                ImGui::PopStyleVar();
+
+                float x = hover_x + 2.f * drag_size + 2.f * inner_sp;
+                sized_text(x, 0.5f, "=", 0.5f);
+
+                ImGui::PushID("Current");
+                ImGui::SameLine(x);
+                // pixel_color_widget no longer bakes in compact styling itself, so opt in here to match the
+                // X/Y drag boxes above, and nudge down by the same backed-up fpy to stay on "="'s baseline
+                ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+                ImGui::SetCursorPosY(y + fpy);
+                pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, EmSize(25.f));
+                ImGui::PopStyleVar();
+                ImGui::PopID();
+            }
         }
 
-        ImGui::BeginDisabled(!in_viewport);
-        ImGui::SameLine();
-        auto  fpy       = ImGui::GetStyle().FramePadding.y;
-        float drag_size = EmSize(5.f);
-        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-        auto y = ImGui::GetCursorPosY();
-        ImGui::SetCursorPosY(y + fpy);
-        ImGui::SetNextItemWidth(drag_size);
-        ImGui::DragInt("##pixel x coordinates", &hovered_pixel.x, 1.f, 0, 0, "X: %d", ImGuiInputTextFlags_ReadOnly);
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::SetCursorPosY(y + fpy);
-        ImGui::SetNextItemWidth(drag_size);
-        ImGui::DragInt("##pixel y coordinates", &hovered_pixel.y, 1.f, 0, 0, "Y: %d", ImGuiInputTextFlags_ReadOnly);
-        ImGui::PopStyleVar();
-        ImGui::EndDisabled();
-
-        x += 2.f * drag_size + 2.f * ImGui::GetStyle().ItemInnerSpacing.x;
-
-        sized_text(0.5f, "=", 0.5f);
-
-        ImGui::PushID("Current");
-        ImGui::SameLine(x);
-        pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, EmSize(25.f));
-        ImGui::PopID();
-
-        float real_zoom = m_zoom * pixel_ratio();
-        int   numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
-        int   denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
-        x               = ImGui::GetIO().DisplaySize.x - EmSize(11.f) - (m_show_FPS ? EmSize(14.f) : EmSize(0.f));
-        sized_text(10.f, fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom));
+        float zoom_x = right_zone_x;
+        sized_text(zoom_x, 10.f, zoom_str);
     }
 
     if (m_show_FPS)
@@ -275,8 +300,6 @@ void HDRViewApp::draw_status_bar()
         ImGui::AlignTextToFramePadding();
         ImGui::Text("FPS: %.1f%s", FrameRate(), m_params.fpsIdling.isIdling ? " (Idling)" : "");
     }
-
-    ImGui::PopStyleVar();
 }
 
 void HDRViewApp::draw_menus()
@@ -432,6 +455,18 @@ void HDRViewApp::draw_menus()
 
         MenuItem(action("Restore default layout"));
 
+        if (!m_params.alternativeDockingLayouts.empty() && ImGui::BeginMenuEx("Layout", ICON_MY_SHOW_ALL_WINDOWS))
+        {
+            auto current = HelloImGui::CurrentLayoutName();
+            if (ImGui::MenuItem(m_params.dockingParams.layoutName.c_str(), nullptr,
+                                current == m_params.dockingParams.layoutName))
+                HelloImGui::SwitchLayout(m_params.dockingParams.layoutName);
+            for (auto &layout : m_params.alternativeDockingLayouts)
+                if (ImGui::MenuItem(layout.layoutName.c_str(), nullptr, current == layout.layoutName))
+                    HelloImGui::SwitchLayout(layout.layoutName);
+            ImGui::EndMenu();
+        }
+
         ImGui::Separator();
 
         MenuItem(action("Show entire GUI"));
@@ -484,16 +519,15 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    auto  a      = action("Show Log window");
+    auto  a      = action("Show help");
     float text_w = ImGui::CalcTextSize(a.icon.c_str()).x;
 
-    auto pos_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2.f * text_w -
-                 3.5f * ImGui::GetStyle().ItemSpacing.x + 0.5f * ImGui::GetStyle().WindowPadding.x - 2.f;
+    auto pos_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 1.f * text_w -
+                 2.0f * ImGui::GetStyle().ItemSpacing.x + ImGui::GetStyle().WindowPadding.x - 2.f;
     if (pos_x > ImGui::GetCursorPosX())
         ImGui::SetCursorPosX(pos_x);
 
     ImGui::MenuItem(a, false);
-    ImGui::MenuItem(action("Show help"), false);
 }
 
 void HDRViewApp::draw_top_toolbar()

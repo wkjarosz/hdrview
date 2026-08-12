@@ -4,6 +4,7 @@
 #include "common.h"
 #include "fonts.h"
 #include "image.h"
+#include "log_throttle.h"
 
 #include <random>
 
@@ -236,7 +237,7 @@ void HDRViewApp::draw_image() const
 
         if (img)
         {
-            int                 group_idx = target == Target_Primary ? img->selected_group : img->reference_group;
+            int                 group_idx = img->active_group_index(target);
             const ChannelGroup &group     = img->groups[group_idx];
 
             // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
@@ -336,7 +337,6 @@ void HDRViewApp::draw_background()
     // If watching files for changes, do so every 250ms
     if (m_watch_files_for_changes && this_frame - last_file_changes_check_time >= 250ms)
     {
-        spdlog::trace("Checking for file changes...");
         m_image_loader.load_new_and_modified_files();
         last_file_changes_check_time = this_frame;
     }
@@ -367,7 +367,8 @@ void HDRViewApp::draw_background()
     }
     catch (const exception &e)
     {
-        spdlog::error("Drawing failed:\n\t{}.", e.what());
+        if (static LogThrottle throttle{std::chrono::seconds(5)}; throttle)
+            spdlog::error("Drawing failed:\n\t{}.", e.what());
     }
 }
 
@@ -389,6 +390,7 @@ void HDRViewApp::set_image_textures()
     }
     catch (const exception &e)
     {
-        spdlog::error("Could not upload texture to graphics backend: {}.", e.what());
+        if (static LogThrottle throttle{std::chrono::seconds(5)}; throttle)
+            spdlog::error("Could not upload texture to graphics backend: {}.", e.what());
     }
 }

@@ -11,6 +11,7 @@
 #include "imgui.h"
 #include "ringbuffer_color_sink.h"
 
+#include <optional>
 #include <string>
 
 namespace ImGui
@@ -33,6 +34,8 @@ public:
 class SpdLogWindow
 {
 public:
+    using BadgeState = spdlog::sinks::ringbuffer_color_sink_mt::BadgeState;
+
     SpdLogWindow(int max_items = 1024);
 
     void draw(ImFont *console_font = nullptr, float size = 0.f);
@@ -48,6 +51,15 @@ public:
     void  set_level_color(spdlog::level::level_enum level, ImU32 color);
     ImU32 get_level_color(spdlog::level::level_enum level);
 
+    /// snapshot of the highest-severity activity logged since the last mark_log_seen()
+    BadgeState badge_state() { return m_ringbuffer_sink->badge_state(); }
+    /// clears the badge state; called automatically once this window regains focus
+    void mark_log_seen() { m_ringbuffer_sink->mark_badge_seen(); }
+
+    /// scrolls the log view to the item with the given seq (see ringbuffer_color_sink::LogItem::seq)
+    /// the next time draw() is called
+    void scroll_to(uint64_t seq) { m_scroll_to_seq = seq; }
+
 protected:
     std::shared_ptr<spdlog::sinks::dup_filter_sink_mt>       m_filter_sink;
     std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> m_ringbuffer_sink;
@@ -55,14 +67,26 @@ protected:
     ImGuiTextFilter                                          m_filter;
     bool                                                     m_auto_scroll = true;
     bool                                                     m_wrap_text   = false;
+    std::optional<uint64_t>                                  m_scroll_to_seq;
 };
 
 // reference to a global SpdLogWindow instance
 SpdLogWindow &GlobalSpdLogWindow();
 
+// icon representing a given spdlog level, from the app's active icon set
+const char *LogLevelIcon(spdlog::level::level_enum level);
+
 ImVec2 IconSize();
 ImVec2 IconButtonSize();
 bool   IconButton(const char *icon, bool *v = nullptr, const ImVec2 &size = ImVec2(-1, -1));
+
+// A button with no background/border in its resting state (just a hover/press highlight), sized to fit
+// its label rather than forced into a fixed square like IconButton. Useful for compact status/toolbar
+// controls where the label itself (icon, text, or both) should be the only visible element. When
+// active is true, the resting state is filled with ImGuiCol_FrameBg instead of being transparent, for
+// a persistent toggled-on look (matching IconButton's toggle-pointer variant), without affecting the
+// return value based on the click that happened this frame.
+bool FlatButton(const char *label, bool active = false, const ImVec2 &size = ImVec2(0, 0));
 
 //! A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
 struct Action
@@ -157,6 +181,49 @@ void PlotMultiHistograms(const char *label, int num_hists, const char **names, c
                          int values_count, float scale_min = FLT_MAX, float scale_max = FLT_MAX,
                          ImVec2 graph_size = ImVec2(0, 0));
 
+//! How a ChannelValuesRow's numeric boxes currently render their values. Raw/ExposureAdjusted read from the
+//! row's `raw` array (Raw as-is, ExposureAdjusted scaled by `exposure_gain`); Displayed32/8/Hex read from
+//! the row's `displayed` array (already run through the app's exposure/tonemap/gamma/sRGB pipeline).
+enum ChannelDisplayMode_ : int
+{
+    ChannelDisplayMode_Raw = 0,
+    ChannelDisplayMode_ExposureAdjusted,
+    ChannelDisplayMode_Displayed32,
+    ChannelDisplayMode_Displayed8,
+    ChannelDisplayMode_DisplayedHex,
+    ChannelDisplayMode_COUNT
+};
+using ChannelDisplayModeMask                                    = unsigned int;
+constexpr ChannelDisplayModeMask ChannelDisplayMode_RawOnlyMask = 1u << ChannelDisplayMode_Raw;
+constexpr ChannelDisplayModeMask ChannelDisplayMode_NoDisplayMask =
+    (1u << ChannelDisplayMode_Raw) | (1u << ChannelDisplayMode_ExposureAdjusted);
+constexpr ChannelDisplayModeMask ChannelDisplayMode_AllMask = (1u << ChannelDisplayMode_COUNT) - 1u;
+
+//! Draws `num_components` read-only numeric boxes side by side, plus an optional trailing color swatch
+//! and/or text label -- all one click target opening a popup with "Copy to clipboard" (if `allow_copy`)
+//! and a "Display as:" list of ChannelDisplayMode_ entries (disabled, not omitted, per `enabled_modes`).
+//! The click target stays active under `content_disabled`; only the boxes/swatch/label gray out (e.g. for
+//! a meaningless/out-of-bounds sample). `*mode` is the caller-owned current selection. `raw` is required;
+//! `displayed` may be null unless a Displayed* mode is enabled. `id` scopes the row's widget IDs.
+//! `total_width`, if nonzero, overrides the row's natural (CalcItemWidth-based) width. `show_color_markers`
+//! tints each box's left edge per component (only meaningful with `show_swatch`). Row height follows the
+//! ambient FramePadding -- push ImGuiStyleVar_FramePadding for a more compact row; there is no compact
+//! default.
+void ChannelValuesRow(const char *id, const float *raw, const float *displayed, int num_components,
+                      ImGuiDataType data_type, const char *format, float exposure_gain, int *mode,
+                      ChannelDisplayModeMask enabled_modes = ChannelDisplayMode_AllMask, bool allow_copy = true,
+                      bool show_swatch = false, const ImVec4 &swatch_color = ImVec4(0, 0, 0, 1),
+                      const std::string &label = {}, float total_width = 0.f, bool content_disabled = false,
+                      bool show_color_markers = false);
+
+//! Draws a row of `num_components` text labels (e.g. channel names), each left-aligned over the column
+//! ChannelValuesRow(..., num_components, ...) would draw for the same `total_width` -- for a
+//! column-header row placed above one or more ChannelValuesRow calls sharing that same num_components. Pass
+//! `reserve_swatch_gap = true` if any of those rows reserve a swatch column (see ChannelValuesRow) out of
+//! the same `total_width`, so the header's columns still line up with the (narrower) box columns below.
+void ChannelValuesRowHeader(const std::string *names, int num_components, float total_width = 0.f,
+                            bool reserve_swatch_gap = false);
+
 inline void AlignCursor(float width, float align)
 {
     if (auto shift = align * (GetContentRegionAvail().x - width))
@@ -169,6 +236,20 @@ inline void AlignCursor(const std::string &text, float align) { AlignCursor(Calc
 std::string TruncatedText(const std::string &filename, const std::string &icon);
 
 void PushRowColors(bool is_current, bool is_reference, bool reference_mod = false);
+
+//! Draws one row of a table-as-tree/outliner view -- the shared skeleton behind the image list's three
+//! row kinds (top-level image rows, flat/tree channel-group rows, tree-mode layer-path rows): TableNextRow(),
+//! an optional leading-column callback (drawn in column 0; pass nullptr to leave it empty), then
+//! TreeNodeEx(id, flags, "%s", label) in column 1. `before_node` runs immediately before the TreeNodeEx
+//! call (after the row has moved into the label column) and must push exactly 3 style colors -- e.g. via
+//! PushRowColors() above, or a plain dim/hover-neutralizing 3x PushStyleColor() for a non-selectable row --
+//! which TreeRow() pops again before returning; it's also the right place for any one-off Indent()/
+//! Unindent() that needs to apply specifically to this row's label column. `label` may be "" for callers
+//! that render their own content after TreeRow() returns instead (e.g. a row needing custom text
+//! truncation) -- SpanAllColumns keeps that row the click target either way. Returns TreeNodeEx's own
+//! open/closed result.
+bool TreeRow(const void *id, ImGuiTreeNodeFlags flags, const char *label, const std::function<void()> &leading_column,
+             const std::function<void()> &before_node);
 
 void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args);
 void TextAligned2(float align_x, float size_x, const char *fmt, ...);

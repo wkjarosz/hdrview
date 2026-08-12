@@ -342,7 +342,11 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
                 return std::numeric_limits<float>::quiet_NaN(); // out of bounds
             }
             float val = img(i2d + croi.min - img_data_origin);
-            if (ref)
+            // BlendMode_Normal discards the reference sample (blend() just returns `val`), and croi is only
+            // intersected with rroi above when the reference is actually going to be sampled -- so sampling it
+            // here regardless of blend mode risks indexing outside ref's bounds whenever the two channels
+            // differ in size.
+            if (ref && settings.blend_mode != BlendMode_Normal)
                 val = blend(val, (*ref)(i2d + croi.min - rroi.min), settings.blend_mode);
             return val;
         };
@@ -595,10 +599,11 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
         hdrview()->exposure(),   hdrview()->histogram_x_scale(), hdrview()->histogram_y_scale(),   hdrview()->roi(),
         hdrview()->blend_mode(), img2 ? img2->id : -1,           img2 ? img2->reference_group : -1};
 
-    auto recompute_async_stats =
-        [this, desired_settings, img1, img_data_origin = img1->data_window.min,
-         ref             = img2 ? &img2->channels[img2->groups[img2->reference_group].channels[c]] : nullptr,
-         ref_data_origin = img2 ? img2->data_window.min : int2{}]()
+    auto recompute_async_stats = [this, desired_settings, img1, img_data_origin = img1->data_window.min,
+                                  ref             = (img2 && img2->is_valid_group(img2->reference_group))
+                                                        ? &img2->channels[img2->groups[img2->reference_group].channels[c]]
+                                                        : nullptr,
+                                  ref_data_origin = img2 ? img2->data_window.min : int2{}]()
     {
         spdlog::debug("id: {}", img1->id);
         // First cancel the potential previous async task
@@ -659,7 +664,7 @@ void Image::set_as_texture(Target_ target)
 {
     auto                s         = hdrview()->shader();
     auto                t         = target_name(target);
-    int                 group_idx = target == Target_Primary ? selected_group : reference_group;
+    int                 group_idx = active_group_index(target);
     const ChannelGroup &group     = groups[group_idx];
 
     for (int c = 0; c < group.num_channels; ++c)
@@ -1267,7 +1272,7 @@ float4 Image::raw_pixel(int2 p, Target_ target) const
     if (!contains(p))
         return float4{0.f};
 
-    int                 group_idx = target == Target_Primary ? selected_group : reference_group;
+    int                 group_idx = active_group_index(target);
     const ChannelGroup &group     = groups[group_idx];
 
     float4 value{0.f};
@@ -1282,7 +1287,7 @@ float4 Image::rgba_pixel(int2 p, Target_ target) const
     if (!contains(p))
         return float4{0.f};
 
-    int                 group_idx = target == Target_Primary ? selected_group : reference_group;
+    int                 group_idx = active_group_index(target);
     const ChannelGroup &group     = groups[group_idx];
 
     float4 value{float3{0.f}, 1.f};

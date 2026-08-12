@@ -115,6 +115,25 @@ public:
     }
     bool app_pos_in_viewport(float2 app_pos) const { return vp_pos_in_viewport(vp_pos_at_app_pos(app_pos)); }
     bool pixel_in_viewport(float2 pixel) const { return vp_pos_in_viewport(vp_pos_at_pixel(pixel)); }
+
+    /// True when the mouse is over the visible image viewport and nothing else (a panel, a popup, ...)
+    /// is currently claiming the mouse. The geometric *_in_viewport() checks above don't account for
+    /// occlusion by other windows, so hover-based pixel displays should gate on this instead.
+    bool mouse_over_viewport() const
+    {
+        return app_pos_in_viewport(ImGui::GetIO().MousePos) && !ImGui::GetIO().WantCaptureMouse;
+    }
+
+    /// The most recently hovered image pixel while the mouse was over the viewport, held (not cleared)
+    /// once the mouse moves elsewhere so that hover-driven widgets (e.g. the pixel-color button) stay
+    /// interactable instead of disappearing as soon as the mouse leaves the viewport to reach them.
+    /// Returns nullopt only if the viewport has never been hovered this session.
+    optional<int2> last_hovered_pixel()
+    {
+        if (mouse_over_viewport())
+            m_last_hovered_pixel = int2{pixel_at_app_pos(ImGui::GetIO().MousePos)};
+        return m_last_hovered_pixel;
+    }
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -145,6 +164,10 @@ public:
     //-----------------------------------------------------------------------------
 
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;
+
+    //! Applies the same exposure/tonemap/gamma pipeline as pixel_value(..., raw=false, ...), for an
+    //! arbitrary linear value rather than a pixel lookup (e.g. to preview a computed statistic).
+    float4 tonemap_value(float4 value) const;
 
     // load font with the specified name at the specified size
     ImFont *font(const string &name) const;
@@ -183,8 +206,7 @@ private:
     float2 image_scale(ConstImagePtr img) const;
 
     void draw_background();
-    void draw_channel_stats_window();
-    void draw_pixel_inspector_window();
+    void draw_statistics_window();
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
@@ -219,7 +241,7 @@ private:
     bool supports_hdr() const;
 
     void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
-                            float width = 0.f) const;
+                            float width = 0.f, const string &trailing_label = {}) const;
 
 private:
     //-----------------------------------------------------------------------------
@@ -336,9 +358,12 @@ private:
     float2    m_translate          = {0.f, 0.f};     ///< The panning offset of the image
     Channels_ m_channel            = Channels_::Channels_RGBA; ///< Which channel to display
 
-    float2 m_viewport_min, m_viewport_size;
+    float2         m_viewport_min, m_viewport_size;
+    optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
     MouseMode m_mouse_mode = MouseMode_PanZoom;
+
+    HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
 
     //-----------------------------------------------------------------------------
     // Hello ImGui / app framework state

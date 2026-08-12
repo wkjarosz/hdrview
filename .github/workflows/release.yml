@@ -197,7 +197,8 @@ jobs:
       matrix:
         buildtype: [Release]
         config:
-          - { name: "Windows MSVC", os: windows-latest, preset: "windows-msvc" }
+          - { name: "Windows MSVC", os: windows-latest, preset: "windows-msvc", arch: "x86_64" }
+          - { name: "Windows ARM64 MSVC", os: windows-11-arm, preset: "windows-arm64-msvc", arch: "arm64", msvc_arch: "arm64" }
 
     steps:
       - name: Install dependencies
@@ -208,6 +209,8 @@ jobs:
           fetch-depth: 0
 
       - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.config.msvc_arch || 'x64' }}
 
       - name: Set version variables
         run: |
@@ -249,14 +252,14 @@ jobs:
         uses: thedoctor0/zip-release@0.7.5
         with:
           type: "zip"
-          filename: "HDRView-${{ env.VERSION_NO_V }}-windows.zip"
+          filename: "HDRView-${{ env.VERSION_NO_V }}-windows-${{ matrix.config.arch }}.zip"
           directory: ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy
 
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy/HDRView-${{ env.VERSION_NO_V }}-windows.zip
+            ${{github.workspace}}/build/${{ matrix.config.preset }}/deploy/HDRView-${{ env.VERSION_NO_V }}-windows-${{ matrix.config.arch }}.zip
           prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

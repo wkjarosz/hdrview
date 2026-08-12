@@ -37,6 +37,9 @@ static std::chrono::system_clock::time_point to_system_clock(std::filesystem::fi
 void Image::draw_histogram()
 {
     static ImPlotCond plot_cond = ImPlotCond_Always;
+    ImGui::SeparatorText("Histogram");
+
+    // ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
     float combo_width = std::max(EmSize(5.f), 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
                                                       2.f * ImGui::GetStyle().ItemSpacing.x) -
                                                   (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
@@ -71,6 +74,8 @@ void Image::draw_histogram()
     ImGui::Tooltip((plot_cond == ImPlotCond_Always) ? "Click to allow manually panning/zooming in histogram"
                                                     : "Click to auto-fit histogram axes based on the exposure.");
 
+    // ImGui::PopStyleVar();
+
     auto        hovered_pixel = int2{hdrview()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
     float4      color32       = raw_pixel(hovered_pixel);
     auto       &group         = groups[selected_group];
@@ -99,7 +104,7 @@ void Image::draw_histogram()
     ImPlot::PushStyleVar(ImPlotStyleVar_AnnotationPadding, ImVec2{2.0, 0.0});
     // float4 plot_bg{0.35f, 0.35f, 0.35f, 1.f};
     // ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
-    if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, -1)))
+    if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, 150.f)))
     {
         ImPlot::GetInputMap().ZoomRate = 0.03f;
         ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_NoTickLabels);
@@ -231,7 +236,7 @@ void Image::draw_histogram()
             ImPlot::PopStyleColor(2);
         }
 
-        if (contains(hovered_pixel) && hdrview()->app_pos_in_viewport(ImGui::GetIO().MousePos))
+        if (contains(hovered_pixel) && hdrview()->mouse_over_viewport())
         {
             for (int c = 0; c < std::min(4, group.num_channels); ++c)
             {
@@ -325,60 +330,54 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
         bool is_selected_channel  = is_current && selected_group == layer.groups[g];
         bool is_reference_channel = is_reference && reference_group == layer.groups[g];
 
-        ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift);
+        ImGuiTreeNodeFlags flags =
+            tree_node_flags |
+            (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_None);
+        ImGui::TreeRow((void *)(intptr_t)id_++, flags, name.c_str(),
+                       [&]
+                       {
+                           string shortcut = is_current && visible_group < 10
+                                                 ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(visible_group + 1, 10))
+                                                 : "";
+                           ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
+                       },
+                       [&]
+                       { ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift); });
+
+        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
-            ImGui::TableNextRow();
-
-            ImGui::TableNextColumn();
-            string shortcut = is_current && visible_group < 10
-                                  ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(visible_group + 1, 10))
-                                  : "";
-            ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
-
-            // ImGui::TableNextColumn();
-            // ImGui::TextAligned2(0.0f, -FLT_MIN, is_selected_channel ? ICON_MY_VISIBILITY : "");
-
-            ImGui::TableNextColumn();
-            ImGui::TreeNodeEx((void *)(intptr_t)id_++,
-                              tree_node_flags |
-                                  (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected
-                                                                               : ImGuiTreeNodeFlags_None),
-                              "%s", name.c_str());
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            if (ImGui::GetIO().KeyShift)
             {
-                if (ImGui::GetIO().KeyShift)
+                spdlog::trace("Shift-clicked on {}", name);
+                // check if we are already the reference channel group
+                if (is_reference_channel)
                 {
-                    spdlog::trace("Shift-clicked on {}", name);
-                    // check if we are already the reference channel group
-                    if (is_reference_channel)
-                    {
-                        spdlog::trace("Clearing reference image");
-                        hdrview()->set_reference_image_index(-1, true);
-                        reference_group = 0;
-                    }
-                    else
-                    {
-                        spdlog::trace("Setting reference image to {}", img_idx);
-                        hdrview()->set_reference_image_index(img_idx);
-                        reference_group = layer.groups[g];
-                    }
-                    set_as_texture(Target_Secondary);
+                    spdlog::trace("Clearing reference image");
+                    hdrview()->set_reference_image_index(-1, true);
+                    reference_group = 0;
                 }
                 else
                 {
-                    hdrview()->set_current_image_index(img_idx);
-                    selected_group = layer.groups[g];
-                    set_as_texture(Target_Primary);
+                    spdlog::trace("Setting reference image to {}", img_idx);
+                    hdrview()->set_reference_image_index(img_idx);
+                    reference_group = layer.groups[g];
                 }
+                set_as_texture(Target_Secondary);
             }
-            else if (is_selected_channel && scroll_to >= -0.5f)
+            else
             {
-                if (!ImGui::IsItemVisible())
-                    ImGui::SetScrollHereY(scroll_to);
-                scroll_to = -1.f;
+                hdrview()->set_current_image_index(img_idx);
+                selected_group = layer.groups[g];
+                set_as_texture(Target_Primary);
             }
         }
-        ImGui::PopStyleColor(3);
+        else if (is_selected_channel && scroll_to >= -0.5f)
+        {
+            if (!ImGui::IsItemVisible())
+                ImGui::SetScrollHereY(scroll_to);
+            scroll_to = -1.f;
+        }
+
         ++visible_group;
     }
 }
@@ -403,14 +402,15 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id_, bo
         if (child_node.visible_groups == 0)
             continue;
 
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(1);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGuiCol_Header);
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGuiCol_Header);
-        bool open = ImGui::TreeNodeEx((void *)(intptr_t)id_++, tree_node_flags, "%s %s", ICON_MY_OPEN_IMAGE,
-                                      child_node.name.c_str());
-        ImGui::PopStyleColor(3);
+        bool open =
+            ImGui::TreeRow((void *)(intptr_t)id_++, tree_node_flags,
+                           fmt::format("{} {}", ICON_MY_OPEN_IMAGE, child_node.name).c_str(), nullptr,
+                           [&]
+                           {
+                               ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                               ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGuiCol_Header);
+                               ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGuiCol_Header);
+                           });
         if (open)
         {
             draw_layer_node(child_node, img_idx, id_, is_current, is_reference, visible_group, scroll_to);
@@ -1177,7 +1177,7 @@ void Image::draw_chromaticity_diagram(float width)
             auto  rgb2xyz = mul(M_RGB_to_XYZ, inverse(M_to_sRGB));
             ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4{0.f, 0.f, 0.f, 1.0f});
             ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-            if (hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_app_pos(io.MousePos)))
+            if (hdrview()->mouse_over_viewport())
             {
                 auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
                 float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);
@@ -1218,6 +1218,7 @@ void Image::draw_colorspace()
         // The diagram gets its own full-width row when the value column alone is too narrow to render it legibly.
         const bool diagram_fits_in_value_column = ImGui::PE::ColumnWidth(1) > HelloImGui::EmSize(12.f);
         ImGui::Indent(ImGui::GetStyle().CellPadding.x);
+        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
 
         ImGui::PE::WrappedText(
             "Profile name",
@@ -1427,6 +1428,7 @@ void Image::draw_colorspace()
                                           return false;
                                       });
 
+        ImGui::PopStyleVar();
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         ImGui::PE::End();
     }
@@ -1436,76 +1438,75 @@ void Image::draw_colorspace()
 
 void Image::draw_channel_stats()
 {
-    auto bold_font = hdrview()->font("sans bold");
-    auto mono_font = hdrview()->font("mono regular");
+    auto &group      = groups[selected_group];
+    int   components = group.num_channels;
+    bool  is_color   = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
 
-    static const ImGuiTableFlags table_flags =
-        ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg;
-
-    static int value_mode = 0;
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Combo("##Value mode", &value_mode, "Raw values\0Exposure-adjusted\0\0");
-    float gain = value_mode == 0 ? 1.f : pow(2.f, hdrview()->exposure_live());
-
-    auto &group = groups[selected_group];
-    // Set the hover and active colors to be the same as the background color
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
-    if (ImGui::BeginTable("Channel statistics", group.num_channels + 1, table_flags))
+    PixelStats *channel_stats[4] = {nullptr, nullptr, nullptr, nullptr};
+    string      channel_names[4];
+    for (int c = 0; c < components; ++c)
     {
-        PixelStats *channel_stats[4] = {nullptr, nullptr, nullptr, nullptr};
-        string      channel_names[4];
-        for (int c = 0; c < group.num_channels; ++c)
-        {
-            auto &channel = channels[group.channels[c]];
-            channel.update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
-            channel_stats[c] = channel.get_stats();
-            channel_names[c] = Channel::tail(channel.name);
-        }
-
-        // set up header row
-        ImGui::PushFont(bold_font, ImGui::GetStyle().FontSizeBase);
-        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
-        for (int c = 0; c < group.num_channels; ++c)
-            ImGui::TableSetupColumn(fmt::format("{}{}", ICON_MY_CHANNEL_GROUP, channel_names[c]).c_str(),
-                                    ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupScrollFreeze(1, 1);
-        ImGui::TableHeadersRow();
-        ImGui::PopFont();
-
-        const char   *stat_names[] = {"Minimum", "Average",   "Std. Dev.",
-                                      "Maximum", "# of NaNs", "# of Infs"}; //, "# valid pixels"};
-        constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
-        for (int s = 0; s < NUM_STATS; ++s)
-        {
-            ImGui::PushFont(bold_font, ImGui::GetStyle().FontSizeBase);
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-            ImGui::TextUnformatted(stat_names[s]);
-            ImGui::PopFont();
-            ImGui::PushFont(mono_font, ImGui::GetStyle().FontSizeBase);
-            for (int c = 0; c < group.num_channels; ++c)
-            {
-                ImGui::TableNextColumn();
-                switch (s)
-                {
-                case 0: ImGui::TextFmt("{:f}", channel_stats[c]->summary.minimum * gain); break;
-                case 1: ImGui::TextFmt("{:f}", channel_stats[c]->summary.average * gain); break;
-                case 2: ImGui::TextFmt("{:f}", channel_stats[c]->summary.stddev * gain); break;
-                case 3: ImGui::TextFmt("{:f}", channel_stats[c]->summary.maximum * gain); break;
-                case 4: ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.nan_pixels); break;
-                case 5:
-                default:
-                    ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.inf_pixels);
-                    break;
-                    // case 5:
-                    // default: ImGui::TextFmt("{:d}", channel_stats[c]->summary.valid_pixels); break;
-                }
-            }
-            ImGui::PopFont();
-        }
-        ImGui::EndTable();
+        auto &channel = channels[group.channels[c]];
+        channel.update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
+        channel_stats[c] = channel.get_stats();
+        channel_names[c] = Channel::tail(channel.name);
     }
-    ImGui::PopStyleColor(2);
+
+    float exposure_gain = pow(2.f, hdrview()->exposure_live());
+
+    // Persisted per-row display mode. A module-static (rather than a per-Image field) is a simplification
+    // carried over from the pre-existing `value_mode` this replaces -- shared across all images, which is
+    // fine since only one image's stats are ever shown at a time.
+    static int mode_min = ImGui::ChannelDisplayMode_Raw, mode_avg = ImGui::ChannelDisplayMode_Raw,
+               mode_max = ImGui::ChannelDisplayMode_Raw, mode_stddev = ImGui::ChannelDisplayMode_Raw,
+               mode_nan = ImGui::ChannelDisplayMode_Raw, mode_inf = ImGui::ChannelDisplayMode_Raw;
+
+    auto stat_row = [&](auto &&accessor, ImGuiDataType data_type, const char *format, bool show_swatch,
+                        ImGui::ChannelDisplayModeMask enabled_modes, int *mode, const string &label)
+    {
+        float raw[4] = {0.f, 0.f, 0.f, 1.f};
+        for (int c = 0; c < components; ++c) raw[c] = (float)accessor(c);
+
+        float4 displayed{0.f, 0.f, 0.f, 1.f};
+        if (show_swatch)
+            displayed = linear_to_sRGB(hdrview()->tonemap_value(float4{raw[0], raw[1], raw[2], raw[3]}));
+
+        ImGui::PE::Entry(label,
+                         [&]
+                         {
+                             ImGui::ChannelValuesRow(label.c_str(), raw, show_swatch ? &displayed.x : nullptr,
+                                                     components, data_type, format, exposure_gain, mode, enabled_modes,
+                                                     /*allow_copy=*/true, show_swatch,
+                                                     ImVec4{displayed.x, displayed.y, displayed.z, displayed.w},
+                                                     /*label=*/{}, ImGui::PE::ColumnWidth(1));
+                             return false;
+                         });
+    };
+
+    // Channel names as a row of their own, positioned via the PE table's actual value-column width -- a PE
+    // table has no shared header row to put them in otherwise. No left-column label: "Statistics" already
+    // lives in the SeparatorText above the table.
+    ImGui::PE::Entry("",
+                     [&]
+                     {
+                         ImGui::ChannelValuesRowHeader(channel_names, components, ImGui::PE::ColumnWidth(1),
+                                                       /*reserve_swatch_gap=*/true);
+                         return false;
+                     });
+
+    stat_row([&](int c) { return channel_stats[c]->summary.minimum; }, ImGuiDataType_Float, "%g", is_color,
+             is_color ? ImGui::ChannelDisplayMode_AllMask : ImGui::ChannelDisplayMode_NoDisplayMask, &mode_min,
+             "Minimum");
+    stat_row([&](int c) { return channel_stats[c]->summary.average; }, ImGuiDataType_Float, "%g", is_color,
+             is_color ? ImGui::ChannelDisplayMode_AllMask : ImGui::ChannelDisplayMode_NoDisplayMask, &mode_avg,
+             "Average");
+    stat_row([&](int c) { return channel_stats[c]->summary.maximum; }, ImGuiDataType_Float, "%g", is_color,
+             is_color ? ImGui::ChannelDisplayMode_AllMask : ImGui::ChannelDisplayMode_NoDisplayMask, &mode_max,
+             "Maximum");
+    stat_row([&](int c) { return channel_stats[c]->summary.stddev; }, ImGuiDataType_Float, "%g", false,
+             ImGui::ChannelDisplayMode_NoDisplayMask, &mode_stddev, "Std. Dev.");
+    stat_row([&](int c) { return channel_stats[c]->summary.nan_pixels; }, ImGuiDataType_S32, "%d", false,
+             ImGui::ChannelDisplayMode_RawOnlyMask, &mode_nan, "# NaNs");
+    stat_row([&](int c) { return channel_stats[c]->summary.inf_pixels; }, ImGuiDataType_S32, "%d", false,
+             ImGui::ChannelDisplayMode_RawOnlyMask, &mode_inf, "# Infs");
 }

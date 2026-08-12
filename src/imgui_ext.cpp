@@ -67,6 +67,8 @@ SpdLogWindow &GlobalSpdLogWindow()
     return s_log;
 }
 
+const char *LogLevelIcon(spdlog::level::level_enum level) { return s_level_icons[int(level)].c_str(); }
+
 SpdLogWindow::SpdLogWindow(int max_items) :
     m_filter_sink(make_shared<spdlog::sinks::dup_filter_sink_mt>(std::chrono::seconds(5))),
     m_ringbuffer_sink(make_shared<spdlog::sinks::ringbuffer_color_sink_mt>(max_items)),
@@ -85,6 +87,11 @@ void SpdLogWindow::set_pattern(const string &pattern)
 
 void SpdLogWindow::draw(ImFont *console_font, float size)
 {
+    // Being focused (as opposed to merely visible, e.g. an inactive docked tab) is what counts as
+    // the user having seen the log, so this is what clears the status-bar badge.
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+        mark_log_seen();
+
     static const spdlog::string_view_t level_names[] = SPDLOG_LEVEL_NAMES;
 
     auto         current_level = m_ringbuffer_sink->level();
@@ -152,16 +159,24 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
         auto default_font = ImGui::GetFont();
         ImGui::PushFont(console_font, size);
 
-        int  item_num = 0;
-        bool did_copy = false;
+        int  item_num           = 0;
+        bool did_copy           = false;
+        bool scrolled_to_target = false;
         m_ringbuffer_sink->iterate(
-            [this, &item_num, &did_copy,
+            [this, &item_num, &did_copy, &scrolled_to_target,
              default_font](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
             {
                 ++item_num;
+                bool is_scroll_target = m_scroll_to_seq && msg.seq == *m_scroll_to_seq;
                 if (!m_ringbuffer_sink->should_log(msg.level) ||
                     !m_filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
+                {
+                    // the requested item exists but is filtered out of view; drop the request rather
+                    // than waiting forever for a match that will never render
+                    if (is_scroll_target)
+                        m_scroll_to_seq.reset();
                     return true;
+                }
 
                 bool invalid_color_range = msg.color_range_end <= msg.color_range_start ||
                                            std::min(msg.color_range_start, msg.color_range_end) >= msg.message.length();
@@ -220,6 +235,13 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
                         ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_end);
                 }
 
+                if (is_scroll_target)
+                {
+                    ImGui::SetScrollHereY(0.5f);
+                    m_scroll_to_seq.reset();
+                    scrolled_to_target = true;
+                }
+
                 return true;
             });
 
@@ -229,7 +251,10 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
 
         // ImGui::PopStyleColor();
 
-        if (m_ringbuffer_sink->has_new_items() && m_auto_scroll)
+        // still consume has_new_items() every frame so it doesn't report a stale batch once autoscroll
+        // resumes; just don't act on it the same frame we scrolled to an explicit target above
+        bool has_new = m_ringbuffer_sink->has_new_items();
+        if (!scrolled_to_target && has_new && m_auto_scroll)
             ImGui::SetScrollHereY(1.f);
 
         ImGui::PopFont();
@@ -251,17 +276,46 @@ ImU32 SpdLogWindow::get_level_color(spdlog::level::level_enum level)
 
 string TruncatedText(const string &filename, const string &icon)
 {
-    string ellipsis = "";
-    string text     = filename;
-
     const float avail_width = GetContentRegionAvail().x;
-    while (CalcTextSize((icon + ellipsis + text).c_str()).x > avail_width && text.length() > 1)
+
+    // Common case: the whole thing already fits, nothing to truncate.
+    if (CalcTextSize((icon + filename).c_str()).x <= avail_width)
+        return filename;
+
+    // Filenames here are `file:part.layer.channel` paths whose meaningful part is the *end*, so this
+    // keeps the tail and elides the front -- the opposite of ImGui's RenderTextEllipsis(), which
+    // keeps the prefix. Same technique as that function though: accumulate per-glyph advances in a
+    // single pass (here walking backwards from the end) rather than re-measuring a growing substring.
+    static const string ellipsis = " ...";
+    const float         budget   = avail_width - CalcTextSize((icon + ellipsis).c_str()).x;
+
+    ImFont      *font  = GetFont();
+    ImFontBaked *baked = font->GetFontBaked(GetFontSize());
+
+    const char *begin = filename.c_str();
+    const char *end   = begin + filename.size();
+    const char *cut   = end;
+    float       width = 0.f;
+    while (cut > begin)
     {
-        text     = text.substr(1);
-        ellipsis = " ...";
+        // Step back to the start (lead byte) of the codepoint immediately before `cut`.
+        const char *prev = cut - 1;
+        while (prev > begin && (static_cast<unsigned char>(*prev) & 0xC0) == 0x80) --prev;
+
+        unsigned int codepoint = 0;
+        ImTextCharFromUtf8(&codepoint, prev, cut);
+        float advance = baked->GetCharAdvance((ImWchar)codepoint);
+
+        // Always keep at least the final character, even if it alone exceeds the budget, so the
+        // result is never a bare ellipsis.
+        if (cut != end && width + advance > budget)
+            break;
+
+        width += advance;
+        cut = prev;
     }
 
-    return ellipsis + text;
+    return cut == begin ? filename : ellipsis + string(cut, end);
 };
 
 ImVec2 IconSize() { return CalcTextSize(ICON_MY_WIDEST); }
@@ -300,6 +354,20 @@ bool IconButton(const char *icon, bool *v, const ImVec2 &size)
     if (toggle)
         ImGui::PopStyleColor(3);
 
+    return ret;
+}
+
+bool FlatButton(const char *label, bool active, const ImVec2 &size)
+{
+    // clearing ImGuiCol_Button alone isn't enough: the theme sets a nonzero FrameBorderSize, which
+    // Button() draws unconditionally in ImGuiCol_Border regardless of the fill color
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, active ? ImGui::GetColorU32(ImGuiCol_FrameBg) : IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetColorU32(ImGuiCol_ButtonHovered, active ? 0.75f : 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetColorU32(ImGuiCol_ButtonActive, 0.75f));
+    bool ret = ImGui::Button(label, size);
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
     return ret;
 }
 
@@ -346,25 +414,322 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
     float4 header  = GetStyleColorVec4(ImGuiCol_Header);
     float4 hovered = GetStyleColorVec4(ImGuiCol_HeaderHovered);
 
-    // "complementary" color (for reference image/channel group) is shifted by 2/3 in hue
-    constexpr float3 hsv_adjust = float3{0.67f, 0.f, -0.2f};
-    float4           hovered_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust), hovered.w};
-    float4           header_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust), header.w};
-    float4           active_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust), active.w};
+    // The derived colors below depend only on those three theme colors, but this is called once per
+    // visible row per frame, so they're cached and rederived only when the theme actually changes --
+    // comparing three colors is much cheaper than six HSV<->RGB conversions.
+    static float4 cached_hovered{-1.f}, cached_header{-1.f}, cached_active{-1.f};
+    static float4 hovered_c, header_c, active_c, hovered_avg, header_avg, active_avg;
+    if (hovered != cached_hovered || header != cached_header || active != cached_active)
+    {
+        cached_hovered = hovered;
+        cached_header  = header;
+        cached_active  = active;
 
-    // the average between the two is used when a row is both current and reference
-    float4 hovered_avg = 0.5f * (hovered_c + hovered);
-    float4 header_avg  = 0.5f * (header_c + header);
-    float4 active_avg  = 0.5f * (active_c + active);
-    // constexpr float3 hsv_adjust2 = float3{0.33f, 0.f, -0.2f};
-    // float4           hovered_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust2), hovered.w};
-    // float4           header_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust2), header.w};
-    // float4           active_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust2), active.w};
+        // "complementary" color (for reference image/channel group) is shifted by 2/3 in hue
+        constexpr float3 hsv_adjust = float3{0.67f, 0.f, -0.2f};
+        hovered_c = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust), hovered.w};
+        header_c  = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust), header.w};
+        active_c  = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust), active.w};
+
+        // the average between the two is used when a row is both current and reference
+        hovered_avg = 0.5f * (hovered_c + hovered);
+        header_avg  = 0.5f * (header_c + header);
+        active_avg  = 0.5f * (active_c + active);
+    }
 
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, reference_mod ? (is_current ? hovered_avg : hovered_c)
                                                                 : (is_reference ? hovered_avg : hovered));
     ImGui::PushStyleColor(ImGuiCol_Header, is_reference ? (is_current ? header_avg : header_c) : header);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, reference_mod ? (is_current ? active_avg : active_c) : active);
+}
+
+bool TreeRow(const void *id, ImGuiTreeNodeFlags flags, const char *label, const std::function<void()> &leading_column,
+             const std::function<void()> &before_node)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    if (leading_column)
+        leading_column();
+
+    ImGui::TableNextColumn();
+    before_node();
+    bool open = ImGui::TreeNodeEx(id, flags, "%s", label);
+    ImGui::PopStyleColor(3);
+    return open;
+}
+
+// Splits `total_width` (already reduced by inter-item spacing) into `num_components` columns using the same
+// truncated allocation Dear ImGui's ColorEdit4 uses internally (remainder folded into the last column), so
+// a header row computed independently still lines up with the value boxes drawn below it.
+static void split_channel_widths(float total_width, int num_components, float out_widths[4])
+{
+    float prev_split = 0.f;
+    for (int c = 0; c < num_components; ++c)
+    {
+        float next_split = IM_TRUNC(total_width * (c + 1) / num_components);
+        out_widths[c]    = ImMax(next_split - prev_split, 1.0f);
+        prev_split       = next_split;
+    }
+}
+
+// Same left-edge tint ColorEdit4 draws on its R/G/B/A component sliders (see GDefaultRgbaColorMarkers in
+// imgui_widgets.cpp) -- InputFloat/InputScalar don't support ImGuiSliderFlags_ColorMarkers themselves (that
+// flag is only wired up in Drag/SliderScalar), so it's drawn manually via the same public
+// RenderColorComponentMarker() those widgets call internally.
+static const ImU32 rgba_marker_colors[4] = {IM_COL32(240, 20, 20, 255), IM_COL32(20, 240, 20, 255),
+                                            IM_COL32(20, 20, 240, 255), IM_COL32(140, 140, 140, 255)};
+
+static const char *channel_display_mode_names[ChannelDisplayMode_COUNT] = {
+    "Raw values", "Exposure-adjusted", "Displayed (32-bit)", "Displayed (8-bit)", "Displayed (hex)"};
+
+void ChannelValuesRow(const char *id, const float *raw, const float *displayed, int num_components,
+                      ImGuiDataType data_type, const char *format, float exposure_gain, int *mode,
+                      ChannelDisplayModeMask enabled_modes, bool allow_copy, bool show_swatch,
+                      const ImVec4 &swatch_color, const std::string &label, float total_width, bool content_disabled,
+                      bool show_color_markers)
+{
+    ImGui::PushID(id);
+
+    float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+    float sz      = ImGui::GetFrameHeight();
+    float label_w = label.empty() ? 0.f : ImGui::CalcTextSize(label.c_str()).x;
+
+    // `total_width`, when given, is the desired footprint for the *whole* row (boxes + swatch + label) --
+    // e.g. a PE table column's actual width, which the swatch must fit inside rather than overflow past
+    // (and get clipped by the cell's own clip rect). The box area is whatever's left after reserving space
+    // for the swatch (always) and the label (if given). Without an explicit total_width, it's the reverse:
+    // let the boxes take their natural CalcItemWidth(), and grow the row to fit the swatch/label beyond it.
+    float w_full, row_width;
+    if (total_width > 0.f)
+    {
+        row_width = total_width;
+        w_full    = ImMax(total_width - (spacing + sz) - (label.empty() ? 0.f : spacing + label_w), 1.f);
+    }
+    else
+    {
+        w_full    = ImGui::CalcItemWidth();
+        row_width = w_full + spacing + sz + (label.empty() ? 0.f : spacing + label_w);
+    }
+
+    float w_items = w_full - spacing * (num_components - 1);
+    float widths[4];
+    split_channel_widths(w_items, num_components, widths);
+
+    // 8-bit/hex are both simple derivations of `displayed` (already run through the app's tonemap/gamma/sRGB
+    // pipeline) -- computed once up front regardless of *mode so Copy-to-clipboard can use them too.
+    int ldr[4] = {0, 0, 0, 0};
+    if (displayed)
+        for (int c = 0; c < num_components; ++c) ldr[c] = (int)ImClamp(IM_ROUND(displayed[c] * 255.f), 0.f, 255.f);
+
+    // The whole row is one click target opening the Copy/Display-as popup. Real ImGui widgets (InputFloat,
+    // ColorButton, ...) call ButtonBehavior() -> ItemHoverable(), which claims g.HoveredId *regardless* of
+    // BeginDisabled() -- SetNextItemAllowOverlap() on this button doesn't stop a later, still-hoverable
+    // (if inert) widget from stealing that claim back. So the boxes/swatch/label below are drawn by hand,
+    // straight onto the draw list, with no ImGui item/ID of their own -- like TextUnformatted, which never
+    // competed for hover in the first place and is why the label already worked.
+    // Not wrapped in BeginDisabled(content_disabled): the click target (and its tooltip) stay active even
+    // when the content below is grayed out, e.g. a hovered pixel that's currently outside the image -- the
+    // popup (mode switching, copy) is still meaningful there, only the displayed sample isn't.
+    bool clicked = ImGui::InvisibleButton("##click", ImVec2{row_width, sz});
+    if (clicked)
+        ImGui::OpenPopup("##dropdown");
+    ImGui::SetItemTooltip("Click to change value format%s", allow_copy ? " or copy to clipboard." : ".");
+
+    ImVec2            row_pos   = ImGui::GetItemRectMin();
+    ImDrawList       *draw_list = ImGui::GetWindowDrawList();
+    const ImGuiStyle &style     = ImGui::GetStyle();
+
+    ImGui::BeginDisabled(content_disabled);
+
+    // Read-only look: no fill/border (the optional color-component marker is the only framing left). Text
+    // is clipped to the box's own bounds via ImGui's standard clipped-text renderer (the same one
+    // Button/Selectable/etc. use for their labels) so an overly long value can't spill into the next box.
+    // Temporary: the numeric text itself (only) renders in the mono font, tightly scoped to this one draw
+    // call -- everything else in the row (label, tooltip, popup) stays in the ambient/regular font.
+    auto draw_box = [&](ImVec2 p_min, float w, const char *text)
+    {
+        ImVec2 p_max{p_min.x + w, p_min.y + sz};
+        ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase);
+        ImVec2 text_size = ImGui::CalcTextSize(text);
+        ImGui::RenderTextClipped(ImVec2{p_min.x + style.FramePadding.x, p_min.y + (sz - text_size.y) * 0.5f}, p_max,
+                                 text, nullptr, &text_size);
+        ImGui::PopFont();
+        return ImRect(p_min, p_max);
+    };
+
+    char  text_buf[64];
+    float x = row_pos.x;
+    if (*mode == ChannelDisplayMode_DisplayedHex)
+    {
+        uint32_t hex = 0;
+        for (int c = 0; c < 4; ++c) hex |= (uint32_t)(c < num_components ? ldr[c] : 0) << (8 * (3 - c));
+        ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), "#%08X", hex);
+        draw_box(ImVec2{x, row_pos.y}, w_full, text_buf);
+        // The per-component loop below advances by (width + spacing) on every iteration, including the
+        // last, so its cumulative x ends up w_full + spacing, not just w_full -- match that here too, or
+        // the swatch/label end up spacing px further left when in hex mode than in every other mode.
+        x += w_full + spacing;
+    }
+    else
+    {
+        for (int c = 0; c < num_components; ++c)
+        {
+            switch (*mode)
+            {
+            case ChannelDisplayMode_Raw:
+                if (data_type == ImGuiDataType_Float)
+                    ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), format, raw[c]);
+                else
+                    ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), format, (int)raw[c]);
+                break;
+            case ChannelDisplayMode_ExposureAdjusted:
+                ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), "%g", raw[c] * exposure_gain);
+                break;
+            case ChannelDisplayMode_Displayed32:
+                ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), "%g", displayed ? displayed[c] : 0.f);
+                break;
+            case ChannelDisplayMode_Displayed8:
+            default: ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), "%d", ldr[c]); break;
+            }
+
+            ImRect box_rect = draw_box(ImVec2{x, row_pos.y}, widths[c], text_buf);
+            if (show_color_markers)
+                ImGui::RenderColorComponentMarker(box_rect, rgba_marker_colors[c % 4], style.FrameRounding);
+            x += widths[c] + spacing;
+        }
+    }
+
+    // Always reserve the swatch's footprint (real swatch, or an equally sized blank gap) so rows without one
+    // still line up with rows that have one.
+    if (show_swatch)
+    {
+        ImVec2 p_min{x, row_pos.y}, p_max{x + sz, row_pos.y + sz};
+        if (swatch_color.w < 1.0f)
+        {
+            // Same half-solid/half-checkerboard split ImGui::ColorButton's AlphaPreviewHalf flag draws (see
+            // ColorButton() in imgui_widgets.cpp), replicated by hand -- matching it exactly, including the
+            // rounding clamp and the inward bb shrink it applies for its (here, nonexistent) border -- since
+            // the swatch is a plain draw-list rect now, not an actual ColorButton (see the click-target note
+            // above). Approximating any of these made the split visibly not match a real ColorEdit's.
+            float  grid_step = ImMin(sz, sz) / 2.99f;
+            float  rounding  = ImMin(style.FrameRounding, grid_step * 0.5f);
+            float  off       = -0.75f;
+            ImRect bb_inner{p_min, p_max};
+            bb_inner.Expand(off);
+            float  mid_x = IM_ROUND((bb_inner.Min.x + bb_inner.Max.x) * 0.5f);
+            ImVec4 opaque{swatch_color.x, swatch_color.y, swatch_color.z, 1.f};
+            ImGui::RenderColorRectWithAlphaCheckerboard(draw_list, ImVec2{bb_inner.Min.x + grid_step, bb_inner.Min.y},
+                                                        bb_inner.Max, ImGui::GetColorU32(swatch_color), grid_step,
+                                                        ImVec2{-grid_step + off, off}, rounding,
+                                                        ImDrawFlags_RoundCornersRight);
+            draw_list->AddRectFilled(bb_inner.Min, ImVec2{mid_x, bb_inner.Max.y}, ImGui::GetColorU32(opaque), rounding,
+                                     ImDrawFlags_RoundCornersLeft);
+        }
+        else
+            draw_list->AddRectFilled(p_min, p_max, ImGui::ColorConvertFloat4ToU32(swatch_color), style.FrameRounding);
+    }
+    x += sz;
+
+    if (!label.empty())
+    {
+        x += spacing;
+        ImVec2 text_size = ImGui::CalcTextSize(label.c_str());
+        draw_list->AddText(ImVec2{x, row_pos.y + (sz - text_size.y) * 0.5f}, ImGui::GetColorU32(ImGuiCol_Text),
+                           label.c_str());
+    }
+
+    ImGui::EndDisabled();
+
+    if (ImGui::BeginPopup("##dropdown"))
+    {
+        if (allow_copy && ImGui::Selectable("Copy to clipboard"))
+        {
+            string buf;
+            switch (*mode)
+            {
+            case ChannelDisplayMode_Raw:
+            case ChannelDisplayMode_ExposureAdjusted:
+            {
+                float gain = *mode == ChannelDisplayMode_ExposureAdjusted ? exposure_gain : 1.f;
+                if (num_components == 4)
+                    buf = fmt::format("({:g}, {:g}, {:g}, {:g})", raw[0] * gain, raw[1] * gain, raw[2] * gain,
+                                      raw[3] * gain);
+                else if (num_components == 3)
+                    buf = fmt::format("({:g}, {:g}, {:g})", raw[0] * gain, raw[1] * gain, raw[2] * gain);
+                else if (num_components == 2)
+                    buf = fmt::format("({:g}, {:g})", raw[0] * gain, raw[1] * gain);
+                else
+                    buf = fmt::format("{:g}", raw[0] * gain);
+                break;
+            }
+            case ChannelDisplayMode_Displayed32:
+                if (displayed)
+                {
+                    if (num_components == 4)
+                        buf = fmt::format("({:g}, {:g}, {:g}, {:g})", displayed[0], displayed[1], displayed[2],
+                                          displayed[3]);
+                    else if (num_components == 3)
+                        buf = fmt::format("({:g}, {:g}, {:g})", displayed[0], displayed[1], displayed[2]);
+                    else if (num_components == 2)
+                        buf = fmt::format("({:g}, {:g})", displayed[0], displayed[1]);
+                    else
+                        buf = fmt::format("{:g}", displayed[0]);
+                }
+                break;
+            case ChannelDisplayMode_Displayed8:
+                buf = fmt::format("({:d}, {:d}, {:d}, {:d})", ldr[0], ldr[1], ldr[2], ldr[3]);
+                break;
+            case ChannelDisplayMode_DisplayedHex:
+                buf = fmt::format("#{:02X}{:02X}{:02X}{:02X}", ldr[0], ldr[1], ldr[2], ldr[3]);
+                break;
+            }
+            ImGui::SetClipboardText(buf.c_str());
+        }
+        ImGui::SeparatorText("Display as:");
+        for (int m = 0; m < ChannelDisplayMode_COUNT; ++m)
+        {
+            ImGui::BeginDisabled((enabled_modes & (1u << m)) == 0);
+            if (ImGui::Selectable(channel_display_mode_names[m], *mode == m))
+                *mode = m;
+            ImGui::EndDisabled();
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopID();
+}
+
+void ChannelValuesRowHeader(const std::string *names, int num_components, float total_width, bool reserve_swatch_gap)
+{
+    float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+    float w_full  = total_width > 0.f ? total_width : ImGui::CalcItemWidth();
+    if (reserve_swatch_gap)
+        w_full = ImMax(w_full - (spacing + ImGui::GetFrameHeight()), 1.f);
+    float w_items = w_full - spacing * (num_components - 1);
+    float widths[4];
+    split_channel_widths(w_items, num_components, widths);
+
+    // Drawn straight onto the draw list (like ChannelValuesRow's boxes/swatch) rather than via per-iteration
+    // ImGui::SetCursorPos()+TextUnformatted() calls -- the latter looked equivalent but only the first label
+    // ever landed at the intended row_y, later ones drifted, for the same reason ChannelValuesRow's old
+    // approach needed defensive SetCursorPosY() calls: ImGui's cursor/same-line bookkeeping between
+    // ImGui-level item calls is easy to get subtly wrong across a loop. Raw draw-list positions sidestep it.
+    ImVec2      row_pos   = ImGui::GetCursorScreenPos();
+    ImDrawList *draw_list = ImGui::GetWindowDrawList();
+    float       line_h    = ImGui::GetTextLineHeight();
+    ImU32       text_col  = ImGui::GetColorU32(ImGuiCol_Text);
+
+    // Left-aligned (with the same FramePadding.x inset the value boxes below use for their own text) rather
+    // than centered, so a column's header lines up with its value text instead of just its box.
+    float x = row_pos.x;
+    for (int c = 0; c < num_components; ++c)
+    {
+        draw_list->AddText(ImVec2{x + ImGui::GetStyle().FramePadding.x, row_pos.y}, text_col, names[c].c_str());
+        x += widths[c] + ImGui::GetStyle().ItemInnerSpacing.x;
+    }
+
+    // Reserve the row's layout space so whatever's drawn next lands below it.
+    ImGui::Dummy(ImVec2{x - ImGui::GetStyle().ItemInnerSpacing.x - row_pos.x, line_h});
 }
 
 void UnderLine(ImColor c, float raise)
