@@ -222,34 +222,42 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
     m_params.dockingParams.dockingSplits = docking_splits;
 
+    // Builds an alternate layout that starts from the same dockable windows as the default layout, letting
+    // `customize` override each copy's dockSpaceName/isVisible/etc. (e.g. to re-tab or hide windows without
+    // redeclaring them from scratch).
+    auto make_layout = [&](string name, vector<DockingSplit> splits, auto &&customize)
+    {
+        DockingParams p;
+        p.layoutName      = std::move(name);
+        p.dockingSplits   = std::move(splits);
+        p.dockableWindows = m_params.dockingParams.dockableWindows;
+        for (auto &w : p.dockableWindows) customize(w);
+        return p;
+    };
+
     // "Image browser": same panel geometry as "Pixel peeper", but only the Images/Watched Folders panels start
     // open -- a minimal layout for browsing/culling images without the inspector panels.
-    DockingParams image_browser_layout;
-    image_browser_layout.layoutName      = "Image browser";
-    image_browser_layout.dockingSplits   = docking_splits;
-    image_browser_layout.dockableWindows = m_params.dockingParams.dockableWindows;
-    for (auto &w : image_browser_layout.dockableWindows)
-        w.isVisible = (w.label == "Images" || w.label == "Watched Folders");
+    DockingParams image_browser_layout =
+        make_layout("Image browser", docking_splits,
+                    [](DockableWindow &w) { w.isVisible = (w.label == "Images" || w.label == "Watched Folders"); });
 
     // "Metadata": Images and Watched Folders tabbed together atop the left column, with Info below them (both
     // share the left column here, unlike the other layouts); Log spans the full width along the bottom. Only
     // Images/Watched Folders/Info start open, for a view focused on browsing images and inspecting their metadata.
-    DockingParams metadata_layout;
-    metadata_layout.layoutName    = "Metadata";
-    metadata_layout.dockingSplits = {
-        DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f},
-        DockingSplit{"ImagesSpace", "InfoSpace", ImGuiDir_Down, 0.54f, ImGuiDockNodeFlags_AutoHideTabBar},
-        DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-        DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
-    metadata_layout.dockableWindows = m_params.dockingParams.dockableWindows;
-    for (auto &w : metadata_layout.dockableWindows)
-    {
-        if (w.label == "Watched Folders")
-            w.dockSpaceName = "ImagesSpace";
-        else if (w.label == "Info")
-            w.dockSpaceName = "InfoSpace";
-        w.isVisible = (w.label == "Images" || w.label == "Info" || w.label == "Watched Folders");
-    }
+    DockingParams metadata_layout =
+        make_layout("Metadata",
+                    {DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f},
+                     DockingSplit{"ImagesSpace", "InfoSpace", ImGuiDir_Down, 0.54f, ImGuiDockNodeFlags_AutoHideTabBar},
+                     DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
+                     DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}},
+                    [](DockableWindow &w)
+                    {
+                        if (w.label == "Watched Folders")
+                            w.dockSpaceName = "ImagesSpace";
+                        else if (w.label == "Info")
+                            w.dockSpaceName = "InfoSpace";
+                        w.isVisible = (w.label == "Images" || w.label == "Info" || w.label == "Watched Folders");
+                    });
 
     m_params.alternativeDockingLayouts = {image_browser_layout, metadata_layout};
 

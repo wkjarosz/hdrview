@@ -39,8 +39,8 @@
 using namespace std;
 using namespace HelloImGui;
 
-void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy,
-                                    float width, const string &trailing_label) const
+void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy, float width,
+                                    const string &trailing_label) const
 {
     // Shares ImGui::ChannelValuesRow with Image::draw_channel_stats() -- both use the exact same row shape,
     // including its Copy/Display-as popup. Pixel rows always offer the full mode set: unlike stats, a
@@ -81,7 +81,7 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
         // Composite is always the 4-channel blended visualization buffer, independent of the current
         // image's channel-group semantics.
         inside = (current_image() && current_image()->contains(pixel)) ||
-                (reference_image() && reference_image()->contains(pixel));
+                 (reference_image() && reference_image()->contains(pixel));
 
     // content_disabled (not an outer BeginDisabled around the whole call): the row's popup -- mode
     // switching, copy -- stays clickable even when the sample itself is meaningless (out of bounds, or no

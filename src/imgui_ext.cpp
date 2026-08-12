@@ -415,8 +415,8 @@ static void split_channel_widths(float total_width, int num_components, float ou
     for (int c = 0; c < num_components; ++c)
     {
         float next_split = IM_TRUNC(total_width * (c + 1) / num_components);
-        out_widths[c]     = ImMax(next_split - prev_split, 1.0f);
-        prev_split         = next_split;
+        out_widths[c]    = ImMax(next_split - prev_split, 1.0f);
+        prev_split       = next_split;
     }
 }
 
@@ -433,8 +433,8 @@ static const char *channel_display_mode_names[ChannelDisplayMode_COUNT] = {
 void ChannelValuesRow(const char *id, const float *raw, const float *displayed, int num_components,
                       ImGuiDataType data_type, const char *format, float exposure_gain, int *mode,
                       ChannelDisplayModeMask enabled_modes, bool allow_copy, bool show_swatch,
-                      const ImVec4 &swatch_color, const std::string &label, float total_width,
-                      bool content_disabled, bool show_color_markers)
+                      const ImVec4 &swatch_color, const std::string &label, float total_width, bool content_disabled,
+                      bool show_color_markers)
 {
     ImGui::PushID(id);
 
@@ -483,9 +483,9 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
         ImGui::OpenPopup("##dropdown");
     ImGui::SetItemTooltip("Click to change value format%s", allow_copy ? " or copy to clipboard." : ".");
 
-    ImVec2       row_pos    = ImGui::GetItemRectMin();
-    ImDrawList  *draw_list  = ImGui::GetWindowDrawList();
-    const ImGuiStyle &style = ImGui::GetStyle();
+    ImVec2            row_pos   = ImGui::GetItemRectMin();
+    ImDrawList       *draw_list = ImGui::GetWindowDrawList();
+    const ImGuiStyle &style     = ImGui::GetStyle();
 
     ImGui::BeginDisabled(content_disabled);
 
@@ -537,9 +537,7 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
                 ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), "%g", displayed ? displayed[c] : 0.f);
                 break;
             case ChannelDisplayMode_Displayed8:
-            default:
-                ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), "%d", ldr[c]);
-                break;
+            default: ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), "%d", ldr[c]); break;
             }
 
             ImRect box_rect = draw_box(ImVec2{x, row_pos.y}, widths[c], text_buf);
@@ -568,12 +566,12 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
             bb_inner.Expand(off);
             float  mid_x = IM_ROUND((bb_inner.Min.x + bb_inner.Max.x) * 0.5f);
             ImVec4 opaque{swatch_color.x, swatch_color.y, swatch_color.z, 1.f};
-            ImGui::RenderColorRectWithAlphaCheckerboard(
-                draw_list, ImVec2{bb_inner.Min.x + grid_step, bb_inner.Min.y}, bb_inner.Max,
-                ImGui::GetColorU32(swatch_color), grid_step, ImVec2{-grid_step + off, off}, rounding,
-                ImDrawFlags_RoundCornersRight);
-            draw_list->AddRectFilled(bb_inner.Min, ImVec2{mid_x, bb_inner.Max.y}, ImGui::GetColorU32(opaque),
-                                     rounding, ImDrawFlags_RoundCornersLeft);
+            ImGui::RenderColorRectWithAlphaCheckerboard(draw_list, ImVec2{bb_inner.Min.x + grid_step, bb_inner.Min.y},
+                                                        bb_inner.Max, ImGui::GetColorU32(swatch_color), grid_step,
+                                                        ImVec2{-grid_step + off, off}, rounding,
+                                                        ImDrawFlags_RoundCornersRight);
+            draw_list->AddRectFilled(bb_inner.Min, ImVec2{mid_x, bb_inner.Max.y}, ImGui::GetColorU32(opaque), rounding,
+                                     ImDrawFlags_RoundCornersLeft);
         }
         else
             draw_list->AddRectFilled(p_min, p_max, ImGui::ColorConvertFloat4ToU32(swatch_color), style.FrameRounding);

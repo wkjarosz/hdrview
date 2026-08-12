@@ -252,35 +252,21 @@ void HDRViewApp::draw_statistics_window()
 
     ImGui::SeparatorText("Statistics");
 
-    // Draws a PE::TreeNode row whose value column holds the X/Y coordinate boxes (small/compact, re-centered
-    // within this otherwise normal-height row -- draggable and copy-enabled for watched pixels; disabled
-    // entirely for the hovered pixel, since ReadOnly alone doesn't block DragInt's drag gesture, only
-    // keyboard entry) plus, for watched pixels, a trailing delete button styled like CollapsingHeader's own
-    // close X (no frame/border, just the glyph -- see ImGui::CloseButton, used internally by
-    // CollapsingHeader's p_open close button, positioned the same way it is: relative to the row's own top,
-    // not the compact drag boxes') -- and whose children are Current/Reference/Composite ChannelValuesRow
-    // entries. Returns true if the delete button was clicked.
-    //
-    // Note: PE::TreeNode() only keeps its PushID(icon_title) alive while open (see its "if (!ret)
-    // PopID()"), so the X/Y/delete controls below -- drawn unconditionally, open or not -- would resolve to
-    // the *same* IDs across different (collapsed) rows without a caller-owned PushID wrapping the whole
-    // call, hence the explicit PushID(i)/PushID("Mouse") around each call below.
-    //
-    // ImGuiTreeNodeFlags_SpanAllColumns extends the tree node's own click-detection rect across the whole
-    // row (all columns, see TreeNodeBehavior() in imgui_widgets.cpp), processed synchronously inside this
-    // very call, before the X/Y/delete controls in the value column are even drawn -- so on its own, it'd
-    // make any click meant for them toggle the tree node instead. CollapsingHeader(label, p_visible, ...)
-    // resolves the exact same conflict (its own close button, plus our SameLine coordinate drags) by adding
-    // ImGuiTreeNodeFlags_AllowOverlap whenever a close button is present: with that flag, the tree node
-    // defers its own click on the frame hover first lands on it, letting a later-submitted, geometrically
-    // overlapping widget claim it instead (see the "AllowOverlap mode" branch of ItemHoverable() in
-    // imgui.cpp) -- so combining both flags gets a full-row highlight *and* working value-column widgets.
+    // Draws one PE::TreeNode row: the value column holds X/Y coordinate boxes (draggable for watched pixels,
+    // disabled for the hovered pixel -- ReadOnly alone doesn't block DragInt's drag gesture, only keyboard
+    // entry) plus, for watched pixels, a trailing delete button. Children (open only) are Current/Reference/
+    // Composite ChannelValuesRow entries. Returns true if the delete button was clicked.
     auto PixelTreeNodePE = [&](const string &icon_title, int2 &pixel, int3 &color_mode, bool editable, bool show_delete)
     {
         bool deleted = false;
-        bool open    = ImGui::PE::TreeNode(icon_title.c_str(),
-                                           ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanFullWidth |
-                                               ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_AllowOverlap);
+        // SpanAllColumns extends the tree node's own click rect across the whole row (see TreeNodeBehavior()
+        // in imgui_widgets.cpp), processed before the X/Y/delete controls below are drawn -- on its own, a
+        // click meant for them would toggle the tree node instead. AllowOverlap defers that first claim,
+        // letting a later, geometrically overlapping widget take the click instead: the same fix
+        // CollapsingHeader(label, p_visible, ...) applies whenever it's given a close button.
+        bool open = ImGui::PE::TreeNode(icon_title.c_str(),
+                                        ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanFullWidth |
+                                            ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_AllowOverlap);
         ImGui::TableNextColumn();
         // Row's own top-left, before anything else is drawn in this column -- the reference point for the
         // close button below, matching CollapsingHeader's own (g.LastItemData.Rect.Min.y + FramePadding.y).
@@ -367,13 +353,13 @@ void HDRViewApp::draw_statistics_window()
                                 ImGui::CalcTextSize("Maximum").x + ImGui::GetStyle().CellPadding.x);
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
         if (auto img = current_image())
-            img->draw_channel_stats_pe();
+            img->draw_channel_stats();
         ImGui::PopStyleVar();
 
         ImGui::PE::End();
     }
 
-    ImGui::SeparatorText("Watched pixels:");
+    ImGui::SeparatorText("Watched pixels");
 
     ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
     ImGui::Checkbox("Show " ICON_MY_WATCHED_PIXEL "s in viewport", &m_draw_watched_pixels);
@@ -389,6 +375,9 @@ void HDRViewApp::draw_statistics_window()
         {
             auto        hovered_pixel = *hp;
             static int3 hover_color_mode{0, 0, 0};
+            // PE::TreeNode only keeps its own PushID(icon_title) alive while open, so a caller-owned PushID
+            // is needed to keep the X/Y/delete controls' IDs (drawn unconditionally below) stable across
+            // collapsed rows too.
             ImGui::PushID("Mouse");
             PixelTreeNodePE(ICON_MY_CURSOR_ARROW " Mouse", hovered_pixel, hover_color_mode, false, false);
             ImGui::PopID();

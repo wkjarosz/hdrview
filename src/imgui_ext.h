@@ -193,24 +193,22 @@ enum ChannelDisplayMode_ : int
     ChannelDisplayMode_DisplayedHex,
     ChannelDisplayMode_COUNT
 };
-using ChannelDisplayModeMask                                     = unsigned int;
-constexpr ChannelDisplayModeMask ChannelDisplayMode_RawOnlyMask   = 1u << ChannelDisplayMode_Raw;
-constexpr ChannelDisplayModeMask ChannelDisplayMode_NoDisplayMask = (1u << ChannelDisplayMode_Raw) |
-                                                                    (1u << ChannelDisplayMode_ExposureAdjusted);
+using ChannelDisplayModeMask                                    = unsigned int;
+constexpr ChannelDisplayModeMask ChannelDisplayMode_RawOnlyMask = 1u << ChannelDisplayMode_Raw;
+constexpr ChannelDisplayModeMask ChannelDisplayMode_NoDisplayMask =
+    (1u << ChannelDisplayMode_Raw) | (1u << ChannelDisplayMode_ExposureAdjusted);
 constexpr ChannelDisplayModeMask ChannelDisplayMode_AllMask = (1u << ChannelDisplayMode_COUNT) - 1u;
 
-//! Draws `num_components` read-only numeric boxes side by side, evenly distributing the available item
-//! width, optionally followed by a fixed-size color swatch and/or a trailing text label -- all under one
-//! click target (covering whatever combination of boxes/swatch/label is actually drawn) that opens a
-//! popup offering "Copy to clipboard" (if `allow_copy`) and a "Display as:" list of ChannelDisplayMode_
-//! entries, disabled per the `enabled_modes` mask rather than omitted. The click target itself is always
-//! active (e.g. even when displaying a meaningless/out-of-bounds sample) -- pass `content_disabled` to gray
-//! out just the boxes/swatch/label without blocking the popup. `*mode` persists the row's current selection
-//! (caller-owned). `raw` is required; `displayed` may be null if no Displayed* mode is enabled. `id` scopes
-//! the row's widget IDs. `total_width`, if nonzero, overrides the row's natural (CalcItemWidth-based) width.
-//! `show_color_markers` draws a per-component R/G/B/A tint on each box's left edge (only meaningful when
-//! `show_swatch` is also true). Uses the ambient FramePadding -- wrap the call in
-//! PushStyleVar(ImGuiStyleVar_FramePadding, ...) for a more compact row; there is no compact default.
+//! Draws `num_components` read-only numeric boxes side by side, plus an optional trailing color swatch
+//! and/or text label -- all one click target opening a popup with "Copy to clipboard" (if `allow_copy`)
+//! and a "Display as:" list of ChannelDisplayMode_ entries (disabled, not omitted, per `enabled_modes`).
+//! The click target stays active under `content_disabled`; only the boxes/swatch/label gray out (e.g. for
+//! a meaningless/out-of-bounds sample). `*mode` is the caller-owned current selection. `raw` is required;
+//! `displayed` may be null unless a Displayed* mode is enabled. `id` scopes the row's widget IDs.
+//! `total_width`, if nonzero, overrides the row's natural (CalcItemWidth-based) width. `show_color_markers`
+//! tints each box's left edge per component (only meaningful with `show_swatch`). Row height follows the
+//! ambient FramePadding -- push ImGuiStyleVar_FramePadding for a more compact row; there is no compact
+//! default.
 void ChannelValuesRow(const char *id, const float *raw, const float *displayed, int num_components,
                       ImGuiDataType data_type, const char *format, float exposure_gain, int *mode,
                       ChannelDisplayModeMask enabled_modes = ChannelDisplayMode_AllMask, bool allow_copy = true,
@@ -218,8 +216,8 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
                       const std::string &label = {}, float total_width = 0.f, bool content_disabled = false,
                       bool show_color_markers = false);
 
-//! Draws a row of `num_components` text labels (e.g. channel names), each horizontally centered over the
-//! column ChannelValuesRow(..., num_components, ...) would draw for the same `total_width` -- for a
+//! Draws a row of `num_components` text labels (e.g. channel names), each left-aligned over the column
+//! ChannelValuesRow(..., num_components, ...) would draw for the same `total_width` -- for a
 //! column-header row placed above one or more ChannelValuesRow calls sharing that same num_components. Pass
 //! `reserve_swatch_gap = true` if any of those rows reserve a swatch column (see ChannelValuesRow) out of
 //! the same `total_width`, so the header's columns still line up with the (narrower) box columns below.

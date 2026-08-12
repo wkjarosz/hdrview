@@ -1466,71 +1466,6 @@ void Image::draw_channel_stats()
                mode_max = ImGui::ChannelDisplayMode_Raw, mode_stddev = ImGui::ChannelDisplayMode_Raw,
                mode_nan = ImGui::ChannelDisplayMode_Raw, mode_inf = ImGui::ChannelDisplayMode_Raw;
 
-    // Only literal RGB(A) groups get a color-preview swatch and Displayed-* modes on Minimum/Average/Maximum
-    // -- a "displayed color" doesn't mean anything for e.g. a UV or depth channel group. Exposure-adjusted
-    // (a pure linear gain) stays meaningful regardless of channel semantics, so it's not gated by is_color.
-    auto stat_row = [&](auto &&accessor, ImGuiDataType data_type, const char *format, bool show_swatch,
-                        ImGui::ChannelDisplayModeMask enabled_modes, int *mode, const string &label)
-    {
-        float raw[4] = {0.f, 0.f, 0.f, 1.f};
-        for (int c = 0; c < components; ++c) raw[c] = (float)accessor(c);
-
-        float4 displayed{0.f, 0.f, 0.f, 1.f};
-        if (show_swatch)
-            displayed = linear_to_sRGB(hdrview()->tonemap_value(float4{raw[0], raw[1], raw[2], raw[3]}));
-
-        ImGui::ChannelValuesRow(label.c_str(), raw, show_swatch ? &displayed.x : nullptr, components, data_type, format,
-                                exposure_gain, mode, enabled_modes, /*allow_copy=*/true, show_swatch,
-                                ImVec4{displayed.x, displayed.y, displayed.z, displayed.w}, label);
-    };
-
-    ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-
-    ImGui::ChannelValuesRowHeader(channel_names, components);
-
-    stat_row([&](int c) { return channel_stats[c]->summary.minimum; }, ImGuiDataType_Float, "%g", is_color,
-             is_color ? ImGui::ChannelDisplayMode_AllMask : ImGui::ChannelDisplayMode_NoDisplayMask, &mode_min,
-             "Minimum");
-    stat_row([&](int c) { return channel_stats[c]->summary.average; }, ImGuiDataType_Float, "%g", is_color,
-             is_color ? ImGui::ChannelDisplayMode_AllMask : ImGui::ChannelDisplayMode_NoDisplayMask, &mode_avg,
-             "Average");
-    stat_row([&](int c) { return channel_stats[c]->summary.maximum; }, ImGuiDataType_Float, "%g", is_color,
-             is_color ? ImGui::ChannelDisplayMode_AllMask : ImGui::ChannelDisplayMode_NoDisplayMask, &mode_max,
-             "Maximum");
-    stat_row([&](int c) { return channel_stats[c]->summary.stddev; }, ImGuiDataType_Float, "%g", false,
-             ImGui::ChannelDisplayMode_NoDisplayMask, &mode_stddev, "Std. Dev.");
-    stat_row([&](int c) { return channel_stats[c]->summary.nan_pixels; }, ImGuiDataType_S32, "%d", false,
-             ImGui::ChannelDisplayMode_RawOnlyMask, &mode_nan, "# NaNs");
-    stat_row([&](int c) { return channel_stats[c]->summary.inf_pixels; }, ImGuiDataType_S32, "%d", false,
-             ImGui::ChannelDisplayMode_RawOnlyMask, &mode_inf, "# Infs");
-
-    ImGui::PopStyleVar();
-}
-
-void Image::draw_channel_stats_pe()
-{
-    auto &group      = groups[selected_group];
-    int   components = group.num_channels;
-    bool  is_color   = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
-
-    PixelStats *channel_stats[4] = {nullptr, nullptr, nullptr, nullptr};
-    string      channel_names[4];
-    for (int c = 0; c < components; ++c)
-    {
-        auto &channel = channels[group.channels[c]];
-        channel.update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
-        channel_stats[c] = channel.get_stats();
-        channel_names[c] = Channel::tail(channel.name);
-    }
-
-    float exposure_gain = pow(2.f, hdrview()->exposure_live());
-
-    // Separate from draw_channel_stats()'s mode_* statics for now -- these are two independently-explored
-    // prototypes, not (yet) meant to stay in sync with each other.
-    static int mode_min = ImGui::ChannelDisplayMode_Raw, mode_avg = ImGui::ChannelDisplayMode_Raw,
-               mode_max = ImGui::ChannelDisplayMode_Raw, mode_stddev = ImGui::ChannelDisplayMode_Raw,
-               mode_nan = ImGui::ChannelDisplayMode_Raw, mode_inf = ImGui::ChannelDisplayMode_Raw;
-
     auto stat_row = [&](auto &&accessor, ImGuiDataType data_type, const char *format, bool show_swatch,
                         ImGui::ChannelDisplayModeMask enabled_modes, int *mode, const string &label)
     {
@@ -1553,9 +1488,9 @@ void Image::draw_channel_stats_pe()
                          });
     };
 
-    // The channel-name header (that currently sits above draw_channel_stats()'s rows) is repurposed as this
-    // row's value-column content, positioned via the PE table's actual value-column width. No left-column
-    // label -- "Statistics" now lives in the SeparatorText above the table instead.
+    // Channel names as a row of their own, positioned via the PE table's actual value-column width -- a PE
+    // table has no shared header row to put them in otherwise. No left-column label: "Statistics" already
+    // lives in the SeparatorText above the table.
     ImGui::PE::Entry("",
                      [&]
                      {
