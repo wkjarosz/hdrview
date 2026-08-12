@@ -237,6 +237,20 @@ std::string TruncatedText(const std::string &filename, const std::string &icon);
 
 void PushRowColors(bool is_current, bool is_reference, bool reference_mod = false);
 
+//! Draws one row of a table-as-tree/outliner view -- the shared skeleton behind the image list's three
+//! row kinds (top-level image rows, flat/tree channel-group rows, tree-mode layer-path rows): TableNextRow(),
+//! an optional leading-column callback (drawn in column 0; pass nullptr to leave it empty), then
+//! TreeNodeEx(id, flags, "%s", label) in column 1. `before_node` runs immediately before the TreeNodeEx
+//! call (after the row has moved into the label column) and must push exactly 3 style colors -- e.g. via
+//! PushRowColors() above, or a plain dim/hover-neutralizing 3x PushStyleColor() for a non-selectable row --
+//! which TreeRow() pops again before returning; it's also the right place for any one-off Indent()/
+//! Unindent() that needs to apply specifically to this row's label column. `label` may be "" for callers
+//! that render their own content after TreeRow() returns instead (e.g. a row needing custom text
+//! truncation) -- SpanAllColumns keeps that row the click target either way. Returns TreeNodeEx's own
+//! open/closed result.
+bool TreeRow(const void *id, ImGuiTreeNodeFlags flags, const char *label, const std::function<void()> &leading_column,
+             const std::function<void()> &before_node);
+
 void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args);
 void TextAligned2(float align_x, float size_x, const char *fmt, ...);
 

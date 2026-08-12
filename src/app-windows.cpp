@@ -676,11 +676,33 @@ void HDRViewApp::draw_file_window()
         int hidden_groups  = 0;
         int image_to_close = -1;
 
+        // The image rows' font depends only on the list mode, so it's pushed once around the whole list
+        // rather than per row. Pushed before the clipper is set up so that the row height it measures is
+        // the height rows are actually drawn at.
+        ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
+
         // currently we only support the clipper when each image is one row
         bool             use_clipper = m_file_list_mode == 0;
         ImGuiListClipper clipper;
         if (use_clipper)
+        {
             clipper.Begin((int)m_visible_images.size());
+
+            // A pending scroll-to-selection request is consumed inside the per-row loop below, which the
+            // clipper only enters for rows it decided to draw. Without this, a request made while the
+            // target is scrolled out of view (e.g. a next/prev-image shortcut) would never reach its
+            // SetScrollHereY() call, and -- since the clipper computes the same range again next frame --
+            // would stay pending forever, until the user manually scrolled the target back into view.
+            if (m_scroll_to_next_frame >= -0.5f && is_valid(m_current))
+            {
+                auto it = find(m_visible_images.begin(), m_visible_images.end(), (size_t)m_current);
+                if (it != m_visible_images.end())
+                {
+                    int vi = int(it - m_visible_images.begin());
+                    clipper.IncludeItemsByIndex(vi, vi + 1);
+                }
+            }
+        }
         // the loop conditions here are to execute this outer loop once if we are not using the clipper, and execute it
         // as long as clipper.Step() returns true otherwise
         for (int iter = 0; (!use_clipper && iter < 1) || (use_clipper && clipper.Step()); ++iter)
@@ -696,25 +718,13 @@ void HDRViewApp::draw_file_window()
 
                 ImGuiTreeNodeFlags node_flags = base_node_flags;
 
-                ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
-                ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str());
-
-                ImGui::TableNextColumn();
-
                 if (is_current || is_reference)
                     node_flags |= ImGuiTreeNodeFlags_Selected;
                 if (m_file_list_mode == 0)
-                {
                     node_flags |= ImGuiTreeNodeFlags_Leaf;
-                    ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
-                }
 
-                auto &selected_group =
-                    img->groups[(is_reference && !is_current) ? img->reference_group : img->selected_group];
+                auto  &selected_group = img->groups[img->active_group_index(
+                    is_reference && !is_current ? Target_Secondary : Target_Primary)];
                 string group_name =
                     selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
                 auto  &channel    = img->channels[selected_group.channels[0]];
@@ -722,12 +732,19 @@ void HDRViewApp::draw_file_window()
                 string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
                                   (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
-                bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", "");
+                // Drawn with an empty label -- SpanAllColumns still makes this the row's click target -- so
+                // the icon and front-truncated filename below can be laid out and drawn by hand afterward.
+                bool open = ImGui::TreeRow((void *)(intptr_t)i, node_flags, "", [&]
+                                           { ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str()); },
+                                           [&]
+                                           {
+                                               if (m_file_list_mode == 0)
+                                                   ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
+                                               ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
+                                           });
                 auto icon = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
                 ImGui::SameLine(0.f, 0.f);
                 string the_text = ImGui::TruncatedText(filename, icon);
-
-                ImGui::PopStyleColor(3);
 
                 // Add right-click context menu
                 ImGui::PushFont(m_sans_regular, 0.f);
@@ -862,13 +879,11 @@ void HDRViewApp::draw_file_window()
 
                     ImGui::PopFont();
 
-                    if (open)
-                        ImGui::TreePop();
+                    ImGui::TreePop();
                 }
-
-                ImGui::PopFont();
             }
         }
+        ImGui::PopFont();
 
         int hidden_images = num_images() - num_visible_images();
         if (hidden_images || hidden_groups)

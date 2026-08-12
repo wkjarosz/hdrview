@@ -347,8 +347,19 @@ public:
     int2 size() const { return data_window.size(); }
 
     bool is_valid_group(int index) const { return index >= 0 && index < (int)groups.size(); }
-    int  next_visible_group_index(int index, Direction_ direction) const;
-    int  nth_visible_group_index(int n) const;
+
+    //! The group index to use for `target`: `selected_group` for Target_Primary, `reference_group` for
+    //! Target_Secondary -- except reference_group can be left at -1 by update_visibility() (a channel
+    //! filter can hide the group an image was set as *reference* for without deselecting it as the
+    //! reference), so Target_Secondary falls back to `selected_group` whenever `reference_group` is
+    //! currently invalid, rather than indexing `groups` out of bounds.
+    int active_group_index(Target_ target) const
+    {
+        return (target == Target_Secondary && is_valid_group(reference_group)) ? reference_group : selected_group;
+    }
+
+    int next_visible_group_index(int index, Direction_ direction) const;
+    int nth_visible_group_index(int n) const;
 
     static void set_null_texture(Target_ target = Target_Primary);
     void        set_as_texture(Target_ target = Target_Primary);

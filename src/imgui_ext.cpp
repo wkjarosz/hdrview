@@ -276,17 +276,46 @@ ImU32 SpdLogWindow::get_level_color(spdlog::level::level_enum level)
 
 string TruncatedText(const string &filename, const string &icon)
 {
-    string ellipsis = "";
-    string text     = filename;
-
     const float avail_width = GetContentRegionAvail().x;
-    while (CalcTextSize((icon + ellipsis + text).c_str()).x > avail_width && text.length() > 1)
+
+    // Common case: the whole thing already fits, nothing to truncate.
+    if (CalcTextSize((icon + filename).c_str()).x <= avail_width)
+        return filename;
+
+    // Filenames here are `file:part.layer.channel` paths whose meaningful part is the *end*, so this
+    // keeps the tail and elides the front -- the opposite of ImGui's RenderTextEllipsis(), which
+    // keeps the prefix. Same technique as that function though: accumulate per-glyph advances in a
+    // single pass (here walking backwards from the end) rather than re-measuring a growing substring.
+    static const string ellipsis = " ...";
+    const float         budget   = avail_width - CalcTextSize((icon + ellipsis).c_str()).x;
+
+    ImFont      *font  = GetFont();
+    ImFontBaked *baked = font->GetFontBaked(GetFontSize());
+
+    const char *begin = filename.c_str();
+    const char *end   = begin + filename.size();
+    const char *cut   = end;
+    float       width = 0.f;
+    while (cut > begin)
     {
-        text     = text.substr(1);
-        ellipsis = " ...";
+        // Step back to the start (lead byte) of the codepoint immediately before `cut`.
+        const char *prev = cut - 1;
+        while (prev > begin && (static_cast<unsigned char>(*prev) & 0xC0) == 0x80) --prev;
+
+        unsigned int codepoint = 0;
+        ImTextCharFromUtf8(&codepoint, prev, cut);
+        float advance = baked->GetCharAdvance((ImWchar)codepoint);
+
+        // Always keep at least the final character, even if it alone exceeds the budget, so the
+        // result is never a bare ellipsis.
+        if (cut != end && width + advance > budget)
+            break;
+
+        width += advance;
+        cut = prev;
     }
 
-    return ellipsis + text;
+    return cut == begin ? filename : ellipsis + string(cut, end);
 };
 
 ImVec2 IconSize() { return CalcTextSize(ICON_MY_WIDEST); }
@@ -385,25 +414,48 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
     float4 header  = GetStyleColorVec4(ImGuiCol_Header);
     float4 hovered = GetStyleColorVec4(ImGuiCol_HeaderHovered);
 
-    // "complementary" color (for reference image/channel group) is shifted by 2/3 in hue
-    constexpr float3 hsv_adjust = float3{0.67f, 0.f, -0.2f};
-    float4           hovered_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust), hovered.w};
-    float4           header_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust), header.w};
-    float4           active_c{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust), active.w};
+    // The derived colors below depend only on those three theme colors, but this is called once per
+    // visible row per frame, so they're cached and rederived only when the theme actually changes --
+    // comparing three colors is much cheaper than six HSV<->RGB conversions.
+    static float4 cached_hovered{-1.f}, cached_header{-1.f}, cached_active{-1.f};
+    static float4 hovered_c, header_c, active_c, hovered_avg, header_avg, active_avg;
+    if (hovered != cached_hovered || header != cached_header || active != cached_active)
+    {
+        cached_hovered = hovered;
+        cached_header  = header;
+        cached_active  = active;
 
-    // the average between the two is used when a row is both current and reference
-    float4 hovered_avg = 0.5f * (hovered_c + hovered);
-    float4 header_avg  = 0.5f * (header_c + header);
-    float4 active_avg  = 0.5f * (active_c + active);
-    // constexpr float3 hsv_adjust2 = float3{0.33f, 0.f, -0.2f};
-    // float4           hovered_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust2), hovered.w};
-    // float4           header_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust2), header.w};
-    // float4           active_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust2), active.w};
+        // "complementary" color (for reference image/channel group) is shifted by 2/3 in hue
+        constexpr float3 hsv_adjust = float3{0.67f, 0.f, -0.2f};
+        hovered_c = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust), hovered.w};
+        header_c  = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust), header.w};
+        active_c  = float4{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust), active.w};
+
+        // the average between the two is used when a row is both current and reference
+        hovered_avg = 0.5f * (hovered_c + hovered);
+        header_avg  = 0.5f * (header_c + header);
+        active_avg  = 0.5f * (active_c + active);
+    }
 
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, reference_mod ? (is_current ? hovered_avg : hovered_c)
                                                                 : (is_reference ? hovered_avg : hovered));
     ImGui::PushStyleColor(ImGuiCol_Header, is_reference ? (is_current ? header_avg : header_c) : header);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, reference_mod ? (is_current ? active_avg : active_c) : active);
+}
+
+bool TreeRow(const void *id, ImGuiTreeNodeFlags flags, const char *label, const std::function<void()> &leading_column,
+             const std::function<void()> &before_node)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    if (leading_column)
+        leading_column();
+
+    ImGui::TableNextColumn();
+    before_node();
+    bool open = ImGui::TreeNodeEx(id, flags, "%s", label);
+    ImGui::PopStyleColor(3);
+    return open;
 }
 
 // Splits `total_width` (already reduced by inter-item spacing) into `num_components` columns using the same
