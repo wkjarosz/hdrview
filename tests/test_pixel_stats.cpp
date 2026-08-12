@@ -160,6 +160,25 @@ TEST_CASE("PixelStats::calculate applies each blend mode against a reference ima
     CHECK(blended_value(BlendMode_Difference) == doctest::Approx(6.0));
 }
 
+TEST_CASE("PixelStats::calculate tolerates a reference channel smaller than the image under BlendMode_Normal")
+{
+    // BlendMode_Normal ignores the reference sample entirely (blend() just returns the image's own value), but
+    // a reference image/channel of a different size than the current one is a completely ordinary thing to
+    // select (e.g. comparing two unrelated photos) -- it must not crash just because Normal is the active mode.
+    auto img = make_identifiable_channel(10, 10);
+    auto ref = make_identifiable_channel(2, 2);
+
+    PixelStats::Settings settings; // BlendMode_Normal by default, whole image
+
+    PixelStats        stats;
+    std::atomic<bool> canceled{false};
+    stats.calculate(img, int2{0, 0}, &ref, int2{0, 0}, settings, canceled);
+
+    CHECK(stats.summary.valid_pixels == 100);
+    CHECK(stats.summary.minimum == doctest::Approx(0.f));
+    CHECK(stats.summary.maximum == doctest::Approx(99.f));
+}
+
 TEST_CASE("PixelStats::calculate resets to the default, uncomputed state when canceled")
 {
     auto img = make_identifiable_channel(4, 4);

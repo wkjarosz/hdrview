@@ -164,6 +164,10 @@ public:
 
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;
 
+    //! Applies the same exposure/tonemap/gamma pipeline as pixel_value(..., raw=false, ...), for an
+    //! arbitrary linear value rather than a pixel lookup (e.g. to preview a computed statistic).
+    float4 tonemap_value(float4 value) const;
+
     // load font with the specified name at the specified size
     ImFont *font(const string &name) const;
 
@@ -201,8 +205,7 @@ private:
     float2 image_scale(ConstImagePtr img) const;
 
     void draw_background();
-    void draw_channel_stats_window();
-    void draw_pixel_inspector_window();
+    void draw_statistics_window();
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
@@ -226,7 +229,7 @@ private:
     void setup_rendering();
 
     void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
-                            float width = 0.f) const;
+                            float width = 0.f, const string &trailing_label = {}) const;
 
 private:
     //-----------------------------------------------------------------------------

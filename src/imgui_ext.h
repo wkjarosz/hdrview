@@ -181,6 +181,49 @@ void PlotMultiHistograms(const char *label, int num_hists, const char **names, c
                          int values_count, float scale_min = FLT_MAX, float scale_max = FLT_MAX,
                          ImVec2 graph_size = ImVec2(0, 0));
 
+//! How a ChannelValuesRow's numeric boxes currently render their values. Raw/ExposureAdjusted read from the
+//! row's `raw` array (Raw as-is, ExposureAdjusted scaled by `exposure_gain`); Displayed32/8/Hex read from
+//! the row's `displayed` array (already run through the app's exposure/tonemap/gamma/sRGB pipeline).
+enum ChannelDisplayMode_ : int
+{
+    ChannelDisplayMode_Raw = 0,
+    ChannelDisplayMode_ExposureAdjusted,
+    ChannelDisplayMode_Displayed32,
+    ChannelDisplayMode_Displayed8,
+    ChannelDisplayMode_DisplayedHex,
+    ChannelDisplayMode_COUNT
+};
+using ChannelDisplayModeMask                                    = unsigned int;
+constexpr ChannelDisplayModeMask ChannelDisplayMode_RawOnlyMask = 1u << ChannelDisplayMode_Raw;
+constexpr ChannelDisplayModeMask ChannelDisplayMode_NoDisplayMask =
+    (1u << ChannelDisplayMode_Raw) | (1u << ChannelDisplayMode_ExposureAdjusted);
+constexpr ChannelDisplayModeMask ChannelDisplayMode_AllMask = (1u << ChannelDisplayMode_COUNT) - 1u;
+
+//! Draws `num_components` read-only numeric boxes side by side, plus an optional trailing color swatch
+//! and/or text label -- all one click target opening a popup with "Copy to clipboard" (if `allow_copy`)
+//! and a "Display as:" list of ChannelDisplayMode_ entries (disabled, not omitted, per `enabled_modes`).
+//! The click target stays active under `content_disabled`; only the boxes/swatch/label gray out (e.g. for
+//! a meaningless/out-of-bounds sample). `*mode` is the caller-owned current selection. `raw` is required;
+//! `displayed` may be null unless a Displayed* mode is enabled. `id` scopes the row's widget IDs.
+//! `total_width`, if nonzero, overrides the row's natural (CalcItemWidth-based) width. `show_color_markers`
+//! tints each box's left edge per component (only meaningful with `show_swatch`). Row height follows the
+//! ambient FramePadding -- push ImGuiStyleVar_FramePadding for a more compact row; there is no compact
+//! default.
+void ChannelValuesRow(const char *id, const float *raw, const float *displayed, int num_components,
+                      ImGuiDataType data_type, const char *format, float exposure_gain, int *mode,
+                      ChannelDisplayModeMask enabled_modes = ChannelDisplayMode_AllMask, bool allow_copy = true,
+                      bool show_swatch = false, const ImVec4 &swatch_color = ImVec4(0, 0, 0, 1),
+                      const std::string &label = {}, float total_width = 0.f, bool content_disabled = false,
+                      bool show_color_markers = false);
+
+//! Draws a row of `num_components` text labels (e.g. channel names), each left-aligned over the column
+//! ChannelValuesRow(..., num_components, ...) would draw for the same `total_width` -- for a
+//! column-header row placed above one or more ChannelValuesRow calls sharing that same num_components. Pass
+//! `reserve_swatch_gap = true` if any of those rows reserve a swatch column (see ChannelValuesRow) out of
+//! the same `total_width`, so the header's columns still line up with the (narrower) box columns below.
+void ChannelValuesRowHeader(const std::string *names, int num_components, float total_width = 0.f,
+                            bool reserve_swatch_gap = false);
+
 inline void AlignCursor(float width, float align)
 {
     if (auto shift = align * (GetContentRegionAvail().x - width))

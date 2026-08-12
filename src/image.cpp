@@ -342,7 +342,11 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
                 return std::numeric_limits<float>::quiet_NaN(); // out of bounds
             }
             float val = img(i2d + croi.min - img_data_origin);
-            if (ref)
+            // BlendMode_Normal discards the reference sample (blend() just returns `val`), and croi is only
+            // intersected with rroi above when the reference is actually going to be sampled -- so sampling it
+            // here regardless of blend mode risks indexing outside ref's bounds whenever the two channels
+            // differ in size.
+            if (ref && settings.blend_mode != BlendMode_Normal)
                 val = blend(val, (*ref)(i2d + croi.min - rroi.min), settings.blend_mode);
             return val;
         };

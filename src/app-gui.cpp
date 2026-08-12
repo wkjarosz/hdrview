@@ -39,152 +39,57 @@
 using namespace std;
 using namespace HelloImGui;
 
-void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy,
-                                    float width) const
+void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy, float width,
+                                    const string &trailing_label) const
 {
-    float4   color32         = pixel_value(pixel, true, which_image);
-    float4   displayed_color = linear_to_sRGB(pixel_value(pixel, false, which_image));
-    uint32_t hex             = color_f128_to_u32(color_u32_to_f128(color_f128_to_u32(displayed_color)));
-    int4     ldr_color       = int4{float4{color_u32_to_f128(hex)} * 255.f};
-    bool3    inside          = {false, false, false};
+    // Shares ImGui::ChannelValuesRow with Image::draw_channel_stats() -- both use the exact same row shape,
+    // including its Copy/Display-as popup. Pixel rows always offer the full mode set: unlike stats, a
+    // "displayed color" is well-defined for any channel selection here (rgba_pixel() already does a
+    // sensible per-group reconstruction before tonemapping), not just literal RGB(A) groups.
+    float4 raw           = pixel_value(pixel, true, which_image);
+    float4 displayed     = linear_to_sRGB(pixel_value(pixel, false, which_image));
+    float  exposure_gain = powf(2.f, m_exposure_live);
 
-    float start_x = ImGui::GetCursorPosX();
-
-    int    components       = 4;
-    string channel_names[4] = {"R", "G", "B", "A"};
-    if (which_image != 2)
+    int  components  = 4;
+    bool show_swatch = true;
+    bool inside      = false;
+    if (which_image == 0)
     {
-        ConstImagePtr img;
-        ChannelGroup  group;
-        if (which_image == 0)
-        {
-            if (!current_image())
-                return;
-            img        = current_image();
-            components = color_mode == 0 ? img->groups[img->selected_group].num_channels : 4;
-            group      = img->groups[img->selected_group];
-            inside[0]  = img->contains(pixel);
-        }
-        else if (which_image == 1)
-        {
-            if (!reference_image())
-                return;
-            img        = reference_image();
-            components = color_mode == 0 ? img->groups[img->reference_group].num_channels : 4;
-            group      = img->groups[img->reference_group];
-            inside[1]  = img->contains(pixel);
-        }
-
-        if (color_mode == 0)
-            for (int c = 0; c < components; ++c)
-                channel_names[c] = Channel::tail(img->channels[group.channels[c]].name);
+        if (!current_image())
+            return;
+        auto &group = current_image()->groups[current_image()->selected_group];
+        components  = group.num_channels;
+        show_swatch = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
+        inside      = current_image()->contains(pixel);
     }
-    inside[2] = inside[0] || inside[1];
-
-    ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf;
-    if (ImGui::ColorButton("colorbutton", displayed_color, color_flags))
-        ImGui::OpenPopup("dropdown");
-    ImGui::SetItemTooltip("Click to change value format%s", allow_copy ? " or copy to clipboard." : ".");
-
-    // ImGui::PushFont(sans_font);
-    if (ImGui::BeginPopup("dropdown"))
+    else if (which_image == 1)
     {
-        if (allow_copy && ImGui::Selectable("Copy to clipboard"))
+        // Unlike Current, this doesn't early-return when absent: the row stays visible (via the caller's
+        // label, e.g. "Reference"), just disabled -- reference_image() being null already makes `inside`
+        // false below, same mechanism as an out-of-bounds pixel.
+        if (reference_image())
         {
-            string buf;
-            if (color_mode == 0)
-            {
-                if (components == 4)
-                    buf = fmt::format("({:g}, {:g}, {:g}, {:g})", color32.x, color32.y, color32.z, color32.w);
-                else if (components == 3)
-                    buf = fmt::format("({:g}, {:g}, {:g})", color32.x, color32.y, color32.z);
-                else if (components == 2)
-                    buf = fmt::format("({:g}, {:g})", color32.x, color32.y);
-                else
-                    buf = fmt::format("{:g}", color32.x);
-            }
-            else if (color_mode == 1)
-                buf = fmt::format("({:g}, {:g}, {:g}, {:g})", displayed_color.x, displayed_color.y, displayed_color.z,
-                                  displayed_color.w);
-            else if (color_mode == 2)
-                buf = fmt::format("({:d}, {:d}, {:d}, {:d})", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
-            else if (color_mode == 3)
-                buf = fmt::format("#{:02X}{:02X}{:02X}{:02X}", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
-            ImGui::SetClipboardText(buf.c_str());
+            auto &group = reference_image()->groups[reference_image()->reference_group];
+            components  = group.num_channels;
+            show_swatch = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
+            inside      = reference_image()->contains(pixel);
         }
-        ImGui::SeparatorText("Display as:");
-        if (ImGui::Selectable("Raw values", color_mode == 0))
-            color_mode = 0;
-        if (ImGui::Selectable("Displayed color (32-bit)", color_mode == 1))
-            color_mode = 1;
-        if (ImGui::Selectable("Displayed color (8-bit)", color_mode == 2))
-            color_mode = 2;
-        if (ImGui::Selectable("Displayed color (hex)", color_mode == 3))
-            color_mode = 3;
-
-        ImGui::EndPopup();
+        else
+            show_swatch = false;
     }
+    else
+        // Composite is always the 4-channel blended visualization buffer, independent of the current
+        // image's channel-group semantics.
+        inside = (current_image() && current_image()->contains(pixel)) ||
+                 (reference_image() && reference_image()->contains(pixel));
 
-    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-
-    float w_full = (width == 0.f) ? ImGui::GetContentRegionAvail().x : width - (ImGui::GetCursorPosX() - start_x);
-    // width available to all items (without spacing)
-    float w_items    = w_full - ImGui::GetStyle().ItemInnerSpacing.x * (components - 1);
-    float prev_split = w_items;
-    // distributes the available width without jitter during resize
-    auto set_item_width = [&prev_split, w_items, components](int c)
-    {
-        float next_split = ImMax(IM_TRUNC(w_items * (components - 1 - c) / components), 1.f);
-        ImGui::SetNextItemWidth(ImMax(prev_split - next_split, 1.0f));
-        prev_split = next_split;
-    };
-
-    ImGui::BeginDisabled(!inside[which_image]);
-    ImGui::BeginGroup();
-    if (color_mode == 0)
-    {
-        for (int c = 0; c < components; ++c)
-        {
-            if (c > 0)
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-
-            set_item_width(c);
-            ImGui::InputFloat(fmt::format("##component {}", c).c_str(), &color32[c], 0.f, 0.f,
-                              fmt::format("{}: %g", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
-        }
-    }
-    else if (color_mode == 1)
-    {
-        for (int c = 0; c < components; ++c)
-        {
-            if (c > 0)
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-
-            set_item_width(c);
-            ImGui::InputFloat(fmt::format("##component {}", c).c_str(), &displayed_color[c], 0.f, 0.f,
-                              fmt::format("{}: %g", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
-        }
-    }
-    else if (color_mode == 2)
-    {
-        for (int c = 0; c < components; ++c)
-        {
-            if (c > 0)
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-
-            set_item_width(c);
-            ImGui::InputScalarN(fmt::format("##component {}", c).c_str(), ImGuiDataType_S32, &ldr_color[c], 1, nullptr,
-                                nullptr, fmt::format("{}: %d", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
-        }
-    }
-    else if (color_mode == 3)
-    {
-        ImGui::SetNextItemWidth(IM_TRUNC(w_full));
-        ImGui::InputScalar("##hex color", ImGuiDataType_S32, &hex, nullptr, nullptr, "#%08X",
-                           ImGuiInputTextFlags_ReadOnly);
-    }
-    ImGui::EndGroup();
-    ImGui::EndDisabled();
+    // content_disabled (not an outer BeginDisabled around the whole call): the row's popup -- mode
+    // switching, copy -- stays clickable even when the sample itself is meaningless (out of bounds, or no
+    // reference image), only the displayed values gray out.
+    ImGui::ChannelValuesRow(fmt::format("##pixel_color_{}", which_image).c_str(), &raw.x, &displayed.x, components,
+                            ImGuiDataType_Float, "%g", exposure_gain, &color_mode, ImGui::ChannelDisplayMode_AllMask,
+                            allow_copy, show_swatch, ImVec4{displayed.x, displayed.y, displayed.z, displayed.w},
+                            trailing_label, width, /*content_disabled=*/!inside);
 }
 
 void HDRViewApp::draw_status_bar()
@@ -353,6 +258,9 @@ void HDRViewApp::draw_status_bar()
                 auto fpy = ImGui::GetStyle().FramePadding.y;
                 ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
                 auto y = ImGui::GetCursorPosY();
+                // ReadOnly alone doesn't block DragInt's drag gesture, only keyboard entry -- these
+                // coordinates track the live hover position and were never meant to be draggable at all.
+                ImGui::BeginDisabled();
                 ImGui::SetCursorPosY(y + fpy);
                 ImGui::SetNextItemWidth(drag_size);
                 ImGui::DragInt("##pixel x coordinates", &hovered_pixel.x, 1.f, 0, 0, "X: %d",
@@ -362,6 +270,7 @@ void HDRViewApp::draw_status_bar()
                 ImGui::SetNextItemWidth(drag_size);
                 ImGui::DragInt("##pixel y coordinates", &hovered_pixel.y, 1.f, 0, 0, "Y: %d",
                                ImGuiInputTextFlags_ReadOnly);
+                ImGui::EndDisabled();
                 ImGui::PopStyleVar();
 
                 float x = hover_x + 2.f * drag_size + 2.f * inner_sp;
@@ -369,7 +278,12 @@ void HDRViewApp::draw_status_bar()
 
                 ImGui::PushID("Current");
                 ImGui::SameLine(x);
+                // pixel_color_widget no longer bakes in compact styling itself, so opt in here to match the
+                // X/Y drag boxes above, and nudge down by the same backed-up fpy to stay on "="'s baseline
+                ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+                ImGui::SetCursorPosY(y + fpy);
                 pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, EmSize(25.f));
+                ImGui::PopStyleVar();
                 ImGui::PopID();
             }
         }
@@ -540,6 +454,18 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Restore default layout"));
+
+        if (!m_params.alternativeDockingLayouts.empty() && ImGui::BeginMenuEx("Layout", ICON_MY_SHOW_ALL_WINDOWS))
+        {
+            auto current = HelloImGui::CurrentLayoutName();
+            if (ImGui::MenuItem(m_params.dockingParams.layoutName.c_str(), nullptr,
+                                current == m_params.dockingParams.layoutName))
+                HelloImGui::SwitchLayout(m_params.dockingParams.layoutName);
+            for (auto &layout : m_params.alternativeDockingLayouts)
+                if (ImGui::MenuItem(layout.layoutName.c_str(), nullptr, current == layout.layoutName))
+                    HelloImGui::SwitchLayout(layout.layoutName);
+            ImGui::EndMenu();
+        }
 
         ImGui::Separator();
 

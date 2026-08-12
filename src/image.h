@@ -390,6 +390,9 @@ public:
     void draw_info();
     void draw_chromaticity_diagram(float width);
     void draw_colorspace();
+    //! Draws the channel-statistics rows (Minimum/Average/Maximum/Std. Dev./# NaNs/# Infs) as PropertyEditor
+    //! (PE) entries. Must be called between ImGui::PE::Begin()/End() -- the caller owns the table itself
+    //! since it also hosts entries (hovered pixel, watched pixels) that aren't Image state.
     void draw_channel_stats();
 
 private:
