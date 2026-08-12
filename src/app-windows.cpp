@@ -713,8 +713,8 @@ void HDRViewApp::draw_file_window()
                     ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
                 }
 
-                auto &selected_group =
-                    img->groups[(is_reference && !is_current) ? img->reference_group : img->selected_group];
+                auto  &selected_group = img->groups[img->active_group_index(
+                    is_reference && !is_current ? Target_Secondary : Target_Primary)];
                 string group_name =
                     selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
                 auto  &channel    = img->channels[selected_group.channels[0]];

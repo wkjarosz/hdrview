@@ -69,7 +69,7 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
         // false below, same mechanism as an out-of-bounds pixel.
         if (reference_image())
         {
-            auto &group = reference_image()->groups[reference_image()->reference_group];
+            auto &group = reference_image()->groups[reference_image()->active_group_index(Target_Secondary)];
             components  = group.num_channels;
             show_swatch = group.type == ChannelGroup::RGBA_Channels || group.type == ChannelGroup::RGB_Channels;
             inside      = reference_image()->contains(pixel);

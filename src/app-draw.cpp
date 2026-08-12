@@ -237,7 +237,7 @@ void HDRViewApp::draw_image() const
 
         if (img)
         {
-            int                 group_idx = target == Target_Primary ? img->selected_group : img->reference_group;
+            int                 group_idx = img->active_group_index(target);
             const ChannelGroup &group     = img->groups[group_idx];
 
             // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
