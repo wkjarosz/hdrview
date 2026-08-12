@@ -190,12 +190,15 @@ void HDRViewApp::draw_status_bar()
     // whatever follows never has to move depending on it
     const float progress_w = EmSize(15.f);
     const float progress_x = badge_x + reserved_w + item_spacing;
-    ImGui::SetCursorPosX(progress_x);
     if (auto num = m_image_loader.num_pending_images())
+    {
+        ImGui::SetCursorPosX(progress_x);
         ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(progress_w, 0.f),
                            fmt::format("Loading {} image{}", num, num > 1 ? "s" : "").c_str());
+    }
     else if (m_remaining_download > 0)
     {
+        ImGui::SetCursorPosX(progress_x);
         ImGui::ScopedFont f{nullptr, 4.0f};
         ImGui::ProgressBar((100 - m_remaining_download) / 100.f, ImVec2(progress_w, 0.f), "Downloading image");
     }
