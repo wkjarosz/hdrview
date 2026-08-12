@@ -101,15 +101,40 @@ convention), each exposing a `RegisterTests_X(ImGuiTestEngine*)` aggregated by
 `tests/gui/test_gui_registry.h`. `src/app.h`/`src/app-windows.cpp` add a small
 `HDRViewApp::enable_gui_test_engine()` opt-in hook, entirely guarded behind `HDRVIEW_ENABLE_GUI_TEST_ENGINE`
 (defined only for the `hdrview_gui_tests` target) so the production `HDRView` binary and `hdrview_tests` are
-untouched by it.
+untouched by it. That hook also overrides `io.ConfigRunSpeed` to `ImGuiTestRunSpeed_Fast` — Hello ImGui's own
+test-engine `Setup()` hardcodes `Normal` speed ("slowest mode... in this demo"), which animates every
+simulated mouse move over many real frames instead of teleporting it; without the override the suite runs
+correctly but painfully slowly, and it gets slower with every test added.
 
-Two addressing quirks worth knowing before writing new tests here: the menu bar lives in a top-level
-`ImGui::BeginMainMenuBar()` window named `"##MainMenuBar"`, and each `EdgeToolbar` (e.g. the exposure/offset
-toolbar) is its own floating window with a fixed internal name (`"##" + EdgeToolbarTypeName(...) +
-"_2123243"`, baked into hello_imgui) — neither is a child of the `"MainDockSpace"` host window that the
-regular dockable windows (Histogram, Images, etc.) are displayed inside. Always reset `ctx->SetRef("")` back
-to root before looking up a window that isn't a child of whatever ref you last set, or a `WindowInfo()`/
-`ItemClick()` call will silently search in the wrong scope and simply not find it.
+Addressing quirks worth knowing before writing new tests here:
+- The menu bar lives in a top-level `ImGui::BeginMainMenuBar()` window named `"##MainMenuBar"`, and each
+  `EdgeToolbar` (e.g. the exposure/offset toolbar) is its own floating window with a fixed internal name
+  (`"##" + EdgeToolbarTypeName(...) + "_2123243"`, baked into hello_imgui) — neither is a child of the
+  `"MainDockSpace"` host window that the regular dockable windows (Images, Pixel statistics, etc.) are
+  displayed inside.
+- `WindowInfo()`/`GatherItems()`/`MenuClick()` all resolve a bare (non-`"//"`-prefixed) ref *relative to
+  whatever `ctx->SetRef(...)` is still active*, not relative to root. Always call `ctx->SetRef("")` (or use
+  an explicit `"//Window"` absolute ref) before looking up something that isn't a child of the current ref —
+  otherwise the lookup silently searches the wrong scope and just doesn't find it. This has bitten every
+  test file in this suite at least once; it's the single most common mistake here.
+- A menu/action name containing a literal `/` (e.g. `"Pixel/color inspector"`) needs it escaped as `\/` in a
+  `MenuClick()` path, or the `/` gets parsed as a submenu separator — mirrors how Dear ImGui's own demo
+  addresses `"Tools/Metrics\\/Debugger"`.
+- `BeginTable(...)`-hosted content (e.g. the Images-window file list) lives in a child window whose name gets
+  a runtime ID-hash suffix (`"Images/ImageList_<hex>"`), not the literal table name — don't hardcode that
+  path. Gather broadly (`GatherItems(&list, "//Images", -1)`) and filter the result by `.Depth` and
+  `.Window->Name` substring instead (see `tests/gui/test_gui_navigation.cpp`).
+- `HDRViewApp::load_images({pathA, pathB})` does not guarantee the resulting `m_images` order matches the
+  request order — background loads can complete in either order. Tests that care which loaded image is
+  which should look it up by filename after loading, not assume index 0/1 (see
+  `find_image_index_containing()` in `tests/gui/test_gui_filtering.cpp`).
+
+Like `hdrview_tests`' EXR/PNG doctests, `tests/gui/test_gui_multipart.cpp` conditionally builds real
+assertions against a vendored multi-part OpenEXR fixture (`HDRVIEW_TEST_OPENEXR_DIR`, only set on
+`-cpm`/`-universal` presets) and registers zero tests otherwise — a useful real-world-scale complement to the
+simple single-layer PNG fixtures (`HDRVIEW_GUI_TEST_IMAGE`/`_2`) the rest of the suite uses. Note a multi-part
+EXR loads as multiple separate `Image`s (one per part), not as multiple `ChannelGroup`s within one `Image` —
+that's only how a single-part *multi-layer* EXR behaves.
 
 The imgui_test_engine license is non-standard (not MIT) but free for OSI-licensed open-source projects like
 HDRView (see `LICENSE.txt` in the fetched package). CI runs it headlessly only on Linux (`ci-linux.yml`'s

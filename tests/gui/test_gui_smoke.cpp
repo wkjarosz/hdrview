@@ -25,9 +25,9 @@ void RegisterTests_Smoke(ImGuiTestEngine *engine)
         // window's dock node, not ID-children of it, so they're looked up at the (default, root) ref rather
         // than via SetRef("MainDockSpace").
         // "Log" starts closed (see log_window's initial visibility in app.cpp) so it's deliberately excluded
-        // here; every other dockable window set up in the constructor starts open.
-        for (const char *label :
-             {"Histogram", "Channel statistics", "Images", "Info", "Colorspace", "Pixel inspector", "Watched Folders"})
+        // here; every other dockable window set up in the constructor starts open. Histogram, Channel
+        // statistics, and Pixel inspector were merged into "Pixel statistics" (see #172).
+        for (const char *label : {"Pixel statistics", "Images", "Info", "Colorspace", "Watched Folders"})
             check_window_exists(ctx, label);
     };
 }

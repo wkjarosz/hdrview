@@ -1639,6 +1639,12 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_smoke.cpp
     tests/gui/test_gui_dialogs.cpp
     tests/gui/test_gui_image_io.cpp
+    tests/gui/test_gui_view.cpp
+    tests/gui/test_gui_tools.cpp
+    tests/gui/test_gui_stats.cpp
+    tests/gui/test_gui_filtering.cpp
+    tests/gui/test_gui_navigation.cpp
+    tests/gui/test_gui_multipart.cpp
   )
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)
@@ -1648,12 +1654,22 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   target_compile_definitions(
     hdrview_gui_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
   )
-  # Reuses the app's own icon (always present, unlike the vendored OpenEXR/PNG conformance suites hdrview_tests
-  # conditionally compiles against, which only exist on -cpm/-universal presets) as a tiny, always-available
-  # image fixture for tests/gui/test_gui_image_io.cpp.
+  # Reuses the app's own icons (always present, unlike the vendored OpenEXR/PNG conformance suites
+  # hdrview_tests conditionally compiles against, which only exist on -cpm/-universal presets) as tiny,
+  # always-available, distinctly-named image fixtures for the tests/gui/ suite.
   target_compile_definitions(
-    hdrview_gui_tests PRIVATE HDRVIEW_GUI_TEST_IMAGE="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon.png"
+    hdrview_gui_tests
+    PRIVATE HDRVIEW_GUI_TEST_IMAGE="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon.png"
+            HDRVIEW_GUI_TEST_IMAGE_2="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon-256.png"
   )
+  # Same idea as the OpenEXR guard above, but for hdrview_gui_tests: on -cpm/-universal presets this makes a
+  # real multi-part EXR fixture available to tests/gui/test_gui_multipart.cpp; that file registers no
+  # tests at all when the define is absent (e.g. on -local presets).
+  if(DEFINED OpenEXR_SOURCE_DIR AND EXISTS "${OpenEXR_SOURCE_DIR}/src/test/bin/test_images")
+    target_compile_definitions(
+      hdrview_gui_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${OpenEXR_SOURCE_DIR}/src/test/bin/test_images"
+    )
+  endif()
   target_link_libraries(hdrview_gui_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
 
   if(APPLE)

@@ -38,6 +38,12 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
         // to report *why* a test failed when run in headless/CI (-nogui) mode.
         io.ConfigLogToTTY            = true;
         io.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
+        // Hello ImGui's own test-engine Setup() (called before this callback runs) hardcodes
+        // ConfigRunSpeed = Normal ("slowest mode in this demo" - it's tuned for a watchable interactive
+        // demo, not headless test runs). Normal/Cinematic speed animates every simulated mouse move over
+        // many real frames (see MouseMoveToPos() in imgui_te_context.cpp); Fast teleports it in 2 frames.
+        // Override back to Fast, since nothing else resets it after this point.
+        io.ConfigRunSpeed = ImGuiTestRunSpeed_Fast;
         register_tests(engine);
         ImGuiTestEngine_QueueTests(engine, ImGuiTestGroup_Tests, nullptr, ImGuiTestRunFlags_RunFromCommandLine);
     };
