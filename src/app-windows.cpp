@@ -698,20 +698,10 @@ void HDRViewApp::draw_file_window()
 
                 ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
-                ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str());
-
-                ImGui::TableNextColumn();
-
                 if (is_current || is_reference)
                     node_flags |= ImGuiTreeNodeFlags_Selected;
                 if (m_file_list_mode == 0)
-                {
                     node_flags |= ImGuiTreeNodeFlags_Leaf;
-                    ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
-                }
 
                 auto  &selected_group = img->groups[img->active_group_index(
                     is_reference && !is_current ? Target_Secondary : Target_Primary)];
@@ -722,12 +712,19 @@ void HDRViewApp::draw_file_window()
                 string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
                                   (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
-                bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", "");
+                // Drawn with an empty label -- SpanAllColumns still makes this the row's click target -- so
+                // the icon and front-truncated filename below can be laid out and drawn by hand afterward.
+                bool open = ImGui::TreeRow((void *)(intptr_t)i, node_flags, "", [&]
+                                           { ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str()); },
+                                           [&]
+                                           {
+                                               if (m_file_list_mode == 0)
+                                                   ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
+                                               ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
+                                           });
                 auto icon = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
                 ImGui::SameLine(0.f, 0.f);
                 string the_text = ImGui::TruncatedText(filename, icon);
-
-                ImGui::PopStyleColor(3);
 
                 // Add right-click context menu
                 ImGui::PushFont(m_sans_regular, 0.f);

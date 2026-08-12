@@ -437,6 +437,21 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, reference_mod ? (is_current ? active_avg : active_c) : active);
 }
 
+bool TreeRow(const void *id, ImGuiTreeNodeFlags flags, const char *label, const std::function<void()> &leading_column,
+             const std::function<void()> &before_node)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    if (leading_column)
+        leading_column();
+
+    ImGui::TableNextColumn();
+    before_node();
+    bool open = ImGui::TreeNodeEx(id, flags, "%s", label);
+    ImGui::PopStyleColor(3);
+    return open;
+}
+
 // Splits `total_width` (already reduced by inter-item spacing) into `num_components` columns using the same
 // truncated allocation Dear ImGui's ColorEdit4 uses internally (remainder folded into the last column), so
 // a header row computed independently still lines up with the value boxes drawn below it.

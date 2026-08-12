@@ -330,60 +330,54 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
         bool is_selected_channel  = is_current && selected_group == layer.groups[g];
         bool is_reference_channel = is_reference && reference_group == layer.groups[g];
 
-        ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift);
+        ImGuiTreeNodeFlags flags =
+            tree_node_flags |
+            (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_None);
+        ImGui::TreeRow((void *)(intptr_t)id_++, flags, name.c_str(),
+                       [&]
+                       {
+                           string shortcut = is_current && visible_group < 10
+                                                 ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(visible_group + 1, 10))
+                                                 : "";
+                           ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
+                       },
+                       [&]
+                       { ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift); });
+
+        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
-            ImGui::TableNextRow();
-
-            ImGui::TableNextColumn();
-            string shortcut = is_current && visible_group < 10
-                                  ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(visible_group + 1, 10))
-                                  : "";
-            ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
-
-            // ImGui::TableNextColumn();
-            // ImGui::TextAligned2(0.0f, -FLT_MIN, is_selected_channel ? ICON_MY_VISIBILITY : "");
-
-            ImGui::TableNextColumn();
-            ImGui::TreeNodeEx((void *)(intptr_t)id_++,
-                              tree_node_flags |
-                                  (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected
-                                                                               : ImGuiTreeNodeFlags_None),
-                              "%s", name.c_str());
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            if (ImGui::GetIO().KeyShift)
             {
-                if (ImGui::GetIO().KeyShift)
+                spdlog::trace("Shift-clicked on {}", name);
+                // check if we are already the reference channel group
+                if (is_reference_channel)
                 {
-                    spdlog::trace("Shift-clicked on {}", name);
-                    // check if we are already the reference channel group
-                    if (is_reference_channel)
-                    {
-                        spdlog::trace("Clearing reference image");
-                        hdrview()->set_reference_image_index(-1, true);
-                        reference_group = 0;
-                    }
-                    else
-                    {
-                        spdlog::trace("Setting reference image to {}", img_idx);
-                        hdrview()->set_reference_image_index(img_idx);
-                        reference_group = layer.groups[g];
-                    }
-                    set_as_texture(Target_Secondary);
+                    spdlog::trace("Clearing reference image");
+                    hdrview()->set_reference_image_index(-1, true);
+                    reference_group = 0;
                 }
                 else
                 {
-                    hdrview()->set_current_image_index(img_idx);
-                    selected_group = layer.groups[g];
-                    set_as_texture(Target_Primary);
+                    spdlog::trace("Setting reference image to {}", img_idx);
+                    hdrview()->set_reference_image_index(img_idx);
+                    reference_group = layer.groups[g];
                 }
+                set_as_texture(Target_Secondary);
             }
-            else if (is_selected_channel && scroll_to >= -0.5f)
+            else
             {
-                if (!ImGui::IsItemVisible())
-                    ImGui::SetScrollHereY(scroll_to);
-                scroll_to = -1.f;
+                hdrview()->set_current_image_index(img_idx);
+                selected_group = layer.groups[g];
+                set_as_texture(Target_Primary);
             }
         }
-        ImGui::PopStyleColor(3);
+        else if (is_selected_channel && scroll_to >= -0.5f)
+        {
+            if (!ImGui::IsItemVisible())
+                ImGui::SetScrollHereY(scroll_to);
+            scroll_to = -1.f;
+        }
+
         ++visible_group;
     }
 }
@@ -408,14 +402,15 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id_, bo
         if (child_node.visible_groups == 0)
             continue;
 
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(1);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGuiCol_Header);
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGuiCol_Header);
-        bool open = ImGui::TreeNodeEx((void *)(intptr_t)id_++, tree_node_flags, "%s %s", ICON_MY_OPEN_IMAGE,
-                                      child_node.name.c_str());
-        ImGui::PopStyleColor(3);
+        bool open =
+            ImGui::TreeRow((void *)(intptr_t)id_++, tree_node_flags,
+                           fmt::format("{} {}", ICON_MY_OPEN_IMAGE, child_node.name).c_str(), nullptr,
+                           [&]
+                           {
+                               ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                               ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGuiCol_Header);
+                               ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGuiCol_Header);
+                           });
         if (open)
         {
             draw_layer_node(child_node, img_idx, id_, is_current, is_reference, visible_group, scroll_to);
