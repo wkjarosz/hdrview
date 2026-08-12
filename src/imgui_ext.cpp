@@ -282,12 +282,10 @@ string TruncatedText(const string &filename, const string &icon)
     if (CalcTextSize((icon + filename).c_str()).x <= avail_width)
         return filename;
 
-    // Unlike RenderTextEllipsis (imgui.cpp), which keeps the prefix and elides the tail, filenames
-    // here are `file:part.layer.channel` paths whose meaningful part is the *end* -- so this keeps
-    // the tail and elides the front instead. Mirrors RenderTextEllipsis's technique (a single
-    // width-accumulating pass over per-glyph advances, O(n)) rather than the old approach of
-    // re-measuring the whole (icon + ellipsis + text) string with CalcTextSize on every character
-    // dropped, which was O(n^2).
+    // Filenames here are `file:part.layer.channel` paths whose meaningful part is the *end*, so this
+    // keeps the tail and elides the front -- the opposite of ImGui's RenderTextEllipsis(), which
+    // keeps the prefix. Same technique as that function though: accumulate per-glyph advances in a
+    // single pass (here walking backwards from the end) rather than re-measuring a growing substring.
     static const string ellipsis = " ...";
     const float         budget   = avail_width - CalcTextSize((icon + ellipsis).c_str()).x;
 
@@ -308,8 +306,8 @@ string TruncatedText(const string &filename, const string &icon)
         ImTextCharFromUtf8(&codepoint, prev, cut);
         float advance = baked->GetCharAdvance((ImWchar)codepoint);
 
-        // Always keep at least the very last character, even if it alone exceeds the budget --
-        // matches the old loop's `text.length() > 1` guard.
+        // Always keep at least the final character, even if it alone exceeds the budget, so the
+        // result is never a bare ellipsis.
         if (cut != end && width + advance > budget)
             break;
 
