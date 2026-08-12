@@ -1533,6 +1533,13 @@ hello_imgui_add_app(HDRView ${HDRVIEW_SOURCES} ASSETS_LOCATION ${CMAKE_CURRENT_B
 if(HDRVIEW_SOKOL_SHDC_TARGETS)
   add_dependencies(HDRView ${HDRVIEW_SOKOL_SHDC_TARGETS})
 endif()
+if(WIN32)
+  # Opt in to Windows 10 1607+ long-path support: removes the ~260-char MAX_PATH limit for
+  # CreateFileW & friends, which std::filesystem/std::ifstream/std::ofstream route through on
+  # Windows. This alone is not sufficient -- the system-wide "Enable Win32 long paths" policy
+  # must also be turned on (see README); the manifest is the piece HDRView controls.
+  target_sources(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
+endif()
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})

@@ -76,6 +76,18 @@ jobs:
         working-directory: ${{github.workspace}}
         run: ./build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.exe --help
 
+      - name: Verify long-path-aware manifest is embedded
+        working-directory: ${{github.workspace}}
+        run: |
+          $exe = "build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView.exe"
+          mt.exe -nologo -inputresource:"$exe;#1" -out:extracted.manifest
+          $manifest = Get-Content extracted.manifest -Raw
+          if ($manifest -notmatch "longPathAware") {
+            Write-Error "HDRView.exe's embedded manifest does not declare longPathAware=true"
+            exit 1
+          }
+          Write-Host "OK: embedded manifest declares longPathAware"
+
       - name: Run unit tests
         if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
         working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}

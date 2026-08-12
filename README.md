@@ -121,6 +121,13 @@ Recent version of macOS will complain that the app is unsigned and from an unkno
 
 On Windows you'll need to copy `HDRView.exe` together with the accompanying `assets` folder to your desired installation location.
 
+HDRView's Windows build declares itself long-path aware (via its application manifest), which lets it open files at paths longer than 260 characters. This also requires the system-wide "Enable Win32 long paths" policy to be turned on, which HDRView cannot enable on its own. To turn it on, run as Administrator:
+```powershell
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+  -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+```
+(or via Group Policy: *Computer Configuration > Administrative Templates > System > Filesystem > Enable Win32 long paths*). A reboot may be required for all processes to pick up the change.
+
 For Linux there is an appimage installer. After configuring and building using the `linux-appimage` preset, you can create the appimage using:
 ```bash
 cpack -C Release -G External
