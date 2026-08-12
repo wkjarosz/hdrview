@@ -391,6 +391,10 @@ public:
     void draw_chromaticity_diagram(float width);
     void draw_colorspace();
     void draw_channel_stats();
+    //! Prototype: same statistics, laid out as PropertyEditor (PE) entries instead. Must be called between
+    //! ImGui::PE::Begin()/End() -- the caller owns the table itself since it also hosts entries (hovered
+    //! pixel, watched pixels) that aren't Image state.
+    void draw_channel_stats_pe();
 
 private:
     void                       build_layers_and_groups();

@@ -230,9 +230,13 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
         value      = blend(rgba1, rgba2, m_blend_mode);
     }
 
-    return raw ? value
-               : ::tonemap(float4{powf(2.f, m_exposure_live) * value.xyz() + m_offset_live, value.w}, m_gamma_live,
-                           m_tonemap, m_colormaps[m_colormap_index], m_reverse_colormap);
+    return raw ? value : tonemap_value(value);
+}
+
+float4 HDRViewApp::tonemap_value(float4 value) const
+{
+    return ::tonemap(float4{powf(2.f, m_exposure_live) * value.xyz() + m_offset_live, value.w}, m_gamma_live,
+                     m_tonemap, m_colormaps[m_colormap_index], m_reverse_colormap);
 }
 
 void HDRViewApp::calculate_viewport()

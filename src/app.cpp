@@ -147,12 +147,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     // Dockable windows
     //
 
-    DockableWindow histogram_window{"Histogram", "HistogramSpace", [this]
-                                    {
-                                        if (auto img = current_image())
-                                            img->draw_histogram();
-                                    }};
-    DockableWindow statistics_window{"Statistics", "HistogramSpace", [this] { draw_statistics_window(); }};
+    DockableWindow statistics_window{"Pixel statistics", "RightSpace", [this] { draw_statistics_window(); }};
     DockableWindow file_window{"Images", "ImagesSpace", [this] { draw_file_window(); }};
     file_window.focusWindowAtNextFrame = true;
 
@@ -173,7 +168,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
 
 #if !defined(__EMSCRIPTEN__)
-    DockableWindow watched_folders_window{"Watched Folders", "ImagesSpace", [this] { m_image_loader.draw_gui(); }};
+    DockableWindow watched_folders_window{"Watched Folders", "WatchedFoldersSpace",
+                                          [this] { m_image_loader.draw_gui(); }};
 #endif
 
 #ifdef _WIN32
@@ -189,9 +185,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         const char   *icon  = nullptr;
     };
 
-    m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window,
-                                              statistics_window,
+    m_params.dockingParams.layoutName      = "Pixel peeper";
+    m_params.dockingParams.dockableWindows = {statistics_window,
                                               file_window,
                                               info_window,
                                               colorspace_window,
@@ -206,8 +201,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                      [](const DockableWindow &w) { return w.label == "Log"; });
     m_log_window = log_window_it != m_params.dockingParams.dockableWindows.end() ? &*log_window_it : nullptr;
 
-    DockableWindowExtraInfo window_info[] = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
-                                             {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
+    // Order here must match the order of dockableWindows above.
+    DockableWindowExtraInfo window_info[] = {{ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
                                              {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
                                              {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                              {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
@@ -218,10 +213,45 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 #endif
     };
 
-    m_params.dockingParams.dockingSplits = {DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
-                                            DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
-                                            DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-                                            DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
+    // Left column: "Images" occupies the top 80%, "Watched Folders" the bottom 20%. Each dock space holds a
+    // single window, so auto-hide their tab bars.
+    std::vector<DockingSplit> docking_splits = {
+        DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
+        DockingSplit{"ImagesSpace", "WatchedFoldersSpace", ImGuiDir_Down, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
+        DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
+        DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
+    m_params.dockingParams.dockingSplits = docking_splits;
+
+    // "Image browser": same panel geometry as "Pixel peeper", but only the Images/Watched Folders panels start
+    // open -- a minimal layout for browsing/culling images without the inspector panels.
+    DockingParams image_browser_layout;
+    image_browser_layout.layoutName      = "Image browser";
+    image_browser_layout.dockingSplits   = docking_splits;
+    image_browser_layout.dockableWindows = m_params.dockingParams.dockableWindows;
+    for (auto &w : image_browser_layout.dockableWindows)
+        w.isVisible = (w.label == "Images" || w.label == "Watched Folders");
+
+    // "Metadata": Images and Watched Folders tabbed together atop the left column, with Info below them (both
+    // share the left column here, unlike the other layouts); Log spans the full width along the bottom. Only
+    // Images/Watched Folders/Info start open, for a view focused on browsing images and inspecting their metadata.
+    DockingParams metadata_layout;
+    metadata_layout.layoutName    = "Metadata";
+    metadata_layout.dockingSplits = {
+        DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f},
+        DockingSplit{"ImagesSpace", "InfoSpace", ImGuiDir_Down, 0.54f, ImGuiDockNodeFlags_AutoHideTabBar},
+        DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
+        DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
+    metadata_layout.dockableWindows = m_params.dockingParams.dockableWindows;
+    for (auto &w : metadata_layout.dockableWindows)
+    {
+        if (w.label == "Watched Folders")
+            w.dockSpaceName = "ImagesSpace";
+        else if (w.label == "Info")
+            w.dockSpaceName = "InfoSpace";
+        w.isVisible = (w.label == "Images" || w.label == "Info" || w.label == "Watched Folders");
+    }
+
+    m_params.alternativeDockingLayouts = {image_browser_layout, metadata_layout};
 
 #if defined(HELLOIMGUI_USE_GLFW3)
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this, in_files]

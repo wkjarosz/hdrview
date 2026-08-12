@@ -199,116 +199,215 @@ void HDRViewApp::draw_statistics_window()
         return;
     }
 
-    auto PixelHeader = [](const string &title, int2 &pixel, bool *p_visible = nullptr)
+    current_image()->draw_histogram();
+
+    // ImGui::SeparatorText("Selection");
+    if (ImGui::PE::Begin("SelectionPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        bool open = ImGui::CollapsingHeader(title.c_str(), p_visible, ImGuiTreeNodeFlags_DefaultOpen);
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed,
+                                ImGui::CalcTextSize("Selection").x + ImGui::GetStyle().CellPadding.x);
+        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
 
-        ImGuiInputTextFlags_ flags = p_visible ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
-        ImGui::BeginDisabled(p_visible == nullptr);
-        // slightly convoluted process to show the coordinates as drag elements within the header
-        ImGui::SameLine();
-        float drag_size =
-            0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x - ImGui::GetFrameHeight());
-        if (drag_size > EmSize(1.f))
-        {
-            auto fpy = ImGui::GetStyle().FramePadding.y;
-            ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-            auto y = ImGui::GetCursorPosY();
-            ImGui::SetCursorPosY(y + fpy);
-            ImGui::SetNextItemWidth(drag_size);
-            ImGui::DragInt("##pixel x coordinates", &pixel.x, 1.f, 0, 0, "X: %d", flags);
-            ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-            ImGui::SetCursorPosY(y + fpy);
-            ImGui::SetNextItemWidth(drag_size);
-            ImGui::DragInt("##pixel y coordinates", &pixel.y, 1.f, 0, 0, "Y: %d", flags);
-            ImGui::PopStyleVar();
-        }
-        else
-            ImGui::NewLine();
+        ImGui::PE::Entry("Selection",
+                         [&]
+                         {
+                             // Same width-budget shape as ChannelValuesRow (N boxes + a trailing swatch-
+                             // sized slot), but these boxes are genuinely editable (DragInt, not read-only
+                             // text) and the trailing slot holds a "clear the selection" close button
+                             // instead of a color swatch.
+                             float col_w   = ImGui::PE::ColumnWidth(1);
+                             float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+                             float sz      = ImGui::GetFontSize();
+                             float box_w   = ImMax((col_w - 4.f * spacing - sz) / 4.f, 1.f);
 
+                             int *comps[4]  = {&m_roi_live.min.x, &m_roi_live.min.y, &m_roi_live.max.x,
+                                               &m_roi_live.max.y};
+                             bool committed = false;
+                             for (int c = 0; c < 4; ++c)
+                             {
+                                 if (c > 0)
+                                     ImGui::SameLine(0.f, spacing);
+                                 ImGui::SetNextItemWidth(box_w);
+                                 ImGui::DragInt(fmt::format("##roi{}", c).c_str(), comps[c]);
+                                 if (ImGui::IsItemDeactivatedAfterEdit())
+                                     committed = true;
+                             }
+                             ImGui::SetItemTooltip("W x H: (%d x %d)", m_roi_live.size().x, m_roi_live.size().y);
+                             if (committed)
+                                 m_roi = m_roi_live;
+
+                             ImGui::SameLine(0.f, spacing);
+                             ImGui::BeginDisabled(!m_roi_live.has_volume());
+                             if (ImGui::CloseButton(ImGui::GetID("##deselect"), ImGui::GetCursorScreenPos()))
+                                 m_roi = m_roi_live = Box2i{int2{0}};
+                             ImGui::EndDisabled();
+                             ImGui::SetItemTooltip("Clear the selection.");
+
+                             return committed;
+                         });
+
+        ImGui::PopStyleVar();
+        ImGui::PE::End();
+    }
+
+    ImGui::SeparatorText("Statistics");
+
+    // Draws a PE::TreeNode row whose value column holds the X/Y coordinate boxes (small/compact, re-centered
+    // within this otherwise normal-height row -- draggable and copy-enabled for watched pixels; disabled
+    // entirely for the hovered pixel, since ReadOnly alone doesn't block DragInt's drag gesture, only
+    // keyboard entry) plus, for watched pixels, a trailing delete button styled like CollapsingHeader's own
+    // close X (no frame/border, just the glyph -- see ImGui::CloseButton, used internally by
+    // CollapsingHeader's p_open close button, positioned the same way it is: relative to the row's own top,
+    // not the compact drag boxes') -- and whose children are Current/Reference/Composite ChannelValuesRow
+    // entries. Returns true if the delete button was clicked.
+    //
+    // Note: PE::TreeNode() only keeps its PushID(icon_title) alive while open (see its "if (!ret)
+    // PopID()"), so the X/Y/delete controls below -- drawn unconditionally, open or not -- would resolve to
+    // the *same* IDs across different (collapsed) rows without a caller-owned PushID wrapping the whole
+    // call, hence the explicit PushID(i)/PushID("Mouse") around each call below.
+    //
+    // ImGuiTreeNodeFlags_SpanAllColumns extends the tree node's own click-detection rect across the whole
+    // row (all columns, see TreeNodeBehavior() in imgui_widgets.cpp), processed synchronously inside this
+    // very call, before the X/Y/delete controls in the value column are even drawn -- so on its own, it'd
+    // make any click meant for them toggle the tree node instead. CollapsingHeader(label, p_visible, ...)
+    // resolves the exact same conflict (its own close button, plus our SameLine coordinate drags) by adding
+    // ImGuiTreeNodeFlags_AllowOverlap whenever a close button is present: with that flag, the tree node
+    // defers its own click on the frame hover first lands on it, letting a later-submitted, geometrically
+    // overlapping widget claim it instead (see the "AllowOverlap mode" branch of ItemHoverable() in
+    // imgui.cpp) -- so combining both flags gets a full-row highlight *and* working value-column widgets.
+    auto PixelTreeNodePE = [&](const string &icon_title, int2 &pixel, int3 &color_mode, bool editable, bool show_delete)
+    {
+        bool deleted = false;
+        bool open    = ImGui::PE::TreeNode(icon_title.c_str(),
+                                           ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanFullWidth |
+                                               ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_AllowOverlap);
+        ImGui::TableNextColumn();
+        // Row's own top-left, before anything else is drawn in this column -- the reference point for the
+        // close button below, matching CollapsingHeader's own (g.LastItemData.Rect.Min.y + FramePadding.y).
+        ImVec2 row_screen_pos = ImGui::GetCursorScreenPos();
+
+        float col_w   = ImGui::PE::ColumnWidth(1);
+        float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        // GetFontSize(), not GetFrameHeight(): the children rows below (Current/Reference/Composite) are
+        // drawn compact (FramePadding.y == 0, where FrameHeight == FontSize), so their ChannelValuesRow
+        // swatch slot is FontSize wide. This row's own FramePadding is still the ambient (normal) one at
+        // this point -- using GetFrameHeight() here would reserve a *larger* slot than the children's,
+        // shifting the close button left of where their swatches actually sit.
+        float sz = ImGui::GetFontSize();
+        // Two inter-item gaps (X-to-Y, Y-to-close-slot), not one -- always reserve the same swatch-sized
+        // slot ChannelValuesRow reserves for its color swatch (real close button here, or nothing for the
+        // Mouse row), so the X/Y boxes end at the same place regardless of show_delete, matching the
+        // channel value boxes' own column width below them.
+        float drag_size = ImMax((col_w - 2.f * spacing - sz) * 0.5f, 1.f);
+
+        ImGuiInputTextFlags_ flags = editable ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
+        ImGui::BeginDisabled(!editable);
+        auto fpy = ImGui::GetStyle().FramePadding.y;
+        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+        auto y0 = ImGui::GetCursorPosY();
+        ImGui::SetCursorPosY(y0 + fpy);
+        ImGui::SetNextItemWidth(drag_size);
+        ImGui::DragInt("##x", &pixel.x, 1.f, 0, 0, "X: %d", flags);
+        ImGui::SameLine(0.f, spacing);
+        ImGui::SetCursorPosY(y0 + fpy);
+        ImGui::SetNextItemWidth(drag_size);
+        ImGui::DragInt("##y", &pixel.y, 1.f, 0, 0, "Y: %d", flags);
+        ImGui::PopStyleVar();
         ImGui::EndDisabled();
 
-        return open;
+        if (show_delete)
+        {
+            ImGui::SameLine(0.f, spacing);
+            ImVec2 pos{ImGui::GetCursorScreenPos().x, row_screen_pos.y + ImGui::GetStyle().FramePadding.y};
+            if (ImGui::CloseButton(ImGui::GetID("##delete"), pos))
+                deleted = true;
+            ImGui::SetItemTooltip("Remove this watched pixel.");
+        }
+
+        if (open)
+        {
+            // Compact only for the value rows (the tree node/X/Y/delete row above stays full height).
+            ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+
+            ImGui::PE::Entry("Current",
+                             [&]
+                             {
+                                 pixel_color_widget(pixel, color_mode.x, 0, editable, ImGui::PE::ColumnWidth(1));
+                                 return false;
+                             });
+
+            // Dims the "Reference" label itself too, not just its (already self-dimming) value row.
+            ImGui::BeginDisabled(!reference_image());
+            ImGui::PE::Entry("Reference",
+                             [&]
+                             {
+                                 pixel_color_widget(pixel, color_mode.y, 1, editable, ImGui::PE::ColumnWidth(1));
+                                 return false;
+                             });
+            ImGui::EndDisabled();
+
+            ImGui::PE::Entry("Composite",
+                             [&]
+                             {
+                                 pixel_color_widget(pixel, color_mode.z, 2, editable, ImGui::PE::ColumnWidth(1));
+                                 return false;
+                             });
+
+            ImGui::PopStyleVar();
+            ImGui::PE::TreePop();
+        }
+        return deleted;
     };
 
-    ImGui::SeparatorText("Selection:");
-    // float sz = ImGui::GetContentRegionAvail().x * 0.65f + ImGui::GetFrameHeight();
-    ImGui::SetNextItemWidth(-ImGui::CalcTextSize(" Min,Max ").x);
-    ImGui::DragInt4("Min,Max", &m_roi_live.min.x);
-    if (ImGui::IsItemDeactivatedAfterEdit())
-        m_roi = m_roi_live;
-    ImGui::SetItemTooltip("W x H: (%d x %d)", m_roi_live.size().x, m_roi_live.size().y);
+    if (ImGui::PE::Begin("StatisticsPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    {
+        // Initial (still user-resizable) label-column width: fits the widest label ("Maximum"), matching
+        // the pattern draw_info() uses for its own "Property" column.
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed,
+                                ImGui::CalcTextSize("Maximum").x + ImGui::GetStyle().CellPadding.x);
+        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+        if (auto img = current_image())
+            img->draw_channel_stats_pe();
+        ImGui::PopStyleVar();
 
-    if (auto img = current_image())
-        img->draw_channel_stats();
+        ImGui::PE::End();
+    }
 
     ImGui::SeparatorText("Watched pixels:");
 
-    // last_hovered_pixel() freezes at the last real hover instead of clearing when the mouse leaves the
-    // viewport, so the color widgets below stay reachable (e.g. to click their dropdowns) instead of
-    // vanishing out from under the cursor on the way to them
-    if (auto hp = last_hovered_pixel())
-    {
-        auto hovered_pixel = *hp;
-        if (PixelHeader(ICON_MY_CURSOR_ARROW "##hovered pixel", hovered_pixel))
-        {
-            static int3 color_mode = {0, 0, 0};
-            ImGui::PushID("Current");
-            pixel_color_widget(hovered_pixel, color_mode.x, 0);
-            ImGui::SetItemTooltip("Hovered pixel values in current channel.");
-            ImGui::PopID();
-
-            ImGui::PushID("Reference");
-            pixel_color_widget(hovered_pixel, color_mode.y, 1);
-            ImGui::SetItemTooltip("Hovered pixel values in reference channel.");
-            ImGui::PopID();
-
-            ImGui::PushID("Composite");
-            pixel_color_widget(hovered_pixel, color_mode.z, 2);
-            ImGui::SetItemTooltip("Hovered pixel values in composite.");
-            ImGui::PopID();
-
-            ImGui::Spacing();
-        }
-    }
-    else
-        ImGui::TextDisabled("Hover over the image to inspect a pixel.");
-
+    ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
     ImGui::Checkbox("Show " ICON_MY_WATCHED_PIXEL "s in viewport", &m_draw_watched_pixels);
-
-    int delete_idx = -1;
-    for (int i = 0; i < (int)m_watched_pixels.size(); ++i)
+    ImGui::PopStyleVar();
+    if (ImGui::PE::Begin("WatchedPixelsPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        auto &wp = m_watched_pixels[i];
+        // Same initial-width pattern as the Statistics table above, sized to the widest child-row label
+        // ("Composite") rather than the (typically shorter) top-level tree node labels.
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed,
+                                ImGui::CalcTextSize("Composite").x + ImGui::GetStyle().CellPadding.x);
 
-        ImGui::PushID(i);
-        bool visible = true;
-        if (PixelHeader(fmt::format("{}{}", ICON_MY_WATCHED_PIXEL, i + 1), wp.pixel, &visible))
+        if (auto hp = last_hovered_pixel())
         {
-            ImGui::PushID("Current");
-            pixel_color_widget(wp.pixel, wp.color_mode.x, 0, true);
-            ImGui::SetItemTooltip("Pixel %s%d values in current channel.", ICON_MY_WATCHED_PIXEL, i + 1);
+            auto        hovered_pixel = *hp;
+            static int3 hover_color_mode{0, 0, 0};
+            ImGui::PushID("Mouse");
+            PixelTreeNodePE(ICON_MY_CURSOR_ARROW " Mouse", hovered_pixel, hover_color_mode, false, false);
             ImGui::PopID();
-
-            ImGui::PushID("Reference");
-            pixel_color_widget(wp.pixel, wp.color_mode.y, 1, true);
-            ImGui::SetItemTooltip("Pixel %s%d values in reference channel.", ICON_MY_WATCHED_PIXEL, i + 1);
-            ImGui::PopID();
-
-            ImGui::PushID("Composite");
-            pixel_color_widget(wp.pixel, wp.color_mode.z, 2, true);
-            ImGui::SetItemTooltip("Pixel %s%d values in composite.", ICON_MY_WATCHED_PIXEL, i + 1);
-            ImGui::PopID();
-
-            ImGui::Spacing();
         }
-        ImGui::PopID();
 
-        if (!visible)
-            delete_idx = i;
+        int pe_delete_idx = -1;
+        for (int i = 0; i < (int)m_watched_pixels.size(); ++i)
+        {
+            auto &wp = m_watched_pixels[i];
+            ImGui::PushID(i);
+            if (PixelTreeNodePE(fmt::format("{}{}", ICON_MY_WATCHED_PIXEL, i + 1), wp.pixel, wp.color_mode, true, true))
+                pe_delete_idx = i;
+            ImGui::PopID();
+        }
+        if (pe_delete_idx >= 0)
+            m_watched_pixels.erase(m_watched_pixels.begin() + pe_delete_idx);
+
+        ImGui::PE::End();
     }
-    if (delete_idx >= 0)
-        m_watched_pixels.erase(m_watched_pixels.begin() + delete_idx);
 }
 
 void HDRViewApp::update_visibility()
