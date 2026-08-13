@@ -232,7 +232,8 @@ struct BackgroundImageLoader::PendingImages
                 fs::file_time_type last_modified = fs::file_time_type::clock::now();
                 if (buffer_str.empty())
                 {
-                    if (!fs::exists(path))
+                    std::error_code ec;
+                    if (!fs::exists(path, ec) || ec)
                     {
                         spdlog::error("File '{}' doesn't exist.", path.u8string());
                         return;
@@ -397,6 +398,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
 
     auto path = fs::u8path(filename);
 
+    std::error_code path_ec;
     if (!buffer.empty())
     {
         // if we have a buffer, we assume it is a file that has been downloaded
@@ -414,7 +416,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         return;
     }
 #if !defined(__EMSCRIPTEN__)
-    else if (fs::is_directory(path))
+    else if (fs::is_directory(path, path_ec) && !path_ec)
     {
         spdlog::info("Loading images from folder '{}'", filename);
 
@@ -462,7 +464,10 @@ void BackgroundImageLoader::background_load(const string filename, const string_
 
         auto zip_path = fs::u8path(zip_fn);
 
-        if (!fs::exists(zip_path) || !fs::is_regular_file(zip_path))
+        std::error_code zip_ec;
+        bool            zip_exists = fs::exists(zip_path, zip_ec) && !zip_ec &&
+                                     fs::is_regular_file(zip_path, zip_ec) && !zip_ec;
+        if (!zip_exists)
         {
             spdlog::error("File '{}' does not exist or is not a regular file.", zip_path.u8string());
             return;
@@ -564,7 +569,16 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
                                                 return false;
 
                                             // finalize the computation
-                                            p->computation.wait();
+                                            try
+                                            {
+                                                p->computation.wait();
+                                            }
+                                            catch (const std::exception &e)
+                                            {
+                                                spdlog::error("Could not load image \"{}\": {}.", p->filename,
+                                                              e.what());
+                                                return true;
+                                            }
 
                                             // once the async computation is ready, we can access the resulting
                                             // images and return true to report that we can remove this entry from
@@ -593,7 +607,9 @@ void BackgroundImageLoader::load_new_and_modified_files()
     for (int i = 0; i < hdrview()->num_images(); ++i)
     {
         auto img = hdrview()->image(i);
-        if (!fs::exists(img->path))
+
+        std::error_code ec;
+        if (!fs::exists(img->path, ec) || ec)
         {
             // this loop revisits every loaded image on each poll regardless of whether anything
             // changed, so m_missing_files_warned is what limits the warning to once per disappearance
