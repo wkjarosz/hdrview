@@ -94,18 +94,8 @@ bool validate_session_manifest(const json &j, const string &source_name)
 
 void HDRViewApp::draw_save_as_dialog(bool &open)
 {
-    if (open)
-        ImGui::OpenPopup("Save as...");
-
-    // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()),
-                            ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
-    // ImGui::SetNextWindowSize(ImVec2{HelloImGui::EmSize(29), 0}, ImGuiCond_Always);
-
-    if (ImGui::BeginPopupModal("Save as...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginModalDialog("Save as...", open, ImGui::DialogPosition::Center))
     {
-        open = false;
-
         // Define enum for save formats
         enum Format_
         {
@@ -563,25 +553,6 @@ void HDRViewApp::open_session_bundle()
 #endif
 }
 
-void HDRViewApp::draw_open_options_dialog(bool &open)
-{
-    if (open)
-        ImGui::OpenPopup("Image loading options...");
-
-    // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Once,
-                            ImVec2(0.5f, 0.0f));
-
-    if (ImGui::BeginPopupModal("Image loading options...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        open = false;
-
-        load_image_options_gui();
-
-        ImGui::EndPopup();
-    }
-}
-
 // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
 void HDRViewApp::load_image(const string filename, const string_view buffer, bool should_select,
                             const ImageLoadOptions &opts)
@@ -998,8 +969,8 @@ void HDRViewApp::load_session(const string &filename)
 
     if (!m_images.empty())
     {
-        m_pending_session_load              = PendingSessionLoad{j, dir};
-        m_dialogs["Replace session?"]->open = true;
+        m_pending_session_load          = PendingSessionLoad{j, dir};
+        dialog("Replace session?").open = true;
         return;
     }
 
@@ -1042,8 +1013,8 @@ bool HDRViewApp::try_load_zip_as_session(string_view zip_bytes, const string &zi
 
     if (!m_images.empty())
     {
-        m_pending_zip_session_load          = PendingZipSessionLoad{string(zip_bytes), zip_name, j};
-        m_dialogs["Replace session?"]->open = true;
+        m_pending_zip_session_load      = PendingZipSessionLoad{string(zip_bytes), zip_name, j};
+        dialog("Replace session?").open = true;
         return true;
     }
 
@@ -1093,8 +1064,8 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
     pending.current_index   = clamp(j.value<int>("current", -1), -1, n - 1);
     pending.reference_index = clamp(j.value<int>("reference", -1), -1, n - 1);
 
-    m_pending_session                     = std::move(pending);
-    m_dialogs["Loading session..."]->open = true;
+    m_pending_session                 = std::move(pending);
+    dialog("Loading session...").open = true;
 }
 
 void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &zip_name, const json &j)
@@ -1144,8 +1115,8 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
     pending.current_index   = clamp(j.value<int>("current", -1), -1, n - 1);
     pending.reference_index = clamp(j.value<int>("reference", -1), -1, n - 1);
 
-    m_pending_session                     = std::move(pending);
-    m_dialogs["Loading session..."]->open = true;
+    m_pending_session                 = std::move(pending);
+    dialog("Loading session...").open = true;
 }
 
 void HDRViewApp::finish_pending_session()
@@ -1219,50 +1190,29 @@ void HDRViewApp::finish_pending_session()
 
 void HDRViewApp::draw_confirm_load_session_dialog(bool &open)
 {
-    if (open)
-        ImGui::OpenPopup("Replace session?");
-    open = false;
-
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-    if (ImGui::BeginPopupModal("Replace session?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    auto result = ImGui::ConfirmDialog("Replace session?", open,
+                                       "Loading this session will close all currently open images.", "Replace");
+    if (result == ImGui::DialogResult::Cancel)
     {
-        ImGui::TextUnformatted("Loading this session will close all currently open images.");
-        ImGui::Spacing();
-
-        if (ImGui::Button("Cancel"))
-        {
-            m_pending_session_load.reset();
-            m_pending_zip_session_load.reset();
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Replace") && (m_pending_session_load || m_pending_zip_session_load))
-        {
-            if (m_pending_session_load)
-                begin_session_load(m_pending_session_load->j, m_pending_session_load->dir);
-            else
-                begin_bundle_session_load(m_pending_zip_session_load->zip_bytes, m_pending_zip_session_load->zip_name,
-                                          m_pending_zip_session_load->j);
-            m_pending_session_load.reset();
-            m_pending_zip_session_load.reset();
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
+        m_pending_session_load.reset();
+        m_pending_zip_session_load.reset();
+    }
+    else if (result == ImGui::DialogResult::Confirm)
+    {
+        if (m_pending_session_load)
+            begin_session_load(m_pending_session_load->j, m_pending_session_load->dir);
+        else
+            begin_bundle_session_load(m_pending_zip_session_load->zip_bytes, m_pending_zip_session_load->zip_name,
+                                      m_pending_zip_session_load->j);
+        m_pending_session_load.reset();
+        m_pending_zip_session_load.reset();
     }
 }
 
 void HDRViewApp::draw_loading_session_dialog(bool &open)
 {
-    if (open)
-        ImGui::OpenPopup("Loading session...");
-    open = false;
-
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-    if (ImGui::BeginPopupModal("Loading session...", nullptr,
-                               ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+    if (ImGui::BeginModalDialog("Loading session...", open, ImGui::DialogPosition::Center,
+                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
     {
         if (m_pending_session)
         {

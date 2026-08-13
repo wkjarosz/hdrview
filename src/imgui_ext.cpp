@@ -1013,6 +1013,73 @@ void Checkbox(const Action &a)
     }
 }
 
+bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags)
+{
+    // HelloImGui renders a couple of frames to figure out sizes before the first real frame; guard against
+    // opening a dialog that starts out already-open (e.g. the About box on first launch) before then.
+    if (open && ImGui::GetFrameCount() > 2)
+    {
+        ImGui::OpenPopup(title);
+        open = false;
+    }
+
+    switch (position)
+    {
+    case DialogPosition::TopCenter:
+        ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()),
+                                ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
+        break;
+    case DialogPosition::Center:
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        break;
+    case DialogPosition::None: break;
+    }
+
+    return ImGui::BeginPopupModal(title, nullptr, flags);
+}
+
+DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, bool use_shortcuts,
+                           bool confirm_enabled)
+{
+    DialogResult result = DialogResult::None;
+
+    // Omitting the size lets Dear ImGui auto-fit each button to its own label (text size + FramePadding*2),
+    // so a longer label like "Reset options to defaults" is never clipped.
+    if (ImGui::Button(cancel_label) ||
+        (use_shortcuts && !ImGui::GetIO().NavVisible &&
+         (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
+        result = DialogResult::Cancel;
+
+    ImGui::SameLine();
+
+    ImGui::BeginDisabled(!confirm_enabled);
+    if (ImGui::Button(confirm_label) ||
+        (confirm_enabled && use_shortcuts && !ImGui::GetIO().NavVisible &&
+         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter)))
+        result = DialogResult::Confirm;
+    ImGui::EndDisabled();
+
+    return result;
+}
+
+DialogResult ConfirmDialog(const char *title, bool &open, const char *message, const char *confirm_label,
+                           DialogPosition position)
+{
+    DialogResult result = DialogResult::None;
+    if (BeginModalDialog(title, open, position))
+    {
+        ImGui::TextUnformatted(message);
+        ImGui::Spacing();
+
+        result = DialogButtons(confirm_label);
+        if (result != DialogResult::None)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+    return result;
+}
+
 void Tooltip(const char *description, bool questionMark /*= false*/, float wrap /*=-1.f*/)
 {
     if (questionMark)

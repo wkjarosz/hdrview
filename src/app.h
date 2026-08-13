@@ -264,7 +264,6 @@ private:
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
-    void draw_open_options_dialog(bool &open);
     void draw_confirm_load_session_dialog(bool &open);
     void draw_loading_session_dialog(bool &open);
     void draw_pixel_info() const;
@@ -475,15 +474,19 @@ private:
     //-----------------------------------------------------------------------------
     struct PopupDialog
     {
+        string                      title;
         std::function<void(bool &)> draw;
         bool                        open;
 
-        PopupDialog(std::function<void(bool &)> draw_func, bool initially_open = false) :
-            draw(draw_func), open(initially_open)
+        PopupDialog(string title_, std::function<void(bool &)> draw_func, bool initially_open = false) :
+            title(std::move(title_)), draw(draw_func), open(initially_open)
         {
         }
     };
-    map<string, unique_ptr<PopupDialog>> m_dialogs;
+    // Dispatched once per frame, in registration order (see setup_dialogs()), from ShowGui.
+    vector<unique_ptr<PopupDialog>> m_dialogs;
+    // Linear search by title; ~8 dialogs, only ever called from a user-triggered action, never per-frame.
+    PopupDialog &dialog(const string &title);
 
     // A parsed session file waiting on the user to confirm closing currently-open images before it starts loading.
     struct PendingSessionLoad
