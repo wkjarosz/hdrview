@@ -12,6 +12,8 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include <filesystem>
+
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
 #endif
@@ -66,5 +68,43 @@ void RegisterTests_ImageIO(ImGuiTestEngine *engine)
 
         hdrview()->close_all_images();
         IM_CHECK_EQ(hdrview()->num_images(), 0);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "image_io", "load_from_long_path");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        namespace fs = std::filesystem;
+
+        hdrview()->close_all_images();
+        IM_CHECK_EQ(hdrview()->num_images(), 0);
+
+        // Build a path over 260 characters, the classic Win32 MAX_PATH limit that HDRView's application
+        // manifest (resources/windows/HDRView.manifest) opts out of. Requires the system-wide "Enable Win32
+        // long paths" policy to actually succeed, which is outside HDRView's control -- tolerate failure here
+        // rather than treat it as a test failure.
+        fs::path          dir = fs::temp_directory_path() / "hdrview_gui_long_path_test";
+        const std::string segment(50, 'a');
+        while (dir.u8string().size() < 300) dir /= segment;
+
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        if (ec)
+        {
+            ctx->LogWarning("Skipping: could not create a >260 character path (%s). This requires the "
+                             "system-wide \"Enable Win32 long paths\" policy.",
+                             ec.message().c_str());
+            return;
+        }
+
+        fs::path long_path = dir / "fixture.png";
+        fs::copy_file(HDRVIEW_GUI_TEST_IMAGE, long_path, fs::copy_options::overwrite_existing, ec);
+        IM_CHECK(!ec);
+
+        hdrview()->load_images({long_path.u8string()});
+        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        IM_CHECK(hdrview()->num_images() > 0);
+
+        hdrview()->close_all_images();
+        fs::remove_all(fs::temp_directory_path() / "hdrview_gui_long_path_test", ec);
     };
 }
