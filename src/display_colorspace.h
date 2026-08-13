@@ -1,0 +1,64 @@
+//
+// Copyright (C) Wojciech Jarosz. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
+
+#pragma once
+
+#include "colorspace.h"
+#include "fwd.h"
+
+/**
+    The color space the display expects HDRView's final frame to be encoded in.
+
+    HDRView renders everything -- image content and Dear ImGui's UI alike -- in "extended sRGB": sRGB
+    encoding over an unbounded signed range, with 1.0 meaning the display's SDR reference white. On macOS
+    that convention is what Metal's EDR path consumes directly, so no conversion is needed. On
+    Windows/Linux the display may instead want scRGB linear, a plain power curve, or PQ, possibly over a
+    wider gamut -- see the colorpass in app-draw.cpp, which converts to whatever this struct describes.
+
+    Everything here is expressed in HDRView's own color vocabulary (colorspace.h's TransferFunction and
+    Chromaticities). The wp_color_manager_v1 protocol integers that GLFW reports exist only inside
+    query_display_colorspace(); nothing downstream of it should ever see them.
+*/
+struct DisplayColorSpace
+{
+    /// How the display wants the final frame encoded.
+    TransferFunction tf{TransferFunction::Gamma, 2.2f};
+    /// The display's primaries. Rendering is done in Rec.709, so a conversion is needed when these differ.
+    Chromaticities chroma = gamut_chromaticities(ColorGamut_sRGB_BT709);
+    /// The display's configured SDR reference white, in nits. scRGB fixes this at 80, but Windows' "SDR
+    /// content brightness" slider and Wayland compositors' reference luminance routinely raise it.
+    float sdr_white_nits = 80.f;
+    /// The display's reported luminance limits, in nits. 0 means "unknown", *not* "no limit" -- only clamp
+    /// to max_nits when it is greater than zero.
+    float min_nits = 0.f, max_nits = 0.f;
+
+    /// The reference white of `tf` itself, in nits, for the transfer functions that are defined relative to
+    /// one. Absolute transfer functions (PQ) return 0 -- they map nits directly to code values and must not
+    /// be normalized by a reference white first.
+    float transfer_white_nits() const;
+
+    /// True when the display wants something other than HDRView's own extended-sRGB convention, i.e. when
+    /// the colorpass has to run at all. False for the plain-SDR combination {gamma 2.2, sRGB, 80 nits}.
+    bool needs_color_management() const;
+
+    bool operator==(const DisplayColorSpace &o) const;
+    bool operator!=(const DisplayColorSpace &o) const { return !(*this == o); }
+
+    /// Human-readable summary for logs and the About dialog, e.g. "PQ / BT.2020, 203 nits SDR white".
+    std::string name() const;
+};
+
+/**
+    Ask GLFW what color space the window's display currently wants.
+
+    Window-scoped, so this needs the real window to exist -- call it no earlier than
+    PostInit_AddPlatformBackendCallbacks. Returns the plain-SDR default on any platform or GLFW build
+    without HDR support, which makes the colorpass inert.
+
+    `window` is a GLFWwindow*, kept as void* so this header doesn't drag GLFW into everything that includes
+    it.
+*/
+DisplayColorSpace query_display_colorspace(void *window);

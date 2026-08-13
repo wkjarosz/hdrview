@@ -307,33 +307,17 @@ void HDRViewApp::draw_image() const
     // ImGui::End();
 }
 
-void HDRViewApp::process_shortcuts()
-{
-    // spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
-
-    for (auto &a : m_actions)
-        if (a.second.chord)
-            if (a.second.enabled() && !ImGui::GetIO().NavVisible &&
-                ImGui::GlobalShortcut(a.second.chord, a.second.flags))
-            {
-                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.names[0],
-                              ImGui::GetFrameCount());
-                if (a.second.p_selected)
-                    *a.second.p_selected = !*a.second.p_selected;
-                a.second.callback();
-#ifdef __EMSCRIPTEN__
-                ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
-                                                 // modifiers) needs to be pressed before this chord is detected again
-#endif
-                break;
-            }
-
-    set_image_textures();
-}
-
 void HDRViewApp::draw_background()
 {
     using namespace literals;
+
+    // Decide once, here, whether this frame needs color management, so that the two halves of the colorpass
+    // -- which run at different points in the frame -- can never disagree. Then, if it does, redirect this
+    // frame's rendering (this call, and the ImGui rendering that follows it) into an offscreen target
+    // instead of the real framebuffer; end_colorpass_frame() converts it to the real framebuffer right
+    // before the frame is presented. Both no-op otherwise.
+    update_colorpass();
+    begin_colorpass_frame();
 
     static auto prev_frame                   = chrono::steady_clock::now();
     static auto last_file_changes_check_time = chrono::steady_clock::now();
@@ -408,47 +392,5 @@ void HDRViewApp::set_image_textures()
     {
         if (static LogThrottle throttle{std::chrono::seconds(5)}; throttle)
             spdlog::error("Could not upload texture to graphics backend: {}.", e.what());
-    }
-}
-
-void HDRViewApp::setup_rendering()
-{
-    try
-    {
-        // Query (and cache) the backend's max texture size while a graphics context is guaranteed to be current on
-        // this (the main) thread. Image::finalize() relies on the cached value from background loader threads.
-        spdlog::info("Maximum supported texture size: {}", Texture::max_size());
-
-        m_render_pass = new RenderPass(false, true);
-        m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
-        m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);
-        m_render_pass->set_clear_color(float4(0.15f, 0.15f, 0.15f, 1.f));
-
-        // colorspaces.sglsl's shared functions are baked directly into image-shader_frag's generated text at
-        // sokol-shdc compile time (see assets/shaders/image-shader.sglsl), so no runtime prepend_includes()
-        // is needed here anymore, unlike the old hand-maintained image-shader_frag.{glsl,metal}.
-        m_shader = new Shader(m_render_pass,
-                              /* An identifying name */
-                              "ImageView", Shader::from_asset("shaders/image-shader_vert"),
-                              Shader::from_asset("shaders/image-shader_frag"), Shader::BlendMode::AlphaBlend);
-
-        const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
-
-        m_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
-        m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
-
-        Image::make_default_textures();
-        Colormap::initialize();
-
-        m_shader->set_texture("dither_texture", Image::dither_texture());
-        set_image_textures();
-        spdlog::info("Successfully initialized graphics API!");
-    }
-    catch (const exception &e)
-    {
-        // m_shader would be left null; every draw call downstream dereferences it unconditionally
-        // with no null check, so continuing here just trades this error for a later segfault.
-        spdlog::critical("Shader initialization failed!:\n\t{}.", e.what());
-        exit(EXIT_FAILURE);
     }
 }

@@ -190,12 +190,15 @@ void HDRViewApp::draw_status_bar()
     // whatever follows never has to move depending on it
     const float progress_w = EmSize(15.f);
     const float progress_x = badge_x + reserved_w + item_spacing;
-    ImGui::SetCursorPosX(progress_x);
     if (auto num = m_image_loader.num_pending_images())
+    {
+        ImGui::SetCursorPosX(progress_x);
         ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(progress_w, 0.f),
                            fmt::format("Loading {} image{}", num, num > 1 ? "s" : "").c_str());
+    }
     else if (m_remaining_download > 0)
     {
+        ImGui::SetCursorPosX(progress_x);
         ImGui::ScopedFont f{nullptr, 4.0f};
         ImGui::ProgressBar((100 - m_remaining_download) / 100.f, ImVec2(progress_w, 0.f), "Downloading image");
     }
@@ -427,7 +430,7 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Reset tonemapping"));
-        if (m_params.rendererBackendOptions.requestFloatBuffer)
+        if (supports_hdr())
             MenuItem(action("Clamp to LDR"));
         MenuItem(action("Dither"));
 
@@ -676,7 +679,7 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine();
 
-    if (m_params.rendererBackendOptions.requestFloatBuffer)
+    if (supports_hdr())
     {
         IconButton(action("Clamp to LDR"));
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
@@ -1350,7 +1353,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info += fmt::format("{:<16} : {}\n", "Renderer backend", renderer_backend);
 
                     info += fmt::format("{:<16} : {}\n", "ImGui version", ImGui::GetVersion());
-                    info += fmt::format("{:<16} : {}\n", "EDR support", hasEdrSupport() ? "yes" : "no");
+                    info += fmt::format("{:<16} : {}\n", "HDR support", supports_hdr() ? "yes" : "no");
+                    info += fmt::format("{:<16} : {}\n", "Display", m_display_cs.name());
 
                     info += fmt::format("{:<16} : {}\n", "__EMSCRIPTEN__",
 #ifdef __EMSCRIPTEN__

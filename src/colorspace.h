@@ -16,8 +16,6 @@
 #include <string>
 #include <vector>
 
-#include <string>
-
 using AlphaType_ = int;
 enum AlphaType : AlphaType_
 {
@@ -764,86 +762,10 @@ Color4 linear_to_sRGB(const Color4 &c);
 Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma);
 
-inline float from_linear(float linear, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return linear_to_sRGB(linear);
-    case TransferFunction::Gamma: return linear_to_gamma(linear, 1.f / tf.gamma);
-    case TransferFunction::ITU: return OETF_ITU(linear);
-    case TransferFunction::BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::ST240: return OETF_ST240(linear);
-    case TransferFunction::Log100: return OETF_log100(linear);
-    case TransferFunction::Log100_Sqrt10: return OETF_log100_sqrt10(linear);
-    case TransferFunction::IEC61966_2_4: return OETF_IEC61966_2_4(linear);
-    case TransferFunction::DCI_P3: return inverse_EOTF_DCI_P3(linear);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return linear;
-    }
-}
-
-inline float3 from_linear(float3 linear, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return linear_to_sRGB(linear);
-    case TransferFunction::Gamma: return linear_to_gamma(linear, float3{1.f / tf.gamma});
-    case TransferFunction::ITU: return la::apply(OETF_ITU<float>, linear);
-    case TransferFunction::BT2100_PQ:
-        return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::ST240: return la::apply(OETF_ST240<float>, linear);
-    case TransferFunction::Log100: return la::apply(OETF_log100<float>, linear);
-    case TransferFunction::Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, linear);
-    case TransferFunction::IEC61966_2_4: return la::apply(OETF_IEC61966_2_4<float>, linear);
-    case TransferFunction::DCI_P3: return la::apply(inverse_EOTF_DCI_P3<float>, linear);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return linear;
-    }
-}
-
-inline float to_linear(float encoded, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction::Gamma: return linear_to_gamma(encoded, tf.gamma);
-    case TransferFunction::ITU: return inverse_OETF_ITU(encoded);
-    case TransferFunction::BT2100_PQ: return EOTF_BT2100_PQ(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::ST240: return EOTF_ST240(encoded);
-    case TransferFunction::Log100: return EOTF_log100(encoded);
-    case TransferFunction::Log100_Sqrt10: return EOTF_log100_sqrt10(encoded);
-    case TransferFunction::IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
-    case TransferFunction::DCI_P3: return EOTF_DCI_P3(encoded);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return encoded;
-    }
-}
-
-inline float3 to_linear(const float3 &encoded, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction::Gamma: return linear_to_gamma(encoded, float3{tf.gamma});
-    case TransferFunction::ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
-    case TransferFunction::BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::ST240: return la::apply(EOTF_ST240<float>, encoded);
-    case TransferFunction::Log100: return la::apply(EOTF_log100<float>, encoded);
-    case TransferFunction::Log100_Sqrt10: return la::apply(EOTF_log100_sqrt10<float>, encoded);
-    case TransferFunction::IEC61966_2_4: return la::apply(EOTF_IEC61966_2_4<float>, encoded);
-    case TransferFunction::DCI_P3: return la::apply(EOTF_DCI_P3<float>, encoded);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return encoded;
-    }
-}
+float  from_linear(float linear, const TransferFunction tf);
+float3 from_linear(float3 linear, const TransferFunction tf);
+float  to_linear(float encoded, const TransferFunction tf);
+float3 to_linear(const float3 &encoded, const TransferFunction tf);
 
 void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction tf, int stride = 1);
 inline void to_linear(float *pixels, int3 size, TransferFunction tf)
@@ -857,48 +779,17 @@ void from_linear(float *pixels, int3 size, TransferFunction tf);
 void convert_primaries(float *pixels, int3 size, const Chromaticities &src, const Chromaticities &dst,
                        AdaptationMethod m = AdaptationMethod_Bradford);
 
-inline Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
-{
-    switch (tonemap_mode)
-    {
-    default: [[fallthrough]];
-    case Tonemap_Gamma: return linear_to_gamma(color, float3{1.f / gamma});
-    case Tonemap_FalseColor: [[fallthrough]];
-    case Tonemap_PositiveNegative:
-    {
-        auto  xform = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
-        float avg   = sum(color) * (1.f / 3.f);
-        float t     = xform.x * avg + xform.y;
-        if (reverse_colormap)
-            t = 1.f - t;
-        return sRGB_to_linear(float4{Colormap::sample(colormap, t)}.xyz());
-    }
-    }
-}
+Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap);
 inline Color4 tonemap(const Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
     return Color4(tonemap(color.xyz(), gamma, tonemap_mode, colormap, reverse_colormap), color.w);
 }
 
-inline float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
-{
-    float diff  = top.x - bottom.x;
-    float alpha = top.y + bottom.y * (1.f - top.y);
-    switch (blend_mode)
-    {
-    // case BlendMode_Normal:
-    default: return float2(top.x + bottom.x * (1.f - top.y), alpha);
-    case BlendMode_Multiply: return float2(top.x * bottom.x, alpha);
-    case BlendMode_Divide: return float2(top.x / bottom.x, alpha);
-    case BlendMode_Add: return float2(top.x + bottom.x, alpha);
-    case BlendMode_Average: return 0.5f * (top + bottom);
-    case BlendMode_Subtract: return float2(diff, alpha);
-    case BlendMode_Difference: return float2(abs(diff), alpha);
-    case BlendMode_Relative_Difference: return float2(abs(diff) / (bottom.x + 0.01f), alpha);
-    }
-    return float2(0.f);
-}
+float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode);
 
+// Kept inline (unlike its float2/float4 siblings, moved to colorspace.cpp): called per-pixel from
+// image.cpp's parallel_for computing channel statistics, a different translation unit, and the project has
+// no LTO/IPO enabled -- de-inlining this one would be a real cross-TU perf regression.
 inline float blend(float top, float bottom, BlendMode_ blend_mode)
 {
     float diff = top - bottom;
@@ -918,25 +809,7 @@ inline float blend(float top, float bottom, BlendMode_ blend_mode)
     // return float(0.f);
 }
 
-inline float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
-{
-    float3 diff  = top.xyz() - bottom.xyz();
-    float  alpha = top.w + bottom.w * (1.f - top.w);
-    switch (blend_mode)
-    {
-    default: [[fallthrough]];
-    case BlendMode_Normal: return float4(top.xyz() + bottom.xyz() * (1.f - top.w), alpha);
-    case BlendMode_Multiply: return float4(top.xyz() * bottom.xyz(), alpha);
-    case BlendMode_Divide: return float4(top.xyz() / bottom.xyz(), alpha);
-    case BlendMode_Add: return float4(top.xyz() + bottom.xyz(), alpha);
-    case BlendMode_Average: return 0.5f * (top + bottom);
-    case BlendMode_Subtract: return float4(diff, alpha);
-    case BlendMode_Relative_Subtract: return float4(diff / (bottom.xyz() + float3(0.01f)), alpha);
-    case BlendMode_Difference: return float4(abs(diff), alpha);
-    case BlendMode_Relative_Difference: return float4(abs(diff) / (bottom.xyz() + float3(0.01f)), alpha);
-    }
-    // return float4(0.f);
-}
+float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode);
 
 //! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
 template <typename T>
