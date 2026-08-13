@@ -51,7 +51,7 @@ jobs:
     steps:
       - name: Install dependencies (Ubuntu 24.04)
         if: startsWith(matrix.config.os, 'ubuntu-24.04')
-        run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libimath-dev libopenexr-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libde265-dev libx265-dev libjxl-dev libcli11-dev libspdlog-dev libfmt-dev libexif-dev libwayland-dev wayland-protocols libopenh264-dev libopenjp2-7-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libimath-dev libopenexr-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libde265-dev libx265-dev libjxl-dev libcli11-dev libspdlog-dev libfmt-dev libexif-dev libwayland-dev wayland-protocols libopenh264-dev libopenjp2-7-dev xvfb
 
       - name: Install dependencies (Ubuntu 22.04)
         if: startsWith(matrix.config.os, 'ubuntu-22.04')
@@ -95,7 +95,7 @@ jobs:
         run: |
           EXTRA_FLAGS=""
           if [ "${{ matrix.config.run_tests }}" = "true" ] && [ "${{ matrix.buildtype }}" = "Release" ]; then
-            EXTRA_FLAGS="-DHDRVIEW_BUILD_TESTS=ON"
+            EXTRA_FLAGS="-DHDRVIEW_BUILD_TESTS=ON -DHDRVIEW_BUILD_GUI_TESTS=ON"
           fi
           cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache $EXTRA_FLAGS
 
@@ -111,7 +111,20 @@ jobs:
       - name: Run unit tests
         if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
         working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}
-        run: ctest -C ${{ matrix.buildtype }} --output-on-failure
+        # Excludes hdrview_gui_tests: it needs a real display server (see "Run GUI tests" below with
+        # xvfb-run), which this step doesn't set up.
+        run: ctest -C ${{ matrix.buildtype }} --output-on-failure -E hdrview_gui_tests
+
+      # hdrview_gui_tests drives a real (GLFW/OpenGL) HDRView window via Dear ImGui Test Engine, so it needs an
+      # actual display server; GitHub's Ubuntu runners have none by default. Kept as its own step (not folded
+      # into "Run unit tests") since it's a separate ctest-registered binary from hdrview_tests (see
+      # HDRVIEW_BUILD_GUI_TESTS in CMakeLists.txt) and its failure output shouldn't be mixed in with the
+      # logic-level doctest suite's. Linux-only for now: macOS/Windows headless GUI automation is a known,
+      # currently-unsolved gap (Hello ImGui's own CI doesn't cover it either).
+      - name: Run GUI tests
+        if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
+        working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}
+        run: xvfb-run -a ctest -C ${{ matrix.buildtype }} --output-on-failure -R hdrview_gui_tests
 
       - name: Package
         if: matrix.config.preset == 'linux-appimage'

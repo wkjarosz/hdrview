@@ -38,6 +38,11 @@ option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
 option(HDRVIEW_ENABLE_X3F "Enable LibRaw X3F support" ON)
 
+# Declared here (rather than alongside HDRVIEW_BUILD_TESTS near the bottom of this file) because it must be known
+# before the hello_imgui CPMAddPackage() call below, so it can conditionally request hello_imgui's own
+# HELLOIMGUI_WITH_TEST_ENGINE option.
+option(HDRVIEW_BUILD_GUI_TESTS "Build Dear ImGui Test Engine GUI regression tests" OFF)
+
 set(HDRVIEW_ENABLE_LIBHEIF OFF)
 if(HDRVIEW_ENABLE_J2K
    OR HDRVIEW_ENABLE_HTJ2K
@@ -413,14 +418,22 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 # Prevent dependencies from installing their files
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
+set(HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
+                           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
+)
+if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
+  # Turns on hello_imgui's own bundled Dear ImGui Test Engine integration (fetches imgui_test_engine, builds it,
+  # and links it into the shared `imgui` target) - see hdrview_gui_tests below, the only target that uses it.
+  list(APPEND HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_WITH_TEST_ENGINE ON")
+endif()
+
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY pthom/hello_imgui
   GIT_TAG v1.92.700
   # URL https://github.com/pthom/hello_imgui/archive/refs/tags/v1.92.700.zip
   VERSION 1.92.700
-  OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
-          "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
+  OPTIONS ${HELLOIMGUI_CPM_OPTIONS}
   EXCLUDE_FROM_ALL YES
   SYSTEM YES
 )
@@ -1607,6 +1620,68 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
   enable_testing()
   doctest_discover_tests(hdrview_tests)
+endif()
+
+# GUI regression tests, driven by Dear ImGui Test Engine (https://github.com/ocornut/imgui_test_engine),
+# fetched/built for us by hello_imgui's own HELLOIMGUI_WITH_TEST_ENGINE option (see above). Unlike
+# hdrview_tests, these can't share doctest's binary/main(): a GUI test needs HelloImGui::Run() to own the
+# frame loop for the process's whole lifetime, so it gets its own executable and its own tests/gui/ sources,
+# reusing HDRVIEW_SOURCES/HDRVIEW_DEPENDENCIES the same way hdrview_tests does. HDRVIEW_ENABLE_GUI_TEST_ENGINE
+# gates the small opt-in hook on HDRViewApp (see src/app.h/src/app-windows.cpp) that lets this binary turn on
+# useImGuiTestEngine and register tests, without touching the production HDRView binary or hdrview_tests at
+# all.
+if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
+  list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
+  add_executable(
+    hdrview_gui_tests
+    ${HDRVIEW_SOURCES}
+    tests/gui/test_gui_main.cpp
+    tests/gui/test_gui_smoke.cpp
+    tests/gui/test_gui_dialogs.cpp
+    tests/gui/test_gui_image_io.cpp
+    tests/gui/test_gui_view.cpp
+    tests/gui/test_gui_tools.cpp
+    tests/gui/test_gui_stats.cpp
+    tests/gui/test_gui_filtering.cpp
+    tests/gui/test_gui_navigation.cpp
+    tests/gui/test_gui_multipart.cpp
+  )
+  target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)
+  target_compile_definitions(
+    hdrview_gui_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS} HDRVIEW_ENABLE_GUI_TEST_ENGINE
+  )
+  target_compile_definitions(
+    hdrview_gui_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
+  )
+  # Reuses the app's own icons (always present, unlike the vendored OpenEXR/PNG conformance suites
+  # hdrview_tests conditionally compiles against, which only exist on -cpm/-universal presets) as tiny,
+  # always-available, distinctly-named image fixtures for the tests/gui/ suite.
+  target_compile_definitions(
+    hdrview_gui_tests
+    PRIVATE HDRVIEW_GUI_TEST_IMAGE="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon.png"
+            HDRVIEW_GUI_TEST_IMAGE_2="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon-256.png"
+  )
+  # Same idea as the OpenEXR guard above, but for hdrview_gui_tests: on -cpm/-universal presets this makes a
+  # real multi-part EXR fixture available to tests/gui/test_gui_multipart.cpp; that file registers no
+  # tests at all when the define is absent (e.g. on -local presets).
+  if(DEFINED OpenEXR_SOURCE_DIR AND EXISTS "${OpenEXR_SOURCE_DIR}/src/test/bin/test_images")
+    target_compile_definitions(
+      hdrview_gui_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${OpenEXR_SOURCE_DIR}/src/test/bin/test_images"
+    )
+  endif()
+  target_link_libraries(hdrview_gui_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+
+  if(APPLE)
+    target_compile_options(hdrview_gui_tests PRIVATE "-fobjc-arc")
+    target_link_libraries(hdrview_gui_tests PRIVATE "-framework ApplicationServices")
+    target_compile_definitions(hdrview_gui_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+  endif()
+
+  # Its own ctest entry, kept separate from doctest_discover_tests(hdrview_tests) above so GUI-test
+  # failures/logs are never mixed in with the logic-level doctest suite's output.
+  enable_testing()
+  add_test(NAME hdrview_gui_tests COMMAND hdrview_gui_tests -nogui -nopause)
 endif()
 
 if(EMSCRIPTEN)
