@@ -1645,6 +1645,7 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_filtering.cpp
     tests/gui/test_gui_navigation.cpp
     tests/gui/test_gui_multipart.cpp
+    tests/gui/test_gui_session.cpp
   )
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)
@@ -1831,6 +1832,10 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   # Install desktop file and icons
   install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
           DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
+
+  # Register the .hsess session file's mime type so file managers offer HDRView to open/associate with it
+  install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/hdrview-session-mime.xml"
+          DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/mime/packages")
 
   # Strip leading 'v' from GIT_TAG to get full version
   string(REGEX REPLACE "^v" "" VERSION_NO_V "${GIT_TAG}")

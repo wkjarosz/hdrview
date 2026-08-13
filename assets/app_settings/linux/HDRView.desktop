@@ -7,6 +7,6 @@ Exec=HDRView %F
 Icon=HDRView
 Terminal=false
 Categories=Graphics;Viewer;Photography;
-MimeType=image/x-exr;image/x-hdr;image/x-portable-floatmap;image/png;image/jpeg;image/tiff;image/webp;image/avif;image/heic;image/jp2;image/jxl;image/bmp;image/x-dds;image/x-qoi;
+MimeType=image/x-exr;image/x-hdr;image/x-portable-floatmap;image/png;image/jpeg;image/tiff;image/webp;image/avif;image/heic;image/jp2;image/jxl;image/bmp;image/x-dds;image/x-qoi;application/x-hdrview-session;
 Keywords=image;viewer;hdr;exr;openexr;photography;
 StartupNotify=true

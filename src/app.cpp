@@ -498,9 +498,33 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
                 if (should_select)
                     m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
+
+                if (m_pending_session)
+                {
+                    // Resolve this arrival to the earliest not-yet-filled entry sharing its (path,
+                    // channel_selector) -- see PendingSession's comment in app.h for why matching by that
+                    // key (rather than by request order) is correct even when the same file is loaded more
+                    // than once in one session.
+                    auto key = std::make_pair(new_image->path, new_image->channel_selector);
+                    if (auto it = m_pending_session->unresolved.find(key); it != m_pending_session->unresolved.end())
+                    {
+                        if (!it->second.empty())
+                        {
+                            int idx = it->second.front();
+                            it->second.pop_front();
+                            m_pending_session->entries[idx].loaded = new_image;
+                        }
+                        if (it->second.empty())
+                            m_pending_session->unresolved.erase(it);
+                    }
+                }
+
                 update_visibility(); // this also calls set_image_textures();
                 m_request_sort = true;
             });
+
+        if (m_pending_session && m_image_loader.num_pending_images() == 0)
+            finish_pending_session();
 
         draw_tweak_window();
         draw_developer_windows();
@@ -513,6 +537,10 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     m_dialogs["Save as..."]         = make_unique<PopupDialog>([this](bool &open) { draw_save_as_dialog(open); });
     m_dialogs["Image loading options..."] =
         make_unique<PopupDialog>([this](bool &open) { draw_open_options_dialog(open); });
+    m_dialogs["Replace session?"] =
+        make_unique<PopupDialog>([this](bool &open) { draw_confirm_load_session_dialog(open); });
+    m_dialogs["Loading session..."] =
+        make_unique<PopupDialog>([this](bool &open) { draw_loading_session_dialog(open); });
     m_dialogs["Create dither image..."] = make_unique<PopupDialog>(
         [this](bool &open)
         {
@@ -1142,6 +1170,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    0,
                    [this]() { m_dialogs["Save as..."]->open = true; },
                    if_img});
+
+#if !defined(__EMSCRIPTEN__)
+        add(Action{{"Save session..."}, ICON_MY_SAVE_AS, ImGuiKey_None, 0, [this]() { save_session(); }, if_img});
+        add(Action{{"Load session..."}, ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0, [this]() { load_session(); }});
+#endif
 
         add(Action{{"Normalize exposure"},
                    ICON_MY_NORMALIZE_EXPOSURE,

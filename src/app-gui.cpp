@@ -370,6 +370,13 @@ void HDRViewApp::draw_menus()
 
         MenuItem(action("Save as..."));
 
+#if !defined(__EMSCRIPTEN__)
+        ImGui::Separator();
+
+        MenuItem(action("Save session..."));
+        MenuItem(action("Load session..."));
+#endif
+
         ImGui::Separator();
 
         MenuItem(action("Close"));

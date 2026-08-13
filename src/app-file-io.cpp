@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include "image.h"
+#include <algorithm>
 #include <fstream>
 #include <hello_imgui/dpi_aware.h>
 #include <sstream>
@@ -29,6 +30,41 @@
 #endif
 
 using namespace std;
+
+namespace
+{
+
+// Stable, lowercase snake_case identifiers for enum values as stored in .hsess session files. These are
+// deliberately independent from any GUI display-string table (e.g. blend_mode_names()/channel_names() in
+// common.cpp), so relabeling a dropdown can never silently change what an existing session file means.
+const char *const g_blend_mode_ids[BlendMode_COUNT] = {
+    "normal",     "multiply",           "divide", "add", "average", "subtract", "relative_subtract",
+    "difference", "relative_difference"};
+const char *const g_tonemap_ids[Tonemap_COUNT]  = {"gamma", "false_color", "positive_negative"};
+const char *const g_channel_ids[Channels_COUNT] = {"rgba", "rgb", "red", "green", "blue", "alpha", "y"};
+const char *const g_bg_mode_ids[BGMode_COUNT]   = {"black", "white", "dark_checker", "light_checker", "custom_color"};
+
+template <typename Enum, size_t N>
+string enum_to_id(Enum value, const char *const (&ids)[N])
+{
+    size_t i = (size_t)value;
+    return ids[i < N ? i : 0];
+}
+
+template <typename Enum, size_t N>
+Enum id_to_enum(const json &j, const char *key, const char *const (&ids)[N], Enum default_value)
+{
+    if (!j.contains(key))
+        return default_value;
+    string id = j.value<string>(key, ids[(size_t)default_value]);
+    for (size_t i = 0; i < N; ++i)
+        if (id == ids[i])
+            return (Enum)i;
+    spdlog::warn("Unrecognized '{}' value '{}' in session file; using default.", key, id);
+    return default_value;
+}
+
+} // namespace
 
 void HDRViewApp::draw_save_as_dialog(bool &open)
 {
@@ -421,6 +457,15 @@ void HDRViewApp::load_images(const vector<string> &filenames)
             continue;
         }
 
+        if (to_lower(fs::path(filenames[i]).extension().string()) == ".hsess")
+        {
+            // a session file can arrive via the same paths as an image (drag-and-drop, CLI args, Finder
+            // "Open With", the "Open image..." dialog) -- route it to session loading instead of trying
+            // (and failing) to decode it as an image.
+            load_session(filenames[i]);
+            continue;
+        }
+
         load_image(filenames[i], {}, i == 0, opts);
     }
 }
@@ -679,4 +724,316 @@ void HDRViewApp::close_all_images()
     m_active_directories.clear();
     m_image_loader.remove_watched_directories([](const fs::path &) { return true; });
     update_visibility(); // this also calls set_image_textures();
+}
+
+void HDRViewApp::save_session()
+{
+    if (m_images.empty())
+        return;
+
+#if !defined(__EMSCRIPTEN__)
+    string filename = pfd::save_file("Save session...", "session.hsess", {"HDRView session", "*.hsess"}).result();
+    if (filename.empty())
+        return;
+
+    fs::path dir = fs::path(filename).parent_path();
+
+    auto relative_path_of = [&dir](ConstImagePtr img) -> string
+    {
+        if (!img)
+            return "";
+        std::error_code ec;
+        fs::path        rel = fs::relative(img->path, dir, ec);
+        return (ec ? img->path : rel).generic_u8string();
+    };
+
+    json j;
+    j["type"]    = "HDRView session";
+    j["version"] = "0.2"; // pre-release/unpublished schema revision; becomes "1" once validated end-to-end
+
+    json images = json::array();
+    for (auto &img : m_images)
+    {
+        json entry;
+        entry["path"]             = relative_path_of(img);
+        entry["channel_selector"] = img->channel_selector;
+        entry["selected_group"]   = img->selected_group;
+        entry["reference_group"]  = img->reference_group;
+        images.push_back(entry);
+    }
+    j["images"] = images;
+    // Indices into "images", not paths: the same file can legitimately be listed more than once (e.g. to
+    // compare two channel groups of it side by side), so a path alone can't identify which occurrence is
+    // current/reference.
+    j["current"]   = image_index(current_image());
+    j["reference"] = image_index(reference_image());
+
+    j["blend_mode"] = enum_to_id(m_blend_mode, g_blend_mode_ids);
+
+    json view;
+    view["exposure"]           = m_exposure;
+    view["gamma"]              = m_gamma;
+    view["offset"]             = m_offset;
+    view["tonemap"]            = enum_to_id(m_tonemap, g_tonemap_ids);
+    view["channel"]            = enum_to_id(m_channel, g_channel_ids);
+    view["colormap_index"]     = m_colormap_index;
+    view["reverse_colormap"]   = m_reverse_colormap;
+    view["clamp_to_LDR"]       = m_clamp_to_LDR;
+    view["dither"]             = m_dither;
+    view["bg_mode"]            = enum_to_id(m_bg_mode, g_bg_mode_ids);
+    view["bg_color"]           = m_bg_color.xyz();
+    view["zoom"]               = m_zoom;
+    view["translate"]          = m_translate;
+    view["flip"]               = m_flip;
+    view["auto_fit_display"]   = m_auto_fit_display;
+    view["auto_fit_data"]      = m_auto_fit_data;
+    view["auto_fit_selection"] = m_auto_fit_selection;
+    view["draw_grid"]          = m_draw_grid;
+    view["draw_pixel_info"]    = m_draw_pixel_info;
+    view["draw_clip_warnings"] = m_draw_clip_warnings;
+    view["clip_range"]         = m_clip_range;
+    view["roi"]                = json::array();
+    view["roi"].push_back(m_roi.min);
+    view["roi"].push_back(m_roi.max);
+    j["view"] = view;
+
+    try
+    {
+        ofstream ofs{filename};
+        ofs << j.dump(4);
+        spdlog::info("Saved session to '{}'.", filename);
+    }
+    catch (const exception &e)
+    {
+        spdlog::error("Failed to save session to '{}': {}.", filename, e.what());
+    }
+#endif
+}
+
+void HDRViewApp::load_session()
+{
+#if !defined(__EMSCRIPTEN__)
+    auto selected = pfd::open_file("Load session...", "", {"HDRView session", "*.hsess"}).result();
+    if (selected.empty())
+        return;
+    load_session(selected.front());
+#endif
+}
+
+void HDRViewApp::load_session(const string &filename)
+{
+#if !defined(__EMSCRIPTEN__)
+    json j;
+    try
+    {
+        ifstream ifs{filename};
+        if (!ifs)
+            throw runtime_error("could not open file");
+        ifs >> j;
+    }
+    catch (const exception &e)
+    {
+        spdlog::error("Failed to parse session file '{}': {}.", filename, e.what());
+        return;
+    }
+
+    if (j.value<string>("type", "") != "HDRView session")
+    {
+        spdlog::error("'{}' does not look like an HDRView session file.", filename);
+        return;
+    }
+    // "0.2" is a pre-release/unpublished schema revision -- this becomes "1" once the format has been
+    // validated end-to-end. Warn (don't fail) on an unrecognized version so a newer/older file still loads
+    // best-effort rather than being rejected outright.
+    string version = j.value<string>("version", "");
+    if (version != "0.2")
+        spdlog::warn("Session file '{}' has version '{}', expected '0.2'; attempting to load anyway.", filename,
+                     version);
+
+    fs::path dir = fs::path(filename).parent_path();
+
+    if (!m_images.empty())
+    {
+        m_pending_session_load              = PendingSessionLoad{j, dir};
+        m_dialogs["Replace session?"]->open = true;
+        return;
+    }
+
+    begin_session_load(j, dir);
+#endif
+}
+
+void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
+{
+    close_all_images();
+
+    auto resolve = [&dir](const string &rel) -> fs::path
+    {
+        if (rel.empty())
+            return {};
+        std::error_code ec;
+        fs::path        abs = fs::weakly_canonical(dir / fs::u8path(rel), ec);
+        return ec ? (dir / fs::u8path(rel)) : abs;
+    };
+
+    PendingSession pending;
+    pending.blend_mode = id_to_enum(j, "blend_mode", g_blend_mode_ids, BlendMode_Normal);
+    pending.view       = j.value("view", json::object());
+
+    for (auto &entry : j.value("images", json::array()))
+    {
+        string rel = entry.value<string>("path", "");
+        if (rel.empty())
+            continue;
+
+        PendingSession::Entry e;
+        e.path             = resolve(rel);
+        e.channel_selector = entry.value<string>("channel_selector", "");
+        e.selected_group   = entry.value<int>("selected_group", 0);
+        e.reference_group  = entry.value<int>("reference_group", 0);
+
+        int idx = (int)pending.entries.size();
+        pending.entries.push_back(e);
+        pending.unresolved[{e.path, e.channel_selector}].push_back(idx);
+
+        ImageLoadOptions opts;
+        opts.channel_selector = e.channel_selector;
+        load_image(e.path.string(), {}, false, opts);
+    }
+
+    int n                   = (int)pending.entries.size();
+    pending.current_index   = clamp(j.value<int>("current", -1), -1, n - 1);
+    pending.reference_index = clamp(j.value<int>("reference", -1), -1, n - 1);
+
+    m_pending_session                     = std::move(pending);
+    m_dialogs["Loading session..."]->open = true;
+}
+
+void HDRViewApp::finish_pending_session()
+{
+    if (!m_pending_session)
+        return;
+
+    auto &entries = m_pending_session->entries;
+
+    for (auto &e : entries)
+        if (!e.loaded)
+            spdlog::warn("Session referenced '{}', but it failed to load.", e.path.u8string());
+        else
+        {
+            e.loaded->selected_group  = e.selected_group;
+            e.loaded->reference_group = e.reference_group;
+        }
+
+    // Rebuild m_images in the exact saved order. The generic per-image callback above appended arriving
+    // images in whatever order their independent background loads happened to finish in, not necessarily
+    // file order (and the same path can legitimately appear more than once), so entries -> loaded is the
+    // only reliable source of truth for both order and identity here. Entries that failed to load are
+    // simply omitted. The modal blocks all interaction until this runs, so the transient arrival-order
+    // state built up above is never visible to the user.
+    m_images.clear();
+    for (auto &e : entries)
+        if (e.loaded)
+            m_images.push_back(e.loaded);
+
+    // current_index/reference_index index into `entries`, not m_images -- bounds-check against that, not
+    // is_valid() (which checks against the just-rebuilt m_images and would be the wrong index space here).
+    auto entry_loaded = [&entries](int idx) -> ImagePtr
+    { return (idx >= 0 && idx < (int)entries.size()) ? entries[idx].loaded : nullptr; };
+
+    m_current = m_reference = -1;
+    if (auto img = entry_loaded(m_pending_session->current_index))
+        m_current = image_index(img);
+    if (auto img = entry_loaded(m_pending_session->reference_index))
+        m_reference = image_index(img);
+
+    m_blend_mode = m_pending_session->blend_mode;
+
+    const json &view = m_pending_session->view;
+    m_exposure_live = m_exposure = view.value<float>("exposure", m_exposure);
+    m_gamma_live = m_gamma = view.value<float>("gamma", m_gamma);
+    m_offset_live = m_offset = view.value<float>("offset", m_offset);
+    m_tonemap                = id_to_enum(view, "tonemap", g_tonemap_ids, m_tonemap);
+    m_channel                = id_to_enum(view, "channel", g_channel_ids, m_channel);
+    m_colormap_index     = clamp<int>(view.value<int>("colormap_index", m_colormap_index), 0, std::size(m_colormaps));
+    m_reverse_colormap   = view.value<bool>("reverse_colormap", m_reverse_colormap);
+    m_clamp_to_LDR       = view.value<bool>("clamp_to_LDR", m_clamp_to_LDR);
+    m_dither             = view.value<bool>("dither", m_dither);
+    m_bg_mode            = id_to_enum(view, "bg_mode", g_bg_mode_ids, m_bg_mode);
+    m_bg_color.xyz()     = view.value<float3>("bg_color", m_bg_color.xyz());
+    m_zoom               = view.value<float>("zoom", m_zoom);
+    m_translate          = view.value<float2>("translate", m_translate);
+    m_flip               = view.value<bool2>("flip", m_flip);
+    m_auto_fit_display   = view.value<bool>("auto_fit_display", m_auto_fit_display);
+    m_auto_fit_data      = view.value<bool>("auto_fit_data", m_auto_fit_data);
+    m_auto_fit_selection = view.value<bool>("auto_fit_selection", m_auto_fit_selection);
+    m_draw_grid          = view.value<bool>("draw_grid", m_draw_grid);
+    m_draw_pixel_info    = view.value<bool>("draw_pixel_info", m_draw_pixel_info);
+    m_draw_clip_warnings = view.value<bool>("draw_clip_warnings", m_draw_clip_warnings);
+    m_clip_range         = view.value<float2>("clip_range", m_clip_range);
+    if (view.contains("roi") && view["roi"].is_array() && view["roi"].size() == 2)
+    {
+        view["roi"][0].get_to(m_roi.min);
+        view["roi"][1].get_to(m_roi.max);
+    }
+
+    m_request_sort = true;
+    m_pending_session.reset();
+}
+
+void HDRViewApp::draw_confirm_load_session_dialog(bool &open)
+{
+    if (open)
+        ImGui::OpenPopup("Replace session?");
+    open = false;
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Replace session?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextUnformatted("Loading this session will close all currently open images.");
+        ImGui::Spacing();
+
+        if (ImGui::Button("Cancel"))
+        {
+            m_pending_session_load.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Replace") && m_pending_session_load)
+        {
+            begin_session_load(m_pending_session_load->j, m_pending_session_load->dir);
+            m_pending_session_load.reset();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void HDRViewApp::draw_loading_session_dialog(bool &open)
+{
+    if (open)
+        ImGui::OpenPopup("Loading session...");
+    open = false;
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Loading session...", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+    {
+        if (m_pending_session)
+        {
+            int total = (int)m_pending_session->entries.size();
+            int done  = 0;
+            for (auto &e : m_pending_session->entries)
+                if (e.loaded)
+                    ++done;
+            ImGui::Text("Loading session... (%d/%d)", done, total);
+        }
+        else
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
 }
