@@ -23,8 +23,9 @@ namespace fs = std::filesystem;
 // Builds a path under the system temp directory whose full length exceeds the classic Win32 MAX_PATH
 // (260 chars), by nesting many subdirectories. On Windows this only succeeds end-to-end if the process is
 // long-path aware (see resources/windows/HDRView.manifest) *and* the system-wide "Enable Win32 long paths"
-// policy is on -- the latter is outside HDRView's control, so callers must tolerate create_directories()
-// failing here rather than treat it as a hard test failure.
+// policy is on. The test below treats a failure to create this directory as a hard failure rather than
+// silently skipping, so that running on a system/CI runner without the policy enabled is a visible signal
+// to go enable it, not a silent no-op.
 fs::path make_long_test_dir()
 {
     fs::path dir = fs::temp_directory_path() / "hdrview_long_path_test";
@@ -43,13 +44,8 @@ TEST_CASE("BackgroundImageLoader opens an image at a path longer than 260 charac
 
     std::error_code ec;
     fs::create_directories(dir, ec);
-    if (ec)
-    {
-        MESSAGE("Skipping: could not create a >260 character path (", ec.message(),
-                "). This requires the system-wide \"Enable Win32 long paths\" policy, which is outside "
-                "HDRView's control.");
-        return;
-    }
+    REQUIRE_MESSAGE(!ec, "Could not create a >260 character path (", ec.message(),
+                     "). This requires the system-wide \"Enable Win32 long paths\" policy to be enabled.");
 
     fs::path file = dir / "test.pfm";
 
