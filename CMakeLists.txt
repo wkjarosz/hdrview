@@ -1528,6 +1528,8 @@ set(HDRVIEW_SOURCES
 add_library(hdrview_version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
 add_dependencies(hdrview_version hdrview_check_version)
 target_link_libraries(hdrview_version PRIVATE hello_imgui)
+target_include_directories(hdrview_version PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(hdrview_version PROPERTIES CXX_STANDARD 17)
 
 hello_imgui_add_app(HDRView ${HDRVIEW_SOURCES} ASSETS_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 if(HDRVIEW_SOKOL_SHDC_TARGETS)
@@ -1659,6 +1661,8 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_filtering.cpp
     tests/gui/test_gui_navigation.cpp
     tests/gui/test_gui_multipart.cpp
+    tests/gui/test_gui_session.cpp
+    tests/gui/test_gui_session_bundle.cpp
   )
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)
@@ -1850,6 +1854,10 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   # Install desktop file and icons
   install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
           DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
+
+  # Register the .hsess session file's mime type so file managers offer HDRView to open/associate with it
+  install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/hdrview-session-mime.xml"
+          DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/mime/packages")
 
   # Strip leading 'v' from GIT_TAG to get full version
   string(REGEX REPLACE "^v" "" VERSION_NO_V "${GIT_TAG}")
