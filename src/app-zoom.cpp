@@ -242,13 +242,10 @@ float4 HDRViewApp::tonemap_value(float4 value) const
 void HDRViewApp::calculate_viewport()
 {
     auto &io = ImGui::GetIO();
-    //
-    // calculate the viewport sizes
-    // fbsize is the size of the window in physical pixels while accounting for dpi factor on retina
-    // screens. For retina displays, io.DisplaySize is the size of the window in logical pixels so we it by
-    // io.DisplayFramebufferScale to get the physical pixel size for the framebuffer.
-    spdlog::trace("DisplayFramebufferScale: {}, DpiWindowSizeFactor: {}, DpiFontLoadingFactor: {}",
-                  float2{io.DisplayFramebufferScale}, DpiWindowSizeFactor(), DpiFontLoadingFactor());
+    // The viewport is the central dockspace node, falling back to the whole window before the dockspace
+    // exists. Both are in logical pixels, the same space as io.DisplaySize and ImGui's MousePos.
+    spdlog::trace("DisplayFramebufferScale: {}, DpiWindowSizeFactor: {}, FontScaleDpi: {}",
+                  float2{io.DisplayFramebufferScale}, DpiWindowSizeFactor(), ImGui::GetStyle().FontScaleDpi);
     m_viewport_min  = {0.f, 0.f};
     m_viewport_size = io.DisplaySize;
     if (auto id = m_params.dockingParams.dockSpaceIdFromName("MainDockSpace"))

@@ -837,7 +837,7 @@ void DrawLabeledRect(ImDrawList *draw_list, const Box2f &rect, ImU32 col, const 
     constexpr float2 fudge     = float2{thickness * 0.5f - 0.5f, -(thickness * 0.5f - 0.5f)};
     const float2     pad       = float2{0.25, 0.125} * ImGui::GetFontSize();
 
-    draw_list->AddRect(rect.min, rect.max, col, 0.f, ImDrawFlags_None, thickness);
+    draw_list->AddRect(rect.min, rect.max, col, 0.f, thickness, ImDrawFlags_None);
 
     if (!draw_label)
         return;
@@ -1053,9 +1053,8 @@ DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, 
     ImGui::SameLine();
 
     ImGui::BeginDisabled(!confirm_enabled);
-    if (ImGui::Button(confirm_label) ||
-        (confirm_enabled && use_shortcuts && !ImGui::GetIO().NavVisible &&
-         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter)))
+    if (ImGui::Button(confirm_label) || (confirm_enabled && use_shortcuts && !ImGui::GetIO().NavVisible &&
+                                         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter)))
         result = DialogResult::Confirm;
     ImGui::EndDisabled();
 

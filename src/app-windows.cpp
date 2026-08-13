@@ -142,9 +142,6 @@ void HDRViewApp::draw_developer_windows()
                     {
                         ImPlot::SetupAxes("input", "encoded", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
 
-                        ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-
                         auto f = [](float x) { return to_linear(x, tf); };
                         auto g = [](float y) { return from_linear(y, tf); };
 
@@ -162,12 +159,15 @@ void HDRViewApp::draw_developer_windows()
                             xs2[i] = g(ys2[i]);
                         }
 
-                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-                        ImPlot::PlotLine("to_linear", xs1, ys1, N);
-                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Square);
-                        ImPlot::PlotLine("from_linear", xs2, ys2, N);
+                        ImPlotSpec spec;
+                        spec.LineWeight = 2.f;
+                        spec.MarkerSize = 2.f;
 
-                        ImPlot::PopStyleVar(2);
+                        spec.Marker = ImPlotMarker_Circle;
+                        ImPlot::PlotLine("to_linear", xs1, ys1, N, spec);
+                        spec.Marker = ImPlotMarker_Square;
+                        ImPlot::PlotLine("from_linear", xs2, ys2, N, spec);
+
                         ImPlot::EndPlot();
                     }
                     ImGui::EndTabItem();
@@ -179,9 +179,10 @@ void HDRViewApp::draw_developer_windows()
                     {
                         ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
 
-                        ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-                        ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
+                        ImPlotSpec spec;
+                        spec.LineWeight = 2.f;
+                        spec.Marker     = ImPlotMarker_Circle;
+                        spec.MarkerSize = 2.f;
 
                         for (WhitePoint n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
                         {
@@ -193,9 +194,8 @@ void HDRViewApp::draw_developer_windows()
                             ImPlot::PlotLine(name.c_str(), spectrum.values.data(), (int)spectrum.values.size(),
                                              (spectrum.max_wavelength - spectrum.min_wavelength) /
                                                  (spectrum.values.size() - 1),
-                                             spectrum.min_wavelength);
+                                             spectrum.min_wavelength, spec);
                         }
-                        ImPlot::PopStyleVar(3);
                         ImPlot::EndPlot();
                     }
                     ImGui::EndTabItem();
@@ -207,20 +207,22 @@ void HDRViewApp::draw_developer_windows()
                     {
                         ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
 
-                        ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-                        ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
+                        ImPlotSpec spec;
+                        spec.LineWeight = 2.f;
+                        spec.Marker     = ImPlotMarker_Circle;
+                        spec.MarkerSize = 2.f;
+                        // the three curves are interleaved in one float3 array
+                        spec.Stride = sizeof(float3);
 
                         auto &xyz       = CIE_XYZ_spectra();
                         auto  increment = (xyz.max_wavelength - xyz.min_wavelength) / xyz.values.size();
                         ImPlot::PlotLine("X", (const float *)&xyz.values[0].x, (int)xyz.values.size(), increment,
-                                         xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                                         xyz.min_wavelength, spec);
                         ImPlot::PlotLine("Y", (const float *)&xyz.values[0].y, (int)xyz.values.size(), increment,
-                                         xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                                         xyz.min_wavelength, spec);
                         ImPlot::PlotLine("Z", (const float *)&xyz.values[0].z, (int)xyz.values.size(), increment,
-                                         xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                                         xyz.min_wavelength, spec);
 
-                        ImPlot::PopStyleVar(3);
                         ImPlot::EndPlot();
                     }
 

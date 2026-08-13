@@ -463,26 +463,6 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 # Prevent dependencies from installing their files
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
-# Fork of pthom/hello_imgui (v1.92.700 + two commits) carrying the two changes HDRView needs for HDR
-# display output. Both are written to be proposed upstream as independent PRs, and are kept on separate
-# branches in the fork -- rebased onto upstream master, which is where they will be submitted -- so they
-# can go up that way:
-#
-#   before-swap-callback       Adds RunnerCallbacks::BeforeSwap, the only point in the render loop where an
-#                              app can run a final full-screen pass over the whole frame (ImGui's UI
-#                              included) and still have it presented. No HDR-specific code.
-#   glfw-opengl-float-buffer   Makes the *existing* RendererBackendOptions::requestFloatBuffer work on the
-#                              GLFW3+OpenGL backend, not just Metal. Probes with a throwaway hidden window
-#                              and writes back what was actually obtained.
-#
-# The `hdr-display` branch pinned here carries the same two commits, but based on v1.92.700 rather than
-# upstream master: master has since removed DpiFontLoadingFactor() (upstream f5b94f3, "Scale fonts for
-# HighDPI via style.FontScaleDpi"), which HDRView still uses in fonts.cpp and app-zoom.cpp. Moving HDRView
-# to upstream master is a separate font-DPI migration, unrelated to HDR. Both changes are
-# guarded by `#if defined(GLFW_FLOATBUFFER)`, so built against a vanilla GLFW this fork is byte-identical to
-# upstream hello_imgui (verified: the probe is compiled out entirely).
-#
-# Re-point at pthom/hello_imgui directly if/when the PRs are merged there.
 set(HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
                            "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
 )
@@ -492,10 +472,15 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   list(APPEND HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_WITH_TEST_ENGINE ON")
 endif()
 
+# HDR display output relies on two things here: RunnerCallbacks::BeforeSwap, the one point in the render
+# loop where a full-screen pass over the whole frame (Dear ImGui's UI included) is still presented, and
+# RendererBackendOptions::requestFloatBuffer on the GLFW3+OpenGL backend, not just Metal. The latter needs
+# a GLFW defining GLFW_FLOATBUFFER (see the Tom94/glfw pin above); against stock GLFW, Hello ImGui reports
+# back that no float framebuffer was obtained.
 CPMAddPackage(
   NAME hello_imgui
-  GITHUB_REPOSITORY wkjarosz/hello_imgui
-  GIT_TAG 74ef58fc219476685624c9cca6847c9792dd83da
+  GITHUB_REPOSITORY pthom/hello_imgui
+  GIT_TAG v1.92.900
   OPTIONS ${HELLOIMGUI_CPM_OPTIONS}
   EXCLUDE_FROM_ALL YES
   SYSTEM YES
@@ -516,7 +501,9 @@ else()
   message(FATAL_ERROR "Could not find or download hello_imgui library.")
 endif()
 
-CPMAddPackage("gh:epezent/implot#3da8bd34299965d3b0ab124df743fe3e076fa222")
+# Must track the Dear ImGui that hello_imgui vendors: implot draws through ImDrawList directly, and
+# IMGUI_DISABLE_OBSOLETE_FUNCTIONS (set above) deletes superseded overloads rather than keeping shims.
+CPMAddPackage("gh:epezent/implot#7eeb9168d2e5e6b14e266d8782ecf7e649dfc3a4")
 if(NOT implot_ADDED)
   message(FATAL_ERROR "Could not download implot library.")
 endif()
