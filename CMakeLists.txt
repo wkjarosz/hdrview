@@ -1581,6 +1581,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_assets.cpp
+                                tests/test_long_paths.cpp
   )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
@@ -1589,6 +1590,12 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   # can exercise the same asset lookup the app uses.
   target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
   target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version doctest::doctest)
+
+  if(WIN32)
+    # Same long-path opt-in as the HDRView target above: hdrview_tests is a separate executable and doesn't
+    # inherit it, but tests/test_long_paths.cpp needs it to exercise paths over 260 characters on Windows.
+    target_sources(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
+  endif()
 
   if(APPLE)
     target_compile_options(hdrview_tests PRIVATE "-fobjc-arc")
@@ -1655,6 +1662,11 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   )
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)
+  if(WIN32)
+    # Same long-path opt-in as the HDRView/hdrview_tests targets: needed for
+    # tests/gui/test_gui_image_io.cpp's load_from_long_path test to exercise paths over 260 characters.
+    target_sources(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
+  endif()
   target_compile_definitions(
     hdrview_gui_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS} HDRVIEW_ENABLE_GUI_TEST_ENGINE
   )
