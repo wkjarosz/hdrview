@@ -313,6 +313,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Image loading options..."));
 #if defined(__EMSCRIPTEN__)
         MenuItem(action("Open URL..."));
+        MenuItem(action("Load session bundle..."));
 #else
 
         // // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
@@ -372,6 +373,14 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Save as..."));
+
+#if !defined(__EMSCRIPTEN__)
+        ImGui::Separator();
+
+        MenuItem(action("Save session..."));
+        MenuItem(action("Load session..."));
+        MenuItem(action("Export session bundle..."));
+#endif
 
         ImGui::Separator();
 

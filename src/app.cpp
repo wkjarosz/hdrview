@@ -86,6 +86,11 @@ void HDRViewApp::setup_window_and_backend(optional<bool> force_sdr)
     Imf::setGlobalThreadCount(threads);
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 
+    // Lets any zip opened through m_image_loader (drag-and-drop, CLI args, "Open image...") be recognized as
+    // a session bundle -- see try_load_zip_as_session().
+    m_image_loader.zip_bundle_hook = [this](string_view zip_bytes, const string &zip_name)
+    { return try_load_zip_as_session(zip_bytes, zip_name); };
+
 #if defined(__APPLE__)
     // if there is a screen with a non-retina resolution connected to an otherwise retina mac, the fonts may
     // look blurry. Here we force that macs always use the 2X retina scale factor for fonts. Produces crisp
@@ -576,9 +581,33 @@ void HDRViewApp::setup_frame_callbacks()
 
                 if (should_select)
                     m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
+
+                if (m_pending_session)
+                {
+                    // Resolve this arrival to the earliest not-yet-filled entry sharing its (path,
+                    // channel_selector) -- see PendingSession's comment in app.h for why matching by that
+                    // key (rather than by request order) is correct even when the same file is loaded more
+                    // than once in one session.
+                    auto key = std::make_pair(new_image->path, new_image->channel_selector);
+                    if (auto it = m_pending_session->unresolved.find(key); it != m_pending_session->unresolved.end())
+                    {
+                        if (!it->second.empty())
+                        {
+                            int idx = it->second.front();
+                            it->second.pop_front();
+                            m_pending_session->entries[idx].loaded = new_image;
+                        }
+                        if (it->second.empty())
+                            m_pending_session->unresolved.erase(it);
+                    }
+                }
+
                 update_visibility(); // this also calls set_image_textures();
                 m_request_sort = true;
             });
+
+        if (m_pending_session && m_image_loader.num_pending_images() == 0)
+            finish_pending_session();
 
         draw_tweak_window();
         draw_developer_windows();
@@ -595,6 +624,10 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     m_dialogs["Save as..."]         = make_unique<PopupDialog>([this](bool &open) { draw_save_as_dialog(open); });
     m_dialogs["Image loading options..."] =
         make_unique<PopupDialog>([this](bool &open) { draw_open_options_dialog(open); });
+    m_dialogs["Replace session?"] =
+        make_unique<PopupDialog>([this](bool &open) { draw_confirm_load_session_dialog(open); });
+    m_dialogs["Loading session..."] =
+        make_unique<PopupDialog>([this](bool &open) { draw_loading_session_dialog(open); });
     m_dialogs["Create dither image..."] = make_unique<PopupDialog>(
         [this](bool &open)
         {
@@ -830,6 +863,8 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    },
                    always_enabled,
                    true});
+        add(Action{
+            {"Load session bundle..."}, ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0, [this]() { open_session_bundle(); }});
 #endif
 
         add(Action{{"Show help"},
@@ -1229,6 +1264,22 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]() { m_dialogs["Save as..."]->open = true; },
                    if_img});
+
+#if !defined(__EMSCRIPTEN__)
+        add(Action{{"Save session..."}, ICON_MY_SAVE_AS, ImGuiKey_None, 0, [this]() { save_session(); }, if_img});
+        add(Action{{"Load session..."}, ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0, [this]() { load_session(); }});
+        add(Action{{"Export session bundle..."},
+                   ICON_MY_SAVE_AS,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { export_session_bundle(); },
+                   if_img,
+                   false,
+                   nullptr,
+                   "Exports the current session as a single self-contained .zip (manifest plus copies of "
+                   "every loaded image) that can be shared or opened on the web build, where a plain "
+                   ".hsess file's relative paths can't be resolved."});
+#endif
 
         add(Action{{"Normalize exposure"},
                    ICON_MY_NORMALIZE_EXPOSURE,

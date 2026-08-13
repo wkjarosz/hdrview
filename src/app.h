@@ -9,9 +9,11 @@
 #include "display_colorspace.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
+#include "json.h"
 #include "renderpass.h"
 #include "shader.h"
 #include "theme.h"
+#include <deque>
 #include <filesystem>
 #include <hello_imgui/runner_callbacks.h>
 #include <hello_imgui/runner_params.h>
@@ -19,12 +21,19 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
+
+#ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+struct ImGuiTestEngine;
+#endif
 
 namespace fs = std::filesystem;
 
+using std::deque;
 using std::map;
 using std::optional;
+using std::pair;
 using std::set;
 using std::string;
 using std::string_view;
@@ -38,6 +47,17 @@ public:
                optional<bool> force_apple_keys, vector<string> in_files = {});
 
     void run();
+
+#ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+    /// Turns on Dear ImGui Test Engine for this app instance. `register_tests` is invoked once the engine is
+    /// ready and should call IM_REGISTER_TEST(engine, ...) for every test; all registered tests are then queued
+    /// automatically. run() exits once the queue is empty, after which test_engine_result() reports how many of
+    /// the queued tests passed. Must be called before run(). Only ever compiled into the hdrview_gui_tests
+    /// target — the production HDRView binary and hdrview_tests never define HDRVIEW_ENABLE_GUI_TEST_ENGINE.
+    void enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *));
+    /// Valid only after run() returns; {tested, succeeded} counts from the Test Engine queue.
+    std::pair<int, int> test_engine_result() const { return {m_test_engine_tested, m_test_engine_succeeded}; }
+#endif
 
     RenderPass *renderpass() { return m_render_pass.get(); }
     Shader     *shader() { return m_shader.get(); }
@@ -54,6 +74,22 @@ public:
     void close_image(int index = -1);
     void close_all_images();
     void reload_image(ImagePtr image, bool shall_select = false);
+
+    //-----------------------------------------------------------------------------
+    // saving/loading an entire session (loaded images, current/reference selection, blend mode,
+    // and view/display settings) to/from a user-chosen .hsess file
+    //-----------------------------------------------------------------------------
+    void save_session();
+    void load_session();
+    void load_session(const string &filename);
+    void export_session_bundle();
+    // Emscripten's "Load session..." entry point: uploads a .zip and loads it strictly as a session bundle,
+    // erroring rather than falling back to plain image loading if it doesn't contain a manifest.
+    void open_session_bundle();
+    // Looks for a session manifest ("*.hsess") at the root of `zip_bytes` (a zip archive named `zip_name`,
+    // for identity/logging). If found, loads it as a session and returns true; otherwise returns false so
+    // the caller can fall back to treating the zip as a plain multi-image archive. Works on native and web.
+    bool try_load_zip_as_session(string_view zip_bytes, const string &zip_name);
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -197,6 +233,24 @@ public:
 private:
     void load_fonts();
 
+    // Builds the "HDRView session" manifest for the currently loaded images/view settings, shared by
+    // save_session() and export_session_bundle() -- they differ only in what "path" each image gets, which
+    // `path_of` supplies (a filesystem-relative path for a plain .hsess, an in-bundle location for a zip
+    // export).
+    json build_session_manifest(const std::function<string(ConstImagePtr)> &path_of) const;
+
+    // Begins asynchronously loading the images listed in a parsed session file `j` (paths resolved relative to
+    // `dir`), populating m_pending_session so the per-frame image-loader drain can apply the rest of the session
+    // (current/reference selection, blend mode, view settings) once every image has finished loading.
+    void begin_session_load(const json &j, const fs::path &dir);
+    // Same as begin_session_load(), but for a session bundled inside a zip: `zip_bytes` is the whole
+    // archive, and each image entry's "path" is resolved against the zip's own internal entries (extracted
+    // into memory and fed to the loader as a buffer) rather than a filesystem directory.
+    void begin_bundle_session_load(string_view zip_bytes, const string &zip_name, const json &j);
+    // Called once every image in m_pending_session has been resolved (successfully or not); rebuilds m_images
+    // in the saved order, then applies current/reference selection, blend mode, and view settings.
+    void finish_pending_session();
+
     void   handle_mouse_interaction();
     void   calculate_viewport();
     float2 center_offset() const;
@@ -211,6 +265,8 @@ private:
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
     void draw_open_options_dialog(bool &open);
+    void draw_confirm_load_session_dialog(bool &open);
+    void draw_loading_session_dialog(bool &open);
     void draw_pixel_info() const;
     void draw_pixel_grid() const;
     void draw_image() const;
@@ -370,6 +426,10 @@ private:
     //-----------------------------------------------------------------------------
     HelloImGui::RunnerParams m_params;
 
+#ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+    int m_test_engine_tested = 0, m_test_engine_succeeded = 0; ///< see test_engine_result()
+#endif
+
     ImFont *m_sans_regular = nullptr, *m_sans_bold = nullptr, *m_mono_regular = nullptr, *m_mono_bold = nullptr;
 
     map<string, ImGui::Action>     m_actions;
@@ -424,6 +484,50 @@ private:
         }
     };
     map<string, unique_ptr<PopupDialog>> m_dialogs;
+
+    // A parsed session file waiting on the user to confirm closing currently-open images before it starts loading.
+    struct PendingSessionLoad
+    {
+        json     j;
+        fs::path dir;
+    };
+    optional<PendingSessionLoad> m_pending_session_load;
+
+    // Same as PendingSessionLoad, but for a session bundled inside a zip: the zip's bytes must be kept
+    // alive (owned here) until the user confirms, since begin_bundle_session_load() needs them again then.
+    struct PendingZipSessionLoad
+    {
+        string zip_bytes;
+        string zip_name;
+        json   j;
+    };
+    optional<PendingZipSessionLoad> m_pending_zip_session_load;
+
+    // A session whose images have been issued to the BackgroundImageLoader and are loading asynchronously; the
+    // rest of the session (selection, blend mode, view settings) is applied once every entry here has been
+    // resolved (successfully or not) by the per-frame image-loader drain in the PostInit-registered callback.
+    struct PendingSession
+    {
+        struct Entry
+        {
+            fs::path path;
+            string   channel_selector;
+            int      selected_group = 0, reference_group = 0;
+            ImagePtr loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
+        };
+        vector<Entry> entries; ///< One per saved "images" entry, in file order; the same path may repeat
+        int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset
+        BlendMode_    blend_mode;
+        json          view; ///< The session file's "view" sub-object, applied verbatim once loading completes
+
+        // An arriving image is matched to the earliest not-yet-filled entry sharing its (path, channel_selector).
+        // Entries sharing that key are guaranteed content-identical (loaded with identical options), so any
+        // valid one-to-one assignment among them is correct regardless of which physical async load happens to
+        // finish first -- this is what makes it safe to load the same file more than once in one session (e.g.
+        // to compare two channel groups of it side by side).
+        map<pair<fs::path, string>, deque<int>> unresolved;
+    };
+    optional<PendingSession> m_pending_session;
 };
 
 /// Create the global singleton HDRViewApp instance
