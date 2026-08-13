@@ -784,7 +784,7 @@ const ImageLoadOptions &load_image_options() { return s_opts; }
 
 void draw_load_image_options_dialog(bool &open)
 {
-    if (ImGui::BeginModalDialog("Image loading options2...", open, ImGui::DialogPosition::Center))
+    if (ImGui::BeginModalDialog("Image loading options...", open, ImGui::DialogPosition::Center))
     {
         ImGui::PushTextWrapPos(350.0f);
         ImGui::Text("These options control how images are loaded. They will be applied to all images opened "
