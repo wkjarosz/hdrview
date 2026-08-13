@@ -4,9 +4,11 @@
 #include "fwd.h"
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -47,6 +49,15 @@ const ImageLoadOptions &load_image_options_gui();
 */
 vector<ImagePtr> load_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 
+/// Returns {entry_name, contents} for every root-level (no '/' in the stored path) entry in a zip archive
+/// whose name ends with `suffix` (case-insensitive). Used to look for a manifest at a zip's root without
+/// assuming a fixed filename. Returns an empty vector if `zip_bytes` isn't a valid zip.
+vector<std::pair<string, string>> zip_root_entries_with_suffix(string_view zip_bytes, const string &suffix);
+
+/// Extracts one specific entry from a zip archive by its exact stored path. Returns std::nullopt if the
+/// zip can't be opened or doesn't contain that entry.
+std::optional<string> zip_extract_entry(string_view zip_bytes, const string &entry_path);
+
 struct BackgroundImageLoader
 {
     void background_load(const string filename, const string_view = string_view{}, bool should_select = false,
@@ -66,8 +77,17 @@ struct BackgroundImageLoader
     void                  clear_recent_files() { set_recent_files({}); }
     const vector<string> &recent_files() const { return m_recent_files; }
     vector<string>        recent_files_short(int head_length = 32, int tail_length = 25) const;
+    //! Adds (or moves to the front of) the recent-files list. Public so callers that load something outside
+    //! background_load()'s own paths (e.g. HDRViewApp's session loading) can still register it as recent.
+    void add_recent_file(const string &f);
 
     void draw_gui();
+
+    // Called with the raw bytes of a top-level zip archive before it's extracted as a folder of images (not
+    // called for a single-entry re-extraction from within a zip). Returning true means "handled, don't also
+    // extract this zip's images normally". A plain byte-buffer hook with no session/JSON knowledge, so this
+    // loader stays app-agnostic.
+    function<bool(string_view zip_bytes, const string &zip_name)> zip_bundle_hook;
 
 private:
     struct PendingImages;
@@ -75,7 +95,6 @@ private:
 
     vector<string> m_recent_files;
 
-    void add_recent_file(const string &f);
     void remove_recent_file(const string &f);
 
     set<fs::path> m_directories;

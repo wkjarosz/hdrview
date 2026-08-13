@@ -81,6 +81,14 @@ public:
     void save_session();
     void load_session();
     void load_session(const string &filename);
+    void export_session_bundle();
+    // Emscripten's "Load session..." entry point: uploads a .zip and loads it strictly as a session bundle,
+    // erroring rather than falling back to plain image loading if it doesn't contain a manifest.
+    void open_session_bundle();
+    // Looks for a session manifest ("*.hsess") at the root of `zip_bytes` (a zip archive named `zip_name`,
+    // for identity/logging). If found, loads it as a session and returns true; otherwise returns false so
+    // the caller can fall back to treating the zip as a plain multi-image archive. Works on native and web.
+    bool try_load_zip_as_session(string_view zip_bytes, const string &zip_name);
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -224,10 +232,20 @@ public:
 private:
     void load_fonts();
 
+    // Builds the "HDRView session" manifest for the currently loaded images/view settings, shared by
+    // save_session() and export_session_bundle() -- they differ only in what "path" each image gets, which
+    // `path_of` supplies (a filesystem-relative path for a plain .hsess, an in-bundle location for a zip
+    // export).
+    json build_session_manifest(const std::function<string(ConstImagePtr)> &path_of) const;
+
     // Begins asynchronously loading the images listed in a parsed session file `j` (paths resolved relative to
     // `dir`), populating m_pending_session so the per-frame image-loader drain can apply the rest of the session
     // (current/reference selection, blend mode, view settings) once every image has finished loading.
     void begin_session_load(const json &j, const fs::path &dir);
+    // Same as begin_session_load(), but for a session bundled inside a zip: `zip_bytes` is the whole
+    // archive, and each image entry's "path" is resolved against the zip's own internal entries (extracted
+    // into memory and fed to the loader as a buffer) rather than a filesystem directory.
+    void begin_bundle_session_load(string_view zip_bytes, const string &zip_name, const json &j);
     // Called once every image in m_pending_session has been resolved (successfully or not); rebuilds m_images
     // in the saved order, then applies current/reference selection, blend mode, and view settings.
     void finish_pending_session();
@@ -382,6 +400,16 @@ private:
         fs::path dir;
     };
     optional<PendingSessionLoad> m_pending_session_load;
+
+    // Same as PendingSessionLoad, but for a session bundled inside a zip: the zip's bytes must be kept
+    // alive (owned here) until the user confirms, since begin_bundle_session_load() needs them again then.
+    struct PendingZipSessionLoad
+    {
+        string zip_bytes;
+        string zip_name;
+        json   j;
+    };
+    optional<PendingZipSessionLoad> m_pending_zip_session_load;
 
     // A session whose images have been issued to the BackgroundImageLoader and are loading asynchronously; the
     // rest of the session (selection, blend mode, view settings) is applied once every entry here has been

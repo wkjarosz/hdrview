@@ -1,9 +1,11 @@
 #include "app.h"
 
 #include "image.h"
+#include "version.h"
 #include <algorithm>
 #include <fstream>
 #include <hello_imgui/dpi_aware.h>
+#include <miniz.h>
 #include <sstream>
 #include <string>
 
@@ -62,6 +64,30 @@ Enum id_to_enum(const json &j, const char *key, const char *const (&ids)[N], Enu
             return (Enum)i;
     spdlog::warn("Unrecognized '{}' value '{}' in session file; using default.", key, id);
     return default_value;
+}
+
+// Checks "type"/"version" on a parsed session manifest, logging as needed (`source_name` is a filename or
+// zip archive name, for the log message only). Returns false if `j` doesn't look like a session at all --
+// callers should treat that as "not a session", not a hard failure.
+bool validate_session_manifest(const json &j, const string &source_name)
+{
+    if (j.value<string>("type", "") != "HDRView session")
+    {
+        spdlog::error("'{}' does not look like an HDRView session.", source_name);
+        return false;
+    }
+
+    if (auto v = parse_version(j.value<string>("version", "")))
+    {
+        if (v->combined() > version_combined())
+            spdlog::warn("'{}' was saved by a newer version of HDRView ({}.{}.{}) than this one ({}.{}.{}); some "
+                         "things may not load correctly.",
+                         source_name, v->major, v->minor, v->patch, version_major(), version_minor(), version_patch());
+    }
+    else
+        spdlog::warn("'{}' has an unrecognized version; attempting to load anyway.", source_name);
+
+    return true;
 }
 
 } // namespace
@@ -466,6 +492,8 @@ void HDRViewApp::load_images(const vector<string> &filenames)
             continue;
         }
 
+        // A .zip might be a session bundle -- see zip_bundle_hook (wired in the constructor), checked inside
+        // background_load() once it has the zip's bytes in hand.
         load_image(filenames[i], {}, i == 0, opts);
     }
 }
@@ -492,6 +520,8 @@ void HDRViewApp::open_image()
             {
                 spdlog::debug("User uploaded a {:.0h} file with filename '{}' of mime-type '{}'",
                               human_readible{buffer.size()}, filename, mime_type);
+
+                // A zip might be a session bundle -- see load_image()/background_load()'s zip_bundle_hook.
                 hdrview()->load_image(filename, buffer, true, load_image_options());
             }
         });
@@ -506,6 +536,30 @@ void HDRViewApp::open_folder()
 {
 #if !defined(__EMSCRIPTEN__)
     load_images({pfd::select_folder("Open images in folder", "").result()});
+#endif
+}
+
+void HDRViewApp::open_session_bundle()
+{
+#if defined(__EMSCRIPTEN__)
+    spdlog::debug("Requesting a session bundle from user...");
+    emscripten_browser_file::upload(
+        ".zip,application/zip",
+        [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
+        {
+            if (buffer.empty())
+            {
+                spdlog::debug("User canceled upload.");
+                return;
+            }
+            spdlog::debug("User uploaded a {:.0h} file with filename '{}' of mime-type '{}'",
+                          human_readible{buffer.size()}, filename, mime_type);
+
+            // Explicit "load a session" entry point -- error rather than silently falling back to plain
+            // image loading if the uploaded zip isn't actually a session bundle.
+            if (!hdrview()->try_load_zip_as_session(buffer, filename))
+                spdlog::error("'{}' does not contain a session manifest at its root.", filename);
+        });
 #endif
 }
 
@@ -726,36 +780,17 @@ void HDRViewApp::close_all_images()
     update_visibility(); // this also calls set_image_textures();
 }
 
-void HDRViewApp::save_session()
+json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr)> &path_of) const
 {
-    if (m_images.empty())
-        return;
-
-#if !defined(__EMSCRIPTEN__)
-    string filename = pfd::save_file("Save session...", "session.hsess", {"HDRView session", "*.hsess"}).result();
-    if (filename.empty())
-        return;
-
-    fs::path dir = fs::path(filename).parent_path();
-
-    auto relative_path_of = [&dir](ConstImagePtr img) -> string
-    {
-        if (!img)
-            return "";
-        std::error_code ec;
-        fs::path        rel = fs::relative(img->path, dir, ec);
-        return (ec ? img->path : rel).generic_u8string();
-    };
-
     json j;
     j["type"]    = "HDRView session";
-    j["version"] = "0.2"; // pre-release/unpublished schema revision; becomes "1" once validated end-to-end
+    j["version"] = fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch());
 
     json images = json::array();
     for (auto &img : m_images)
     {
         json entry;
-        entry["path"]             = relative_path_of(img);
+        entry["path"]             = path_of(img);
         entry["channel_selector"] = img->channel_selector;
         entry["selected_group"]   = img->selected_group;
         entry["reference_group"]  = img->reference_group;
@@ -797,6 +832,31 @@ void HDRViewApp::save_session()
     view["roi"].push_back(m_roi.max);
     j["view"] = view;
 
+    return j;
+}
+
+void HDRViewApp::save_session()
+{
+    if (m_images.empty())
+        return;
+
+#if !defined(__EMSCRIPTEN__)
+    string filename = pfd::save_file("Save session...", "session.hsess", {"HDRView session", "*.hsess"}).result();
+    if (filename.empty())
+        return;
+
+    fs::path dir = fs::path(filename).parent_path();
+
+    json j = build_session_manifest(
+        [&dir](ConstImagePtr img) -> string
+        {
+            if (!img)
+                return "";
+            std::error_code ec;
+            fs::path        rel = fs::relative(img->path, dir, ec);
+            return (ec ? img->path : rel).generic_u8string();
+        });
+
     try
     {
         ofstream ofs{filename};
@@ -810,10 +870,87 @@ void HDRViewApp::save_session()
 #endif
 }
 
+void HDRViewApp::export_session_bundle()
+{
+    if (m_images.empty())
+        return;
+
+#if !defined(__EMSCRIPTEN__)
+    string filename =
+        pfd::save_file("Export session bundle...", "session.hsess.zip", {"HDRView session bundle", "*.zip"}).result();
+    if (filename.empty())
+        return;
+
+    // Flatten every image into "images/<index>_<original filename>" inside the bundle -- index-prefixed so
+    // two source images that happen to share a filename (from different original directories) can't collide,
+    // without needing real collision-detection logic.
+    vector<string> archive_paths(m_images.size());
+    for (size_t i = 0; i < m_images.size(); ++i)
+        archive_paths[i] = fmt::format("images/{:03d}_{}", i, m_images[i]->path.filename().u8string());
+
+    json j = build_session_manifest([&](ConstImagePtr img) -> string { return archive_paths[image_index(img)]; });
+
+    mz_zip_archive zip;
+    memset(&zip, 0, sizeof(zip));
+    if (!mz_zip_writer_init_file(&zip, filename.c_str(), 0))
+    {
+        spdlog::error("Failed to create '{}'.", filename);
+        return;
+    }
+
+    string manifest_text = j.dump(4);
+    bool   ok =
+        mz_zip_writer_add_mem(&zip, "session.hsess", manifest_text.data(), manifest_text.size(), MZ_DEFAULT_LEVEL);
+    for (size_t i = 0; ok && i < m_images.size(); ++i)
+    {
+        string source = m_images[i]->path.u8string();
+        string source_zip, entry_path;
+        if (split_zip_entry(source, source_zip, entry_path) && !entry_path.empty())
+        {
+            // This image's own source is an entry inside another zip (e.g. it was loaded from a plain
+            // image zip, or from a previously-loaded session bundle) rather than a standalone file on
+            // disk -- re-extract its bytes from that zip and embed them directly instead of adding a
+            // filesystem file.
+            ifstream ifs{fs::u8path(source_zip), std::ios::binary};
+            string   zip_bytes{std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>()};
+            auto     bytes = ifs ? zip_extract_entry(zip_bytes, entry_path) : std::nullopt;
+            if (!bytes)
+            {
+                spdlog::warn("Could not re-extract '{}' from '{}'; omitting it from the exported bundle.", entry_path,
+                             source_zip);
+                continue;
+            }
+            ok = mz_zip_writer_add_mem(&zip, archive_paths[i].c_str(), bytes->data(), bytes->size(), MZ_DEFAULT_LEVEL);
+            continue;
+        }
+
+        if (!fs::exists(m_images[i]->path))
+        {
+            spdlog::warn("'{}' no longer exists; omitting it from the exported bundle.", source);
+            continue;
+        }
+        ok = mz_zip_writer_add_file(&zip, archive_paths[i].c_str(), m_images[i]->path.string().c_str(), nullptr, 0,
+                                    MZ_DEFAULT_LEVEL);
+    }
+    if (ok)
+        ok = mz_zip_writer_finalize_archive(&zip);
+    mz_zip_writer_end(&zip);
+
+    if (ok)
+        spdlog::info("Exported session bundle to '{}'.", filename);
+    else
+    {
+        spdlog::error("Failed to write '{}'.", filename);
+        std::error_code ec;
+        fs::remove(filename, ec); // don't leave a corrupt/partial zip behind
+    }
+#endif
+}
+
 void HDRViewApp::load_session()
 {
 #if !defined(__EMSCRIPTEN__)
-    auto selected = pfd::open_file("Load session...", "", {"HDRView session", "*.hsess"}).result();
+    auto selected = pfd::open_file("Load session...", "", {"HDRView session", "*.hsess *.zip"}).result();
     if (selected.empty())
         return;
     load_session(selected.front());
@@ -823,6 +960,21 @@ void HDRViewApp::load_session()
 void HDRViewApp::load_session(const string &filename)
 {
 #if !defined(__EMSCRIPTEN__)
+    if (to_lower(fs::path(filename).extension().string()) == ".zip")
+    {
+        // An explicit "load a session" action: an error if the zip isn't actually a bundle, not a silent
+        // fallback to plain image loading (unlike a zip opened generically via drag-and-drop/"Open image...").
+        ifstream ifs{filename, ios::binary};
+        string   bytes;
+        if (ifs)
+            bytes.assign((istreambuf_iterator<char>(ifs)), istreambuf_iterator<char>());
+        if (bytes.empty() || !try_load_zip_as_session(bytes, filename))
+            spdlog::error("'{}' does not contain a session manifest at its root.", filename);
+        return;
+    }
+
+    spdlog::info("Loading session from '{}'...", filename);
+
     json j;
     try
     {
@@ -837,18 +989,10 @@ void HDRViewApp::load_session(const string &filename)
         return;
     }
 
-    if (j.value<string>("type", "") != "HDRView session")
-    {
-        spdlog::error("'{}' does not look like an HDRView session file.", filename);
+    if (!validate_session_manifest(j, filename))
         return;
-    }
-    // "0.2" is a pre-release/unpublished schema revision -- this becomes "1" once the format has been
-    // validated end-to-end. Warn (don't fail) on an unrecognized version so a newer/older file still loads
-    // best-effort rather than being rejected outright.
-    string version = j.value<string>("version", "");
-    if (version != "0.2")
-        spdlog::warn("Session file '{}' has version '{}', expected '0.2'; attempting to load anyway.", filename,
-                     version);
+
+    m_image_loader.add_recent_file(filename);
 
     fs::path dir = fs::path(filename).parent_path();
 
@@ -861,6 +1005,50 @@ void HDRViewApp::load_session(const string &filename)
 
     begin_session_load(j, dir);
 #endif
+}
+
+bool HDRViewApp::try_load_zip_as_session(string_view zip_bytes, const string &zip_name)
+{
+    auto candidates = zip_root_entries_with_suffix(zip_bytes, ".hsess");
+    if (candidates.empty())
+        return false;
+
+    if (candidates.size() > 1)
+    {
+        string names;
+        for (auto &c : candidates) names += (names.empty() ? "" : ", ") + c.first;
+        spdlog::warn("'{}' contains multiple session manifests at its root ({}); using '{}'.", zip_name, names,
+                     candidates.front().first);
+    }
+
+    json j;
+    try
+    {
+        j = json::parse(candidates.front().second);
+    }
+    catch (const exception &e)
+    {
+        spdlog::error("Found '{}' at the root of '{}', but failed to parse it as a session: {}.",
+                      candidates.front().first, zip_name, e.what());
+        return false;
+    }
+
+    if (!validate_session_manifest(j, zip_name))
+        return false;
+
+    spdlog::info("'{}' is a session bundle (manifest '{}'); loading it as a session, not as a folder of images.",
+                 zip_name, candidates.front().first);
+    m_image_loader.add_recent_file(zip_name);
+
+    if (!m_images.empty())
+    {
+        m_pending_zip_session_load          = PendingZipSessionLoad{string(zip_bytes), zip_name, j};
+        m_dialogs["Replace session?"]->open = true;
+        return true;
+    }
+
+    begin_bundle_session_load(zip_bytes, zip_name, j);
+    return true;
 }
 
 void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
@@ -909,6 +1097,57 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
     m_dialogs["Loading session..."]->open = true;
 }
 
+void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &zip_name, const json &j)
+{
+    close_all_images();
+
+    PendingSession pending;
+    pending.blend_mode = id_to_enum(j, "blend_mode", g_blend_mode_ids, BlendMode_Normal);
+    pending.view       = j.value("view", json::object());
+
+    for (auto &entry : j.value("images", json::array()))
+    {
+        string rel = entry.value<string>("path", "");
+        if (rel.empty())
+            continue;
+
+        // Follows the same "zip_name/entry_path" synthetic identity already used for regular zip-loaded
+        // images (image_loader.cpp's extract_and_schedule) -- this is also why "reveal in file manager" and
+        // reload_image() already handle these correctly with no session-specific work.
+        PendingSession::Entry e;
+        e.path             = fs::path(zip_name) / fs::u8path(rel);
+        e.channel_selector = entry.value<string>("channel_selector", "");
+        e.selected_group   = entry.value<int>("selected_group", 0);
+        e.reference_group  = entry.value<int>("reference_group", 0);
+
+        int idx = (int)pending.entries.size();
+        pending.entries.push_back(e);
+
+        auto bytes = zip_extract_entry(zip_bytes, rel);
+        if (!bytes)
+        {
+            // Never issued to the loader, so it stays permanently unresolved -- finish_pending_session()
+            // reports it as a load failure once everything else has settled, same as a missing file on
+            // disk in the plain (non-bundle) case.
+            spdlog::warn("Session bundle '{}' references '{}', but it isn't present in the zip.", zip_name, rel);
+            continue;
+        }
+
+        pending.unresolved[{e.path, e.channel_selector}].push_back(idx);
+
+        ImageLoadOptions opts;
+        opts.channel_selector = e.channel_selector;
+        m_image_loader.background_load(e.path.string(), *bytes, false, nullptr, opts);
+    }
+
+    int n                   = (int)pending.entries.size();
+    pending.current_index   = clamp(j.value<int>("current", -1), -1, n - 1);
+    pending.reference_index = clamp(j.value<int>("reference", -1), -1, n - 1);
+
+    m_pending_session                     = std::move(pending);
+    m_dialogs["Loading session..."]->open = true;
+}
+
 void HDRViewApp::finish_pending_session()
 {
     if (!m_pending_session)
@@ -925,12 +1164,9 @@ void HDRViewApp::finish_pending_session()
             e.loaded->reference_group = e.reference_group;
         }
 
-    // Rebuild m_images in the exact saved order. The generic per-image callback above appended arriving
-    // images in whatever order their independent background loads happened to finish in, not necessarily
-    // file order (and the same path can legitimately appear more than once), so entries -> loaded is the
-    // only reliable source of truth for both order and identity here. Entries that failed to load are
-    // simply omitted. The modal blocks all interaction until this runs, so the transient arrival-order
-    // state built up above is never visible to the user.
+    // Rebuild m_images in the saved order: images arrive in whatever order their independent background
+    // loads finish (not necessarily file order), and the same path can appear more than once, so
+    // entries -> loaded is the only reliable source of truth for both order and identity.
     m_images.clear();
     for (auto &e : entries)
         if (e.loaded)
@@ -997,13 +1233,19 @@ void HDRViewApp::draw_confirm_load_session_dialog(bool &open)
         if (ImGui::Button("Cancel"))
         {
             m_pending_session_load.reset();
+            m_pending_zip_session_load.reset();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Replace") && m_pending_session_load)
+        if (ImGui::Button("Replace") && (m_pending_session_load || m_pending_zip_session_load))
         {
-            begin_session_load(m_pending_session_load->j, m_pending_session_load->dir);
+            if (m_pending_session_load)
+                begin_session_load(m_pending_session_load->j, m_pending_session_load->dir);
+            else
+                begin_bundle_session_load(m_pending_zip_session_load->zip_bytes, m_pending_zip_session_load->zip_name,
+                                          m_pending_zip_session_load->j);
             m_pending_session_load.reset();
+            m_pending_zip_session_load.reset();
             ImGui::CloseCurrentPopup();
         }
 

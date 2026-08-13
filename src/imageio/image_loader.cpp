@@ -304,6 +304,75 @@ vector<string> BackgroundImageLoader::recent_files_short(int head_length, int ta
     return short_names;
 }
 
+vector<std::pair<string, string>> zip_root_entries_with_suffix(string_view zip_bytes, const string &suffix)
+{
+    vector<std::pair<string, string>> found;
+
+    mz_zip_archive zip;
+    memset(&zip, 0, sizeof(zip));
+    if (!mz_zip_reader_init_mem(&zip, zip_bytes.data(), zip_bytes.size(), 0))
+        return found;
+
+    string suffix_lower = to_lower(suffix);
+    int    num          = (int)mz_zip_reader_get_num_files(&zip);
+    for (int i = 0; i < num; ++i)
+    {
+        mz_zip_archive_file_stat stat;
+        if (!mz_zip_reader_file_stat(&zip, i, &stat) || stat.m_is_directory)
+            continue;
+
+        fs::path entry_path = fs::path(stat.m_filename);
+        // "root-level" means no directory component in the stored path
+        if (entry_path.has_parent_path())
+            continue;
+        string name = entry_path.filename().u8string();
+        if (name.size() < suffix_lower.size() ||
+            to_lower(name.substr(name.size() - suffix_lower.size())) != suffix_lower)
+            continue;
+
+        std::vector<char> buffer(stat.m_uncomp_size);
+        if (!mz_zip_reader_extract_to_mem(&zip, i, buffer.data(), buffer.size(), 0))
+        {
+            spdlog::warn("Failed to extract '{}' while scanning a zip for session manifests", name);
+            continue;
+        }
+        found.emplace_back(name, string(buffer.begin(), buffer.end()));
+    }
+
+    mz_zip_reader_end(&zip);
+    return found;
+}
+
+std::optional<string> zip_extract_entry(string_view zip_bytes, const string &entry_path)
+{
+    mz_zip_archive zip;
+    memset(&zip, 0, sizeof(zip));
+    if (!mz_zip_reader_init_mem(&zip, zip_bytes.data(), zip_bytes.size(), 0))
+        return std::nullopt;
+
+    int index = mz_zip_reader_locate_file(&zip, entry_path.c_str(), nullptr, 0);
+    if (index < 0)
+    {
+        mz_zip_reader_end(&zip);
+        return std::nullopt;
+    }
+
+    mz_zip_archive_file_stat stat;
+    if (!mz_zip_reader_file_stat(&zip, index, &stat))
+    {
+        mz_zip_reader_end(&zip);
+        return std::nullopt;
+    }
+
+    std::vector<char> buffer(stat.m_uncomp_size);
+    bool              ok = mz_zip_reader_extract_to_mem(&zip, index, buffer.data(), buffer.size(), 0);
+    mz_zip_reader_end(&zip);
+    if (!ok)
+        return std::nullopt;
+
+    return string(buffer.begin(), buffer.end());
+}
+
 void BackgroundImageLoader::background_load(const string filename, const string_view buffer, bool should_select,
                                             ImagePtr to_replace, const ImageLoadOptions &opts)
 {
@@ -405,6 +474,9 @@ void BackgroundImageLoader::background_load(const string filename, const string_
 
         if (to_lower(get_extension(filename)) == ".zip")
         {
+            if (zip_bundle_hook && zip_bundle_hook(buffer, filename))
+                return;
+
             remove_recent_file(filename);
             if (extract_and_schedule(buffer, filename, should_select, to_replace))
                 add_recent_file(filename);
@@ -487,6 +559,12 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                 return;
             }
             spdlog::info("Loading zip file data took {:f} seconds.", timer.elapsed() / 1000.f);
+
+            // entry_fn non-empty means "re-extract this one already-known entry" (e.g. reload_image() on an
+            // image originally loaded from inside a zip), not "a zip was just opened" -- only the latter
+            // should be considered for session-bundle detection.
+            if (entry_fn.empty() && zip_bundle_hook && zip_bundle_hook(string_view(buf.data(), buf.size()), zip_fn))
+                return;
 
             if (extract_and_schedule(string_view(buf.data(), buf.size()), zip_fn, should_select, to_replace, entry_fn))
                 add_recent_file(filename);

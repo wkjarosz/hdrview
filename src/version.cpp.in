@@ -4,6 +4,9 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "version.h"
+
+#include <charconv>
 #include <string>
 
 using std::string;
@@ -14,7 +17,7 @@ using std::string;
 int    version_major() { return @VERSION_MAJOR@; }
 int    version_minor() { return @VERSION_MINOR@; }
 int    version_patch() { return @VERSION_PATCH@; }
-int    version_combined() { return version_patch() + 100 * (version_minor() + 100 * version_major()); }
+int    version_combined() { return SemVer{version_major(), version_minor(), version_patch()}.combined(); }
 string version() { return string("@VERSION_LONG@"); }
 string git_hash() { return string("@GIT_HASH@"); }
 string git_describe() { return string("@GIT_DESCRIBE@"); }
@@ -29,3 +32,26 @@ string backend()
 #endif
 }
 // clang-format on
+
+std::optional<SemVer> parse_version(std::string_view s)
+{
+    if (!s.empty() && s.front() == 'v')
+        s.remove_prefix(1);
+
+    SemVer v;
+    int   *fields[3] = {&v.major, &v.minor, &v.patch};
+    for (int i = 0; i < 3; ++i)
+    {
+        auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), *fields[i]);
+        if (ec != std::errc{})
+            return std::nullopt;
+        s.remove_prefix(ptr - s.data());
+        if (i < 2)
+        {
+            if (s.empty() || s.front() != '.')
+                return std::nullopt;
+            s.remove_prefix(1);
+        }
+    }
+    return v;
+}

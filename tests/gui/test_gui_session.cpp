@@ -1,17 +1,16 @@
 /** \file test_gui_session.cpp
     \author Wojciech Jarosz
 
-    Regression coverage for two bugs found during manual testing of session save/load (see
+    Coverage for two properties of session save/load (see
     HDRViewApp::save_session()/load_session()/begin_session_load()/finish_pending_session() in
     src/app-file-io.cpp):
 
     1. A `.hsess` session file arriving through the same code path as an image (drag-and-drop, CLI args,
        Finder "Open With", the "Open image..." dialog - all of which funnel through
-       HDRViewApp::load_images()) used to be rejected as "not a supported image file" instead of being
-       routed to session loading.
+       HDRViewApp::load_images()) is routed to session loading rather than treated as an unsupported image.
     2. Listing the same image path more than once in one session (e.g. to compare two channel groups of it
-       side by side) used to collapse to a single pending load and made current/reference resolve to the
-       same image, since identity was tracked by path alone.
+       side by side) resolves each occurrence to its own distinct pending load, since identity isn't
+       tracked by path alone; current/reference don't collapse onto the same image.
 
     These don't drive the "Save session..."/"Load session..." menu items (which open native file dialogs
     that can't be automated here) - instead they write a hand-crafted .hsess file directly and exercise
@@ -22,6 +21,7 @@
 #include "image.h"
 #include "json.h"
 #include "test_gui_registry.h"
+#include "version.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
@@ -44,6 +44,8 @@ fs::path write_temp_session(const json &j, const char *name)
     return path;
 }
 
+string current_version_string() { return fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch()); }
+
 } // namespace
 
 void RegisterTests_Session(ImGuiTestEngine *engine)
@@ -53,7 +55,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     {
         json j;
         j["type"]    = "HDRView session";
-        j["version"] = "0.2";
+        j["version"] = current_version_string();
         json entry;
         entry["path"]         = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
         j["images"]           = json::array({entry});
@@ -88,7 +90,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
 
         json j;
         j["type"]             = "HDRView session";
-        j["version"]          = "0.2";
+        j["version"]          = current_version_string();
         j["images"]           = json::array({entry0, entry1});
         j["current"]          = 0;
         j["reference"]        = 1;
@@ -127,7 +129,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
 
         json j;
         j["type"]             = "HDRView session";
-        j["version"]          = "0.2";
+        j["version"]          = current_version_string();
         j["images"]           = json::array({good, missing});
         j["current"]          = 0;
         j["reference"]        = 1;

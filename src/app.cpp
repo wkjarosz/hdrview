@@ -70,6 +70,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     Imf::setGlobalThreadCount(threads);
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 
+    // Lets any zip opened through m_image_loader (drag-and-drop, CLI args, "Open image...") be recognized as
+    // a session bundle -- see try_load_zip_as_session().
+    m_image_loader.zip_bundle_hook = [this](string_view zip_bytes, const string &zip_name)
+    { return try_load_zip_as_session(zip_bytes, zip_name); };
+
 #if defined(__APPLE__)
     // if there is a screen with a non-retina resolution connected to an otherwise retina mac, the fonts may
     // look blurry. Here we force that macs always use the 2X retina scale factor for fonts. Produces crisp
@@ -773,6 +778,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    },
                    always_enabled,
                    true});
+        add(Action{
+            {"Load session bundle..."}, ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0, [this]() { open_session_bundle(); }});
 #endif
 
         add(Action{{"Show help"},
@@ -1174,6 +1181,17 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 #if !defined(__EMSCRIPTEN__)
         add(Action{{"Save session..."}, ICON_MY_SAVE_AS, ImGuiKey_None, 0, [this]() { save_session(); }, if_img});
         add(Action{{"Load session..."}, ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0, [this]() { load_session(); }});
+        add(Action{{"Export session bundle..."},
+                   ICON_MY_SAVE_AS,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { export_session_bundle(); },
+                   if_img,
+                   false,
+                   nullptr,
+                   "Exports the current session as a single self-contained .zip (manifest plus copies of "
+                   "every loaded image) that can be shared or opened on the web build, where a plain "
+                   ".hsess file's relative paths can't be resolved."});
 #endif
 
         add(Action{{"Normalize exposure"},
