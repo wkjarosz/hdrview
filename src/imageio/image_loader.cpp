@@ -537,8 +537,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         auto zip_path = fs::u8path(zip_fn);
 
         std::error_code zip_ec;
-        bool            zip_exists = fs::exists(zip_path, zip_ec) && !zip_ec &&
-                                     fs::is_regular_file(zip_path, zip_ec) && !zip_ec;
+        bool zip_exists = fs::exists(zip_path, zip_ec) && !zip_ec && fs::is_regular_file(zip_path, zip_ec) && !zip_ec;
         if (!zip_exists)
         {
             spdlog::error("File '{}' does not exist or is not a regular file.", zip_path.u8string());
@@ -638,45 +637,44 @@ void BackgroundImageLoader::remove_watched_directories(std::function<bool(const 
 void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback)
 {
     // move elements matching the criterion to the end of the vector, and then erase all matching elements
-    pending_images.erase(std::remove_if(pending_images.begin(), pending_images.end(),
-                                        [this, &callback](shared_ptr<PendingImages> p)
-                                        {
-                                            // if the computation isn't ready, we return false to indicate that we can't
-                                            // yet remove this entry
-                                            if (!p->computation.ready())
-                                                return false;
+    pending_images.erase(
+        std::remove_if(pending_images.begin(), pending_images.end(),
+                       [this, &callback](shared_ptr<PendingImages> p)
+                       {
+                           // if the computation isn't ready, we return false to indicate that we can't
+                           // yet remove this entry
+                           if (!p->computation.ready())
+                               return false;
 
-                                            // finalize the computation
-                                            try
-                                            {
-                                                p->computation.wait();
-                                            }
-                                            catch (const std::exception &e)
-                                            {
-                                                spdlog::error("Could not load image \"{}\": {}.", p->filename,
-                                                              e.what());
-                                                return true;
-                                            }
+                           // finalize the computation
+                           try
+                           {
+                               p->computation.wait();
+                           }
+                           catch (const std::exception &e)
+                           {
+                               spdlog::error("Could not load image \"{}\": {}.", p->filename, e.what());
+                               return true;
+                           }
 
-                                            // once the async computation is ready, we can access the resulting
-                                            // images and return true to report that we can remove this entry from
-                                            // pending_images
-                                            if (p->images.empty())
-                                                return true;
+                           // once the async computation is ready, we can access the resulting
+                           // images and return true to report that we can remove this entry from
+                           // pending_images
+                           if (p->images.empty())
+                               return true;
 
-                                            for (size_t i = 0; i < p->images.size(); ++i)
-                                                callback(p->images[i], p->to_replace,
-                                                         p->should_select &&
-                                                             i == 0); // i == 0 to always select the first of the
-                                                                      // possibly multiple 'should_select' images
+                           for (size_t i = 0; i < p->images.size(); ++i)
+                               callback(p->images[i], p->to_replace,
+                                        p->should_select && i == 0); // i == 0 to always select the first of the
+                                                                     // possibly multiple 'should_select' images
 
-                                            // if loading was successful, add the filename to the recent list
-                                            if (p->add_to_recent)
-                                                add_recent_file(p->filename);
+                           // if loading was successful, add the filename to the recent list
+                           if (p->add_to_recent)
+                               add_recent_file(p->filename);
 
-                                            return true;
-                                        }),
-                         pending_images.end());
+                           return true;
+                       }),
+        pending_images.end());
 }
 
 void BackgroundImageLoader::load_new_and_modified_files()
@@ -784,198 +782,204 @@ void BackgroundImageLoader::draw_gui()
 
 const ImageLoadOptions &load_image_options() { return s_opts; }
 
-const ImageLoadOptions &load_image_options_gui()
+void draw_load_image_options_dialog(bool &open)
 {
-    ImGui::TextWrapped("These options control how images are loaded. They will be applied to all images opened "
-                       "from now on, including those opened via the main \"Open image\" dialog.");
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    static char buf[256] = "";
-    if (s_opts.channel_selector != buf)
-        snprintf(buf, sizeof(buf), "%s", s_opts.channel_selector.c_str());
-    if (ImGui::InputTextWithHint("Channel selector", ICON_MY_FILTER " Filter 'include,-exclude'", buf,
-                                 IM_ARRAYSIZE(buf)))
-        s_opts.channel_selector = string(buf);
-    ImGui::Tooltip(
-        "If the image file contains multiple images or channels (e.g. multi-part EXR files), you can specify "
-        "which part(s) to load here. This is a comma-separated list of part,layer, or channel names to include or "
-        "(prefixed with '-') exclude.\n\n"
-        "For example, \"diffuse,specular\" will only load layers which contain either of these two words, and \"-.A\" "
-        "would exclude channels named \"A\". Leave empty to load all parts.");
-
-    ImGui::Checkbox("Override file's color profile", &s_opts.override_profile);
-    ImGui::Tooltip(
-        "By default, HDRView tries to detect the color profile of the image from metadata stored in the file. "
-        "Enabling this option instructs HDRView to ignore any color profile information in the file and instead use "
-        "the settings you select below.");
-
-    if (s_opts.override_profile)
+    if (ImGui::BeginModalDialog("Image loading options2...", open, ImGui::DialogPosition::Center))
     {
-        ImGui::Indent();
-        // ImGui::BeginDisabled(!s_opts.override_profile);
+        ImGui::PushTextWrapPos(350.0f);
+        ImGui::Text("These options control how images are loaded. They will be applied to all images opened "
+                    "from now on, including those opened via the main \"Open image\" dialog.");
 
-        if (ImGui::BeginCombo("Color gamut", color_gamut_name(s_opts.gamut_override), ImGuiComboFlags_HeightLargest))
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        static char buf[256] = "";
+        if (s_opts.channel_selector != buf)
+            snprintf(buf, sizeof(buf), "%s", s_opts.channel_selector.c_str());
+        if (ImGui::InputTextWithHint("Channel selector", ICON_MY_FILTER " Filter 'include,-exclude'", buf,
+                                     IM_ARRAYSIZE(buf)))
+            s_opts.channel_selector = string(buf);
+        ImGui::Tooltip("If the image file contains multiple images or channels (e.g. multi-part EXR files), you can "
+                       "specify which part(s) to load here. This is a comma-separated list of part,layer, or channel "
+                       "names to include or (prefixed with '-') exclude.\n\n For example, \"diffuse,specular\" will "
+                       "only load layers which contain either of these two words, and \"-.A\" would exclude channels "
+                       "named \"A\". Leave empty to load all parts.");
+
+        ImGui::Checkbox("Override file's color profile", &s_opts.override_profile);
+        ImGui::Tooltip("By default, HDRView tries to detect the color profile of the image from metadata stored in the "
+                       "file. Enabling this option instructs HDRView to ignore any color profile information in the "
+                       "file and instead use the settings you select below.");
+
+        if (s_opts.override_profile)
         {
-            auto csn = color_gamut_names();
-            for (ColorGamut n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
+            ImGui::Indent();
+            // Item width is derived from the window, not the current indent, so indenting alone would push
+            // these widgets' labels (drawn just past each widget) right by the indent as well. Narrowing them
+            // by exactly that amount keeps their labels aligned with the non-indented widgets above.
+            ImGui::PushItemWidth(ImGui::CalcItemWidth() - ImGui::GetStyle().IndentSpacing);
+            // ImGui::BeginDisabled(!s_opts.override_profile);
+
+            if (ImGui::BeginCombo("Color gamut", color_gamut_name(s_opts.gamut_override),
+                                  ImGuiComboFlags_HeightLargest))
             {
-                auto       cg          = (ColorGamut_)n;
-                const bool is_selected = (s_opts.gamut_override == n);
-                if (ImGui::Selectable(csn[n], is_selected))
-                    s_opts.gamut_override = cg;
-
-                // Set the initial focus when opening the combo (scrolling + keyboard
-                // navigation focus)
-                if (is_selected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-
-        if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf_override).c_str()))
-        {
-            for (TransferFunction::Type i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
-            {
-                auto       t           = (TransferFunction::Type_)i;
-                const bool is_selected = (s_opts.tf_override.type == t);
-                if (ImGui::Selectable(transfer_function_name({t, s_opts.tf_override.gamma}).c_str(), is_selected))
-                    s_opts.tf_override.type = t;
-                if (is_selected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-
-        ImGui::BeginDisabled(s_opts.tf_override.type != TransferFunction::Gamma);
-        if (s_opts.tf_override.type == TransferFunction::Gamma)
-            ImGui::SliderFloat("Gamma", &s_opts.tf_override.gamma, 0.1f, 5.f);
-        ImGui::EndDisabled();
-
-        // ImGui::EndDisabled();
-        ImGui::Unindent();
-    }
-
-    ImGui::Checkbox("Keep file's primaries and only linearize on load", &s_opts.keep_primaries);
-    ImGui::Tooltip(
-        "HDRView can either 1) convert all pixel values to the working linear Rec709/sRGB color space upon loading, or "
-        "2) only linearize the pixel values on load while retaining the file's original color gamut/primaries.\n\n"
-        "With option 2, HDRView will still try to deduce the file's primaries during load, but it keeps the color "
-        "values in the file's color space, only transforming colors to HDRView's working color space during display. "
-        "This can be useful if you want to inspect the (linearized) pixel values in the image's native color space. It"
-        "is exact when the file unambiguously defines the color primaries via CICP, but color shifts may occur if the "
-        "color space is specified using a general ICC profile.");
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    if (ImGui::BeginTable("FormatOrderTable", 3,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
-                              ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable |
-                              ImGuiTableFlags_SortTristate))
-    {
-        ImGui::TableSetupScrollFreeze(0, 1); // Freeze the header row
-        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 0.0f, 0);
-        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_None, 0.0f, 1); // Only this column is sortable
-        ImGui::TableSetupColumn("Image loading format order (drag to reorder):", ImGuiTableColumnFlags_NoSort, 0.0f, 2);
-        ImGui::TableHeadersRow();
-
-        // Handle sorting
-        if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
-        {
-            if (sort_specs->SpecsDirty && sort_specs->SpecsCount > 0)
-            {
-                const ImGuiTableColumnSortSpecs &spec = sort_specs->Specs[0];
-                if (spec.ColumnIndex == 1) // Only sort if the "Enabled" column is selected
+                auto csn = color_gamut_names();
+                for (ColorGamut n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
                 {
-                    std::stable_sort(g_loaders.begin(), g_loaders.end(),
-                                     [spec](const LoaderEntry &a, const LoaderEntry &b)
-                                     {
-                                         if (spec.SortDirection == ImGuiSortDirection_Ascending)
-                                             return a.enabled < b.enabled;
-                                         else if (spec.SortDirection == ImGuiSortDirection_Descending)
-                                             return a.enabled > b.enabled;
-                                         else
-                                             return false;
-                                     });
+                    auto       cg          = (ColorGamut_)n;
+                    const bool is_selected = (s_opts.gamut_override == n);
+                    if (ImGui::Selectable(csn[n], is_selected))
+                        s_opts.gamut_override = cg;
+
+                    // Set the initial focus when opening the combo (scrolling + keyboard
+                    // navigation focus)
+                    if (is_selected)
+                        ImGui::SetItemDefaultFocus();
                 }
-                sort_specs->SpecsDirty = false;
+                ImGui::EndCombo();
             }
-        }
 
-        int drag_src = -1, drag_dst = -1;
-        for (int n = 0; n < (int)g_loaders.size(); n++)
-        {
-            ImGui::TableNextRow();
-
-            // Order number column
-            ImGui::TableSetColumnIndex(0);
-            ImGui::Text("%d", n + 1);
-
-            // Enabled checkbox column
-            ImGui::TableSetColumnIndex(1);
-            ImGui::PushID(n);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
-            ImGui::Checkbox("##enabled", &g_loaders[n].enabled);
-            ImGui::PopStyleVar();
-            ImGui::PopID();
-
-            // Format name column
-            ImGui::TableSetColumnIndex(2);
-            if (!g_loaders[n].enabled)
-                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-
-            // Remove highlight for Selectable
-            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));        // No highlight when selected
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0)); // No highlight on hover
-
-            if (ImGui::Selectable(g_loaders[n].name.c_str(), false,
-                                  ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_NoAutoClosePopups))
+            if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf_override).c_str()))
             {
+                for (TransferFunction::Type i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+                {
+                    auto       t           = (TransferFunction::Type_)i;
+                    const bool is_selected = (s_opts.tf_override.type == t);
+                    if (ImGui::Selectable(transfer_function_name({t, s_opts.tf_override.gamma}).c_str(), is_selected))
+                        s_opts.tf_override.type = t;
+                    if (is_selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
             }
-            ImGui::PopStyleColor(2);
-            if (!g_loaders[n].enabled)
-                ImGui::PopStyleColor();
 
-            // allow reordering by dragging. just record the source and destination indices
-            if (ImGui::IsItemActive() && !ImGui::IsItemHovered())
-            {
-                drag_src = n;
-                drag_dst = n + (ImGui::GetMouseDragDelta(0).y < 0.f ? -1 : 1);
-            }
+            ImGui::BeginDisabled(s_opts.tf_override.type != TransferFunction::Gamma);
+            if (s_opts.tf_override.type == TransferFunction::Gamma)
+                ImGui::SliderFloat("Gamma", &s_opts.tf_override.gamma, 0.1f, 5.f);
+            ImGui::EndDisabled();
+
+            // ImGui::EndDisabled();
+            ImGui::PopItemWidth();
+            ImGui::Unindent();
         }
 
-        // now that we are outside the loop, perform the reordering if needed
-        if (drag_src >= 0 && drag_dst >= 0 && drag_dst < (int)g_loaders.size() && drag_src != drag_dst)
+        ImGui::Checkbox("Keep file's primaries and only linearize on load", &s_opts.keep_primaries);
+        ImGui::Tooltip(
+            "HDRView can either 1) convert all pixel values to the working linear Rec709/sRGB color space upon "
+            "loading, or 2) only linearize the pixel values on load while retaining the file's original color "
+            "gamut/primaries.\n\n With option 2, HDRView will still try to deduce the file's primaries during load, "
+            "but it keeps the color values in the file's color space, only transforming colors to HDRView's working "
+            "color space during display. This can be useful if you want to inspect the (linearized) pixel values in "
+            "the image's native color space. It is exact when the file unambiguously defines the color primaries via "
+            "CICP, but color shifts may occur if the color space is specified using a general ICC profile.");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::BeginTable("FormatOrderTable", 3,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
+                                  ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable |
+                                  ImGuiTableFlags_SortTristate))
         {
-            std::swap(g_loaders[drag_src], g_loaders[drag_dst]);
-            ImGui::ResetMouseDragDelta();
+            ImGui::TableSetupScrollFreeze(0, 1); // Freeze the header row
+            ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 0.0f, 0);
+            ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_None, 0.0f, 1); // Only this column is sortable
+            ImGui::TableSetupColumn("Image loading format order (drag to reorder):", ImGuiTableColumnFlags_NoSort, 0.0f,
+                                    2);
+            ImGui::TableHeadersRow();
+
+            // Handle sorting
+            if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
+            {
+                if (sort_specs->SpecsDirty && sort_specs->SpecsCount > 0)
+                {
+                    const ImGuiTableColumnSortSpecs &spec = sort_specs->Specs[0];
+                    if (spec.ColumnIndex == 1) // Only sort if the "Enabled" column is selected
+                    {
+                        std::stable_sort(g_loaders.begin(), g_loaders.end(),
+                                         [spec](const LoaderEntry &a, const LoaderEntry &b)
+                                         {
+                                             if (spec.SortDirection == ImGuiSortDirection_Ascending)
+                                                 return a.enabled < b.enabled;
+                                             else if (spec.SortDirection == ImGuiSortDirection_Descending)
+                                                 return a.enabled > b.enabled;
+                                             else
+                                                 return false;
+                                         });
+                    }
+                    sort_specs->SpecsDirty = false;
+                }
+            }
+
+            int drag_src = -1, drag_dst = -1;
+            for (int n = 0; n < (int)g_loaders.size(); n++)
+            {
+                ImGui::TableNextRow();
+
+                // Order number column
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("%d", n + 1);
+
+                // Enabled checkbox column
+                ImGui::TableSetColumnIndex(1);
+                ImGui::PushID(n);
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
+                ImGui::Checkbox("##enabled", &g_loaders[n].enabled);
+                ImGui::PopStyleVar();
+                ImGui::PopID();
+
+                // Format name column
+                ImGui::TableSetColumnIndex(2);
+                if (!g_loaders[n].enabled)
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+
+                // Remove highlight for Selectable
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));        // No highlight when selected
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0)); // No highlight on hover
+
+                if (ImGui::Selectable(g_loaders[n].name.c_str(), false,
+                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_NoAutoClosePopups))
+                {
+                }
+                ImGui::PopStyleColor(2);
+                if (!g_loaders[n].enabled)
+                    ImGui::PopStyleColor();
+
+                // allow reordering by dragging. just record the source and destination indices
+                if (ImGui::IsItemActive() && !ImGui::IsItemHovered())
+                {
+                    drag_src = n;
+                    drag_dst = n + (ImGui::GetMouseDragDelta(0).y < 0.f ? -1 : 1);
+                }
+            }
+
+            // now that we are outside the loop, perform the reordering if needed
+            if (drag_src >= 0 && drag_dst >= 0 && drag_dst < (int)g_loaders.size() && drag_src != drag_dst)
+            {
+                std::swap(g_loaders[drag_src], g_loaders[drag_dst]);
+                ImGui::ResetMouseDragDelta();
+            }
+
+            ImGui::EndTable();
         }
 
-        ImGui::EndTable();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        auto result = ImGui::DialogButtons("OK", "Reset options to defaults");
+        if (result == ImGui::DialogResult::Confirm)
+            ImGui::CloseCurrentPopup();
+        else if (result == ImGui::DialogResult::Cancel)
+        {
+            s_opts    = ImageLoadOptions{};
+            g_loaders = default_loaders();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    if (ImGui::Button("Reset options to defaults"))
-    {
-        s_opts    = ImageLoadOptions{};
-        g_loaders = default_loaders();
-    }
-
-    ImGui::SameLine();
-
-    string filename;
-
-    if (ImGui::Button("OK", HelloImGui::EmToVec2(4.f, 0.f)))
-        ImGui::CloseCurrentPopup();
-
-    return s_opts;
 }
 
 vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOptions &opts)

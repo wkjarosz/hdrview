@@ -37,7 +37,7 @@ struct ImageLoadOptions
 };
 
 const ImageLoadOptions &load_image_options();
-const ImageLoadOptions &load_image_options_gui();
+void                    draw_load_image_options_dialog(bool &open);
 
 /**
     Load the an image from the input stream.

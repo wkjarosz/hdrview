@@ -107,6 +107,48 @@ void MenuItem(const Action &a, bool inlude_name = true);
 void IconButton(const Action &a, bool include_name = false);
 void Checkbox(const Action &a);
 
+// ===== Modal dialog helpers =====
+// Shared boilerplate for HDRViewApp's "PopupDialog"-style modals: an OpenPopup-on-request shell plus a
+// Cancel/Confirm footer, used together (via ConfirmDialog) for simple yes/no prompts, or separately for
+// dialogs with custom bodies (see e.g. HDRViewApp::draw_save_as_dialog / draw_confirm_load_session_dialog).
+
+enum class DialogPosition
+{
+    TopCenter, //!< centered horizontally, near the top of the viewport
+    Center,    //!< centered both horizontally and vertically in the viewport
+    None       //!< no positioning; caller may set its own via SetNextWindowPos/SetNextWindowSize
+};
+
+// Handles the open-on-request / startup-frame-safety / centering boilerplate common to every modal dialog:
+// fires ImGui::OpenPopup(title) the frame `open` becomes true (once HelloImGui's startup frames have settled,
+// so a dialog can safely start out already-open), consumes `open` itself, applies `position`, then forwards
+// to ImGui::BeginPopupModal. Caller must call ImGui::EndPopup() only when this returns true (same contract as
+// BeginPopupModal).
+bool BeginModalDialog(const char *title, bool &open, DialogPosition position = DialogPosition::TopCenter,
+                      ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize);
+
+enum class DialogResult
+{
+    None,
+    Cancel,
+    Confirm
+};
+
+// Draws a Cancel/<confirm_label> button pair (SameLine-separated). If use_shortcuts is true, Escape or
+// Ctrl+. also trigger Cancel and Ctrl+Enter also triggers Confirm (ignored while ImGui nav is active); if
+// false, only the buttons themselves respond. Returns which one fired this frame, if any -- the caller
+// decides what each means and whether/when to call ImGui::CloseCurrentPopup() (a button's slot need not mean
+// "cancel"/"confirm" literally -- e.g. an in-place "Reset to defaults" action can use the Cancel slot and
+// simply never close the popup).
+DialogResult DialogButtons(const char *confirm_label = "OK", const char *cancel_label = "Cancel",
+                           bool use_shortcuts = true, bool confirm_enabled = true);
+
+// Draws `message` plus a Cancel/confirm_label footer (via DialogButtons, with shortcuts enabled) inside a
+// BeginModalDialog shell. Returns Confirm/Cancel the frame a button fires (also closing the popup then),
+// else None.
+DialogResult ConfirmDialog(const char *title, bool &open, const char *message, const char *confirm_label = "OK",
+                           DialogPosition position = DialogPosition::Center);
+
 inline bool BeginComboButton(const char *id, const char *preview_icon, ImGuiComboFlags flags = ImGuiComboFlags_None)
 {
     // Calculate the padding needed to center an icon in a ComboBox

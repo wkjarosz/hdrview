@@ -546,7 +546,7 @@ void HDRViewApp::setup_frame_callbacks()
     {
         process_shortcuts();
 
-        for (auto &[key, value] : m_dialogs) value->draw(value->open);
+        for (auto &d : m_dialogs) d->draw(d->open);
 
         // recompute toolbar height in case the font size was changed
         // this is require because HelloImGui decided to specify toolbar sizes in Ems, but we want the padding and size
@@ -617,44 +617,47 @@ void HDRViewApp::setup_frame_callbacks()
     m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
 }
 
+auto HDRViewApp::dialog(const string &title) -> PopupDialog &
+{
+    for (auto &d : m_dialogs)
+        if (d->title == title)
+            return *d;
+    spdlog::critical("Unknown dialog: '{}'", title);
+    exit(EXIT_FAILURE);
+}
+
 void HDRViewApp::setup_dialogs(const vector<string> &in_files)
 {
-    m_dialogs["About"] = make_unique<PopupDialog>([this](bool &open) { draw_about_dialog(open); }, in_files.empty());
-    m_dialogs["Command palette..."] = make_unique<PopupDialog>([this](bool &open) { draw_command_palette(open); });
-    m_dialogs["Save as..."]         = make_unique<PopupDialog>([this](bool &open) { draw_save_as_dialog(open); });
-    m_dialogs["Image loading options..."] =
-        make_unique<PopupDialog>([this](bool &open) { draw_open_options_dialog(open); });
-    m_dialogs["Replace session?"] =
-        make_unique<PopupDialog>([this](bool &open) { draw_confirm_load_session_dialog(open); });
-    m_dialogs["Loading session..."] =
-        make_unique<PopupDialog>([this](bool &open) { draw_loading_session_dialog(open); });
-    m_dialogs["Create dither image..."] = make_unique<PopupDialog>(
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("About", [this](bool &open) { draw_about_dialog(open); }, in_files.empty()));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Command palette...", [this](bool &open) { draw_command_palette(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Save as...", [this](bool &open) { draw_save_as_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Image loading options...", [](bool &open) { draw_load_image_options_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Replace session?", [this](bool &open) { draw_confirm_load_session_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Loading session...", [this](bool &open) { draw_loading_session_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>(
+        "Create dither image...",
         [this](bool &open)
         {
-            if (open)
-                ImGui::OpenPopup("Create dither image...");
-
             static int2  size = {256, 256};
             static bool  tent = false;
             static Box1f range{0.0f, 1.0f};
             ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
-            if (ImGui::BeginPopupModal("Create dither image...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            if (ImGui::BeginModalDialog("Create dither image...", open, ImGui::DialogPosition::Center))
             {
-                open = false;
                 ImGui::InputInt2("Size", &size.x);
                 ImGui::Checkbox("Tent dither", &tent);
                 ImGui::DragFloatRange2("Value range", &range.min.x, &range.max.x, 0.01f, -FLT_MAX, FLT_MAX, "min: %.3f",
                                        "max: %.3f");
 
-                if (ImGui::Button("Cancel", EmToVec2(6.f, 0.f)) ||
-                    (!ImGui::GetIO().NavVisible &&
-                     (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
+                auto result = ImGui::DialogButtons("Create");
+                if (result == ImGui::DialogResult::Cancel)
                     ImGui::CloseCurrentPopup();
-
-                ImGui::SameLine();
-
-                if (ImGui::Button("Create", EmToVec2(6.f, 0.f)) ||
-                    (!ImGui::GetIO().NavVisible && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter)))
+                else if (result == ImGui::DialogResult::Confirm)
                 {
                     auto img = std::make_shared<Image>(size, 1);
 
@@ -687,22 +690,19 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
                 }
                 ImGui::EndPopup();
             }
-        });
-    m_dialogs["Create gradient image..."] = make_unique<PopupDialog>(
+        }));
+    m_dialogs.push_back(make_unique<PopupDialog>(
+        "Create gradient image...",
         [this](bool &open)
         {
-            if (open)
-                ImGui::OpenPopup("Create gradient image...");
-
             static int2   res    = {256, 256};
             static float  dither = 1.f;
             static int    levels = 1;
             static float4 c00{0.f, 0.f, 1.f, 1.f}, c10{1.f, 0.f, 0.f, 1.f}, c11{1.f, 1.f, 0.f, 1.f},
                 c01{0.f, 1.f, 0.f, 1.f};
             ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
-            if (ImGui::BeginPopupModal("Create gradient image...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            if (ImGui::BeginModalDialog("Create gradient image...", open, ImGui::DialogPosition::Center))
             {
-                open = false;
                 ImGui::InputInt2("Resolution", &res.x);
                 static int channel_mode = 1; // Default to RGB
                 static int num_channels = 3;
@@ -733,15 +733,10 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
                 ImGui::Separator();
                 ImGui::Spacing();
 
-                if (ImGui::Button("Cancel", EmToVec2(6.f, 0.f)) ||
-                    (!ImGui::GetIO().NavVisible &&
-                     (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
+                auto result = ImGui::DialogButtons("Create");
+                if (result == ImGui::DialogResult::Cancel)
                     ImGui::CloseCurrentPopup();
-
-                ImGui::SameLine();
-
-                if (ImGui::Button("Create", EmToVec2(6.f, 0.f)) ||
-                    (!ImGui::GetIO().NavVisible && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter)))
+                else if (result == ImGui::DialogResult::Confirm)
                 {
                     auto img = std::make_shared<Image>(res, num_channels);
 
@@ -794,7 +789,7 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
                 }
                 ImGui::EndPopup();
             }
-        });
+        }));
 }
 
 void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtraInfo> &window_info)
@@ -813,18 +808,18 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ICON_MY_DITHER,
                    ImGuiKey_None,
                    0,
-                   [this]() { m_dialogs["Create gradient image..."]->open = true; }});
+                   [this]() { dialog("Create gradient image...").open = true; }});
         add(Action{{"Create dither image..."},
                    ICON_MY_DITHER,
                    ImGuiKey_None,
                    0,
-                   [this]() { m_dialogs["Create dither image..."]->open = true; }});
+                   [this]() { dialog("Create dither image...").open = true; }});
 
         add(Action{{"Image loading options..."},
                    ICON_MY_SETTINGS_WINDOW,
                    ImGuiKey_None,
                    0,
-                   [this]() { m_dialogs["Image loading options..."]->open = true; }});
+                   [this]() { dialog("Image loading options...").open = true; }});
 
 #if !defined(__EMSCRIPTEN__)
         add(Action{{"Open folder..."}, ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0, [this]() { open_folder(); }});
@@ -874,7 +869,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    []() {},
                    always_enabled,
                    false,
-                   &m_dialogs["About"]->open});
+                   &dialog("About").open});
         add(Action{{"Quit"}, ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
         add(Action{{"Command palette..."},
@@ -884,7 +879,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    []() {},
                    always_enabled,
                    false,
-                   &m_dialogs["Command palette..."]->open});
+                   &dialog("Command palette...").open});
 
         static bool toolbar_on =
             m_params.callbacks.edgesToolbars.find(EdgeToolbarType::Top) != m_params.callbacks.edgesToolbars.end();
@@ -1262,7 +1257,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ICON_MY_SAVE_AS,
                    ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S,
                    0,
-                   [this]() { m_dialogs["Save as..."]->open = true; },
+                   [this]() { dialog("Save as...").open = true; },
                    if_img});
 
 #if !defined(__EMSCRIPTEN__)
