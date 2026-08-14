@@ -397,7 +397,7 @@ void Image::draw_histogram()
             // the visible curve is the additive fill rasterized above. The item still has to be plotted,
             // since it owns the legend entry whose Show flag gates that fill.
             ImPlotSpec spec;
-            spec.LineColor = float4{colors[c].xyz(), 0.f};
+            spec.LineColor = float4{colors[c].xyz(), 0.1f};
             spec.FillColor = float4{0.f};
             ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
                                PixelStats::NUM_BINS, spec);
