@@ -247,6 +247,10 @@ void HDRViewApp::draw_statistics_window()
 
     current_image()->draw_histogram();
 
+    // Label column of the Statistics and Watched pixels tables below: bold, to read as a header against the
+    // values beside it (as the channel-name row drawn by ChannelValuesRowHeader() already does).
+    auto bold_font = font("sans bold");
+
     // ImGui::SeparatorText("Selection");
     if (ImGui::PE::Begin("SelectionPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
@@ -394,12 +398,17 @@ void HDRViewApp::draw_statistics_window()
     if (ImGui::PE::Begin("StatisticsPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         // Initial (still user-resizable) label-column width: fits the widest label ("Maximum"), matching
-        // the pattern draw_info() uses for its own "Property" column.
-        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed,
-                                ImGui::CalcTextSize("Maximum").x + ImGui::GetStyle().CellPadding.x);
+        // the pattern draw_info() uses for its own "Property" column. Measured in the bold label font the
+        // rows themselves use, so the labels fit without truncation.
+        ImGui::PushFont(bold_font, 0.f);
+        float label_col_w = ImGui::CalcTextSize("Maximum").x + ImGui::GetStyle().CellPadding.x;
+        ImGui::PopFont();
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, label_col_w);
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+        ImGui::PE::PushLabelFont(bold_font);
         if (auto img = current_image())
             img->draw_channel_stats();
+        ImGui::PE::PopLabelFont();
         ImGui::PopStyleVar();
 
         ImGui::PE::End();
@@ -414,8 +423,12 @@ void HDRViewApp::draw_statistics_window()
     {
         // Same initial-width pattern as the Statistics table above, sized to the widest child-row label
         // ("Composite") rather than the (typically shorter) top-level tree node labels.
-        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed,
-                                ImGui::CalcTextSize("Composite").x + ImGui::GetStyle().CellPadding.x);
+        ImGui::PushFont(bold_font, 0.f);
+        float label_col_w = ImGui::CalcTextSize("Composite").x + ImGui::GetStyle().CellPadding.x;
+        ImGui::PopFont();
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, label_col_w);
+
+        ImGui::PE::PushLabelFont(bold_font);
 
         if (auto hp = last_hovered_pixel())
         {
@@ -441,6 +454,7 @@ void HDRViewApp::draw_statistics_window()
         if (pe_delete_idx >= 0)
             m_watched_pixels.erase(m_watched_pixels.begin() + pe_delete_idx);
 
+        ImGui::PE::PopLabelFont();
         ImGui::PE::End();
     }
 }

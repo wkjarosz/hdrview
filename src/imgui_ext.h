@@ -363,6 +363,13 @@ inline void Entry(const std::string &property_name, const std::string &value)
 bool TreeNode(const char *name, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanFullWidth);
 void TreePop();
 
+//! Font used by Entry()/TreeNode() for the property-name column only -- the content column keeps the ambient
+//! font, so a whole table's labels can be distinguished (e.g. bolded) with one push around it instead of a
+//! push/pop per row. Pushed at the ambient size, so row heights are unaffected. Stacked, so nested sections
+//! restore the enclosing choice.
+void PushLabelFont(ImFont *font);
+void PopLabelFont();
+
 /**
     Displays a property with wrapped text in a property editor.
 

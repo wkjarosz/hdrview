@@ -720,13 +720,17 @@ void ChannelValuesRowHeader(const std::string *names, int num_components, float 
     ImU32       text_col  = ImGui::GetColorU32(ImGuiCol_Text);
 
     // Left-aligned (with the same FramePadding.x inset the value boxes below use for their own text) rather
-    // than centered, so a column's header lines up with its value text instead of just its box.
+    // than centered, so a column's header lines up with its value text instead of just its box. Bold, to set
+    // the header apart from the values below it -- AddText() picks up the pushed font like any ImGui-level
+    // text call, since PushFont() also updates the shared draw-list state.
+    ImGui::PushFont(hdrview()->font("sans bold"), 0.f);
     float x = row_pos.x;
     for (int c = 0; c < num_components; ++c)
     {
         draw_list->AddText(ImVec2{x + ImGui::GetStyle().FramePadding.x, row_pos.y}, text_col, names[c].c_str());
         x += widths[c] + ImGui::GetStyle().ItemInnerSpacing.x;
     }
+    ImGui::PopFont();
 
     // Reserve the row's layout space so whatever's drawn next lands below it.
     ImGui::Dummy(ImVec2{x - ImGui::GetStyle().ItemInnerSpacing.x - row_pos.x, line_h});
@@ -1191,6 +1195,24 @@ bool PE::FullWidthEntry(const char *id, const std::function<bool(float)> &conten
     return result;
 }
 
+static ImVector<ImFont *> g_pe_label_fonts;
+
+void PE::PushLabelFont(ImFont *font) { g_pe_label_fonts.push_back(font); }
+void PE::PopLabelFont()
+{
+    IM_ASSERT(!g_pe_label_fonts.empty() && "PE::PopLabelFont() without a matching PE::PushLabelFont()");
+    g_pe_label_fonts.pop_back();
+}
+
+// Pushes the current label font, if any; returns whether a matching ImGui::PopFont() is needed.
+static bool PushPELabelFont()
+{
+    ImFont *font = g_pe_label_fonts.empty() ? nullptr : g_pe_label_fonts.back();
+    if (font)
+        ImGui::PushFont(font, 0.f);
+    return font != nullptr;
+}
+
 // Generic entry, the lambda function should return true if the widget changed
 bool PE::Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip)
 {
@@ -1198,8 +1220,11 @@ bool PE::Entry(const std::string &property_name, const std::function<bool()> &co
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
+    bool pop_font = PushPELabelFont();
     ImGui::TextAligned2(0.f, -FLT_MIN, "%s", property_name.c_str());
     // ImGui::TextUnformatted(property_name.c_str());
+    if (pop_font)
+        ImGui::PopFont();
     if (!tooltip.empty())
         Tooltip(tooltip.c_str());
     ImGui::TableNextColumn();
@@ -1218,7 +1243,10 @@ bool PE::TreeNode(const char *name, ImGuiTreeNodeFlags flags)
     auto ret = ImGui::TreeNodeEx("##tree node arrow",
                                  ImGuiTreeNodeFlags_SpanFullWidth | flags); // | ImGuiTreeNodeFlags_SpanAllColumns);
     ImGui::SameLine(0.f, 0.f);
+    bool pop_font = PushPELabelFont();
     ImGui::TextAligned2(0.f, -FLT_MIN, "%s", name);
+    if (pop_font)
+        ImGui::PopFont();
 
     if (!ret)
         ImGui::PopID();

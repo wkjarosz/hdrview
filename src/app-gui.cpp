@@ -108,8 +108,12 @@ void HDRViewApp::draw_status_bar()
     {
         // drawn first so it always sits at a fixed position at the far left, regardless of whatever
         // transient content (progress bars, etc.) follows
-        auto badge       = ImGui::GlobalSpdLogWindow().badge_state();
-        bool has_badge   = badge.count > 0;
+        auto badge      = ImGui::GlobalSpdLogWindow().badge_state();
+        bool has_unseen = badge.count > 0;
+        // Only warnings and above are surfaced in the bar itself. Quieter activity still counts towards the
+        // tooltip and the click's scroll target -- it just isn't worth interrupting the bar for, and the Log
+        // window is one click away.
+        bool show_badge  = has_unseen && badge.level >= spdlog::level::warn;
         bool log_visible = m_log_window && m_log_window->isVisible;
 
         // the leading icon always identifies this as "the log" (matching the Log window's menu-bar
@@ -124,7 +128,7 @@ void HDRViewApp::draw_status_bar()
 
         string message;
         ImU32  msg_color = 0;
-        if (has_badge)
+        if (show_badge)
         {
             msg_color = ImGui::GlobalSpdLogWindow().get_level_color(badge.level);
 
@@ -145,8 +149,8 @@ void HDRViewApp::draw_status_bar()
         // laid out and drawn manually (rather than via a single-colored FlatButton label) since the
         // leading icon and the message need different colors within one clickable region
         const ImVec2 open_size = ImGui::CalcTextSize(open_icon.c_str());
-        const ImVec2 msg_size  = has_badge ? ImGui::CalcTextSize(message.c_str()) : ImVec2(0.f, 0.f);
-        const ImVec2 btn_size(open_size.x + (has_badge ? inner_spacing + msg_size.x : 0.f) +
+        const ImVec2 msg_size  = show_badge ? ImGui::CalcTextSize(message.c_str()) : ImVec2(0.f, 0.f);
+        const ImVec2 btn_size(open_size.x + (show_badge ? inner_spacing + msg_size.x : 0.f) +
                                   2 * ImGui::GetStyle().FramePadding.x,
                               ImGui::GetFrameHeight());
 
@@ -163,14 +167,14 @@ void HDRViewApp::draw_status_bar()
         const float2 left    = {btn_min.x + ImGui::GetStyle().FramePadding.x,
                                 (btn_min.y + ImGui::GetItemRectMax().y) * 0.5f};
         ImGui::AddTextAligned(ImGui::GetWindowDrawList(), left, open_color, open_icon, {0.f, 0.5f});
-        if (has_badge)
+        if (show_badge)
             ImGui::AddTextAligned(ImGui::GetWindowDrawList(), left + float2{open_size.x + inner_spacing, 0.f},
                                   msg_color, message, {0.f, 0.5f});
 
-        ImGui::Tooltip(has_badge ? fmt::format("{} unseen log message{}. Click to view in the Log window.", badge.count,
-                                               badge.count > 1 ? "s" : "")
-                                       .c_str()
-                                 : "No new log messages. Click to open the Log window.");
+        ImGui::Tooltip(has_unseen ? fmt::format("{} unseen log message{}. Click to view in the Log window.",
+                                                badge.count, badge.count > 1 ? "s" : "")
+                                        .c_str()
+                                  : "No new log messages. Click to open the Log window.");
 
         if (clicked && m_log_window)
         {
@@ -180,7 +184,7 @@ void HDRViewApp::draw_status_bar()
             {
                 m_log_window->isVisible              = true;
                 m_log_window->focusWindowAtNextFrame = true;
-                if (has_badge)
+                if (has_unseen)
                     ImGui::GlobalSpdLogWindow().scroll_to(badge.seq);
             }
         }
