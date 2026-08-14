@@ -209,7 +209,10 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                          if (auto img = current_image())
                                              return img->draw_colorspace();
                                      }};
-    colorspace_window.imGuiWindowFlags = ImGuiWindowFlags_HorizontalScrollbar;
+    // The vertical scrollbar is unconditional: the chromaticity diagram's height is locked to the available
+    // width, so a scrollbar toggling in and out would resize the diagram, which can toggle it again every frame.
+    colorspace_window.imGuiWindowFlags =
+        ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar;
 
     DockableWindow log_window{
         "Log", "LogSpace",
