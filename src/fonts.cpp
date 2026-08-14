@@ -51,27 +51,29 @@ void HDRViewApp::load_fonts()
         iconFontParams.mergeToLastFont       = true;
         iconFontParams.fontConfig.PixelSnapH = true;
 
+        // Fonts load at their nominal size; ImGui bakes them on demand at nominal * style.FontScaleDpi,
+        // which Hello ImGui sets from the display's DPI factor. The glyph metrics below are nominal for
+        // the same reason: ImGui rescales them by the baked size over the merged-into font's own size.
 #if defined(HDRVIEW_ICONSET_FA6)
         auto icon_font_size                        = 0.85f * size;
         iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
-            icon_font_size * DpiFontLoadingFactor() * 1.25f;
-        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * DpiFontLoadingFactor() * 0.05f;
+            icon_font_size * 1.25f;
+        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * 0.05f;
 #elif defined(HDRVIEW_ICONSET_LC)
         auto icon_font_size                     = size;
-        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * DpiFontLoadingFactor() * 0.03f;
-        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * DpiFontLoadingFactor() * 0.20f;
+        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * 0.03f;
+        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * 0.20f;
 #elif defined(HDRVIEW_ICONSET_MS)
         auto icon_font_size                     = 1.28571429f * size;
-        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * DpiFontLoadingFactor() * 0.01f;
-        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * DpiFontLoadingFactor() * 0.2f;
+        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * 0.01f;
+        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * 0.2f;
 #elif defined(HDRVIEW_ICONSET_MD)
         auto icon_font_size                     = size;
-        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * DpiFontLoadingFactor() * 0.01f;
-        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * DpiFontLoadingFactor() * 0.2f;
+        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * 0.01f;
+        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * 0.2f;
 #elif defined(HDRVIEW_ICONSET_MDI)
         auto icon_font_size                   = size;
-        iconFontParams.fontConfig.GlyphOffset = icon_font_size * DpiFontLoadingFactor() * float2{0.02f, 0.1f};
-
+        iconFontParams.fontConfig.GlyphOffset = icon_font_size * float2{0.02f, 0.1f};
 #endif
         return LoadFont(FONT_ICON_FILE_NAME_MY, icon_font_size, iconFontParams);
     };

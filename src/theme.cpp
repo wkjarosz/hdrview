@@ -205,8 +205,17 @@ const char *Theme::name(int t)
 
 static void apply(int theme)
 {
+    // Applying a theme replaces the whole ImGuiStyle. FontScaleDpi belongs to Hello ImGui, which sets it
+    // from the display's DPI, so carry it across.
+    float dpi_scale = ImGui::GetStyle().FontScaleDpi;
+
     if (theme >= 0)
     {
+        // A built-in theme's style function starts from the live style and sets only the fields it
+        // defines, so reset first: otherwise it inherits the previous theme's geometry, DPI scaling
+        // included.
+        ImGui::GetStyle() = ImGuiStyle();
+
         ImGuiTheme::ImGuiTheme_ t                               = (ImGuiTheme::ImGuiTheme_)theme;
         GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = t;
         ImGuiTheme::ApplyTheme(t);
@@ -217,6 +226,9 @@ static void apply(int theme)
         apply_hdrview_light_theme();
 
     // otherwise, its a custom theme, and we keep the parameters that were read from the config file
+
+    if (theme != Theme::CUSTOM_THEME)
+        ImGui::GetStyle().FontScaleDpi = dpi_scale;
 }
 
 void Theme::set(int t)
@@ -231,6 +243,16 @@ void Theme::set(int t)
     theme = t;
 
     apply(theme);
+
+    // apply() leaves non-custom themes at nominal, DPI-unscaled geometry. Hello ImGui scales geometry for
+    // DPI only on the second frame after startup (HandleDpiOnSecondFrame()), so a theme set after that
+    // needs it reapplied here.
+    if (theme != CUSTOM_THEME)
+    {
+        float dpi_scale = GetRunnerParams()->dpiAwareParams.dpiWindowSizeFactor;
+        if (dpi_scale > 1.f)
+            ImGui::GetStyle().ScaleAllSizes(dpi_scale);
+    }
 }
 
 void Theme::load(json j)
@@ -330,7 +352,11 @@ void Theme::load(json j)
             read_float1("DockingSeparatorSize", style.DockingSeparatorSize);
             read_float1("FontSizeBase", style.FontSizeBase);
             read_float1("FontScaleMain", style.FontScaleMain);
-            read_float1("FontScaleDpi", style.FontScaleDpi);
+            // FontScaleDpi belongs to Hello ImGui, which sets it from the current display, so a value
+            // saved against a different monitor must not be restored over it. Files still carrying the key
+            // have the DPI factor baked into FontSizeBase instead; divide it back out. Saving drops the key.
+            if (j_style.contains("FontScaleDpi") && style.FontScaleDpi > 0.f)
+                style.FontSizeBase /= style.FontScaleDpi;
             read_float1("CircleTessellationMaxError", style.CircleTessellationMaxError);
             if (j_style.contains("WindowMenuButtonPosition"))
                 style.WindowMenuButtonPosition = (ImGuiDir)j_style["WindowMenuButtonPosition"].get<int>();
@@ -417,7 +443,6 @@ void Theme::save(json &j, float dpiWindowSizeFactor) const
     j_style["DockingSeparatorSize"]        = style.DockingSeparatorSize;
     j_style["FontSizeBase"]                = style.FontSizeBase;
     j_style["FontScaleMain"]               = style.FontScaleMain;
-    j_style["FontScaleDpi"]                = style.FontScaleDpi;
     j_style["CircleTessellationMaxError"]  = style.CircleTessellationMaxError;
     j_style["WindowMenuButtonPosition"]    = (int)style.WindowMenuButtonPosition;
 

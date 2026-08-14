@@ -322,21 +322,10 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
                                 hdrview()->load_images(arg);
                             });
 
-        // Our patched Hello ImGui clears requestFloatBuffer when the request could not be satisfied, so by
-        // now this is the *achieved* framebuffer, not the one we asked for. It drives the HDR-related UI
-        // below; the display's actual color space is queried separately, and per frame, by
-        // update_colorpass().
+        // Hello ImGui clears requestFloatBuffer when the request could not be satisfied, so by now this is
+        // the *achieved* framebuffer, not the one we asked for. It drives the HDR-related UI below; the
+        // display's actual color space is queried separately, and per frame, by update_colorpass().
         m_float_buffer = m_params.rendererBackendOptions.requestFloatBuffer;
-#if !defined(__APPLE__) && !defined(GLFW_FLOATBUFFER)
-        // ...but only our patched version does that. Stock Hello ImGui ignores requestFloatBuffer entirely
-        // on this backend and leaves it set, so trusting the read-back above would claim a float buffer we
-        // never got (this is the Emscripten build, and any desktop build with HDRVIEW_ENABLE_HDR_DISPLAY
-        // off). Without GLFW_FLOATBUFFER no float framebuffer is obtainable here in the first place.
-        //
-        // Once the upstream PR (see the hello_imgui pin in CMakeLists.txt) is merged, delete this block and
-        // just rely on the documented contract: Hello ImGui resets the field when it cannot satisfy it.
-        m_float_buffer = false;
-#endif
         spdlog::info("Got a {} framebuffer.", m_float_buffer ? "floating-point precision" : "standard precision");
 
         // Seed the display color space before the first frame so startup logs and the UI are right from the

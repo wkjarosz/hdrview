@@ -229,27 +229,26 @@ void Image::draw_histogram()
         {
             // PlotStairs holds each x[i]'s y-value constant across [x[i], x[i+1)), so hist_xs (each bin's
             // left edge) rather than a bin center is what aligns the steps with the true bin boundaries.
-            ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
-            ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
+            ImPlotSpec spec;
+            spec.LineColor = float4{colors[c].xyz(), 1.0f};
+            spec.FillColor = float4{0.f};
             ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                               PixelStats::NUM_BINS);
-            ImPlot::PopStyleColor(2);
+                               PixelStats::NUM_BINS, spec);
         }
 
         if (contains(hovered_pixel) && hdrview()->mouse_over_viewport())
         {
             for (int c = 0; c < std::min(4, group.num_channels); ++c)
             {
-                ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
-                ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
-
-                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 2.f);
+                ImPlotSpec spec;
+                spec.LineColor  = float4{colors[c].xyz(), 1.0f};
+                spec.FillColor  = float4{0.f};
+                spec.Marker     = ImPlotMarker_Circle;
+                spec.MarkerSize = 2.f;
                 ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c],
-                                  &stats[c]->bin_y(stats[c]->value_to_bin(color32[c])), 1, 0);
+                                  &stats[c]->bin_y(stats[c]->value_to_bin(color32[c])), 1, 0, spec);
 
                 ImPlot::TagX(color32[c], float4{colors[c].xyz(), 1.0f}, "%s", "");
-
-                ImPlot::PopStyleColor(2);
             }
         }
 
@@ -969,7 +968,7 @@ void Image::draw_chromaticity_diagram(float width)
             }
 
             ImPlot::GetPlotDrawList()->AddPolyline((ImVec2 *)&poly[0], poly.Size, ImGui::GetColorU32(text_color_f),
-                                                   ImDrawFlags_Closed, std::max(1.f, 1.2f * pixels_per_texel));
+                                                   std::max(1.f, 1.2f * pixels_per_texel), ImDrawFlags_Closed);
         }
 
         //
@@ -1001,9 +1000,11 @@ void Image::draw_chromaticity_diagram(float width)
                 // Tick mark parameters
                 float2 tick[2] = {pos, pos + normal};
 
-                ImPlot::SetNextMarkerStyle(ImPlotMarker_None);
-                ImPlot::SetNextLineStyle({0.f, 0.f, 0.f, 1.f}, 0.5f * scale_factor);
-                ImPlot::PlotLine("##CCT_tick", &tick[0].x, &tick[0].y, 2, 0, 0, sizeof(float2));
+                ImPlotSpec tick_spec;
+                tick_spec.LineColor  = ImVec4{0.f, 0.f, 0.f, 1.f};
+                tick_spec.LineWeight = 0.5f * scale_factor;
+                tick_spec.Stride     = sizeof(float2);
+                ImPlot::PlotLine("##CCT_tick", &tick[0].x, &tick[0].y, 2, tick_spec);
 
                 // Add text label for major ticks (100 nm multiples)
                 if (is_major)
@@ -1046,7 +1047,7 @@ void Image::draw_chromaticity_diagram(float width)
             for (int i = 0; i < poly.Size; ++i) poly[i] = ImPlot::PlotToPixels({poly[i].x, poly[i].y});
 
             ImPlot::GetPlotDrawList()->AddPolyline((ImVec2 *)&poly[0], poly.Size, ImGui::GetColorU32(text_color_f),
-                                                   ImDrawFlags_None, scale_factor);
+                                                   scale_factor, ImDrawFlags_None);
 
             const float label_font_scale = 1.0f;
             const float scale            = 1.f;
@@ -1082,9 +1083,11 @@ void Image::draw_chromaticity_diagram(float width)
 
                 if (draw)
                 {
-                    ImPlot::SetNextMarkerStyle(ImPlotMarker_None);
-                    ImPlot::SetNextLineStyle(text_color_f, 0.5f * scale_factor);
-                    ImPlot::PlotLine("##CCT_tick", &tick[0].x, &tick[0].y, 2, 0, 0, sizeof(float2));
+                    ImPlotSpec tick_spec;
+                    tick_spec.LineColor  = text_color_f;
+                    tick_spec.LineWeight = 0.5f * scale_factor;
+                    tick_spec.Stride     = sizeof(float2);
+                    ImPlot::PlotLine("##CCT_tick", &tick[0].x, &tick[0].y, 2, tick_spec);
                     prev_tick_end = tick[1];
 
                     ImPlot::Annotation(tick[1].x, tick[1].y, ImVec4(1, 1, 1, 0.5), ImVec2(1, 1), false, "%s", label);
@@ -1110,10 +1113,11 @@ void Image::draw_chromaticity_diagram(float width)
 
             primaries[3] = double2(gamut_chr.red);
 
-            ImPlot::SetNextMarkerStyle(ImPlotMarker_None);
-            ImPlot::SetNextLineStyle(text_color_fc, scale_factor);
-            ImPlot::PlotLine("##gamut_triangle", &primaries[0].x, &primaries[0].y, 4, ImPlotLineFlags_None, 0,
-                             sizeof(double2));
+            ImPlotSpec triangle_spec;
+            triangle_spec.LineColor  = text_color_fc;
+            triangle_spec.LineWeight = scale_factor;
+            triangle_spec.Stride     = sizeof(double2);
+            ImPlot::PlotLine("##gamut_triangle", &primaries[0].x, &primaries[0].y, 4, triangle_spec);
 
             primaries[3] = double2(gamut_chr.white);
 
@@ -1127,12 +1131,6 @@ void Image::draw_chromaticity_diagram(float width)
                 ImPlot::GetPlotDrawList()->AddCircleFilled(
                     poly[i], 2.5f * scale_factor,
                     ImGui::GetColorU32(clicked[i] || hovered[i] || held[i] ? text_color_f : text_color_fc), 0);
-
-            // ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 5.f);
-            // ImPlot::SetNextLineStyle(ImVec4{0.f, 0.f, 0.f, 1.0f});
-            // ImPlot::PlotScatter("##white_point", &primaries[3].x, &primaries[3].y, 1,
-            // ImPlotScatterFlags_None,
-            //                     0, sizeof(double2));
 
             ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
             for (int i = 0; i < 4; ++i)
@@ -1175,8 +1173,6 @@ void Image::draw_chromaticity_diagram(float width)
         {
             auto &io      = ImGui::GetIO();
             auto  rgb2xyz = mul(M_RGB_to_XYZ, inverse(M_to_sRGB));
-            ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4{0.f, 0.f, 0.f, 1.0f});
-            ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
             if (hdrview()->mouse_over_viewport())
             {
                 auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
@@ -1185,10 +1181,11 @@ void Image::draw_chromaticity_diagram(float width)
                 float3 XYZ = mul(rgb2xyz, color32.xyz());
                 float2 xy  = XYZ.xy() / (XYZ.x + XYZ.y + XYZ.z);
 
-                ImPlot::PlotScatter("##HoveredPixel", &xy.x, &xy.y, 1);
+                ImPlotSpec spec;
+                spec.LineColor  = ImVec4{0.f, 0.f, 0.f, 1.0f};
+                spec.MarkerSize = 2.f;
+                ImPlot::PlotScatter("##HoveredPixel", &xy.x, &xy.y, 1, spec);
             }
-            ImPlot::PopStyleColor();
-            ImPlot::PopStyleVar();
         }
         ImPlot::PopPlotClipRect();
 
