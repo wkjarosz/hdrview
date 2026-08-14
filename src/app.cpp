@@ -416,12 +416,16 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_dither               = j.value<bool>("dither", m_dither);
                 m_file_list_mode       = j.value<int>("file list mode", m_file_list_mode);
                 m_short_names          = j.value<bool>("short names", m_short_names);
-                m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
-                m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
-                m_clip_range           = j.value<float2>("clip range", m_clip_range);
-                m_playback_speed       = j.value<float>("playback speed", m_playback_speed);
-                m_colormap_index       = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
-                m_show_developer_menu  = j.value<bool>("show developer menu", m_show_developer_menu);
+                // "draw clip warnings" is the older key, a single toggle covering both ends; fall back to it
+                // so settings written by an earlier version still take effect
+                bool both             = j.value<bool>("draw clip warnings", false);
+                m_clip_warnings       = j.value<bool2>("clip warnings", bool2{both, both});
+                m_show_FPS            = j.value<bool>("show FPS", m_show_FPS);
+                m_clip_range          = j.value<float2>("clip range", m_clip_range);
+                m_histogram_height    = j.value<float>("histogram height", m_histogram_height);
+                m_playback_speed      = j.value<float>("playback speed", m_playback_speed);
+                m_colormap_index      = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
+                m_show_developer_menu = j.value<bool>("show developer menu", m_show_developer_menu);
             }
             catch (json::exception &e)
             {
@@ -484,9 +488,10 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         j["verbosity"]               = spdlog::get_level();
         j["file list mode"]          = m_file_list_mode;
         j["short names"]             = m_short_names;
-        j["draw clip warnings"]      = m_draw_clip_warnings;
+        j["clip warnings"]           = m_clip_warnings;
         j["show FPS"]                = m_show_FPS;
         j["clip range"]              = m_clip_range;
+        j["histogram height"]        = m_histogram_height;
         j["show developer menu"]     = m_show_developer_menu;
         j["playback speed"]          = m_playback_speed;
         j["colormap index"]          = m_colormap_index;
@@ -1080,14 +1085,22 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    false,
                    &m_clamp_to_LDR});
         add(Action{{"Dither"}, ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
-        add(Action{{"Clip warnings", "Zebra stripes"},
+        add(Action{{"Shadow clipping", "Zebra stripes: shadows"},
                    ICON_MY_ZEBRA_STRIPES,
                    0,
                    0,
                    []() {},
                    always_enabled,
                    false,
-                   &m_draw_clip_warnings});
+                   &m_clip_warnings.x});
+        add(Action{{"Highlight clipping", "Zebra stripes: highlights"},
+                   ICON_MY_ZEBRA_STRIPES,
+                   0,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
+                   &m_clip_warnings.y});
 
         add(Action{{"Draw pixel grid"},
                    ICON_MY_SHOW_GRID,

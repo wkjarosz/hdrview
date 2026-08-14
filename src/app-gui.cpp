@@ -436,12 +436,29 @@ void HDRViewApp::draw_menus()
         ImGui::SameLine();
         ImGui::TextUnformatted("Clip warnings");
         ImGui::SameLine();
-        ImGui::Checkbox("##Draw clip warnings", &m_draw_clip_warnings);
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::BeginDisabled(!m_draw_clip_warnings);
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::DragFloatRange2("##Clip warnings", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.01f",
-                               "max: %.01f");
+        // Each end's checkbox is followed by its own bound, so enabling one end never hands the user the
+        // other's draggable. The two bounds still can't cross, as a DragFloatRange2 would have enforced.
+        const float inner_sp = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float drag_w   = ImMax(
+            0.5f * (ImGui::GetContentRegionAvail().x - 2.f * ImGui::GetFrameHeight() - 4.f * inner_sp), EmSize(4.f));
+
+        ImGui::Checkbox("##Shadow clipping", &m_clip_warnings.x);
+        ImGui::SetItemTooltip("Zebra-stripe values below the low clip bound.");
+        ImGui::SameLine(0.f, inner_sp);
+        ImGui::BeginDisabled(!m_clip_warnings.x);
+        ImGui::SetNextItemWidth(drag_w);
+        if (ImGui::DragFloat("##Low clip bound", &m_clip_range.x, 0.01f, 0.f, 0.f, "min: %.3f"))
+            m_clip_range.x = std::min(m_clip_range.x, m_clip_range.y);
+        ImGui::EndDisabled();
+
+        ImGui::SameLine(0.f, inner_sp);
+        ImGui::Checkbox("##Highlight clipping", &m_clip_warnings.y);
+        ImGui::SetItemTooltip("Zebra-stripe values above the high clip bound.");
+        ImGui::SameLine(0.f, inner_sp);
+        ImGui::BeginDisabled(!m_clip_warnings.y);
+        ImGui::SetNextItemWidth(drag_w);
+        if (ImGui::DragFloat("##High clip bound", &m_clip_range.y, 0.01f, 0.f, 0.f, "max: %.3f"))
+            m_clip_range.y = std::max(m_clip_range.y, m_clip_range.x);
         ImGui::EndDisabled();
         ImGui::PopStyleVar();
         ImGui::EndMenu();

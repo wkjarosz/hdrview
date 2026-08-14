@@ -225,10 +225,14 @@ public:
     bool       &draw_pixel_info_on() { return m_draw_pixel_info; }
     AxisScale  &histogram_x_scale() { return m_x_scale; }
     AxisScale  &histogram_y_scale() { return m_y_scale; }
+    float      &histogram_height() { return m_histogram_height; }
     Box2i      &roi_live() { return m_roi_live; }
     Box2i      &roi() { return m_roi; }
-    bool       &draw_clip_warnings() { return m_draw_clip_warnings; }
+    bool2      &clip_warnings() { return m_clip_warnings; }
     float2     &clip_range() { return m_clip_range; }
+
+    /// Height of the Pixel statistics histogram plot, in em, when it has never been resized
+    static constexpr float default_histogram_height = 9.f;
 
 private:
     void load_fonts();
@@ -379,11 +383,13 @@ private:
     float m_exposure = 0.f, m_exposure_live = 0.f, m_offset = 0.f, m_offset_live = 0.f, m_gamma = 1.0f,
           m_gamma_live  = 1.0f;
     AxisScale m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
+    float     m_histogram_height = default_histogram_height;
 
     bool m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
-         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
-         m_draw_clip_warnings = false, m_show_FPS = false;
-    float2 m_clip_range{0.f, 1.f}; ///< Values outside this range will have zebra stripes if m_draw_clip_warnings = true
+         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true, m_show_FPS = false;
+    /// Zebra-stripe values below clip_range.x (x: shadows) and above clip_range.y (y: highlights)
+    bool2  m_clip_warnings{false, false};
+    float2 m_clip_range{0.f, 1.f};
     Box2i  m_roi{int2{0}}, m_roi_live{int2{0}};
 
     Tonemap_                   m_tonemap     = Tonemap_Gamma;

@@ -95,7 +95,7 @@ layout(binding=1) uniform fs_params {
     int   secondary_channels_type;
     mat4  secondary_M_to_sRGB;
     float time;
-    int   draw_clip_warnings;
+    ivec2 clip_warnings;
     vec2  clip_range;
 } fsp;
 
@@ -272,11 +272,13 @@ void main()
     vec4  blended    = linearToSRGB(tonemapped);
     vec4  dithered   = dither(blended);
     dithered         = clamp(dithered, fsp.clamp_to_LDR != 0 ? 0.0 : -64.0, fsp.clamp_to_LDR != 0 ? 1.0 : 64.0);
-    if (fsp.draw_clip_warnings != 0)
-    {
+    // Stripe only where the value came from real image data: sample_channel() returns 0 outside a data
+    // window, which the shadow test would otherwise read as crushed black across the whole background.
+    bool in_data = in_img || (fsp.has_reference != 0 && in_ref);
+    if (in_data && fsp.clip_warnings.y != 0)
         dithered.rgb = mix(dithered.rgb, vec3(zebra1), clipped);
+    if (in_data && fsp.clip_warnings.x != 0)
         dithered.rgb = mix(dithered.rgb, vec3(zebra2), crushed);
-    }
     frag_color = vec4(dithered.rgb, 1.0);
 }
 @end
