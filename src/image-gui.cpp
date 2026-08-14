@@ -34,6 +34,162 @@ static std::chrono::system_clock::time_point to_system_clock(std::filesystem::fi
                                                    system_clock::now());
 }
 
+/// What place_clip_warning_toggles() hit-tested, for paint_clip_warning_toggles() to render afterwards.
+struct ClipWarningToggles
+{
+    ImRect rect[2];
+    bool   hovered[2], held[2];
+};
+
+/// Index of a group's alpha channel, or -1 if it has none. Alpha is always the group's last channel.
+static int alpha_channel_index(const ChannelGroup &group)
+{
+    switch (group.type)
+    {
+    case ChannelGroup::RGBA_Channels:
+    case ChannelGroup::XYZA_Channels:
+    case ChannelGroup::YCA_Channels:
+    case ChannelGroup::YA_Channels: return group.num_channels - 1;
+    default: return -1;
+    }
+}
+
+/*!
+    Hit-tests the two clip-warning toggles in the histogram's top corners -- shadows on the left, highlights
+    on the right -- flipping \p warnings when one is clicked, and reports where they landed so
+    paint_clip_warning_toggles() can render them later. \p ui_font_size is the app's normal text size,
+    captured before the plot's reduced font was pushed, and is used for the tooltips.
+
+    Call between BeginPlot and EndPlot, *before* the drag tools. ImPlot hit-tests the whole plot rect with
+    ImGuiButtonFlags_AllowOverlap, so later items can still claim hover from it, but DragLineX's grab rect
+    does not allow overlap and spans the full plot height -- so whichever of the two is submitted first owns
+    the corner. These claim it; a drag line under one stays grabbable over the rest of its height. Painting
+    is deliberately deferred to the opposite end of that ordering, so the buttons sit *above* the lines.
+*/
+static ClipWarningToggles place_clip_warning_toggles(bool2 &warnings, float ui_font_size)
+{
+    const ImVec2 plot_pos  = ImPlot::GetPlotPos();
+    const ImVec2 plot_size = ImPlot::GetPlotSize();
+    const float  sz        = ImTrunc(ImGui::GetFrameHeight());
+    const float  pad       = EmSize(0.25f);
+
+    static const char *ids[2]      = {"##shadow clipping", "##highlight clipping"};
+    static const char *tooltips[2] = {"Toggle zebra stripes on values below the low clip bound.",
+                                      "Toggle zebra stripes on values above the high clip bound."};
+
+    // BeginPlot() already advanced the layout cursor past the whole plot, so park it back where it was once
+    // these manually-positioned buttons are placed -- otherwise whatever is drawn after EndPlot() starts at
+    // the last button's corner instead of below the plot.
+    const ImVec2       saved_cursor = ImGui::GetCursorScreenPos();
+    ClipWarningToggles toggles;
+
+    for (int e = 0; e < 2; ++e)
+    {
+        bool &on = e == 0 ? warnings.x : warnings.y;
+        ImGui::SetCursorScreenPos(
+            ImVec2{e == 0 ? plot_pos.x + pad : plot_pos.x + plot_size.x - pad - sz, plot_pos.y + pad});
+        ImGui::InvisibleButton(ids[e], ImVec2{sz, sz});
+        if (ImGui::IsItemClicked())
+            on = !on;
+        {
+            // draw_histogram() runs under a reduced font so the plot's own tick labels stay compact; the
+            // tooltip is ordinary UI text and should read at the app's normal size, which the caller has to
+            // supply -- by now style.FontSizeBase reports the reduced size, not the app's.
+            ImGui::ScopedFont f{nullptr, ui_font_size};
+            ImGui::SetItemTooltip("%s", tooltips[e]);
+        }
+
+        toggles.rect[e]    = ImRect{ImGui::GetItemRectMin(), ImGui::GetItemRectMax()};
+        toggles.hovered[e] = ImGui::IsItemHovered();
+        toggles.held[e]    = ImGui::IsItemActive();
+    }
+    ImGui::SetCursorScreenPos(saved_cursor);
+    return toggles;
+}
+
+/*!
+    Paints the clip-warning toggles placed by place_clip_warning_toggles(): a rounded square button holding
+    an upward isosceles triangle, i.e. an inverted take on a combo box's dropdown arrow button.
+
+    The button's background says whether that end's zebra striping is enabled (dark when off, light when on,
+    lighter still under the cursor), while the triangle says what is *currently* clipping, so it stays a live
+    indicator whether or not the striping is switched on. \p clip_colors carries that per-end color, with
+    `w == 0` meaning nothing crosses that bound.
+
+    Call between BeginPlot and EndPlot, *after* the drag tools, so the buttons cover the vertical lines
+    rather than the other way around.
+*/
+static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const bool2 &warnings,
+                                       const float4 clip_colors[2])
+{
+    ImDrawList *draw_list = ImGui::GetWindowDrawList();
+
+    for (int e = 0; e < 2; ++e)
+    {
+        const bool   on       = e == 0 ? warnings.x : warnings.y;
+        const ImRect rect     = toggles.rect[e];
+        const float  sz       = rect.GetWidth();
+        const float  rounding = ImGui::GetStyle().FrameRounding;
+
+        // ImGuiCol_FrameBgHovered is a translucent wash in both themes, so layering it over the base lifts
+        // either state a further step rather than replacing it
+        draw_list->AddRectFilled(rect.Min, rect.Max, ImGui::GetColorU32(on ? ImGuiCol_FrameBgActive : ImGuiCol_FrameBg),
+                                 rounding);
+        if (toggles.hovered[e] || toggles.held[e])
+            draw_list->AddRectFilled(rect.Min, rect.Max, ImGui::GetColorU32(ImGuiCol_FrameBgHovered), rounding);
+
+        // apex above the center, base an equal distance below it, so the triangle sits centered in the square
+        const float  cx = rect.Min.x + 0.5f * sz, cy = rect.Min.y + 0.5f * sz;
+        const float  hw = ImTrunc(sz * 0.28f), hh = ImTrunc(sz * 0.20f);
+        const ImVec2 apex{cx, cy - hh}, base_l{cx - hw, cy + hh}, base_r{cx + hw, cy + hh};
+
+        const ImU32 tri = clip_colors[e].w > 0.f ? ImGui::ColorConvertFloat4ToU32(clip_colors[e])
+                                                 : ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        draw_list->AddTriangleFilled(base_r, base_l, apex, tri);
+    }
+}
+
+/*!
+    Draws the drag-to-resize grip below the histogram, modeled on the column-resize divider of a PE table:
+    ImGui's TableUpdateBorders()/TableGetColumnBorderCol() rotated 90 degrees, reusing its 4px hit band, its
+    delayed hover feedback, its Separator colors, and its double-click-to-restore gesture.
+*/
+static void draw_histogram_resize_grip()
+{
+    float &height = hdrview()->histogram_height();
+
+    const float hit_half = ImTrunc(4.f * ImGui::GetCurrentContext()->CurrentDpiScale);
+    const bool  pressed =
+        ImGui::InvisibleButton("##histogram_resize", ImVec2{-FLT_MIN, 2.f * hit_half},
+                               ImGuiButtonFlags_PressedOnClick | ImGuiButtonFlags_PressedOnDoubleClick);
+    const ImRect rect{ImGui::GetItemRectMin(), ImGui::GetItemRectMax()};
+
+    const bool hovered = ImGui::IsItemHovered();
+    bool       held    = ImGui::IsItemActive();
+    if (pressed && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+    {
+        height = HDRViewApp::default_histogram_height;
+        ImGui::ClearActiveID();
+        held = false;
+    }
+    if (held)
+        height = ImClamp(height + ImGui::GetIO().MouseDelta.y / EmSize(1.f), 6.f, 40.f);
+
+    // Hover feedback waits out a short timer, as a table's resize borders do, so brushing past the grip on the
+    // way somewhere else doesn't flash the resize cursor.
+    if ((hovered && ImGui::GetCurrentContext()->HoveredIdTimer > 0.06f) || held)
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+
+    // A short centered stub advertises the grip at rest; hovering or dragging extends it the full width, the
+    // same way NoBordersInBodyUntilResize reveals a table's column border only while it is being addressed.
+    const float y     = ImTrunc((rect.Min.y + rect.Max.y) * 0.5f);
+    const float inset = (hovered || held) ? 0.f : 0.5f * (rect.GetWidth() - EmSize(3.f));
+    ImGui::GetWindowDrawList()->AddLine(ImVec2{rect.Min.x + inset, y}, ImVec2{rect.Max.x - inset, y},
+                                        ImGui::GetColorU32(held      ? ImGuiCol_SeparatorActive
+                                                           : hovered ? ImGuiCol_SeparatorHovered
+                                                                     : ImGuiCol_TableBorderStrong));
+}
+
 void Image::draw_histogram()
 {
     static ImPlotCond plot_cond = ImPlotCond_Always;
@@ -100,11 +256,16 @@ void Image::draw_histogram()
 
     ImPlot::GetStyle().PlotMinSize = {100, 100};
 
-    ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
+    // PushFont() overwrites style.FontSizeBase with whatever size it pushes (see UpdateCurrentFontSize), so
+    // the plot's reduced font below makes the style's value unusable as "the app's normal size" from here on.
+    // Capture it first, for the widgets inside the plot that want ordinary UI text.
+    const float ui_font_size = ImGui::GetStyle().FontSizeBase;
+
+    ImGui::PushFont(hdrview()->font("sans regular"), ui_font_size * 10.f / 14.f);
     ImPlot::PushStyleVar(ImPlotStyleVar_AnnotationPadding, ImVec2{2.0, 0.0});
     // float4 plot_bg{0.35f, 0.35f, 0.35f, 1.f};
     // ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
-    if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, 150.f)))
+    if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, EmSize(hdrview()->histogram_height()))))
     {
         ImPlot::GetInputMap().ZoomRate = 0.03f;
         ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_NoTickLabels);
@@ -118,6 +279,9 @@ void Image::draw_histogram()
         ImPlot::SetupAxesLimits(x_limits[0], x_limits[1], y_limits[0], y_limits[1], plot_cond);
 
         ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
+        // ImPlot only assigns these when they differ from what was passed last frame, so this positions the
+        // legend once and still lets the user relocate it via the legend's own right-click menu.
+        ImPlot::SetupLegend(ImPlotLocation_North, ImPlotLegendFlags_Horizontal);
         switch (hdrview()->histogram_x_scale())
         {
         case AxisScale_Linear: ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear); break;
@@ -229,11 +393,22 @@ void Image::draw_histogram()
         {
             // PlotStairs holds each x[i]'s y-value constant across [x[i], x[i+1)), so hist_xs (each bin's
             // left edge) rather than a bin center is what aligns the steps with the true bin boundaries.
+            // The stairs themselves are invisible (ImPlot skips line rendering entirely at zero alpha) --
+            // the visible curve is the additive fill rasterized above. The item still has to be plotted,
+            // since it owns the legend entry whose Show flag gates that fill.
             ImPlotSpec spec;
-            spec.LineColor = float4{colors[c].xyz(), 1.0f};
+            spec.LineColor = float4{colors[c].xyz(), 0.1f};
             spec.FillColor = float4{0.f};
             ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
                                PixelStats::NUM_BINS, spec);
+
+            // Re-register the same label opaque to recolor its legend swatch: PlotDummy adopts the first
+            // non-auto color in its spec as the legend icon color, and the legend isn't rendered until
+            // EndPlot, so this second, geometry-free item wins. Without it the swatch would inherit the
+            // transparent line color above and the legend would be invisible.
+            ImPlotSpec legend_spec;
+            legend_spec.LineColor = float4{colors[c].xyz(), 1.f};
+            ImPlot::PlotDummy(names[c].c_str(), legend_spec);
         }
 
         if (contains(hovered_pixel) && hdrview()->mouse_over_viewport())
@@ -251,6 +426,9 @@ void Image::draw_histogram()
                 ImPlot::TagX(color32[c], float4{colors[c].xyz(), 1.0f}, "%s", "");
             }
         }
+
+        auto &warnings = hdrview()->clip_warnings();
+        auto  toggles  = place_clip_warning_toggles(warnings, ui_font_size);
 
         Box1d xrange{-hdrview()->offset_live() * pow(2.f, -hdrview()->exposure_live()),
                      (1.0 - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live())};
@@ -291,20 +469,49 @@ void Image::draw_histogram()
         ImPlot::TagX(xrange.min.x, ImVec4(0, 0, 0, 1), "0");
         ImPlot::TagX(xrange.max.x, ImVec4(1, 1, 1, 1), "1");
 
-        if (hdrview()->draw_clip_warnings())
+        // The shader compares clip_range against display values (d = p * gain + offset), so map it into plot
+        // space -- which holds stored values p -- the same way the black/white points above do.
+        auto gain       = pow(2.f, hdrview()->exposure_live());
+        auto offset     = hdrview()->offset_live();
+        auto clip_range = double2((hdrview()->clip_range() - offset) / gain);
+        if (warnings.x)
         {
-            auto gain       = pow(2.f, hdrview()->exposure_live());
-            auto clip_range = double2(hdrview()->clip_range() / gain);
             if (ImPlot::DragLineX(2, &clip_range.x, ImVec4(0, 0, 0, 1), 1, ImPlotDragToolFlags_Delayed))
-                hdrview()->clip_range().x = (float)clip_range.x * gain;
-            if (ImPlot::DragLineX(3, &clip_range.y, ImVec4(1, 1, 1, 1), 1, ImPlotDragToolFlags_Delayed))
-                hdrview()->clip_range().y = (float)clip_range.y * gain;
+                hdrview()->clip_range().x = (float)clip_range.x * gain + offset;
             ImPlot::TagX(clip_range.x, ImVec4(0, 0, 0, 1), "clip");
+        }
+        if (warnings.y)
+        {
+            if (ImPlot::DragLineX(3, &clip_range.y, ImVec4(1, 1, 1, 1), 1, ImPlotDragToolFlags_Delayed))
+                hdrview()->clip_range().y = (float)clip_range.y * gain + offset;
             ImPlot::TagX(clip_range.y, ImVec4(1, 1, 1, 1), "clip");
         }
 
+        // Color each triangle by which channels cross its bound, summing their canonical colors additively
+        // the way the histogram fill does -- red plus blue reads magenta, all three read white. Alpha is
+        // left out, matching the shader, which only tests rgb. Both bounds are already in plot space, so
+        // they compare directly against the stored per-channel extremes.
+        float4 clip_colors[2] = {float4{0.f}, float4{0.f}};
+        for (int e = 0; e < 2; ++e)
+        {
+            float3 col{0.f};
+            for (int c = 0; c < std::min(4, group.num_channels); ++c)
+            {
+                if (c == alpha_channel_index(group) || !stats[c])
+                    continue;
+                if (e == 0 ? stats[c]->summary.minimum < clip_range.x : stats[c]->summary.maximum > clip_range.y)
+                    col += colors[c].xyz();
+            }
+            if (col != float3{0.f})
+                clip_colors[e] = float4{la::min(col, float3{1.f}), 1.f};
+        }
+
+        paint_clip_warning_toggles(toggles, warnings, clip_colors);
+
         ImPlot::EndPlot();
     }
+
+    draw_histogram_resize_grip();
     // ImGui::PopStyleColor();
     ImPlot::PopStyleVar();
     ImGui::PopFont();
@@ -1204,12 +1411,9 @@ void Image::draw_colorspace()
     auto bold_font = hdrview()->font("sans bold");
 
     static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
-    // Scroll this child rather than the table: a table's own ScrollY has no way to reserve scrollbar space
-    // unconditionally, so toggling it in and out changes the available width, which changes the height of the
-    // width-locked chromaticity diagram below, which can toggle the scrollbar again every frame.
-    ImGui::BeginChild("##ColorspaceScroll", ImVec2(0, 0), ImGuiChildFlags_None,
-                      ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    // The enclosing window scrolls this panel (see the ImGuiWindowFlags_AlwaysVerticalScrollbar the Colorspace
+    // DockableWindow is created with), so the table itself neither scrolls nor sits in a scrolling child: the
+    // window's padding is what separates it from the scrollbar.
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
         // The diagram gets its own full-width row when the value column alone is too narrow to render it legibly.
@@ -1429,8 +1633,6 @@ void Image::draw_colorspace()
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         ImGui::PE::End();
     }
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
 }
 
 void Image::draw_channel_stats()

@@ -796,7 +796,7 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
     view["auto_fit_selection"] = m_auto_fit_selection;
     view["draw_grid"]          = m_draw_grid;
     view["draw_pixel_info"]    = m_draw_pixel_info;
-    view["draw_clip_warnings"] = m_draw_clip_warnings;
+    view["clip_warnings"]      = m_clip_warnings;
     view["clip_range"]         = m_clip_range;
     view["roi"]                = json::array();
     view["roi"].push_back(m_roi.min);
@@ -1176,8 +1176,11 @@ void HDRViewApp::finish_pending_session()
     m_auto_fit_selection = view.value<bool>("auto_fit_selection", m_auto_fit_selection);
     m_draw_grid          = view.value<bool>("draw_grid", m_draw_grid);
     m_draw_pixel_info    = view.value<bool>("draw_pixel_info", m_draw_pixel_info);
-    m_draw_clip_warnings = view.value<bool>("draw_clip_warnings", m_draw_clip_warnings);
-    m_clip_range         = view.value<float2>("clip_range", m_clip_range);
+    // "draw_clip_warnings" is the older key, a single toggle covering both ends; fall back to it so sessions
+    // written by an earlier version still restore their clip warnings
+    bool both       = view.value<bool>("draw_clip_warnings", false);
+    m_clip_warnings = view.value<bool2>("clip_warnings", bool2{both, both});
+    m_clip_range    = view.value<float2>("clip_range", m_clip_range);
     if (view.contains("roi") && view["roi"].is_array() && view["roi"].size() == 2)
     {
         view["roi"][0].get_to(m_roi.min);

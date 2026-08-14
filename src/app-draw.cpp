@@ -273,7 +273,7 @@ void HDRViewApp::draw_image() const
         // fs_params/vs_params are GLSL uniform blocks (see image-shader.sglsl); booleans are `int` there
         // since GLSL uniform blocks cannot contain `bool` members.
         m_shader->set_uniform_block("fsp", {{"time", (float)ImGui::GetTime()},
-                                            {"draw_clip_warnings", (int)m_draw_clip_warnings},
+                                            {"clip_warnings", int2{m_clip_warnings}},
                                             {"clip_range", m_clip_range},
                                             {"randomness", randomness},
                                             {"gain", powf(2.0f, m_exposure_live)},

@@ -98,11 +98,13 @@ void HDRViewApp::draw_status_bar()
     // this callback runs; override the starting cursor position with a smaller explicit top margin
     // instead of accepting that default. Tune this constant directly to adjust the bar's top margin.
     const float top_margin = HelloImGui::EmSize(0.25f);
-    ImGui::SetCursorPosY(top_margin);
 
     const float item_spacing = ImGui::GetStyle().ItemSpacing.x;
     float       badge_x, reserved_w; // set inside the badge block below, used by the zones that follow it
 
+    auto fpy = ImGui::GetStyle().FramePadding.y;
+    ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 1.f);
+    ImGui::SetCursorPosY(top_margin + fpy);
     {
         // drawn first so it always sits at a fixed position at the far left, regardless of whatever
         // transient content (progress bars, etc.) follows
@@ -190,6 +192,7 @@ void HDRViewApp::draw_status_bar()
     // whatever follows never has to move depending on it
     const float progress_w = EmSize(15.f);
     const float progress_x = badge_x + reserved_w + item_spacing;
+
     if (auto num = m_image_loader.num_pending_images())
     {
         ImGui::SetCursorPosX(progress_x);
@@ -236,7 +239,10 @@ void HDRViewApp::draw_status_bar()
 
         const float drag_size = EmSize(5.f);
         const float inner_sp  = ImGui::GetStyle().ItemInnerSpacing.x;
-        const float hover_w   = 2.f * drag_size + 2.f * inner_sp + EmSize(0.5f) + inner_sp + EmSize(25.f);
+        // width the color row is given below; also part of the fit test, so the zone is only drawn when the
+        // whole thing -- coordinates, "=", color row -- clears the right-aligned zoom text
+        const float color_w = EmSize(18.f);
+        const float hover_w = 2.f * drag_size + 2.f * inner_sp + EmSize(0.5f) + inner_sp + color_w;
 
         // last_hovered_pixel() freezes at the last real hover instead of clearing when the mouse leaves
         // the viewport, so the color widget below stays reachable (e.g. to click its dropdown) instead
@@ -258,35 +264,25 @@ void HDRViewApp::draw_status_bar()
                 }
 
                 ImGui::SameLine(hover_x);
-                auto fpy = ImGui::GetStyle().FramePadding.y;
-                ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-                auto y = ImGui::GetCursorPosY();
                 // ReadOnly alone doesn't block DragInt's drag gesture, only keyboard entry -- these
                 // coordinates track the live hover position and were never meant to be draggable at all.
                 ImGui::BeginDisabled();
-                ImGui::SetCursorPosY(y + fpy);
                 ImGui::SetNextItemWidth(drag_size);
                 ImGui::DragInt("##pixel x coordinates", &hovered_pixel.x, 1.f, 0, 0, "X: %d",
                                ImGuiInputTextFlags_ReadOnly);
                 ImGui::SameLine(0.f, inner_sp);
-                ImGui::SetCursorPosY(y + fpy);
                 ImGui::SetNextItemWidth(drag_size);
                 ImGui::DragInt("##pixel y coordinates", &hovered_pixel.y, 1.f, 0, 0, "Y: %d",
                                ImGuiInputTextFlags_ReadOnly);
                 ImGui::EndDisabled();
-                ImGui::PopStyleVar();
 
                 float x = hover_x + 2.f * drag_size + 2.f * inner_sp;
                 sized_text(x, 0.5f, "=", 0.5f);
 
                 ImGui::PushID("Current");
                 ImGui::SameLine(x);
-                // pixel_color_widget no longer bakes in compact styling itself, so opt in here to match the
-                // X/Y drag boxes above, and nudge down by the same backed-up fpy to stay on "="'s baseline
-                ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-                ImGui::SetCursorPosY(y + fpy);
-                pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, EmSize(25.f));
-                ImGui::PopStyleVar();
+                pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, color_w);
+
                 ImGui::PopID();
             }
         }
@@ -303,6 +299,7 @@ void HDRViewApp::draw_status_bar()
         ImGui::AlignTextToFramePadding();
         ImGui::Text("FPS: %.1f%s", FrameRate(), m_params.fpsIdling.isIdling ? " (Idling)" : "");
     }
+    ImGui::PopStyleVar();
 }
 
 void HDRViewApp::draw_menus()
@@ -439,12 +436,29 @@ void HDRViewApp::draw_menus()
         ImGui::SameLine();
         ImGui::TextUnformatted("Clip warnings");
         ImGui::SameLine();
-        ImGui::Checkbox("##Draw clip warnings", &m_draw_clip_warnings);
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::BeginDisabled(!m_draw_clip_warnings);
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::DragFloatRange2("##Clip warnings", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.01f",
-                               "max: %.01f");
+        // Each end's checkbox is followed by its own bound, so enabling one end never hands the user the
+        // other's draggable. The two bounds still can't cross, as a DragFloatRange2 would have enforced.
+        const float inner_sp = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float drag_w   = ImMax(
+            0.5f * (ImGui::GetContentRegionAvail().x - 2.f * ImGui::GetFrameHeight() - 4.f * inner_sp), EmSize(4.f));
+
+        ImGui::Checkbox("##Shadow clipping", &m_clip_warnings.x);
+        ImGui::SetItemTooltip("Zebra-stripe values below the low clip bound.");
+        ImGui::SameLine(0.f, inner_sp);
+        ImGui::BeginDisabled(!m_clip_warnings.x);
+        ImGui::SetNextItemWidth(drag_w);
+        if (ImGui::DragFloat("##Low clip bound", &m_clip_range.x, 0.01f, 0.f, 0.f, "min: %.3f"))
+            m_clip_range.x = std::min(m_clip_range.x, m_clip_range.y);
+        ImGui::EndDisabled();
+
+        ImGui::SameLine(0.f, inner_sp);
+        ImGui::Checkbox("##Highlight clipping", &m_clip_warnings.y);
+        ImGui::SetItemTooltip("Zebra-stripe values above the high clip bound.");
+        ImGui::SameLine(0.f, inner_sp);
+        ImGui::BeginDisabled(!m_clip_warnings.y);
+        ImGui::SetNextItemWidth(drag_w);
+        if (ImGui::DragFloat("##High clip bound", &m_clip_range.y, 0.01f, 0.f, 0.f, "max: %.3f"))
+            m_clip_range.y = std::max(m_clip_range.y, m_clip_range.x);
         ImGui::EndDisabled();
         ImGui::PopStyleVar();
         ImGui::EndMenu();
