@@ -8,6 +8,7 @@
 
 #include "image.h"
 #include "imageio/exr.h"
+#include "imageio/image_loader.h"
 #include "imageio/exr_save_options.h"
 
 #include <fstream>
@@ -111,6 +112,31 @@ TEST_CASE("EXR load respects channel_selector, including selectors matching noth
         CHECK(reloaded[0]->channels[0].name == "R");
     }
 
+    SUBCASE("excluding an unqualified channel name")
+    {
+        // "-.A" is a substring search for ".A", which a bare "A" doesn't contain -- load_image()
+        // normalizes each channel to a dot-prefixed name so the documented example works either way.
+        const int2 size{2, 2};
+        auto       rgba = std::make_shared<Image>(size, 4);
+        for (auto &c : rgba->channels)
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x) c(x, y) = 0.5f;
+        rgba->finalize();
+
+        std::ostringstream out(std::ios::binary);
+        auto               save_opts = exr_default_save_options(*rgba);
+        save_exr_image(*rgba, out, "test.exr", &save_opts);
+
+        std::istringstream in(out.str(), std::ios::binary);
+        ImageLoadOptions   load_opts;
+        load_opts.channel_selector = "-.A";
+        auto reloaded              = load_image(in, "test.exr", load_opts);
+
+        REQUIRE(reloaded.size() == 1);
+        REQUIRE(reloaded[0]->channels.size() == 3);
+        for (const auto &c : reloaded[0]->channels) CHECK(c.name != "A");
+    }
+
     SUBCASE("selector matching no channels yields no images")
     {
         std::ostringstream out(std::ios::binary);
@@ -123,6 +149,32 @@ TEST_CASE("EXR load respects channel_selector, including selectors matching noth
         auto reloaded              = load_exr_image(in, "test.exr", load_opts);
 
         CHECK(reloaded.empty());
+    }
+}
+
+TEST_CASE("EXR load reports the format's premultiplied alpha convention")
+{
+    // EXR color channels are premultiplied by convention, so an alpha-bearing part must not be
+    // reported as straight -- Image::finalize() would premultiply values that already are.
+    SUBCASE("a part with an alpha channel")
+    {
+        const int2 size{2, 2};
+        auto       img = std::make_shared<Image>(size, 4);
+        for (auto &c : img->channels)
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x) c(x, y) = 0.5f;
+        img->finalize();
+
+        auto reloaded = save_and_reload(*img);
+        REQUIRE(reloaded.size() == 1);
+        CHECK(reloaded[0]->alpha_type == AlphaType_PremultipliedLinear);
+    }
+
+    SUBCASE("a part without an alpha channel")
+    {
+        auto reloaded = save_and_reload(*make_test_image(int2{2, 2}));
+        REQUIRE(reloaded.size() == 1);
+        CHECK(reloaded[0]->alpha_type == AlphaType_None);
     }
 }
 

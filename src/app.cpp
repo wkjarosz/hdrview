@@ -581,11 +581,12 @@ void HDRViewApp::setup_frame_callbacks()
 
                 if (m_pending_session)
                 {
-                    // Resolve this arrival to the earliest not-yet-filled entry sharing its (path,
-                    // channel_selector) -- see PendingSession's comment in app.h for why matching by that
-                    // key (rather than by request order) is correct even when the same file is loaded more
-                    // than once in one session.
-                    auto key = std::make_pair(new_image->path, new_image->channel_selector);
+                    // Resolve this arrival to the earliest not-yet-filled entry sharing its load options
+                    // -- see PendingSession's comment in app.h for why matching by that key (rather than
+                    // by request order) is correct even when the same file is loaded more than once in
+                    // one session.
+                    auto key = PendingSession::Key{new_image->path, new_image->channel_selector,
+                                                   new_image->alpha_is_transparency};
                     if (auto it = m_pending_session->unresolved.find(key); it != m_pending_session->unresolved.end())
                     {
                         if (!it->second.empty())

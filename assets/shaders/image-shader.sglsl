@@ -39,6 +39,9 @@
 
 #define YCA_Channels    4
 #define YC_Channels     5
+
+// Keep in sync with k_small_alpha in image.h: guards the divide when undoing a premultiply.
+#define k_small_alpha (1.0 / 67108864.0)
 @end
 
 @vs vs
@@ -97,6 +100,7 @@ layout(binding=1) uniform fs_params {
     float time;
     ivec2 clip_warnings;
     vec2  clip_range;
+    int   primary_straight_alpha;
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -170,15 +174,23 @@ float rand_tent(vec2 xy)
     return (r < 0.0) ? 0.5 * rn : 0.5 * rp;
 }
 
+// Isolating color channels shows them opaque, so undo the premultiply Image::finalize() applied on
+// load -- but only for files that stored straight alpha, since a premultiplied file's alpha=0 pixels
+// carry real color that dividing would blow up.
+vec3 isolate(vec3 color, float alpha)
+{
+    return fsp.primary_straight_alpha != 0 ? color / max(k_small_alpha, alpha) : color;
+}
+
 vec4 choose_channel(vec4 rgba)
 {
     switch (fsp.channel)
     {
     case Channels_RGBA: return rgba;
-    case Channels_RGB: return vec4(rgba.rgb, 1.0);
-    case Channels_Red: return vec4(rgba.rrr, 1.0);
-    case Channels_Green: return vec4(rgba.ggg, 1.0);
-    case Channels_Blue: return vec4(rgba.bbb, 1.0);
+    case Channels_RGB: return vec4(isolate(rgba.rgb, rgba.a), 1.0);
+    case Channels_Red: return vec4(isolate(rgba.rrr, rgba.a), 1.0);
+    case Channels_Green: return vec4(isolate(rgba.ggg, rgba.a), 1.0);
+    case Channels_Blue: return vec4(isolate(rgba.bbb, rgba.a), 1.0);
     case Channels_Alpha: return vec4(rgba.aaa, 1.0);
     case Channels_Y: return vec4(vec3(dot(rgba.rgb, fsp.primary_yw)), rgba.a);
     }

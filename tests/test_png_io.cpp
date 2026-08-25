@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 
 #include "image.h"
+#include "imageio/image_loader.h"
 #include "imageio/png.h"
 
 #include <fstream>
@@ -122,6 +123,60 @@ TEST_CASE("is_png_image correctly identifies real PNG bytes and rejects garbage"
 
     std::istringstream empty("", std::ios::binary);
     CHECK_FALSE(is_png_image(empty));
+}
+
+TEST_CASE("channel_selector drops channels in formats that don't filter during decode")
+{
+    // Only EXR and JPEG XL apply the selector while decoding; for every other format load_image()
+    // applies it centrally afterwards, so "-.A" has to work here just as it does for EXR.
+    const int2 size{2, 2};
+    auto       img = std::make_shared<Image>(size, 4);
+    for (auto &c : img->channels)
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x) c(x, y) = 0.5f;
+    img->finalize();
+
+    std::ostringstream out(std::ios::binary);
+    save_png_image(*img, out, "rgba.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                   /*sixteen_bit*/ false, TransferFunction::Linear);
+
+    SUBCASE("excluding the alpha channel by name")
+    {
+        ImageLoadOptions opts;
+        opts.channel_selector = "-.A";
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_image(in, "rgba.png", opts);
+
+        REQUIRE(reloaded.size() == 1);
+        REQUIRE(reloaded[0]->channels.size() == 3);
+        for (const auto &c : reloaded[0]->channels) CHECK(c.name != "A");
+        // save_png_image unpremultiplied on the way out, so the file holds 1.0 here; with the alpha
+        // channel filtered away there is nothing left to premultiply it back down by.
+        CHECK(reloaded[0]->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.005));
+    }
+
+    SUBCASE("selecting a single channel by name")
+    {
+        ImageLoadOptions opts;
+        opts.channel_selector = "G";
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_image(in, "rgba.png", opts);
+
+        REQUIRE(reloaded.size() == 1);
+        REQUIRE(reloaded[0]->channels.size() == 1);
+        CHECK(reloaded[0]->channels[0].name == "G");
+    }
+
+    SUBCASE("a selector matching nothing yields no images")
+    {
+        ImageLoadOptions opts;
+        opts.channel_selector = "NoSuchChannel";
+
+        std::istringstream in(out.str(), std::ios::binary);
+        CHECK(load_image(in, "rgba.png", opts).empty());
+    }
 }
 
 // The following tests need libpng's own vendored test image sets (PngSuite and testpngs), which HDRView's own

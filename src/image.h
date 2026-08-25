@@ -248,6 +248,13 @@ public:
     float4x4 colors() const;
 };
 
+//! True for the group types whose last channel is an alpha channel.
+inline bool group_has_alpha(ChannelGroup::Type type)
+{
+    return type == ChannelGroup::RGBA_Channels || type == ChannelGroup::YA_Channels ||
+           type == ChannelGroup::YCA_Channels || type == ChannelGroup::XYZA_Channels;
+}
+
 struct Layer
 {
 public:
@@ -297,6 +304,9 @@ public:
     ColorGamut_                   color_space       = ColorGamut_Unspecified;
     WhitePoint_                   white_point       = WhitePoint_Unspecified;
     AlphaType            alpha_type = AlphaType_None; //!< Does the image have straight (unpremultiplied) alpha?
+    bool alpha_is_transparency = true; //!< When false, an 'A' channel is grouped on its own as ordinary data
+                                       //!< instead of joining an RGBA/YA/YCA/XYZA group, so nothing is
+                                       //!< premultiplied by it. Read by finalize(), so set it before calling.
     json                 metadata   = json::object();
     Exif                 exif;     //!< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any

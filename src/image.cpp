@@ -837,6 +837,10 @@ void Image::build_layers_and_groups()
                 break;
             if (layer_channels.size() < group_channel_names.size())
                 continue;
+            // Skipping the alpha-bearing patterns lets the alpha-free one match instead, leaving 'A' to
+            // fall through to the single-channel groups created below.
+            if (!alpha_is_transparency && group_has_alpha(group_type))
+                continue;
             auto found = find_group_channels(layer_channels, layer.name, group_channel_names);
 
             // if we found all the group channels, then create them and remove from list of all channels
@@ -1148,10 +1152,7 @@ void Image::finalize()
     {
         for (auto &g : groups)
         {
-            bool has_alpha =
-                g.num_channels > 1 && (g.type == ChannelGroup::RGBA_Channels || g.type == ChannelGroup::YA_Channels ||
-                                       g.type == ChannelGroup::YCA_Channels || g.type == ChannelGroup::XYZA_Channels);
-            if (!has_alpha)
+            if (g.num_channels <= 1 || !group_has_alpha(g.type))
                 continue;
 
             for (int c = 0; c < g.num_channels - 1; ++c)

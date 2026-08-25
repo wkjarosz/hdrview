@@ -144,41 +144,57 @@ struct TiffInput
     static void unmap(thandle_t, tdata_t, toff_t) {}
 };
 
-// Custom TIFF I/O for writing to ostream
+// Custom TIFF I/O for writing to an ostream. libtiff seeks past the end of the output while laying out a
+// file and expects the gap to be filled, which ostringstream (HDRView's only save path) refuses to do, so
+// assemble the file in a memory buffer that grows on such seeks and hand it over once libtiff closes it.
 struct TiffOutput
 {
     ostream     *os;
     vector<char> buffer;
+    size_t       pos = 0;
 
     explicit TiffOutput(ostream *os) : os(os) {}
 
-    static tsize_t read(thandle_t /*handle*/, tdata_t /*data*/, tsize_t /*size*/) { return 0; }
+    static tsize_t read(thandle_t handle, tdata_t data, tsize_t size)
+    {
+        auto tiff      = reinterpret_cast<TiffOutput *>(handle);
+        auto available = tiff->pos < tiff->buffer.size() ? tsize_t(tiff->buffer.size() - tiff->pos) : tsize_t(0);
+        size           = std::min(size, available);
+        if (size <= 0)
+            return 0;
+        memcpy(data, tiff->buffer.data() + tiff->pos, size_t(size));
+        tiff->pos += size_t(size);
+        return size;
+    }
 
     static tsize_t write(thandle_t handle, tdata_t data, tsize_t size)
     {
         auto tiff = reinterpret_cast<TiffOutput *>(handle);
-        tiff->os->write(reinterpret_cast<const char *>(data), size);
-        return tiff->os->good() ? size : 0;
+        if (tiff->pos + size_t(size) > tiff->buffer.size())
+            tiff->buffer.resize(tiff->pos + size_t(size), 0);
+        memcpy(tiff->buffer.data() + tiff->pos, data, size_t(size));
+        tiff->pos += size_t(size);
+        return size;
     }
 
     static toff_t seek(thandle_t handle, toff_t offset, int whence)
     {
         auto tiff = reinterpret_cast<TiffOutput *>(handle);
-        tiff->os->seekp(offset, whence == SEEK_SET ? ios::beg : (whence == SEEK_CUR ? ios::cur : ios::end));
-        return tiff->os->tellp();
+        auto base = whence == SEEK_SET  ? toff_t(0)
+                    : whence == SEEK_CUR ? toff_t(tiff->pos)
+                                         : toff_t(tiff->buffer.size());
+        tiff->pos = size_t(base + offset);
+        return toff_t(tiff->pos);
     }
 
-    static int close(thandle_t) { return 0; }
-
-    static toff_t get_size(thandle_t handle)
+    static int close(thandle_t handle)
     {
         auto tiff = reinterpret_cast<TiffOutput *>(handle);
-        auto pos  = tiff->os->tellp();
-        tiff->os->seekp(0, ios::end);
-        auto size = tiff->os->tellp();
-        tiff->os->seekp(pos);
-        return size;
+        tiff->os->write(tiff->buffer.data(), std::streamsize(tiff->buffer.size()));
+        return tiff->os->good() ? 0 : -1;
     }
+
+    static toff_t get_size(thandle_t handle) { return toff_t(reinterpret_cast<TiffOutput *>(handle)->buffer.size()); }
 };
 
 // Helper to check TIFF signature
@@ -330,7 +346,9 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         uint16_t  num_extra_samples   = 0;
         uint16_t *extra_samples_types = nullptr;
 
-        if (TIFFGetField(tif, TIFFTAG_EXTRASAMPLES, &num_extra_samples, &extra_samples_types))
+        const bool has_extra_samples =
+            TIFFGetField(tif, TIFFTAG_EXTRASAMPLES, &num_extra_samples, &extra_samples_types) != 0;
+        if (has_extra_samples)
         {
             // Look for alpha channel in extra samples
             for (uint16_t i = 0; i < num_extra_samples; ++i)
@@ -352,8 +370,9 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             }
         }
 
-        // If no EXTRASAMPLES tag, infer alpha presence from channel count
-        if (!has_alpha && num_channels == 4)
+        // Only guess when the file said nothing. An EXTRASAMPLES tag naming something other than alpha
+        // (EXTRASAMPLE_UNSPECIFIED) is the file stating the extra sample is arbitrary data, so honor it.
+        if (!has_alpha && !has_extra_samples && num_channels == 4)
         {
             has_alpha = true;
             // Default to straight alpha if not specified
@@ -365,6 +384,10 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         // Track what type of alpha the file contained (not what we convert it to internally)
         image->alpha_type =
             has_alpha ? (is_premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight) : AlphaType_None;
+        // An EXTRASAMPLES tag that names something other than alpha states the extra sample is arbitrary
+        // data, so keep it out of an alpha-bearing group entirely.
+        if (has_extra_samples && !has_alpha)
+            image->alpha_is_transparency = false;
         image->metadata["loader"] = "libtiff";
         image->partname           = partname;
 
@@ -905,27 +928,8 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 
         image->metadata["color profile"] = profile_desc;
 
-        // Convert straight alpha to premultiplied if needed (HDRView uses premultiplied alpha pipeline)
-        // Note: image->alpha_type tracks what the file contained, not our internal representation
-        if (has_alpha && !is_premultiplied && num_channels == 4)
-        {
-            spdlog::debug("Converting straight alpha to premultiplied");
-            int block_size = std::max(1, 1024 * 1024);
-            parallel_for(blocked_range<int>(0, (int)(width * height), block_size),
-                         [&float_pixels](int begin, int end, int, int)
-                         {
-                             for (int i = begin; i < end; ++i)
-                             {
-                                 size_t pixel_idx = i * 4;
-                                 float  alpha     = float_pixels[pixel_idx + 3];
-
-                                 // Premultiply RGB channels by alpha
-                                 float_pixels[pixel_idx + 0] *= alpha;
-                                 float_pixels[pixel_idx + 1] *= alpha;
-                                 float_pixels[pixel_idx + 2] *= alpha;
-                             }
-                         });
-        }
+        // Straight alpha is premultiplied by Image::finalize(), which is the single place that does so
+        // for every format; image->alpha_type above tells it what the file contained.
 
         // Copy processed pixels to image channels
         for (int c = 0; c < num_channels; ++c)
@@ -1277,6 +1281,14 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     TIFFSetField(tif, TIFFTAG_IMAGELENGTH, h);
     TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, n);
     TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+
+    // The pixels below are written premultiplied (as_interleaved is asked not to undo it), which is
+    // what EXTRASAMPLE_ASSOCALPHA describes.
+    if (n == 2 || n == 4)
+    {
+        uint16_t extra_samples[] = {EXTRASAMPLE_ASSOCALPHA};
+        TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, uint16_t(1), extra_samples);
+    }
 
     // Set photometric interpretation
     if (n == 1)

@@ -286,9 +286,10 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
         int              frame_idx = 0;
         const ScopeGuard iter_guard{[&iter] { WebPDemuxReleaseIterator(&iter); }};
         do {
-            // Check channel filter
+            // Select whole frames by name here; load_image() applies the selector per channel afterwards,
+            // so a still image has no name to match against and must not be filtered out on that basis.
             string partname = has_animation ? fmt::format("frame {:04}", frame_idx) : "";
-            if (!filter.PassFilter(partname.c_str()))
+            if (has_animation && !filter.PassFilter(partname.c_str()))
             {
                 spdlog::debug("Skipping frame {} (filtered out)", frame_idx);
                 frame_idx++;
