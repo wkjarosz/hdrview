@@ -176,6 +176,9 @@ until another channel selector is encountered.)")
             spdlog::debug("Launching HDRView with no command line arguments.");
 
         spdlog::info("Welcome to HDRView!");
+        // Log the same string --version reports: bug reports usually arrive as a copy of this console
+        // output, and the version is the first thing needed to interpret them.
+        spdlog::info("{}", version_string);
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
 
 #ifdef ASSETS_LOCATION

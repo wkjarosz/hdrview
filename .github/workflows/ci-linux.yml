@@ -130,6 +130,14 @@ jobs:
         if: matrix.config.preset == 'linux-appimage'
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{ matrix.buildtype }} -G External
+
+      # Unpacks the AppImage and starts it, which is the only way to exercise the *installed* asset layout:
+      # the "Checking that HDRView runs" step above runs the build-tree binary, which finds its assets
+      # through HDRVIEW_BUILD_TREE_ASSETS_DIR and never loads a shader. xvfb-run because the runners have no
+      # display server, same as the GUI tests above.
+      - name: Checking that the AppImage runs
+        if: matrix.config.preset == 'linux-appimage'
+        run: xvfb-run -a ${{github.workspace}}/.github/scripts/check-appimage.sh ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage
         
       - name: Archive package
         if: matrix.config.preset == 'linux-appimage'
