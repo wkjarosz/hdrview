@@ -267,20 +267,6 @@ void HDRViewApp::draw_image() const
     set_color(Target_Primary, current_image());
     set_color(Target_Secondary, reference_image());
 
-    // isolate() can only undo the premultiply when both images agree, so a mismatched pair silently keeps
-    // showing premultiplied values in the single-channel views. Say so once per pairing.
-    if (auto img = current_image(), ref = reference_image(); img && ref)
-        if (img->alpha_type != AlphaType_None && ref->alpha_type != AlphaType_None &&
-            (img->alpha_type == AlphaType_Straight) != (ref->alpha_type == AlphaType_Straight) &&
-            m_warned_alpha_mismatch != int2{img->id, ref->id})
-        {
-            m_warned_alpha_mismatch = int2{img->id, ref->id};
-            spdlog::warn("'{}' has {} alpha but reference '{}' has {}; isolated channel views will show "
-                         "premultiplied values while these two are compared.",
-                         img->short_name, alpha_type_name(img->alpha_type), ref->short_name,
-                         alpha_type_name(ref->alpha_type));
-        }
-
     if (current_image() && !current_image()->data_window.is_empty())
     {
         static mt19937 rng(53);

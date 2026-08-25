@@ -175,28 +175,28 @@ float rand_tent(vec2 xy)
     return (r < 0.0) ? 0.5 * rn : 0.5 * rp;
 }
 
-// Isolating color channels shows them opaque, so undo the premultiply Image::finalize() applied on
-// load. Only safe when every image feeding the value stored straight alpha: a premultiplied file's
-// alpha=0 pixels carry real color, and dividing those by a near-zero alpha blows up. With a reference
-// blended in, the alpha here is the composite's, so the reference has to qualify too.
-vec4 isolate(vec4 rgba)
+// Isolating color channels shows them opaque, so undo the premultiply Image::finalize() applied on load.
+// Only for files that stored straight alpha: a premultiplied file's alpha=0 pixels carry real color, which
+// has no straight form and would blow up on the divide.
+vec4 isolate(vec4 rgba, int straight_alpha)
 {
-    bool straight = fsp.primary_straight_alpha != 0 &&
-                    (fsp.has_reference == 0 || fsp.secondary_straight_alpha != 0);
-    return vec4(straight ? rgba.rgb / max(k_small_alpha, rgba.a) : rgba.rgb, 1.0);
+    return vec4(straight_alpha != 0 ? rgba.rgb / max(k_small_alpha, rgba.a) : rgba.rgb, 1.0);
 }
 
-vec4 choose_channel(vec4 rgba)
+// Applied to each image separately, before any blending: an isolated channel is then undone with its own
+// file's alpha rather than a composite's, and comparison blend modes operate on the values being compared
+// instead of on premultiplied ones.
+vec4 choose_channel(vec4 rgba, int straight_alpha, vec3 yw)
 {
     switch (fsp.channel)
     {
     case Channels_RGBA: return rgba;
-    case Channels_RGB: return isolate(rgba);
-    case Channels_Red: return isolate(rgba.rrra);
-    case Channels_Green: return isolate(rgba.ggga);
-    case Channels_Blue: return isolate(rgba.bbba);
+    case Channels_RGB: return isolate(rgba, straight_alpha);
+    case Channels_Red: return isolate(rgba.rrra, straight_alpha);
+    case Channels_Green: return isolate(rgba.ggga, straight_alpha);
+    case Channels_Blue: return isolate(rgba.bbba, straight_alpha);
     case Channels_Alpha: return vec4(rgba.aaa, 1.0);
-    case Channels_Y: return vec4(vec3(dot(rgba.rgb, fsp.primary_yw)), rgba.a);
+    case Channels_Y: return vec4(vec3(dot(rgba.rgb, yw)), rgba.a);
     }
     return rgba;
 }
@@ -265,6 +265,7 @@ void main()
         value.xyz = YC_to_RGB(value.xyz, fsp.primary_yw);
 
     value = fsp.primary_M_to_sRGB * value;
+    value = choose_channel(value, fsp.primary_straight_alpha, fsp.primary_yw);
 
     if (fsp.has_reference != 0)
     {
@@ -277,11 +278,12 @@ void main()
             reference_val.xyz = YC_to_RGB(reference_val.xyz, fsp.secondary_yw);
 
         reference_val = fsp.secondary_M_to_sRGB * reference_val;
+        reference_val = choose_channel(reference_val, fsp.secondary_straight_alpha, fsp.secondary_yw);
 
         value = blend(value, reference_val);
     }
 
-    vec4  foreground = choose_channel(value) * vec4(vec3(fsp.gain), 1.0) + vec4(vec3(fsp.offset * value.a), 0.0);
+    vec4  foreground = value * vec4(vec3(fsp.gain), 1.0) + vec4(vec3(fsp.offset * value.a), 0.0);
     vec4  tonemapped = tonemap(foreground) + background * (1.0 - foreground.a);
     bvec3 clipped    = greaterThan(foreground.rgb, fsp.clip_range.yyy);
     bvec3 crushed    = lessThan(foreground.rgb, fsp.clip_range.xxx);

@@ -388,9 +388,6 @@ private:
 
     bool m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true, m_show_FPS = false;
-    /// Ids of the current/reference pair whose clashing alpha conventions have already been logged, so
-    /// draw_image() reports each pairing once rather than every frame.
-    mutable int2 m_warned_alpha_mismatch{-1, -1};
     /// Zebra-stripe values below clip_range.x (x: shadows) and above clip_range.y (y: highlights)
     bool2  m_clip_warnings{false, false};
     float2 m_clip_range{0.f, 1.f};

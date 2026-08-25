@@ -69,6 +69,30 @@ TEST_CASE("alpha_is_transparency=false splits alpha off and skips the premultipl
     CHECK(img->channels[3](0, 0) == doctest::Approx(0.5f));
 }
 
+TEST_CASE("raw_pixel reports the file's values for a straight-alpha image")
+{
+    SUBCASE("straight alpha is divided back out")
+    {
+        auto img = make_rgba_image(AlphaType_Straight, /*alpha_is_transparency*/ true);
+
+        // Stored premultiplied as 0.5; the file held 1.0.
+        CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
+        auto p = img->raw_pixel(int2{0, 0});
+        CHECK(p.x == doctest::Approx(1.f));
+        CHECK(p.w == doctest::Approx(0.5f)); // the alpha channel itself is untouched
+    }
+
+    SUBCASE("a premultiplied file is reported as stored")
+    {
+        // Its alpha=0 pixels have no straight form, so its values are what the author intended.
+        auto img = make_rgba_image(AlphaType_PremultipliedLinear, /*alpha_is_transparency*/ true);
+
+        auto p = img->raw_pixel(int2{0, 0});
+        CHECK(p.x == doctest::Approx(1.f));
+        CHECK(p.w == doctest::Approx(0.5f));
+    }
+}
+
 TEST_CASE("alpha_is_transparency=false leaves premultiplied files untouched too")
 {
     auto img = make_rgba_image(AlphaType_PremultipliedLinear, /*alpha_is_transparency*/ false);

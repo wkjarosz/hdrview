@@ -55,7 +55,7 @@ TEST_CASE("PixelStats::calculate uses the selected sub-region, not the image ori
 
     PixelStats        stats;
     std::atomic<bool> canceled{false};
-    stats.calculate(img, int2{0, 0}, nullptr, int2{0, 0}, settings, canceled);
+    stats.calculate(img, nullptr, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
 
     CHECK(stats.summary.valid_pixels == 4);
     CHECK(stats.summary.minimum == doctest::Approx(33.f));
@@ -76,7 +76,7 @@ TEST_CASE("PixelStats::calculate covers the whole image when no selection is act
 
     PixelStats        stats;
     std::atomic<bool> canceled{false};
-    stats.calculate(img, int2{0, 0}, nullptr, int2{0, 0}, settings, canceled);
+    stats.calculate(img, nullptr, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
 
     // values range from 0 (0,0) to 33 (3,3) across all 16 pixels
     CHECK(stats.summary.valid_pixels == 16);
@@ -97,7 +97,7 @@ TEST_CASE("PixelStats::calculate offsets a non-zero image data origin correctly"
 
     PixelStats        stats;
     std::atomic<bool> canceled{false};
-    stats.calculate(img, int2{5, 5}, nullptr, int2{0, 0}, settings, canceled);
+    stats.calculate(img, nullptr, int2{5, 5}, nullptr, nullptr, int2{0, 0}, settings, canceled);
 
     CHECK(stats.summary.valid_pixels == 4);
     CHECK(stats.summary.minimum == doctest::Approx(33.f));
@@ -119,7 +119,7 @@ TEST_CASE("PixelStats::calculate counts NaN/Inf pixels separately and excludes t
 
     PixelStats        stats;
     std::atomic<bool> canceled{false};
-    stats.calculate(img, int2{0, 0}, nullptr, int2{0, 0}, settings, canceled);
+    stats.calculate(img, nullptr, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
 
     CHECK(stats.summary.nan_pixels == 1);
     CHECK(stats.summary.inf_pixels == 2);
@@ -143,7 +143,7 @@ TEST_CASE("PixelStats::calculate applies each blend mode against a reference ima
 
         PixelStats        stats;
         std::atomic<bool> canceled{false};
-        stats.calculate(img, int2{0, 0}, &ref, int2{0, 0}, settings, canceled);
+        stats.calculate(img, nullptr, int2{0, 0}, &ref, nullptr, int2{0, 0}, settings, canceled);
 
         CHECK(stats.summary.valid_pixels == 4);
         // constant inputs -> every blended pixel is identical -> zero spread
@@ -172,7 +172,7 @@ TEST_CASE("PixelStats::calculate tolerates a reference channel smaller than the 
 
     PixelStats        stats;
     std::atomic<bool> canceled{false};
-    stats.calculate(img, int2{0, 0}, &ref, int2{0, 0}, settings, canceled);
+    stats.calculate(img, nullptr, int2{0, 0}, &ref, nullptr, int2{0, 0}, settings, canceled);
 
     CHECK(stats.summary.valid_pixels == 100);
     CHECK(stats.summary.minimum == doctest::Approx(0.f));
@@ -187,10 +187,41 @@ TEST_CASE("PixelStats::calculate resets to the default, uncomputed state when ca
 
     PixelStats        stats;
     std::atomic<bool> canceled{true}; // already canceled before calculate() even starts
-    stats.calculate(img, int2{0, 0}, nullptr, int2{0, 0}, settings, canceled);
+    stats.calculate(img, nullptr, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
 
     CHECK_FALSE(stats.computed);
     CHECK(stats.summary.valid_pixels == 0);
     CHECK(stats.summary.minimum == std::numeric_limits<float>::infinity());
     CHECK(stats.summary.maximum == -std::numeric_limits<float>::infinity());
+}
+
+TEST_CASE("PixelStats::calculate reports straight values when given an alpha channel")
+{
+    // A channel premultiplied on load (see Image::finalize()) has to be divided back out so the histogram
+    // and summary describe what the file holds rather than HDRView's internal representation.
+    Channel img("img", int2{2, 2});
+    Channel alpha("alpha", int2{2, 2});
+    alpha.apply([](float, int, int) { return 0.5f; });
+    img.apply([](float, int, int) { return 0.5f; }); // 1.0 straight, premultiplied by an alpha of 0.5
+
+    PixelStats::Settings settings;
+    std::atomic<bool>    canceled{false};
+
+    SUBCASE("with the alpha channel")
+    {
+        PixelStats stats;
+        stats.calculate(img, &alpha, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
+
+        CHECK(stats.summary.valid_pixels == 4);
+        CHECK(stats.summary.average == doctest::Approx(1.0));
+        CHECK(stats.summary.maximum == doctest::Approx(1.f));
+    }
+
+    SUBCASE("without it, the stored value is reported as-is")
+    {
+        PixelStats stats;
+        stats.calculate(img, nullptr, int2{0, 0}, nullptr, nullptr, int2{0, 0}, settings, canceled);
+
+        CHECK(stats.summary.average == doctest::Approx(0.5));
+    }
 }
