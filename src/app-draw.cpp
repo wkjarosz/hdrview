@@ -250,17 +250,18 @@ void HDRViewApp::draw_image() const
             yw             = img->luminance_weights;
         }
 
-        // Only the primary drives choose_channel(); with a reference loaded, blend() runs first and in
-        // premultiplied space, which is what its "over" expects.
+        // Both targets report their alpha convention: choose_channel() runs after blend(), so undoing the
+        // premultiply on an isolated channel is only safe when the reference qualifies as well.
         if (target == Target_Primary)
             m_shader->set_uniform_block("fsp", {{"primary_M_to_sRGB", M_to_sRGB},
                                                 {"primary_channels_type", channels_type},
                                                 {"primary_yw", yw},
                                                 {"primary_straight_alpha", straight_alpha}});
         else
-            m_shader->set_uniform_block(
-                "fsp",
-                {{"secondary_M_to_sRGB", M_to_sRGB}, {"secondary_channels_type", channels_type}, {"secondary_yw", yw}});
+            m_shader->set_uniform_block("fsp", {{"secondary_M_to_sRGB", M_to_sRGB},
+                                                {"secondary_channels_type", channels_type},
+                                                {"secondary_yw", yw},
+                                                {"secondary_straight_alpha", straight_alpha}});
     };
 
     set_color(Target_Primary, current_image());

@@ -101,6 +101,7 @@ layout(binding=1) uniform fs_params {
     ivec2 clip_warnings;
     vec2  clip_range;
     int   primary_straight_alpha;
+    int   secondary_straight_alpha;
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -175,11 +176,14 @@ float rand_tent(vec2 xy)
 }
 
 // Isolating color channels shows them opaque, so undo the premultiply Image::finalize() applied on
-// load -- but only for files that stored straight alpha, since a premultiplied file's alpha=0 pixels
-// carry real color that dividing would blow up.
+// load. Only safe when every image feeding the value stored straight alpha: a premultiplied file's
+// alpha=0 pixels carry real color, and dividing those by a near-zero alpha blows up. With a reference
+// blended in, the alpha here is the composite's, so the reference has to qualify too.
 vec3 isolate(vec3 color, float alpha)
 {
-    return fsp.primary_straight_alpha != 0 ? color / max(k_small_alpha, alpha) : color;
+    bool straight = fsp.primary_straight_alpha != 0 &&
+                    (fsp.has_reference == 0 || fsp.secondary_straight_alpha != 0);
+    return straight ? color / max(k_small_alpha, alpha) : color;
 }
 
 vec4 choose_channel(vec4 rgba)
