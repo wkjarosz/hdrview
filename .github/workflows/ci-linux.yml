@@ -38,7 +38,19 @@ jobs:
           # Runs the same two suites under AddressSanitizer and UndefinedBehaviorSanitizer. A plain build
           # can't see a use-after-free or a non-finite-to-integer cast: the tests pass and the damage is
           # silent, which is how both shipped. Release keeps the instrumented build tolerably fast.
-          - { name: "Ubuntu 24.04 CPM sanitizers", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true, sanitizers: true }
+          - { name: "Ubuntu 24.04 CPM sanitizers", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true, sanitizer: "asan" }
+
+          # ThreadSanitizer, which neither of the above can stand in for: a data race that doesn't corrupt
+          # anything on a given run is invisible to ASan/UBSan, and HDRView loads images off-thread, computes
+          # stats through a thread pool, and uploads textures in tiles across frames.
+          #
+          # Runs on linux-local rather than linux-cpm for two reasons. GCC's TSan runtime segfaults on the
+          # linux-cpm build before reaching main, recursing inside its own __cxa_atexit interceptor. And with
+          # system libraries left uninstrumented, reports come from HDRView's own code instead of arriving as
+          # a suppressions file to maintain. The cost is that races at the boundary with an uninstrumented
+          # library are invisible, and that the system libpng is too old for cICP (the tests that need it
+          # compile out; see tests/test_png_io.cpp).
+          - { name: "Ubuntu 24.04 Local TSan", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64", run_tests: true, sanitizer: "tsan" }
           - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64"}
 
           - { name: "Ubuntu 24.04 CPM arm", os: ubuntu-24.04-arm, preset: "linux-cpm", arch: "arm" }
@@ -55,7 +67,9 @@ jobs:
         exclude:
           # Only the Release build of the sanitizer entry is instrumented; its Debug build would just
           # repeat the plain CPM Debug job.
-          - config: { name: "Ubuntu 24.04 CPM sanitizers", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true, sanitizers: true }
+          - config: { name: "Ubuntu 24.04 CPM sanitizers", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true, sanitizer: "asan" }
+            buildtype: Debug
+          - config: { name: "Ubuntu 24.04 Local TSan", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64", run_tests: true, sanitizer: "tsan" }
             buildtype: Debug
 
     steps:
@@ -91,7 +105,7 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.config.sanitizers && 'asan' || 'plain' }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
+          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.config.sanitizer || 'plain' }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
 
@@ -99,16 +113,52 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.23
         with:
-          key: ${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.config.sanitizers && 'asan' || 'plain' }}-${{ matrix.buildtype }}
+          key: ${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.config.sanitizer || 'plain' }}-${{ matrix.buildtype }}
+
+      # Only the image corpora, not the libraries: linux-local links the system OpenEXR and libpng, but the
+      # tests that sweep real-world files still need the data those projects vendor. Sparse and shallow, so
+      # this pulls a few MB rather than ~100. Pinned to the same revisions CPM uses for the -cpm presets, so
+      # both jobs test against identical inputs.
+      - name: Fetch OpenEXR test images
+        if: matrix.config.sanitizer == 'tsan'
+        uses: actions/checkout@v5
+        with:
+          repository: AcademySoftwareFoundation/openexr
+          ref: v3.4.13
+          path: test-corpora/openexr
+          sparse-checkout: src/test/bin/test_images
+          fetch-depth: 1
+
+      - name: Fetch libpng test images
+        if: matrix.config.sanitizer == 'tsan'
+        uses: actions/checkout@v5
+        with:
+          repository: pnggroup/libpng
+          ref: 62954d33fe729566e9d17b78ddaf013896a1f3c5
+          path: test-corpora/libpng
+          sparse-checkout: contrib
+          fetch-depth: 1
 
       - name: Configure CMake
         run: |
           EXTRA_FLAGS=""
           if [ "${{ matrix.config.run_tests }}" = "true" ] && [ "${{ matrix.buildtype }}" = "Release" ]; then
             EXTRA_FLAGS="-DHDRVIEW_BUILD_TESTS=ON -DHDRVIEW_BUILD_GUI_TESTS=ON"
-            if [ "${{ matrix.config.sanitizers }}" = "true" ]; then
-              EXTRA_FLAGS="$EXTRA_FLAGS -DUSE_SANITIZER=Address;Undefined"
-            fi
+            case "${{ matrix.config.sanitizer }}" in
+              asan)
+                EXTRA_FLAGS="$EXTRA_FLAGS -DUSE_SANITIZER=Address;Undefined"
+                ;;
+              tsan)
+                # No GUI tests: they drive a real GL context whose driver threads are not instrumented, which
+                # is where TSan noise would come from rather than from HDRView. -g because a race report
+                # without a usable stack cannot be triaged.
+                # linux-local gets its libraries from the system, so the vendored image corpora have to be
+                # supplied explicitly (checked out above) rather than coming from CPM-fetched sources.
+                EXTRA_FLAGS="$EXTRA_FLAGS -DHDRVIEW_BUILD_GUI_TESTS=OFF -DUSE_SANITIZER=Thread -DCMAKE_CXX_FLAGS=-g"
+                EXTRA_FLAGS="$EXTRA_FLAGS -DHDRVIEW_TEST_OPENEXR_DIR=${{github.workspace}}/test-corpora/openexr/src/test/bin/test_images"
+                EXTRA_FLAGS="$EXTRA_FLAGS -DHDRVIEW_TEST_PNG_CONTRIB_DIR=${{github.workspace}}/test-corpora/libpng/contrib"
+                ;;
+            esac
           fi
           cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache $EXTRA_FLAGS
 
@@ -126,10 +176,16 @@ jobs:
       # filtered by the suppressions file instead.
       # detect_leaks=0: the app leaks by design at exit (static GPU and font state outliving main).
       - name: Sanitizer environment
-        if: matrix.config.sanitizers == true
+        if: matrix.config.sanitizer
         run: |
-          echo "ASAN_OPTIONS=detect_leaks=0:abort_on_error=1" >> $GITHUB_ENV
-          echo "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=${{github.workspace}}/.github/ubsan-suppressions.txt" >> $GITHUB_ENV
+          if [ "${{ matrix.config.sanitizer }}" = "tsan" ]; then
+            # halt_on_error for the same reason as above: a race reported into a passing job is a race nobody
+            # reads. second_deadlock_stack makes lock-order-inversion reports show both acquisition sites.
+            echo "TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1" >> $GITHUB_ENV
+          else
+            echo "ASAN_OPTIONS=detect_leaks=0:abort_on_error=1" >> $GITHUB_ENV
+            echo "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=${{github.workspace}}/.github/ubsan-suppressions.txt" >> $GITHUB_ENV
+          fi
 
       - name: Run unit tests
         if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
@@ -145,7 +201,7 @@ jobs:
       # logic-level doctest suite's. Linux-only for now: macOS/Windows headless GUI automation is a known,
       # currently-unsolved gap (Hello ImGui's own CI doesn't cover it either).
       - name: Run GUI tests
-        if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
+        if: matrix.config.run_tests == true && matrix.buildtype == 'Release' && matrix.config.sanitizer != 'tsan'
         working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}
         run: xvfb-run -a ctest -C ${{ matrix.buildtype }} --output-on-failure -R hdrview_gui_tests
 

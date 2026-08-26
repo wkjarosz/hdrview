@@ -1661,31 +1661,74 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_compile_definitions(hdrview_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
   endif()
 
-  # -cpm/-universal presets fetch OpenEXR from source via CPM, which vendors a compact, permissively-licensed set
-  # of real-world test images (OpenEXR's own test suite fixtures) at src/test/bin/test_images. -local presets
-  # never fetch OpenEXR's source at all (it comes from find_package/system install instead), so this is only
-  # available conditionally; tests relying on it are compiled out entirely when it's absent (see
-  # HDRVIEW_TEST_OPENEXR_DIR guards in tests/test_exr_io.cpp) rather than failing or silently skipping at runtime.
-  if(DEFINED OpenEXR_SOURCE_DIR AND EXISTS "${OpenEXR_SOURCE_DIR}/src/test/bin/test_images")
-    target_compile_definitions(
-      hdrview_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${OpenEXR_SOURCE_DIR}/src/test/bin/test_images"
-    )
+  # Several tests run against real-world image corpora that OpenEXR and libpng vendor in their own source
+  # trees. That data is an input to the tests, independent of where the libraries themselves came from, so
+  # both paths can be set directly:
+  #
+  #   -DHDRVIEW_TEST_OPENEXR_DIR=<openexr>/src/test/bin/test_images
+  #   -DHDRVIEW_TEST_PNG_CONTRIB_DIR=<libpng>/contrib
+  #
+  # -cpm/-universal presets fill them in from the CPM-fetched sources automatically. -local presets get the
+  # libraries from find_package and so have no source tree to read them from, but can still point at a
+  # checkout of the corresponding upstream tag -- a shallow, sparse one is enough, the two sets total under
+  # 8 MB. Left unset with no source tree available, the tests that need them are compiled out entirely
+  # (see the guards in tests/test_exr_io.cpp and tests/test_png_io.cpp) rather than failing or silently
+  # skipping at runtime.
+  set(HDRVIEW_TEST_OPENEXR_DIR
+      ""
+      CACHE PATH "OpenEXR's vendored test images (src/test/bin/test_images in its source tree)"
+  )
+  set(HDRVIEW_TEST_PNG_CONTRIB_DIR
+      ""
+      CACHE PATH "libpng's contrib directory, holding the pngsuite and testpngs image sets"
+  )
+
+  # A path the user supplied but that does not exist is a mistake worth surfacing, whereas simply having no
+  # source tree to default to is the ordinary -local case and only warrants a status line.
+  if(HDRVIEW_TEST_OPENEXR_DIR)
+    set(_hdrview_exr_images "${HDRVIEW_TEST_OPENEXR_DIR}")
+    set(_hdrview_exr_explicit TRUE)
+  elseif(DEFINED OpenEXR_SOURCE_DIR)
+    set(_hdrview_exr_images "${OpenEXR_SOURCE_DIR}/src/test/bin/test_images")
+    set(_hdrview_exr_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_exr_images AND EXISTS "${_hdrview_exr_images}")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${_hdrview_exr_images}")
+  elseif(_hdrview_exr_explicit)
+    # Fatal rather than a warning: whoever set this asked for those tests, and quietly compiling them out
+    # instead would leave a build that looks like it ran them.
+    message(FATAL_ERROR "HDRVIEW_TEST_OPENEXR_DIR is set to '${_hdrview_exr_images}', which does not exist")
   else()
-    message(STATUS "OpenEXR test images not available (not a -cpm/-universal preset); "
-                    "skipping tests/test_exr_io.cpp's vendored-data tests"
+    message(STATUS "OpenEXR test images not available (no fetched source; set HDRVIEW_TEST_OPENEXR_DIR to "
+                    "use a checkout); skipping tests/test_exr_io.cpp's vendored-data tests"
     )
   endif()
 
-  # Same idea as OpenEXR above, but for libpng's two vendored test image sets: contrib/pngsuite (the well-known
-  # PngSuite conformance set - bit depth/color type matrix, plus interlaced/non-interlaced pairs) and
-  # contrib/testpngs (a matrix of color-signaling methods: sRGB chunk, gAMA chunk at various gammas, no chunk at
-  # all, plus a dedicated cICP/Display-P3 example).
-  if(DEFINED PNG_SOURCE_DIR AND EXISTS "${PNG_SOURCE_DIR}/contrib/pngsuite" AND EXISTS "${PNG_SOURCE_DIR}/contrib/testpngs"
+  # Same idea for libpng's two vendored image sets: contrib/pngsuite (the well-known PngSuite conformance set
+  # - bit depth/color type matrix, plus interlaced/non-interlaced pairs) and contrib/testpngs (a matrix of
+  # color-signaling methods: sRGB chunk, gAMA chunk at various gammas, no chunk at all, plus a dedicated
+  # cICP/Display-P3 example).
+  if(HDRVIEW_TEST_PNG_CONTRIB_DIR)
+    set(_hdrview_png_contrib "${HDRVIEW_TEST_PNG_CONTRIB_DIR}")
+    set(_hdrview_png_explicit TRUE)
+  elseif(DEFINED PNG_SOURCE_DIR)
+    set(_hdrview_png_contrib "${PNG_SOURCE_DIR}/contrib")
+    set(_hdrview_png_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_png_contrib
+     AND EXISTS "${_hdrview_png_contrib}/pngsuite"
+     AND EXISTS "${_hdrview_png_contrib}/testpngs"
   )
-    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_PNG_CONTRIB_DIR="${PNG_SOURCE_DIR}/contrib")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_PNG_CONTRIB_DIR="${_hdrview_png_contrib}")
+  elseif(_hdrview_png_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_PNG_CONTRIB_DIR is set to '${_hdrview_png_contrib}', which does not "
+                        "contain both pngsuite and testpngs"
+    )
   else()
-    message(STATUS "libpng test images not available (not a -cpm/-universal preset); "
-                    "skipping tests/test_png_io.cpp's vendored-data tests"
+    message(STATUS "libpng test images not available (no fetched source; set HDRVIEW_TEST_PNG_CONTRIB_DIR to "
+                    "use a checkout); skipping tests/test_png_io.cpp's vendored-data tests"
     )
   endif()
 

@@ -10,6 +10,13 @@
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
 
+// For PNG_cICP_SUPPORTED. libpng gained the cICP chunk in 1.6.46, and older releases remain current on
+// common distributions (Ubuntu 24.04 ships 1.6.43), so -local builds can link a libpng without it. HDRView's
+// writer guards png_set_cICP() on this same macro (src/imageio/png.cpp), so without the chunk a saved PNG
+// records no transfer function at all: the pixels are encoded with one, but nothing in the file says which,
+// and a reload falls back to sRGB. The tests guarded below all depend on that record surviving a round-trip.
+#include <png.h>
+
 #include <fstream>
 #include <sstream>
 
@@ -37,6 +44,10 @@ ImagePtr make_test_image(int2 size)
 
 } // namespace
 
+#ifdef PNG_cICP_SUPPORTED
+// Writes with TransferFunction::Linear, so recovering the original values on load requires the file to say
+// it is linear -- which is the cICP chunk's job here. Without it the reload assumes sRGB and the pixels
+// legitimately differ.
 TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without dithering")
 {
     auto img = make_test_image(int2{4, 3});
@@ -107,6 +118,8 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
             CHECK(reloaded[0]->channels[c](2, 1) == doctest::Approx(img->channels[c](2, 1)).epsilon(1e-3));
     }
 }
+
+#endif // PNG_cICP_SUPPORTED
 
 TEST_CASE("is_png_image correctly identifies real PNG bytes and rejects garbage")
 {
@@ -289,6 +302,9 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
         CHECK(header["sRGB"]["value"].get<int>() >= 0); // sRGB chunk present with a valid rendering intent
     }
 
+#ifdef PNG_cICP_SUPPORTED
+    // Reading the chunk is guarded on the same macro as writing it (png_get_cICP in src/imageio/png.cpp), so
+    // against an older libpng the loader never reports a cICP chunk however the file itself is tagged.
     SUBCASE("cICP chunk takes priority over everything else, with correct Display P3 primaries")
     {
         auto reloaded = load_test_png("testpngs/png-3", "cicp-display-p3_reencoded.png");
@@ -302,6 +318,7 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
         Chromaticities p3{{0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
         CHECK(approx_equal(*reloaded[0]->chromaticities, p3, 1e-3f));
     }
+#endif // PNG_cICP_SUPPORTED
 }
 
 #endif // HDRVIEW_TEST_PNG_CONTRIB_DIR
