@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -521,6 +522,7 @@ private:
         {
             fs::path path;
             string   channel_selector;
+            bool     alpha_is_transparency = true;
             int      selected_group = 0, reference_group = 0;
             ImagePtr loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
         };
@@ -529,12 +531,13 @@ private:
         BlendMode_    blend_mode;
         json          view; ///< The session file's "view" sub-object, applied verbatim once loading completes
 
-        // An arriving image is matched to the earliest not-yet-filled entry sharing its (path, channel_selector).
+        // An arriving image is matched to the earliest not-yet-filled entry sharing its load options.
         // Entries sharing that key are guaranteed content-identical (loaded with identical options), so any
         // valid one-to-one assignment among them is correct regardless of which physical async load happens to
         // finish first -- this is what makes it safe to load the same file more than once in one session (e.g.
-        // to compare two channel groups of it side by side).
-        map<pair<fs::path, string>, deque<int>> unresolved;
+        // to compare two channel groups of it, or the same file with and without alpha as transparency).
+        using Key = std::tuple<fs::path, string, bool>; ///< path, channel_selector, alpha_is_transparency
+        map<Key, deque<int>> unresolved;
     };
     optional<PendingSession> m_pending_session;
 };

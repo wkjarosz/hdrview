@@ -115,8 +115,9 @@ struct PixelStats
     PixelStats() = default;
 
     /// Populate the statistics from the provided img and settings
-    void calculate(const Channel &img, int2 img_data_origin, const Channel *ref, int2 ref_data_origin,
-                   const Settings &desired, std::atomic<bool> &canceled);
+    void calculate(const Channel &img, const Channel *alpha, int2 img_data_origin, const Channel *ref,
+                   const Channel *ref_alpha, int2 ref_data_origin, const Settings &desired,
+                   std::atomic<bool> &canceled);
 
     int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
     float &bin_y(int i) { return hist_ys[clamp_idx(i)]; }
@@ -248,6 +249,13 @@ public:
     float4x4 colors() const;
 };
 
+//! True for the group types whose last channel is an alpha channel.
+inline bool group_has_alpha(ChannelGroup::Type type)
+{
+    return type == ChannelGroup::RGBA_Channels || type == ChannelGroup::YA_Channels ||
+           type == ChannelGroup::YCA_Channels || type == ChannelGroup::XYZA_Channels;
+}
+
 struct Layer
 {
 public:
@@ -297,6 +305,9 @@ public:
     ColorGamut_                   color_space       = ColorGamut_Unspecified;
     WhitePoint_                   white_point       = WhitePoint_Unspecified;
     AlphaType            alpha_type = AlphaType_None; //!< Does the image have straight (unpremultiplied) alpha?
+    bool alpha_is_transparency = true; //!< When false, an 'A' channel is grouped on its own as ordinary data
+                                       //!< instead of joining an RGBA/YA/YCA/XYZA group, so nothing is
+                                       //!< premultiplied by it. Read by finalize(), so set it before calling.
     json                 metadata   = json::object();
     Exif                 exif;     //!< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any
@@ -369,6 +380,14 @@ public:
     void        apply_exif_orientation();
     void        compute_color_transform();
     std::string to_string() const;
+
+    //! True when `group`'s values were premultiplied by finalize() and so must be divided back out to
+    //! report what the file holds. Straight-alpha files only: a file that stored premultiplied values has
+    //! no straight form for its alpha=0 pixels.
+    bool unpremultiplies(const ChannelGroup &group) const
+    {
+        return alpha_type == AlphaType_Straight && group.num_channels > 1 && group_has_alpha(group.type);
+    }
 
     template <typename T>
     std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain = 1.f,

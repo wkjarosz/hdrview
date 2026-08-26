@@ -929,8 +929,31 @@ void Image::draw_info()
                               fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
             filtered_property("Alpha", alpha_type_name(alpha_type),
-                              "Type of alpha channel stored in the file. HDRView always converts the file's gamma to "
-                              "premultiplied alpha upon load.");
+                              "Type of alpha channel stored in the file. When treated as transparency, HDRView "
+                              "converts it to premultiplied alpha upon load.");
+            // Only offered when the file declares an alpha channel: a file that states its extra channel
+            // is data (e.g. TIFF's EXTRASAMPLE_UNSPECIFIED) isn't overridden from here.
+            if (alpha_type != AlphaType_None)
+            {
+                if (filter.PassFilter("Alpha is transparency"))
+                    ImGui::PE::Entry(
+                        "Is transparency",
+                        [this]
+                        {
+                            bool value = alpha_is_transparency;
+                            if (!ImGui::Checkbox("##Alpha is transparency", &value))
+                                return false;
+                            // The premultiply happens in-place on load, so switching interpretation means
+                            // re-reading the file; reload_image() carries the new setting through.
+                            alpha_is_transparency = value;
+                            // draw_info() is only ever drawn for the current image (see the Info window)
+                            hdrview()->reload_image(hdrview()->current_image());
+                            return true;
+                        },
+                        "Whether the alpha channel means transparency. Turn this off for files whose alpha is "
+                        "really a mask or other data: it is then shown as an ordinary channel of its own and "
+                        "nothing is premultiplied by it.\n\nChanging this re-reads the file from disk.");
+            }
             if (exif.valid())
                 filtered_property("EXIF data", fmt::format("{:.0h}", human_readible{exif.size()}),
                                   "Size of the EXIF metadata block embedded in the image file.");

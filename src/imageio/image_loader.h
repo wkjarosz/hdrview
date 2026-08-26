@@ -25,6 +25,10 @@ struct ImageLoadOptions
     //! Comma-separated list of channel names to include or exclude from the image. If empty, all channels are selected.
     string channel_selector;
 
+    //! When false, an alpha channel is loaded as ordinary data instead of transparency: it is grouped on its own
+    //! and the color channels are not premultiplied by it. See Image::alpha_is_transparency.
+    bool alpha_is_transparency = true;
+
     bool override_profile = false;
     //! Override any metadata in the file and decode pixel values using this color gamut.
     ColorGamut_ gamut_override = ColorGamut_sRGB_BT709;

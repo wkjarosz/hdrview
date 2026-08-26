@@ -635,8 +635,9 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     }
 
     spdlog::info("Reloading file '{}' with channel selector '{}'...", image->filename, image->channel_selector);
-    auto opts             = load_image_options();
-    opts.channel_selector = image->channel_selector;
+    auto opts                  = load_image_options();
+    opts.channel_selector      = image->channel_selector;
+    opts.alpha_is_transparency = image->alpha_is_transparency;
     m_image_loader.background_load(image->filename, {}, should_select, image, opts);
 }
 
@@ -761,10 +762,11 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
     for (auto &img : m_images)
     {
         json entry;
-        entry["path"]             = path_of(img);
-        entry["channel_selector"] = img->channel_selector;
-        entry["selected_group"]   = img->selected_group;
-        entry["reference_group"]  = img->reference_group;
+        entry["path"]                  = path_of(img);
+        entry["channel_selector"]      = img->channel_selector;
+        entry["alpha_is_transparency"] = img->alpha_is_transparency;
+        entry["selected_group"]        = img->selected_group;
+        entry["reference_group"]       = img->reference_group;
         images.push_back(entry);
     }
     j["images"] = images;
@@ -1047,16 +1049,18 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
 
         PendingSession::Entry e;
         e.path             = resolve(rel);
-        e.channel_selector = entry.value<string>("channel_selector", "");
-        e.selected_group   = entry.value<int>("selected_group", 0);
-        e.reference_group  = entry.value<int>("reference_group", 0);
+        e.channel_selector      = entry.value<string>("channel_selector", "");
+        e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
+        e.selected_group        = entry.value<int>("selected_group", 0);
+        e.reference_group       = entry.value<int>("reference_group", 0);
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
-        pending.unresolved[{e.path, e.channel_selector}].push_back(idx);
+        pending.unresolved[{e.path, e.channel_selector, e.alpha_is_transparency}].push_back(idx);
 
         ImageLoadOptions opts;
-        opts.channel_selector = e.channel_selector;
+        opts.channel_selector      = e.channel_selector;
+        opts.alpha_is_transparency = e.alpha_is_transparency;
         load_image(e.path.string(), {}, false, opts);
     }
 
@@ -1087,9 +1091,10 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         // reload_image() already handle these correctly with no session-specific work.
         PendingSession::Entry e;
         e.path             = fs::path(zip_name) / fs::u8path(rel);
-        e.channel_selector = entry.value<string>("channel_selector", "");
-        e.selected_group   = entry.value<int>("selected_group", 0);
-        e.reference_group  = entry.value<int>("reference_group", 0);
+        e.channel_selector      = entry.value<string>("channel_selector", "");
+        e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
+        e.selected_group        = entry.value<int>("selected_group", 0);
+        e.reference_group       = entry.value<int>("reference_group", 0);
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
@@ -1104,10 +1109,11 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
             continue;
         }
 
-        pending.unresolved[{e.path, e.channel_selector}].push_back(idx);
+        pending.unresolved[{e.path, e.channel_selector, e.alpha_is_transparency}].push_back(idx);
 
         ImageLoadOptions opts;
-        opts.channel_selector = e.channel_selector;
+        opts.channel_selector      = e.channel_selector;
+        opts.alpha_is_transparency = e.alpha_is_transparency;
         m_image_loader.background_load(e.path.string(), *bytes, false, nullptr, opts);
     }
 

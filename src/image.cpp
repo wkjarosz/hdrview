@@ -300,8 +300,9 @@ float2 PixelStats::x_limits(float e, AxisScale scale) const
     return ret;
 }
 
-void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Channel *ref, int2 ref_data_origin,
-                           const Settings &desired, std::atomic<bool> &canceled)
+void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_data_origin, const Channel *ref,
+                           const Channel *ref_alpha, int2 ref_data_origin, const Settings &desired,
+                           std::atomic<bool> &canceled)
 {
     try
     {
@@ -333,7 +334,12 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         if (croi.size() != rroi.size())
             spdlog::error("Image and reference channel ROIs are not the same size!");
 
-        auto pixel_value = [&img, img_data_origin, ref, &croi, &rroi, this](int i)
+        // Report what the file holds: a straight-alpha channel was premultiplied on load, so divide that
+        // back out (`alpha` is null for channels that weren't, and for the alpha channel itself).
+        auto sample = [](const Channel &c, const Channel *a, int2 p)
+        { return a ? c(p) / std::max(k_small_alpha, (*a)(p)) : c(p); };
+
+        auto pixel_value = [&img, alpha, img_data_origin, ref, ref_alpha, &croi, &rroi, sample, this](int i)
         {
             int2 i2d(i % croi.size().x, i / croi.size().x); // convert to 2D coordinates
             if (i2d.y >= croi.size().y)
@@ -341,13 +347,13 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
                 // spdlog::error("Pixel index {} ({}) out of bounds for ROI {}..{}", i, i2d, croi.min, croi.max);
                 return std::numeric_limits<float>::quiet_NaN(); // out of bounds
             }
-            float val = img(i2d + croi.min - img_data_origin);
+            float val = sample(img, alpha, i2d + croi.min - img_data_origin);
             // BlendMode_Normal discards the reference sample (blend() just returns `val`), and croi is only
             // intersected with rroi above when the reference is actually going to be sampled -- so sampling it
             // here regardless of blend mode risks indexing outside ref's bounds whenever the two channels
             // differ in size.
             if (ref && settings.blend_mode != BlendMode_Normal)
-                val = blend(val, (*ref)(i2d + croi.min - rroi.min), settings.blend_mode);
+                val = blend(val, sample(*ref, ref_alpha, i2d + croi.min - rroi.min), settings.blend_mode);
             return val;
         };
 
@@ -599,10 +605,23 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
         hdrview()->exposure(),   hdrview()->histogram_x_scale(), hdrview()->histogram_y_scale(),   hdrview()->roi(),
         hdrview()->blend_mode(), img2 ? img2->id : -1,           img2 ? img2->reference_group : -1};
 
+    // The group's alpha channel, when this channel needs dividing by it to report the file's values.
+    // Null for the alpha channel itself, which is stored as the file had it.
+    auto alpha_of = [c](const ConstImagePtr &img, int group_idx) -> const Channel *
+    {
+        if (!img || !img->is_valid_group(group_idx))
+            return nullptr;
+        const ChannelGroup &g = img->groups[group_idx];
+        return img->unpremultiplies(g) && c != g.num_channels - 1 ? &img->channels[g.channels[g.num_channels - 1]]
+                                                                  : nullptr;
+    };
+
     auto recompute_async_stats = [this, desired_settings, img1, img_data_origin = img1->data_window.min,
+                                  alpha           = alpha_of(img1, img1->selected_group),
                                   ref             = (img2 && img2->is_valid_group(img2->reference_group))
                                                         ? &img2->channels[img2->groups[img2->reference_group].channels[c]]
                                                         : nullptr,
+                                  ref_alpha       = alpha_of(img2, img2 ? img2->reference_group : -1),
                                   ref_data_origin = img2 ? img2->data_window.min : int2{}]()
     {
         spdlog::debug("id: {}", img1->id);
@@ -617,10 +636,12 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
         // create the new task
         async_canceled = make_shared<atomic<bool>>(false);
         async_tracker  = do_async(
-            [this, desired_settings, canceled = async_canceled, img_data_origin, ref, ref_data_origin]()
+            [this, desired_settings, canceled = async_canceled, img_data_origin, alpha, ref, ref_alpha,
+             ref_data_origin]()
             {
                 spdlog::debug("Starting a new stats computation");
-                async_stats->calculate(*this, img_data_origin, ref, ref_data_origin, desired_settings, *canceled);
+                async_stats->calculate(*this, alpha, img_data_origin, ref, ref_alpha, ref_data_origin,
+                                       desired_settings, *canceled);
             });
         async_settings = desired_settings;
     };
@@ -836,6 +857,10 @@ void Image::build_layers_and_groups()
             if (layer_channels.empty())
                 break;
             if (layer_channels.size() < group_channel_names.size())
+                continue;
+            // Skipping the alpha-bearing patterns lets the alpha-free one match instead, leaving 'A' to
+            // fall through to the single-channel groups created below.
+            if (!alpha_is_transparency && group_has_alpha(group_type))
                 continue;
             auto found = find_group_channels(layer_channels, layer.name, group_channel_names);
 
@@ -1148,10 +1173,7 @@ void Image::finalize()
     {
         for (auto &g : groups)
         {
-            bool has_alpha =
-                g.num_channels > 1 && (g.type == ChannelGroup::RGBA_Channels || g.type == ChannelGroup::YA_Channels ||
-                                       g.type == ChannelGroup::YCA_Channels || g.type == ChannelGroup::XYZA_Channels);
-            if (!has_alpha)
+            if (g.num_channels <= 1 || !group_has_alpha(g.type))
                 continue;
 
             for (int c = 0; c < g.num_channels - 1; ++c)
@@ -1277,6 +1299,12 @@ float4 Image::raw_pixel(int2 p, Target_ target) const
 
     float4 value{0.f};
     for (int c = 0; c < group.num_channels; ++c) value[c] = channels[group.channels[c]](p - data_window.min);
+
+    if (unpremultiplies(group))
+    {
+        float a = std::max(k_small_alpha, value[group.num_channels - 1]);
+        for (int c = 0; c < group.num_channels - 1; ++c) value[c] /= a;
+    }
 
     return value;
 }

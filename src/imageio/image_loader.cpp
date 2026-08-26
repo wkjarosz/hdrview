@@ -806,6 +806,12 @@ void draw_load_image_options_dialog(bool &open)
                        "only load layers which contain either of these two words, and \"-.A\" would exclude channels "
                        "named \"A\". Leave empty to load all parts.");
 
+        ImGui::Checkbox("Alpha channel is transparency", &s_opts.alpha_is_transparency);
+        ImGui::Tooltip("By default an alpha channel is treated as transparency: HDRView premultiplies the color "
+                       "channels by it on load, and composites the image against the background. Turn this off for "
+                       "files whose fourth channel is really a mask or other data, to load it as an ordinary "
+                       "channel of its own that nothing is multiplied by.");
+
         ImGui::Checkbox("Override file's color profile", &s_opts.override_profile);
         ImGui::Tooltip("By default, HDRView tries to detect the color profile of the image from metadata stored in the "
                        "file. Enabling this option instructs HDRView to ignore any color profile information in the "
@@ -992,8 +998,7 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
             throw invalid_argument("Invalid input stream");
 
         vector<ImagePtr> images;
-        int              num_successful = 0;
-        string           active_loader  = "";
+        string           active_loader = "";
         for (auto &loader : g_loaders)
         {
             if (!loader.enabled)
@@ -1017,14 +1022,41 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
         std::streampos size = is.tellg();
         is.seekg(pos);
 
+        // EXR and JPEG XL apply the channel selector while decoding, so they never read what they'd
+        // discard. Every other loader ignores it, so apply it here to whatever they produced.
+        ImGuiTextFilter filter{opts.channel_selector.c_str()};
+        filter.Build();
+
+        vector<ImagePtr> kept;
+        kept.reserve(images.size());
         for (auto i : images)
         {
             try
             {
-                i->finalize();
+                if (!opts.channel_selector.empty())
+                {
+                    // Qualify each channel by its part and prefix a '.', so a selector like "-.A" excludes
+                    // a bare "A" as well as a layer's "diffuse.A".
+                    auto excluded = [&](const Channel &c)
+                    {
+                        auto name = i->partname.empty() ? "." + c.name : fmt::format(".{}.{}", i->partname, c.name);
+                        return !filter.PassFilter(name.c_str());
+                    };
+                    i->channels.erase(remove_if(begin(i->channels), end(i->channels), excluded), end(i->channels));
+
+                    if (i->channels.empty())
+                    {
+                        spdlog::debug("Skipping part '{}': no channels match the selector '{}'", i->partname,
+                                      opts.channel_selector);
+                        continue;
+                    }
+                }
+
                 i->filename   = filename;
-                i->short_name = i->file_and_partname();
                 i->size_bytes = static_cast<size_t>(size);
+                // A loader that already knows the file's extra channel isn't alpha keeps that; the option
+                // can only turn transparency off, never assert it against what the file says.
+                i->alpha_is_transparency = i->alpha_is_transparency && opts.alpha_is_transparency;
 
                 // If multiple image "parts" were loaded and they have names, store these names in the image's
                 // channel selector. This is useful if we later want to reload a specific image part from the
@@ -1041,7 +1073,11 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
                     else
                         i->channel_selector = opts.channel_selector;
                 }
-                ++num_successful;
+                i->short_name = i->file_and_partname();
+
+                // finalize() consumes alpha_is_transparency, so it runs after the options are stamped on
+                i->finalize();
+                kept.push_back(i);
             }
             catch (const exception &e)
             {
@@ -1049,9 +1085,9 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
                 continue; // skip this image
             }
         }
-        spdlog::info("Loaded {} images from {} using {} in {:f} seconds.", num_successful, filename, active_loader,
+        spdlog::info("Loaded {} images from {} using {} in {:f} seconds.", kept.size(), filename, active_loader,
                      timer.elapsed() / 1000.f);
-        return images;
+        return kept;
     }
     catch (const exception &e)
     {

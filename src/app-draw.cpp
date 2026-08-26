@@ -232,8 +232,9 @@ void HDRViewApp::draw_image() const
     auto set_color = [this](Target_ target, ConstImagePtr img)
     {
         float4x4 M_to_sRGB{la::identity};
-        int      channels_type = (int)ChannelGroup::Single_Channel;
-        float3   yw            = sRGB_Yw();
+        int      channels_type  = (int)ChannelGroup::Single_Channel;
+        int      straight_alpha = 0;
+        float3   yw             = sRGB_Yw();
 
         if (img)
         {
@@ -244,18 +245,23 @@ void HDRViewApp::draw_image() const
             // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
             M_to_sRGB = float4x4{
                 {img->M_to_sRGB[0], 0.f}, {img->M_to_sRGB[1], 0.f}, {img->M_to_sRGB[2], 0.f}, {0.f, 0.f, 0.f, 1.f}};
-            channels_type = (int)group.type;
-            yw            = img->luminance_weights;
+            channels_type  = (int)group.type;
+            straight_alpha = (int)(img->alpha_type == AlphaType_Straight);
+            yw             = img->luminance_weights;
         }
 
+        // Both targets report their alpha convention: choose_channel() runs after blend(), so undoing the
+        // premultiply on an isolated channel is only safe when the reference qualifies as well.
         if (target == Target_Primary)
-            m_shader->set_uniform_block(
-                "fsp",
-                {{"primary_M_to_sRGB", M_to_sRGB}, {"primary_channels_type", channels_type}, {"primary_yw", yw}});
+            m_shader->set_uniform_block("fsp", {{"primary_M_to_sRGB", M_to_sRGB},
+                                                {"primary_channels_type", channels_type},
+                                                {"primary_yw", yw},
+                                                {"primary_straight_alpha", straight_alpha}});
         else
-            m_shader->set_uniform_block(
-                "fsp",
-                {{"secondary_M_to_sRGB", M_to_sRGB}, {"secondary_channels_type", channels_type}, {"secondary_yw", yw}});
+            m_shader->set_uniform_block("fsp", {{"secondary_M_to_sRGB", M_to_sRGB},
+                                                {"secondary_channels_type", channels_type},
+                                                {"secondary_yw", yw},
+                                                {"secondary_straight_alpha", straight_alpha}});
     };
 
     set_color(Target_Primary, current_image());

@@ -512,6 +512,15 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
             continue;
         }
 
+        // EXR stores color channels premultiplied, so record that rather than leaving the default of
+        // AlphaType_None -- Image::finalize() and the display path both key off this.
+        for (const auto &c : img->channels)
+            if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
+            {
+                img->alpha_type = AlphaType_PremultipliedLinear;
+                break;
+            }
+
         part.setFrameBuffer(framebuffer);
         part.readPixels(dataWindow.min.y, dataWindow.max.y);
 
