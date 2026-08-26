@@ -501,6 +501,9 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
             name = c.name();
 
             img->channels.emplace_back(name, size);
+            // EXR records a pixel type per channel, so one part can mix depths. Only UINT is quantized;
+            // half and float get the histogram's full bin resolution.
+            img->channels.back().bits_per_sample = c.channel().type == Imf::UINT ? 32 : 0;
             framebuffer.insert(c.name(), Imf::Slice::Make(Imf::FLOAT, img->channels.back().data(), dataWindow, 0, 0,
                                                           c.channel().xSampling, c.channel().ySampling));
         }

@@ -690,6 +690,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         image->alpha_type     = size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None;
         image->chromaticities = chr;
         image->metadata       = metadata;
+        // A palette's IHDR depth counts bits per index; png_set_palette_to_rgb() expands those to 8-bit RGB.
+        image->set_bits_per_sample(color_type == PNG_COLOR_TYPE_PALETTE ? 8 : file_bit_depth);
         if (exif.valid())
             image->exif = exif;
         if (!xmp_data.empty())

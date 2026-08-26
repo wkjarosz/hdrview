@@ -821,6 +821,9 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 image->partname                 = "main";
                 image->metadata["loader"]       = fmt::format("LibRaw; {}", libraw_unpack_function_name(&idata));
                 image->metadata["pixel format"] = pixel_format;
+                // Demosaicing interpolates between photosites, so the output no longer sits on the sensor's
+                // lattice; 16 is the finest binning the result can justify.
+                image->set_bits_per_sample(16);
                 if (!exif_ctx.metadata.empty())
                     image->metadata["exif"] = exif_ctx.metadata;
 
@@ -907,6 +910,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                     cfa_img->partname                 = "cfa";
                     cfa_img->metadata["loader"]       = "LibRaw (CFA)";
                     cfa_img->metadata["pixel format"] = pixel_format;
+                    cfa_img->set_bits_per_sample(idata.color.raw_bps); //< undemosaiced, still on the lattice
                     if (!exif_ctx.metadata.empty())
                         cfa_img->metadata["exif"] = exif_ctx.metadata;
 
@@ -995,6 +999,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 timg->filename                           = filename;
                 timg->partname                           = fmt::format("thumbnail:{}", ti);
                 timg->metadata["pixel format"]           = fmt::format("{}-bit ({} bpc)", n * thumb->bits, thumb->bits);
+                timg->set_bits_per_sample(thumb->bits);
                 timg->metadata["loader"]                 = "LibRaw";
                 timg->metadata["header"]["Is thumbnail"] = {{"value", true},
                                                             {"string", "Yes"},

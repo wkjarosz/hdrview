@@ -33,38 +33,57 @@ using namespace stp;
 // smallest value happens to be the denormal number 2^-24, so 2^-26 should be a good choice.
 static constexpr float k_small_alpha = 1.f / (1u << 26u);
 
-inline double axis_scale_fwd_xform(double value, void *user_data)
-{
-    static constexpr double eps     = 0.0001;
-    static constexpr double log_eps = -4;        // std::log10(eps);
-    static constexpr double a_0     = eps * 1.8; // 1.8 makes asinh and our symlog looks roughly the same
+// Knee of the histogram x axis's nonlinear scales: below roughly this magnitude they stay near-linear,
+// and above it they turn logarithmic.
+inline constexpr double axis_scale_eps     = 0.0001;
+inline constexpr double axis_scale_log_eps = -4; // std::log10(axis_scale_eps)
 
-    const auto x_scale = *(AxisScale *)user_data;
+// The asinh scale's knee sits well above axis_scale_eps so that the axis doesn't spend most of its width
+// below the darkest level an 8-bit source can represent: at 1.8e-4 the curve is logarithmic across all of
+// [0,1], which spreads consecutive dark levels tens of bins apart and combs the histogram.
+inline constexpr double axis_scale_a_0 = 0.01;
+
+//! Warp \p value into the space the histogram's x axis is drawn in.
+/*!
+    Histogram bins are laid out uniformly in this space, and ImPlot positions the axis linearly in it as
+    well, so the bins come out uniformly wide on screen too.
+*/
+inline double axis_scale_fwd(double value, AxisScale x_scale)
+{
     if (x_scale == AxisScale_SRGB)
         return linear_to_sRGB(value);
     else if (x_scale == AxisScale_SymLog)
-        return value > 0 ? (std::log10(value + eps) - log_eps) : -(std::log10(-value + eps) - log_eps);
+        return value > 0 ? (std::log10(value + axis_scale_eps) - axis_scale_log_eps)
+                         : -(std::log10(-value + axis_scale_eps) - axis_scale_log_eps);
     else if (x_scale == AxisScale_Asinh)
-        return a_0 * std::asinh(value / a_0);
+        return axis_scale_a_0 * std::asinh(value / axis_scale_a_0);
     else
         return value;
 }
 
-inline double axis_scale_inv_xform(double value, void *user_data)
+//! Inverse of axis_scale_fwd().
+inline double axis_scale_inv(double value, AxisScale x_scale)
 {
-    static constexpr double eps     = 0.0001;
-    static constexpr double log_eps = -4;        // std::log10(eps);
-    static constexpr double a_0     = eps * 1.8; // 1.8 makes asinh and our symlog looks roughly the same
-
-    const auto x_scale = *(AxisScale *)user_data;
     if (x_scale == AxisScale_SRGB)
         return sRGB_to_linear(value);
     else if (x_scale == AxisScale_SymLog)
-        return value > 0 ? (std::pow(10., value + log_eps) - eps) : -(pow(10., -value + log_eps) - eps);
+        return value > 0 ? (std::pow(10., value + axis_scale_log_eps) - axis_scale_eps)
+                         : -(std::pow(10., -value + axis_scale_log_eps) - axis_scale_eps);
     else if (x_scale == AxisScale_Asinh)
-        return a_0 * std::sinh(value / a_0);
+        return axis_scale_a_0 * std::sinh(value / axis_scale_a_0);
     else
         return value;
+}
+
+// ImPlotTransform-compatible wrappers, for ImPlot::SetupAxisScale(); \p user_data points at an AxisScale.
+inline double axis_scale_fwd_xform(double value, void *user_data)
+{
+    return axis_scale_fwd(value, *(AxisScale *)user_data);
+}
+
+inline double axis_scale_inv_xform(double value, void *user_data)
+{
+    return axis_scale_inv(value, *(AxisScale *)user_data);
 }
 
 struct Channel;
@@ -72,8 +91,20 @@ struct Image;
 
 struct PixelStats
 {
-    static constexpr int NUM_BINS = 512;
+    static constexpr int MAX_BINS = 512;
     using Ptr                     = std::shared_ptr<PixelStats>;
+
+    //! Number of histogram bins appropriate for a source with \p bits bits per sample.
+    /*!
+        An n-bit source holds at most 2^n distinct levels, so binning any finer than that leaves bins empty
+        by construction. \p bits is 0 when the samples are floating point or their depth is unknown, which
+        gets the full resolution.
+    */
+    static constexpr int bins_for_bit_depth(int bits)
+    {
+        // the depth test comes first: 1 << bits is undefined for large bits
+        return (bits <= 0 || bits >= 16) ? MAX_BINS : (1 << bits);
+    }
 
     struct Settings
     {
@@ -105,35 +136,56 @@ struct PixelStats
 
     bool computed = false; ///< Did we finish computing the stats?
 
-    // histogram
-    float2 hist_y_limits      = {0.f, 1.f};
-    float2 hist_normalization = {0.f, 1.f};
+    // Histogram, binned separately for every AxisScale. Switching the x axis is then free, at the cost of
+    // transforming each sample once per scale in the single pass over the pixels that fills these.
+    // Fixed-size arrays rather than vectors: the GUI reads these from stats objects that have not been
+    // computed yet, which is only safe as long as they always hold storage.
 
-    std::array<float, NUM_BINS> hist_xs{}; // left edge of each bin's range; {}: value-initialized to zeros
-    std::array<float, NUM_BINS> hist_ys{}; // {}: value-initialized to zeros
+    int num_bins = MAX_BINS; ///< Only [0, num_bins) of each histogram below is meaningful
 
-    PixelStats() = default;
+    std::array<float2, AxisScale_COUNT> hist_y_limits{};
+    std::array<float2, AxisScale_COUNT> hist_normalization{}; ///< Offset and span of the binned range
+
+    /// Bin edges: hist_xs[s][i] is bin i's left edge, and hist_xs[s][num_bins] the last bin's right edge
+    std::array<std::array<float, MAX_BINS + 1>, AxisScale_COUNT> hist_xs{};
+    /// Number of samples in each bin
+    std::array<std::array<float, MAX_BINS>, AxisScale_COUNT> hist_ys{};
+
+    //! Leaves every histogram empty but with usable ranges, since the GUI draws stats objects that have
+    //! not been computed yet.
+    PixelStats()
+    {
+        hist_y_limits.fill(float2{0.f, 1.f});
+        hist_normalization.fill(float2{0.f, 1.f});
+    }
 
     /// Populate the statistics from the provided img and settings
     void calculate(const Channel &img, const Channel *alpha, int2 img_data_origin, const Channel *ref,
                    const Channel *ref_alpha, int2 ref_data_origin, const Settings &desired,
                    std::atomic<bool> &canceled);
 
-    int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
-    float &bin_y(int i) { return hist_ys[clamp_idx(i)]; }
+    int    clamp_idx(int i) const { return std::clamp(i, 0, num_bins - 1); }
+    float &bin_y(int i, AxisScale x_scale) { return hist_ys[x_scale][clamp_idx(i)]; }
 
-    int value_to_bin(double value) const
+    //! Index of the bin containing \p value under \p x_scale.
+    /*!
+        Returns a negative index for a value below the binned range or for one with no bin at all (NaN), and
+        num_bins for one above it. The clamp keeps the result representable: casting a non-finite double to
+        int is undefined, and the GUI does ask about values far outside the range.
+    */
+    int value_to_bin(double value, AxisScale x_scale) const
     {
-        static constexpr int x_scale = AxisScale_Asinh;
-        return int(std::floor((axis_scale_fwd_xform(value, (void *)&x_scale) - hist_normalization[0]) /
-                              hist_normalization[1] * NUM_BINS));
+        double t = (axis_scale_fwd(value, x_scale) - hist_normalization[x_scale][0]) / hist_normalization[x_scale][1];
+        if (std::isnan(t))
+            return -1;
+        return int(std::floor(std::clamp(t * num_bins, -1.0, double(num_bins))));
     }
 
-    double bin_to_value(double value) const
+    //! Value at bin edge \p bin under \p x_scale; bin == num_bins gives the last bin's right edge.
+    double bin_to_value(double bin, AxisScale x_scale) const
     {
-        static constexpr int   x_scale  = AxisScale_Asinh;
-        static constexpr float inv_bins = 1.f / NUM_BINS;
-        return axis_scale_inv_xform(hist_normalization[1] * value * inv_bins + hist_normalization[0], (void *)&x_scale);
+        return axis_scale_inv(hist_normalization[x_scale][1] * bin / num_bins + hist_normalization[x_scale][0],
+                              x_scale);
     }
 
     float2 x_limits(float exposure, AxisScale x_scale) const;
@@ -141,6 +193,10 @@ struct PixelStats
 
 struct Channel : public Array2Df
 {
+    //! Bits per sample of this channel's samples in the file, or 0 when the file stores them as floating
+    //! point or their depth is unknown. Sets the histogram's bin count, via bins_for_bit_depth().
+    int bits_per_sample = 0;
+
 private:
     PixelStats::Ptr                    cached_stats;
     ThreadPool::TaskTracker            async_tracker;
@@ -380,6 +436,12 @@ public:
     void        apply_exif_orientation();
     void        compute_color_transform();
     std::string to_string() const;
+
+    //! Record the file's sample depth on every channel; see Channel::bits_per_sample.
+    void set_bits_per_sample(int bits)
+    {
+        for (auto &c : channels) c.bits_per_sample = bits;
+    }
 
     //! True when `group`'s values were premultiplied by finalize() and so must be divided back out to
     //! report what the file holds. Straight-alpha files only: a file that stored premultiplied values has

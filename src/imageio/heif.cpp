@@ -352,7 +352,10 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         if (bpp_storage != cpp * 16 && bpp_storage != cpp * 8)
             throw runtime_error(fmt::format("Unsupported bits per pixel: {}", bpp_storage));
         if (p == 0)
+        {
             image->metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", size.z * bpc, bpc);
+            image->set_bits_per_sample(bpc);
+        }
         float bpc_div = 1.f / ((1 << bpc) - 1);
 
         // copy pixels into a contiguous float buffer and normalize values to [0,1]

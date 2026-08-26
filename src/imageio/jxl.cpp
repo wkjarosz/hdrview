@@ -588,6 +588,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                      (has_encoded_profile ? color_encoding_info(file_enc) : "    no encoded color profile")}};
             image->metadata["pixel format"] =
                 fmt::format("{}-bit ({} bpc)", size.z * info.bits_per_sample, info.bits_per_sample);
+            // exponent bits mark the samples as floating-point, which has no quantization lattice
+            image->set_bits_per_sample(info.exponent_bits_per_sample ? 0 : info.bits_per_sample);
             image->metadata["header"]["intrinsic width"] = {
                 {"value", int(info.intrinsic_xsize)}, {"string", to_string(info.intrinsic_xsize)}, {"type", "int"}};
             image->metadata["header"]["intrinsic height"] = {

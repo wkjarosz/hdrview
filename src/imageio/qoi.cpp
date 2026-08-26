@@ -88,6 +88,7 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
     image->alpha_type               = size.z > 3 ? AlphaType_Straight : AlphaType_None;
     image->metadata["loader"]       = "qoi";
     image->metadata["pixel format"] = fmt::format("{}-bit (8 bpc)", size.z * 8);
+    image->set_bits_per_sample(8);
 
     TransferFunction tf =
         desc.colorspace == QOI_LINEAR ? TransferFunction{TransferFunction::Linear, 1.f} : TransferFunction::sRGB;

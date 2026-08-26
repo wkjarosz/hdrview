@@ -454,62 +454,93 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
 
         //
         // compute histograms
+        //
+        // Bins are laid out uniformly in the same transformed space the x axis is drawn in, so each bin is
+        // equally wide on screen and its height can be a plain count: with equal widths, bar height and bar
+        // area say the same thing. Every scale is binned in this one pass, which costs an extra transform
+        // per sample but leaves switching the x axis free. The bin count comes from the source's bit depth,
+        // since an n-bit channel cannot fill more bins than it has levels.
+        //
+        // The bins span the channel's own range so that the histogram never depends on exposure. On a
+        // linear x axis a single very bright sample therefore stretches the bins far past the visible range
+        // and crowds everything into the first few; the nonlinear scales, which is what high-dynamic-range
+        // content wants anyway, are unaffected.
 
-        static constexpr int x_scale = AxisScale_Asinh;
-        hist_normalization[0]        = (float)axis_scale_fwd_xform(summary.minimum, (void *)&x_scale);
-        hist_normalization[1] = (float)axis_scale_fwd_xform(summary.maximum, (void *)&x_scale) - hist_normalization[0];
+        // A blended value lies on neither channel's lattice, so this is only exactly right without a
+        // reference; it stays the best available bound on how many distinct values can show up.
+        num_bins = bins_for_bit_depth(img.bits_per_sample);
 
-        for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = (float)bin_to_value(i);
-
-        // accumulate bin counts
-        for (int i = 0; i < croi.volume(); ++i)
+        // An all-NaN channel has no range to bin over, and leaves every histogram empty.
+        if (std::isfinite(summary.minimum) && std::isfinite(summary.maximum))
         {
-            if (canceled)
-                throw std::runtime_error("Canceling histogram accumulation");
-            bin_y(value_to_bin(pixel_value(i))) += 1;
+            for (int s = 0; s < AxisScale_COUNT; ++s)
+            {
+                AxisScale x_scale        = (AxisScale)s;
+                hist_normalization[s]    = float2{(float)axis_scale_fwd(summary.minimum, x_scale), 0.f};
+                hist_normalization[s][1] = (float)axis_scale_fwd(summary.maximum, x_scale) - hist_normalization[s][0];
+
+                // A channel whose samples are all equal transforms to a zero-width range; widen it so that
+                // the bin index stays finite and that single value lands in bin 0.
+                if (!(hist_normalization[s][1] > 0.f))
+                    hist_normalization[s][1] = std::max(std::abs(hist_normalization[s][0]), 1.f) * 1e-6f;
+
+                for (int i = 0; i <= num_bins; ++i) hist_xs[s][i] = (float)bin_to_value(i, x_scale);
+            }
+
+            // Counts are accumulated as integers: a large flat region in a many-megapixel image can push a
+            // single bin past 2^24, beyond which incrementing a float stops having any effect.
+            using Bins = std::array<std::array<uint32_t, MAX_BINS>, AxisScale_COUNT>;
+
+            size_t            block_size  = 1024 * 1024;
+            const size_t      num_threads = estimate_threads(croi.volume(), block_size, *ThreadPool::singleton());
+            std::vector<Bins> partials(max<size_t>(1, num_threads));
+
+            spdlog::trace("Breaking histogram accumulation into {} work units.", partials.size());
+
+            parallel_for(
+                blocked_range<size_t>(0u, croi.volume(), block_size),
+                [&partials, &canceled, &pixel_value, this](size_t begin, size_t end, int unit_index, int)
+                {
+                    Bins &bins = partials[unit_index];
+
+                    for (size_t i = begin; i != end; ++i)
+                    {
+                        if (canceled)
+                            throw std::runtime_error("Canceling histogram accumulation");
+
+                        float val = pixel_value((int)i);
+                        if (!std::isfinite(val)) //< the summary counts these instead
+                            continue;
+
+                        for (int s = 0; s < AxisScale_COUNT; ++s)
+                            ++bins[s][clamp_idx(value_to_bin(val, (AxisScale)s))];
+                    }
+                },
+                (int)num_threads);
+
+            for (const auto &bins : partials)
+                for (int s = 0; s < AxisScale_COUNT; ++s)
+                    for (int i = 0; i < num_bins; ++i) hist_ys[s][i] += (float)bins[s][i];
         }
 
-        // normalize histogram density by dividing bin counts by bin sizes
-        hist_y_limits[0] = std::numeric_limits<float>::infinity();
-        std::array<float, NUM_BINS> bin_sizes;
-        for (int i = 0; i < NUM_BINS; ++i)
+        for (int s = 0; s < AxisScale_COUNT; ++s)
         {
-            bin_sizes[i] = float(bin_to_value(i + 1) - bin_to_value(i));
-            hist_ys[i] /= bin_sizes[i];
-            hist_y_limits[0] = min(hist_y_limits[0], bin_sizes[i]);
+            // ImPlot's SymLog y scale is 2*asinh(y/2), which is defined at zero, so both y scales can start
+            // at the baseline.
+            hist_y_limits[s][0] = 0.f;
+
+            // Take the (drop+1)-th tallest bin rather than the tallest, so the one enormous spike that a
+            // flat background or a clipped highlight produces doesn't squash everything else flat. Those
+            // few bins run off the top of the plot, which reads correctly as "off the scale".
+            const int                   drop = std::min(num_bins - 1, 1 + num_bins / 128);
+            std::array<float, MAX_BINS> sorted;
+            std::copy_n(hist_ys[s].begin(), num_bins, sorted.begin());
+            std::nth_element(sorted.begin(), sorted.begin() + drop, sorted.begin() + num_bins, std::greater<float>());
+            hist_y_limits[s][1] = std::max(1.f, sorted[drop]);
         }
 
-        // Compute y limit for each histogram according to its 10th-largest bin
-        std::array<int, NUM_BINS> indices;
-        std::iota(indices.begin(), indices.end(), 0);
-        // Partially sort indices by descending hist_ys value
-        // auto idx = int(0.1 * NUM_BINS);
-        std::sort(indices.begin(), indices.end(), [&](int a, int b) { return hist_ys[a] < hist_ys[b]; });
-        // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
-        hist_y_limits[0] = settings.y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0];
-        // for upper y-limit, accumulate bins in descending order until reaching perc% of total area
-
-        float total_area    = (float)croi.volume();
-        float required_area = 0.99f * total_area; // percentage of total area to accumulate
-
-        double accum_area = 0.0;
-        hist_y_limits[1]  = 1.f;
-        int i;
-        for (i = 0; i < int(0.95f * NUM_BINS); ++i)
-        {
-            int bin_idx = indices[i]; // sorted by descending hist_ys
-            accum_area += hist_ys[bin_idx] * bin_sizes[bin_idx];
-            if (accum_area >= required_area)
-                break;
-        }
-        hist_y_limits[1] = hist_ys[indices[i]];
-
-        // fallback if all bins are zero
-        if (hist_y_limits[1] == 0.f)
-            hist_y_limits[1] = 1.f;
-
-        spdlog::trace("Histogram computed in {} ms:\nx_limits: {}\ny_limits: {}", timer.lap(),
-                      float2{summary.minimum, summary.maximum}, hist_y_limits);
+        spdlog::trace("Histogram computed in {} ms into {} bins:\nx_limits: {}\ny_limits: {}", timer.lap(), num_bins,
+                      float2{summary.minimum, summary.maximum}, hist_y_limits[settings.x_scale]);
 
         computed = true;
     }
@@ -578,6 +609,8 @@ Texture *Channel::get_texture()
 
 bool PixelStats::Settings::match(const Settings &other) const
 {
+    // Only what changes the computed values counts. exposure never reaches the computation, every x_scale
+    // is binned, and y_scale only picks which stored histogram the plot draws.
     return (blend_mode == other.blend_mode && ref_id == other.ref_id && ref_group == other.ref_group) &&
            other.roi == roi;
 }
@@ -640,8 +673,8 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
              ref_data_origin]()
             {
                 spdlog::debug("Starting a new stats computation");
-                async_stats->calculate(*this, alpha, img_data_origin, ref, ref_alpha, ref_data_origin,
-                                       desired_settings, *canceled);
+                async_stats->calculate(*this, alpha, img_data_origin, ref, ref_alpha, ref_data_origin, desired_settings,
+                                        *canceled);
             });
         async_settings = desired_settings;
     };

@@ -403,6 +403,11 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 fmt::format("{}-bit unsigned int ({} bpc)", bits_per_sample * samples_per_pixel, bits_per_sample);
 
         image->metadata["pixel format"] = format_str;
+        // file_bits_per_sample is the depth before the rounding above; the RGBA interface overrides it,
+        // since it always hands back 8-bit samples.
+        image->set_bits_per_sample(sample_format == SAMPLEFORMAT_IEEEFP ? 0
+                                   : use_rgba_interface                 ? 8
+                                                                        : file_bits_per_sample);
 
         if (use_rgba_interface)
         {
