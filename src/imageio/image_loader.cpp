@@ -132,32 +132,6 @@ static std::vector<LoaderEntry> default_loaders()
              return false;
          }},
 #endif
-#if HDRVIEW_ENABLE_LIBRAW
-        {"libraw",
-         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
-         {
-             if (is_raw_image(is))
-             {
-                 spdlog::info("Loading '{}' using libraw loader...", filename);
-                 out = load_raw_image(is, filename, opts);
-                 return true;
-             }
-             return false;
-         }},
-#endif
-#if HDRVIEW_ENABLE_LIBTIFF
-        {"libtiff",
-         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
-         {
-             if (is_tiff_image(is))
-             {
-                 spdlog::info("Loading '{}' using libtiff loader...", filename);
-                 out = load_tiff_image(is, filename, opts);
-                 return true;
-             }
-             return false;
-         }},
-#endif
 #if HDRVIEW_ENABLE_LIBPNG
         {"libpng",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
@@ -179,6 +153,32 @@ static std::vector<LoaderEntry> default_loaders()
              {
                  spdlog::info("Loading '{}' using libwebp loader...", filename);
                  out = load_webp_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#if HDRVIEW_ENABLE_LIBRAW
+        {"libraw",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_raw_image(is))
+             {
+                 spdlog::info("Loading '{}' using libraw loader...", filename);
+                 out = load_raw_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#if HDRVIEW_ENABLE_LIBTIFF
+        {"libtiff",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_tiff_image(is))
+             {
+                 spdlog::info("Loading '{}' using libtiff loader...", filename);
+                 out = load_tiff_image(is, filename, opts);
                  return true;
              }
              return false;

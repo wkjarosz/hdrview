@@ -676,6 +676,37 @@ Box2i get_display_window(const libraw_data_t &idata)
 
 } // namespace
 
+// LibRaw's "is this a raw file?" test is a full parse, and its parser is permissive enough to read
+// arbitrary bytes as sensor metadata: a 156-byte corrupted PNG opens as a 3072x2047 "Contax N Digital",
+// which then costs a full AHD demosaic of a 6.3-megapixel image that isn't there. The dimensions alone
+// look ordinary, so the giveaway is how little data backs them.
+//
+// Measured over 316 real files spanning 14 formats (CR2, CRW, NEF, ARW, ORF, RAF, RW2, PEF, DNG, SRW,
+// KDC, 3FR, MOS, DCR), a raw carries between 0.17 and 6.1 pixels per byte; the high end is a Kodak KDC
+// storing JPEG-compressed sensor data. The limit sits well above that while still being far below what
+// a confabulated image asks for -- the PNG above wants 40,310 -- since rejecting a real raw would be a
+// visible failure whereas letting an implausible one through only costs time.
+static constexpr double k_max_raw_pixels_per_byte = 512.0;
+
+//! Whether \p width by \p height is plausible for a raw file of \p bytes.
+static bool plausible_raw_size(int64_t width, int64_t height, std::streamoff bytes)
+{
+    if (width <= 0 || height <= 0 || bytes <= 0)
+        return false;
+    return double(width) * double(height) <= k_max_raw_pixels_per_byte * double(bytes);
+}
+
+//! Size of \p is in bytes, restoring the stream position.
+static std::streamoff stream_size(std::istream &is)
+{
+    auto pos = is.tellg();
+    is.seekg(0, std::ios::end);
+    auto size = is.tellg();
+    is.clear();
+    is.seekg(pos);
+    return size;
+}
+
 bool is_raw_image(std::istream &is) noexcept
 {
     try
@@ -684,6 +715,15 @@ bool is_raw_image(std::istream &is) noexcept
         LibRawIStream      ds(is);
 
         auto ret = raw->open_datastream(&ds) == LIBRAW_SUCCESS;
+
+        // Decline rather than throw, so a file LibRaw merely thinks it recognizes still gets offered to
+        // the loaders after this one.
+        if (ret && !plausible_raw_size(raw->imgdata.sizes.width, raw->imgdata.sizes.height, stream_size(is)))
+        {
+            spdlog::debug("Declining {}x{} raw: too little data to back those dimensions.",
+                          raw->imgdata.sizes.width, raw->imgdata.sizes.height);
+            ret = false;
+        }
 
         is.clear();
         is.seekg(0);
@@ -753,6 +793,12 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     // Open the RAW file using datastream (avoids loading entire file into memory)
     if (auto ret = raw->open_datastream(&libraw_stream); ret != LIBRAW_SUCCESS)
         throw std::runtime_error(fmt::format("Failed to open RAW file: {}", libraw_strerror(ret)));
+
+    // Checked again here, since this is reachable without going through is_raw_image().
+    if (!plausible_raw_size(raw->imgdata.sizes.width, raw->imgdata.sizes.height, stream_size(is)))
+        throw std::runtime_error(fmt::format("RAW: {}x{} is too large to be backed by {} bytes.",
+                                             raw->imgdata.sizes.width, raw->imgdata.sizes.height,
+                                             (long long)stream_size(is)));
 
     add_maker_notes(raw, exif_ctx.metadata);
 

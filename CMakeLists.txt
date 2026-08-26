@@ -1643,6 +1643,10 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   # Mirrors HDRView's own HDRVIEW_BUILD_TREE_ASSETS_DIR definition above, so tests/test_assets.cpp
   # can exercise the same asset lookup the app uses.
   target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
+  # Fuzzer-found inputs that can't be synthesized; see tests/fuzz/artifacts/README.md.
+  target_compile_definitions(
+    hdrview_tests PRIVATE HDRVIEW_TEST_ARTIFACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/artifacts"
+  )
   target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version doctest::doctest)
 
   if(WIN32)

@@ -13,9 +13,11 @@
 #include "imageio/dds.h"
 #include "imageio/image_loader.h"
 #include "imageio/qoi.h"
+#include "imageio/raw.h"
 #include "imageio/stb.h"
 
 #include <cstdint>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -186,3 +188,16 @@ TEST_CASE("A header declaring an ordinary size is not rejected for its dimension
         CHECK(std::string(e.what()).find("implausibly large") == std::string::npos);
     }
 }
+
+#ifdef HDRVIEW_TEST_ARTIFACTS_DIR
+TEST_CASE("A file that only LibRaw claims is declined when too little data backs it")
+{
+    // LibRaw's sniff is a full parse, and its parser is permissive enough to read this corrupted PNG as a
+    // 3072x2047 sensor -- 6.3 megapixels from 156 bytes, which it would then demosaic. The dimensions look
+    // ordinary, so the size check that guards the other loaders doesn't catch it; what gives it away is the
+    // ratio of declared pixels to bytes present.
+    std::ifstream f(std::string(HDRVIEW_TEST_ARTIFACTS_DIR) + "/libraw-claims-this-png.bin", std::ios::binary);
+    REQUIRE(f.good());
+    CHECK_FALSE(is_raw_image(f));
+}
+#endif
