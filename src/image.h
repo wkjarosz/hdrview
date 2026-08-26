@@ -14,6 +14,7 @@
 #include "imageio/exif.h"
 #include "json.h"
 #include "texture.h"
+#include <algorithm>
 #include <cfloat>
 #include <half.h>
 #include <map>
@@ -102,8 +103,11 @@ struct PixelStats
     */
     static constexpr int bins_for_bit_depth(int bits)
     {
-        // the depth test comes first: 1 << bits is undefined for large bits
-        return (bits <= 0 || bits >= 16) ? MAX_BINS : (1 << bits);
+        // The shift is guarded first, since 1 << bits is undefined for large bits. A source with more
+        // levels than MAX_BINS, or one whose depth is unknown, gets the full resolution.
+        if (bits <= 0 || bits >= 16)
+            return MAX_BINS;
+        return std::min(MAX_BINS, 1 << bits);
     }
 
     struct Settings

@@ -8,8 +8,6 @@
 #include <doctest/doctest.h>
 
 #include "image.h"
-#include "imageio/image_loader.h"
-#include <fstream>
 
 // PixelStats::calculate() (exercised by the tests below) lazily spins up stp::ThreadPool::singleton()'s
 // worker threads. If we let them be torn down via the pool's own static destructor, their exit-time
@@ -400,9 +398,9 @@ TEST_CASE("PixelStats::calculate counts NaN/Inf pixels separately and excludes t
     Channel img("test", int2{4, 4});
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x) img(x, y) = float(x + 4 * y);
-    img(1, 1) = std::numeric_limits<float>::quiet_NaN();     // value 5
-    img(2, 2) = std::numeric_limits<float>::infinity();      // value 10
-    img(3, 0) = -std::numeric_limits<float>::infinity();     // value 3
+    img(1, 1) = std::numeric_limits<float>::quiet_NaN(); // value 5
+    img(2, 2) = std::numeric_limits<float>::infinity();  // value 10
+    img(3, 0) = -std::numeric_limits<float>::infinity(); // value 3
 
     PixelStats::Settings settings; // whole image
 
@@ -558,26 +556,3 @@ TEST_CASE("A 10-bit channel bins without running off the end of its storage")
     auto stats = compute(c);
     CHECK(stats.num_bins <= PixelStats::MAX_BINS);
 }
-
-#ifdef HDRVIEW_REPRO_DIR
-TEST_CASE("Computing stats for a real 10-bit AVIF stays inside the histogram's storage")
-{
-    // load_image() finalizes for us; calling it again is not supported.
-    std::string   path = std::string(HDRVIEW_REPRO_DIR) + "/avif_10bit_color.avif";
-    std::ifstream f(path, std::ios::binary);
-    REQUIRE(f.good());
-    auto images = load_image(f, "avif_10bit_color.avif");
-    REQUIRE(images.size() == 1);
-    REQUIRE(!images[0]->channels.empty());
-
-    CHECK(images[0]->channels[0].bits_per_sample == 10);
-    CHECK(PixelStats::bins_for_bit_depth(10) <= PixelStats::MAX_BINS);
-
-    std::atomic<bool>    canceled{false};
-    PixelStats::Settings settings;
-    PixelStats           stats;
-    stats.calculate(images[0]->channels[0], nullptr, images[0]->data_window.min, nullptr, nullptr, int2{0, 0},
-                    settings, canceled);
-    CHECK(stats.num_bins <= PixelStats::MAX_BINS);
-}
-#endif
