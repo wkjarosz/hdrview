@@ -94,8 +94,9 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
         throw invalid_argument{"Failed to decode data from the QOI format."};
 
     int3 size{static_cast<int>(desc.width), static_cast<int>(desc.height), static_cast<int>(desc.channels)};
-    if (product(size) == 0)
-        throw invalid_argument{"Image has zero pixels."};
+    // The dimensions were vetted before decoding; only the channel count is still unchecked.
+    if (size.z == 0)
+        throw invalid_argument{"Image has zero channels."};
 
     auto image                      = make_shared<Image>(size.xy(), size.z);
     image->filename                 = filename;
