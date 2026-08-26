@@ -1702,7 +1702,16 @@ void Image::draw_channel_stats()
 
         float4 displayed{0.f, 0.f, 0.f, 1.f};
         if (show_swatch)
-            displayed = linear_to_sRGB(hdrview()->tonemap_value(float4{raw[0], raw[1], raw[2], raw[3]}));
+        {
+            // The swatch goes through the tonemap and, in false-color mode, a colormap lookup that indexes
+            // with an integer -- a NaN sample survives neither. The numbers printed beside the swatch come
+            // from `raw`, so they still report the value the file holds.
+            float4 finite{raw[0], raw[1], raw[2], raw[3]};
+            for (int c = 0; c < 4; ++c)
+                if (!std::isfinite(finite[c]))
+                    finite[c] = 0.f;
+            displayed = linear_to_sRGB(hdrview()->tonemap_value(finite));
+        }
 
         ImGui::PE::Entry(label,
                          [&]

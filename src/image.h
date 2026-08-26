@@ -231,12 +231,15 @@ public:
     Channel(Channel &&other) noexcept            = default;
     Channel &operator=(Channel &&other) noexcept = default;
 
-    ~Channel()
+    //! Stop any in-flight statistics computation for this channel and wait for it to unwind.
+    void cancel_stats()
     {
         if (async_canceled)
             async_canceled->store(true);
         async_tracker.wait();
     }
+
+    ~Channel() { cancel_stats(); }
 
     template <typename Func>
     void apply(Func &&func)
@@ -406,6 +409,18 @@ public:
     Image();
     Image(const Image &) = delete;
     Image(Image &&)      = default;
+
+    //! Stops every channel's statistics computation before any channel is destroyed.
+    /*!
+        A task computing one channel's statistics also reads its group's alpha channel, and the channel
+        vector destroys its elements back to front -- so the alpha channel, being last, would be freed while
+        an earlier channel's task was still reading it. Each Channel destructor only cancels its own task,
+        which is too late by then.
+    */
+    ~Image()
+    {
+        for (auto &c : channels) c.cancel_stats();
+    }
 
     std::string file_and_partname() const { return partname.empty() ? filename : filename + ":" + partname; }
     std::string delimiter() const { return partname.empty() ? ":" : "."; }
