@@ -223,6 +223,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         image->metadata["pixel format"] =
             fmt::format("{} ({} channel{}, {} bpc)", color_space_name(cinfo.jpeg_color_space), cinfo.num_components,
                         cinfo.num_components > 1 ? "s" : "", cinfo.data_precision);
+        image->set_bits_per_sample(cinfo.data_precision);
 #if JPEG_LIB_VERSION >= 80
         image->metadata["header"]["Is baseline"] = {
             {"value", cinfo.is_baseline}, {"string", cinfo.is_baseline ? "yes" : "no"}, {"type", "bool"}};

@@ -204,15 +204,19 @@ TEST_CASE("PNG load handles the full PngSuite bit-depth/color-type matrix withou
 {
     // one representative file per PngSuite color-type code: 0g=gray, 2c=truecolor, 3p=palette (expanded to RGB),
     // 4a=gray+alpha, 6a=truecolor+alpha; expected channel count reflects HDRView's post-expansion representation
+    // expected_bits is the file's own sample depth, which sets the histogram's bin count; palette entries are
+    // 8-bit RGB however few bits the indices took.
     struct Case
     {
         const char *file;
         int          expected_channels;
+        int         expected_bits;
     };
     static const Case cases[] = {
-        {"basn0g01.png", 1}, {"basn0g02.png", 1}, {"basn0g04.png", 1}, {"basn0g08.png", 1}, {"basn0g16.png", 1},
-        {"basn2c08.png", 3}, {"basn2c16.png", 3}, {"basn3p01.png", 3}, {"basn3p02.png", 3}, {"basn3p04.png", 3},
-        {"basn3p08.png", 3}, {"basn4a08.png", 2}, {"basn4a16.png", 2}, {"basn6a08.png", 4}, {"basn6a16.png", 4},
+        {"basn0g01.png", 1, 1},  {"basn0g02.png", 1, 2}, {"basn0g04.png", 1, 4},  {"basn0g08.png", 1, 8},
+        {"basn0g16.png", 1, 16}, {"basn2c08.png", 3, 8}, {"basn2c16.png", 3, 16}, {"basn3p01.png", 3, 8},
+        {"basn3p02.png", 3, 8},  {"basn3p04.png", 3, 8}, {"basn3p08.png", 3, 8},  {"basn4a08.png", 2, 8},
+        {"basn4a16.png", 2, 16}, {"basn6a08.png", 4, 8}, {"basn6a16.png", 4, 16},
     };
 
     for (const auto &c : cases)
@@ -221,6 +225,7 @@ TEST_CASE("PNG load handles the full PngSuite bit-depth/color-type matrix withou
         auto reloaded = load_test_png("pngsuite", c.file);
         REQUIRE(reloaded.size() == 1);
         CHECK(reloaded[0]->channels.size() == (size_t)c.expected_channels);
+        for (const auto &ch : reloaded[0]->channels) CHECK(ch.bits_per_sample == c.expected_bits);
     }
 }
 

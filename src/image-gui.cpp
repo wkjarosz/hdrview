@@ -239,6 +239,9 @@ void Image::draw_histogram()
     string      names[4];
     auto        colors = group.colors();
 
+    // Each PixelStats holds one histogram per AxisScale; this picks the one the x axis is currently drawn in.
+    const AxisScale x_scale = hdrview()->histogram_x_scale();
+
     float2 x_limits = {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
     float2 y_limits = x_limits;
     for (int c = 0; c < std::min(4, group.num_channels); ++c)
@@ -246,9 +249,9 @@ void Image::draw_histogram()
         auto &channel = channels[group.channels[c]];
         channel.update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
         stats[c]    = channel.get_stats();
-        y_limits[0] = std::min(y_limits[0], stats[c]->hist_y_limits[0]);
-        y_limits[1] = std::max(y_limits[1], stats[c]->hist_y_limits[1]);
-        auto xl     = stats[c]->x_limits(hdrview()->exposure_live(), hdrview()->histogram_x_scale());
+        y_limits[0] = std::min(y_limits[0], stats[c]->hist_y_limits[x_scale][0]);
+        y_limits[1] = std::max(y_limits[1], stats[c]->hist_y_limits[x_scale][1]);
+        auto xl     = stats[c]->x_limits(hdrview()->exposure_live(), x_scale);
         x_limits[0] = std::min(x_limits[0], xl[0]);
         x_limits[1] = std::max(x_limits[1], xl[1]);
         names[c]    = Channel::tail(channel.name);
@@ -322,16 +325,22 @@ void Image::draw_histogram()
             int         px1        = (int)std::ceil(plot_pos.x + plot_size.x);
             ImDrawList *draw_list  = ImPlot::GetPlotDrawList();
 
-            // The histogram is piecewise-constant (one count per bin): the height across bin i's range is
-            // simply hist_ys[i]. Bins are uniform in the (nonlinear) asinh-transformed value space, not in
-            // raw pixel-value space, so finding the containing bin needs value_to_bin()'s asinh transform
-            // rather than a linear fraction of x's position in the range.
-            auto sample_height = [](const PixelStats *s, float x) -> float
+            // The histogram is piecewise-constant (one count per bin), so a screen column shows the tallest
+            // bin it covers. Reducing by the maximum keeps a bin narrower than a pixel from falling between
+            // samples, so a gap that survives is a range of values the source has no code for. The column's
+            // edges have to be resolved through value_to_bin() rather than scaled by their position, since
+            // the plot's x range follows exposure while the binned range follows the data.
+            auto column_height = [x_scale](const PixelStats *s, double xa, double xb) -> float
             {
-                int i = s->value_to_bin((double)x);
-                if (i < 0 || i >= PixelStats::NUM_BINS)
+                int i0 = s->value_to_bin(std::min(xa, xb), x_scale);
+                int i1 = s->value_to_bin(std::max(xa, xb), x_scale);
+                if (i1 < 0 || i0 >= s->num_bins)
                     return 0.f;
-                return s->hist_ys[i];
+
+                float h = 0.f;
+                for (int i = std::max(i0, 0); i <= std::min(i1, s->num_bins - 1); ++i)
+                    h = std::max(h, s->hist_ys[x_scale][i]);
+                return h;
             };
 
             // Raw ImDrawList calls (unlike ImPlot's own Plot* items, e.g. PlotStairs below) aren't
@@ -354,11 +363,13 @@ void Image::draw_histogram()
             std::array<float, 4> heights;
             for (int px = px0; px < px1; ++px)
             {
-                double x = ImPlot::PixelsToPlot(ImVec2((float)px + 0.5f, plot_pos.y)).x;
+                double xa = ImPlot::PixelsToPlot(ImVec2((float)px, plot_pos.y)).x;
+                double xb = ImPlot::PixelsToPlot(ImVec2((float)px + 1.f, plot_pos.y)).x;
+                double x  = 0.5 * (xa + xb);
 
                 for (int c = 0; c < n_channels; ++c)
                 {
-                    heights[c] = shown[c] ? std::max(0.f, sample_height(stats[c], (float)x)) : 0.f;
+                    heights[c] = shown[c] ? std::max(0.f, column_height(stats[c], xa, xb)) : 0.f;
                     order[c]   = c;
                 }
                 std::sort(order.begin(), order.begin() + n_channels,
@@ -399,8 +410,8 @@ void Image::draw_histogram()
             ImPlotSpec spec;
             spec.LineColor = float4{colors[c].xyz(), 0.1f};
             spec.FillColor = float4{0.f};
-            ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
-                               PixelStats::NUM_BINS, spec);
+            ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs[x_scale].data(), stats[c]->hist_ys[x_scale].data(),
+                               stats[c]->num_bins, spec);
 
             // Re-register the same label opaque to recolor its legend swatch: PlotDummy adopts the first
             // non-auto color in its spec as the legend icon color, and the legend isn't rendered until
@@ -421,7 +432,7 @@ void Image::draw_histogram()
                 spec.Marker     = ImPlotMarker_Circle;
                 spec.MarkerSize = 2.f;
                 ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c],
-                                  &stats[c]->bin_y(stats[c]->value_to_bin(color32[c])), 1, 0, spec);
+                                  &stats[c]->bin_y(stats[c]->value_to_bin(color32[c], x_scale), x_scale), 1, 0, spec);
 
                 ImPlot::TagX(color32[c], float4{colors[c].xyz(), 1.0f}, "%s", "");
             }

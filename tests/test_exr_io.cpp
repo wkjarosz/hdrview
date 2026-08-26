@@ -8,11 +8,17 @@
 
 #include "image.h"
 #include "imageio/exr.h"
-#include "imageio/image_loader.h"
 #include "imageio/exr_save_options.h"
+#include "imageio/image_loader.h"
 
 #include <fstream>
 #include <sstream>
+
+#include <ImfChannelList.h>
+#include <ImfFrameBuffer.h>
+#include <ImfHeader.h>
+#include <ImfOutputFile.h>
+#include <ImfStdIO.h>
 
 #ifdef HDRVIEW_TEST_OPENEXR_DIR
 #include <algorithm>
@@ -193,6 +199,7 @@ TEST_CASE("EXR save/load precision depends on the chosen pixel type")
         opts.pixel_type  = 1; // HALF
         auto reloaded    = save_and_reload(*img, opts);
         REQUIRE(reloaded.size() == 1);
+        CHECK(reloaded[0]->channels[0].bits_per_sample == 0); //< floating point, so no quantization lattice
         float value = reloaded[0]->channels[0](0, 0);
         CHECK(value != doctest::Approx(0.1f).epsilon(1e-6));  // not exact
         CHECK(value == doctest::Approx(0.1f).epsilon(1e-3));  // but close, within half precision
@@ -206,6 +213,48 @@ TEST_CASE("EXR save/load precision depends on the chosen pixel type")
         REQUIRE(reloaded.size() == 1);
         CHECK(reloaded[0]->channels[0](0, 0) == doctest::Approx(0.1f).epsilon(1e-6));
     }
+}
+
+TEST_CASE("EXR channels report their own sample depths independently")
+{
+    // A part can mix pixel types, which is why the depth that sets the histogram's bin count lives on the
+    // channel rather than the image. Only UINT is quantized; half and float report 0.
+    const int2 size{4, 4};
+
+    Imf::Header header(size.x, size.y);
+    header.channels().insert("H", Imf::Channel(Imf::HALF));
+    header.channels().insert("F", Imf::Channel(Imf::FLOAT));
+    header.channels().insert("U", Imf::Channel(Imf::UINT));
+
+    std::vector<half>     halves(size.x * size.y, half(0.5f));
+    std::vector<float>    floats(size.x * size.y, 0.5f);
+    std::vector<uint32_t> uints(size.x * size.y, 7u);
+
+    std::ostringstream out(std::ios::binary);
+    {
+        Imf::StdOSStream os;
+        Imf::FrameBuffer fb;
+        fb.insert("H", Imf::Slice(Imf::HALF, (char *)halves.data(), sizeof(half), sizeof(half) * size.x));
+        fb.insert("F", Imf::Slice(Imf::FLOAT, (char *)floats.data(), sizeof(float), sizeof(float) * size.x));
+        fb.insert("U", Imf::Slice(Imf::UINT, (char *)uints.data(), sizeof(uint32_t), sizeof(uint32_t) * size.x));
+
+        Imf::OutputFile file(os, header);
+        file.setFrameBuffer(fb);
+        file.writePixels(size.y);
+        out << os.str();
+    }
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               images = load_exr_image(in, "mixed.exr");
+    REQUIRE(images.size() == 1);
+
+    std::map<std::string, int> depths;
+    for (const auto &c : images[0]->channels) depths[c.name] = c.bits_per_sample;
+
+    REQUIRE(depths.size() == 3);
+    CHECK(depths["H"] == 0);
+    CHECK(depths["F"] == 0);
+    CHECK(depths["U"] == 32);
 }
 
 TEST_CASE("is_exr_image correctly identifies real EXR bytes and rejects garbage")
@@ -260,8 +309,8 @@ TEST_CASE("EXR load splits a real multi-part file into one Image per part, with 
     for (const auto &img : reloaded) actual_names.insert(img->partname);
     CHECK(actual_names == expected_names);
 
-    auto depth_left =
-        std::find_if(reloaded.begin(), reloaded.end(), [](const ImagePtr &img) { return img->partname == "depth_left"; });
+    auto depth_left = std::find_if(reloaded.begin(), reloaded.end(),
+                                   [](const ImagePtr &img) { return img->partname == "depth_left"; });
     REQUIRE(depth_left != reloaded.end());
     REQUIRE((*depth_left)->channels.size() == 1);
     CHECK((*depth_left)->channels[0].name == "Z");
@@ -277,8 +326,8 @@ TEST_CASE("EXR load up-samples subsampled channels to full resolution with block
 
     auto find_channel = [&](const char *name) -> Channel &
     {
-        auto it = std::find_if(img.channels.begin(), img.channels.end(),
-                               [&](const Channel &c) { return c.name == name; });
+        auto it =
+            std::find_if(img.channels.begin(), img.channels.end(), [&](const Channel &c) { return c.name == name; });
         REQUIRE(it != img.channels.end());
         return *it;
     };

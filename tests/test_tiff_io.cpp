@@ -41,8 +41,7 @@ std::string tiff_with_extra_samples(uint16_t value)
     std::string bytes(reinterpret_cast<const char *>(k_rgba_tiff), sizeof(k_rgba_tiff));
 
     auto read_u16 = [&](size_t o) { return uint16_t(uint8_t(bytes[o]) | (uint8_t(bytes[o + 1]) << 8)); };
-    auto read_u32 = [&](size_t o)
-    { return uint32_t(read_u16(o)) | (uint32_t(read_u16(o + 2)) << 16); };
+    auto read_u32 = [&](size_t o) { return uint32_t(read_u16(o)) | (uint32_t(read_u16(o + 2)) << 16); };
 
     REQUIRE(bytes.compare(0, 2, "II") == 0); // the fixture is little-endian
     const uint32_t ifd     = read_u32(4);
@@ -71,6 +70,12 @@ ImagePtr load_tiff(const std::string &bytes)
 }
 
 } // namespace
+
+TEST_CASE("TIFF channels report the file's sample depth")
+{
+    auto img = load_tiff(tiff_with_extra_samples(2)); // EXTRASAMPLE_UNASSALPHA
+    for (const auto &c : img->channels) CHECK(c.bits_per_sample == 8);
+}
 
 TEST_CASE("TIFF with unassociated alpha is premultiplied exactly once")
 {

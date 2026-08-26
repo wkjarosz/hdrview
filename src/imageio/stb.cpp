@@ -283,6 +283,9 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         else
             image->metadata["pixel format"] = fmt::format("{} bbp", 8);
 
+        // RGBE decodes to floating point, so like any float source it has no quantization lattice
+        image->set_bits_per_sample(is_hdr ? 0 : (is_16_bit ? 16 : 8));
+
         if (j.contains("header"))
             image->metadata["header"] = j["header"];
 

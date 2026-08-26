@@ -339,6 +339,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             // Start with base metadata common to all frames
             frame_image->metadata                 = base_metadata;
             frame_image->metadata["pixel format"] = has_alpha ? "RGBA 8-bit" : "RGB 8-bit";
+            frame_image->set_bits_per_sample(8);
 
             // Check if frame is lossy or lossless
             WebPBitstreamFeatures features;
