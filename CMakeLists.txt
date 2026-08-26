@@ -1690,6 +1690,40 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   doctest_discover_tests(hdrview_tests)
 endif()
 
+# libFuzzer target for the image loaders. Off by default and Clang-only: load_image() sniffs magic bytes to
+# pick a loader, so this single target reaches every format in default_loaders(). Reuses the same sources as
+# hdrview_tests, with libFuzzer supplying main() instead of doctest. Pair with -DUSE_SANITIZER.
+option(HDRVIEW_BUILD_FUZZERS "Build libFuzzer targets for the image loaders (Clang only)" OFF)
+if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "HDRVIEW_BUILD_FUZZERS requires Clang (libFuzzer)")
+  endif()
+
+  list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
+  add_executable(hdrview_fuzz_load_image ${HDRVIEW_SOURCES} tests/fuzz/fuzz_load_image.cpp)
+  target_include_directories(hdrview_fuzz_load_image PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  set_target_properties(hdrview_fuzz_load_image PROPERTIES CXX_STANDARD 17)
+  target_compile_definitions(hdrview_fuzz_load_image PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
+  target_compile_definitions(
+    hdrview_fuzz_load_image PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
+  )
+  target_link_libraries(hdrview_fuzz_load_image PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+  target_compile_options(hdrview_fuzz_load_image PRIVATE -fsanitize=fuzzer-no-link)
+  # Apple's clang instruments for libFuzzer but ships no fuzzer runtime, so link one explicitly.
+  # HDRVIEW_FUZZER_RUNTIME should point at a libclang_rt.fuzzer_osx.a from an LLVM install.
+  if(HDRVIEW_FUZZER_RUNTIME)
+    target_link_libraries(hdrview_fuzz_load_image PRIVATE "${HDRVIEW_FUZZER_RUNTIME}")
+  else()
+    target_link_options(hdrview_fuzz_load_image PRIVATE -fsanitize=fuzzer)
+  endif()
+
+  if(APPLE)
+    target_compile_options(hdrview_fuzz_load_image PRIVATE "-fobjc-arc")
+    target_link_libraries(hdrview_fuzz_load_image PRIVATE "-framework ApplicationServices")
+    target_compile_definitions(hdrview_fuzz_load_image PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+  endif()
+endif()
+
 # GUI regression tests, driven by Dear ImGui Test Engine (https://github.com/ocornut/imgui_test_engine),
 # fetched/built for us by hello_imgui's own HELLOIMGUI_WITH_TEST_ENGINE option (see above). Unlike
 # hdrview_tests, these can't share doctest's binary/main(): a GUI test needs HelloImGui::Run() to own the
