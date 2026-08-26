@@ -5,6 +5,7 @@
 //
 
 #include "image.h"
+#include "imageio/image_loader.h"
 #include <cstring>
 #include <iostream>
 #include <spdlog/fmt/fmt.h>
@@ -512,6 +513,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                              (int)preferred_chroma);
 
                 int3 size{heif_image_handle_get_width(ihandle.get()), heif_image_handle_get_height(ihandle.get()), 0};
+                check_image_dimensions(size.x, size.y, "HEIF");
                 bool has_alpha = heif_image_handle_has_alpha_channel(ihandle.get()) != 0;
 
                 heif_chroma     out_chroma;

@@ -9,6 +9,7 @@
 #include "colorspace.h"
 #include "exif.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 #include "imgui.h"
 #include "timer.h"
 #include <cstdint>
@@ -205,6 +206,8 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
         throw_if_error(uhdr_dec_probe(decoder.get()));
         spdlog::debug("base image: {}x{}", uhdr_dec_get_image_width(decoder.get()),
                       uhdr_dec_get_image_height(decoder.get()));
+        check_image_dimensions(uhdr_dec_get_image_width(decoder.get()), uhdr_dec_get_image_height(decoder.get()),
+                               "Ultra HDR");
         throw_if_error(uhdr_decode(decoder.get()));
         // going out of scope deallocates contents of data
     }

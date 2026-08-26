@@ -10,6 +10,7 @@
 #include "exr_save_options.h"
 #include "exr_std_streams.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 #include "timer.h"
@@ -439,6 +440,7 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
         Imath::Box2i dataWindow    = part.header().dataWindow();
         Imath::Box2i displayWindow = part.header().displayWindow();
         int2         size          = {dataWindow.max.x - dataWindow.min.x + 1, dataWindow.max.y - dataWindow.min.y + 1};
+        check_image_dimensions(size.x, size.y, "EXR");
 
         if (size.x <= 0 || size.y <= 0)
         {

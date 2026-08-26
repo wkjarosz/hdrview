@@ -8,6 +8,7 @@
 #include "app.h"
 #include "common.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 
 using namespace std;
 
@@ -241,8 +242,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         throw_if_error(TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width), "image width");
         throw_if_error(TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height), "image height");
 
-        if (width == 0 || height == 0)
-            throw runtime_error(fmt::format("Invalid TIFF dimensions: {}x{}", width, height));
+        check_image_dimensions(width, height, "TIFF");
 
         uint16_t samples_per_pixel, bits_per_sample, sample_format, photometric, planar_config, compression_type;
         throw_if_error(TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel), "samples per pixel");
