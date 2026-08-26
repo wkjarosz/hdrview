@@ -13,17 +13,28 @@
 
 #include <cmath>
 
-TEST_CASE("Transfer functions keep negative input finite")
+TEST_CASE("Transfer functions mirror around the origin for negative input")
 {
-    // A wide-gamut color converted to a narrower gamut lands outside it, i.e. negative. sRGB handles this
-    // with an odd extension; the HDR curves return NaN instead, which then poisons whatever they feed.
+    // A wide-gamut color converted to a narrower gamut lands outside it, which is carried as negative
+    // components. The convention -- OpenColorIO's LIN_TO_PQ, colour-science's signed power, and this file's
+    // own linear_to_sRGB -- is to mirror the curve around the origin rather than clamp, so that the sign
+    // survives and the round trip stays exact.
     for (int t = TransferFunction::Unspecified; t < TransferFunction::Count; ++t)
     {
         TransferFunction tf{static_cast<TransferFunction::Type_>(t)};
         for (float x : {-0.5f, -10.f})
         {
             INFO("transfer function = ", transfer_function_name(tf), ", x = ", x);
-            CHECK(std::isfinite(from_linear(x, tf)));
+            float encoded = from_linear(x, tf);
+            REQUIRE(std::isfinite(encoded));
+
+            // Log100 and its sqrt10 variant are defined on a bounded domain and clamp by specification,
+            // so they are the one family that legitimately loses the sign.
+            if (tf.type == TransferFunction::Log100 || tf.type == TransferFunction::Log100_Sqrt10)
+                continue;
+
+            CHECK(encoded <= 0.f);
+            CHECK(to_linear(encoded, tf) == doctest::Approx(x).epsilon(1e-3));
         }
     }
 }
@@ -89,3 +100,4 @@ TEST_CASE("axis_scale_fwd/inv round-trip across the range the histogram spans")
             CHECK(axis_scale_inv(f, (AxisScale)s) == doctest::Approx(x).epsilon(1e-9));
         }
 }
+

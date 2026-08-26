@@ -12,6 +12,8 @@
 
 #include <qoi.h>
 
+#include "imageio/image_loader.h"
+
 #include "colorspace.h"
 #include "image.h"
 #include "timer.h"
@@ -72,6 +74,18 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
     if ((size_t)is.gcount() != raw_size)
         throw invalid_argument{
             fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
+
+    // qoi_decode() sizes its output from the header, so the dimensions have to be checked before the call
+    // rather than after: bytes 4..12 are big-endian width and height.
+    if (raw_size >= 12)
+    {
+        auto be32 = [&raw_data](size_t o)
+        {
+            return (int64_t)((uint8_t)raw_data[o] << 24 | (uint8_t)raw_data[o + 1] << 16 |
+                             (uint8_t)raw_data[o + 2] << 8 | (uint8_t)raw_data[o + 3]);
+        };
+        check_image_dimensions(be32(4), be32(8), "QOI");
+    }
 
     qoi_desc                                     desc;
     std::unique_ptr<void, decltype(std::free) *> decoded_data{

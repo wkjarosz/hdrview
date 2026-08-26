@@ -13,6 +13,7 @@
 #include "dithermatrix256.h"
 
 #include "fwd.h"
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -423,8 +424,13 @@ inline Real EOTF_BT2100_PQ(Real E_p)
     constexpr Real c2    = Real(2413) / Real(4096) * 32; // 18.8515625f;
     constexpr Real c3    = Real(2392) / Real(4096) * 32; // 18.6875f;
 
-    const auto E_pm2 = std::pow(std::max(E_p, Real(0)), m2inv);
-    return Real(10000) * std::pow(std::max(Real(0), E_pm2 - c1) / (c2 - c3 * E_pm2), m1inv);
+    // Out-of-gamut color is carried as negative components, so the curve is mirrored around the origin
+    // rather than clamped -- the same convention linear_to_sRGB() uses here, and the one OpenColorIO's
+    // LIN_TO_PQ and colour-science's signed-power ST 2084 both apply. Clamping would silently discard
+    // whichever channels a gamut conversion pushed negative. The inner max() is separate: it keeps the
+    // PQ numerator from going negative for very small inputs.
+    const auto E_pm2 = std::pow(std::abs(E_p), m2inv);
+    return std::copysign(Real(10000) * std::pow(std::max(Real(0), E_pm2 - c1) / (c2 - c3 * E_pm2), m1inv), E_p);
 }
 
 /*! Defines Recommendation ITU-R BT.2100-2 Reference PQ inverse electro-optical transfer function (EOTF^-1).
@@ -446,8 +452,10 @@ inline Real inverse_EOTF_BT2100_PQ(Real F_D)
     constexpr Real c2 = Real(2413) / Real(4096) * 32; // 18.8515625f;
     constexpr Real c3 = Real(2392) / Real(4096) * 32; // 18.6875f;
 
-    const Real Y = F_D / Real(10000);
-    return std::pow((c1 + c2 * std::pow(Y, m1)) / (1 + c3 * std::pow(Y, m1)), m2);
+    // Mirrored around the origin, matching EOTF_BT2100_PQ; see the note there.
+    const Real Y    = std::abs(F_D) / Real(10000);
+    const Real Y_m1 = std::pow(Y, m1);
+    return std::copysign(std::pow((c1 + c2 * Y_m1) / (1 + c3 * Y_m1), m2), F_D);
 }
 
 /*! Recommendation ITU-R BT.2100-2 Reference HLG inverse optical-electro transfer function (OETF^-1).
@@ -468,7 +476,12 @@ inline Real inverse_OETF_BT2100_HLG(Real x)
     constexpr Real b = Real(0.28466892); // 1 - 4*a;
     constexpr Real c = Real(0.55991073); // 0.5 - a * std::log(4 * a)
 
-    return (x < Real(0.5)) ? (x * x) / Real(3) : (std::exp((x - c) / a) + b) / Real(12);
+    // Mirrored around the origin to match OETF_BT2100_HLG: squaring a negative input would otherwise
+    // return a positive value and lose the sign.
+    const Real x_abs = std::abs(x);
+    const Real linear =
+        (x_abs < Real(0.5)) ? (x_abs * x_abs) / Real(3) : (std::exp((x_abs - c) / a) + b) / Real(12);
+    return std::copysign(linear, x);
 }
 
 /*! Recommendation ITU-R BT.2100-2 Reference HLG optical-electro transfer function (OETF).
@@ -489,7 +502,12 @@ inline Real OETF_BT2100_HLG(Real E)
     constexpr Real b = Real(0.28466892); // 1 - 4*a;
     constexpr Real c = Real(0.55991073); // 0.5 - a * std::log(4 * a)
 
-    return (E <= Real(1) / Real(12)) ? std::sqrt(Real(3) * E) : (a * std::log(12 * E - b) + c);
+    // Mirrored around the origin: std::sqrt and std::log have no real result below zero, and out-of-gamut
+    // channels legitimately land there.
+    const Real E_abs    = std::abs(E);
+    const Real nonlinear =
+        (E_abs <= Real(1) / Real(12)) ? std::sqrt(Real(3) * E_abs) : (a * std::log(12 * E_abs - b) + c);
+    return std::copysign(nonlinear, E);
 }
 
 /*! Recommendation ITU-R BT.2100-2 Reference HLG opto-optical transfer function (OOTF^-1).
@@ -510,7 +528,9 @@ inline Real OETF_BT2100_HLG(Real E)
 template <typename Real>
 inline Real OOTF_BT2100_HLG(Real E_S, Real Y_S, Real alpha, Real gamma = Real(1.2))
 {
-    return (alpha * std::pow(Y_S, gamma - Real(1)) * E_S);
+    // Only the magnitude of the scene luminance scales the result; E_S carries the sign. Mirrors
+    // inverse_OOTF_BT2100_HLG.
+    return (alpha * std::pow(std::abs(Y_S), gamma - Real(1)) * E_S);
 }
 
 /*! Recommendation ITU-R BT.2100-2 Reference HLG inverse opto-optical transfer function (OOTF^-1).
@@ -531,7 +551,13 @@ inline Real OOTF_BT2100_HLG(Real E_S, Real Y_S, Real alpha, Real gamma = Real(1.
 template <typename Real>
 inline Real inverse_OOTF_BT2100_HLG(Real E_D, Real Y_D, Real alpha = Real(1.0), Real gamma = Real(1.2))
 {
-    return (E_D / alpha) * std::pow(Y_D / alpha, Real(1.0) / gamma - Real(1.0));
+    // The luminance only scales the result, so its magnitude is what matters -- colour-science's inverse
+    // OOTF takes the same absolute value. E_D carries the sign. A zero luminance would diverge here, since
+    // the exponent is negative, and means there is no light to invert.
+    const Real Y_abs = std::abs(Y_D);
+    if (!(Y_abs > Real(0)))
+        return Real(0);
+    return (E_D / alpha) * std::pow(Y_abs / alpha, Real(1.0) / gamma - Real(1.0));
 }
 
 /*! Recommendation ITU-R BT.2100-2 HLG reference system gamma for a given display peak luminance.
@@ -566,7 +592,11 @@ inline Real EOTF_BT2100_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000))
     const Real gamma = HLG_system_gamma(L_W);
     const Real alpha = L_W - L_B;
     const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
-    auto       E_s   = inverse_OETF_BT2100_HLG(std::max(Real(0), (Real(1) - beta) * E_p + beta));
+    // Mirrored around the origin like the rest of the HLG chain, so that a negative encoded value decodes
+    // back to the negative linear value it came from. The black-lift beta is applied to the magnitude, so
+    // it still raises the floor rather than folding the sign.
+    const Real signed_E_p = std::copysign((Real(1) - beta) * std::abs(E_p) + beta, E_p);
+    auto       E_s        = inverse_OETF_BT2100_HLG(signed_E_p);
     return OOTF_BT2100_HLG(E_s, E_s, alpha, gamma);
 }
 
@@ -734,7 +764,8 @@ inline Real EOTF_IEC61966_2_4(Real nonlinear)
 template <typename Real>
 inline Real EOTF_DCI_P3(Real nonlinear)
 {
-    return std::pow(nonlinear, Real(2.6)) * Real(52.37);
+    // Mirrored around the origin, as for PQ and sRGB.
+    return std::copysign(std::pow(std::abs(nonlinear), Real(2.6)) * Real(52.37), nonlinear);
 }
 
 /*! DCI-P3 inverse EOTF (EOTF^-1).
@@ -750,7 +781,7 @@ inline Real EOTF_DCI_P3(Real nonlinear)
 template <typename Real>
 inline Real inverse_EOTF_DCI_P3(Real linear)
 {
-    return std::pow(linear / Real(52.37), Real(1.0) / Real(2.6));
+    return std::copysign(std::pow(std::abs(linear) / Real(52.37), Real(1.0) / Real(2.6)), linear);
 }
 
 float3 YC_to_RGB(float3 input, float3 Yw);
@@ -839,6 +870,11 @@ T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
     constexpr auto min_val = std::numeric_limits<T>::min();
     constexpr auto max_val = std::numeric_limits<T>::max();
     const float    range   = float(max_val) - float(min_val);
+    // std::clamp lets a NaN through -- both of its comparisons are false for one -- and converting that to
+    // an integer type is undefined. Real images do carry NaN, so map it to zero before quantizing.
+    if constexpr (!std::is_floating_point_v<T>)
+        if (std::isnan(v))
+            v = 0.f;
     if constexpr (std::is_signed<T>::value)
     {
         // signed normalized, map [-1, 1] to [min, max]

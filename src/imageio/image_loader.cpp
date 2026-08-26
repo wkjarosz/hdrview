@@ -780,6 +780,21 @@ void BackgroundImageLoader::draw_gui()
     }
 }
 
+// A single axis this long, or this many pixels in total, is beyond anything that could be displayed: at
+// four float channels, the pixel cap alone is already 4 GB.
+static constexpr int64_t k_max_image_dimension = 65536;
+static constexpr int64_t k_max_image_pixels    = 1ll << 28;
+
+void check_image_dimensions(int64_t width, int64_t height, string_view format)
+{
+    if (width <= 0 || height <= 0)
+        throw std::invalid_argument{fmt::format("{}: image has no pixels ({}x{}).", format, width, height)};
+
+    if (width > k_max_image_dimension || height > k_max_image_dimension || width * height > k_max_image_pixels)
+        throw std::invalid_argument{fmt::format("{}: image dimensions {}x{} are implausibly large.", format, width,
+                                                height)};
+}
+
 const ImageLoadOptions &load_image_options() { return s_opts; }
 
 void draw_load_image_options_dialog(bool &open)

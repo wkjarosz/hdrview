@@ -7,6 +7,7 @@
 #include "stb.h"
 #include "colorspace.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 #include "timer.h"
 #include <cstdint>
 #include <cstring>
@@ -39,6 +40,10 @@
 // #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_FAILURE_USERMSG
+// stb_image allocates from the dimensions in the header before validating anything else, so a tiny file
+// declaring a huge canvas -- a GIF claiming 19789x19789, say -- costs gigabytes. stb's own limit defaults
+// to 1<<24 per axis; bring it down to something an image can plausibly be.
+#define STBI_MAX_DIMENSIONS 65536
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
 // #undef STB_IMAGE_STATIC
@@ -149,6 +154,17 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     bool is_16_bit = stbi_is_16_bit_from_callbacks(&stbi_callbacks, &is);
     is.clear();
     is.seekg(0);
+
+    // stbi_info only reads the header, so the declared dimensions can be vetted before stb allocates for
+    // them. STBI_MAX_DIMENSIONS caps each axis on its own, which still leaves room for a small file to
+    // claim hundreds of megapixels.
+    {
+        int info_w = 0, info_h = 0, info_n = 0;
+        if (stbi_info_from_callbacks(&stbi_callbacks, &is, &info_w, &info_h, &info_n))
+            check_image_dimensions(info_w, info_h, "stb_image");
+        is.clear();
+        is.seekg(0);
+    }
 
     using DataBuffer = std::unique_ptr<void, void (*)(void *)>;
     DataBuffer data{nullptr, stbi_image_free};

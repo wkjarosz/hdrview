@@ -649,7 +649,10 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
                                                                   : nullptr;
     };
 
-    auto recompute_async_stats = [this, desired_settings, img1, img_data_origin = img1->data_window.min,
+    // img2 is captured so that the reference image outlives the task: the raw Channel pointers below point
+    // into it, and closing it drops the app's last reference. img1 needs no such capture -- it owns this
+    // Channel, whose destructor cancels and waits for the task.
+    auto recompute_async_stats = [this, desired_settings, img1, img2, img_data_origin = img1->data_window.min,
                                   alpha           = alpha_of(img1, img1->selected_group),
                                   ref             = (img2 && img2->is_valid_group(img2->reference_group))
                                                         ? &img2->channels[img2->groups[img2->reference_group].channels[c]]
@@ -669,7 +672,7 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
         // create the new task
         async_canceled = make_shared<atomic<bool>>(false);
         async_tracker  = do_async(
-            [this, desired_settings, canceled = async_canceled, img_data_origin, alpha, ref, ref_alpha,
+            [this, desired_settings, canceled = async_canceled, img2, img_data_origin, alpha, ref, ref_alpha,
              ref_data_origin]()
             {
                 spdlog::debug("Starting a new stats computation");

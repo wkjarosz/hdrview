@@ -1709,8 +1709,25 @@ if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
   )
   target_link_libraries(hdrview_fuzz_load_image PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
   target_compile_options(hdrview_fuzz_load_image PRIVATE -fsanitize=fuzzer-no-link)
-  # Apple's clang instruments for libFuzzer but ships no fuzzer runtime, so link one explicitly.
-  # HDRVIEW_FUZZER_RUNTIME should point at a libclang_rt.fuzzer_osx.a from an LLVM install.
+
+  # Apple's clang instruments for libFuzzer but ships no fuzzer runtime, so on macOS one has to be linked
+  # explicitly -- from Homebrew's LLVM by default. Everywhere else -fsanitize=fuzzer supplies its own.
+  # Set HDRVIEW_FUZZER_RUNTIME to override the search.
+  if(APPLE AND NOT HDRVIEW_FUZZER_RUNTIME)
+    file(GLOB HDRVIEW_FUZZER_RUNTIME_CANDIDATES
+         "/opt/homebrew/opt/llvm/lib/clang/*/lib/darwin/libclang_rt.fuzzer_osx.a"
+         "/usr/local/opt/llvm/lib/clang/*/lib/darwin/libclang_rt.fuzzer_osx.a"
+    )
+    if(HDRVIEW_FUZZER_RUNTIME_CANDIDATES)
+      list(GET HDRVIEW_FUZZER_RUNTIME_CANDIDATES -1 HDRVIEW_FUZZER_RUNTIME)
+      message(STATUS "Fuzzer runtime: ${HDRVIEW_FUZZER_RUNTIME}")
+    else()
+      message(FATAL_ERROR "No libFuzzer runtime found. Install one with `brew install llvm`, or point "
+                          "HDRVIEW_FUZZER_RUNTIME at a libclang_rt.fuzzer_osx.a."
+      )
+    endif()
+  endif()
+
   if(HDRVIEW_FUZZER_RUNTIME)
     target_link_libraries(hdrview_fuzz_load_image PRIVATE "${HDRVIEW_FUZZER_RUNTIME}")
   else()

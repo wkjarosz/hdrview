@@ -23,6 +23,8 @@
 
 #include <smalldds.h>
 
+#include "imageio/image_loader.h"
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #elif defined(__GNUC__) || defined(__GNUG__)
@@ -642,6 +644,9 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
         spdlog::warn(result.message);
     else if (result.type == Result::Info)
         spdlog::info(result.message);
+
+    // load() only reads the header; populate_image_data() is what allocates from it.
+    check_image_dimensions(dds.header.width, dds.header.height, "DDS");
 
     result = dds.populate_image_data();
     if (result.type == Result::Error)
