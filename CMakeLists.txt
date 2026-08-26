@@ -571,7 +571,7 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "spdlog::spdlog")
 
-CPMAddPackage("gh:wkjarosz/smallthreadpool#c1aa634e8aaf0517f9a6722b662892dd06eb437f")
+CPMAddPackage("gh:wkjarosz/smallthreadpool#323c20dd0b54e66d7153665e7571612d40b6c48d")
 if(NOT smallthreadpool_ADDED)
   message(FATAL_ERROR "Could not download smallthreadpool library.")
 endif()
