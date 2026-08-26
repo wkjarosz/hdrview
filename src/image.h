@@ -33,11 +33,15 @@ using namespace stp;
 // smallest value happens to be the denormal number 2^-24, so 2^-26 should be a good choice.
 static constexpr float k_small_alpha = 1.f / (1u << 26u);
 
-// Knee of the histogram x axis's nonlinear scales: below roughly this magnitude asinh and symlog stay
-// near-linear, and above it they turn logarithmic. 1.8 makes asinh and our symlog look roughly the same.
+// Knee of the histogram x axis's nonlinear scales: below roughly this magnitude they stay near-linear,
+// and above it they turn logarithmic.
 inline constexpr double axis_scale_eps     = 0.0001;
 inline constexpr double axis_scale_log_eps = -4; // std::log10(axis_scale_eps)
-inline constexpr double axis_scale_a_0     = axis_scale_eps * 1.8;
+
+// The asinh scale's knee sits well above axis_scale_eps so that the axis doesn't spend most of its width
+// below the darkest level an 8-bit source can represent: at 1.8e-4 the curve is logarithmic across all of
+// [0,1], which spreads consecutive dark levels tens of bins apart and combs the histogram.
+inline constexpr double axis_scale_a_0 = 0.01;
 
 //! Warp \p value into the space the histogram's x axis is drawn in.
 /*!

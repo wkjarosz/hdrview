@@ -211,6 +211,22 @@ TEST_CASE("Every 8-bit level gets its own bin on the sRGB axis")
     }
 }
 
+TEST_CASE("The asinh axis keeps 8-bit levels within a bin or two of each other")
+{
+    // asinh's knee has to sit well above the darkest 8-bit level, or the curve is logarithmic across the
+    // whole of [0,1] and flings consecutive dark levels tens of bins apart.
+    auto stats = compute(make_8bit_sRGB_ramp());
+    REQUIRE(stats.num_bins == 256);
+
+    int longest = 0, run = 0;
+    for (int i = 0; i < stats.num_bins; ++i)
+    {
+        run     = stats.hist_ys[AxisScale_Asinh][i] == 0.f ? run + 1 : 0;
+        longest = std::max(longest, run);
+    }
+    CHECK(longest <= 4); //< a run this short is under a pixel wide once the fill reduces bins to columns
+}
+
 TEST_CASE("Histogram bins hold plain counts of the valid pixels")
 {
     // Bins are equally wide on screen, so their heights are counts rather than densities.

@@ -423,6 +423,10 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_show_FPS            = j.value<bool>("show FPS", m_show_FPS);
                 m_clip_range          = j.value<float2>("clip range", m_clip_range);
                 m_histogram_height    = j.value<float>("histogram height", m_histogram_height);
+                m_x_scale =
+                    clamp<int>(j.value<int>("histogram x scale", m_x_scale), 0, AxisScale_COUNT - 1);
+                m_y_scale =
+                    clamp<int>(j.value<int>("histogram y scale", m_y_scale), 0, AxisScale_COUNT - 1);
                 m_playback_speed      = j.value<float>("playback speed", m_playback_speed);
                 m_colormap_index      = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
                 m_show_developer_menu = j.value<bool>("show developer menu", m_show_developer_menu);
@@ -492,6 +496,8 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         j["show FPS"]                = m_show_FPS;
         j["clip range"]              = m_clip_range;
         j["histogram height"]        = m_histogram_height;
+        j["histogram x scale"]       = m_x_scale;
+        j["histogram y scale"]       = m_y_scale;
         j["show developer menu"]     = m_show_developer_menu;
         j["playback speed"]          = m_playback_speed;
         j["colormap index"]          = m_colormap_index;
