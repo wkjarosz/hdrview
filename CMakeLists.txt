@@ -1635,7 +1635,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp
-                                tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_numeric_edge_cases.cpp
+                                tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_numeric_edge_cases.cpp tests/test_loader_limits.cpp
   )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)

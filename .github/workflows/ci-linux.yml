@@ -34,6 +34,11 @@ jobs:
           # tests/test_png_io.cpp conditionally compile against. Running the same suite across every preset in
           # this matrix would be redundant.
           - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true}
+
+          # Runs the same two suites under AddressSanitizer and UndefinedBehaviorSanitizer. A plain build
+          # can't see a use-after-free or a non-finite-to-integer cast: the tests pass and the damage is
+          # silent, which is how both shipped. Release keeps the instrumented build tolerably fast.
+          - { name: "Ubuntu 24.04 CPM sanitizers", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true, sanitizers: true }
           - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64"}
 
           - { name: "Ubuntu 24.04 CPM arm", os: ubuntu-24.04-arm, preset: "linux-cpm", arch: "arm" }
@@ -47,6 +52,11 @@ jobs:
           # ubuntu 22.04 had openexr 2, but we require 3
           # - { name: "Ubuntu 22.04 Local", os: ubuntu-22.04, preset: "linux-local" }
         buildtype: [Release, Debug]
+        exclude:
+          # Only the Release build of the sanitizer entry is instrumented; its Debug build would just
+          # repeat the plain CPM Debug job.
+          - config: { name: "Ubuntu 24.04 CPM sanitizers", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true, sanitizers: true }
+            buildtype: Debug
 
     steps:
       - name: Install dependencies (Ubuntu 24.04)
@@ -81,7 +91,7 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
+          key: ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-${{ matrix.config.sanitizers && 'asan' || 'plain' }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake') }}
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-${{ matrix.config.preset }}-
 
@@ -89,13 +99,16 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.23
         with:
-          key: ${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.buildtype }}
+          key: ${{ matrix.config.os }}-${{ matrix.config.preset }}-${{ matrix.config.sanitizers && 'asan' || 'plain' }}-${{ matrix.buildtype }}
 
       - name: Configure CMake
         run: |
           EXTRA_FLAGS=""
           if [ "${{ matrix.config.run_tests }}" = "true" ] && [ "${{ matrix.buildtype }}" = "Release" ]; then
             EXTRA_FLAGS="-DHDRVIEW_BUILD_TESTS=ON -DHDRVIEW_BUILD_GUI_TESTS=ON"
+            if [ "${{ matrix.config.sanitizers }}" = "true" ]; then
+              EXTRA_FLAGS="$EXTRA_FLAGS -DUSE_SANITIZER=Address;Undefined"
+            fi
           fi
           cmake --preset ${{ matrix.config.preset }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache $EXTRA_FLAGS
 
@@ -107,6 +120,16 @@ jobs:
       - name: Checking that HDRView runs
         run: |
           ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView --help
+
+      # Both sanitizers have to abort, or the job goes green with the report buried in the log -- which is
+      # the whole failure mode this entry exists to catch. Third-party undefined behavior we can't fix is
+      # filtered by the suppressions file instead.
+      # detect_leaks=0: the app leaks by design at exit (static GPU and font state outliving main).
+      - name: Sanitizer environment
+        if: matrix.config.sanitizers == true
+        run: |
+          echo "ASAN_OPTIONS=detect_leaks=0:abort_on_error=1" >> $GITHUB_ENV
+          echo "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=${{github.workspace}}/.github/ubsan-suppressions.txt" >> $GITHUB_ENV
 
       - name: Run unit tests
         if: matrix.config.run_tests == true && matrix.buildtype == 'Release'

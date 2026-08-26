@@ -1,0 +1,6 @@
+# Dear ImGui's ImRound64() casts to an integer before checking the value, so a non-finite window
+# coordinate from the docking layout trips UBSan inside the framework. HDRView passes no NaN of its own
+# down that path -- the whole reported stack is ImGui and hello_imgui -- and the helper's own source
+# comments the limitation ("FIXME: Positive values only.").
+float-cast-overflow:imgui_internal.h
+float-cast-overflow:implot_internal.h
