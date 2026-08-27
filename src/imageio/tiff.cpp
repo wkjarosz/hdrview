@@ -684,6 +684,13 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 throw invalid_argument{
                     fmt::format("TIFF: {}-bit integer samples are not supported", file_bits_per_sample)};
 
+            // convert_to_float() reads a float sample as half, float or double and has nothing to return
+            // for any other width -- it yielded zero, so a 24-bit float image decoded to a uniformly black
+            // one with no diagnostic. Say so instead.
+            if (!needs_unpacking && bits_per_sample != 16 && bits_per_sample != 32 && bits_per_sample != 64)
+                throw invalid_argument{
+                    fmt::format("TIFF: {}-bit floating-point samples are not supported", bits_per_sample)};
+
             // Store tile/strip information in metadata
             image->metadata["header"]["Pixel organization"] = {
                 {"value",
