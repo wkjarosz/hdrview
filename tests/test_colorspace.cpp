@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 
 #include "colorspace.h"
+#include "common.h" // for blend_mode_names()
 
 TEST_CASE("sRGB encode/decode are inverses, including negative (out-of-gamut) values")
 {
@@ -221,4 +222,33 @@ TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_
     CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) ==
           doctest::Approx(inverse_EOTF_BT2100_PQ(HDR_REFERENCE_WHITE_NITS)));
     CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(inverse_EOTF_BT2100_PQ(1.f)));
+}
+
+TEST_CASE("blend()'s overloads agree on every blend mode")
+{
+    // The float2 overload was missing BlendMode_Relative_Subtract, so that mode fell through to its
+    // `default:` and blended as Normal instead, disagreeing with the other two overloads.
+    const float top = 0.6f, bottom = 0.25f, top_a = 0.75f, bottom_a = 0.5f;
+
+    for (int m = 0; m < BlendMode_COUNT; ++m)
+    {
+        auto mode = (BlendMode_)m;
+        CAPTURE(blend_mode_names()[m]);
+
+        float  s  = blend(top, bottom, mode);
+        float2 v2 = blend(float2{top, top_a}, float2{bottom, bottom_a}, mode);
+        float4 v4 = blend(float4{top, top, top, top_a}, float4{bottom, bottom, bottom, bottom_a}, mode);
+
+        // The two vector overloads carry the same alpha and must agree on both color and alpha.
+        CHECK(v2.x == doctest::Approx(v4.x));
+        CHECK(v4.x == doctest::Approx(v4.y));
+        CHECK(v4.x == doctest::Approx(v4.z));
+        CHECK(v2.y == doctest::Approx(v4.w));
+
+        // The scalar overload has no alpha to composite with, so for Normal it keeps the top sample rather
+        // than compositing -- which is what the statistics pass wants of it. Every other mode is pure
+        // per-channel arithmetic and must match.
+        if (mode != BlendMode_Normal)
+            CHECK(v4.x == doctest::Approx(s));
+    }
 }
