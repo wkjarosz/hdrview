@@ -452,3 +452,97 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
 }
 
 #endif // HDRVIEW_TEST_PNG_CONTRIB_DIR
+
+TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha channel")
+{
+    // A Y,A group takes as_interleaved()'s n < 3 path, which loops uniformly over every channel. Alpha is
+    // not a color: it takes neither the exposure gain nor the transfer function, and the group's other
+    // channels have to be divided back out by it, exactly as the n >= 3 path does.
+    constexpr int2 size{4, 4};
+
+    auto img = std::make_shared<Image>(size, 2);
+    REQUIRE(img->channels.size() == 2);
+    REQUIRE(img->channels[0].name == "Y");
+    REQUIRE(img->channels[1].name == "A");
+
+    // The file's straight (unpremultiplied) values, on the 16-bit lattice so the round trip is exact.
+    std::vector<float> straight_y(size.x * size.y), alpha(size.x * size.y);
+    for (int i = 0; i < size.x * size.y; ++i)
+    {
+        straight_y[i] = float(i * 4000 + 1000) / 65535.f;
+        alpha[i]      = float(i * 4369) / 65535.f; // spans 0 .. 1
+    }
+
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            int i                  = y * size.x + x;
+            img->channels[0](x, y) = straight_y[i];
+            img->channels[1](x, y) = alpha[i];
+        }
+
+    img->alpha_type = AlphaType_Straight; // what the PNG loader records for a gray+alpha file
+    img->finalize();                      // premultiplies Y by A, and builds the Y,A group
+
+    REQUIRE(img->groups.size() == 1);
+    REQUIRE(img->groups[0].type == ChannelGroup::YA_Channels);
+    REQUIRE(img->unpremultiplies(img->groups[0]));
+
+    // sRGB rather than Linear: with a linear transfer function the erroneous encoding of alpha is the
+    // identity and the bug hides.
+    std::ostringstream out(std::ios::binary);
+    save_png_image(*img, out, "gray_alpha.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                   /*sixteen_bit*/ true, TransferFunction::sRGB);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_png_image(in, "gray_alpha.png");
+    REQUIRE(reloaded.size() == 1);
+    reloaded[0]->finalize();
+    REQUIRE(reloaded[0]->channels.size() == 2);
+
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            int i = y * size.x + x;
+            CAPTURE(i);
+            // Alpha survives untouched: no gain, no transfer function.
+            CHECK(reloaded[0]->channels[1](x, y) == doctest::Approx(alpha[i]).epsilon(1e-4));
+            // Y comes back premultiplied by that same alpha, i.e. exactly what finalize() produced here --
+            // premultiplied once on save's behalf, not twice.
+            CHECK(reloaded[0]->channels[0](x, y) ==
+                  doctest::Approx(straight_y[i] * std::max(k_small_alpha, alpha[i])).epsilon(1e-3));
+        }
+}
+
+TEST_CASE("saving gray+alpha applies the exposure gain to the color channel only")
+{
+    constexpr int2 size{2, 2};
+    constexpr float straight_y = 0.4f, a = 0.5f, gain = 2.f;
+
+    auto img = std::make_shared<Image>(size, 2);
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            img->channels[0](x, y) = straight_y;
+            img->channels[1](x, y) = a; // a gain of 2 would saturate this to 1
+        }
+    img->alpha_type = AlphaType_Straight;
+    img->finalize(); // premultiplies Y by A
+
+    std::ostringstream out(std::ios::binary);
+    save_png_image(*img, out, "gray_alpha_gain.png", gain, /*dither*/ false, /*interlaced*/ false,
+                   /*sixteen_bit*/ true, TransferFunction::Linear);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_png_image(in, "gray_alpha_gain.png");
+    REQUIRE(reloaded.size() == 1);
+
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            // The file holds straight values, so the gain lands on the straight Y and alpha keeps the value
+            // it had. Gaining alpha too would have saturated it to 1.
+            CHECK(reloaded[0]->channels[0](x, y) == doctest::Approx(straight_y * gain).epsilon(1e-4));
+            CHECK(reloaded[0]->channels[1](x, y) == doctest::Approx(a).epsilon(1e-4));
+        }
+}
