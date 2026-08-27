@@ -454,15 +454,19 @@ int next_matching_index(const std::vector<T> &vec, int current_index, Criterion 
     if (vec.empty())
         return current_index; // Return current index if vector is empty
 
-    const size_t size = vec.size();
+    const int size = (int)vec.size();
+    const int step = (direction == Direction_Forward) ? 1 : -1;
 
-    size_t index_increment =
-        (direction == Direction_Forward) ? 1 : (size - 1); // Increment/decrement based on direction
+    // current_index is -1 whenever nothing is selected, so the first index to probe can't just be
+    // current_index + step: in size_t arithmetic that wraps to near 2^64, and its remainder modulo size
+    // depends on 2^64 % size rather than on the index. With no current position, start the search at the
+    // near end -- the first element going forward, the last going backward.
+    int i = (current_index >= 0 && current_index < size) ? mod(current_index + step, size)
+                                                         : (direction == Direction_Forward ? 0 : size - 1);
 
-    for (size_t i = (current_index + index_increment) % size, count = 0; count < size;
-         i = (i + index_increment) % size, ++count)
-        if (criterion(i, vec[i]))
-            return (int)i; // Found the next matching element
+    for (int count = 0; count < size; i = mod(i + step, size), ++count)
+        if (criterion((size_t)i, vec[i]))
+            return i; // Found the next matching element
 
     return current_index; // Nothing matched, return current index
 }
