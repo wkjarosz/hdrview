@@ -493,5 +493,15 @@ size_t nth_matching_index(const std::vector<T> &vec, size_t n, Criterion criteri
 //! range that is unique across the strings
 std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &names);
 
+//! Shorten a collection of related names (e.g. file paths) down to what distinguishes them.
+/*!
+    Trims the prefix and suffix shared by every name, marking each trimmed end with an ellipsis, and keeps
+    whole words rather than cutting one in half. Names with nothing unique left -- the paths are all
+    identical, or one name is entirely a suffix of the others -- fall back to their own file name.
+
+    \returns One short name per input, in the same order.
+*/
+std::vector<std::string> shorten_names(const std::vector<std::string> &names);
+
 // Compare two strings in "natural" order (e.g. file2 < file10)
 bool natural_less(const std::string_view a, const std::string_view b);
