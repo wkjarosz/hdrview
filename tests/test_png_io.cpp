@@ -17,6 +17,7 @@
 // and a reload falls back to sRGB. The tests guarded below all depend on that record surviving a round-trip.
 #include <png.h>
 
+#include <cmath>
 #include <fstream>
 #include <sstream>
 
@@ -44,10 +45,6 @@ ImagePtr make_test_image(int2 size)
 
 } // namespace
 
-#ifdef PNG_cICP_SUPPORTED
-// Writes with TransferFunction::Linear, so recovering the original values on load requires the file to say
-// it is linear -- which is the cICP chunk's job here. Without it the reload assumes sRGB and the pixels
-// legitimately differ.
 TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without dithering")
 {
     auto img = make_test_image(int2{4, 3});
@@ -82,6 +79,7 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
     }
 }
 
+#ifdef PNG_cICP_SUPPORTED
 TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide gamut via the cICP chunk")
 {
     // HDRView cares specifically about HDR: CICPProfile::is_HDR() explicitly checks for PQ (CICP transfer
@@ -119,6 +117,138 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
     }
 }
 
+#endif // PNG_cICP_SUPPORTED
+
+TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in cICP")
+{
+    // cICP is recent enough that most readers ignore it, so a file tagged only that way is read correctly
+    // only by HDRView. Every curve that gAMA or the sRGB chunk can express is written through those too.
+    auto img = make_test_image(int2{4, 3});
+
+    SUBCASE("linear is recorded as gAMA 1.0")
+    {
+        std::ostringstream out(std::ios::binary);
+        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                       /*sixteen_bit*/ true, TransferFunction::Linear);
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_png_image(in, "test.png");
+        REQUIRE(reloaded.size() == 1);
+        auto &header = reloaded[0]->metadata["header"];
+
+        // The loader reports the reciprocal of the stored value, so a linear encode reads back as 1.0.
+        REQUIRE(header.contains("gAMA"));
+        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(1.f).epsilon(1e-3));
+    }
+
+    SUBCASE("a pure power curve is recorded exactly")
+    {
+        std::ostringstream out(std::ios::binary);
+        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                       /*sixteen_bit*/ true, TransferFunction{TransferFunction::Gamma, 2.4f});
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_png_image(in, "test.png");
+        REQUIRE(reloaded.size() == 1);
+        auto &header = reloaded[0]->metadata["header"];
+
+        REQUIRE(header.contains("gAMA"));
+        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.4f).epsilon(1e-3));
+    }
+
+    SUBCASE("sRGB content carries the sRGB chunk and a gAMA companion")
+    {
+        std::ostringstream out(std::ios::binary);
+        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                       /*sixteen_bit*/ false, TransferFunction::sRGB);
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_png_image(in, "test.png");
+        REQUIRE(reloaded.size() == 1);
+        auto &header = reloaded[0]->metadata["header"];
+
+        // A valid rendering intent, i.e. the chunk is present.
+        REQUIRE(header.contains("sRGB"));
+        CHECK(header["sRGB"]["value"].get<int>() >= 0);
+        // ...and gAMA alongside it, for readers that honor neither cICP nor sRGB.
+        REQUIRE(header.contains("gAMA"));
+        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
+    }
+
+    SUBCASE("an sRGB curve over a wide gamut does not claim the sRGB chunk")
+    {
+        // The sRGB chunk asserts BT.709 primaries as well as the curve, so writing it here would misstate
+        // the gamut. gAMA carries the curve instead, and cHRM the primaries.
+        auto wide            = make_test_image(int2{4, 3});
+        wide->chromaticities = gamut_chromaticities(ColorGamut_BT2020_2100);
+
+        std::ostringstream out(std::ios::binary);
+        save_png_image(*wide, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                       /*sixteen_bit*/ true, TransferFunction::sRGB);
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_png_image(in, "test.png");
+        REQUIRE(reloaded.size() == 1);
+        auto &header = reloaded[0]->metadata["header"];
+
+        REQUIRE(header.contains("sRGB"));
+        CHECK(header["sRGB"]["value"].get<int>() < 0); // absent
+        REQUIRE(header.contains("gAMA"));
+        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
+    }
+
+    SUBCASE("the ITU curve is approximated as gAMA 2.2")
+    {
+        std::ostringstream out(std::ios::binary);
+        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                       /*sixteen_bit*/ true, TransferFunction::ITU);
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_png_image(in, "test.png");
+        REQUIRE(reloaded.size() == 1);
+        auto &header = reloaded[0]->metadata["header"];
+
+        REQUIRE(header.contains("gAMA"));
+        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
+        // ITU is not sRGB, so the sRGB chunk must not appear even though the primaries are BT.709.
+        CHECK(header["sRGB"]["value"].get<int>() < 0);
+    }
+}
+
+#ifdef PNG_cICP_SUPPORTED
+TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
+{
+    // PQ has no power-curve equivalent, so nothing is written that would let a gAMA-only reader believe it
+    // knows the curve. The file is correct but understood only by cICP-aware readers, which save_png_image
+    // warns about.
+    auto img = make_test_image(int2{4, 3});
+
+    std::ostringstream out(std::ios::binary);
+    save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                   /*sixteen_bit*/ true, TransferFunction::BT2100_PQ);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_png_image(in, "test.png");
+    REQUIRE(reloaded.size() == 1);
+    auto &header = reloaded[0]->metadata["header"];
+
+    CHECK(header["cICP"]["value"] != "<not present>");
+    REQUIRE(header.contains("gAMA"));
+    CHECK(std::isnan(header["gAMA"]["value"].get<float>())); // the loader reports an absent gAMA as NaN
+    CHECK(header["sRGB"]["value"].get<int>() < 0);
+}
+#else
+TEST_CASE("saving a curve this libpng cannot record fails instead of mislabelling the file")
+{
+    // Without cICP there is nowhere to put PQ, and writing the file anyway would encode the pixels with one
+    // curve while the file names another. Only reachable on a libpng older than 1.6.46.
+    auto img = make_test_image(int2{4, 3});
+
+    std::ostringstream out(std::ios::binary);
+    CHECK_THROWS_AS(save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                                   /*sixteen_bit*/ true, TransferFunction::BT2100_PQ),
+                    std::runtime_error);
+}
 #endif // PNG_cICP_SUPPORTED
 
 TEST_CASE("is_png_image correctly identifies real PNG bytes and rejects garbage")

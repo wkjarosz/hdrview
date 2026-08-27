@@ -796,6 +796,42 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     return images;
 }
 
+namespace
+{
+
+// How this build can record a transfer function in a PNG. Shared by the writer and the save-options GUI so
+// the dialog cannot describe an outcome different from the one saving produces.
+//
+// gAMA stores the exponent taking file samples toward linear light, inverted -- 1/2.2 for a 2.2 encode --
+// so only a pure power curve has an exact gAMA representation.
+struct TransferSignalling
+{
+    double file_gamma     = 0.0;   ///< gAMA value to write; 0 when the curve has no gAMA equivalent
+    bool   gamma_is_exact = true;  ///< false when gAMA merely approximates the curve
+    bool   srgb_chunk     = false; ///< the sRGB chunk describes it, if the primaries are sRGB's too
+};
+
+TransferSignalling transfer_signalling(TransferFunction tf)
+{
+    switch (tf.type)
+    {
+    case TransferFunction::Linear: return {1.0, true, false};
+    case TransferFunction::Gamma: return {(tf.gamma > 0.f) ? 1.0 / double(tf.gamma) : 0.0, true, false};
+    // sRGB and ITU are piecewise: a linear segment near black joined to a power curve. 1/2.2 is the
+    // long-standing convention for approximating either with gAMA, and sRGB has an exact chunk of its own.
+    case TransferFunction::sRGB: return {1.0 / 2.2, false, true};
+    case TransferFunction::ITU: return {1.0 / 2.2, false, false};
+    default: return {}; // PQ, HLG, the log curves and the rest: cICP or nothing
+    }
+}
+
+// cICP expresses any curve exactly, but it is a recent addition to the PNG specification: libpng before
+// 1.6.46 cannot write it, and most readers still ignore it. A file tagged only with cICP is one that only a
+// cICP-aware reader interprets correctly, which is why the older chunks are written alongside it.
+constexpr bool k_can_write_cicp = PNG_cICP_SUPPORTED_ENABLED;
+
+} // namespace
+
 void save_png_image(const Image &img, ostream &os, string_view /*filename*/, float gain, bool dither, bool interlaced,
                     bool sixteen_bit, TransferFunction tf)
 {
@@ -896,6 +932,39 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, flo
     png_set_cICP(png_ptr, info_ptr.get(), color_primaries, transfer_function, matrix_coefficients, video_full_range);
 #endif
 
+    // The sRGB chunk asserts the whole colorspace, primaries included, so it may only be written when those
+    // really are sRGB's: stated as BT.709 (1), left unspecified (2, in which case no cHRM is written either
+    // and a reader assumes sRGB), or unrecognized (< 0, where the pixels were converted to sRGB above). A
+    // genuinely wide gamut -- BT.2020, Display P3 -- gets cHRM and gAMA instead.
+    const bool primaries_are_srgb = cicp_primaries < 0 || cicp_primaries == 1 || cicp_primaries == 2;
+    const auto signalling         = transfer_signalling(tf);
+
+    if (signalling.srgb_chunk && primaries_are_srgb)
+        png_set_sRGB(png_ptr, info_ptr.get(), PNG_sRGB_INTENT_PERCEPTUAL);
+
+    if (signalling.file_gamma > 0.0)
+    {
+        png_set_gAMA(png_ptr, info_ptr.get(), signalling.file_gamma);
+        if (!signalling.gamma_is_exact)
+            spdlog::debug("PNG: approximating the {} curve as gAMA {:.5f} for readers that ignore cICP",
+                          transfer_function_name(tf), signalling.file_gamma);
+    }
+    else if (!k_can_write_cicp)
+        // Writing the file regardless would encode the pixels with this curve while recording no curve at
+        // all, which a reader cannot recover from: it assumes sRGB and silently returns wrong values.
+        throw runtime_error(fmt::format("PNG: cannot record the {} transfer function. It has no gAMA or sRGB "
+                                        "equivalent, and this build's libpng ({}) predates the cICP chunk added "
+                                        "in 1.6.46. Save to a format that can carry it, or rebuild against a "
+                                        "newer libpng.",
+                                        transfer_function_name(tf), PNG_LIBPNG_VER_STRING));
+    else
+        // Not an error -- the file is correct and HDRView reads it back exactly -- but the caveat belongs in
+        // front of the user, since it only arises for HDR curves and those are precisely the saves where
+        // being misread as sRGB elsewhere matters.
+        spdlog::warn("PNG: the {} curve can only be recorded in the cICP chunk, which most readers still "
+                     "ignore; other applications will interpret this file as sRGB",
+                     transfer_function_name(tf));
+
     png_write_info(png_ptr, info_ptr.get());
 
     // Ask libpng for the correct rowbytes (safer than w * n)
@@ -969,6 +1038,31 @@ PNGSaveOptions *png_parameters_gui()
         ImGui::PE::Combo("Pixel format", &s_opts.data_type_index, "UInt8\0UInt16\0");
 
         ImGui::PE::End();
+    }
+
+    // How faithfully the chosen curve can be recorded, said here rather than only in the log after the fact:
+    // this is the moment the user can still pick a different curve or a different format. The classification
+    // is the writer's own, so the two cannot disagree.
+    if (const auto signalling = transfer_signalling(s_opts.tf); signalling.file_gamma <= 0.0)
+    {
+        const string name = transfer_function_name(s_opts.tf);
+        const string note =
+            k_can_write_cicp
+                ? fmt::format(ICON_MY_LOG_LEVEL_WARN
+                              "  {} can only be recorded in PNG's cICP chunk, which most other applications "
+                              "still ignore. They will read this file as sRGB.",
+                              name)
+                : fmt::format(ICON_MY_LOG_LEVEL_ERROR
+                              "  {} cannot be recorded at all by this build's libpng ({}), which predates the "
+                              "cICP chunk. Saving will fail; choose another transfer function or format.",
+                              name, PNG_LIBPNG_VER_STRING);
+
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              k_can_write_cicp ? ImVec4{1.f, 0.75f, 0.25f, 1.f} : ImVec4{1.f, 0.4f, 0.4f, 1.f});
+        ImGui::PushTextWrapPos(0.f);
+        ImGui::TextUnformatted(note.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
     }
 
     if (ImGui::Button("Reset options to defaults"))
