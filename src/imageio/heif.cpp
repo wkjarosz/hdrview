@@ -44,8 +44,10 @@ HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
 #else
 
 #include "colorspace.h"
+#include "common.h"
 #include "exif.h"
 #include "fonts.h"
+#include "gainmap.h"
 #include "heif.h"
 #include "icc.h"
 #include "imgui_ext.h"
@@ -424,6 +426,155 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     return image;
 }
 
+//! Decode an auxiliary image's samples into normalized floats, applying no color management.
+/*!
+    An auxiliary image such as a gain map is not a picture -- its samples are coefficients -- so
+    pushing it through the base image's ICC or NCLX profile would be meaningless. Unlike
+    process_decoded_heif_image(), this normalizes the samples to [0,1] and stops there.
+
+    \param aux_handle  Handle of the auxiliary image to decode
+    \return            The decoded map, at whatever resolution and channel count the file stored it
+*/
+static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
+{
+    heif_colorspace preferred_colorspace = heif_colorspace_undefined;
+    heif_chroma     preferred_chroma     = heif_chroma_undefined;
+    heif_image_handle_get_preferred_decoding_colorspace(aux_handle, &preferred_colorspace, &preferred_chroma);
+
+    // Apple's maps are monochrome; decoding one as RGB would trigger a needless upsample to three
+    // identical planes. Anything else is asked for as interleaved RGB.
+    const bool mono = (preferred_chroma == heif_chroma_monochrome);
+
+    const heif_colorspace out_colorspace = mono ? heif_colorspace_monochrome : heif_colorspace_RGB;
+    const heif_chroma     out_chroma     = mono ? heif_chroma_monochrome : heif_chroma_interleaved_RRGGBB_LE;
+    const heif_channel    out_plane      = mono ? heif_channel_Y : heif_channel_interleaved;
+    const int             channels       = mono ? 1 : 3;
+
+    check_image_dimensions(heif_image_handle_get_width(aux_handle), heif_image_handle_get_height(aux_handle),
+                           "HEIF auxiliary image");
+
+    HeifImagePtr himage(
+        [&]
+        {
+            heif_image *raw_img = nullptr;
+            throw_on_error(heif_decode_image(aux_handle, &raw_img, out_colorspace, out_chroma, nullptr),
+                           "Failed to decode HEIF auxiliary image");
+            return raw_img;
+        }(),
+        heif_image_release);
+
+    const int w = heif_image_get_width(himage.get(), out_plane);
+    const int h = heif_image_get_height(himage.get(), out_plane);
+    if (w <= 0 || h <= 0)
+        throw runtime_error{"HEIF auxiliary image decoded to an empty plane"};
+
+    int            bytes_per_line = 0;
+    const uint8_t *plane          = heif_image_get_plane(himage.get(), out_plane, &bytes_per_line);
+    if (!plane)
+        throw runtime_error{"HEIF auxiliary image has no pixel data"};
+
+    const int bpp_storage = heif_image_get_bits_per_pixel(himage.get(), out_plane);
+    const int bpc         = heif_image_get_bits_per_pixel_range(himage.get(), out_plane);
+    if (bpp_storage != channels * 16 && bpp_storage != channels * 8)
+        throw runtime_error{fmt::format("Unsupported bits per pixel in HEIF auxiliary image: {}", bpp_storage)};
+
+    const bool  is_16bit = (bpp_storage == channels * 16);
+    const float bpc_div  = 1.f / ((1 << bpc) - 1);
+
+    GainmapImage out;
+    out.size     = int2{w, h};
+    out.channels = channels;
+    out.pixels.resize(size_t(w) * h * channels);
+    for (int y = 0; y < h; ++y)
+    {
+        auto row8  = reinterpret_cast<const uint8_t *>(plane + y * (size_t)bytes_per_line);
+        auto row16 = reinterpret_cast<const uint16_t *>(plane + y * (size_t)bytes_per_line);
+        for (int x = 0; x < w; ++x)
+            for (int c = 0; c < channels; ++c)
+                out.pixels[(size_t(y) * w + x) * channels + c] =
+                    bpc_div * (is_16bit ? row16[channels * x + c] : row8[channels * x + c]);
+    }
+
+    return out;
+}
+
+//! Reconstruct \p image's HDR rendition from an Apple gain map, when the file carries one.
+/*!
+    Apple stores its gain maps as auxiliary images typed urn:com:apple:photo:<year>:aux:hdrgainmap,
+    and puts the reconstruction strength in the primary image's maker note rather than alongside the
+    map itself. ISO 21496-1 gain maps in HEIC are a different mechanism -- 'tmap' derived items --
+    that libheif has no API for yet, so files carrying only those are still read as their base
+    rendition.
+
+    \param ihandle  Handle of the top-level image whose auxiliary images to search
+    \param image    Base image, already linearized. Modified in place
+    \param opts     Load options, for the target headroom
+*/
+static void apply_heif_gainmap(const heif_image_handle *ihandle, Image &image, const ImageLoadOptions &opts)
+{
+    // A gain map is neither alpha nor depth, and filtering those out keeps the log quiet on files
+    // that carry them.
+    static constexpr int filter = LIBHEIF_AUX_IMAGE_FILTER_OMIT_ALPHA | LIBHEIF_AUX_IMAGE_FILTER_OMIT_DEPTH;
+
+    const int num_aux = heif_image_handle_get_number_of_auxiliary_images(ihandle, filter);
+    if (num_aux <= 0)
+        return;
+
+    spdlog::debug("Image has {} auxiliary image(s).", num_aux);
+
+    std::vector<heif_item_id> aux_ids((size_t)num_aux);
+    heif_image_handle_get_list_of_auxiliary_image_IDs(ihandle, filter, aux_ids.data(), num_aux);
+
+    for (auto aux_id : aux_ids)
+    {
+        heif_image_handle *raw_aux = nullptr;
+        if (heif_image_handle_get_auxiliary_image_handle(ihandle, aux_id, &raw_aux).code != heif_error_Ok || !raw_aux)
+        {
+            spdlog::warn("Failed to get auxiliary image handle for id {}", aux_id);
+            continue;
+        }
+        HeifImageHandlePtr aux(raw_aux, heif_image_handle_release);
+
+        string      aux_type;
+        const char *type_str = nullptr;
+        if (heif_image_handle_get_auxiliary_type(aux.get(), &type_str).code == heif_error_Ok && type_str)
+        {
+            aux_type = type_str;
+            heif_image_handle_release_auxiliary_type(aux.get(), &type_str);
+        }
+
+        spdlog::info("Auxiliary image {}: '{}'", aux_id, aux_type);
+
+        // Apple has dated this URN both 2020 and 2023, so match the parts that have stayed put.
+        const auto lower = to_lower(aux_type);
+        if (lower.find("apple") == string::npos || lower.find("hdrgainmap") == string::npos)
+            continue;
+
+        image.metadata["header"]["Auxiliary image type"] = {
+            {"value", aux_type}, {"string", aux_type}, {"type", "string"}};
+
+        AppleGainmapParams params;
+        if (image.exif.valid())
+        {
+            params.hdr_headroom = (float)image.exif.apple_makernote_value(0x21).value_or(params.hdr_headroom);
+            params.hdr_gain     = (float)image.exif.apple_makernote_value(0x30).value_or(params.hdr_gain);
+        }
+        else
+            spdlog::warn("Apple gain map with no maker note to size it by; using the weakest reconstruction.");
+
+        try
+        {
+            apply_apple_gainmap(image, decode_aux_gainmap(aux.get()), params, opts.gainmap_headroom);
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::warn("Failed to apply Apple gain map: {}", e.what());
+        }
+
+        return; // an image has at most one gain map
+    }
+}
+
 vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "HEIF"};
@@ -690,6 +841,9 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         image->xmp_data = std::move(xmp_data);
                 }
 
+                // After the EXIF block above, since Apple's gain maps are sized by its maker note.
+                apply_heif_gainmap(ihandle.get(), *image, opts);
+
                 images.emplace_back(image);
             }
         }
@@ -923,28 +1077,26 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 
         // Writer trampoline to write to std::ostream
         static struct heif_writer c_writer = {
-            1, [](struct heif_context * /*ctx*/, const void *data, size_t size, void *userdata) -> struct heif_error
-            {
-                std::ostream     *os   = reinterpret_cast<std::ostream *>(userdata);
-                struct heif_error herr = heif_error_success;
-                os->write(reinterpret_cast<const char *>(data), size);
-                if (!*os)
-                {
-                    herr.code    = heif_error_Encoding_error;
-                    herr.message = "Failed to write to output stream";
-                }
-                return herr;
-            }};
-
-        throw_on_error(heif_context_write(ctx.get(), &c_writer, &os),
-                       "HEIF: failed while writing encoded data to output stream");
-
-        spdlog::info("Saved image to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+            1,
+            [](struct heif_context * /*ctx*/, const void *data, size_t size,
+               void *userdata) -> struct heif_error{std::ostream *os = reinterpret_cast<std::ostream *>(userdata);
+        struct heif_error herr = heif_error_success;
+        os->write(reinterpret_cast<const char *>(data), size);
+        if (!*os)
+        {
+            herr.code    = heif_error_Encoding_error;
+            herr.message = "Failed to write to output stream";
+        }
+        return herr;
     }
-    catch (const std::exception &err)
-    {
-        throw std::runtime_error(fmt::format("HEIF error: {}", err.what()));
-    }
+};
+
+throw_on_error(heif_context_write(ctx.get(), &c_writer, &os),
+               "HEIF: failed while writing encoded data to output stream");
+
+spdlog::info("Saved image to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+catch (const std::exception &err) { throw std::runtime_error(fmt::format("HEIF error: {}", err.what())); }
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,

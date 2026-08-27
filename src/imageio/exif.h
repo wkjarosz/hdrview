@@ -8,6 +8,7 @@
 
 #include "json.h"
 #include <cstdint>
+#include <optional>
 
 json        entry_to_json(void *entry, int boi, unsigned int ifd_idx_i = 0);
 json        exif_to_json(const uint8_t *data_ptr, size_t data_size);
@@ -31,6 +32,16 @@ public:
     const uint8_t *data() const;
 
     json to_json() const;
+
+    //! Value of an Apple maker-note tag, when this file carries an Apple maker note holding it.
+    /*!
+        libexif has no decoder for Apple's maker note, so these tags never reach the ordinary EXIF
+        accessors. Tags 0x21 (HDR headroom) and 0x30 (HDR gain) parameterize Apple's HDR gain maps.
+
+        \param wanted_tag  Maker-note tag to look up
+        \return            The tag's value as a double, or nullopt if the tag is absent or not numeric
+    */
+    std::optional<double> apple_makernote_value(uint16_t wanted_tag) const;
 
 private:
     struct Impl;

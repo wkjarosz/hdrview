@@ -12,6 +12,7 @@
 #include "image.h"
 #include "imgui_ext.h"
 #include "timer.h"
+#include <cmath>
 #include <fstream>
 #include <hello_imgui/dpi_aware.h>
 #include <miniz.h>
@@ -791,8 +792,8 @@ void check_image_dimensions(int64_t width, int64_t height, string_view format)
         throw std::invalid_argument{fmt::format("{}: image has no pixels ({}x{}).", format, width, height)};
 
     if (width > k_max_image_dimension || height > k_max_image_dimension || width * height > k_max_image_pixels)
-        throw std::invalid_argument{fmt::format("{}: image dimensions {}x{} are implausibly large.", format, width,
-                                                height)};
+        throw std::invalid_argument{
+            fmt::format("{}: image dimensions {}x{} are implausibly large.", format, width, height)};
 }
 
 const ImageLoadOptions &load_image_options() { return s_opts; }
@@ -893,6 +894,35 @@ void draw_load_image_options_dialog(bool &open)
             "color space during display. This can be useful if you want to inspect the (linearized) pixel values in "
             "the image's native color space. It is exact when the file unambiguously defines the color primaries via "
             "CICP, but color shifts may occur if the color space is specified using a general ICC profile.");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        {
+            // The stored value is a ceiling in stops, with infinity meaning "no ceiling". The checkbox
+            // and the slider are two views of that one number, so each writes it directly.
+            bool full = !std::isfinite(s_opts.gainmap_headroom);
+            if (ImGui::Checkbox("Reconstruct HDR gain maps fully", &full))
+                s_opts.gainmap_headroom = full ? k_full_gainmap_headroom : 2.f;
+            ImGui::Tooltip("Some HDR photos -- from iPhones, and from recent Android phones -- store an SDR image "
+                           "plus a gain map saying how much brighter the HDR rendition is. HDRView's working space "
+                           "is unbounded, so by default it reconstructs the whole HDR rendition.\n\nTurn this off to "
+                           "cap how far the reconstruction goes, or to see the SDR image the file actually stores.");
+
+            if (!full)
+            {
+                ImGui::Indent();
+                ImGui::PushItemWidth(ImGui::CalcItemWidth() - ImGui::GetStyle().IndentSpacing);
+
+                ImGui::SliderFloat("Gain map headroom", &s_opts.gainmap_headroom, 0.f, 10.f, "%.2f stops");
+                ImGui::Tooltip("Stops of brightening to reconstruct, at most. A file whose gain map asks for less "
+                               "than this is unaffected; zero shows the SDR image as stored.");
+
+                ImGui::PopItemWidth();
+                ImGui::Unindent();
+            }
+        }
 
         ImGui::Spacing();
         ImGui::Separator();
