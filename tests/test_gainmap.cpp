@@ -4,6 +4,16 @@
 // be found in the LICENSE.txt file.
 //
 
+// Gain-map tests. The synthetic cases here always run; the ones against real captures are opt-in,
+// since the files are far too large to vendor. Point these at a checkout of HDRView's test-image
+// corpus to run them:
+//
+//   HDRVIEW_TEST_APPLE_HEIC       OpenImageIO-images-main/heif/greyhounds-looking-for-a-table.heic
+//   HDRVIEW_TEST_JXL_GAINMAP_DIR  Gain_Map_Sample_Photos
+//   HDRVIEW_TEST_GAINMAP_JPEG     Gain_Map_Sample_Photos/samples_jpeg/01.jpg          (ISO binary)
+//                                 greg benz photography/DSC0529-...benz8GainMap.jpg   (3-channel XMP)
+//                                 Ultra_HDR_Samples-main/Originals/..._01.jpg         (also UltraHDR)
+
 #include <doctest/doctest.h>
 
 #include "image.h"
@@ -88,9 +98,9 @@ TEST_CASE("Apple gain-map strength follows the published piecewise fit")
         CHECK(p.stops() == doctest::Approx(0.793f));
     }
 
-    SUBCASE("the file on which this feature was developed asks for 1.8 stops")
+    SUBCASE("what an iPhone 12 Pro actually writes")
     {
-        // IMG_4816.HEIC: maker note 0x21 = 0.8432090282, 0x30 = 0.
+        // Maker note 0x21 = 0.8432090282, 0x30 = 0, which several captures in the test corpus share.
         AppleGainmapParams p{0.8432090282f, 0.f};
         CHECK(p.stops() == doctest::Approx(1.8f));
     }
@@ -204,7 +214,7 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
 {
     // Apple gain maps need a real capture to exercise: the aux-image plumbing, the maker-note read,
     // and the map itself all have to line up, and none of that is reachable from a synthetic file
-    // this suite could build. Point HDRVIEW_TEST_APPLE_HEIC at an iPhone HEIC to run this.
+    // this suite could build.
     const char *path = std::getenv("HDRVIEW_TEST_APPLE_HEIC");
     if (!path)
     {

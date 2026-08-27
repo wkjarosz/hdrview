@@ -7,6 +7,7 @@
 #include "jpg.h"
 #include "app.h"
 #include "colorspace.h"
+#include "common.h"
 #include "endian-utils.h"
 #include "exif.h"
 #include "gainmap.h"
@@ -337,9 +338,10 @@ SecondaryGainmap read_secondary_gainmap(const uint8_t *image, size_t size)
         }
 
         // Apple marks its gain maps by auxiliary image type rather than with any parameters; the
-        // strength lives in the primary image's maker note instead.
-        const string_view packet{text, xmp.size};
-        out.apple = packet.find("apple") != string_view::npos && packet.find("hdrgainmap") != string_view::npos;
+        // strength lives in the primary image's maker note instead. Matched case-insensitively and
+        // on the stable parts of the URN, since Apple has dated it both 2020 and 2023.
+        const auto packet = to_lower(string_view{text, xmp.size});
+        out.apple         = packet.find("apple") != string::npos && packet.find("hdrgainmap") != string::npos;
     }
 
     return out;
