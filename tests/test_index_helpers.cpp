@@ -8,6 +8,7 @@
 
 #include "common.h"
 
+#include <initializer_list>
 #include <algorithm>
 #include <numeric>
 #include <vector>

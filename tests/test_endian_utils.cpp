@@ -8,6 +8,8 @@
 
 #include "endian-utils.h"
 
+#include <initializer_list>
+
 TEST_CASE("read_partial_as assembles a value narrower than its destination")
 {
     // A DDS bitmasked pixel is 1 to 4 bytes wide, so the stored value is narrower than the uint32_t it

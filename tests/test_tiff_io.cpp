@@ -10,6 +10,7 @@
 #include "image.h"
 #include "imageio/tiff.h"
 
+#include <initializer_list>
 #include <cstring>
 #include <sstream>
 #include <string>
