@@ -547,9 +547,10 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 [&](const uint8_t *input, size_t input_size, int bitwidth, vector<uint32_t> &output, bool handle_sign)
             {
                 // Masks for a sample exactly as wide as the accumulator: 1u << 32 is undefined, and a
-                // 32-bit sample needs every bit anyway, so its "sign extension" is a no-op.
+                // 32-bit sample needs every bit anyway, so its "sign extension" is a no-op. Wider samples
+                // are rejected before any of this runs, but neither expression may shift off the end.
                 const uint32_t value_mask = bitwidth >= 32 ? ~0u : ((1u << bitwidth) - 1);
-                const uint32_t sign_bit   = bitwidth >= 1 ? (1u << (bitwidth - 1)) : 0u;
+                const uint32_t sign_bit   = (bitwidth >= 1 && bitwidth <= 32) ? (1u << (bitwidth - 1)) : 0u;
 
                 // If the bitwidth is byte aligned (multiple of 8), data is already in machine endianness
                 if (bitwidth % 8 == 0)
