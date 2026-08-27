@@ -13,6 +13,7 @@
 //   HDRVIEW_TEST_GAINMAP_JPEG     Gain_Map_Sample_Photos/samples_jpeg/01.jpg          (ISO binary)
 //                                 greg benz photography/DSC0529-...benz8GainMap.jpg   (3-channel XMP)
 //                                 Ultra_HDR_Samples-main/Originals/..._01.jpg         (also UltraHDR)
+//                                 iphone-gainmap-jpeg/IMG_0825.jpeg                   (Apple in JPEG)
 
 #include <doctest/doctest.h>
 
