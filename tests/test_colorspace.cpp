@@ -252,3 +252,20 @@ TEST_CASE("blend()'s overloads agree on every blend mode")
             CHECK(v4.x == doctest::Approx(s));
     }
 }
+
+TEST_CASE("blend() keeps fractional results in the difference modes")
+{
+    // colorspace.h is a header, so an unqualified abs() there binds to <stdlib.h>'s ::abs(int) on any
+    // standard library that doesn't also declare the floating-point overloads globally -- libstdc++ does
+    // not, libc++ does. Every difference here is below 1, so a truncating abs() returns exactly zero.
+    const float top = 0.6f, bottom = 0.25f;
+
+    CHECK(blend(top, bottom, BlendMode_Difference) == doctest::Approx(0.35f));
+    CHECK(blend(bottom, top, BlendMode_Difference) == doctest::Approx(0.35f));
+    CHECK(blend(top, bottom, BlendMode_Relative_Difference) == doctest::Approx(0.35f / 0.26f));
+
+    // Also below 1 in the other direction, where a truncating abs() would round toward zero rather than
+    // saturate.
+    CHECK(blend(0.2f, 0.1f, BlendMode_Difference) == doctest::Approx(0.1f));
+    CHECK(blend(0.1f, 0.2f, BlendMode_Difference) == doctest::Approx(0.1f));
+}
