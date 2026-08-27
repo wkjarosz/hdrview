@@ -840,9 +840,9 @@ float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode);
 // no LTO/IPO enabled -- de-inlining this one would be a real cross-TU perf regression.
 inline float blend(float top, float bottom, BlendMode_ blend_mode)
 {
-    // std::abs, not abs: this is a header, so there is no `using namespace std` to bring the floating-point
-    // overloads into scope, and <stdlib.h>'s ::abs(int) would otherwise win and truncate the difference.
-    // libc++ happens to declare ::abs(float) as well, which is why the plain call works on macOS only.
+    // std::abs, qualified: this is a header, with no `using namespace std` to bring the floating-point
+    // overloads into scope. libstdc++ leaves only <stdlib.h>'s integer ::abs visible at global scope, which
+    // would truncate; libc++ happens to declare the float ones there too.
     using std::abs;
 
     float diff = top - bottom;

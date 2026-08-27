@@ -155,8 +155,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
         auto shifts = dds.right_shifts;
 
         // A bitmasked pixel is Bpp bytes wide -- 1 for A8/L8, 2 for the 16-bit formats -- and DDS stores
-        // it little-endian. Reading it as a uint32_t would be misaligned at most offsets and would run
-        // past the last pixel by 4 - Bpp bytes.
+        // it little-endian.
         auto read_packed = [Bpp](const uint8_t *p)
         { return read_partial_as<uint32_t>(p, (size_t)Bpp, Endian::Little); };
         // special cases

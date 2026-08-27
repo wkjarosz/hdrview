@@ -152,8 +152,8 @@ const unsigned char k_signed16_tiff[] = {    0x49, 0x49, 0x2a, 0x00, 0x08, 0x00,
 TEST_CASE("TIFF signed integer samples decode into the unit range")
 {
     // unpack_bits() sign-extends a signed sample across its 32-bit accumulator, so the value has to be
-    // read back as signed. Read as unsigned, every negative sample is a number near 2^32 and lands tens of
-    // billions away from where it belongs -- the minimum decoded as 3.9e10 rather than 0.
+    // read back as signed: read as unsigned, a negative sample is a number near 2^32, which the bias and
+    // divisor place far outside [0,1].
     std::string        bytes(reinterpret_cast<const char *>(k_signed16_tiff), sizeof(k_signed16_tiff));
     std::istringstream is(bytes, std::ios::binary);
 
@@ -219,8 +219,7 @@ const unsigned char k_signed64_tiff[] = {
 TEST_CASE("TIFF signed samples of other widths decode into the unit range")
 {
     // 24 bits is neither the accumulator's width nor a power of two, and takes unpack_bits's
-    // byte-aligned branch with a sign bit three bytes in. GDAL's own int24.tif is such a file, and
-    // decoded to a maximum of 199516 before the signed read was corrected.
+    // byte-aligned branch with a sign bit three bytes in. GDAL's own int24.tif is such a file.
     std::string        bytes(reinterpret_cast<const char *>(k_signed24_tiff), sizeof(k_signed24_tiff));
     std::istringstream is(bytes, std::ios::binary);
 
@@ -244,9 +243,8 @@ TEST_CASE("TIFF signed samples of other widths decode into the unit range")
 
 TEST_CASE("TIFF integer samples wider than the accumulator are refused")
 {
-    // unpack_bits accumulates into uint32_t. GDAL's int64.tif took three undefined shifts on the way to
-    // producing min=1e30, max=inf; refusing it is the honest outcome. A 64-bit *float* sample is ordinary
-    // and still loads.
+    // unpack_bits accumulates into uint32_t, so a wider integer sample has nowhere to land and is
+    // refused. A 64-bit *float* sample is ordinary and still loads. GDAL's int64.tif is such a file.
     //
     // The refusal surfaces as no image rather than as an exception: load_image() catches per directory and
     // skips it, so that one bad directory of a multi-directory TIFF doesn't discard the rest.
@@ -281,9 +279,9 @@ const unsigned char k_float24_tiff[] = {
 
 TEST_CASE("TIFF floating-point samples of an unsupported width are refused")
 {
-    // convert_to_float() reads a float sample as half, float or double and had nothing to return for any
-    // other width, so it returned zero -- GDAL's float24.tif decoded to a uniformly black 20x20 image,
-    // 400 zeros out of 400, with no diagnostic. Refusing it says what happened.
+    // convert_to_float() reads a float sample as half, float or double, and has no meaning to give any
+    // other width, so those are refused rather than decoded to something arbitrary. GDAL's float24.tif is
+    // such a file.
     std::string        bytes(reinterpret_cast<const char *>(k_float24_tiff), sizeof(k_float24_tiff));
     std::istringstream is(bytes, std::ios::binary);
 

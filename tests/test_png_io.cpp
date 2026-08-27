@@ -456,8 +456,8 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
 {
     // Real files rather than a synthesized one: PngSuite's 4a set is grayscale+alpha at both sample depths,
     // which is what takes as_interleaved()'s one-or-two-channel path. Whatever alpha the file holds has to
-    // come back unchanged -- neither gained nor transfer-function encoded -- and Y has to come back
-    // premultiplied by exactly that alpha rather than by a corrupted one.
+    // come back unchanged -- neither gained nor transfer-function encoded -- and Y premultiplied by exactly
+    // that alpha.
     for (const char *file : {"basn4a08.png", "basn4a16.png", "ibasn4a08.png", "ibasn4a16.png"})
     {
         CAPTURE(file);
@@ -533,8 +533,8 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
     REQUIRE(img->groups[0].type == ChannelGroup::YA_Channels);
     REQUIRE(img->unpremultiplies(img->groups[0]));
 
-    // sRGB rather than Linear: with a linear transfer function the erroneous encoding of alpha is the
-    // identity and the bug hides.
+    // sRGB rather than Linear: a linear transfer function is the identity, so it could not distinguish an
+    // alpha that had been through the transfer function from one that had not.
     std::ostringstream out(std::ios::binary);
     save_png_image(*img, out, "gray_alpha.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ true, TransferFunction::sRGB);
@@ -552,8 +552,7 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
             CAPTURE(i);
             // Alpha survives untouched: no gain, no transfer function.
             CHECK(reloaded[0]->channels[1](x, y) == doctest::Approx(alpha[i]).epsilon(1e-4));
-            // Y comes back premultiplied by that same alpha, i.e. exactly what finalize() produced here --
-            // premultiplied once on save's behalf, not twice.
+            // Y comes back premultiplied by that same alpha, i.e. exactly what finalize() produced here.
             CHECK(reloaded[0]->channels[0](x, y) ==
                   doctest::Approx(straight_y[i] * std::max(k_small_alpha, alpha[i])).epsilon(1e-3));
         }
@@ -585,8 +584,8 @@ TEST_CASE("saving gray+alpha applies the exposure gain to the color channel only
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x)
         {
-            // The file holds straight values, so the gain lands on the straight Y and alpha keeps the value
-            // it had. Gaining alpha too would have saturated it to 1.
+            // The file holds straight values, so the gain lands on the straight Y while alpha keeps the
+            // value it had. The two are chosen so that a gained alpha would instead saturate to 1.
             CHECK(reloaded[0]->channels[0](x, y) == doctest::Approx(straight_y * gain).epsilon(1e-4));
             CHECK(reloaded[0]->channels[1](x, y) == doctest::Approx(a).epsilon(1e-4));
         }

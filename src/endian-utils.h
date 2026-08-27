@@ -119,12 +119,11 @@ T read_as(const unsigned char *ptr, Endian data_endian)
 /*!
  * @brief Read an unsigned value stored in fewer bytes than T from a byte array.
  *
- * Unlike read_as(), the stored value is narrower than T, so it is assembled a byte at a time and
- * zero-extended rather than copied whole. That is what a format with a variable sample width needs: a
- * DDS bitmasked pixel occupies 1 to 4 bytes, and reading one as a uint32_t would both over-read the
- * last pixel and land on an address that is unaligned three times in four.
+ * Unlike read_as(), which copies sizeof(T) bytes whole, this assembles `num_bytes` of them and
+ * zero-extends. That is what a format with a variable sample width needs -- a DDS bitmasked pixel
+ * occupies 1 to 4 bytes -- and it reads only the bytes the sample actually has, at any alignment.
  *
- * Assembling arithmetically rather than swapping also makes this independent of the host's own
+ * Assembling arithmetically rather than swapping also makes the result independent of the host's own
  * endianness, so there is no branch on it.
  *
  * @tparam T Unsigned type to assemble into

@@ -11,7 +11,8 @@
 TEST_CASE("read_partial_as assembles a value narrower than its destination")
 {
     // A DDS bitmasked pixel is 1 to 4 bytes wide, so the stored value is narrower than the uint32_t it
-    // is assembled into -- read_as<uint32_t> would read four bytes whatever the width.
+    // is assembled into. read_as<uint32_t> reads four bytes whatever the width, which is the distinction
+    // between the two.
     const unsigned char bytes[] = {0x78, 0x56, 0x34, 0x12};
 
     CHECK(read_partial_as<uint32_t>(bytes, 1, Endian::Little) == 0x78u);
@@ -24,7 +25,7 @@ TEST_CASE("read_partial_as assembles a value narrower than its destination")
     CHECK(read_partial_as<uint32_t>(bytes, 3, Endian::Big) == 0x785634u);
     CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Big) == 0x78563412u);
 
-    // At the full width it has to agree with read_as, which is what the four-byte formats used before.
+    // At the full width the two are the same read, so they have to agree.
     CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Little) == read_as<uint32_t>(bytes, Endian::Little));
     CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Big) == read_as<uint32_t>(bytes, Endian::Big));
 

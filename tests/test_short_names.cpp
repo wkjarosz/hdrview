@@ -37,9 +37,8 @@ TEST_CASE("shorten_names trims the shared prefix and suffix")
 
 TEST_CASE("shorten_names handles a name that is entirely the common suffix")
 {
-    // "a.exr" is a suffix of "xa.exr", so the whole of the shorter name is shared and the range left for it
-    // is empty. Indexing the byte before that empty range read out of bounds
-    // (long_name[short_end - 1] with an unsigned short_end of 0).
+    // "a.exr" is a suffix of "xa.exr", so the whole of the shorter name is shared and the range left for
+    // it is empty -- the case where the byte before the range is at index -1 of an unsigned offset.
     vector<string> names{"a.exr", "xa.exr"};
     auto           shortened = shorten_names(names);
     REQUIRE(shortened.size() == 2);

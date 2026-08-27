@@ -606,8 +606,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                     // Handle integer data (already unpacked - both byte-aligned and bit-packed)
                     // Works for both UINT (bias=0) and INT (bias=2^(n-1)).
                     // unpack_bits sign-extends a signed sample across the 32-bit accumulator, so it has to
-                    // be read back as signed: as unsigned, every negative sample is a value near 2^32, and
-                    // the bias below lands it tens of billions away from its [0,1] slot.
+                    // be read back as signed for the bias to land it in [0,1].
                     const float value = sample_format == SAMPLEFORMAT_INT ? (float)(int32_t)unpacked[buffer_idx]
                                                                          : (float)unpacked[buffer_idx];
                     return (value + int_bias) * int_inv_divisor;
@@ -683,9 +682,8 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 throw invalid_argument{
                     fmt::format("TIFF: {}-bit integer samples are not supported", file_bits_per_sample)};
 
-            // convert_to_float() reads a float sample as half, float or double and has nothing to return
-            // for any other width -- it yielded zero, so a 24-bit float image decoded to a uniformly black
-            // one with no diagnostic. Say so instead.
+            // convert_to_float() reads a float sample as half, float or double, and has no meaning to
+            // give any other width.
             if (!needs_unpacking && bits_per_sample != 16 && bits_per_sample != 32 && bits_per_sample != 64)
                 throw invalid_argument{
                     fmt::format("TIFF: {}-bit floating-point samples are not supported", bits_per_sample)};

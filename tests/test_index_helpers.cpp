@@ -25,9 +25,9 @@ TEST_CASE("next_matching_index steps through a vector in both directions")
 TEST_CASE("next_matching_index starts at the near end when nothing is selected")
 {
     // -1 is the "nothing selected" index (m_current with no image, or selected_group/reference_group after
-    // update_visibility() hides every group). Adding the backward step to it in size_t arithmetic wrapped to
-    // near 2^64, so the starting index came out as 2^64 % size -- an arbitrary element that happened to be
-    // right for some sizes and wrong for others.
+    // update_visibility() hides every group). It is not a position to step from, and adding a step to it in
+    // unsigned arithmetic would give a remainder of 2^64 % size rather than of the index, so the search
+    // starts at the near end instead.
     auto all = [](size_t, const int &) { return true; };
 
     for (int size = 1; size <= 8; ++size)

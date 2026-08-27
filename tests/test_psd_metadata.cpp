@@ -12,9 +12,8 @@
 
 TEST_CASE("PSDMetadata::color_mode_name is defined for every 16-bit value")
 {
-    // color_mode is whatever uint16 the file's header held -- including PSDMetadata's own NotSet default of
-    // 0xFFFF -- and the names table has ten entries. Indexing it directly walked off the end and handed a
-    // wild const char* to std::string.
+    // color_mode is whatever uint16 the file's header holds -- including PSDMetadata's own NotSet default
+    // of 0xFFFF -- while the names table has ten entries, so it is not an index to use unchecked.
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::RGB)) == "RGB");
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::Bitmap)) == "Bitmap");
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::Lab)) == "Lab");

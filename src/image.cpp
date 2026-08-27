@@ -334,10 +334,10 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
         if (croi.size() != rroi.size())
             spdlog::error("Image and reference channel ROIs are not the same size!");
 
-        // Number of pixels the two passes below visit. Box::intersect() clamps each bound against the other
-        // box without keeping min <= max, so a selection that misses the channel leaves an inverted box,
-        // whose volume() is negative in one axis and spuriously positive in two. Neither is a count, and
-        // both passes take theirs as a size_t; an empty region simply has nothing to visit.
+        // Number of pixels the two passes below visit. Box::intersect() clamps each bound against the
+        // other box without keeping min <= max, so a selection that misses the channel leaves an inverted
+        // box, whose volume() is negative in one axis and spuriously positive in two. Neither is a count,
+        // and both passes take theirs as a size_t, so ask has_volume() first.
         const size_t num_pixels = croi.has_volume() ? (size_t)croi.volume() : 0;
 
         // Report what the file holds: a straight-alpha channel was premultiplied on load, so divide that

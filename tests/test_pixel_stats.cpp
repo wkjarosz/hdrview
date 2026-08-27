@@ -560,10 +560,9 @@ TEST_CASE("A 10-bit channel bins without running off the end of its storage")
 TEST_CASE("A selection that misses the channel leaves the statistics empty")
 {
     // Box::intersect() does not keep min <= max, so a selection that misses the channel in one axis leaves
-    // an inverted box whose volume() is negative. Read as the size_t length of the parallel work range that
-    // became a count near 2^64, and the pixel index outgrew int and addressed far outside the channel.
-    // The channel has to be large enough that |volume()| exceeds one block (1 << 20), or the same overflow
-    // happens to land on a block count of zero and nothing runs.
+    // an inverted box whose volume() is negative -- as the size_t length of a parallel work range, a count
+    // near 2^64. The channel has to be large enough that |volume()| exceeds one block (1 << 20); below
+    // that the same conversion lands on a block count of zero and nothing would run either way.
     Channel c = make_identifiable_channel(2048, 1024);
 
     SUBCASE("missing in y only")
@@ -589,8 +588,8 @@ TEST_CASE("A selection that misses the channel leaves the statistics empty")
 
     SUBCASE("missing in both axes")
     {
-        // Both axes inverted multiply back to a positive volume(), so this one is wrong in the other
-        // direction: a plausible-looking count over a region that does not exist.
+        // Both axes inverted multiply back to a positive volume(): a plausible-looking count over a
+        // region that does not exist.
         PixelStats::Settings settings;
         settings.roi = Box2i{int2{4000, 2000}, int2{5000, 3000}};
 

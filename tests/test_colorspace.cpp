@@ -226,8 +226,8 @@ TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_
 
 TEST_CASE("blend()'s overloads agree on every blend mode")
 {
-    // The float2 overload was missing BlendMode_Relative_Subtract, so that mode fell through to its
-    // `default:` and blended as Normal instead, disagreeing with the other two overloads.
+    // The three overloads are separate switches over the same enum, so a mode present in one and absent
+    // from another silently blends as whatever its `default:` is.
     const float top = 0.6f, bottom = 0.25f, top_a = 0.75f, bottom_a = 0.5f;
 
     for (int m = 0; m < BlendMode_COUNT; ++m)
@@ -255,17 +255,16 @@ TEST_CASE("blend()'s overloads agree on every blend mode")
 
 TEST_CASE("blend() keeps fractional results in the difference modes")
 {
-    // colorspace.h is a header, so an unqualified abs() there binds to <stdlib.h>'s ::abs(int) on any
-    // standard library that doesn't also declare the floating-point overloads globally -- libstdc++ does
-    // not, libc++ does. Every difference here is below 1, so a truncating abs() returns exactly zero.
+    // colorspace.h is a header, where only a qualified std::abs is sure to reach the floating-point
+    // overloads: libstdc++ leaves just <stdlib.h>'s integer ::abs at global scope, libc++ the float ones
+    // too. Every difference here is below 1, so an integer abs would return exactly zero.
     const float top = 0.6f, bottom = 0.25f;
 
     CHECK(blend(top, bottom, BlendMode_Difference) == doctest::Approx(0.35f));
     CHECK(blend(bottom, top, BlendMode_Difference) == doctest::Approx(0.35f));
     CHECK(blend(top, bottom, BlendMode_Relative_Difference) == doctest::Approx(0.35f / 0.26f));
 
-    // Also below 1 in the other direction, where a truncating abs() would round toward zero rather than
-    // saturate.
+    // Also below 1 with the operands the other way round.
     CHECK(blend(0.2f, 0.1f, BlendMode_Difference) == doctest::Approx(0.1f));
     CHECK(blend(0.1f, 0.2f, BlendMode_Difference) == doctest::Approx(0.1f));
 }

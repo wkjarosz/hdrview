@@ -197,7 +197,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->zoom() <= HDRViewApp::MAX_ZOOM);
 
         // An inverted selection intersects the data window into an inverted box, whose negative volume()
-        // became a near-2^64 pixel count in PixelStats::calculate().
+        // is a near-2^64 pixel count where PixelStats::calculate() takes it as a size_t.
         IM_CHECK(hdrview()->roi().min.x <= hdrview()->roi().max.x);
         IM_CHECK(hdrview()->roi().min.y <= hdrview()->roi().max.y);
 

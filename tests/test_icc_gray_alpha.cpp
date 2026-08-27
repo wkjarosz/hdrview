@@ -60,9 +60,9 @@ std::vector<uint8_t> gray_profile()
 
 TEST_CASE("a gray ICC profile linearizes every pixel of a gray+alpha buffer")
 {
-    // Two floats per pixel, so the transform has to advance two floats per pixel as well. Read as
-    // TYPE_GRAY_FLT it advances one, covering only the first half of the buffer and treating alternating
-    // luminance and alpha values as consecutive gray pixels.
+    // Two floats per pixel, so the transform has to advance two floats per pixel as well. A format
+    // advancing one would cover only the first half of the buffer, reading alternating luminance and
+    // alpha values as consecutive gray pixels.
     constexpr int num_pixels = 64;
 
     ICCProfile profile{gray_profile()};
