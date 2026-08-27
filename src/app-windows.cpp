@@ -522,13 +522,11 @@ void HDRViewApp::update_visibility()
     //
     // compute short (i.e. unique) names for visible images
 
-    // visible_image_names was filled in visibility order above, so the shortened names come back in the
-    // same order as the visible images.
-    auto   short_names = shorten_names(visible_image_names);
-    size_t n           = 0;
-    for (auto img : m_images)
-        if (img->visible)
-            img->short_name = short_names[n++];
+    // m_visible_images and visible_image_names were appended to together above, so they index each other:
+    // one shortened name per visible image, in the same order.
+    auto short_names = shorten_names(visible_image_names);
+    for (size_t n = 0; n < m_visible_images.size(); ++n)
+        m_images[m_visible_images[n]]->short_name = short_names[n];
 
     set_image_textures();
 }
