@@ -4,6 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "imageio/jxl.h"
 #include "app.h"
 #include "endian-utils.h"
 #include "exif.h"
@@ -69,6 +70,9 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 #else
 #define HDRVIEW_HAS_JXL_BOX_COMPLETE 0
 #endif
+
+#include "gainmap.h"
+#include <sstream>
 
 // Check if decoder functions have removed unused_format parameter (removed in 0.9.0)
 #if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0, 9, 0)
@@ -282,6 +286,132 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 // - Setting the desired JxlDecoderSetOutputColorProfile to JXL_TRANSFER_FUNCTION_SRGB does call the CMS functions.
 //
 
+//! Reconstruct \p image's alternate rendition from the gain map in a `jhgm` box, if it holds one.
+/*!
+    A JPEG XL gain map arrives as a bundle laid out as: a version byte, the ISO 21496-1 metadata
+    behind a 16-bit length, the alternate rendition's color encoding behind an 8-bit length, its ICC
+    profile behind a 32-bit length, and then the map itself as a bare JPEG XL codestream filling the
+    rest of the box. Decoding that codestream is a second trip through this same loader.
+
+    libjxl can unpack this too, but only from libjxl_extras, which distributions do not reliably
+    ship and HDRView does not link. The layout is short enough to read directly.
+
+    \param jhgm   Contents of the file's `jhgm` box
+    \param image  Base image, already linearized. Modified in place
+    \param opts   Load options, for the target headroom
+*/
+static void apply_jxl_gainmap(const vector<uint8_t> &jhgm, Image &image, const ImageLoadOptions &opts)
+{
+    size_t     pos  = 0;
+    const auto take = [&](size_t n) -> const uint8_t *
+    {
+        if (n > jhgm.size() - pos)
+            throw invalid_argument{fmt::format("jhgm box ends after {} bytes, mid-field", jhgm.size())};
+
+        const uint8_t *p = jhgm.data() + pos;
+        pos += n;
+        return p;
+    };
+
+    const uint8_t *metadata        = nullptr;
+    size_t         metadata_size   = 0;
+    const uint8_t *codestream      = nullptr;
+    size_t         codestream_size = 0;
+
+    try
+    {
+        const uint8_t version = *take(1);
+
+        const uint8_t *len = take(2);
+        metadata_size      = (size_t)((len[0] << 8) | len[1]);
+        metadata           = take(metadata_size);
+
+        // The alternate rendition's color encoding and ICC profile. Only needed to reconstruct that
+        // rendition's own color space, which HDRView does not do yet, so they are skipped over.
+        take(*take(1));
+
+        const uint8_t *icc_len = take(4);
+        take(((size_t)icc_len[0] << 24) | ((size_t)icc_len[1] << 16) | ((size_t)icc_len[2] << 8) | icc_len[3]);
+
+        codestream_size = jhgm.size() - pos;
+        codestream      = take(codestream_size);
+
+        spdlog::debug("jhgm bundle: version {}, {} bytes of metadata, {} bytes of gain map", version, metadata_size,
+                      codestream_size);
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::warn("Failed to read the jhgm box: {}", e.what());
+        return;
+    }
+
+    if (metadata_size == 0 || codestream_size == 0)
+    {
+        spdlog::warn("The jhgm box is missing its gain map or its metadata; ignoring it.");
+        return;
+    }
+
+    IsoGainmapParams params;
+    try
+    {
+        params = parse_iso_gainmap(metadata, metadata_size);
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::warn("Failed to read the jhgm box's gain map metadata: {}", e.what());
+        return;
+    }
+
+    // Decode the map as stored: its samples are coefficients that the metadata above says how to
+    // interpret, so the color management that would be right for a picture would corrupt them.
+    ImageLoadOptions map_opts;
+    map_opts.override_profile = true;
+    map_opts.tf_override      = TransferFunction::Linear;
+    map_opts.keep_primaries   = true;
+
+    vector<ImagePtr> decoded;
+    try
+    {
+        std::stringstream ss;
+        ss.write(reinterpret_cast<const char *>(codestream), (std::streamsize)codestream_size);
+        decoded = load_jxl_image(ss, "gainmap.jxl", map_opts);
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::warn("Failed to decode the gain map codestream in the jhgm box: {}", e.what());
+        return;
+    }
+
+    if (decoded.empty() || decoded.front()->channels.empty())
+    {
+        spdlog::warn("The gain map codestream in the jhgm box decoded to nothing; ignoring it.");
+        return;
+    }
+
+    const auto &map = *decoded.front();
+
+    // A gain map is monochrome or RGB; an alpha channel on one would be meaningless, so stop at
+    // three and let interleaving pick up only the color channels.
+    GainmapImage gm;
+    gm.size     = map.channels.front().size();
+    gm.channels = std::min((int)map.channels.size(), 3);
+    gm.pixels.resize((size_t)gm.size.x * gm.size.y * gm.channels);
+    for (int c = 0; c < gm.channels; ++c)
+    {
+        const auto &ch = map.channels[c];
+        if (ch.size() != gm.size)
+        {
+            spdlog::warn("The gain map's channels are not all the same size; ignoring it.");
+            return;
+        }
+
+        for (int y = 0; y < gm.size.y; ++y)
+            for (int x = 0; x < gm.size.x; ++x) gm.pixels[((size_t)y * gm.size.x + x) * gm.channels + c] = ch(x, y);
+    }
+
+    apply_iso_gainmap(image, gm, params, opts.gainmap_headroom);
+}
+
 vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "JXL"};
@@ -349,6 +479,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
     std::vector<uint8_t> exif_buffer;
     std::vector<uint8_t> xmp_buffer;
+    std::vector<uint8_t> jhgm_buffer;
     json                 metadata;
     while (true)
     {
@@ -364,7 +495,9 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             auto stype = string{type, type + sizeof(type)};
             spdlog::debug("Box type: '{}'", string{type, type + sizeof(type)});
 
-            if (stype != "Exif" && stype != "xml ")
+            // Skip past any box this loader has no use for, rather than paying to buffer it: a
+            // gain map box in particular can be as large as the image itself.
+            if (stype != "Exif" && stype != "xml " && stype != "jhgm" && stype != "JHGM")
                 continue;
 
             // read in entire box with a growing buffer
@@ -425,6 +558,13 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 xmp_buffer = tmp_buffer;
                 spdlog::debug("XMP data size: {}", xmp_buffer.size());
             }
+            // The spec spells this box lowercase, but accept either so a file that got the case
+            // wrong still gets its gain map read.
+            else if (stype == "jhgm" || stype == "JHGM")
+            {
+                jhgm_buffer = tmp_buffer;
+                spdlog::debug("Gain map (jhgm) box size: {}", jhgm_buffer.size());
+            }
         }
         else if (status == JXL_DEC_NEED_MORE_INPUT)
             throw invalid_argument{"Decoder error, already provided all input"};
@@ -436,8 +576,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
             // check_image_dimensions() above already rejected a degenerate width or height.
             if (info.num_color_channels + info.num_extra_channels == 0)
-                throw invalid_argument{fmt::format("{}x{} image has no color or extra channels", info.xsize,
-                                                   info.ysize)};
+                throw invalid_argument{
+                    fmt::format("{}x{} image has no color or extra channels", info.xsize, info.ysize)};
 
             check_image_dimensions(info.xsize, info.ysize, "JPEG XL");
             size = int3{(int)info.xsize, (int)info.ysize, (int)info.num_color_channels + (info.alpha_bits ? 1 : 0)};
@@ -907,6 +1047,11 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
         // assign xmp metadata to all images
         for (auto &&i : images) { i->xmp_data = xmp_buffer; }
     }
+
+    // The gain map applies to the main image, so it waits until decoding has produced one. A file
+    // with several frames has one gain map for the whole animation, which the first frame carries.
+    if (!jhgm_buffer.empty() && !images.empty())
+        apply_jxl_gainmap(jhgm_buffer, *images.front(), opts);
 
     return images;
 }

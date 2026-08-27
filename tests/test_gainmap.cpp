@@ -10,6 +10,7 @@
 #include "imageio/gainmap.h"
 #include "imageio/heif.h"
 #include "imageio/image_loader.h"
+#include "imageio/jxl.h"
 #include "imageio/uhdr.h"
 
 #if HDRVIEW_ENABLE_LIBHEIF
@@ -569,3 +570,70 @@ TEST_CASE("Applying an ISO gain map moves the base image towards the alternate r
         CHECK(img->channels[0](0, 0) > 0.5f);
     }
 }
+
+#if HDRVIEW_ENABLE_LIBJXL
+TEST_CASE("A JPEG XL gain map is read out of the jhgm box and applied")
+{
+    // Point this at Adobe's Gain_Map_Sample_Photos, which carries the same scene encoded both ways:
+    // samples_jxl_base_sdr stores the SDR rendition and brightens towards HDR, samples_jxl_base_hdr
+    // stores the HDR one and darkens towards SDR. A viewer has to land on the HDR rendition in both.
+    const char *dir = std::getenv("HDRVIEW_TEST_JXL_GAINMAP_DIR");
+    if (!dir)
+    {
+        MESSAGE("HDRVIEW_TEST_JXL_GAINMAP_DIR is unset; skipping the real-file gain-map tests.");
+        return;
+    }
+
+    const auto load = [&](const char *subdir, const char *name, float headroom)
+    {
+        const auto    path = std::string{dir} + "/" + subdir + "/" + name;
+        std::ifstream is{path, std::ios_base::binary};
+        REQUIRE_MESSAGE(is.good(), "cannot open ", path);
+
+        ImageLoadOptions opts;
+        opts.gainmap_headroom = headroom;
+        auto images           = load_jxl_image(is, name, opts);
+        REQUIRE(!images.empty());
+        return images.front();
+    };
+
+    const auto peak = [](const Image &img)
+    {
+        const int2 size = img.channels[0].size();
+        float      p    = 0.f;
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x) p = std::max(p, img.channels[0](x, y));
+        return p;
+    };
+
+    SUBCASE("a base-SDR file brightens towards its HDR rendition")
+    {
+        auto sdr = load("samples_jxl_base_sdr", "01_base_sdr.jxl", 0.f);                     // as stored
+        auto hdr = load("samples_jxl_base_sdr", "01_base_sdr.jxl", k_full_gainmap_headroom); // reconstructed
+
+        REQUIRE_MESSAGE(channel_index(*hdr, "gainmap.R") >= 0, "no gain map was extracted from the jhgm box");
+        REQUIRE(sdr->channels[0].size() == hdr->channels[0].size());
+
+        const float peak_sdr = peak(*sdr), peak_hdr = peak(*hdr);
+        MESSAGE("base-SDR peak ", peak_sdr, " -> reconstructed ", peak_hdr);
+        CHECK(peak_hdr > peak_sdr * 1.5f);
+
+        // The map cannot ask for more brightening than its own maximum, whatever the codec's
+        // reconstruction of the map overshoots to.
+        const float ceiling = std::exp2(hdr->metadata["header"]["Gain map headroom"]["value"].get<float>());
+        CHECK(peak_hdr <= doctest::Approx(peak_sdr * ceiling).epsilon(0.01));
+    }
+
+    SUBCASE("a base-HDR file is left alone at full headroom, and darkened at zero")
+    {
+        auto full = load("samples_jxl_base_hdr", "01_base_hdr.jxl", k_full_gainmap_headroom); // already HDR
+        auto none = load("samples_jxl_base_hdr", "01_base_hdr.jxl", 0.f);                     // driven to SDR
+
+        REQUIRE(full->channels[0].size() == none->channels[0].size());
+
+        const float peak_full = peak(*full), peak_none = peak(*none);
+        MESSAGE("base-HDR peak ", peak_full, " -> driven to SDR ", peak_none);
+        CHECK(peak_none < peak_full * 0.75f);
+    }
+}
+#endif

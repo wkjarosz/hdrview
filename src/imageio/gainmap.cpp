@@ -542,11 +542,17 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
                      for (size_t i = begin; i < end; ++i)
                          for (int c = 0; c < gainmap.channels; ++c)
                          {
-                             const float v = gainmap.pixels[i * gainmap.channels + c];
+                             // Gain-map values are normalized, so anything outside [0,1] is codec
+                             // overshoot rather than signal. Clamping matters more than it looks:
+                             // gamma is commonly around 0.25, making the exponent below about 4, so
+                             // a lossily coded 1.19 would otherwise decode to twice the brightening
+                             // the file says its map can ask for.
+                             const float v = std::clamp(gainmap.pixels[i * gainmap.channels + c], 0.f, 1.f);
+
                              // The channel index saturates so a 4-channel map's alpha reuses blue's
                              // curve rather than reading past the parameters.
                              const int   p         = std::min(c, 2);
-                             const float recovered = std::copysign(std::pow(std::abs(v), 1.f / params.gamma[p]), v);
+                             const float recovered = std::pow(v, 1.f / params.gamma[p]);
 
                              decoded.pixels[i * gainmap.channels + c] =
                                  params.min[p] * (1.f - recovered) + params.max[p] * recovered;
