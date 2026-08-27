@@ -390,24 +390,7 @@ static void apply_jxl_gainmap(const vector<uint8_t> &jhgm, Image &image, const I
 
     const auto &map = *decoded.front();
 
-    // A gain map is monochrome or RGB; an alpha channel on one would be meaningless, so stop at
-    // three and let interleaving pick up only the color channels.
-    GainmapImage gm;
-    gm.size     = map.channels.front().size();
-    gm.channels = std::min((int)map.channels.size(), 3);
-    gm.pixels.resize((size_t)gm.size.x * gm.size.y * gm.channels);
-    for (int c = 0; c < gm.channels; ++c)
-    {
-        const auto &ch = map.channels[c];
-        if (ch.size() != gm.size)
-        {
-            spdlog::warn("The gain map's channels are not all the same size; ignoring it.");
-            return;
-        }
-
-        for (int y = 0; y < gm.size.y; ++y)
-            for (int x = 0; x < gm.size.x; ++x) gm.pixels[((size_t)y * gm.size.x + x) * gm.channels + c] = ch(x, y);
-    }
+    const GainmapImage gm = gainmap_from_image(map);
 
     apply_iso_gainmap(image, gm, params, opts.gainmap_headroom);
 }

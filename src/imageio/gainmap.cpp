@@ -7,6 +7,7 @@
 #include "gainmap.h"
 
 #include "colorspace.h"
+#include "common.h"
 #include "image.h"
 #include "timer.h"
 
@@ -19,6 +20,49 @@
 #include <tinyxml2.h>
 
 using namespace std;
+
+bool is_apple_gainmap_type(string_view aux_type)
+{
+    const auto lower = to_lower(aux_type);
+    return lower.find("apple") != string::npos && lower.find("hdrgainmap") != string::npos;
+}
+
+AppleGainmapParams apple_gainmap_params(const Exif &exif)
+{
+    AppleGainmapParams params;
+    if (!exif.valid())
+    {
+        spdlog::warn("Apple gain map with no maker note to size it by; using the weakest reconstruction.");
+        return params;
+    }
+
+    params.hdr_headroom = (float)exif.apple_makernote_value(0x21).value_or(params.hdr_headroom);
+    params.hdr_gain     = (float)exif.apple_makernote_value(0x30).value_or(params.hdr_gain);
+    return params;
+}
+
+GainmapImage gainmap_from_image(const Image &map)
+{
+    GainmapImage gm;
+    if (map.channels.empty())
+        return gm;
+
+    gm.size     = map.channels.front().size();
+    gm.channels = std::min((int)map.channels.size(), 3);
+    gm.pixels.resize((size_t)gm.size.x * gm.size.y * gm.channels);
+
+    for (int c = 0; c < gm.channels; ++c)
+    {
+        if (map.channels[c].size() != gm.size)
+            return GainmapImage{};
+
+        for (int y = 0; y < gm.size.y; ++y)
+            for (int x = 0; x < gm.size.x; ++x)
+                gm.pixels[((size_t)y * gm.size.x + x) * gm.channels + c] = map.channels[c](x, y);
+    }
+
+    return gm;
+}
 
 float AppleGainmapParams::stops() const
 {

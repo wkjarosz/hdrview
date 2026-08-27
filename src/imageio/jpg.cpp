@@ -338,10 +338,8 @@ SecondaryGainmap read_secondary_gainmap(const uint8_t *image, size_t size)
         }
 
         // Apple marks its gain maps by auxiliary image type rather than with any parameters; the
-        // strength lives in the primary image's maker note instead. Matched case-insensitively and
-        // on the stable parts of the URN, since Apple has dated it both 2020 and 2023.
-        const auto packet = to_lower(string_view{text, xmp.size});
-        out.apple         = packet.find("apple") != string::npos && packet.find("hdrgainmap") != string::npos;
+        // strength lives in the primary image's maker note instead.
+        out.apple = is_apple_gainmap_type(string_view{text, xmp.size});
     }
 
     return out;
@@ -434,35 +432,12 @@ static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOpt
 
         const auto &map = *decoded.front();
 
-        GainmapImage gm;
-        gm.size     = map.channels.front().size();
-        gm.channels = std::min((int)map.channels.size(), 3);
-        gm.pixels.resize((size_t)gm.size.x * gm.size.y * gm.channels);
-        for (int c = 0; c < gm.channels; ++c)
-        {
-            if (map.channels[c].size() != gm.size)
-                return;
-
-            for (int y = 0; y < gm.size.y; ++y)
-                for (int x = 0; x < gm.size.x; ++x)
-                    gm.pixels[((size_t)y * gm.size.x + x) * gm.channels + c] = map.channels[c](x, y);
-        }
+        const GainmapImage gm = gainmap_from_image(map);
 
         if (found.iso)
             apply_iso_gainmap(image, gm, *found.iso, opts.gainmap_headroom);
         else
-        {
-            AppleGainmapParams params;
-            if (image.exif.valid())
-            {
-                params.hdr_headroom = (float)image.exif.apple_makernote_value(0x21).value_or(params.hdr_headroom);
-                params.hdr_gain     = (float)image.exif.apple_makernote_value(0x30).value_or(params.hdr_gain);
-            }
-            else
-                spdlog::warn("Apple gain map with no maker note to size it by; using the weakest reconstruction.");
-
-            apply_apple_gainmap(image, gm, params, opts.gainmap_headroom);
-        }
+            apply_apple_gainmap(image, gm, apple_gainmap_params(image.exif), opts.gainmap_headroom);
 
         return; // an image has at most one gain map
     }

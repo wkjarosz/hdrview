@@ -8,6 +8,10 @@
 
 #include "fwd.h"
 
+#include "imageio/exif.h"
+
+#include <string_view>
+
 #include <limits>
 #include <optional>
 #include <string>
@@ -78,6 +82,34 @@ inline constexpr float k_full_gainmap_headroom = std::numeric_limits<float>::inf
     \return           Index of the first appended channel, and how many were appended
 */
 std::pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap, bool linearize);
+
+//! Whether an auxiliary image type names one of Apple's gain maps.
+/*!
+    Apple has dated this URN both 2020 and 2023 and spells it differently in HEIF's auxC property
+    and in a JPEG's XMP, so this matches the parts that have stayed put, case-insensitively.
+
+    \param aux_type  The auxiliary image type, or a document containing it
+*/
+bool is_apple_gainmap_type(std::string_view aux_type);
+
+//! Reconstruction strength for an Apple gain map, from the primary image's maker note.
+/*!
+    Both fields keep their defaults when the note is absent or has no such tag, which is the weakest
+    reconstruction and what Apple's own software falls back to.
+
+    \param exif  EXIF of the *primary* image; Apple sizes the map from there, not from the map itself
+*/
+AppleGainmapParams apple_gainmap_params(const Exif &exif);
+
+//! Flatten a decoded image's color channels into a gain map, as the loaders' recursion produces it.
+/*!
+    A gain map is monochrome or RGB; an alpha channel on one would be meaningless, so this stops at
+    three channels.
+
+    \param map  Image the container's decoder returned for the gain map
+    \return     The map, or an empty one if \p map has no channels or they disagree on size
+*/
+GainmapImage gainmap_from_image(const Image &map);
 
 /// Metadata of an ISO 21496-1 gain map: how to turn the base rendition into the alternate one.
 /**

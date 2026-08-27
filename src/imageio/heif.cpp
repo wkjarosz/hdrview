@@ -545,26 +545,16 @@ static void apply_heif_gainmap(const heif_image_handle *ihandle, Image &image, c
 
         spdlog::info("Auxiliary image {}: '{}'", aux_id, aux_type);
 
-        // Apple has dated this URN both 2020 and 2023, so match the parts that have stayed put.
-        const auto lower = to_lower(aux_type);
-        if (lower.find("apple") == string::npos || lower.find("hdrgainmap") == string::npos)
+        if (!is_apple_gainmap_type(aux_type))
             continue;
 
         image.metadata["header"]["Auxiliary image type"] = {
             {"value", aux_type}, {"string", aux_type}, {"type", "string"}};
 
-        AppleGainmapParams params;
-        if (image.exif.valid())
-        {
-            params.hdr_headroom = (float)image.exif.apple_makernote_value(0x21).value_or(params.hdr_headroom);
-            params.hdr_gain     = (float)image.exif.apple_makernote_value(0x30).value_or(params.hdr_gain);
-        }
-        else
-            spdlog::warn("Apple gain map with no maker note to size it by; using the weakest reconstruction.");
-
         try
         {
-            apply_apple_gainmap(image, decode_aux_gainmap(aux.get()), params, opts.gainmap_headroom);
+            apply_apple_gainmap(image, decode_aux_gainmap(aux.get()), apple_gainmap_params(image.exif),
+                                opts.gainmap_headroom);
         }
         catch (const std::exception &e)
         {
