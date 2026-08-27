@@ -1,6 +1,7 @@
 #include "dds.h"
 #include "colorspace.h"
 #include "image.h"
+#include <cstring>
 #include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
@@ -422,6 +423,19 @@ vector<ImagePtr> load_compressed(const DDSFile::ImageData *data, const DDSFile &
                     for (int bx = 0; bx < width_in_blocks; ++bx)
                     {
                         auto block = start_of_slice + (by * width_in_blocks + bx) * block_size;
+
+                        // bcdec reads each block as two unsigned long longs straight out of the pointer it
+                        // is given. A DDS carrying a DXT10 header -- which BC6H and BC7 require -- puts its
+                        // pixel data at byte 148 of the file, so those blocks are 4-aligned and never
+                        // 8-aligned. Stage those through an aligned buffer; data that is already aligned,
+                        // including every pre-DX10 format at byte 128, is used in place. block_size is 8 or
+                        // 16, so it always fits.
+                        alignas(unsigned long long) uint8_t aligned_block[16];
+                        if (reinterpret_cast<uintptr_t>(block) % alignof(unsigned long long) != 0)
+                        {
+                            std::memcpy(aligned_block, block, block_size);
+                            block = aligned_block;
+                        }
 
                         switch (cmp)
                         {
