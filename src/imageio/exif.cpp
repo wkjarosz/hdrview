@@ -281,7 +281,7 @@ static bool for_each_apple_makernote_entry(ExifData *ed, F &&visit)
     // Sanity check the offset
     if (mn_size < size_t(6 + 16 + tcount * 12 + 4))
     {
-        spdlog::error("ExifMnoteApple Short MakerNote");
+        spdlog::error("ExifMnoteApple: Short MakerNote");
         return false;
     }
 
@@ -290,7 +290,7 @@ static bool for_each_apple_makernote_entry(ExifData *ed, F &&visit)
     {
         if (ofs + 12 > mn_size)
         {
-            spdlog::error("ExifMnoteApple", "Tag size overflow detected ({} vs size {})", ofs + 12, mn_size);
+            spdlog::error("ExifMnoteApple: Tag size overflow detected ({} vs size {})", ofs + 12, mn_size);
             break;
         }
 
