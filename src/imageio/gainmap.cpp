@@ -12,8 +12,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <optional>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
+#include <tinyxml2.h>
 
 using namespace std;
 
@@ -171,6 +174,447 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
 
                          for (int y = begin_y; y < end_y; ++y)
                              for (int x = 0; x < size.x; ++x) base(x, y) *= 1.f + (headroom - 1.f) * gain(x, y);
+                     }
+                 });
+
+    spdlog::debug("Applying gain map took: {} seconds.", (timer.elapsed() / 1000.f));
+}
+
+// ------------------------------------------------------------------------------------------------
+// ISO 21496-1
+// ------------------------------------------------------------------------------------------------
+
+namespace
+{
+
+//! Reads the big-endian fields of an ISO 21496-1 metadata blob, refusing to run off its end.
+class IsoReader
+{
+public:
+    IsoReader(const uint8_t *data, size_t size) : m_data(data), m_size(size) {}
+
+    uint8_t  u8() { return read<uint8_t>(); }
+    uint16_t u16() { return read<uint16_t>(); }
+    uint32_t u32() { return read<uint32_t>(); }
+    int32_t  i32() { return (int32_t)read<uint32_t>(); }
+
+    //! A rational whose numerator and denominator are stored as a pair, per the spec.
+    float rational_u() { return ratio((float)u32()); }
+    float rational_i() { return ratio((float)i32()); }
+
+    //! The same value where a single denominator, read once, is shared by every field.
+    float over(float denominator, bool is_signed)
+    {
+        const float n = is_signed ? (float)i32() : (float)u32();
+        return denominator == 0.f ? 0.f : n / denominator;
+    }
+
+    size_t consumed() const { return m_pos; }
+
+private:
+    float ratio(float numerator)
+    {
+        const auto d = (float)u32();
+        // A zero denominator is malformed rather than infinite; the spec's own defaults are finite.
+        return d == 0.f ? 0.f : numerator / d;
+    }
+
+    template <typename T>
+    T read()
+    {
+        if (m_pos + sizeof(T) > m_size)
+            throw invalid_argument{fmt::format("ISO 21496-1: metadata ends after {} bytes, mid-field", m_size)};
+
+        T v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i) v = (T)((v << 8) | m_data[m_pos + i]);
+        m_pos += sizeof(T);
+        return v;
+    }
+
+    const uint8_t *m_data;
+    size_t         m_size;
+    size_t         m_pos = 0;
+};
+
+// Bits of the flags byte. Only UseBaseColorSpace and IsMultiChannel are in ISO 21496-1 itself;
+// libultrahdr writes the other two and other readers have followed it, so they are honored here.
+enum IsoFlags : uint8_t
+{
+    IsoFlag_BackwardDirection    = 1u << 2,
+    IsoFlag_UseCommonDenominator = 1u << 3,
+    IsoFlag_UseBaseColorSpace    = 1u << 6,
+    IsoFlag_IsMultiChannel       = 1u << 7,
+};
+
+} // namespace
+
+float IsoGainmapParams::weight(float target_stops) const
+{
+    const float span = alternate_headroom - base_headroom;
+    if (span == 0.f)
+        return 0.f;
+
+    // How far from the base rendition towards the alternate one the target sits. The sign of the
+    // span carries the direction: when the alternate is the darker rendition, an unbounded target
+    // asks for the base as it stands (weight 0) and a target of zero stops asks for the alternate
+    // in full (weight -1).
+    const float t = std::clamp((target_stops - base_headroom) / span, 0.f, 1.f);
+    return span < 0.f ? -t : t;
+}
+
+IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
+{
+    // iPhone HEIC files prepend a padding byte to this box. There is no signature to search for, so
+    // the only handle on it is the length: one more than a well-formed single- or multi-channel blob.
+    if (size == 62 || size == 142)
+    {
+        ++data;
+        --size;
+    }
+
+    IsoReader r{data, size};
+
+    const auto version        = r.u16();
+    const auto writer_version = r.u16();
+    if (version != 0)
+        throw invalid_argument{fmt::format("ISO 21496-1: unsupported version {}", version)};
+
+    IsoGainmapParams p;
+    p.version = fmt::format("ISO 21496-1 v{} (writer v{})", version, writer_version);
+
+    const uint8_t flags    = r.u8();
+    const int     channels = (flags & IsoFlag_IsMultiChannel) ? 3 : 1;
+
+    p.use_base_color_space = (flags & IsoFlag_UseBaseColorSpace) != 0;
+
+    const bool common_denominator = (flags & IsoFlag_UseCommonDenominator) != 0;
+
+    if (common_denominator)
+    {
+        const auto d = (float)r.u32();
+
+        p.base_headroom      = r.over(d, false);
+        p.alternate_headroom = r.over(d, false);
+
+        for (int c = 0; c < channels; ++c)
+        {
+            p.min[c]              = r.over(d, true);
+            p.max[c]              = r.over(d, true);
+            p.gamma[c]            = r.over(d, false);
+            p.base_offset[c]      = r.over(d, true);
+            p.alternate_offset[c] = r.over(d, true);
+        }
+    }
+    else
+    {
+        p.base_headroom      = r.rational_u();
+        p.alternate_headroom = r.rational_u();
+
+        for (int c = 0; c < channels; ++c)
+        {
+            p.min[c]              = r.rational_i();
+            p.max[c]              = r.rational_i();
+            p.gamma[c]            = r.rational_u();
+            p.base_offset[c]      = r.rational_i();
+            p.alternate_offset[c] = r.rational_i();
+        }
+    }
+
+    // A single-channel map drives all three the same way.
+    for (int c = channels; c < 3; ++c)
+    {
+        p.min[c]              = p.min[0];
+        p.max[c]              = p.max[0];
+        p.gamma[c]            = p.gamma[0];
+        p.base_offset[c]      = p.base_offset[0];
+        p.alternate_offset[c] = p.alternate_offset[0];
+    }
+
+    if (flags & IsoFlag_BackwardDirection)
+    {
+        std::swap(p.base_headroom, p.alternate_headroom);
+        std::swap(p.base_offset, p.alternate_offset);
+    }
+
+    spdlog::debug("ISO 21496-1: {} channel(s), base headroom {:.4f}, alternate {:.4f}, base color space {}", channels,
+                  p.base_headroom, p.alternate_headroom, p.use_base_color_space);
+
+    return p;
+}
+
+std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
+{
+    if (!xml || len == 0)
+        return std::nullopt;
+
+    // An XMP blob is usually wrapped in <?xpacket?> processing instructions, which tinyxml2 rejects
+    // as a malformed declaration. Strip them when they are there, and parse the blob as-is when they
+    // are not -- HEIF stores the packet without them.
+    string_view body{xml, len};
+    if (const size_t open_pi = body.find("<?xpacket"); open_pi != string_view::npos)
+    {
+        const size_t open_end = body.find("?>", open_pi);
+        if (open_end == string_view::npos)
+            return std::nullopt;
+
+        body.remove_prefix(open_end + 2);
+
+        if (const size_t close_pi = body.rfind("<?xpacket"); close_pi != string_view::npos)
+            body = body.substr(0, close_pi);
+    }
+
+    tinyxml2::XMLDocument doc;
+    if (doc.Parse(body.data(), body.size()) != tinyxml2::XML_SUCCESS)
+        return std::nullopt;
+
+    // hdrgm properties hang off an rdf:Description, as attributes when they are single-valued and as
+    // <hdrgm:Name><rdf:Seq><rdf:li>...</rdf:li></rdf:Seq></hdrgm:Name> when they are per-channel.
+    // Rather than walk the RDF model, find the prefix bound to the hdrgm namespace and match on it.
+    static constexpr auto k_hdrgm_ns = "http://ns.adobe.com/hdr-gain-map/1.0/";
+
+    string     prefix;
+    const auto find_prefix = [&](auto &&self, const tinyxml2::XMLElement *e) -> void
+    {
+        if (!e || !prefix.empty())
+            return;
+
+        for (auto *a = e->FirstAttribute(); a; a = a->Next())
+        {
+            const string_view name{a->Name()};
+            if (name.rfind("xmlns:", 0) == 0 && string_view{a->Value()} == k_hdrgm_ns)
+            {
+                prefix = string{name.substr(6)} + ":";
+                return;
+            }
+        }
+
+        for (auto *c = e->FirstChildElement(); c; c = c->NextSiblingElement()) self(self, c);
+    };
+    find_prefix(find_prefix, doc.RootElement());
+
+    if (prefix.empty())
+        return std::nullopt;
+
+    // Collect every hdrgm-prefixed property, single values and sequences alike, into name -> values.
+    std::map<string, std::vector<string>> props;
+    const auto                            collect = [&](auto &&self, const tinyxml2::XMLElement *e) -> void
+    {
+        if (!e)
+            return;
+
+        for (auto *a = e->FirstAttribute(); a; a = a->Next())
+        {
+            const string_view name{a->Name()};
+            if (name.rfind(prefix, 0) == 0)
+                props[string{name.substr(prefix.size())}] = {a->Value()};
+        }
+
+        for (auto *c = e->FirstChildElement(); c; c = c->NextSiblingElement())
+        {
+            const string_view name{c->Name()};
+            if (name.rfind(prefix, 0) == 0)
+            {
+                std::vector<string> values;
+                // An rdf:Seq or rdf:Bag of rdf:li, or a bare text value.
+                for (auto *container = c->FirstChildElement(); container; container = container->NextSiblingElement())
+                    for (auto *li = container->FirstChildElement(); li; li = li->NextSiblingElement())
+                        if (const char *t = li->GetText())
+                            values.emplace_back(t);
+
+                if (values.empty())
+                    if (const char *t = c->GetText())
+                        values.emplace_back(t);
+
+                if (!values.empty())
+                    props[string{name.substr(prefix.size())}] = std::move(values);
+            }
+
+            self(self, c);
+        }
+    };
+    collect(collect, doc.RootElement());
+
+    if (props.empty())
+        return std::nullopt;
+
+    const auto to_float = [](const string &s, float fallback)
+    {
+        try
+        {
+            return std::stof(s);
+        }
+        catch (const std::exception &)
+        {
+            return fallback;
+        }
+    };
+
+    // Every hdrgm property but GainMapMax and HDRCapacityMax has a default in Adobe's schema.
+    const auto rgb = [&](const char *name, float3 fallback, bool required)
+    {
+        const auto it = props.find(name);
+        if (it == props.end())
+        {
+            if (required)
+                throw invalid_argument{fmt::format("hdrgm XMP: required property '{}' is missing", name)};
+            return fallback;
+        }
+
+        const auto &v = it->second;
+        float3      out{to_float(v[0], fallback[0])};
+        for (size_t c = 1; c < v.size() && c < 3; ++c) out[c] = to_float(v[c], out[0]);
+        // A single value drives all three channels; two is malformed, so treat the rest as the first.
+        if (v.size() == 2)
+            out[2] = out[0];
+        return out;
+    };
+
+    const auto scalar = [&](const char *name, float fallback, bool required)
+    {
+        const auto it = props.find(name);
+        if (it == props.end())
+        {
+            if (required)
+                throw invalid_argument{fmt::format("hdrgm XMP: required property '{}' is missing", name)};
+            return fallback;
+        }
+        return to_float(it->second.front(), fallback);
+    };
+
+    IsoGainmapParams p;
+    p.version = fmt::format("Adobe hdrgm XMP v{}", props.count("Version") ? props.at("Version").front() : string{"?"});
+
+    p.min              = rgb("GainMapMin", float3{0.f}, false);
+    p.max              = rgb("GainMapMax", float3{1.f}, true);
+    p.gamma            = max(rgb("Gamma", float3{1.f}, false), float3{1e-3f});
+    p.base_offset      = rgb("OffsetSDR", float3{1.f / 64.f}, false);
+    p.alternate_offset = rgb("OffsetHDR", float3{1.f / 64.f}, false);
+    p.max              = max(p.max, p.min);
+
+    p.base_headroom      = scalar("HDRCapacityMin", 0.f, false);
+    p.alternate_headroom = std::max(scalar("HDRCapacityMax", 1.f, true), p.base_headroom);
+
+    // The XMP schema has no equivalent of the ISO color-space flag; Adobe's maps apply in the base
+    // image's space.
+    p.use_base_color_space = true;
+
+    // Older writers spelled the direction two different ways.
+    const auto base_rendition = props.find("BaseRendition");
+    const auto base_is_hdr    = props.find("BaseRenditionIsHDR");
+    if ((base_rendition != props.end() &&
+         (base_rendition->second.front() == "HDR" || base_rendition->second.front() == "HighDynamicRange")) ||
+        (base_is_hdr != props.end() &&
+         (base_is_hdr->second.front() == "True" || base_is_hdr->second.front() == "true")))
+    {
+        std::swap(p.base_headroom, p.alternate_headroom);
+        std::swap(p.base_offset, p.alternate_offset);
+    }
+
+    return p;
+}
+
+void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainmapParams &params, float target_stops)
+{
+    if (image.channels.empty())
+    {
+        spdlog::warn("Gain map: base image has no channels; skipping.");
+        return;
+    }
+
+    if (!gainmap.valid())
+    {
+        spdlog::warn("Gain map: decoded map is empty or malformed ({}x{}, {} channels); skipping.", gainmap.size.x,
+                     gainmap.size.y, gainmap.channels);
+        return;
+    }
+
+    // Decode the map out of its gamma and back into the log2 gain it stands for, before the resize:
+    // the spec interpolates in log space, and the two orders do not commute.
+    GainmapImage decoded;
+    decoded.size     = gainmap.size;
+    decoded.channels = gainmap.channels;
+    decoded.pixels.resize(gainmap.pixels.size());
+
+    const size_t pixel_count = (size_t)gainmap.size.x * gainmap.size.y;
+    parallel_for(blocked_range<size_t>(0, pixel_count, 8192),
+                 [&](size_t begin, size_t end, int, int)
+                 {
+                     for (size_t i = begin; i < end; ++i)
+                         for (int c = 0; c < gainmap.channels; ++c)
+                         {
+                             const float v = gainmap.pixels[i * gainmap.channels + c];
+                             // The channel index saturates so a 4-channel map's alpha reuses blue's
+                             // curve rather than reading past the parameters.
+                             const int   p         = std::min(c, 2);
+                             const float recovered = std::copysign(std::pow(std::abs(v), 1.f / params.gamma[p]), v);
+
+                             decoded.pixels[i * gainmap.channels + c] =
+                                 params.min[p] * (1.f - recovered) + params.max[p] * recovered;
+                         }
+                 });
+
+    const int num_base = (int)image.channels.size();
+
+    // Already in log space, so no transfer function to undo on the way in.
+    const auto [first, n] = append_gainmap_channels(image, decoded, false);
+    if (n == 0)
+        return;
+
+    const float weight = params.weight(target_stops);
+
+    image.metadata["header"]["Gain map"]          = {{"value", params.version},
+                                                     {"string", params.version},
+                                                     {"type", "string"},
+                                                     {"description", "Standardized gain map, as written by Android, Adobe, "
+                                                                              "and recent Apple software."}};
+    image.metadata["header"]["Gain map headroom"] = {
+        {"value", params.alternate_headroom},
+        {"string",
+         fmt::format("{:.3f} stops (base rendition {:.3f})", params.alternate_headroom, params.base_headroom)},
+        {"type", "float"},
+        {"description", "Headroom the alternate rendition is graded for, and the base rendition it converts from."}};
+    image.metadata["header"]["Gain map applied"] = {
+        {"value", weight},
+        {"string", fmt::format("{:.3f} of the way to the alternate rendition", weight)},
+        {"type", "float"},
+        {"description", "How much of the map was applied, after the target headroom in the image loading options. "
+                        "Negative when the alternate rendition is the darker one."}};
+
+    spdlog::info("ISO gain map: {}x{}x{}, base headroom {:.3f} -> alternate {:.3f}, applying weight {:.3f}",
+                 gainmap.size.x, gainmap.size.y, gainmap.channels, params.base_headroom, params.alternate_headroom,
+                 weight);
+
+    if (!params.use_base_color_space)
+        spdlog::warn("Gain map declares the alternate image's color space as the application space; HDRView applies "
+                     "it in the base image's space, which will shift saturated colors.");
+
+    if (weight == 0.f)
+    {
+        spdlog::debug("ISO gain map: weight is zero; leaving base pixels alone.");
+        return;
+    }
+
+    Timer timer;
+
+    const int2 size = image.channels.front().size();
+    parallel_for(blocked_range<int>(0, size.y, 128),
+                 [&, first, n, num_base, weight](int begin_y, int end_y, int, int)
+                 {
+                     for (int c = 0; c < num_base; ++c)
+                     {
+                         // Alpha is not a color: scaling it would change the image's transparency
+                         // rather than its brightness.
+                         if (image.channels[c].name == "A")
+                             continue;
+
+                         const int   p    = std::min(c, 2);
+                         const auto &gain = image.channels[first + std::min(c, n - 1)];
+                         auto       &base = image.channels[c];
+
+                         for (int y = begin_y; y < end_y; ++y)
+                             for (int x = 0; x < size.x; ++x)
+                                 base(x, y) = (base(x, y) + params.base_offset[p]) * std::exp2(gain(x, y) * weight) -
+                                              params.alternate_offset[p];
                      }
                  });
 

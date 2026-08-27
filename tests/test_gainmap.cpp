@@ -339,3 +339,233 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
     CHECK(left != doctest::Approx(right));
 }
 #endif
+
+// ------------------------------------------------------------------------------------------------
+// ISO 21496-1
+// ------------------------------------------------------------------------------------------------
+
+namespace
+{
+
+// The gain map's ISO 21496-1 APP2 block from Gain_Map_Sample_Photos/samples_jpeg/01.jpg: the
+// multi-channel, per-field-denominator encoding, which is what Adobe's exporter writes.
+constexpr char k_iso_multichannel[] =
+    "\x00\x00\x00\x00\xc0\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01\x45\x3e\x00\x00\x80\x00\xfc\x23\x05\x14\x40\x00\x00"
+    "\x00\x00\x01\x1f\xe1\x00\x00\x80\x00\x10\x4b\x9f\x0a\x40\x00\x00\x00\x01\x00\x00\x00\x40\x00\x00\x00\x01\x00\x00"
+    "\x00\x40\x00\x00\x00\xfd\xdb\x68\x04\x40\x00\x00\x00\x00\x01\x11\x68\x00\x00\x80\x00\x10\x28\xf9\x53\x40\x00\x00"
+    "\x00\x01\x00\x00\x00\x40\x00\x00\x00\x01\x00\x00\x00\x40\x00\x00\x00\xf7\x16\x7b\x90\x40\x00\x00\x00\x00\x01\x0f"
+    "\x9a\x00\x00\x80\x00\x12\x95\xa8\x3f\x40\x00\x00\x00\x01\x00\x00\x00\x40\x00\x00\x00\x01\x00\x00\x00\x40\x00\x00"
+    "\x00";
+
+// A three-channel hdrgm packet, from greg benz photography/DSC0529-Edit...benz8GainMap.jpg. Note the
+// mixture of attributes for the scalars and rdf:Seq elements for the per-channel values.
+constexpr char k_hdrgm_xmp[] = R"(<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:hdrgm="http://ns.adobe.com/hdr-gain-map/1.0/"
+   hdrgm:Version="1.0"
+   hdrgm:BaseRenditionIsHDR="False"
+   hdrgm:OffsetSDR="0.015625"
+   hdrgm:OffsetHDR="0.015625"
+   hdrgm:HDRCapacityMin="0"
+   hdrgm:HDRCapacityMax="2.6">
+   <hdrgm:GainMapMin><rdf:Seq>
+     <rdf:li>-0.356199</rdf:li><rdf:li>-0.293477</rdf:li><rdf:li>-0.161647</rdf:li>
+   </rdf:Seq></hdrgm:GainMapMin>
+   <hdrgm:GainMapMax><rdf:Seq>
+     <rdf:li>2.520904</rdf:li><rdf:li>2.197984</rdf:li><rdf:li>1.965616</rdf:li>
+   </rdf:Seq></hdrgm:GainMapMax>
+   <hdrgm:Gamma><rdf:Seq>
+     <rdf:li>0.318981</rdf:li><rdf:li>0.322233</rdf:li><rdf:li>0.268956</rdf:li>
+   </rdf:Seq></hdrgm:Gamma>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>)";
+
+} // namespace
+
+TEST_CASE("The ISO 21496-1 binary metadata parses to the values the file declares")
+{
+    // sizeof - 1 drops the literal's terminating NUL, which is not part of the block.
+    const auto p = parse_iso_gainmap((const uint8_t *)k_iso_multichannel, sizeof(k_iso_multichannel) - 1);
+
+    CHECK(p.base_headroom == doctest::Approx(0.f));
+    CHECK(p.alternate_headroom == doctest::Approx(2.54095459f));
+    CHECK(p.use_base_color_space);
+
+    // Three distinct channels, which is the point of this particular file.
+    CHECK(p.min[0] == doctest::Approx(-0.06036256f));
+    CHECK(p.min[1] == doctest::Approx(-0.03348350f));
+    CHECK(p.min[2] == doctest::Approx(-0.13925277f));
+
+    CHECK(p.max[0] == doctest::Approx(2.24905396f));
+    CHECK(p.max[1] == doctest::Approx(2.13598633f));
+    CHECK(p.max[2] == doctest::Approx(2.12188721f));
+
+    CHECK(p.gamma[0] == doctest::Approx(0.25461555f));
+    CHECK(p.gamma[1] == doctest::Approx(0.25250085f));
+    CHECK(p.gamma[2] == doctest::Approx(0.29038435f));
+
+    for (int c = 0; c < 3; ++c)
+    {
+        CHECK(p.base_offset[c] == doctest::Approx(1.f / 64.f));
+        CHECK(p.alternate_offset[c] == doctest::Approx(1.f / 64.f));
+    }
+}
+
+TEST_CASE("Truncated or unreadable ISO metadata is rejected rather than guessed at")
+{
+    SUBCASE("truncated mid-field")
+    {
+        CHECK_THROWS_AS(parse_iso_gainmap((const uint8_t *)k_iso_multichannel, 20), std::invalid_argument);
+    }
+    SUBCASE("empty")
+    {
+        CHECK_THROWS_AS(parse_iso_gainmap((const uint8_t *)k_iso_multichannel, 0), std::invalid_argument);
+    }
+    SUBCASE("a version this build does not know")
+    {
+        const uint8_t future[] = {0x00, 0x09, 0x00, 0x00, 0x00};
+        CHECK_THROWS_AS(parse_iso_gainmap(future, sizeof(future)), std::invalid_argument);
+    }
+}
+
+TEST_CASE("Adobe's hdrgm XMP parses to the same struct as the binary form")
+{
+    const auto parsed = parse_hdrgm_xmp(k_hdrgm_xmp, sizeof(k_hdrgm_xmp) - 1);
+    REQUIRE(parsed.has_value());
+    const auto &p = *parsed;
+
+    CHECK(p.base_headroom == doctest::Approx(0.f));
+    CHECK(p.alternate_headroom == doctest::Approx(2.6f));
+
+    // Values that arrived as rdf:Seq elements rather than attributes.
+    CHECK(p.min[0] == doctest::Approx(-0.356199f));
+    CHECK(p.min[1] == doctest::Approx(-0.293477f));
+    CHECK(p.min[2] == doctest::Approx(-0.161647f));
+    CHECK(p.max[0] == doctest::Approx(2.520904f));
+    CHECK(p.max[2] == doctest::Approx(1.965616f));
+    CHECK(p.gamma[1] == doctest::Approx(0.322233f));
+
+    // And ones that arrived as attributes.
+    CHECK(p.base_offset[0] == doctest::Approx(0.015625f));
+    CHECK(p.alternate_offset[0] == doctest::Approx(0.015625f));
+
+    CHECK(p.version.find("1.0") != std::string::npos);
+}
+
+TEST_CASE("A packet with no hdrgm properties is reported as absent, not as defaults")
+{
+    constexpr char plain[] = R"(<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF
+        xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about=""
+        xmlns:tiff="http://ns.adobe.com/tiff/1.0/" tiff:Orientation="1"/></rdf:RDF></x:xmpmeta>)";
+
+    CHECK_FALSE(parse_hdrgm_xmp(plain, sizeof(plain) - 1).has_value());
+    CHECK_FALSE(parse_hdrgm_xmp(nullptr, 0).has_value());
+    CHECK_FALSE(parse_hdrgm_xmp("not xml at all", 14).has_value());
+}
+
+TEST_CASE("Gain-map weight follows the target headroom, in both directions")
+{
+    SUBCASE("base is the SDR rendition, as in a JPEG")
+    {
+        IsoGainmapParams p;
+        p.base_headroom      = 0.f;
+        p.alternate_headroom = 2.5f;
+
+        CHECK(p.weight(k_full_gainmap_headroom) == doctest::Approx(1.f)); // all the way to HDR
+        CHECK(p.weight(2.5f) == doctest::Approx(1.f));
+        CHECK(p.weight(1.25f) == doctest::Approx(0.5f));
+        CHECK(p.weight(0.f) == doctest::Approx(0.f)); // the base image as stored
+    }
+
+    SUBCASE("base is the HDR rendition, as in a base-HDR JPEG XL")
+    {
+        // The map then derives a *darker* rendition, so an unbounded target must leave the base
+        // alone rather than applying the map in full.
+        IsoGainmapParams p;
+        p.base_headroom      = 2.5f;
+        p.alternate_headroom = 0.f;
+
+        CHECK(p.weight(k_full_gainmap_headroom) == doctest::Approx(0.f));
+        CHECK(p.weight(2.5f) == doctest::Approx(0.f));
+        CHECK(p.weight(1.25f) == doctest::Approx(-0.5f));
+        CHECK(p.weight(0.f) == doctest::Approx(-1.f)); // all the way down to SDR
+    }
+
+    SUBCASE("a map whose two renditions want the same headroom does nothing")
+    {
+        IsoGainmapParams p;
+        p.base_headroom = p.alternate_headroom = 1.f;
+        CHECK(p.weight(k_full_gainmap_headroom) == doctest::Approx(0.f));
+    }
+}
+
+TEST_CASE("Applying an ISO gain map moves the base image towards the alternate rendition")
+{
+    const int2 size{8, 8};
+
+    // A map that is 1.0 everywhere, with min 0 and max 2, encodes a uniform 2-stop brightening.
+    IsoGainmapParams p;
+    p.min                = float3{0.f};
+    p.max                = float3{2.f};
+    p.gamma              = float3{1.f};
+    p.base_offset        = float3{0.f};
+    p.alternate_offset   = float3{0.f};
+    p.base_headroom      = 0.f;
+    p.alternate_headroom = 2.f;
+
+    SUBCASE("fully applied")
+    {
+        auto img = make_flat_image(size, 0.25f);
+        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, k_full_gainmap_headroom);
+        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * 4.f)); // 2 stops
+    }
+
+    SUBCASE("half applied")
+    {
+        auto img = make_flat_image(size, 0.25f);
+        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, 1.f);
+        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * 2.f)); // 1 stop
+    }
+
+    SUBCASE("not applied, but the map is still there to look at")
+    {
+        auto img = make_flat_image(size, 0.25f);
+        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, 0.f);
+
+        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f));
+
+        // The appended group holds log2 gains, so a map that decodes to "2 stops" reads as 2.
+        const int gm = channel_index(*img, "gainmap.Y");
+        REQUIRE(gm >= 0);
+        CHECK(img->channels[gm](0, 0) == doctest::Approx(2.f));
+    }
+
+    SUBCASE("the offsets are applied around the gain, not after it")
+    {
+        IsoGainmapParams q = p;
+        q.base_offset      = float3{0.125f};
+        q.alternate_offset = float3{0.0625f};
+
+        auto img = make_flat_image(size, 0.25f);
+        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), q, k_full_gainmap_headroom);
+        CHECK(img->channels[0](0, 0) == doctest::Approx((0.25f + 0.125f) * 4.f - 0.0625f));
+    }
+
+    SUBCASE("alpha is left alone")
+    {
+        auto img = std::make_shared<Image>(size, 4);
+        for (int c = 0; c < 4; ++c)
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x) img->channels[c](x, y) = 0.5f;
+
+        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, k_full_gainmap_headroom);
+
+        REQUIRE(img->channels[3].name == "A");
+        CHECK(img->channels[3](0, 0) == doctest::Approx(0.5f));
+        CHECK(img->channels[0](0, 0) > 0.5f);
+    }
+}

@@ -9,6 +9,8 @@
 #include "fwd.h"
 
 #include <limits>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -70,6 +72,75 @@ inline constexpr float k_full_gainmap_headroom = std::numeric_limits<float>::inf
     \return           Index of the first appended channel, and how many were appended
 */
 std::pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap, bool linearize);
+
+/// Metadata of an ISO 21496-1 gain map: how to turn the base rendition into the alternate one.
+/**
+    The map stores, per channel, a normalized value that decodes to a log2 gain somewhere between
+    \ref min and \ref max. Which rendition is which is not fixed: \ref base_headroom and
+    \ref alternate_headroom say how much headroom each end wants, and either may be the brighter.
+    JPEG XL files in particular often store the HDR rendition as the base and use the map to derive
+    an SDR one, in which case the alternate headroom is the lower of the two.
+
+    Adobe's `hdrgm:` XMP schema carries the same information in a different encoding; both parse into
+    this struct so that only one implementation has to apply it.
+*/
+struct IsoGainmapParams
+{
+    float3 min{0.f};                     //!< log2 gain at a gain-map value of 0
+    float3 max{1.f};                     //!< log2 gain at a gain-map value of 1
+    float3 gamma{1.f};                   //!< Encoding gamma of the map's own values
+    float3 base_offset{1.f / 64.f};      //!< Added to the base pixels before the gain is applied
+    float3 alternate_offset{1.f / 64.f}; //!< Subtracted from the result afterwards
+
+    float base_headroom      = 0.f; //!< Stops of headroom the base rendition is graded for
+    float alternate_headroom = 1.f; //!< Stops of headroom the alternate rendition is graded for
+
+    //! Whether the map applies in the base image's color space rather than the alternate image's.
+    bool use_base_color_space = true;
+
+    std::string version = "n/a"; //!< For display: which encoding of these values the file used
+
+    //! How much of the map to apply to land at \p target_stops of headroom.
+    /*!
+        Zero leaves the base rendition alone and one applies the map in full. The result is negative
+        when the alternate rendition is the darker one, which is how a base-HDR file's map gets
+        applied in reverse rather than not at all.
+    */
+    float weight(float target_stops) const;
+};
+
+//! Parse the binary form ISO 21496-1 defines, as carried in a JPEG APP2 or a JPEG XL `jhgm` box.
+/*!
+    \param data  Start of the metadata, past any namespace or box header
+    \param size  Its length in bytes
+    \return      The parsed parameters
+    \throws std::invalid_argument if the data is truncated or announces a version this cannot read
+*/
+IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size);
+
+//! Parse Adobe's `hdrgm:` XMP schema, which encodes the same parameters as ISO 21496-1.
+/*!
+    \param xml  The XMP packet
+    \param len  Its length in bytes
+    \return     The parsed parameters, or nullopt when the packet carries no `hdrgm:` properties
+    \throws std::invalid_argument if `hdrgm:` is present but missing a property with no default
+*/
+std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len);
+
+/// Apply an ISO 21496-1 gain map to \p image, and append the map itself as a channel group.
+/**
+    The map is decoded out of its gamma and normalization into the log2 gain it represents, and
+    appended in that form; the channel group therefore reads in stops, positive where the alternate
+    rendition is brighter. The base image's color channels are then scaled in place, per channel,
+    since ISO maps may carry three.
+
+    \param image         Base image, already linearized. Modified in place
+    \param gainmap       Decoded gain map, still in its encoded form
+    \param params        Parameters from the file's ISO or `hdrgm:` metadata
+    \param target_stops  Headroom to land at, in stops; k_full_gainmap_headroom for the alternate
+                        rendition in full
+*/
+void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainmapParams &params, float target_stops);
 
 /// Apply an Apple-format gain map to \p image, and append the map itself as a channel group.
 /**
