@@ -109,18 +109,24 @@ pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap
     const vector<float> *src = &gainmap.pixels;
     if (linearize)
     {
-        // Rec. 709, as Apple documents twice: the map "is encoded using the Rec.709 transfer
+        // sRGB, though Apple documents Rec. 709 -- the map "is encoded using the Rec.709 transfer
         // function", and applying it means "inverting the gain map gamma using the Rec.709 transfer
-        // function". Nothing in the file says so -- the map is untagged, carrying no colr property
-        // in HEIF and no ICC profile in JPEG -- so the documentation is the whole of the evidence.
+        // function". Their own software disagrees with their prose.
         //
-        // tev reads these as sRGB instead, having compared against the same scenes encoded as ISO
-        // 21496-1 gain maps. Settling that needs a file encoded both ways, which is not something
-        // this corpus has. The choice is worth about 2% on average and 14% at the top of the range,
-        // concentrated in the highlights the map exists to restore, so it is worth revisiting if a
-        // dual-encoded capture ever turns up.
+        // Checked against Preview's reconstruction of an iPhone 12 Pro capture, exported to linear
+        // float. Apple's own output is the reference, so fitting hdr/sdr - 1 against the decoded map
+        // decides it. Two ways, both for sRGB:
+        //
+        //   - Solving for the headroom recovers 7.72 under sRGB and 6.66 under Rec. 709. The maker
+        //     note independently gives 7.695, so only sRGB reproduces a quantity the fit never saw.
+        //   - Pinning the headroom to that 7.695 leaves no free parameter at all: the residual is
+        //     0.062 for sRGB against 0.207 for Rec. 709, and sRGB wins in every decile of gain-map
+        //     value rather than on average.
+        //
+        // tev reads these as sRGB too, having compared against the same scenes encoded as ISO
+        // 21496-1 gain maps -- a different route to the same conclusion.
         linearized = gainmap.pixels;
-        for (auto &v : linearized) v = (float)inverse_OETF_ITU(v);
+        for (auto &v : linearized) v = (float)sRGB_to_linear(v);
         src = &linearized;
     }
 
