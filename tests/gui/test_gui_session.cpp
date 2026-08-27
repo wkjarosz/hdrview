@@ -161,6 +161,9 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         json view;
         view["colormap_index"] = 9999; // indexes HDRViewApp::m_colormaps
         view["zoom"]           = 0.f;  // pixel_at_vp_pos() divides by this
+        view["gamma"]          = 0.f;  // inverted before use, so this divides by zero
+        view["exposure"]       = 1e30f;
+        view["offset"]         = -1e30f;
         view["roi"]            = json::array({json::array({100, 100}), json::array({10, 10})}); // inverted
 
         json j;
@@ -197,6 +200,14 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // became a near-2^64 pixel count in PixelStats::calculate().
         IM_CHECK(hdrview()->roi().min.x <= hdrview()->roi().max.x);
         IM_CHECK(hdrview()->roi().min.y <= hdrview()->roi().max.y);
+
+        // Held to the range the sliders offer, wherever the value came from.
+        IM_CHECK(hdrview()->gamma() >= HDRViewApp::GAMMA_RANGE[0]);
+        IM_CHECK(hdrview()->gamma() <= HDRViewApp::GAMMA_RANGE[1]);
+        IM_CHECK(hdrview()->exposure() >= HDRViewApp::EXPOSURE_RANGE[0]);
+        IM_CHECK(hdrview()->exposure() <= HDRViewApp::EXPOSURE_RANGE[1]);
+        IM_CHECK(hdrview()->offset() >= HDRViewApp::OFFSET_RANGE[0]);
+        IM_CHECK(hdrview()->offset() <= HDRViewApp::OFFSET_RANGE[1]);
 
         // Let a few frames run so anything reading these (the pixel inspector, the statistics window)
         // actually touches them.

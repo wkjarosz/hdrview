@@ -208,6 +208,12 @@ public:
     void set_zoom(float zoom);
     /// The zoom factor: image pixel size / logical pixel size. Always within [MIN_ZOOM, MAX_ZOOM].
     float zoom() const { return m_zoom; }
+
+    /// The ranges the exposure/offset/gamma sliders offer, and the ones the values are held to no matter
+    /// where they come from -- the sliders themselves, a --exposure/--gamma command line, a settings file,
+    /// or a session. Gamma is inverted before use, so zero would divide by zero and a negative one sends a
+    /// black pixel to infinity.
+    static constexpr float2 EXPOSURE_RANGE{-9.f, 9.f}, OFFSET_RANGE{-1.f, 1.f}, GAMMA_RANGE{0.02f, 9.f};
     //-----------------------------------------------------------------------------
 
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;

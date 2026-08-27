@@ -409,8 +409,9 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
                 m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
                 m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
-                m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
-                m_gamma_live = m_gamma = j.value<float>("gamma", m_gamma);
+                m_exposure_live = m_exposure =
+                    clamp(j.value<float>("exposure", m_exposure), EXPOSURE_RANGE[0], EXPOSURE_RANGE[1]);
+                m_gamma_live = m_gamma = clamp(j.value<float>("gamma", m_gamma), GAMMA_RANGE[0], GAMMA_RANGE[1]);
                 m_tonemap = (Tonemap_)clamp<int>(j.value<Tonemap_>("tonemap", m_tonemap), 0, Tonemap_COUNT - 1);
                 m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
                 m_dither               = j.value<bool>("dither", m_dither);
@@ -444,10 +445,13 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
 
         setup_rendering();
 
+        // --exposure/--gamma are plain numbers on a command line, so hold them to the same range the
+        // sliders offer: a gamma of zero divides by zero when inverted, and a negative one sends black to
+        // infinity.
         if (force_exposure.has_value())
-            m_exposure_live = m_exposure = *force_exposure;
+            m_exposure_live = m_exposure = clamp(*force_exposure, EXPOSURE_RANGE[0], EXPOSURE_RANGE[1]);
         if (force_gamma.has_value())
-            m_gamma_live = m_gamma = *force_gamma;
+            m_gamma_live = m_gamma = clamp(*force_gamma, GAMMA_RANGE[0], GAMMA_RANGE[1]);
         if (force_dither.has_value())
             m_dither = *force_dither;
 
