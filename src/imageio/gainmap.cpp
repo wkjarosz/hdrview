@@ -65,17 +65,18 @@ pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap
     const vector<float> *src = &gainmap.pixels;
     if (linearize)
     {
-        // Which curve belongs here is genuinely contested. Apple documents Rec. 709 -- "it's encoded
-        // using the Rec.709 transfer function", and again "linearize the gain map by inverting the
-        // gain map gamma using the Rec.709 transfer function" -- while noting the map is otherwise
-        // untagged, and indeed it carries no colr property in HEIF and no ICC profile in JPEG. tev
-        // concluded sRGB instead, from comparing against the same scenes encoded as ISO 21496-1 gain
-        // maps, and sRGB is what is used here. Deciding between them needs a file encoded both ways,
-        // which nothing to hand is. The stakes are bounded: measured on an iPhone capture the two
-        // agree to 2% on average and diverge by 14% at the top of the range -- concentrated, of
-        // course, in the highlights the map exists to restore.
+        // Rec. 709, as Apple documents twice: the map "is encoded using the Rec.709 transfer
+        // function", and applying it means "inverting the gain map gamma using the Rec.709 transfer
+        // function". Nothing in the file says so -- the map is untagged, carrying no colr property
+        // in HEIF and no ICC profile in JPEG -- so the documentation is the whole of the evidence.
+        //
+        // tev reads these as sRGB instead, having compared against the same scenes encoded as ISO
+        // 21496-1 gain maps. Settling that needs a file encoded both ways, which is not something
+        // this corpus has. The choice is worth about 2% on average and 14% at the top of the range,
+        // concentrated in the highlights the map exists to restore, so it is worth revisiting if a
+        // dual-encoded capture ever turns up.
         linearized = gainmap.pixels;
-        for (auto &v : linearized) v = (float)sRGB_to_linear(v);
+        for (auto &v : linearized) v = (float)inverse_OETF_ITU(v);
         src = &linearized;
     }
 
