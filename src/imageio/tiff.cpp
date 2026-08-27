@@ -552,26 +552,25 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 const uint32_t value_mask = bitwidth >= 32 ? ~0u : ((1u << bitwidth) - 1);
                 const uint32_t sign_bit   = (bitwidth >= 1 && bitwidth <= 32) ? (1u << (bitwidth - 1)) : 0u;
 
-                // If the bitwidth is byte aligned (multiple of 8), data is already in machine endianness
+                // A byte-aligned sample arrives in host order: libtiff byte-swaps 8-, 16-, 24- and 32-bit
+                // samples on the way out (tif_dir.c installs _TIFFSwab*BitData whenever the file's byte
+                // order differs from ours), so the sample is as many bytes as it is wide, ordered the way
+                // this machine orders that many bytes.
                 if (bitwidth % 8 == 0)
                 {
-                    const uint32_t bytes_per_sample = bitwidth / 8;
-                    for (size_t i = 0; i < output.size(); ++i)
+                    const size_t bytes_per_sample = bitwidth / 8;
+                    const size_t count            = std::min(output.size(), input_size / bytes_per_sample);
+                    for (size_t i = 0; i < count; ++i)
                     {
-                        output[i] = 0;
-                        for (uint32_t j = 0; j < bytes_per_sample; ++j)
-                        {
-                            if (is_little_endian())
-                                output[i] |= (uint32_t)input[i * bytes_per_sample + j] << (8 * j);
-                            else
-                                output[i] |= (uint32_t)input[i * bytes_per_sample + j]
-                                             << ((sizeof(uint32_t) * 8 - 8) - 8 * j);
-                        }
+                        output[i] = read_partial_as<uint32_t>(input + i * bytes_per_sample, bytes_per_sample,
+                                                              host_endian());
 
                         // If signbit is set, set all bits to the left to 1
                         if (handle_sign && (output[i] & sign_bit))
                             output[i] |= ~value_mask;
                     }
+                    // A row that ran short leaves the rest of the buffer defined rather than stale.
+                    for (size_t i = count; i < output.size(); ++i) output[i] = 0;
                     return;
                 }
 
