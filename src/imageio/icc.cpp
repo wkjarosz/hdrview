@@ -198,6 +198,22 @@ bool ICCProfile::extract_chromaticities(Chromaticities *c) const
         // No chromatic adaptation matrix: the white point is already unadapted.
         wp_unadapted = *white_point_tag;
     }
+    else if (const auto *chad = static_cast<const cmsFloat64Number *>(chromatic_adapt_tag))
+    {
+        // The chad matrix carries the profile's own white to the D50 of the PCS, so inverting it
+        // carries D50 back to that white -- exactly, and out of the profile's own data.
+        //
+        // Transforming RGB white through the profile is the other way to ask, and is what this used
+        // to do, but lcms does not reliably undo the adaptation even at absolute colorimetric with
+        // an adaptation state of zero: on Apple's Display P3 it answers (0.278, 0.296), which is no
+        // illuminant at all, and every primary derived against it is then wrong too.
+        const float3x3 m{{(float)chad[0], (float)chad[3], (float)chad[6]},
+                         {(float)chad[1], (float)chad[4], (float)chad[7]},
+                         {(float)chad[2], (float)chad[5], (float)chad[8]}};
+        const float3   w = la::mul(la::inverse(m), float3{(float)d50->X, (float)d50->Y, (float)d50->Z});
+
+        wp_unadapted = {w.x, w.y, w.z};
+    }
     else if (xform)
     {
         const cmsFloat64Number in_white[3] = {1.0, 1.0, 1.0};
