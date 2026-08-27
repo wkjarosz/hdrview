@@ -58,23 +58,27 @@ pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap
 
     const int2 size = image.channels.front().size();
 
-    vector<float> src = gainmap.pixels;
+    vector<float>        linearized;
+    const vector<float> *src = &gainmap.pixels;
     if (linearize)
     {
         // Apple's documentation specifies the Rec. 709 transfer function here. tev's comparisons
         // against the same scenes encoded as ISO 21496-1 gain maps show the maps are really
         // sRGB-encoded, and sRGB is what its loader uses; the two curves differ most exactly where
         // gain maps spend their values, so this is not a distinction without a difference.
-        for (auto &v : src) v = (float)sRGB_to_linear(v);
+        linearized = gainmap.pixels;
+        for (auto &v : linearized) v = (float)sRGB_to_linear(v);
+        src = &linearized;
     }
 
-    // Name the group the way Image names its own channels, so that finalize() groups it the same way.
     const int n     = std::min(gainmap.channels, 4);
     const int first = (int)image.channels.size();
 
-    static const char *names[] = {"gainmap.R", "gainmap.G", "gainmap.B", "gainmap.A"};
-    for (int c = 0; c < n; ++c)
-        image.channels.emplace_back(n < 3 ? (c == 0 ? "gainmap.Y" : "gainmap.A") : names[c], size);
+    // Name the channels the way Image names its own, so that finalize() gathers them into a group
+    // the same way it would any other layer.
+    static const char *mono_names[] = {"gainmap.Y", "gainmap.A"};
+    static const char *rgb_names[]  = {"gainmap.R", "gainmap.G", "gainmap.B", "gainmap.A"};
+    for (int c = 0; c < n; ++c) image.channels.emplace_back(n < 3 ? mono_names[c] : rgb_names[c], size);
 
     parallel_for(blocked_range<int>(0, size.y, 128),
                  [&, first, n](int begin_y, int end_y, int, int)
@@ -83,7 +87,7 @@ pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap
                          for (int x = 0; x < size.x; ++x)
                              for (int c = 0; c < n; ++c)
                                  image.channels[first + c](x, y) =
-                                     sample_bilinear(src, gainmap.size, gainmap.channels, c, size, x, y);
+                                     sample_bilinear(*src, gainmap.size, gainmap.channels, c, size, x, y);
                  });
 
     return {first, n};
@@ -105,14 +109,13 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
         return;
     }
 
-    Timer timer;
-
-    // Which channels the gain applies to. Apple's maps are monochrome, so every color channel is
-    // scaled by the same amount; alpha is not a color and is left as it is.
-    const int  num_base = (int)image.channels.size();
-    const auto is_color = [&](int c) { return image.channels[c].name != "A"; };
+    // Captured before appending, so that the scaling loop below covers only the base image's own
+    // channels and not the gain map it is about to grow.
+    const int num_base = (int)image.channels.size();
 
     const auto [first, n] = append_gainmap_channels(image, gainmap, true);
+    if (n == 0)
+        return;
 
     const float stops    = params.stops();
     const float applied  = std::clamp(stops, 0.f, target_stops);
@@ -148,13 +151,17 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
         return;
     }
 
+    Timer timer;
+
     const int2 size = image.channels.front().size();
     parallel_for(blocked_range<int>(0, size.y, 128),
                  [&, first, n, num_base, headroom](int begin_y, int end_y, int, int)
                  {
                      for (int c = 0; c < num_base; ++c)
                      {
-                         if (!is_color(c))
+                         // Alpha is not a color: scaling it would change the image's transparency
+                         // rather than its brightness.
+                         if (image.channels[c].name == "A")
                              continue;
 
                          // A monochrome map drives every color channel; a per-channel one pairs up

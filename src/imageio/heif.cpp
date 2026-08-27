@@ -512,8 +512,8 @@ static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
 */
 static void apply_heif_gainmap(const heif_image_handle *ihandle, Image &image, const ImageLoadOptions &opts)
 {
-    // A gain map is neither alpha nor depth, and filtering those out keeps the log quiet on files
-    // that carry them.
+    // Alpha and depth are auxiliary images too, but neither is ever a gain map, and libheif has
+    // already folded any alpha into the base image by this point.
     static constexpr int filter = LIBHEIF_AUX_IMAGE_FILTER_OMIT_ALPHA | LIBHEIF_AUX_IMAGE_FILTER_OMIT_DEPTH;
 
     const int num_aux = heif_image_handle_get_number_of_auxiliary_images(ihandle, filter);
@@ -571,7 +571,9 @@ static void apply_heif_gainmap(const heif_image_handle *ihandle, Image &image, c
             spdlog::warn("Failed to apply Apple gain map: {}", e.what());
         }
 
-        return; // an image has at most one gain map
+        // Stop at the first: a file carrying both Apple's 2020 and 2023 aux types is
+        // describing one gain map twice, not two different ones.
+        return;
     }
 }
 

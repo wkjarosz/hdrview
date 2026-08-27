@@ -9,19 +9,16 @@
 #include "fwd.h"
 
 #include <limits>
-#include <string>
 #include <utility>
 #include <vector>
 
-/**
-    An HDR gain map holds, per pixel, how much brighter the HDR rendition of an image is than the SDR
-    rendition stored in the file's base pixels. A viewer reconstructs the HDR rendition by scaling the
-    base pixels up by that amount, as far as the display it is targeting can go.
-
-    HDRView renders in extended sRGB with unbounded range, so there is no display ceiling to clip
-    against: the default is to reconstruct the map in full. Lowering the target trades reconstructed
-    highlight detail for a rendition closer to the base image, and zero shows the base image itself.
-*/
+// An HDR gain map holds, per pixel, how much brighter the HDR rendition of an image is than the SDR
+// rendition stored in the file's base pixels. A viewer reconstructs the HDR rendition by scaling the
+// base pixels up by that amount, as far as the display it is targeting can go.
+//
+// HDRView renders in extended sRGB with unbounded range, so there is no display ceiling to clip
+// against: the default is to reconstruct the map in full. Lowering the target trades reconstructed
+// highlight detail for a rendition closer to the base image, and zero shows the base image itself.
 
 /// Parameters of Apple's gain-map format, which predates ISO 21496-1 and is not compatible with it.
 /**
@@ -39,11 +36,10 @@ struct AppleGainmapParams
     float stops() const;
 };
 
-/// A decoded gain-map image, in whatever resolution and channel count the file stored it at.
+/// A decoded gain-map image, at the resolution and channel count the file stored it at.
 /**
-    Gain maps are commonly stored at a fraction of the base image's resolution, and are usually
-    monochrome. Values are the file's samples normalized to [0,1] and otherwise untouched --
-    in particular still gamma-encoded, since linearizing them is part of applying the map.
+    Samples are normalized to [0,1] and otherwise untouched -- in particular still gamma-encoded,
+    since linearizing them is part of applying the map.
 */
 struct GainmapImage
 {
@@ -65,8 +61,7 @@ inline constexpr float k_full_gainmap_headroom = std::numeric_limits<float>::inf
     Gain maps are usually stored at a fraction of the base resolution, so the copy resamples
     bilinearly; replicating samples instead would put visible blocks around high-contrast highlights.
 
-    The map is worth having as a channel group whether or not it is applied, which is why appending
-    it is separate from applying it.
+    Appending is separate from applying because the map is worth having as a channel group either way.
 
     \param image      Base image to append to. Modified in place
     \param gainmap    Decoded map, at the resolution the file stored it at
@@ -78,13 +73,13 @@ std::pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &ga
 
 /// Apply an Apple-format gain map to \p image, and append the map itself as a channel group.
 /**
-    The map is linearized, resized to the base image's resolution, and appended as a `gainmap.*`
-    channel group whether or not it is applied, so that it stays inspectable at \p target_stops of
-    zero. The base image's color channels are then scaled in place; its alpha channel is left alone.
+    The map goes in via append_gainmap_channels() whether or not it is applied, so it stays
+    inspectable at \p target_stops of zero. The base image's color channels are then scaled in place;
+    alpha is not a color and is left alone.
 
-    Apple's maps are monochrome, so the scale is the same for every color channel and applying it
-    commutes with the primaries conversion the loader has already done. This is why \p image may
-    already have been converted to Rec. 709.
+    Apple's maps are monochrome, so the scale is the same for every color channel, and applying it
+    therefore commutes with a primaries conversion -- which is why \p image may already have been
+    converted to Rec. 709 by the time it gets here.
 
     \param image         Base image, already linearized. Modified in place
     \param gainmap       Decoded gain map, still gamma-encoded

@@ -263,6 +263,22 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
     // than the decode takes to run.
     CHECK_MESSAGE(!shrank, "applying the gain map darkened part of the image");
     CHECK_MESSAGE(amplified, "applying the gain map changed nothing");
+
+    // No pixel may gain more than the map asks for: the gain is 1 + (2^stops - 1) * g with g in
+    // [0,1], so 2^stops is the ceiling however bright the scene is.
+    const float stops = img.metadata["header"]["Gain map headroom"]["value"].get<float>();
+    float       peak  = 0.f;
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            const float without = std::abs(base.channels[0](x, y));
+            if (without > 1e-4f)
+                peak = std::max(peak, std::abs(img.channels[0](x, y)) / without);
+        }
+
+    MESSAGE("gain map asks for ", stops, " stops; brightest pixel gained ", peak, "x");
+    CHECK(peak <= doctest::Approx(std::exp2(stops)).epsilon(0.01));
+    CHECK(peak > 1.f);
 }
 #endif
 
