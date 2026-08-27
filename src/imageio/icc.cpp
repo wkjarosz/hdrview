@@ -322,7 +322,12 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
     }
     else if (is_gray)
     {
-        format_in = format_out = size.z == 2 ? TYPE_GRAYA_FLT : TYPE_GRAY_FLT;
+        // Spelled out from lcms's format primitives rather than by its TYPE_GRAYA_FLT name, which
+        // postdates lcms2 releases still shipping on current distributions. This is TYPE_GRAY_FLT plus
+        // the one extra channel.
+        constexpr cmsUInt32Number gray_alpha_flt =
+            FLOAT_SH(1) | COLORSPACE_SH(PT_GRAY) | CHANNELS_SH(1) | BYTES_SH(4) | EXTRA_SH(1);
+        format_in = format_out = size.z == 2 ? gray_alpha_flt : TYPE_GRAY_FLT;
     }
     else if (is_cmyk)
     {
