@@ -556,3 +556,56 @@ TEST_CASE("A 10-bit channel bins without running off the end of its storage")
     auto stats = compute(c);
     CHECK(stats.num_bins <= PixelStats::MAX_BINS);
 }
+
+TEST_CASE("A selection that misses the channel leaves the statistics empty")
+{
+    // Box::intersect() does not keep min <= max, so a selection that misses the channel in one axis leaves
+    // an inverted box whose volume() is negative. Read as the size_t length of the parallel work range that
+    // became a count near 2^64, and the pixel index outgrew int and addressed far outside the channel.
+    // The channel has to be large enough that |volume()| exceeds one block (1 << 20), or the same overflow
+    // happens to land on a block count of zero and nothing runs.
+    Channel c = make_identifiable_channel(2048, 1024);
+
+    SUBCASE("missing in y only")
+    {
+        PixelStats::Settings settings;
+        settings.roi = Box2i{int2{0, 2000}, int2{2048, 3000}};
+
+        auto stats = compute(c, settings);
+        CHECK(stats.computed);
+        CHECK(stats.summary.valid_pixels == 0);
+        CHECK(total_bin_count(stats, AxisScale_Linear) == 0.0);
+    }
+
+    SUBCASE("missing in x only")
+    {
+        PixelStats::Settings settings;
+        settings.roi = Box2i{int2{4000, 0}, int2{5000, 1024}};
+
+        auto stats = compute(c, settings);
+        CHECK(stats.computed);
+        CHECK(stats.summary.valid_pixels == 0);
+    }
+
+    SUBCASE("missing in both axes")
+    {
+        // Both axes inverted multiply back to a positive volume(), so this one is wrong in the other
+        // direction: a plausible-looking count over a region that does not exist.
+        PixelStats::Settings settings;
+        settings.roi = Box2i{int2{4000, 2000}, int2{5000, 3000}};
+
+        auto stats = compute(c, settings);
+        CHECK(stats.computed);
+        CHECK(stats.summary.valid_pixels == 0);
+    }
+
+    SUBCASE("a selection that does overlap is unaffected")
+    {
+        PixelStats::Settings settings;
+        settings.roi = Box2i{int2{10, 20}, int2{40, 50}};
+
+        auto stats = compute(c, settings);
+        CHECK(stats.computed);
+        CHECK(stats.summary.valid_pixels == 30 * 30);
+    }
+}
