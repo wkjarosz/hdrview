@@ -350,7 +350,7 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
                  cmsFLAGS_NOCACHE;
     if (auto xform = Transform{cmsCreateTransformTHR(
             CmsContext::thread_local_instance().get(), profile_in.get(), format_in, profile_out.get(), format_out,
-            is_cmyk ? INTENT_PERCEPTUAL : INTENT_ABSOLUTE_COLORIMETRIC, flags)})
+            is_cmyk ? INTENT_PERCEPTUAL : INTENT_RELATIVE_COLORIMETRIC, flags)})
 
     {
         parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
