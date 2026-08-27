@@ -15,12 +15,12 @@ HDRView currently supports the following image formats while being careful to pr
 |---|---|:--:|:--:|
 | OpenEXR (.exr) | High-dynamic-range image format by Industrial Light & Magic, including multichannel, multi-part, and arbitrary metadata attributes  (via [OpenEXR](https://github.com/AcademySoftwareFoundation/openexr)) | ✓ | ✓ |
 | Portable Float Map (.pfm) | Dead simple HDR floating-point image format | ✓ | ✓ |
-| UltraHDR (.jpeg) | HDR images from recent Android phones (via [libultrahdr](https://github.com/google/libultrahdr)) | ✓ | ✓ |
+| UltraHDR (.jpeg) | Gain-mapped HDR images from recent Android phones (via [libultrahdr](https://github.com/google/libultrahdr)) | ✓ | ✓ |
 | JPEG (.jpg, .jpeg) | (via [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo)) | ✓ | ✓ |
 | PNG (.png) | Including animated PNGs and HDR PNGs with CICP (via [libpng](https://github.com/pnggroup/libpng)) | ✓ | ✓ |
 | TIFF (.tif, .tiff) | Including SGI LogLuv and Pixar Log HDR formats (via [libtiff](https://gitlab.com/libtiff/libtiff)) | ✓ | ✓ |
 | JPEG-XL (.jxl) | Including lossless, lossy, animation/burst, and HDR support (via [libjxl](https://github.com/libjxl/libjxl)) | ✓ | ✓ |
-| HEIF, AVIF (.heif, .avif) | Including lossless, lossy, animation/burst, and HDR support (via [libheif](https://github.com/strukturag/libheif) and various codec libraries) | ✓ | ✓ |
+| HEIF, AVIF (.heif, .heic, .avif) | Including lossless, lossy, animation/burst, HDR support, and the gain maps in HDR photos from iPhones (via [libheif](https://github.com/strukturag/libheif) and various codec libraries) | ✓ | ✓ |
 | WebP (.webp) | Google's image format supporting lossy/lossless and animation (via [libwebp](https://chromium.googlesource.com/webm/libwebp)) | ✓ | ✓ |
 | QOI (.qoi) | Quite OK Image — simple, fast lossless format (via [qoi](https://github.com/phoboslab/qoi)) | ✓ | ✓ |
 | DDS (.dds) | DirectX GPU/compressed texture formats (via [smalldds](https://github.com/wkjarosz/smalldds)) | ✓ |  |

@@ -326,12 +326,24 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
     const uhdr_mem_block_t *icc_data = uhdr_dec_get_icc(decoder.get());
     if (icc_data && icc_data->data && icc_data->data_sz > 0)
     {
-        spdlog::debug("Found ICC data of size {} bytes", icc_data->data_sz);
-        // HACK: for the same file the icc size reported by libuhdr is 14 bytes larger than what libjpeg reports and is
-        // able to successfully load. Skipping it seems to extract an ICC profile that we can load. I assume this is
-        // some additional header
-        image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data) + 14,
-                               reinterpret_cast<uint8_t *>(icc_data->data) + icc_data->data_sz);
+        // libuhdr hands back the APP2 marker's whole payload rather than just the profile: the
+        // "ICC_PROFILE\0" signature, then this chunk's sequence number and the chunk count, and only
+        // then the profile itself. libjpeg-based readers strip that 14-byte header, which is why the
+        // sizes the two report for one file differ by exactly that much.
+        //
+        // libuhdr keeps only the first such marker, so a profile large enough to have been split
+        // across several arrives truncated; ICCProfile then rejects it and the file falls back to its
+        // CICP-derived gamut, handled above.
+        static constexpr uint8_t icc_sig[]  = {'I', 'C', 'C', '_', 'P', 'R', 'O', 'F', 'I', 'L', 'E', '\0'};
+        static constexpr size_t  icc_hdr_sz = sizeof(icc_sig) + 2;
+
+        auto         bytes = reinterpret_cast<const uint8_t *>(icc_data->data);
+        const size_t skip =
+            (icc_data->data_sz > icc_hdr_sz && memcmp(bytes, icc_sig, sizeof(icc_sig)) == 0) ? icc_hdr_sz : 0;
+
+        spdlog::debug("Found ICC data of size {} bytes, {} of which is APP2 header", icc_data->data_sz, skip);
+
+        image->icc_data.assign(bytes + skip, bytes + icc_data->data_sz);
         image->metadata["color profile"] = ICCProfile(image->icc_data).description();
     }
 

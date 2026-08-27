@@ -12,6 +12,10 @@
 #include "imageio/image_loader.h"
 #include "imageio/uhdr.h"
 
+#if HDRVIEW_ENABLE_LIBHEIF
+#include <libheif/heif.h>
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -208,6 +212,14 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
 
     std::ifstream is{path, std::ios_base::binary};
     REQUIRE_MESSAGE(is.good(), "cannot open HDRVIEW_TEST_APPLE_HEIC");
+
+    // HEIC decoding needs an HEVC plugin, which some presets leave out on patent grounds
+    // (HDRVIEW_ENABLE_HEIC=OFF). Nothing about the gain map is testable then.
+    if (!heif_have_decoder_for_format(heif_compression_HEVC))
+    {
+        MESSAGE("this build has no HEVC decoder; skipping the real-capture gain-map test.");
+        return;
+    }
 
     ImageLoadOptions opts;
     opts.gainmap_headroom = k_full_gainmap_headroom;
