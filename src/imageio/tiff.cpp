@@ -530,10 +530,17 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         }
         else
         {
-            // Pre-compute bias and inverse divisor for integer formats based on file bit depth
-            const float int_inv_divisor = 1.0f / (float)((1ull << file_bits_per_sample) - 1);
-            const float int_bias =
-                sample_format == SAMPLEFORMAT_INT ? (float)(1ull << (file_bits_per_sample - 1)) : 0.0f;
+            // Pre-compute bias and inverse divisor for integer formats based on file bit depth.
+            // file_bits_per_sample comes straight from the file's tag and reaches 64 for a 64-bit sample
+            // (libtiff's own caspian.tif is one), where 1ull << 64 is undefined; what is wanted is the mask
+            // of that many low bits. A file declaring zero bits per sample would likewise shift by -1.
+            const uint64_t int_max_value = file_bits_per_sample == 0    ? 1ull
+                                           : file_bits_per_sample >= 64 ? ~0ull
+                                                                        : ((1ull << file_bits_per_sample) - 1);
+            const float    int_inv_divisor = 1.0f / (float)int_max_value;
+            const float    int_bias        = sample_format == SAMPLEFORMAT_INT && file_bits_per_sample > 0
+                                                 ? (float)(1ull << (file_bits_per_sample - 1))
+                                                 : 0.0f;
 
             // Helper function to unpack bits (handles both byte-aligned and bit-packed data)
             auto unpack_bits =

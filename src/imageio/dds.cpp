@@ -151,6 +151,16 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
     {
         auto masks  = dds.header.pixel_format.masks;
         auto shifts = dds.right_shifts;
+
+        // A bitmasked pixel is Bpp bytes wide and stored little-endian, and Bpp is 1 for A8/L8 and 2 for
+        // the 16-bit formats. Reading it as a uint32_t would be misaligned at most offsets, and would run
+        // past the last pixel by 4 - Bpp bytes, so assemble it a byte at a time instead.
+        auto read_packed = [Bpp](const uint8_t *p)
+        {
+            uint32_t v = 0;
+            for (int b = 0; b < Bpp; ++b) v |= uint32_t(p[b]) << (8 * b);
+            return v;
+        };
         // special cases
         if (fmt == DXGI::R9G9B9E5_SHAREDEXP)
         {
@@ -159,7 +169,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
             int u8_index = 0;
             for (int i = 0; i < w * h; ++i, u8_index += Bpp)
             {
-                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
+                uint32_t packed = read_packed(data->bytes() + u8_index);
                 auto     r      = (packed & masks[0]) >> shifts[0];
                 auto     g      = (packed & masks[1]) >> shifts[1];
                 auto     b      = (packed & masks[2]) >> shifts[2];
@@ -210,7 +220,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
             int u8_index = 0;
             for (int i = 0; i < w * h; ++i, u8_index += Bpp)
             {
-                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
+                uint32_t packed = read_packed(data->bytes() + u8_index);
 
                 image->channels[0](i) = xr_bias_to_float((packed & masks[0]) >> shifts[0]);
                 image->channels[1](i) = xr_bias_to_float((packed & masks[1]) >> shifts[1]);
@@ -230,6 +240,11 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
                 // mask_c = max(c, mask_c);
                 while (mask_c < 4 && masks[mask_c] == 0) ++mask_c;
 
+                // A file declaring fewer non-empty masks than it has channels runs this past the last one,
+                // and masks/bit_counts/right_shifts all hold exactly four.
+                if (mask_c >= 4)
+                    break;
+
                 bool snorm = dds.bitmask_was_bump_du_dv;
 
                 float multiplier = snorm ? 1.f / float((1 << (dds.bit_counts[mask_c] - 1)) - 1)
@@ -237,7 +252,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
 
                 for (int i = 0; i < w * h; ++i, u8_index += Bpp)
                 {
-                    uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
+                    uint32_t packed = read_packed(data->bytes() + u8_index);
 
                     // shift everything to the right end of a 32-bit int
                     auto shifted = (packed & masks[mask_c]) << (32 - shifts[mask_c] - dds.bit_counts[mask_c]);
