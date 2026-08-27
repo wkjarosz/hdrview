@@ -20,10 +20,14 @@ TEST_CASE("PSDMetadata::color_mode_name is defined for every 16-bit value")
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::Lab)) == "Lab");
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::NotSet)) == "Unknown");
 
+    // Every value the header can hold has to name something, not walk off the table. Counted rather than
+    // asserted per iteration, so one summary failure stands in for 65536 identical ones.
+    int bad = 0;
     for (int m = 0; m <= 0xFFFF; ++m)
     {
         auto name = PSDMetadata::color_mode_name((PSDMetadata::ColorMode)m);
-        REQUIRE(name != nullptr);
-        CHECK_FALSE(std::string(name).empty());
+        if (!name || std::string(name).empty())
+            ++bad;
     }
+    CHECK(bad == 0);
 }
