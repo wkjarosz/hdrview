@@ -11,6 +11,12 @@
 #include <cstring>
 #include <type_traits>
 
+#if defined(_MSC_VER)
+// Declares _byteswap_ushort/_byteswap_ulong/_byteswap_uint64, which the #pragma intrinsic below only
+// asks to be inlined -- it does not introduce the names.
+#include <stdlib.h>
+#endif
+
 //! Endianness indicator
 enum class Endian
 {
