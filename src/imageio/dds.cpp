@@ -1,5 +1,6 @@
 #include "dds.h"
 #include "colorspace.h"
+#include "endian-utils.h"
 #include "image.h"
 #include <cstring>
 #include <iostream>
@@ -153,15 +154,11 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
         auto masks  = dds.header.pixel_format.masks;
         auto shifts = dds.right_shifts;
 
-        // A bitmasked pixel is Bpp bytes wide and stored little-endian, and Bpp is 1 for A8/L8 and 2 for
-        // the 16-bit formats. Reading it as a uint32_t would be misaligned at most offsets, and would run
-        // past the last pixel by 4 - Bpp bytes, so assemble it a byte at a time instead.
+        // A bitmasked pixel is Bpp bytes wide -- 1 for A8/L8, 2 for the 16-bit formats -- and DDS stores
+        // it little-endian. Reading it as a uint32_t would be misaligned at most offsets and would run
+        // past the last pixel by 4 - Bpp bytes.
         auto read_packed = [Bpp](const uint8_t *p)
-        {
-            uint32_t v = 0;
-            for (int b = 0; b < Bpp; ++b) v |= uint32_t(p[b]) << (8 * b);
-            return v;
-        };
+        { return read_partial_as<uint32_t>(p, (size_t)Bpp, Endian::Little); };
         // special cases
         if (fmt == DXGI::R9G9B9E5_SHAREDEXP)
         {
