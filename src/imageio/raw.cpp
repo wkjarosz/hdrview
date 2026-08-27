@@ -203,6 +203,15 @@ void exif_handler(void *context, int tag, int type, int len, unsigned int ord, v
         break;
     }
 
+    // `type` is the IFD entry's type straight out of the file, and ExifFormat names nothing outside
+    // 1..12 -- loading a value that matches no enumerator is undefined, which is what reading
+    // entry->format back below would do. Kodak's KDC files carry types that are not EXIF's.
+    if (type < EXIF_FORMAT_BYTE || type > EXIF_FORMAT_DOUBLE)
+    {
+        spdlog::debug("Skipping EXIF tag 0x{:04x} with unrecognized type {}", actual_tag, type);
+        return;
+    }
+
     ExifEntry *entry = exif_entry_new();
     if (!entry)
         return;
