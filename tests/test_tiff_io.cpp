@@ -6,6 +6,7 @@
 
 #include <doctest/doctest.h>
 
+#include "endian-utils.h"
 #include "image.h"
 #include "imageio/tiff.h"
 
@@ -132,159 +133,217 @@ TEST_CASE("TIFF save/load round-trips alpha without repeated premultiplication")
 namespace
 {
 
-// A 4x1 uncompressed 16-bit *signed* grayscale TIFF (SAMPLEFORMAT_INT), holding the minimum, zero, the
-// maximum, and a mid negative: -32768, 0, 32767, -16384.
-const unsigned char k_signed16_tiff[] = {    0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x03, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x11, 0x01, 
-    0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x15, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x16, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x17, 0x01, 
-    0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x53, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0xff, 0x7f, 0x00, 0xc0};
+constexpr uint16_t k_sampleformat_uint   = 1;
+constexpr uint16_t k_sampleformat_int    = 2;
+constexpr uint16_t k_sampleformat_ieeefp = 3;
+
+//! Builds a minimal single-strip grayscale TIFF: one IFD, uncompressed, one sample per pixel.
+/*!
+    `samples` holds raw sample words in the file's own bit width, written in `endian`'s byte order;
+    `bits` must be a whole number of bytes. Generating these rather than embedding byte blobs is what
+    makes the byte-order axis reachable at all -- a hand-built fixture is one endianness only, and
+    little-endian is the one where a host-order bug hides.
+*/
+std::string make_gray_tiff(Endian endian, uint16_t bits, uint16_t sample_format, const std::vector<uint64_t> &samples)
+{
+    REQUIRE(bits % 8 == 0);
+    const uint32_t bytes_per_sample = bits / 8u;
+    const uint32_t width            = (uint32_t)samples.size();
+
+    std::string out;
+    auto        put_u16 = [&](uint16_t v)
+    {
+        if (endian == Endian::Little)
+            out += {(char)(v & 0xff), (char)((v >> 8) & 0xff)};
+        else
+            out += {(char)((v >> 8) & 0xff), (char)(v & 0xff)};
+    };
+    auto put_u32 = [&](uint32_t v)
+    {
+        if (endian == Endian::Little)
+            out += {(char)(v & 0xff), (char)((v >> 8) & 0xff), (char)((v >> 16) & 0xff), (char)((v >> 24) & 0xff)};
+        else
+            out += {(char)((v >> 24) & 0xff), (char)((v >> 16) & 0xff), (char)((v >> 8) & 0xff), (char)(v & 0xff)};
+    };
+
+    // 8-byte header + 2-byte entry count + ten 12-byte entries + 4-byte next-IFD pointer.
+    constexpr uint32_t k_num_entries  = 10;
+    constexpr uint32_t k_strip_offset = 8 + 2 + k_num_entries * 12 + 4;
+
+    // A SHORT value occupies the first two bytes of its four-byte field in both byte orders; a LONG
+    // fills it.
+    auto short_entry = [&](uint16_t tag, uint16_t value)
+    {
+        put_u16(tag);
+        put_u16(3); // SHORT
+        put_u32(1);
+        put_u16(value);
+        put_u16(0);
+    };
+    auto long_entry = [&](uint16_t tag, uint32_t value)
+    {
+        put_u16(tag);
+        put_u16(4); // LONG
+        put_u32(1);
+        put_u32(value);
+    };
+
+    out += endian == Endian::Little ? "II" : "MM";
+    put_u16(42);
+    put_u32(8);
+
+    put_u16(k_num_entries);                       // entries must be ordered by ascending tag
+    short_entry(0x0100, (uint16_t)width);         // ImageWidth
+    short_entry(0x0101, 1);                       // ImageLength
+    short_entry(0x0102, bits);                    // BitsPerSample
+    short_entry(0x0103, 1);                       // Compression: none
+    short_entry(0x0106, 1);                       // PhotometricInterpretation: BlackIsZero
+    long_entry(0x0111, k_strip_offset);           // StripOffsets
+    short_entry(0x0115, 1);                       // SamplesPerPixel
+    short_entry(0x0116, 1);                       // RowsPerStrip
+    long_entry(0x0117, width * bytes_per_sample); // StripByteCounts
+    short_entry(0x0153, sample_format);           // SampleFormat
+    put_u32(0);                                   // no next IFD
+
+    REQUIRE(out.size() == k_strip_offset);
+
+    for (uint64_t s : samples)
+        for (uint32_t b = 0; b < bytes_per_sample; ++b)
+        {
+            const uint32_t shift = endian == Endian::Little ? b : (bytes_per_sample - 1 - b);
+            out += (char)((s >> (8 * shift)) & 0xff);
+        }
+
+    return out;
+}
+
+std::vector<ImagePtr> load_tiff_bytes(const std::string &bytes, const std::string &name)
+{
+    std::istringstream is(bytes, std::ios::binary);
+    return load_tiff_image(is, name);
+}
+
+const char *endian_name(Endian e) { return e == Endian::Little ? "little-endian" : "big-endian"; }
 
 } // namespace
 
-TEST_CASE("TIFF signed integer samples decode into the unit range")
+TEST_CASE("TIFF integer samples decode into the unit range at every supported width, sign and byte order")
 {
-    // unpack_bits() sign-extends a signed sample across its 32-bit accumulator, so the value has to be
-    // read back as signed: read as unsigned, a negative sample is a number near 2^32, which the bias and
-    // divisor place far outside [0,1].
-    std::string        bytes(reinterpret_cast<const char *>(k_signed16_tiff), sizeof(k_signed16_tiff));
-    std::istringstream is(bytes, std::ios::binary);
+    // One matrix rather than a fixture per case: the sample width, the signedness and the file's byte
+    // order are three independent axes through unpack_bits(), and a bug in any one of them (a sign bit
+    // read as a magnitude, a partial word assembled in host order) shows up as the same symptom -- a
+    // value outside [0,1] or out of order. GDAL's int16/int24/int32 and uint* samples are such files.
+    for (Endian endian : {Endian::Little, Endian::Big})
+        for (uint16_t bits : {(uint16_t)8, (uint16_t)16, (uint16_t)24, (uint16_t)32})
+            for (uint16_t format : {k_sampleformat_uint, k_sampleformat_int})
+            {
+                const char *sign_name = format == k_sampleformat_int ? "signed" : "unsigned";
+                CAPTURE(endian_name(endian));
+                CAPTURE(bits);
+                CAPTURE(sign_name);
 
-    auto images = load_tiff_image(is, "signed16.tif");
-    REQUIRE(images.size() == 1);
-    auto &ch = images[0]->channels[0];
-    REQUIRE(ch.num_elements() == 4);
+                // Four well-separated samples in increasing true numeric order, so the check is on
+                // ordering and endpoints rather than on whatever curve the loader applies between them.
+                const uint64_t        one   = 1ull;
+                const uint64_t        range = bits >= 64 ? ~0ull : ((one << bits) - 1);
+                std::vector<uint64_t> samples;
+                if (format == k_sampleformat_uint)
+                    samples = {0, range / 4, range / 2, range};
+                else
+                {
+                    const uint64_t min = one << (bits - 1); // two's complement minimum
+                    samples            = {min, min + min / 2, 0, (one << (bits - 1)) - 1};
+                }
 
-    // Whatever transfer function the loader applies, it maps the endpoints to themselves and preserves
-    // order -- so these hold without pinning the curve.
-    for (int i = 0; i < 4; ++i)
-    {
-        CAPTURE(i);
-        CHECK(ch(i) >= 0.f);
-        CHECK(ch(i) <= 1.f);
-    }
+                auto images = load_tiff_bytes(make_gray_tiff(endian, bits, format, samples), "matrix.tif");
+                REQUIRE(images.size() == 1);
+                auto &ch = images[0]->channels[0];
+                REQUIRE(ch.num_elements() == 4);
 
-    CHECK(ch(0) == doctest::Approx(0.f));  // -32768, the minimum
-    CHECK(ch(2) == doctest::Approx(1.f));  //  32767, the maximum
-    CHECK(ch(0) < ch(3));                  // -32768 < -16384
-    CHECK(ch(3) < ch(1));                  // -16384 < 0
-    CHECK(ch(1) < ch(2));                  //      0 < 32767
+                for (int i = 0; i < 4; ++i)
+                {
+                    CAPTURE(i);
+                    CHECK(ch(i) >= 0.f);
+                    CHECK(ch(i) <= 1.f);
+                }
+
+                CHECK(ch(0) == doctest::Approx(0.f).epsilon(1e-5)); // the minimum
+                CHECK(ch(3) == doctest::Approx(1.f).epsilon(1e-5)); // the maximum
+                CHECK(ch(0) < ch(1));
+                CHECK(ch(1) < ch(2));
+                CHECK(ch(2) < ch(3));
+            }
 }
 
-namespace
+TEST_CASE("TIFF samples of a width the loader cannot represent are refused")
 {
-// 4x1 24-bit signed, samples [-8388608, 0, 8388607, -4194304] (146 bytes)
-const unsigned char k_signed24_tiff[] = {
-    0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x03, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x11, 0x01, 
-    0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x15, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x16, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x17, 0x01, 
-    0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x53, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0xff, 0xff, 0x7f, 0x00, 
-    0x00, 0xc0, 
-};
-
-// 4x1 64-bit signed, samples [-1, 0, 1, 2] (166 bytes)
-const unsigned char k_signed64_tiff[] = {
-    0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x03, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x11, 0x01, 
-    0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x15, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x16, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x17, 0x01, 
-    0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x53, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-};
-} // namespace
-
-TEST_CASE("TIFF signed samples of other widths decode into the unit range")
-{
-    // 24 bits is neither the accumulator's width nor a power of two, and takes unpack_bits's
-    // byte-aligned branch with a sign bit three bytes in. GDAL's own int24.tif is such a file.
-    std::string        bytes(reinterpret_cast<const char *>(k_signed24_tiff), sizeof(k_signed24_tiff));
-    std::istringstream is(bytes, std::ios::binary);
-
-    auto images = load_tiff_image(is, "signed24.tif");
-    REQUIRE(images.size() == 1);
-    auto &ch = images[0]->channels[0];
-    REQUIRE(ch.num_elements() == 4);
-
-    for (int i = 0; i < 4; ++i)
-    {
-        CAPTURE(i);
-        CHECK(ch(i) >= 0.f);
-        CHECK(ch(i) <= 1.f);
-    }
-    CHECK(ch(0) == doctest::Approx(0.f)); // the minimum
-    CHECK(ch(2) == doctest::Approx(1.f)); // the maximum
-    CHECK(ch(0) < ch(3));
-    CHECK(ch(3) < ch(1));
-    CHECK(ch(1) < ch(2));
-}
-
-TEST_CASE("TIFF integer samples wider than the accumulator are refused")
-{
-    // unpack_bits accumulates into uint32_t, so a wider integer sample has nowhere to land and is
-    // refused. A 64-bit *float* sample is ordinary and still loads. GDAL's int64.tif is such a file.
+    // The refusal surfaces as no image rather than as an exception: load_image() catches per directory
+    // and skips it, so one bad directory of a multi-directory TIFF doesn't discard the rest.
     //
-    // The refusal surfaces as no image rather than as an exception: load_image() catches per directory and
-    // skips it, so that one bad directory of a multi-directory TIFF doesn't discard the rest.
-    std::string        bytes(reinterpret_cast<const char *>(k_signed64_tiff), sizeof(k_signed64_tiff));
-    std::istringstream is(bytes, std::ios::binary);
+    // unpack_bits accumulates into a uint32_t, so an integer sample wider than that has nowhere to land;
+    // convert_to_float reads a float sample as half, float or double and has no meaning to give any other
+    // width. GDAL's int64.tif and float24.tif are such files.
+    for (Endian endian : {Endian::Little, Endian::Big})
+    {
+        CAPTURE(endian_name(endian));
 
-    auto images = load_tiff_image(is, "signed64.tif");
-    CHECK(images.empty());
+        SUBCASE("integers wider than the accumulator")
+        {
+            for (uint16_t format : {k_sampleformat_uint, k_sampleformat_int})
+            {
+                CAPTURE(format);
+                CHECK(load_tiff_bytes(make_gray_tiff(endian, 64, format, {0, 1, 2, 3}), "int64.tif").empty());
+            }
+        }
+
+        SUBCASE("floating point at a width with no such format")
+        {
+            for (uint16_t bits : {(uint16_t)8, (uint16_t)24})
+            {
+                CAPTURE(bits);
+                CHECK(load_tiff_bytes(make_gray_tiff(endian, bits, k_sampleformat_ieeefp, {0, 0, 0, 0}), "floatN.tif")
+                          .empty());
+            }
+        }
+    }
 }
 
-namespace
+TEST_CASE("TIFF 32- and 64-bit floating point samples load")
 {
+    // The widths convert_to_float does have a meaning for, so the refusal above is about the width and
+    // not about SAMPLEFORMAT_IEEEFP itself.
+    for (Endian endian : {Endian::Little, Endian::Big})
+    {
+        CAPTURE(endian_name(endian));
 
-// 4x1 24-bit floating point (146 bytes). GDAL's float24.tif is such a file.
-const unsigned char k_float24_tiff[] = {
-    0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x03, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x11, 0x01, 
-    0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x15, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x16, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x17, 0x01, 
-    0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x53, 0x01, 
-    0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 
-};
+        std::vector<uint64_t> f32;
+        for (float v : {0.f, 0.25f, 0.5f, 1.f})
+        {
+            uint32_t bits32;
+            std::memcpy(&bits32, &v, sizeof(bits32));
+            f32.push_back(bits32);
+        }
+        auto images = load_tiff_bytes(make_gray_tiff(endian, 32, k_sampleformat_ieeefp, f32), "float32.tif");
+        REQUIRE(images.size() == 1);
+        auto &ch = images[0]->channels[0];
+        REQUIRE(ch.num_elements() == 4);
+        CHECK(ch(0) < ch(1));
+        CHECK(ch(1) < ch(2));
+        CHECK(ch(2) < ch(3));
 
-} // namespace
-
-TEST_CASE("TIFF floating-point samples of an unsupported width are refused")
-{
-    // convert_to_float() reads a float sample as half, float or double, and has no meaning to give any
-    // other width, so those are refused rather than decoded to something arbitrary. GDAL's float24.tif is
-    // such a file.
-    std::string        bytes(reinterpret_cast<const char *>(k_float24_tiff), sizeof(k_float24_tiff));
-    std::istringstream is(bytes, std::ios::binary);
-
-    auto images = load_tiff_image(is, "float24.tif");
-    CHECK(images.empty());
+        std::vector<uint64_t> f64;
+        for (double v : {0.0, 0.25, 0.5, 1.0})
+        {
+            uint64_t bits64;
+            std::memcpy(&bits64, &v, sizeof(bits64));
+            f64.push_back(bits64);
+        }
+        auto images64 = load_tiff_bytes(make_gray_tiff(endian, 64, k_sampleformat_ieeefp, f64), "float64.tif");
+        REQUIRE(images64.size() == 1);
+        auto &ch64 = images64[0]->channels[0];
+        REQUIRE(ch64.num_elements() == 4);
+        CHECK(ch64(0) < ch64(1));
+        CHECK(ch64(1) < ch64(2));
+        CHECK(ch64(2) < ch64(3));
+    }
 }
