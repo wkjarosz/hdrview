@@ -435,9 +435,10 @@ static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOpt
         const GainmapImage gm = gainmap_from_image(map);
 
         if (found.iso)
-            apply_iso_gainmap(image, gm, *found.iso, opts.gainmap_headroom);
+            apply_iso_gainmap(image, gm, *found.iso, opts.gainmap_headroom, opts.gainmap_renditions);
         else
-            apply_apple_gainmap(image, gm, apple_gainmap_params(image.exif), opts.gainmap_headroom);
+            apply_apple_gainmap(image, gm, apple_gainmap_params(image.exif), opts.gainmap_headroom,
+                                opts.gainmap_renditions);
 
         return; // an image has at most one gain map
     }

@@ -410,7 +410,12 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
          gainmap->fmt != UHDR_IMG_FMT_24bppRGB888))
         return {image};
 
-    // otherwise, extract the gain map as a separate channel group
+    if (!opts.gainmap_renditions)
+        return {image};
+
+    // otherwise, keep the gain map as its own channel group. Only the gain map: libuhdr applies the
+    // map inside its own decoder and returns just the result, so unlike HDRView's own gain-map paths
+    // this one never has the base rendition in hand to keep.
 
     const int num_components =
         gainmap->fmt == UHDR_IMG_FMT_32bppRGBA8888 ? 4 : (gainmap->fmt == UHDR_IMG_FMT_24bppRGB888 ? 3 : 1);
@@ -434,7 +439,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
         // libuhdr has already applied the map to produce the pixels above, so these channels exist to
         // be inspected. They keep the file's own encoding: an ISO 21496-1 map is not sRGB-encoded, and
         // linearizing it as if it were would misreport every value.
-        append_gainmap_channels(*image, gm, false);
+        append_gainmap_channels(*image, resample_gainmap(gm, size, false));
 
         spdlog::debug("Copying gainmap data took: {} seconds.", (timer.elapsed() / 1000.f));
     }

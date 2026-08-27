@@ -554,7 +554,7 @@ static void apply_heif_gainmap(const heif_image_handle *ihandle, Image &image, c
         try
         {
             apply_apple_gainmap(image, decode_aux_gainmap(aux.get()), apple_gainmap_params(image.exif),
-                                opts.gainmap_headroom);
+                                opts.gainmap_headroom, opts.gainmap_renditions);
         }
         catch (const std::exception &e)
         {

@@ -68,20 +68,32 @@ struct GainmapImage
 //! Target headroom, in stops, meaning "reconstruct the map in full".
 inline constexpr float k_full_gainmap_headroom = std::numeric_limits<float>::infinity();
 
-/// Append \p gainmap to \p image as a `gainmap.*` channel group, resized to the base image.
+/// Resample \p gainmap to \p size, so it lines up with the base image it applies to.
 /**
-    Gain maps are usually stored at a fraction of the base resolution, so the copy resamples
-    bilinearly; replicating samples instead would put visible blocks around high-contrast highlights.
+    Gain maps are usually stored at a fraction of the base resolution, so this resamples bilinearly;
+    replicating samples instead would put visible blocks around high-contrast highlights.
 
-    Appending is separate from applying because the map is worth having as a channel group either way.
-
-    \param image      Base image to append to. Modified in place
     \param gainmap    Decoded map, at the resolution the file stored it at
-    \param linearize  Whether to undo an sRGB encoding as part of the copy. Apple's maps are
-                      sRGB-encoded; ISO 21496-1 maps carry their own encoding and must not be
-    \return           Index of the first appended channel, and how many were appended
+    \param size       Resolution of the base image
+    \param linearize  Whether to undo an sRGB encoding on the way. Apple's maps are sRGB-encoded;
+                      ISO 21496-1 maps carry their own encoding and must not be
+    \return           The resampled map, or an empty one if \p gainmap is malformed
 */
-std::pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap, bool linearize);
+GainmapImage resample_gainmap(const GainmapImage &gainmap, int2 size, bool linearize);
+
+//! Append \p gainmap to \p image as a `gainmap.*` channel group. It must already be \p image's size.
+void append_gainmap_channels(Image &image, const GainmapImage &gainmap);
+
+//! Copy \p image's colour channels into a `base.*` group, before a gain map is applied to them.
+/*!
+    Called "base" rather than "sdr" because which rendition a file stores is the file's choice: a
+    base-HDR JPEG XL keeps its HDR rendition here and derives an SDR one from the map. Alpha is not
+    part of what the map converts and is not copied.
+
+    \param image     Image to append to
+    \param num_base  How many of \p image's leading channels are the base image's own
+*/
+void append_base_rendition(Image &image, int num_base);
 
 //! Whether an auxiliary image type names one of Apple's gain maps.
 /*!
@@ -178,10 +190,13 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len);
     \param image         Base image, already linearized. Modified in place
     \param gainmap       Decoded gain map, still in its encoded form
     \param params        Parameters from the file's ISO or `hdrgm:` metadata
-    \param target_stops  Headroom to land at, in stops; k_full_gainmap_headroom for the alternate
-                        rendition in full
+    \param target_stops     Headroom to land at, in stops; k_full_gainmap_headroom for the alternate
+                           rendition in full
+    \param keep_renditions  Whether to also keep what the file actually stores -- its base rendition
+                           and its gain map -- as their own channel groups
 */
-void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainmapParams &params, float target_stops);
+void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainmapParams &params, float target_stops,
+                       bool keep_renditions);
 
 /// Apply an Apple-format gain map to \p image, and append the map itself as a channel group.
 /**
@@ -196,7 +211,9 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
     \param image         Base image, already linearized. Modified in place
     \param gainmap       Decoded gain map, still gamma-encoded
     \param params        Reconstruction strength, from the primary image's Apple maker note
-    \param target_stops  Ceiling on the reconstruction, in stops; k_full_gainmap_headroom for all of it
+    \param target_stops     Ceiling on the reconstruction, in stops; k_full_gainmap_headroom for all
+    \param keep_renditions  Whether to also keep what the file actually stores -- its base rendition
+                           and its gain map -- as their own channel groups
 */
 void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleGainmapParams &params,
-                         float target_stops);
+                         float target_stops, bool keep_renditions);

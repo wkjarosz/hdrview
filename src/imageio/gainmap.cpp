@@ -98,12 +98,10 @@ static float sample_bilinear(const vector<float> &src, int2 src_size, int channe
     return top * (1.f - fy) + bottom * fy;
 }
 
-pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap, bool linearize)
+GainmapImage resample_gainmap(const GainmapImage &gainmap, int2 size, bool linearize)
 {
-    if (image.channels.empty() || !gainmap.valid())
-        return {0, 0};
-
-    const int2 size = image.channels.front().size();
+    if (!gainmap.valid() || size.x <= 0 || size.y <= 0)
+        return {};
 
     vector<float>        linearized;
     const vector<float> *src = &gainmap.pixels;
@@ -130,30 +128,95 @@ pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap
         src = &linearized;
     }
 
-    const int n     = std::min(gainmap.channels, 4);
-    const int first = (int)image.channels.size();
-
-    // Name the channels the way Image names its own, so that finalize() gathers them into a group
-    // the same way it would any other layer.
-    static const char *mono_names[] = {"gainmap.Y", "gainmap.A"};
-    static const char *rgb_names[]  = {"gainmap.R", "gainmap.G", "gainmap.B", "gainmap.A"};
-    for (int c = 0; c < n; ++c) image.channels.emplace_back(n < 3 ? mono_names[c] : rgb_names[c], size);
+    GainmapImage out;
+    out.size     = size;
+    out.channels = gainmap.channels;
+    out.pixels.resize((size_t)size.x * size.y * out.channels);
 
     parallel_for(blocked_range<int>(0, size.y, 128),
-                 [&, first, n](int begin_y, int end_y, int, int)
+                 [&](int begin_y, int end_y, int, int)
                  {
                      for (int y = begin_y; y < end_y; ++y)
                          for (int x = 0; x < size.x; ++x)
-                             for (int c = 0; c < n; ++c)
-                                 image.channels[first + c](x, y) =
+                             for (int c = 0; c < out.channels; ++c)
+                                 out.pixels[((size_t)y * size.x + x) * out.channels + c] =
                                      sample_bilinear(*src, gainmap.size, gainmap.channels, c, size, x, y);
                  });
 
-    return {first, n};
+    return out;
+}
+
+//! Copy \p count channels of \p src into \p image under \p prefix, as their own group.
+static void append_group(Image &image, const GainmapImage &src, const char *prefix, int count)
+{
+    static const char *mono[] = {"Y", "A"};
+    static const char *rgba[] = {"R", "G", "B", "A"};
+
+    const int first = (int)image.channels.size();
+    for (int c = 0; c < count; ++c)
+        image.channels.emplace_back(string{prefix} + (count < 3 ? mono[c] : rgba[c]), src.size);
+
+    parallel_for(blocked_range<int>(0, src.size.y, 128),
+                 [&, first, count](int begin_y, int end_y, int, int)
+                 {
+                     for (int y = begin_y; y < end_y; ++y)
+                         for (int x = 0; x < src.size.x; ++x)
+                             for (int c = 0; c < count; ++c)
+                                 image.channels[first + c](x, y) =
+                                     src.pixels[((size_t)y * src.size.x + x) * src.channels + c];
+                 });
+}
+
+void append_gainmap_channels(Image &image, const GainmapImage &gainmap)
+{
+    if (image.channels.empty() || !gainmap.valid())
+        return;
+
+    // Name the channels the way Image names its own, so that finalize() gathers them into a group
+    // the same way it would any other layer.
+    append_group(image, gainmap, "gainmap.", std::min(gainmap.channels, 4));
+}
+
+void append_base_rendition(Image &image, int num_base)
+{
+    if (image.channels.empty())
+        return;
+
+    const int2 size = image.channels.front().size();
+
+    // The colour channels only. Alpha is not part of the rendition the gain map converts, and
+    // duplicating it would just cost memory.
+    std::vector<int> colour;
+    for (int c = 0; c < num_base && c < (int)image.channels.size(); ++c)
+        if (image.channels[c].name != "A")
+            colour.push_back(c);
+
+    if (colour.empty())
+        return;
+
+    // "base", not "sdr": which rendition is stored is the file's choice, and a base-HDR JPEG XL
+    // keeps its HDR rendition here and derives an SDR one. ISO's own vocabulary is base/alternate.
+    static const char *mono[] = {"base.Y"};
+    static const char *rgb[]  = {"base.R", "base.G", "base.B"};
+
+    const int first = (int)image.channels.size();
+    for (size_t c = 0; c < colour.size(); ++c) image.channels.emplace_back(colour.size() < 3 ? mono[c] : rgb[c], size);
+
+    parallel_for(blocked_range<int>(0, size.y, 128),
+                 [&, first](int begin_y, int end_y, int, int)
+                 {
+                     for (size_t c = 0; c < colour.size(); ++c)
+                     {
+                         const auto &from = image.channels[colour[c]];
+                         auto       &to   = image.channels[first + (int)c];
+                         for (int y = begin_y; y < end_y; ++y)
+                             for (int x = 0; x < size.x; ++x) to(x, y) = from(x, y);
+                     }
+                 });
 }
 
 void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleGainmapParams &params,
-                         float target_stops)
+                         float target_stops, bool keep_renditions)
 {
     if (image.channels.empty())
     {
@@ -168,12 +231,14 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
         return;
     }
 
-    // Captured before appending, so that the scaling loop below covers only the base image's own
-    // channels and not the gain map it is about to grow.
+    const int2 size = image.channels.front().size();
+
+    // Captured before appending anything, so the scaling loop below covers only the base image's own
+    // channels and not the groups it is about to grow.
     const int num_base = (int)image.channels.size();
 
-    const auto [first, n] = append_gainmap_channels(image, gainmap, true);
-    if (n == 0)
+    const GainmapImage full = resample_gainmap(gainmap, size, true);
+    if (!full.valid())
         return;
 
     const float stops    = params.stops();
@@ -202,8 +267,13 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
                  gainmap.size.x, gainmap.size.y, gainmap.channels, stops, applied, params.hdr_headroom,
                  params.hdr_gain);
 
-    // The map is still worth having as a channel group when nothing is reconstructed, so this test
-    // comes after it has been linearized and appended above.
+    // The renditions the file actually holds, kept before the base is scaled out from under them.
+    if (keep_renditions)
+    {
+        append_base_rendition(image, num_base);
+        append_gainmap_channels(image, full);
+    }
+
     if (headroom <= 1.f)
     {
         spdlog::debug("Apple gain map: target headroom is {:.3f}; leaving base pixels alone.", headroom);
@@ -212,9 +282,8 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
 
     Timer timer;
 
-    const int2 size = image.channels.front().size();
     parallel_for(blocked_range<int>(0, size.y, 128),
-                 [&, first, n, num_base, headroom](int begin_y, int end_y, int, int)
+                 [&, num_base, headroom](int begin_y, int end_y, int, int)
                  {
                      for (int c = 0; c < num_base; ++c)
                      {
@@ -225,11 +294,15 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
 
                          // A monochrome map drives every color channel; a per-channel one pairs up
                          // with the first three, and any beyond that reuse the last.
-                         const auto &gain = image.channels[first + std::min(c, n - 1)];
-                         auto       &base = image.channels[c];
+                         const int p    = std::min(c, full.channels - 1);
+                         auto     &base = image.channels[c];
 
                          for (int y = begin_y; y < end_y; ++y)
-                             for (int x = 0; x < size.x; ++x) base(x, y) *= 1.f + (headroom - 1.f) * gain(x, y);
+                             for (int x = 0; x < size.x; ++x)
+                             {
+                                 const float g = full.pixels[((size_t)y * size.x + x) * full.channels + p];
+                                 base(x, y) *= 1.f + (headroom - 1.f) * g;
+                             }
                      }
                  });
 
@@ -569,7 +642,8 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
     return p;
 }
 
-void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainmapParams &params, float target_stops)
+void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainmapParams &params, float target_stops,
+                       bool keep_renditions)
 {
     if (image.channels.empty())
     {
@@ -615,11 +689,12 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
                          }
                  });
 
-    const int num_base = (int)image.channels.size();
+    const int2 size     = image.channels.front().size();
+    const int  num_base = (int)image.channels.size();
 
     // Already in log space, so no transfer function to undo on the way in.
-    const auto [first, n] = append_gainmap_channels(image, decoded, false);
-    if (n == 0)
+    const GainmapImage full = resample_gainmap(decoded, size, false);
+    if (!full.valid())
         return;
 
     const float weight = params.weight(target_stops);
@@ -650,6 +725,13 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
         spdlog::warn("Gain map declares the alternate image's color space as the application space; HDRView applies "
                      "it in the base image's space, which will shift saturated colors.");
 
+    // The renditions the file actually holds, kept before the base is scaled out from under them.
+    if (keep_renditions)
+    {
+        append_base_rendition(image, num_base);
+        append_gainmap_channels(image, full);
+    }
+
     if (weight == 0.f)
     {
         spdlog::debug("ISO gain map: weight is zero; leaving base pixels alone.");
@@ -658,9 +740,8 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
 
     Timer timer;
 
-    const int2 size = image.channels.front().size();
     parallel_for(blocked_range<int>(0, size.y, 128),
-                 [&, first, n, num_base, weight](int begin_y, int end_y, int, int)
+                 [&, num_base, weight](int begin_y, int end_y, int, int)
                  {
                      for (int c = 0; c < num_base; ++c)
                      {
@@ -669,14 +750,17 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
                          if (image.channels[c].name == "A")
                              continue;
 
-                         const int   p    = std::min(c, 2);
-                         const auto &gain = image.channels[first + std::min(c, n - 1)];
-                         auto       &base = image.channels[c];
+                         const int p    = std::min(c, 2);
+                         const int gc   = std::min(c, full.channels - 1);
+                         auto     &base = image.channels[c];
 
                          for (int y = begin_y; y < end_y; ++y)
                              for (int x = 0; x < size.x; ++x)
-                                 base(x, y) = (base(x, y) + params.base_offset[p]) * std::exp2(gain(x, y) * weight) -
+                             {
+                                 const float lb = full.pixels[((size_t)y * size.x + x) * full.channels + gc];
+                                 base(x, y)     = (base(x, y) + params.base_offset[p]) * std::exp2(lb * weight) -
                                               params.alternate_offset[p];
+                             }
                      }
                  });
 

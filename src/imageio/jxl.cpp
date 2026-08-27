@@ -392,7 +392,7 @@ static void apply_jxl_gainmap(const vector<uint8_t> &jhgm, Image &image, const I
 
     const GainmapImage gm = gainmap_from_image(map);
 
-    apply_iso_gainmap(image, gm, params, opts.gainmap_headroom);
+    apply_iso_gainmap(image, gm, params, opts.gainmap_headroom, opts.gainmap_renditions);
 }
 
 vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLoadOptions &opts)

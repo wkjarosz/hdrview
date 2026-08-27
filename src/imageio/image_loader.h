@@ -47,6 +47,15 @@ struct ImageLoadOptions
         space is unbounded; zero leaves the SDR rendition alone. See imageio/gainmap.h.
     */
     float gainmap_headroom = k_full_gainmap_headroom;
+
+    //! Whether to keep what a gain-mapped file actually stores, alongside the rendition built from it.
+    /*!
+        A gain-mapped file holds a base rendition and a map, and the image HDRView shows is the two
+        combined. With this on, both are kept as their own `base.*` and `gainmap.*` channel groups,
+        so everything in the file is loaded rather than only the result. Costs roughly 75% more
+        memory for a three-channel image with a single-channel map.
+    */
+    bool gainmap_renditions = true;
 };
 
 /**
