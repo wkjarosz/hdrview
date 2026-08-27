@@ -198,6 +198,26 @@ public:
     void  zoom_out();
     float zoom_level() const;
     void  set_zoom_level(float l);
+
+    /// The range m_zoom is kept within. Outside it the viewport transforms stop being invertible: a zoom of
+    /// zero divides by zero in pixel_at_vp_pos(), and the resulting non-finite pixel coordinate is
+    /// undefined behavior to convert to the int2 the selection and pixel inspector need.
+    static constexpr float MIN_ZOOM = 0.01f, MAX_ZOOM = 512.f;
+    /// Sets the zoom factor, clamped to [MIN_ZOOM, MAX_ZOOM]. Every path that changes the zoom goes
+    /// through here, including the ones restoring it from a session file.
+    void set_zoom(float zoom);
+    /// The zoom factor: image pixel size / logical pixel size. Always within [MIN_ZOOM, MAX_ZOOM].
+    float zoom() const { return m_zoom; }
+
+    /// The ranges the exposure/offset/gamma sliders offer. These bound the sliders' drag travel only:
+    /// Ctrl+click text entry deliberately goes out of bounds (no ImGuiSliderFlags_ClampOnInput), and the
+    /// exposure/gamma keyboard shortcuts step past them, so values outside these are reachable and are
+    /// kept as given.
+    static constexpr float2 EXPOSURE_RANGE{-9.f, 9.f}, OFFSET_RANGE{-1.f, 1.f}, GAMMA_RANGE{0.02f, 9.f};
+
+    /// Smallest gamma that still describes a power curve. It is inverted before use, so zero divides by
+    /// zero and a negative value sends a black pixel to infinity; nothing above this needs a bound.
+    static constexpr float MIN_GAMMA = 1e-4f;
     //-----------------------------------------------------------------------------
 
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;

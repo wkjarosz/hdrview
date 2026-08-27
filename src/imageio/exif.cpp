@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring> // for memcmp
+#include <iterator> // for std::size
 #include <libexif/exif-byte-order.h>
 #include <libexif/exif-data.h>
 #include <libexif/exif-format.h>
@@ -316,7 +317,7 @@ static json get_makernote(ExifData *ed)
         {
             if (ofs + 12 > mn_size)
             {
-                spdlog::error("ExifMnoteApple", "Tag size overflow detected ({} vs size {})", ofs + 12, mn_size);
+                spdlog::error("ExifMnoteApple: Tag size overflow detected ({} vs size {})", ofs + 12, mn_size);
                 break;
             }
 
@@ -508,6 +509,8 @@ json Exif::to_json() const
     json        j;
 
     static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
+    // The loop below indexes this by libexif's own IFD enum, so the two have to stay the same length.
+    static_assert(std::size(ExifIfdTable) == EXIF_IFD_COUNT, "ExifIfdTable must name every libexif IFD");
 
     spdlog::debug("Exif::to_json: Starting to process {} IFDs", (int)EXIF_IFD_COUNT);
 

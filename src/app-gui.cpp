@@ -571,7 +571,8 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::PopFont();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(EmSize(8));
-    ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "Exposure: %+5.2f");
+    ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, EXPOSURE_RANGE[0], EXPOSURE_RANGE[1],
+                       "Exposure: %+5.2f");
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_exposure = m_exposure_live;
     ImGui::EndGroup();
@@ -587,7 +588,7 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::PopFont();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(EmSize(6));
-    ImGui::SliderFloat("##OffsetSlider", &m_offset_live, -1.f, 1.f, "Offset: %+1.2f");
+    ImGui::SliderFloat("##OffsetSlider", &m_offset_live, OFFSET_RANGE[0], OFFSET_RANGE[1], "Offset: %+1.2f");
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_offset = m_offset_live;
     ImGui::EndGroup();
@@ -637,7 +638,7 @@ void HDRViewApp::draw_top_toolbar()
     case Tonemap_Gamma:
     {
         ImGui::SetNextItemWidth(tonemap_width);
-        ImGui::SliderFloat("##GammaSlider", &m_gamma_live, 0.02f, 9.f, "Gamma: %5.3f");
+        ImGui::SliderFloat("##GammaSlider", &m_gamma_live, GAMMA_RANGE[0], GAMMA_RANGE[1], "Gamma: %5.3f");
         if (ImGui::IsItemDeactivatedAfterEdit())
             m_gamma = m_gamma_live;
         ImGui::SetItemTooltip("Set the exponent for gamma correction.");

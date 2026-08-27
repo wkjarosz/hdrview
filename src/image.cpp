@@ -334,6 +334,12 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
         if (croi.size() != rroi.size())
             spdlog::error("Image and reference channel ROIs are not the same size!");
 
+        // Number of pixels the two passes below visit. Box::intersect() clamps each bound against the
+        // other box without keeping min <= max, so a selection that misses the channel leaves an inverted
+        // box, whose volume() is negative in one axis and spuriously positive in two. Neither is a count,
+        // and both passes take theirs as a size_t, so ask has_volume() first.
+        const size_t num_pixels = croi.has_volume() ? (size_t)croi.volume() : 0;
+
         // Report what the file holds: a straight-alpha channel was premultiplied on load, so divide that
         // back out (`alpha` is null for channels that weren't, and for the alpha channel itself).
         auto sample = [](const Channel &c, const Channel *a, int2 p)
@@ -370,13 +376,13 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
             };
 
             size_t               block_size  = 1024 * 1024;
-            const size_t         num_threads = estimate_threads(croi.volume(), block_size, *ThreadPool::singleton());
+            const size_t         num_threads = estimate_threads(num_pixels, block_size, *ThreadPool::singleton());
             std::vector<Partial> partials(max<size_t>(1, num_threads));
 
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());
 
             parallel_for(
-                blocked_range<size_t>(0u, croi.volume(), block_size),
+                blocked_range<size_t>(0u, num_pixels, block_size),
                 [&partials, &canceled, &pixel_value](size_t begin, size_t end, int unit_index, int)
                 {
                     Partial partial = partials[unit_index]; //< compute over local symbols.
@@ -492,13 +498,13 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
             using Bins = std::array<std::array<uint32_t, MAX_BINS>, AxisScale_COUNT>;
 
             size_t            block_size  = 1024 * 1024;
-            const size_t      num_threads = estimate_threads(croi.volume(), block_size, *ThreadPool::singleton());
+            const size_t      num_threads = estimate_threads(num_pixels, block_size, *ThreadPool::singleton());
             std::vector<Bins> partials(max<size_t>(1, num_threads));
 
             spdlog::trace("Breaking histogram accumulation into {} work units.", partials.size());
 
             parallel_for(
-                blocked_range<size_t>(0u, croi.volume(), block_size),
+                blocked_range<size_t>(0u, num_pixels, block_size),
                 [&partials, &canceled, &pixel_value, this](size_t begin, size_t end, int unit_index, int)
                 {
                     Bins &bins = partials[unit_index];

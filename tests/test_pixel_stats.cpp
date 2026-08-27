@@ -9,6 +9,8 @@
 
 #include "image.h"
 
+#include <algorithm>
+
 // PixelStats::calculate() (exercised by the tests below) lazily spins up stp::ThreadPool::singleton()'s
 // worker threads. If we let them be torn down via the pool's own static destructor, their exit-time
 // ordering relative to other statics (e.g. spdlog's logger registry, which the workers touch on startup)
@@ -555,4 +557,101 @@ TEST_CASE("A 10-bit channel bins without running off the end of its storage")
 
     auto stats = compute(c);
     CHECK(stats.num_bins <= PixelStats::MAX_BINS);
+}
+
+TEST_CASE("A selection that misses the channel leaves the statistics empty")
+{
+    // Box::intersect() does not keep min <= max, so a selection that misses the channel in one axis leaves
+    // an inverted box whose volume() is negative -- as the size_t length of a parallel work range, a count
+    // near 2^64. The channel has to be large enough that |volume()| exceeds one block (1 << 20); below
+    // that the same conversion lands on a block count of zero and nothing would run either way.
+    Channel c = make_identifiable_channel(2048, 1024);
+
+    SUBCASE("missing in y only")
+    {
+        PixelStats::Settings settings;
+        settings.roi = Box2i{int2{0, 2000}, int2{2048, 3000}};
+
+        auto stats = compute(c, settings);
+        CHECK(stats.computed);
+        CHECK(stats.summary.valid_pixels == 0);
+        CHECK(total_bin_count(stats, AxisScale_Linear) == 0.0);
+    }
+
+    SUBCASE("missing in x only")
+    {
+        PixelStats::Settings settings;
+        settings.roi = Box2i{int2{4000, 0}, int2{5000, 1024}};
+
+        auto stats = compute(c, settings);
+        CHECK(stats.computed);
+        CHECK(stats.summary.valid_pixels == 0);
+    }
+
+    SUBCASE("missing in both axes")
+    {
+        // Both axes inverted multiply back to a positive volume(): a plausible-looking count over a
+        // region that does not exist.
+        PixelStats::Settings settings;
+        settings.roi = Box2i{int2{4000, 2000}, int2{5000, 3000}};
+
+        auto stats = compute(c, settings);
+        CHECK(stats.computed);
+        CHECK(stats.summary.valid_pixels == 0);
+    }
+
+    SUBCASE("a selection that does overlap is unaffected")
+    {
+        PixelStats::Settings settings;
+        settings.roi = Box2i{int2{10, 20}, int2{40, 50}};
+
+        auto stats = compute(c, settings);
+        CHECK(stats.computed);
+        CHECK(stats.summary.valid_pixels == 30 * 30);
+    }
+}
+
+TEST_CASE("Statistics over an arbitrary selection count exactly the pixels it overlaps")
+{
+    // A selection is not clamped to the image anywhere, so calculate() has to cope with any box: one
+    // that misses in either axis or both, one that straddles an edge, one that swallows the channel,
+    // and the degenerate empty one. This states the property those all share -- the count equals the
+    // true overlap -- over a sweep of placements.
+    //
+    // The channel is small so the sweep stays quick, which does mean an inverted box here yields a work
+    // range that rounds down to no blocks at all. Reaching the out-of-bounds read itself needs a
+    // channel large enough to keep a block: that is what the case above is sized for, and it is the one
+    // that fails if the guard goes.
+    constexpr int w = 128, h = 64;
+    Channel       c = make_identifiable_channel(w, h);
+
+    // Well outside, just outside, straddling each edge, inside, and containing the whole channel.
+    const int xs[] = {-500, -1, 0, 10, w - 10, w, 500};
+    const int ys[] = {-300, -1, 0, 20, h - 20, h, 300};
+
+    for (int x0 : xs)
+        for (int x1 : xs)
+            for (int y0 : ys)
+                for (int y1 : ys)
+                {
+                    PixelStats::Settings settings;
+                    settings.roi = Box2i{int2{x0, y0}, int2{x1, y1}};
+
+                    // A selection with no volume means "no selection", and the whole channel is
+                    // measured. Otherwise the count is the plain rectangle overlap -- what it has to
+                    // come to however the box is shaped.
+                    const int ox       = std::max(0, std::min(x1, w) - std::max(x0, 0));
+                    const int oy       = std::max(0, std::min(y1, h) - std::max(y0, 0));
+                    const int expected = settings.roi.has_volume() ? ox * oy : w * h;
+
+                    CAPTURE(x0);
+                    CAPTURE(x1);
+                    CAPTURE(y0);
+                    CAPTURE(y1);
+
+                    auto stats = compute(c, settings);
+                    CHECK(stats.computed);
+                    CHECK(stats.summary.valid_pixels == expected);
+                    CHECK(total_bin_count(stats, AxisScale_Linear) == doctest::Approx((double)expected));
+                }
 }

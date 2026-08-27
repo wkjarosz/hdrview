@@ -1,6 +1,8 @@
 #include "dds.h"
 #include "colorspace.h"
+#include "endian-utils.h"
 #include "image.h"
+#include <cstring>
 #include <iostream>
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
@@ -151,6 +153,11 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
     {
         auto masks  = dds.header.pixel_format.masks;
         auto shifts = dds.right_shifts;
+
+        // A bitmasked pixel is Bpp bytes wide -- 1 for A8/L8, 2 for the 16-bit formats -- and DDS stores
+        // it little-endian.
+        auto read_packed = [Bpp](const uint8_t *p)
+        { return read_partial_as<uint32_t>(p, (size_t)Bpp, Endian::Little); };
         // special cases
         if (fmt == DXGI::R9G9B9E5_SHAREDEXP)
         {
@@ -159,7 +166,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
             int u8_index = 0;
             for (int i = 0; i < w * h; ++i, u8_index += Bpp)
             {
-                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
+                uint32_t packed = read_packed(data->bytes() + u8_index);
                 auto     r      = (packed & masks[0]) >> shifts[0];
                 auto     g      = (packed & masks[1]) >> shifts[1];
                 auto     b      = (packed & masks[2]) >> shifts[2];
@@ -210,7 +217,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
             int u8_index = 0;
             for (int i = 0; i < w * h; ++i, u8_index += Bpp)
             {
-                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
+                uint32_t packed = read_packed(data->bytes() + u8_index);
 
                 image->channels[0](i) = xr_bias_to_float((packed & masks[0]) >> shifts[0]);
                 image->channels[1](i) = xr_bias_to_float((packed & masks[1]) >> shifts[1]);
@@ -230,6 +237,11 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
                 // mask_c = max(c, mask_c);
                 while (mask_c < 4 && masks[mask_c] == 0) ++mask_c;
 
+                // A file declaring fewer non-empty masks than it has channels runs this past the last one,
+                // and masks/bit_counts/right_shifts all hold exactly four.
+                if (mask_c >= 4)
+                    break;
+
                 bool snorm = dds.bitmask_was_bump_du_dv;
 
                 float multiplier = snorm ? 1.f / float((1 << (dds.bit_counts[mask_c] - 1)) - 1)
@@ -237,7 +249,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
 
                 for (int i = 0; i < w * h; ++i, u8_index += Bpp)
                 {
-                    uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
+                    uint32_t packed = read_packed(data->bytes() + u8_index);
 
                     // shift everything to the right end of a 32-bit int
                     auto shifted = (packed & masks[mask_c]) << (32 - shifts[mask_c] - dds.bit_counts[mask_c]);
@@ -407,6 +419,19 @@ vector<ImagePtr> load_compressed(const DDSFile::ImageData *data, const DDSFile &
                     for (int bx = 0; bx < width_in_blocks; ++bx)
                     {
                         auto block = start_of_slice + (by * width_in_blocks + bx) * block_size;
+
+                        // bcdec reads each block as two unsigned long longs straight out of the pointer it
+                        // is given. A DDS carrying a DXT10 header -- which BC6H and BC7 require -- puts its
+                        // pixel data at byte 148 of the file, so those blocks are 4-aligned and never
+                        // 8-aligned. Stage those through an aligned buffer; data that is already aligned,
+                        // including every pre-DX10 format at byte 128, is used in place. block_size is 8 or
+                        // 16, so it always fits.
+                        alignas(unsigned long long) uint8_t aligned_block[16];
+                        if (reinterpret_cast<uintptr_t>(block) % alignof(unsigned long long) != 0)
+                        {
+                            std::memcpy(aligned_block, block, block_size);
+                            block = aligned_block;
+                        }
 
                         switch (cmp)
                         {

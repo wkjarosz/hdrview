@@ -454,15 +454,19 @@ int next_matching_index(const std::vector<T> &vec, int current_index, Criterion 
     if (vec.empty())
         return current_index; // Return current index if vector is empty
 
-    const size_t size = vec.size();
+    const int size = (int)vec.size();
+    const int step = (direction == Direction_Forward) ? 1 : -1;
 
-    size_t index_increment =
-        (direction == Direction_Forward) ? 1 : (size - 1); // Increment/decrement based on direction
+    // current_index is -1 whenever nothing is selected (no current image, or a group index update_visibility()
+    // cleared), and a session file can name one past the end. Neither is a position to step from, so start at
+    // the near end instead: the first element going forward, the last going backward. Signed throughout --
+    // taking a negative index modulo an unsigned size gives a remainder of 2^64 % size, not of the index.
+    int i = (current_index >= 0 && current_index < size) ? mod(current_index + step, size)
+                                                         : (direction == Direction_Forward ? 0 : size - 1);
 
-    for (size_t i = (current_index + index_increment) % size, count = 0; count < size;
-         i = (i + index_increment) % size, ++count)
-        if (criterion(i, vec[i]))
-            return (int)i; // Found the next matching element
+    for (int count = 0; count < size; i = mod(i + step, size), ++count)
+        if (criterion((size_t)i, vec[i]))
+            return i; // Found the next matching element
 
     return current_index; // Nothing matched, return current index
 }
@@ -492,6 +496,16 @@ size_t nth_matching_index(const std::vector<T> &vec, size_t n, Criterion criteri
 //! Given a collection of strings (e.g. file names) that might share a common prefix and suffix, determine the character
 //! range that is unique across the strings
 std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &names);
+
+//! Shorten a collection of related names (e.g. file paths) down to what distinguishes them.
+/*!
+    Trims the prefix and suffix shared by every name, marking each trimmed end with an ellipsis, and keeps
+    whole words rather than cutting one in half. Names with nothing unique left -- the paths are all
+    identical, or one name is entirely a suffix of the others -- fall back to their own file name.
+
+    \returns One short name per input, in the same order.
+*/
+std::vector<std::string> shorten_names(const std::vector<std::string> &names);
 
 // Compare two strings in "natural" order (e.g. file2 < file10)
 bool natural_less(const std::string_view a, const std::string_view b);

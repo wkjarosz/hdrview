@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
@@ -241,6 +242,54 @@ pair<int, int> find_common_prefix_suffix(const vector<string> &names)
     return {begin_short_offset, end_short_offset};
 }
 
+vector<string> shorten_names(const vector<string> &names)
+{
+    // isalnum() is only defined for values representable as unsigned char, and a byte of a multi-byte UTF-8
+    // character is negative as a plain char.
+    auto is_alnum = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) != 0; };
+
+    auto [begin_short_offset, end_short_offset] = find_common_prefix_suffix(names);
+    // we'll add ellipses, so don't shorten if we don't save much space
+    if (begin_short_offset <= 4)
+        begin_short_offset = 0;
+    if (end_short_offset <= 4)
+        end_short_offset = 0;
+
+    vector<string> short_names;
+    short_names.reserve(names.size());
+    for (const auto &long_name : names)
+    {
+        size_t short_begin = (size_t)begin_short_offset;
+        size_t short_end   = std::max(long_name.size() - (size_t)end_short_offset, short_begin);
+
+        // Nothing unique is left: every other name contains this one whole, either because the paths are
+        // all identical or because this name is entirely their common suffix. Its own file name is
+        // complete on its own, so it needs no ellipsis on either side.
+        if (short_begin >= short_end)
+        {
+            short_names.emplace_back(get_filename(long_name));
+            continue;
+        }
+
+        // Extend beginning and ending of short region to entire word/number
+        if (short_begin < long_name.size() && is_alnum(long_name[short_begin]))
+            while (short_begin > 0 && is_alnum(long_name[short_begin - 1])) --short_begin;
+        if (is_alnum(long_name[short_end - 1]))
+            while (short_end < long_name.size() && is_alnum(long_name[short_end])) ++short_end;
+
+        string short_name = long_name.substr(short_begin, short_end - short_begin);
+
+        // add ellipses to indicate where we shortened
+        if (short_begin != 0)
+            short_name = "..." + short_name;
+        if (short_end != long_name.size())
+            short_name += "...";
+
+        short_names.emplace_back(std::move(short_name));
+    }
+    return short_names;
+}
+
 pair<float, std::string> human_readable_size(size_t bytes)
 {
     float              size       = static_cast<float>(bytes);
@@ -258,10 +307,14 @@ pair<float, std::string> human_readable_size(size_t bytes)
 
 bool natural_less(const string_view a, const string_view b)
 {
+    // isdigit() is only defined for values representable as unsigned char, and a byte of a multi-byte UTF-8
+    // character is negative as a plain char -- which any non-ASCII file name in a sorted folder supplies.
+    auto is_digit = [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; };
+
     size_t ia = 0, ib = 0;
     while (ia < a.size() && ib < b.size())
     {
-        if (std::isdigit(a[ia]) && std::isdigit(b[ib]))
+        if (is_digit(a[ia]) && is_digit(b[ib]))
         {
             // Skip leading zeros
             size_t za = ia, zb = ib;
@@ -270,9 +323,9 @@ bool natural_less(const string_view a, const string_view b)
 
             // Find the end of the digit sequence
             size_t enda = za;
-            while (enda < a.size() && std::isdigit(a[enda])) ++enda;
+            while (enda < a.size() && is_digit(a[enda])) ++enda;
             size_t endb = zb;
-            while (endb < b.size() && std::isdigit(b[endb])) ++endb;
+            while (endb < b.size() && is_digit(b[endb])) ++endb;
 
             size_t lena = enda - za;
             size_t lenb = endb - zb;
