@@ -13,6 +13,7 @@
 #include "imageio/image_loader.h"
 #include "imgui.h"
 #include "timer.h"
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -203,6 +204,16 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
         };
         throw_if_error(uhdr_dec_set_image(decoder.get(), &compressed_image));
         throw_if_error(uhdr_dec_set_out_color_transfer(decoder.get(), UHDR_CT_LINEAR));
+
+        // libultrahdr applies the gain map itself, so the target headroom has to be handed to it
+        // rather than applied afterwards. Left unset it reconstructs the map in full, which is what
+        // an unbounded target asks for anyway.
+        if (std::isfinite(opts.gainmap_headroom))
+        {
+            const float boost = std::max(std::exp2(opts.gainmap_headroom), 1.f);
+            spdlog::info("Limiting gain map reconstruction to {:.3f} stops ({:.3f}x).", opts.gainmap_headroom, boost);
+            throw_if_error(uhdr_dec_set_out_max_display_boost(decoder.get(), boost));
+        }
         throw_if_error(uhdr_dec_set_out_img_format(decoder.get(), UHDR_IMG_FMT_64bppRGBAHalfFloat));
         throw_if_error(uhdr_dec_probe(decoder.get()));
         spdlog::debug("base image: {}x{}", uhdr_dec_get_image_width(decoder.get()),

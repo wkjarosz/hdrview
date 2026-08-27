@@ -10,6 +10,7 @@
 #include "imageio/gainmap.h"
 #include "imageio/heif.h"
 #include "imageio/image_loader.h"
+#include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/uhdr.h"
 
@@ -635,5 +636,131 @@ TEST_CASE("A JPEG XL gain map is read out of the jhgm box and applied")
         MESSAGE("base-HDR peak ", peak_full, " -> driven to SDR ", peak_none);
         CHECK(peak_none < peak_full * 0.75f);
     }
+}
+#endif
+
+#if HDRVIEW_ENABLE_LIBUHDR
+TEST_CASE("The target headroom reaches an UltraHDR JPEG, which libultrahdr reconstructs itself")
+{
+    // libultrahdr applies the map inside its own decoder, so the target has to be handed to it
+    // rather than applied afterwards. Without that, this control would silently do nothing for the
+    // one JPEG flavor that does not come through HDRView's own gain-map path.
+    const char *path = std::getenv("HDRVIEW_TEST_GAINMAP_JPEG");
+    if (!path)
+    {
+        MESSAGE("HDRVIEW_TEST_GAINMAP_JPEG is unset; skipping the UltraHDR headroom test.");
+        return;
+    }
+
+    std::ifstream probe{path, std::ios_base::binary};
+    if (!is_uhdr_image(probe))
+    {
+        MESSAGE("HDRVIEW_TEST_GAINMAP_JPEG is not an UltraHDR file; skipping.");
+        return;
+    }
+
+    const auto peak_at = [&](float headroom)
+    {
+        std::ifstream is{path, std::ios_base::binary};
+        REQUIRE(is.good());
+
+        ImageLoadOptions opts;
+        opts.gainmap_headroom = headroom;
+        auto images           = load_uhdr_image(is, path, opts);
+        REQUIRE(!images.empty());
+
+        const int2 size = images.front()->channels[0].size();
+        float      p    = 0.f;
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x) p = std::max(p, images.front()->channels[0](x, y));
+        return p;
+    };
+
+    const float full = peak_at(k_full_gainmap_headroom);
+
+    // Each stop of target headroom doubles what the brightest pixel is allowed to reach, until the
+    // map's own maximum takes over.
+    CHECK(peak_at(0.f) == doctest::Approx(1.f).epsilon(0.01));
+    CHECK(peak_at(1.f) == doctest::Approx(2.f).epsilon(0.01));
+    CHECK(peak_at(2.f) == doctest::Approx(4.f).epsilon(0.01));
+
+    MESSAGE("unbounded target reconstructs to a peak of ", full);
+    CHECK(full > 4.f);
+}
+#endif
+
+#if HDRVIEW_ENABLE_LIBJPEG
+TEST_CASE("A gain map packed into a JPEG is found through the MPF index and applied")
+{
+    // Point this at a directory of gain-mapped JPEGs. Well-formed UltraHDR files are claimed by the
+    // libultrahdr loader before this path sees them, so what this exercises is everything else that
+    // packs a map the same way.
+    const char *path = std::getenv("HDRVIEW_TEST_GAINMAP_JPEG");
+    if (!path)
+    {
+        MESSAGE("HDRVIEW_TEST_GAINMAP_JPEG is unset; skipping the real-file JPEG gain-map test.");
+        return;
+    }
+
+    const auto load = [&](float headroom)
+    {
+        std::ifstream is{path, std::ios_base::binary};
+        REQUIRE_MESSAGE(is.good(), "cannot open ", path);
+
+        ImageLoadOptions opts;
+        opts.gainmap_headroom = headroom;
+        auto images           = load_jpg_image(is, path, opts);
+        REQUIRE(!images.empty());
+        return images.front();
+    };
+
+    auto base = load(0.f);
+    auto hdr  = load(k_full_gainmap_headroom);
+
+    const bool has_map = channel_index(*hdr, "gainmap.R") >= 0 || channel_index(*hdr, "gainmap.Y") >= 0;
+    REQUIRE_MESSAGE(has_map, "no gain map was extracted from the file");
+    REQUIRE(base->channels[0].size() == hdr->channels[0].size());
+
+    const int2 size      = base->channels[0].size();
+    float      peak_base = 0.f, peak_hdr = 0.f;
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            peak_base = std::max(peak_base, base->channels[0](x, y));
+            peak_hdr  = std::max(peak_hdr, hdr->channels[0](x, y));
+        }
+
+    MESSAGE("base peak ", peak_base, " -> reconstructed ", peak_hdr);
+    CHECK(peak_hdr > peak_base * 1.2f);
+
+#if HDRVIEW_ENABLE_LIBUHDR
+    // When the file is also a well-formed UltraHDR JPEG, libultrahdr will decode it too -- through
+    // an entirely separate implementation of the same standard. Agreeing with it is a much stronger
+    // statement than any self-consistency check this suite can make on its own.
+    std::ifstream probe{path, std::ios_base::binary};
+    if (is_uhdr_image(probe))
+    {
+        std::ifstream is{path, std::ios_base::binary};
+        auto          via_uhdr = load_uhdr_image(is, path);
+        REQUIRE(!via_uhdr.empty());
+
+        auto &other = *via_uhdr.front();
+        REQUIRE(other.channels[0].size() == size);
+
+        // Means rather than peaks: the two resample the reduced-resolution map slightly differently,
+        // so individual pixels near an edge can differ by more than the image as a whole does.
+        double sum_hdr = 0., sum_other = 0.;
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x)
+            {
+                sum_hdr += hdr->channels[0](x, y);
+                sum_other += other.channels[0](x, y);
+            }
+
+        const double ratio = sum_hdr / sum_other;
+        MESSAGE("mean brightness vs. libultrahdr: ", ratio);
+        CHECK(ratio == doctest::Approx(1.0).epsilon(0.02));
+    }
+#endif
 }
 #endif
