@@ -10,6 +10,7 @@
 
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -58,6 +59,22 @@ struct GainmapImage
 
 //! Target headroom, in stops, meaning "reconstruct the map in full".
 inline constexpr float k_full_gainmap_headroom = std::numeric_limits<float>::infinity();
+
+/// Append \p gainmap to \p image as a `gainmap.*` channel group, resized to the base image.
+/**
+    Gain maps are usually stored at a fraction of the base resolution, so the copy resamples
+    bilinearly; replicating samples instead would put visible blocks around high-contrast highlights.
+
+    The map is worth having as a channel group whether or not it is applied, which is why appending
+    it is separate from applying it.
+
+    \param image      Base image to append to. Modified in place
+    \param gainmap    Decoded map, at the resolution the file stored it at
+    \param linearize  Whether to undo an sRGB encoding as part of the copy. Apple's maps are
+                      sRGB-encoded; ISO 21496-1 maps carry their own encoding and must not be
+    \return           Index of the first appended channel, and how many were appended
+*/
+std::pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap, bool linearize);
 
 /// Apply an Apple-format gain map to \p image, and append the map itself as a channel group.
 /**

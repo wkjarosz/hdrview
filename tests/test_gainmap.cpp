@@ -10,10 +10,13 @@
 #include "imageio/gainmap.h"
 #include "imageio/heif.h"
 #include "imageio/image_loader.h"
+#include "imageio/uhdr.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 
 namespace
 {
@@ -248,5 +251,63 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
     // than the decode takes to run.
     CHECK_MESSAGE(!shrank, "applying the gain map darkened part of the image");
     CHECK_MESSAGE(amplified, "applying the gain map changed nothing");
+}
+#endif
+
+#if HDRVIEW_ENABLE_LIBUHDR
+TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
+{
+    // libuhdr hands the gain map back at the reduced resolution the file stores it at, so HDRView has
+    // to expand it. These dimensions are chosen so the reduction rounds: 100x60 at a scale of 8 comes
+    // back as 12x7, whose ratios to the base are not whole numbers. Expanding by an integer ratio
+    // runs off the end of the decoded map, leaving the last rows and columns of the channel at zero
+    // -- which reads as "this part of the image needs no brightening at all".
+    const int2 size{100, 60};
+    const int  scale = 8;
+
+    auto img = std::make_shared<Image>(size, 3);
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            // A bright wedge on the left, so the map has something to encode everywhere down the frame.
+            const float v = x < size.x / 2 ? 8.f : 0.25f;
+            for (int c = 0; c < 3; ++c) img->channels[c](x, y) = v;
+        }
+    img->finalize(); // as_interleaved(), which the writer uses, reads img->groups
+
+    std::stringstream ss;
+    REQUIRE_NOTHROW(save_uhdr_image(*img, ss, "test.jpg", 1.f, 95, 95, false, scale));
+    REQUIRE(ss.tellp() > 0);
+
+    ss.clear();
+    ss.seekg(0);
+    auto loaded = load_uhdr_image(ss, "test.jpg");
+    REQUIRE(loaded.size() == 1);
+
+    auto     &out = *loaded.front();
+    const int gm =
+        channel_index(out, "gainmap.Y") >= 0 ? channel_index(out, "gainmap.Y") : channel_index(out, "gainmap.R");
+    REQUIRE_MESSAGE(gm >= 0, "no gain map channel group was extracted");
+
+    CHECK(out.channels[gm].size() == out.channels[0].size());
+
+    // Every row has to have been written, including the last. A partial expansion leaves the bottom
+    // of the channel at zero, which reads as "this part of the image needs no brightening at all".
+    int empty_rows = 0;
+    for (int y = 0; y < size.y; ++y)
+    {
+        float row = 0.f;
+        for (int x = 0; x < size.x; ++x) row += std::abs(out.channels[gm](x, y));
+        if (row == 0.f)
+            ++empty_rows;
+    }
+    CHECK_MESSAGE(empty_rows == 0, "the expanded gain map has ", empty_rows, " unwritten row(s) of ", size.y);
+
+    // The wedge should still be visible after the expansion.
+    float left = 0.f, right = 0.f;
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) (x < size.x / 2 ? left : right) += out.channels[gm](x, y);
+
+    CHECK(left != doctest::Approx(right));
 }
 #endif

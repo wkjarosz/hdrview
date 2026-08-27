@@ -8,6 +8,7 @@
 #include "app.h"
 #include "colorspace.h"
 #include "exif.h"
+#include "gainmap.h"
 #include "image.h"
 #include "imageio/image_loader.h"
 #include "imgui.h"
@@ -388,46 +389,31 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
 
     // otherwise, extract the gain map as a separate channel group
 
-    int num_components =
+    const int num_components =
         gainmap->fmt == UHDR_IMG_FMT_32bppRGBA8888 ? 4 : (gainmap->fmt == UHDR_IMG_FMT_24bppRGB888 ? 3 : 1);
 
-    if (num_components == 1)
-        image->channels.emplace_back("gainmap.Y", size);
-    if (num_components >= 3)
     {
-        image->channels.emplace_back("gainmap.R", size);
-        image->channels.emplace_back("gainmap.G", size);
-        image->channels.emplace_back("gainmap.B", size);
-    }
-    if (num_components == 4)
-        image->channels.emplace_back("gainmap.A", size);
-
-    {
-        auto  byte_data = reinterpret_cast<uint8_t *>(gainmap->planes[UHDR_PLANE_PACKED]);
-        int   stride_y  = gainmap->stride[UHDR_PLANE_PACKED] * num_components;
         Timer timer;
-        for (int c = 0; c < num_components; ++c)
-            image->channels[4 + c].copy_from_interleaved(
-                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return dequantize_full(v); },
-                stride_y);
+
+        GainmapImage gm;
+        gm.size     = gainmap_size;
+        gm.channels = num_components;
+        gm.pixels.resize((size_t)gainmap_size.x * gainmap_size.y * num_components);
+
+        const auto byte_data = reinterpret_cast<const uint8_t *>(gainmap->planes[UHDR_PLANE_PACKED]);
+        const int  stride_y  = gainmap->stride[UHDR_PLANE_PACKED] * num_components;
+        for (int y = 0; y < gainmap_size.y; ++y)
+            for (int x = 0; x < gainmap_size.x; ++x)
+                for (int c = 0; c < num_components; ++c)
+                    gm.pixels[((size_t)y * gainmap_size.x + x) * num_components + c] =
+                        dequantize_full(byte_data[(size_t)y * stride_y + x * num_components + c]);
+
+        // libuhdr has already applied the map to produce the pixels above, so these channels exist to
+        // be inspected. They keep the file's own encoding: an ISO 21496-1 map is not sRGB-encoded, and
+        // linearizing it as if it were would misreport every value.
+        append_gainmap_channels(*image, gm, false);
 
         spdlog::debug("Copying gainmap data took: {} seconds.", (timer.elapsed() / 1000.f));
-    }
-
-    // resize the data in the channels if necessary
-    if (gainmap_size.x < size.x && gainmap_size.y < size.y)
-    {
-        int xs = size.x / gainmap_size.x;
-        int ys = size.x / gainmap_size.x;
-        spdlog::debug("Resizing gainmap resolution {}x{} by factor {}x{} to match image resolution {}x{}.",
-                      gainmap_size.x, gainmap_size.y, xs, ys, size.x, size.y);
-        for (int c = 0; c < num_components; ++c)
-        {
-            Array2Df tmp = image->channels[4 + c];
-
-            for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) image->channels[4 + c](x, y) = tmp(x / xs, y / ys);
-        }
     }
 
     return {image};

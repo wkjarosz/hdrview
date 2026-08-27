@@ -51,29 +51,31 @@ static float sample_bilinear(const vector<float> &src, int2 src_size, int channe
     return top * (1.f - fy) + bottom * fy;
 }
 
-//! Append \p gainmap to \p image as a `gainmap.*` channel group, linearized and resized to match it.
-/*!
-    \return Index of the first appended channel, and how many were appended.
-*/
-static pair<int, int> append_linearized_gainmap(Image &image, const GainmapImage &gainmap)
+pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap, bool linearize)
 {
+    if (image.channels.empty() || !gainmap.valid())
+        return {0, 0};
+
     const int2 size = image.channels.front().size();
 
-    // Apple's documentation specifies the Rec. 709 transfer function here. tev's comparisons against
-    // the same scenes encoded as ISO 21496-1 gain maps show the maps are really sRGB-encoded, and
-    // sRGB is what its loader uses; the two curves differ most exactly where gain maps spend their
-    // values, so this is not a distinction without a difference.
-    vector<float> linear(gainmap.pixels.size());
-    for (size_t i = 0; i < gainmap.pixels.size(); ++i) linear[i] = (float)sRGB_to_linear(gainmap.pixels[i]);
+    vector<float> src = gainmap.pixels;
+    if (linearize)
+    {
+        // Apple's documentation specifies the Rec. 709 transfer function here. tev's comparisons
+        // against the same scenes encoded as ISO 21496-1 gain maps show the maps are really
+        // sRGB-encoded, and sRGB is what its loader uses; the two curves differ most exactly where
+        // gain maps spend their values, so this is not a distinction without a difference.
+        for (auto &v : src) v = (float)sRGB_to_linear(v);
+    }
 
-    const int n     = gainmap.channels >= 3 ? 3 : 1;
+    // Name the group the way Image names its own channels, so that finalize() groups it the same way.
+    const int n     = std::min(gainmap.channels, 4);
     const int first = (int)image.channels.size();
 
-    static const char *rgb_names[] = {"gainmap.R", "gainmap.G", "gainmap.B"};
-    for (int c = 0; c < n; ++c) image.channels.emplace_back(n == 1 ? "gainmap.Y" : rgb_names[c], size);
+    static const char *names[] = {"gainmap.R", "gainmap.G", "gainmap.B", "gainmap.A"};
+    for (int c = 0; c < n; ++c)
+        image.channels.emplace_back(n < 3 ? (c == 0 ? "gainmap.Y" : "gainmap.A") : names[c], size);
 
-    // Resize as part of the copy: the map is commonly stored at a fraction of the base resolution,
-    // and a nearest-neighbor expansion would put visible blocks around high-contrast highlights.
     parallel_for(blocked_range<int>(0, size.y, 128),
                  [&, first, n](int begin_y, int end_y, int, int)
                  {
@@ -81,7 +83,7 @@ static pair<int, int> append_linearized_gainmap(Image &image, const GainmapImage
                          for (int x = 0; x < size.x; ++x)
                              for (int c = 0; c < n; ++c)
                                  image.channels[first + c](x, y) =
-                                     sample_bilinear(linear, gainmap.size, gainmap.channels, c, size, x, y);
+                                     sample_bilinear(src, gainmap.size, gainmap.channels, c, size, x, y);
                  });
 
     return {first, n};
@@ -110,7 +112,7 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
     const int  num_base = (int)image.channels.size();
     const auto is_color = [&](int c) { return image.channels[c].name != "A"; };
 
-    const auto [first, n] = append_linearized_gainmap(image, gainmap);
+    const auto [first, n] = append_gainmap_channels(image, gainmap, true);
 
     const float stops    = params.stops();
     const float applied  = std::clamp(stops, 0.f, target_stops);
