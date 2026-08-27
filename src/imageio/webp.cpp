@@ -9,6 +9,7 @@
 #include "app.h"
 #include "common.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 #include "webp.h"
 
 using namespace std;
@@ -152,6 +153,8 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
     // Get canvas size (for animations, this may differ from first frame size)
     const int      canvas_width  = (int)WebPDemuxGetI(demux, WEBP_FF_CANVAS_WIDTH);
     const int      canvas_height = (int)WebPDemuxGetI(demux, WEBP_FF_CANVAS_HEIGHT);
+    check_image_dimensions(canvas_width, canvas_height, "WebP");
+
     const uint32_t flags         = WebPDemuxGetI(demux, WEBP_FF_FORMAT_FLAGS);
     const uint32_t loop_count    = WebPDemuxGetI(demux, WEBP_FF_LOOP_COUNT);
     const uint32_t frame_count   = WebPDemuxGetI(demux, WEBP_FF_FRAME_COUNT);

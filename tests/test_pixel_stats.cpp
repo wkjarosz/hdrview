@@ -398,9 +398,9 @@ TEST_CASE("PixelStats::calculate counts NaN/Inf pixels separately and excludes t
     Channel img("test", int2{4, 4});
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x) img(x, y) = float(x + 4 * y);
-    img(1, 1) = std::numeric_limits<float>::quiet_NaN();     // value 5
-    img(2, 2) = std::numeric_limits<float>::infinity();      // value 10
-    img(3, 0) = -std::numeric_limits<float>::infinity();     // value 3
+    img(1, 1) = std::numeric_limits<float>::quiet_NaN(); // value 5
+    img(2, 2) = std::numeric_limits<float>::infinity();  // value 10
+    img(3, 0) = -std::numeric_limits<float>::infinity(); // value 3
 
     PixelStats::Settings settings; // whole image
 
@@ -532,4 +532,27 @@ TEST_CASE("Unpremultiplying puts 8-bit samples back on the source's lattice")
 
     REQUIRE(stats.num_bins == 256);
     CHECK(count_empty_bins(stats, AxisScale_SRGB) <= 1);
+}
+
+TEST_CASE("Bin count never exceeds the histogram's storage")
+{
+    // hist_xs/hist_ys are sized MAX_BINS, so bins_for_bit_depth() must never return more than that.
+    // Depths of 9..15 bits are ordinary: 10- and 12-bit HEIF/AVIF, 12- and 14-bit camera raw, 12-bit TIFF.
+    for (int bits = -1; bits <= 64; ++bits)
+    {
+        CAPTURE(bits);
+        CHECK(PixelStats::bins_for_bit_depth(bits) <= PixelStats::MAX_BINS);
+        CHECK(PixelStats::bins_for_bit_depth(bits) >= 1);
+    }
+}
+
+TEST_CASE("A 10-bit channel bins without running off the end of its storage")
+{
+    // Reaches the out-of-bounds write directly: calculate() fills hist_xs[0..num_bins] inclusive.
+    Channel c("test", int2{16, 16});
+    c.bits_per_sample = 10; // e.g. a 10-bit AVIF
+    c.apply([](float, int x, int y) { return (x + y) / 30.f; });
+
+    auto stats = compute(c);
+    CHECK(stats.num_bins <= PixelStats::MAX_BINS);
 }

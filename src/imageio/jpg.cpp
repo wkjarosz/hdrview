@@ -10,6 +10,7 @@
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 #include <algorithm>
 #include <iostream>
 #include <spdlog/fmt/fmt.h>
@@ -192,6 +193,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             throw std::invalid_argument{"Failed to read JPEG header."};
 
         jpeg_start_decompress(&cinfo);
+        check_image_dimensions(cinfo.output_width, cinfo.output_height, "JPEG");
         int3 size{(int)cinfo.output_width, (int)cinfo.output_height, (int)cinfo.output_components};
         auto image                = make_shared<Image>(size.xy(), size.z);
         image->filename           = filename;

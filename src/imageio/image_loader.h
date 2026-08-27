@@ -40,6 +40,19 @@ struct ImageLoadOptions
     bool keep_primaries = true;
 };
 
+/**
+    Reject dimensions no real image has, before a loader allocates or decodes for them.
+
+    Loaders size their buffers from the header, so a file declaring billions of pixels costs the memory or
+    the decode time whether or not the pixels are there. Image::finalize() rejects oversized images too, but
+    only once that cost has already been paid.
+
+    \param [] width    Width the file declares
+    \param [] height   Height the file declares
+    \param [] format   Format name, for the error message
+*/
+void check_image_dimensions(int64_t width, int64_t height, string_view format);
+
 const ImageLoadOptions &load_image_options();
 void                    draw_load_image_options_dialog(bool &open);
 

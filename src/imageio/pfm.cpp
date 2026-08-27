@@ -7,6 +7,7 @@
 #include "pfm.h"
 #include "colorspace.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 #include "timer.h"
 #include <cmath>
 #include <cstdint>
@@ -91,6 +92,7 @@ unique_ptr<float[]> load_pfm_image(istream &is, string_view filename, int *width
         float  scale;
 
         is >> magic >> *width >> *height >> scale;
+        check_image_dimensions(*width, *height, "PFM");
 
         if (magic == "Pf")
             *num_channels = 1;

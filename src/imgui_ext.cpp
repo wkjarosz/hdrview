@@ -519,7 +519,14 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
     // pipeline) -- computed once up front regardless of *mode so Copy-to-clipboard can use them too.
     int ldr[4] = {0, 0, 0, 0};
     if (displayed)
-        for (int c = 0; c < num_components; ++c) ldr[c] = (int)ImClamp(IM_ROUND(displayed[c] * 255.f), 0.f, 255.f);
+        for (int c = 0; c < num_components; ++c)
+        {
+            // IM_ROUND casts to int internally, and neither it nor ImClamp survives a non-finite input:
+            // NaN slips through both of ImClamp's comparisons, and the cast is then undefined. HDR images
+            // routinely contain both.
+            float v = displayed[c] * 255.f;
+            ldr[c]  = std::isfinite(v) ? (int)ImClamp(IM_ROUND(ImClamp(v, 0.f, 255.f)), 0.f, 255.f) : 0;
+        }
 
     // The whole row is one click target opening the Copy/Display-as popup. Real ImGui widgets (InputFloat,
     // ColorButton, ...) call ButtonBehavior() -> ItemHoverable(), which claims g.HoveredId *regardless* of

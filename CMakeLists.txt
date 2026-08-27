@@ -571,7 +571,7 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "spdlog::spdlog")
 
-CPMAddPackage("gh:wkjarosz/smallthreadpool#fbec7d1a5f20ae592281ec355e419a86b11a692d")
+CPMAddPackage("gh:wkjarosz/smallthreadpool#323c20dd0b54e66d7153665e7571612d40b6c48d")
 if(NOT smallthreadpool_ADDED)
   message(FATAL_ERROR "Could not download smallthreadpool library.")
 endif()
@@ -1635,7 +1635,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp
-                                tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp
+                                tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_numeric_edge_cases.cpp tests/test_loader_limits.cpp
   )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
@@ -1643,6 +1643,10 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   # Mirrors HDRView's own HDRVIEW_BUILD_TREE_ASSETS_DIR definition above, so tests/test_assets.cpp
   # can exercise the same asset lookup the app uses.
   target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
+  # Fuzzer-found inputs that can't be synthesized; see tests/fuzz/artifacts/README.md.
+  target_compile_definitions(
+    hdrview_tests PRIVATE HDRVIEW_TEST_ARTIFACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/artifacts"
+  )
   target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version doctest::doctest)
 
   if(WIN32)
@@ -1657,37 +1661,131 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_compile_definitions(hdrview_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
   endif()
 
-  # -cpm/-universal presets fetch OpenEXR from source via CPM, which vendors a compact, permissively-licensed set
-  # of real-world test images (OpenEXR's own test suite fixtures) at src/test/bin/test_images. -local presets
-  # never fetch OpenEXR's source at all (it comes from find_package/system install instead), so this is only
-  # available conditionally; tests relying on it are compiled out entirely when it's absent (see
-  # HDRVIEW_TEST_OPENEXR_DIR guards in tests/test_exr_io.cpp) rather than failing or silently skipping at runtime.
-  if(DEFINED OpenEXR_SOURCE_DIR AND EXISTS "${OpenEXR_SOURCE_DIR}/src/test/bin/test_images")
-    target_compile_definitions(
-      hdrview_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${OpenEXR_SOURCE_DIR}/src/test/bin/test_images"
-    )
+  # Several tests run against real-world image corpora that OpenEXR and libpng vendor in their own source
+  # trees. That data is an input to the tests, independent of where the libraries themselves came from, so
+  # both paths can be set directly:
+  #
+  #   -DHDRVIEW_TEST_OPENEXR_DIR=<openexr>/src/test/bin/test_images
+  #   -DHDRVIEW_TEST_PNG_CONTRIB_DIR=<libpng>/contrib
+  #
+  # -cpm/-universal presets fill them in from the CPM-fetched sources automatically. -local presets get the
+  # libraries from find_package and so have no source tree to read them from, but can still point at a
+  # checkout of the corresponding upstream tag -- a shallow, sparse one is enough, the two sets total under
+  # 8 MB. Left unset with no source tree available, the tests that need them are compiled out entirely
+  # (see the guards in tests/test_exr_io.cpp and tests/test_png_io.cpp) rather than failing or silently
+  # skipping at runtime.
+  set(HDRVIEW_TEST_OPENEXR_DIR
+      ""
+      CACHE PATH "OpenEXR's vendored test images (src/test/bin/test_images in its source tree)"
+  )
+  set(HDRVIEW_TEST_PNG_CONTRIB_DIR
+      ""
+      CACHE PATH "libpng's contrib directory, holding the pngsuite and testpngs image sets"
+  )
+
+  # A path the user supplied but that does not exist is a mistake worth surfacing, whereas simply having no
+  # source tree to default to is the ordinary -local case and only warrants a status line.
+  if(HDRVIEW_TEST_OPENEXR_DIR)
+    set(_hdrview_exr_images "${HDRVIEW_TEST_OPENEXR_DIR}")
+    set(_hdrview_exr_explicit TRUE)
+  elseif(DEFINED OpenEXR_SOURCE_DIR)
+    set(_hdrview_exr_images "${OpenEXR_SOURCE_DIR}/src/test/bin/test_images")
+    set(_hdrview_exr_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_exr_images AND EXISTS "${_hdrview_exr_images}")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${_hdrview_exr_images}")
+  elseif(_hdrview_exr_explicit)
+    # Fatal rather than a warning: whoever set this asked for those tests, and quietly compiling them out
+    # instead would leave a build that looks like it ran them.
+    message(FATAL_ERROR "HDRVIEW_TEST_OPENEXR_DIR is set to '${_hdrview_exr_images}', which does not exist")
   else()
-    message(STATUS "OpenEXR test images not available (not a -cpm/-universal preset); "
-                    "skipping tests/test_exr_io.cpp's vendored-data tests"
+    message(STATUS "OpenEXR test images not available (no fetched source; set HDRVIEW_TEST_OPENEXR_DIR to "
+                    "use a checkout); skipping tests/test_exr_io.cpp's vendored-data tests"
     )
   endif()
 
-  # Same idea as OpenEXR above, but for libpng's two vendored test image sets: contrib/pngsuite (the well-known
-  # PngSuite conformance set - bit depth/color type matrix, plus interlaced/non-interlaced pairs) and
-  # contrib/testpngs (a matrix of color-signaling methods: sRGB chunk, gAMA chunk at various gammas, no chunk at
-  # all, plus a dedicated cICP/Display-P3 example).
-  if(DEFINED PNG_SOURCE_DIR AND EXISTS "${PNG_SOURCE_DIR}/contrib/pngsuite" AND EXISTS "${PNG_SOURCE_DIR}/contrib/testpngs"
+  # Same idea for libpng's two vendored image sets: contrib/pngsuite (the well-known PngSuite conformance set
+  # - bit depth/color type matrix, plus interlaced/non-interlaced pairs) and contrib/testpngs (a matrix of
+  # color-signaling methods: sRGB chunk, gAMA chunk at various gammas, no chunk at all, plus a dedicated
+  # cICP/Display-P3 example).
+  if(HDRVIEW_TEST_PNG_CONTRIB_DIR)
+    set(_hdrview_png_contrib "${HDRVIEW_TEST_PNG_CONTRIB_DIR}")
+    set(_hdrview_png_explicit TRUE)
+  elseif(DEFINED PNG_SOURCE_DIR)
+    set(_hdrview_png_contrib "${PNG_SOURCE_DIR}/contrib")
+    set(_hdrview_png_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_png_contrib
+     AND EXISTS "${_hdrview_png_contrib}/pngsuite"
+     AND EXISTS "${_hdrview_png_contrib}/testpngs"
   )
-    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_PNG_CONTRIB_DIR="${PNG_SOURCE_DIR}/contrib")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_PNG_CONTRIB_DIR="${_hdrview_png_contrib}")
+  elseif(_hdrview_png_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_PNG_CONTRIB_DIR is set to '${_hdrview_png_contrib}', which does not "
+                        "contain both pngsuite and testpngs"
+    )
   else()
-    message(STATUS "libpng test images not available (not a -cpm/-universal preset); "
-                    "skipping tests/test_png_io.cpp's vendored-data tests"
+    message(STATUS "libpng test images not available (no fetched source; set HDRVIEW_TEST_PNG_CONTRIB_DIR to "
+                    "use a checkout); skipping tests/test_png_io.cpp's vendored-data tests"
     )
   endif()
 
   include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
   enable_testing()
   doctest_discover_tests(hdrview_tests)
+endif()
+
+# libFuzzer target for the image loaders. Off by default and Clang-only: load_image() sniffs magic bytes to
+# pick a loader, so this single target reaches every format in default_loaders(). Reuses the same sources as
+# hdrview_tests, with libFuzzer supplying main() instead of doctest. Pair with -DUSE_SANITIZER.
+option(HDRVIEW_BUILD_FUZZERS "Build libFuzzer targets for the image loaders (Clang only)" OFF)
+if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "HDRVIEW_BUILD_FUZZERS requires Clang (libFuzzer)")
+  endif()
+
+  list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
+  add_executable(hdrview_fuzz_load_image ${HDRVIEW_SOURCES} tests/fuzz/fuzz_load_image.cpp)
+  target_include_directories(hdrview_fuzz_load_image PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  set_target_properties(hdrview_fuzz_load_image PROPERTIES CXX_STANDARD 17)
+  target_compile_definitions(hdrview_fuzz_load_image PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
+  target_compile_definitions(
+    hdrview_fuzz_load_image PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
+  )
+  target_link_libraries(hdrview_fuzz_load_image PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+  target_compile_options(hdrview_fuzz_load_image PRIVATE -fsanitize=fuzzer-no-link)
+
+  # Apple's clang instruments for libFuzzer but ships no fuzzer runtime, so on macOS one has to be linked
+  # explicitly -- from Homebrew's LLVM by default. Everywhere else -fsanitize=fuzzer supplies its own.
+  # Set HDRVIEW_FUZZER_RUNTIME to override the search.
+  if(APPLE AND NOT HDRVIEW_FUZZER_RUNTIME)
+    file(GLOB HDRVIEW_FUZZER_RUNTIME_CANDIDATES
+         "/opt/homebrew/opt/llvm/lib/clang/*/lib/darwin/libclang_rt.fuzzer_osx.a"
+         "/usr/local/opt/llvm/lib/clang/*/lib/darwin/libclang_rt.fuzzer_osx.a"
+    )
+    if(HDRVIEW_FUZZER_RUNTIME_CANDIDATES)
+      list(GET HDRVIEW_FUZZER_RUNTIME_CANDIDATES -1 HDRVIEW_FUZZER_RUNTIME)
+      message(STATUS "Fuzzer runtime: ${HDRVIEW_FUZZER_RUNTIME}")
+    else()
+      message(FATAL_ERROR "No libFuzzer runtime found. Install one with `brew install llvm`, or point "
+                          "HDRVIEW_FUZZER_RUNTIME at a libclang_rt.fuzzer_osx.a."
+      )
+    endif()
+  endif()
+
+  if(HDRVIEW_FUZZER_RUNTIME)
+    target_link_libraries(hdrview_fuzz_load_image PRIVATE "${HDRVIEW_FUZZER_RUNTIME}")
+  else()
+    target_link_options(hdrview_fuzz_load_image PRIVATE -fsanitize=fuzzer)
+  endif()
+
+  if(APPLE)
+    target_compile_options(hdrview_fuzz_load_image PRIVATE "-fobjc-arc")
+    target_link_libraries(hdrview_fuzz_load_image PRIVATE "-framework ApplicationServices")
+    target_compile_definitions(hdrview_fuzz_load_image PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+  endif()
 endif()
 
 # GUI regression tests, driven by Dear ImGui Test Engine (https://github.com/ocornut/imgui_test_engine),
@@ -1714,7 +1812,7 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_navigation.cpp
     tests/gui/test_gui_multipart.cpp
     tests/gui/test_gui_session.cpp
-    tests/gui/test_gui_session_bundle.cpp
+    tests/gui/test_gui_session_bundle.cpp tests/gui/test_gui_lifetime.cpp
   )
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)

@@ -8,6 +8,7 @@
 #include "app.h"
 #include "colorspace.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 
 #include <stdexcept>
 
@@ -310,6 +311,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     png_uint_32 width, height;
     int         file_bit_depth, color_type, interlace;
     png_get_IHDR(png_ptr, info_ptr.get(), &width, &height, &file_bit_depth, &color_type, &interlace, nullptr, nullptr);
+    check_image_dimensions(width, height, "PNG");
 
     // Convert palette to RGB, expand bit depths to 16-bit, add alpha if needed
     png_set_palette_to_rgb(png_ptr);

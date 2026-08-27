@@ -132,32 +132,6 @@ static std::vector<LoaderEntry> default_loaders()
              return false;
          }},
 #endif
-#if HDRVIEW_ENABLE_LIBRAW
-        {"libraw",
-         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
-         {
-             if (is_raw_image(is))
-             {
-                 spdlog::info("Loading '{}' using libraw loader...", filename);
-                 out = load_raw_image(is, filename, opts);
-                 return true;
-             }
-             return false;
-         }},
-#endif
-#if HDRVIEW_ENABLE_LIBTIFF
-        {"libtiff",
-         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
-         {
-             if (is_tiff_image(is))
-             {
-                 spdlog::info("Loading '{}' using libtiff loader...", filename);
-                 out = load_tiff_image(is, filename, opts);
-                 return true;
-             }
-             return false;
-         }},
-#endif
 #if HDRVIEW_ENABLE_LIBPNG
         {"libpng",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
@@ -179,6 +153,32 @@ static std::vector<LoaderEntry> default_loaders()
              {
                  spdlog::info("Loading '{}' using libwebp loader...", filename);
                  out = load_webp_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#if HDRVIEW_ENABLE_LIBRAW
+        {"libraw",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_raw_image(is))
+             {
+                 spdlog::info("Loading '{}' using libraw loader...", filename);
+                 out = load_raw_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#if HDRVIEW_ENABLE_LIBTIFF
+        {"libtiff",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_tiff_image(is))
+             {
+                 spdlog::info("Loading '{}' using libtiff loader...", filename);
+                 out = load_tiff_image(is, filename, opts);
                  return true;
              }
              return false;
@@ -778,6 +778,21 @@ void BackgroundImageLoader::draw_gui()
         ImGui::PopStyleVar(2);
         ImGui::EndTable();
     }
+}
+
+// A single axis this long, or this many pixels in total, is beyond anything that could be displayed: at
+// four float channels, the pixel cap alone is already 4 GB.
+static constexpr int64_t k_max_image_dimension = 65536;
+static constexpr int64_t k_max_image_pixels    = 1ll << 28;
+
+void check_image_dimensions(int64_t width, int64_t height, string_view format)
+{
+    if (width <= 0 || height <= 0)
+        throw std::invalid_argument{fmt::format("{}: image has no pixels ({}x{}).", format, width, height)};
+
+    if (width > k_max_image_dimension || height > k_max_image_dimension || width * height > k_max_image_pixels)
+        throw std::invalid_argument{fmt::format("{}: image dimensions {}x{} are implausibly large.", format, width,
+                                                height)};
 }
 
 const ImageLoadOptions &load_image_options() { return s_opts; }
