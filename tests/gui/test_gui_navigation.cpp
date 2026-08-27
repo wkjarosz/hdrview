@@ -6,12 +6,14 @@
 */
 
 #include "app.h"
+#include "image.h"
 #include "test_gui_registry.h"
 
 #include "imgui_internal.h"
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -95,5 +97,56 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         ctx->ItemClick(row_ids[0]);
         ctx->KeyUp(ImGuiMod_Shift);
         IM_CHECK_EQ(hdrview()->reference_image_index(), 0);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "navigation", "shift_click_toggles_reference_group_off");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        load_both_fixtures(ctx);
+
+        // Channel-group rows only exist in the "flat list" file-list mode, and the mode persists in the
+        // app settings, so drive the mode combo rather than relying on whatever this run started with.
+        // Its entries are icon-prefixed, so address them by position in the popup: 1 = flat list.
+        ctx->SetRef("");
+        ctx->ItemClick("//Images/##channel list mode");
+        ImGuiTestItemList modes;
+        ctx->GatherItems(&modes, "//$FOCUSED", -1);
+        IM_CHECK(modes.GetSize() > 1);
+        ctx->ItemClick(modes[1]->ID);
+        ctx->Yield();
+
+        // A group row is a depth-3 item in the ImageList child window; so are the table's own header
+        // cells, and every one of these is drawn with a leading icon glyph, so neither depth nor an
+        // empty-label test separates them. Match the group name instead: both fixtures are RGBA PNGs,
+        // so each contributes exactly one group row named "(R,G,B,A)".
+        ImGuiTestItemList all_items;
+        ctx->GatherItems(&all_items, "//Images", -1);
+
+        std::vector<ImGuiID> group_ids;
+        for (const ImGuiTestItemInfo &item : all_items)
+            if (item.Depth == 3 && item.Window && strstr(item.Window->Name, "ImageList") != nullptr &&
+                strstr(item.DebugLabel, "(R,G,B,A)") != nullptr)
+                group_ids.push_back(item.ID);
+        IM_CHECK_EQ((int)group_ids.size(), 2);
+
+        // Shift-click adopts the clicked group as this image's reference group and makes it the reference.
+        ctx->KeyDown(ImGuiMod_Shift);
+        ctx->ItemClick(group_ids[0]);
+        ctx->KeyUp(ImGuiMod_Shift);
+        IM_CHECK_EQ(hdrview()->reference_image_index(), 0);
+
+        ConstImagePtr img = hdrview()->image(0);
+        IM_CHECK(img != nullptr);
+        IM_CHECK_EQ(img->reference_group, 0);
+
+        // Shift-clicking the same group row again clears the reference. The group index has to land on
+        // -1, the "no reference channel group" state that active_group_index() falls back from and that
+        // update_visibility() and the Ctrl+number group shortcut also assign; any valid index left behind
+        // would instead pin that group as the reference the next time this image becomes one.
+        ctx->KeyDown(ImGuiMod_Shift);
+        ctx->ItemClick(group_ids[0]);
+        ctx->KeyUp(ImGuiMod_Shift);
+        IM_CHECK_EQ(hdrview()->reference_image_index(), -1);
+        IM_CHECK_EQ(img->reference_group, -1);
     };
 }
