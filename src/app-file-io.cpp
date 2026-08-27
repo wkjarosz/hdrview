@@ -1137,7 +1137,11 @@ void HDRViewApp::finish_pending_session()
             spdlog::warn("Session referenced '{}', but it failed to load.", e.path.u8string());
         else
         {
-            e.loaded->selected_group  = e.selected_group;
+            // Group indices are whatever the file holds, and the image they name is only known now that it
+            // has loaded. selected_group is read unchecked -- active_group_index() validates only
+            // reference_group, which every reader guards with is_valid_group() and for which -1 is the
+            // meaningful "no reference group" state that update_visibility() assigns.
+            e.loaded->selected_group  = clamp(e.selected_group, 0, std::max(0, (int)e.loaded->groups.size() - 1));
             e.loaded->reference_group = e.reference_group;
         }
 
@@ -1168,13 +1172,14 @@ void HDRViewApp::finish_pending_session()
     m_offset_live = m_offset = view.value<float>("offset", m_offset);
     m_tonemap                = id_to_enum(view, "tonemap", g_tonemap_ids, m_tonemap);
     m_channel                = id_to_enum(view, "channel", g_channel_ids, m_channel);
-    m_colormap_index     = clamp<int>(view.value<int>("colormap_index", m_colormap_index), 0, std::size(m_colormaps));
+    m_colormap_index =
+        clamp<int>(view.value<int>("colormap_index", m_colormap_index), 0, (int)std::size(m_colormaps) - 1);
     m_reverse_colormap   = view.value<bool>("reverse_colormap", m_reverse_colormap);
     m_clamp_to_LDR       = view.value<bool>("clamp_to_LDR", m_clamp_to_LDR);
     m_dither             = view.value<bool>("dither", m_dither);
     m_bg_mode            = id_to_enum(view, "bg_mode", g_bg_mode_ids, m_bg_mode);
     m_bg_color.xyz()     = view.value<float3>("bg_color", m_bg_color.xyz());
-    m_zoom               = view.value<float>("zoom", m_zoom);
+    set_zoom(view.value<float>("zoom", m_zoom));
     m_translate          = view.value<float2>("translate", m_translate);
     m_flip               = view.value<bool2>("flip", m_flip);
     m_auto_fit_display   = view.value<bool>("auto_fit_display", m_auto_fit_display);
@@ -1191,7 +1196,9 @@ void HDRViewApp::finish_pending_session()
     {
         view["roi"][0].get_to(m_roi.min);
         view["roi"][1].get_to(m_roi.max);
+        m_roi.make_valid(); // the file's two corners need not arrive in that order
     }
+    m_roi_live = m_roi;
 
     m_request_sort = true;
     m_pending_session.reset();

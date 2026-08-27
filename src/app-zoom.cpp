@@ -9,9 +9,6 @@
 using namespace std;
 using namespace HelloImGui;
 
-static constexpr float MIN_ZOOM = 0.01f;
-static constexpr float MAX_ZOOM = 512.f;
-
 float2 HDRViewApp::pixel_at_vp_pos(float2 vp_pos) const
 {
     float2 pixel = (vp_pos - (m_translate + center_offset())) / m_zoom;
@@ -28,11 +25,18 @@ float2 HDRViewApp::vp_pos_at_pixel(float2 pixel) const
     return m_zoom * pixel + (m_translate + center_offset());
 }
 
+void HDRViewApp::set_zoom(float zoom)
+{
+    // A degenerate window makes the fit_*() ratios below non-finite, and clamp() would pass a NaN through
+    // unchanged (both of its comparisons are false for one), so reject that first.
+    m_zoom = std::isfinite(zoom) ? clamp(zoom, MIN_ZOOM, MAX_ZOOM) : 1.f;
+}
+
 void HDRViewApp::fit_display_window()
 {
     if (auto img = current_image())
     {
-        m_zoom = minelem(viewport_size() / img->display_window.size());
+        set_zoom(minelem(viewport_size() / img->display_window.size()));
         center();
     }
 }
@@ -41,7 +45,7 @@ void HDRViewApp::fit_data_window()
 {
     if (auto img = current_image())
     {
-        m_zoom = minelem(viewport_size() / img->data_window.size());
+        set_zoom(minelem(viewport_size() / img->data_window.size()));
 
         auto center_pos   = float2(viewport_size() / 2.f);
         auto center_pixel = Box2f(img->data_window).center();
@@ -53,7 +57,7 @@ void HDRViewApp::fit_selection()
 {
     if (current_image() && m_roi.has_volume())
     {
-        m_zoom = minelem(viewport_size() / m_roi.size());
+        set_zoom(minelem(viewport_size() / m_roi.size()));
 
         auto center_pos   = float2(viewport_size() / 2.f);
         auto center_pixel = Box2f(m_roi).center();
@@ -75,7 +79,7 @@ float HDRViewApp::zoom_level() const { return log(m_zoom * pixel_ratio()) / log(
 
 void HDRViewApp::set_zoom_level(float level)
 {
-    m_zoom = clamp(std::pow(m_zoom_sensitivity, level) / pixel_ratio(), MIN_ZOOM, MAX_ZOOM);
+    set_zoom(std::pow(m_zoom_sensitivity, level) / pixel_ratio());
 }
 
 void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
@@ -85,7 +89,7 @@ void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
 
     auto  focused_pixel = pixel_at_vp_pos(focus_vp_pos); // save focused pixel coord before modifying zoom
     float scale_factor  = std::pow(m_zoom_sensitivity, amount);
-    m_zoom              = clamp(scale_factor * m_zoom, MIN_ZOOM, MAX_ZOOM);
+    set_zoom(scale_factor * m_zoom);
     // reposition so focused_pixel is still under focus_app_pos
     reposition_pixel_to_vp_pos(focus_vp_pos, focused_pixel);
 }
@@ -99,7 +103,7 @@ void HDRViewApp::zoom_in()
     // determine next higher power of 2 zoom level
     float level_for_sensitivity = ceil(log(m_zoom) / log(2.f) + 0.5f);
     float new_scale             = std::pow(2.f, level_for_sensitivity);
-    m_zoom                      = clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
+    set_zoom(new_scale);
     reposition_pixel_to_vp_pos(center_pos, center_pixel);
 }
 
@@ -112,7 +116,7 @@ void HDRViewApp::zoom_out()
     // determine next lower power of 2 zoom level
     float level_for_sensitivity = std::floor(log(m_zoom) / log(2.f) - 0.5f);
     float new_scale             = std::pow(2.f, level_for_sensitivity);
-    m_zoom                      = clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
+    set_zoom(new_scale);
     reposition_pixel_to_vp_pos(center_pos, center_pixel);
 }
 
