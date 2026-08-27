@@ -2,6 +2,8 @@
 #include "image.h"
 #include "imgui_internal.h"
 
+#include <cmath>
+
 #ifdef HELLOIMGUI_USE_SDL2
 #include <SDL.h>
 #endif

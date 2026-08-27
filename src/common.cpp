@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
