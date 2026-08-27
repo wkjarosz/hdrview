@@ -451,6 +451,51 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
 #endif // PNG_cICP_SUPPORTED
 }
 
+
+TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
+{
+    // Real files rather than a synthesized one: PngSuite's 4a set is grayscale+alpha at both sample depths,
+    // which is what takes as_interleaved()'s one-or-two-channel path. Whatever alpha the file holds has to
+    // come back unchanged -- neither gained nor transfer-function encoded -- and Y has to come back
+    // premultiplied by exactly that alpha rather than by a corrupted one.
+    for (const char *file : {"basn4a08.png", "basn4a16.png", "ibasn4a08.png", "ibasn4a16.png"})
+    {
+        CAPTURE(file);
+        auto loaded = load_test_png("pngsuite", file);
+        REQUIRE(loaded.size() == 1);
+
+        auto &original = loaded[0];
+        original->finalize();
+        REQUIRE(original->channels.size() == 2);
+        REQUIRE(original->groups.size() == 1);
+        REQUIRE(original->groups[0].type == ChannelGroup::YA_Channels);
+        REQUIRE(original->alpha_type == AlphaType_Straight);
+
+        std::ostringstream out(std::ios::binary);
+        save_png_image(*original, out, file, /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                       /*sixteen_bit*/ true, TransferFunction::sRGB);
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_png_image(in, file);
+        REQUIRE(reloaded.size() == 1);
+        reloaded[0]->finalize();
+        REQUIRE(reloaded[0]->channels.size() == 2);
+        REQUIRE(reloaded[0]->size() == original->size());
+
+        const int2 size = original->size();
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                CHECK(reloaded[0]->channels[1](x, y) ==
+                      doctest::Approx(original->channels[1](x, y)).epsilon(1e-3)); // alpha
+                CHECK(reloaded[0]->channels[0](x, y) ==
+                      doctest::Approx(original->channels[0](x, y)).epsilon(2e-3)); // premultiplied Y
+            }
+    }
+}
+
 #endif // HDRVIEW_TEST_PNG_CONTRIB_DIR
 
 TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha channel")
