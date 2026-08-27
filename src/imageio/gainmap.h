@@ -14,6 +14,12 @@
 #include <utility>
 #include <vector>
 
+// Written from ISO 21496-1, Apple's published reconstruction parameters, and the files themselves.
+// tev (https://github.com/Tom94/tev) was a valuable reference while working this out: for which
+// containers carry which flavor of gain map, for the flags libultrahdr writes that ISO 21496-1 does
+// not define, and for two observations about real files that are recorded at the places they are
+// relied on.
+//
 // An HDR gain map holds, per pixel, how much brighter the HDR rendition of an image is than the SDR
 // rendition stored in the file's base pixels. A viewer reconstructs the HDR rendition by scaling the
 // base pixels up by that amount, as far as the display it is targeting can go.
