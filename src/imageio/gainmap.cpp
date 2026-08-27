@@ -65,12 +65,15 @@ pair<int, int> append_gainmap_channels(Image &image, const GainmapImage &gainmap
     const vector<float> *src = &gainmap.pixels;
     if (linearize)
     {
-        // Apple attaches no transfer function to its gain maps -- the HEIF item carries no colr
-        // property and the JPEG variant no ICC profile -- so the encoding is implicit and has to be
-        // inferred. sRGB is what tev concluded by comparing against the same scenes encoded as ISO
-        // 21496-1 gain maps, and is what is used here. Measured against Rec. 709 on an iPhone
-        // capture the two agree to 2% on average but diverge by 14% at the top of the range: a
-        // small difference overall, concentrated in the highlights the map exists to restore.
+        // Which curve belongs here is genuinely contested. Apple documents Rec. 709 -- "it's encoded
+        // using the Rec.709 transfer function", and again "linearize the gain map by inverting the
+        // gain map gamma using the Rec.709 transfer function" -- while noting the map is otherwise
+        // untagged, and indeed it carries no colr property in HEIF and no ICC profile in JPEG. tev
+        // concluded sRGB instead, from comparing against the same scenes encoded as ISO 21496-1 gain
+        // maps, and sRGB is what is used here. Deciding between them needs a file encoded both ways,
+        // which nothing to hand is. The stakes are bounded: measured on an iPhone capture the two
+        // agree to 2% on average and diverge by 14% at the top of the range -- concentrated, of
+        // course, in the highlights the map exists to restore.
         linearized = gainmap.pixels;
         for (auto &v : linearized) v = (float)sRGB_to_linear(v);
         src = &linearized;
@@ -208,7 +211,7 @@ public:
     float over(float denominator, bool is_signed)
     {
         const float n = is_signed ? (float)i32() : (float)u32();
-        return denominator == 0.f ? 0.f : n / denominator;
+        return n / denominator;
     }
 
     size_t consumed() const { return m_pos; }
@@ -217,8 +220,10 @@ private:
     float ratio(float numerator)
     {
         const auto d = (float)u32();
-        // A zero denominator is malformed rather than infinite; the spec's own defaults are finite.
-        return d == 0.f ? 0.f : numerator / d;
+        if (d == 0.f)
+            throw invalid_argument{"ISO 21496-1: rational with a zero denominator"};
+
+        return numerator / d;
     }
 
     template <typename T>
@@ -266,25 +271,19 @@ float IsoGainmapParams::weight(float target_stops) const
 
 IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
 {
-    // iPhone HEIC files prepend a padding byte to this box. There is no signature to search for, so
-    // the only handle on it is the length: one more than a well-formed single- or multi-channel blob.
-    // Confirmed against the 47 iPhone captures in ISO's own Adaptive HDR test sets: every one stores
-    // a 62-byte tmap item whose fields only line up once the leading byte is dropped.
-    if (size == 62 || size == 142)
-    {
-        ++data;
-        --size;
-    }
-
     IsoReader r{data, size};
 
-    const auto version        = r.u16();
-    const auto writer_version = r.u16();
-    if (version != 0)
-        throw invalid_argument{fmt::format("ISO 21496-1: unsupported version {}", version)};
+    const auto minimum_version = r.u16();
+    const auto writer_version  = r.u16();
+
+    // A writer that needs fields this version does not define raises minimum_version; anything above
+    // 0 is metadata this cannot read. A raised writer_version alone is fine, and may leave trailing
+    // bytes here that are deliberately ignored.
+    if (minimum_version != 0)
+        throw invalid_argument{fmt::format("ISO 21496-1: unsupported minimum version {}", minimum_version)};
 
     IsoGainmapParams p;
-    p.version = fmt::format("ISO 21496-1 v{} (writer v{})", version, writer_version);
+    p.version = fmt::format("ISO 21496-1 v{} (writer v{})", minimum_version, writer_version);
 
     const uint8_t flags    = r.u8();
     const int     channels = (flags & IsoFlag_IsMultiChannel) ? 3 : 1;
@@ -296,6 +295,8 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
     if (common_denominator)
     {
         const auto d = (float)r.u32();
+        if (d == 0.f)
+            throw invalid_argument{"ISO 21496-1: shared denominator is zero"};
 
         p.base_headroom      = r.over(d, false);
         p.alternate_headroom = r.over(d, false);

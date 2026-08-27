@@ -482,6 +482,42 @@ TEST_CASE("The ISO metadata's other encodings parse too")
     }
 }
 
+TEST_CASE("A HEIF tmap item's leading version byte is the caller's to strip, not this parser's")
+{
+    // ISO/IEC 23008-12:2024 defines a tmap item's payload as ToneMapImage: a one-byte version,
+    // then the ISO 21496-1 metadata. The 62 bytes below are the tmap item of an iPhone capture from
+    // ISO's own Adaptive HDR test set, and show why the split matters -- 62 bytes is a legal length
+    // for metadata alone, so a parser that guessed by length would corrupt one form or the other.
+    constexpr char tmap[] =
+        "\x00\x00\x00\x00\x00\x40\x00\x00\x00\x00\x00\x00\x00\x01\x00\xb2\x6b\xb5\x00\x40\x00\x00\x00\x00\x00\x00"
+        "\x00\x00\x00\x01\x00\xb2\x6b\xb5\x00\x40\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\xd1\xb7\x20\x00"
+        "\x00\x00\x00\x00\xd1\xb7\x20\x00\x00\x00";
+
+    const auto *bytes = (const uint8_t *)tmap;
+    REQUIRE(sizeof(tmap) - 1 == 62);
+    CHECK(bytes[0] == 0); // ToneMapImage version
+
+    SUBCASE("the metadata parses once the container's version byte is past")
+    {
+        const auto p = parse_iso_gainmap(bytes + 1, 61);
+
+        CHECK(p.use_base_color_space);
+        CHECK(p.base_headroom == doctest::Approx(0.f));
+        CHECK(p.alternate_headroom == doctest::Approx(2.78782f));
+        CHECK(p.min[0] == doctest::Approx(0.f));
+        CHECK(p.max[0] == doctest::Approx(2.78782f));
+        CHECK(p.gamma[0] == doctest::Approx(1.f));
+        CHECK(p.base_offset[0] == doctest::Approx(1e-4f).epsilon(0.001));
+    }
+
+    SUBCASE("handing the whole item over instead is rejected, not silently misread")
+    {
+        // Reading the version byte as the first half of minimum_version shifts every field, and the
+        // denominators land on zero. Better to fail than to return plausible-looking nonsense.
+        CHECK_THROWS_AS(parse_iso_gainmap(bytes, 62), std::invalid_argument);
+    }
+}
+
 TEST_CASE("Truncated or unreadable ISO metadata is rejected rather than guessed at")
 {
     SUBCASE("truncated mid-field")
@@ -741,16 +777,27 @@ TEST_CASE("The target headroom reaches an UltraHDR JPEG, which libultrahdr recon
         return p;
     };
 
+    const float base = peak_at(0.f);
     const float full = peak_at(k_full_gainmap_headroom);
 
-    // Each stop of target headroom doubles what the brightest pixel is allowed to reach, until the
-    // map's own maximum takes over.
-    CHECK(peak_at(0.f) == doctest::Approx(1.f).epsilon(0.01));
-    CHECK(peak_at(1.f) == doctest::Approx(2.f).epsilon(0.01));
-    CHECK(peak_at(2.f) == doctest::Approx(4.f).epsilon(0.01));
+    // A target of N stops caps the reconstruction at 2^N: no pixel may be brightened past it. The
+    // brightest pixel only lands exactly on the cap when the map saturates there, which is common
+    // for a single-channel map and not for a per-channel one, where the channel being measured may
+    // never reach its own maximum at that pixel. So the invariant is the ceiling, plus the fact
+    // that raising the target never darkens anything.
+    float previous = base;
+    for (float stops : {0.5f, 1.f, 1.5f, 2.f, 3.f})
+    {
+        const float peak = peak_at(stops);
+        MESSAGE("  ", stops, " stops -> peak ", peak, " (base x ", peak / base, ", ceiling x ", std::exp2(stops), ")");
 
-    MESSAGE("unbounded target reconstructs to a peak of ", full);
-    CHECK(full > 4.f);
+        CHECK(peak <= doctest::Approx(base * std::exp2(stops)).epsilon(0.01));
+        CHECK(peak >= doctest::Approx(previous).epsilon(0.01));
+        previous = peak;
+    }
+
+    MESSAGE("base peak ", base, "; unbounded target reconstructs to ", full);
+    CHECK(full > base * 2.f);
 }
 #endif
 
@@ -805,26 +852,42 @@ TEST_CASE("A gain map packed into a JPEG is found through the MPF index and appl
     std::ifstream probe{path, std::ios_base::binary};
     if (is_uhdr_image(probe))
     {
-        std::ifstream is{path, std::ios_base::binary};
-        auto          via_uhdr = load_uhdr_image(is, path);
-        REQUIRE(!via_uhdr.empty());
+        const auto sum_via_uhdr = [&](float headroom)
+        {
+            std::ifstream    is{path, std::ios_base::binary};
+            ImageLoadOptions opts;
+            opts.gainmap_headroom = headroom;
+            auto images           = load_uhdr_image(is, path, opts);
+            REQUIRE(!images.empty());
+            REQUIRE(images.front()->channels[0].size() == size);
 
-        auto &other = *via_uhdr.front();
-        REQUIRE(other.channels[0].size() == size);
+            double sum = 0.;
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x) sum += images.front()->channels[0](x, y);
+            return sum;
+        };
 
-        // Means rather than peaks: the two resample the reduced-resolution map slightly differently,
-        // so individual pixels near an edge can differ by more than the image as a whole does.
-        double sum_hdr = 0., sum_other = 0.;
+        double sum_base = 0., sum_hdr = 0.;
         for (int y = 0; y < size.y; ++y)
             for (int x = 0; x < size.x; ++x)
             {
+                sum_base += base->channels[0](x, y);
                 sum_hdr += hdr->channels[0](x, y);
-                sum_other += other.channels[0](x, y);
             }
 
-        const double ratio = sum_hdr / sum_other;
-        MESSAGE("mean brightness vs. libultrahdr: ", ratio);
-        CHECK(ratio == doctest::Approx(1.0).epsilon(0.02));
+        // Compare what the map *does*, not the pixels it lands on. The two loaders linearize a
+        // wide-gamut base image differently -- libultrahdr labels Display P3 with the canonical
+        // primaries where this path derives them from the embedded ICC matrix -- which shifts the
+        // channels by a fixed matrix whether or not a gain map is involved. Dividing each loader's
+        // reconstruction by its own base rendition cancels that and leaves only the gain map.
+        //
+        // Means rather than peaks: the two resample the reduced-resolution map slightly
+        // differently, so pixels near an edge differ by more than the image as a whole does.
+        const double mine   = sum_hdr / sum_base;
+        const double theirs = sum_via_uhdr(k_full_gainmap_headroom) / sum_via_uhdr(0.f);
+
+        MESSAGE("gain applied, mean: ", mine, " here vs ", theirs, " in libultrahdr");
+        CHECK(mine == doctest::Approx(theirs).epsilon(0.02));
     }
 #endif
 }

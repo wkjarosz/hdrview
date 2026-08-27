@@ -117,7 +117,10 @@ struct IsoGainmapParams
 
 //! Parse the binary form ISO 21496-1 defines, as carried in a JPEG APP2 or a JPEG XL `jhgm` box.
 /*!
-    \param data  Start of the metadata, past any namespace or box header
+    \param data  Start of the metadata proper. A HEIF `tmap` item prefixes this with a one-byte
+                version field of its own -- ISO/IEC 23008-12:2024's ToneMapImage, whose payload is
+                that byte followed by this structure -- and the caller has to consume it first. A
+                JPEG APP2 block or a JPEG XL `jhgm` box carries the metadata on its own.
     \param size  Its length in bytes
     \return      The parsed parameters
     \throws std::invalid_argument if the data is truncated or announces a version this cannot read
