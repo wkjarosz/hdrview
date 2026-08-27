@@ -1167,10 +1167,11 @@ void HDRViewApp::finish_pending_session()
     m_blend_mode = m_pending_session->blend_mode;
 
     const json &view = m_pending_session->view;
-    m_exposure_live = m_exposure = clamp(view.value<float>("exposure", m_exposure), EXPOSURE_RANGE[0],
-                                         EXPOSURE_RANGE[1]);
-    m_gamma_live = m_gamma   = clamp(view.value<float>("gamma", m_gamma), GAMMA_RANGE[0], GAMMA_RANGE[1]);
-    m_offset_live = m_offset = clamp(view.value<float>("offset", m_offset), OFFSET_RANGE[0], OFFSET_RANGE[1]);
+    m_exposure_live = m_exposure = view.value<float>("exposure", m_exposure);
+    // Only the floor; see MIN_GAMMA. Exposure and offset have no unsafe values, and a session has to be
+    // able to carry back whatever the sliders' Ctrl+click entry and keyboard shortcuts can set.
+    m_gamma_live = m_gamma   = std::max(MIN_GAMMA, view.value<float>("gamma", m_gamma));
+    m_offset_live = m_offset = view.value<float>("offset", m_offset);
     m_tonemap                = id_to_enum(view, "tonemap", g_tonemap_ids, m_tonemap);
     m_channel                = id_to_enum(view, "channel", g_channel_ids, m_channel);
     m_colormap_index =

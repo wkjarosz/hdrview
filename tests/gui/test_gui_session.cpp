@@ -201,13 +201,12 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->roi().min.x <= hdrview()->roi().max.x);
         IM_CHECK(hdrview()->roi().min.y <= hdrview()->roi().max.y);
 
-        // Held to the range the sliders offer, wherever the value came from.
-        IM_CHECK(hdrview()->gamma() >= HDRViewApp::GAMMA_RANGE[0]);
-        IM_CHECK(hdrview()->gamma() <= HDRViewApp::GAMMA_RANGE[1]);
-        IM_CHECK(hdrview()->exposure() >= HDRViewApp::EXPOSURE_RANGE[0]);
-        IM_CHECK(hdrview()->exposure() <= HDRViewApp::EXPOSURE_RANGE[1]);
-        IM_CHECK(hdrview()->offset() >= HDRViewApp::OFFSET_RANGE[0]);
-        IM_CHECK(hdrview()->offset() <= HDRViewApp::OFFSET_RANGE[1]);
+        // Gamma keeps only its floor -- it is inverted before use. Exposure and offset are carried back
+        // as written, since Ctrl+click entry and the keyboard shortcuts can set values outside the
+        // sliders' travel and a session has to round-trip those.
+        IM_CHECK(hdrview()->gamma() >= HDRViewApp::MIN_GAMMA);
+        IM_CHECK_EQ(hdrview()->exposure(), 1e30f);
+        IM_CHECK_EQ(hdrview()->offset(), -1e30f);
 
         // Let a few frames run so anything reading these (the pixel inspector, the statistics window)
         // actually touches them.
