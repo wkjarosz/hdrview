@@ -457,10 +457,10 @@ int next_matching_index(const std::vector<T> &vec, int current_index, Criterion 
     const int size = (int)vec.size();
     const int step = (direction == Direction_Forward) ? 1 : -1;
 
-    // current_index is -1 whenever nothing is selected, so the first index to probe can't just be
-    // current_index + step: in size_t arithmetic that wraps to near 2^64, and its remainder modulo size
-    // depends on 2^64 % size rather than on the index. With no current position, start the search at the
-    // near end -- the first element going forward, the last going backward.
+    // current_index is -1 whenever nothing is selected (no current image, or a group index update_visibility()
+    // cleared), and a session file can name one past the end. Neither is a position to step from, so start at
+    // the near end instead: the first element going forward, the last going backward. Signed throughout --
+    // taking a negative index modulo an unsigned size gives a remainder of 2^64 % size, not of the index.
     int i = (current_index >= 0 && current_index < size) ? mod(current_index + step, size)
                                                          : (direction == Direction_Forward ? 0 : size - 1);
 

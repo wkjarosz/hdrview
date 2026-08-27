@@ -27,8 +27,9 @@ float2 HDRViewApp::vp_pos_at_pixel(float2 pixel) const
 
 void HDRViewApp::set_zoom(float zoom)
 {
-    // A degenerate window makes the fit_*() ratios below non-finite, and clamp() would pass a NaN through
-    // unchanged (both of its comparisons are false for one), so reject that first.
+    // The fit-to-window ratios divide by a window's size, which is zero for a degenerate one, and clamp()
+    // would pass the resulting NaN straight through -- both of its comparisons are false for one. Reject
+    // non-finite input first and fall back to 1:1.
     m_zoom = std::isfinite(zoom) ? clamp(zoom, MIN_ZOOM, MAX_ZOOM) : 1.f;
 }
 
