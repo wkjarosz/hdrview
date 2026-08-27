@@ -427,6 +427,60 @@ TEST_CASE("The ISO 21496-1 binary metadata parses to the values the file declare
     }
 }
 
+TEST_CASE("The ISO metadata's other encodings parse too")
+{
+    // Every sample file to hand writes a denominator per field and forward-direction headrooms, so
+    // these two blobs are built by hand. libultrahdr emits the shared-denominator form whenever the
+    // denominators happen to agree, and the backward-direction flag whenever the base rendition is
+    // the HDR one, so both are shapes a real file can arrive in.
+
+    SUBCASE("one denominator shared by every field")
+    {
+        // flags 0xC8: multi-channel, shared denominator, gain applies in the base color space.
+        constexpr char blob[] =
+            "\x00\x00\x00\x00\xc8\x00\x0f\x42\x40\x00\x00\x00\x00\x00\x26\x25\xa0\xff\xfe\x79\x60\x00\x21\x91\xc0\x00"
+            "\x03\xd0\x90\x00\x00\x3d\x09\x00\x00\x3d\x09\xff\xff\x3c\xb0\x00\x20\x0b\x20\x00\x03\xf7\xa0\x00\x00\x3d"
+            "\x09\x00\x00\x3d\x09\xff\xfc\xf2\xc0\x00\x1e\x84\x80\x00\x04\x1e\xb0\x00\x00\x3d\x09\x00\x00\x3d\x09";
+
+        const auto p = parse_iso_gainmap((const uint8_t *)blob, sizeof(blob) - 1);
+
+        CHECK(p.base_headroom == doctest::Approx(0.f));
+        CHECK(p.alternate_headroom == doctest::Approx(2.5f));
+        CHECK(p.use_base_color_space);
+
+        CHECK(p.min[0] == doctest::Approx(-0.1f));
+        CHECK(p.min[1] == doctest::Approx(-0.05f));
+        CHECK(p.min[2] == doctest::Approx(-0.2f));
+        CHECK(p.max[0] == doctest::Approx(2.2f));
+        CHECK(p.max[2] == doctest::Approx(2.0f));
+        CHECK(p.gamma[1] == doctest::Approx(0.26f));
+        CHECK(p.base_offset[0] == doctest::Approx(0.015625f));
+    }
+
+    SUBCASE("backward direction, where the base rendition is the HDR one")
+    {
+        // flags 0x4C: single channel, shared denominator, backward direction. The file stores the
+        // headrooms and offsets the other way round, and the parser swaps them back.
+        constexpr char blob[] = "\x00\x00\x00\x00\x4c\x00\x0f\x42\x40\x00\x26\x25\xa0\x00\x00\x00\x00\xff\xfe\x79\x60"
+                                "\x00\x21\x91\xc0\x00\x03\xd0\x90\x00\x00\x7a\x12\x00\x00\x3d\x09";
+
+        const auto p = parse_iso_gainmap((const uint8_t *)blob, sizeof(blob) - 1);
+
+        // Stored as base 2.5 / alternate 0, so after the swap the base is the darker rendition.
+        CHECK(p.base_headroom == doctest::Approx(0.f));
+        CHECK(p.alternate_headroom == doctest::Approx(2.5f));
+
+        // The offsets swap with them: stored base 0.03125 / alternate 0.015625.
+        CHECK(p.base_offset[0] == doctest::Approx(0.015625f));
+        CHECK(p.alternate_offset[0] == doctest::Approx(0.03125f));
+
+        // A single-channel map drives all three the same way.
+        CHECK(p.min[2] == doctest::Approx(p.min[0]));
+        CHECK(p.max[2] == doctest::Approx(2.2f));
+        CHECK(p.gamma[1] == doctest::Approx(0.25f));
+    }
+}
+
 TEST_CASE("Truncated or unreadable ISO metadata is rejected rather than guessed at")
 {
     SUBCASE("truncated mid-field")

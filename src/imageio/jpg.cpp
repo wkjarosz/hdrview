@@ -406,7 +406,7 @@ static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOpt
             continue;
         }
 
-        spdlog::info("Found a {} gain map as MPF image {} ({} bytes).", found.iso ? "standardized" : "Apple", i,
+        spdlog::info("Found {} gain map as MPF image {} ({} bytes).", found.iso ? "a standardized" : "an Apple", i,
                      mp.size);
 
         // Decode the map as stored: its samples are coefficients, so the color management that would
