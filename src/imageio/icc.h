@@ -7,9 +7,12 @@
 
 #include "colorspace.h"
 #include "fwd.h"
+#include <array>
 #include <cstdint>
 #include <string>
 #include <sys/types.h>
+
+class CICPProfile;
 
 /*! Wrapper for an ICC profile providing utility routines used by HDRView.
 
@@ -89,6 +92,13 @@ public:
     std::string description() const;
     bool        extract_chromaticities(Chromaticities *c) const;
 
+    /*! The code points from this profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
+
+        Read straight out of the profile bytes rather than through LCMS, which only learned the tag in 2.16
+        and would otherwise make this depend on which LCMS a given build links.
+    */
+    CICPProfile cicp() const;
+
     std::vector<uint8_t> dump_to_memory() const;
 
     bool is_CMYK() const; ///< Check if this is a CMYK profile.
@@ -146,6 +156,9 @@ private:
     /// Internal constructor from raw profile pointer.
     ICCProfile(void *profile) : m_profile{profile} {}
     void *m_profile = nullptr;
+
+    /// Raw `cicp` code points, filled in at construction; all -1 when the profile carries no such tag.
+    std::array<int, 4> m_cicp{{-1, -1, -1, -1}};
 };
 
 /*! A class to manage color profiles defined via Coding-independent code points (CICP).
