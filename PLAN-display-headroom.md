@@ -143,12 +143,8 @@ Two things to know when testing:
 
 Most of this is not platform-specific, and is testable on any machine.
 
-1. **`display_headroom()`**, from `m_display_cs` where that is populated. Optionally a
-   `--headroom <x>` override: not needed on Wayland, where the brightness control already moves the
-   real value, but useful for pinning a specific number, for exercising the degenerate cases, and on
-   macOS, where real headroom only moves on thermal and power events you cannot summon on demand.
-2. **The histogram UI.** Pure ImPlot drawing, and on Wayland it can be verified against a real
-   headroom that moves with the brightness control.
+1. ~~**`display_headroom()`**~~ -- done, in `app-colorpass.cpp`, from `m_display_cs`.
+2. ~~**The histogram UI.**~~ -- done, verified on Wayland against a live headroom.
 3. **macOS `NSScreen` query.** Small and isolated; needs a Mac to compile and a real EDR display to
    confirm the number is sane and the band tracks the brightness slider.
 4. **Windows DXGI query.** Independent of 3.
@@ -156,15 +152,27 @@ Most of this is not platform-specific, and is testable on any machine.
 Steps 1 and 2 are fully verifiable on Wayland against a real, live-changing headroom, so the
 platform-specific steps reduce to making macOS and Windows report the same number.
 
+## Settled
+
+- **Label format**: a multiplier, `6.25x`, in grey rather than white so it does not read as a third
+  handle beside the black and white points. Bands are labeled along the bottom edge; the legend
+  (`ImPlotLocation_North`) and the clip-warning toggles already own the top.
+- **Axis range**: `x_limits()` capped the asinh axis at 4x display white, so any real headroom put the
+  ceiling permanently off the plot. Asinh now reaches `max(4x, headroom * 1.15)`; linear and sRGB are
+  unchanged.
+- **Trusting the ceiling**: it is only as good as the peak the display reports. KDE writes a
+  `maxPeakBrightnessOverride` in `~/.config/kwinoutputconfig.json` from its HDR calibration wizard
+  (`/usr/bin/hdrcalibrator`), and a careless run leaves a value the panel cannot reach -- 1850 nits
+  against an EDID peak of 418, here, until the wizard was re-run and it became 500. A ceiling far from
+  where values visibly clip is a reason to suspect that key, not this code.
+
 ## Open questions
 
-- **Label format** for the headroom tag: multiplier (`8x`), stops (`+3`), or nits? The neighbouring
-  tags read `"0"` and `"1"`, which argues for the multiplier.
 - **Current vs. potential headroom on macOS.** The dynamic value is the truthful one, but it sags
   under thermal throttling and on battery, so the band will visibly drift while nothing about the
   image changed. A second, fainter tick at `maximumPotential...` would make that legible instead of
   mysterious. Needs a real display to judge.
-- **Dim style beyond the ceiling.** The existing out-of-range dimming uses
-  `DragRect(..., ImVec4(0,0,0,1.5), NoInputs | NoFit)`. Reusing it keeps the look consistent, but
-  "beyond what the display can show" may warrant something distinct from "outside the exposure
-  range".
+- **Dim style beyond the ceiling.** Currently reuses the existing out-of-range dimming,
+  `DragRect(..., ImVec4(0,0,0,1.5), NoInputs | NoFit)`, which keeps the look consistent. Whether
+  "beyond what the display can show" deserves something distinct from "outside the exposure range" is
+  still worth a look now that the boundary is visible.
