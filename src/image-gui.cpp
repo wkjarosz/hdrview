@@ -150,6 +150,64 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
 }
 
 /*!
+    Marks the boundary between what an SDR display can show and the extra range this one adds, labeling
+    the two bands the way Lightroom does.
+
+    The undimmed part of the plot is everything the display can reproduce. Its lower half, up to display
+    value 1, is ordinary SDR; above that, up to \p ceiling_x, is the headroom the display currently has,
+    which grows as the display is dimmed (see HDRViewApp::display_headroom()). Dimming what lies beyond
+    is left to the caller's DragRect, so this only draws the ceiling line and the labels.
+
+    Call between BeginPlot and EndPlot. Everything here takes plot-space x, so it follows the exposure
+    and rides all three x-axis scales without knowing which is active.
+
+    \param sdr_x      Plot-space x of display values 0 and 1
+    \param ceiling_x  Plot-space x of the headroom ceiling
+    \param has_hdr    Whether there is any headroom to label; when false only the SDR band is marked
+*/
+static void draw_display_range_bands(const Box1d &sdr_x, double ceiling_x, bool has_hdr)
+{
+    ImDrawList  *draw_list = ImPlot::GetPlotDrawList();
+    const ImVec2 plot_pos  = ImPlot::GetPlotPos();
+    const ImVec2 plot_size = ImPlot::GetPlotSize();
+    const float  pad       = EmSize(0.25f);
+    const ImU32  col       = ImGui::GetColorU32(ImGuiCol_Text, 0.5f);
+
+    // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive fill
+    // and the CIE diagram elsewhere in this file.
+    ImPlot::PushPlotClipRect();
+
+    if (has_hdr)
+    {
+        const float x = ImPlot::PlotToPixels(ceiling_x, 0.0).x;
+        draw_list->AddLine(ImVec2{x, plot_pos.y}, ImVec2{x, plot_pos.y + plot_size.y}, col);
+    }
+
+    // The labels sit along the bottom edge rather than the top, which the legend (ImPlotLocation_North)
+    // and the two clip-warning toggles have already claimed.
+    const float text_y = plot_pos.y + plot_size.y - pad - ImGui::GetTextLineHeight();
+
+    auto label_band = [&](double xa, double xb, const char *text)
+    {
+        // Clamp to the visible span before centering, so a band running off the edge keeps its label
+        // where it can still be read instead of centering it out of view.
+        const float a = ImMax(ImPlot::PlotToPixels(xa, 0.0).x, plot_pos.x);
+        const float b = ImMin(ImPlot::PlotToPixels(xb, 0.0).x, plot_pos.x + plot_size.x);
+        const float w = ImGui::CalcTextSize(text).x;
+        if (b - a < w + 2.f * pad)
+            return; // too narrow to label without overflowing into the neighbouring band
+
+        draw_list->AddText(ImVec2{0.5f * (a + b) - 0.5f * w, text_y}, col, text);
+    };
+
+    label_band(sdr_x.min.x, sdr_x.max.x, "SDR");
+    if (has_hdr)
+        label_band(sdr_x.max.x, ceiling_x, "HDR");
+
+    ImPlot::PopPlotClipRect();
+}
+
+/*!
     Draws the drag-to-resize grip below the histogram, modeled on the column-resize divider of a PE table:
     ImGui's TableUpdateBorders()/TableGetColumnBorderCol() rotated 90 degrees, reusing its 4px hit band, its
     delayed hover feedback, its Separator colors, and its double-click-to-restore gesture.
@@ -444,10 +502,24 @@ void Image::draw_histogram()
         Box1d xrange{-hdrview()->offset_live() * pow(2.f, -hdrview()->exposure_live()),
                      (1.0 - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live())};
 
+        // Display values map into plot space through the same exposure and offset as the black/white
+        // points below; headroom is just another display value, so it maps the same way.
+        auto display_to_plot = [](double d)
+        { return (d - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live()); };
+
+        // 0 means the display never told us its ceiling, which is not the same as having none -- in that
+        // case fall back to dimming above display 1, the pre-headroom behavior.
+        const float headroom = hdrview()->display_headroom();
+        const bool  has_hdr  = headroom > 1.f;
+        // Non-const: DragRect takes a mutable pointer, though NoInputs keeps it from ever writing back.
+        double ceiling_x = has_hdr ? display_to_plot(headroom) : xrange.max.x;
+
         auto plt_range = ImPlot::GetPlotLimits(ImAxis_X1);
         ImPlot::DragRect(0, &plt_range.X.Min, &plt_range.Y.Min, &xrange.min.x, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
-        ImPlot::DragRect(0, &xrange.max.x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
+        // Dim from the display's ceiling rather than from white: the range between the two is real
+        // headroom this display can show, so it belongs to the highlighted region.
+        ImPlot::DragRect(0, &ceiling_x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
 
         // Displayed values (d) are related to stored values (p) via the exposure and offset:
@@ -479,6 +551,16 @@ void Image::draw_histogram()
 
         ImPlot::TagX(xrange.min.x, ImVec4(0, 0, 0, 1), "0");
         ImPlot::TagX(xrange.max.x, ImVec4(1, 1, 1, 1), "1");
+
+        // Re-derived from the exposure the drags just settled on, so the bands track the handles within
+        // the same frame rather than lagging them by one.
+        if (has_hdr)
+            ceiling_x = display_to_plot(headroom);
+        draw_display_range_bands(xrange, ceiling_x, has_hdr);
+        if (has_hdr)
+            // Grey rather than white: this is the display telling us where it stops, not a control the
+            // user set, and it should not read as a third handle alongside the black and white points.
+            ImPlot::TagX(ceiling_x, ImVec4(0.6f, 0.6f, 0.6f, 1.f), "%.3gx", headroom);
 
         // The shader compares clip_range against display values (d = p * gain + offset), so map it into plot
         // space -- which holds stored values p -- the same way the black/white points above do.
