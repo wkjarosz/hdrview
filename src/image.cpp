@@ -301,7 +301,12 @@ float2 PixelStats::x_limits(float e, AxisScale scale, float headroom) const
     float2 ret;
     ret[1] = pow(2.f, -e) * past_white;
     if (summary.minimum < -summary.maximum / 255.f)
-        ret[0] = -ret[1];
+        // Negatives get the room they actually occupy, plus a sliver so the extreme value does not land on
+        // the axis itself. Mirroring the positive reach instead spends half the plot on whatever ringing a
+        // lossy codec left around black -- a hundredth of a stop below zero in one channel is enough to
+        // trigger it -- and makes two encodes of the same image look nothing alike. Still capped at that
+        // mirror, so genuinely signed data cannot crowd out the range the exposure is set for.
+        ret[0] = std::max(-ret[1], 1.05f * summary.minimum);
     else
         ret[0] = ret[1] / 10000.f;
 
