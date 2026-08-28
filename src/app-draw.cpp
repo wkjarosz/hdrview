@@ -380,6 +380,12 @@ void HDRViewApp::draw_background()
 
 void HDRViewApp::set_image_textures()
 {
+    // Every binding below goes through the shader, which setup_rendering() creates once the graphics
+    // backend is up. Images can arrive before that -- a session passed on the command line resolves and
+    // refreshes its textures as it loads -- and the next frame binds them anyway.
+    if (!m_shader)
+        return;
+
     try
     {
         // bind the primary and secondary images, or a placehold black texture when we have no current or
