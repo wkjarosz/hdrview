@@ -316,7 +316,10 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
         const float x = edge - dir * leg_inset;
         stroke(from, y - 0.5f, leg ? x - dir * 0.5f : edge, y + 0.5f);
         if (leg)
-            stroke(x - 0.5f, y - 0.5f, x + 0.5f, leg_end);
+            // Spanning the run's whole row, not just down from one side of it. Reaching from y - 0.5
+            // meets the run where the axis is above the plot and the leg descends, but falls a row short
+            // of it where the axis is below and the leg climbs, leaving the corner visibly unjoined.
+            stroke(x - 0.5f, ImMin(y - 0.5f, leg_end), x + 0.5f, ImMax(y + 0.5f, leg_end));
     };
 
     auto bracket = [&](double va, double vb, const char *name)

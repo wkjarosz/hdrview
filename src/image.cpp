@@ -290,13 +290,15 @@ bool Image::loadable(const std::string &ext)
 
 float2 PixelStats::x_limits(float e, AxisScale scale, float headroom) const
 {
-    // Each scale reaches a fixed multiple past display white, which sits at 2^-e. Asinh compresses its
-    // far end, so it can afford to clear the display's ceiling -- with a little margin, so the ceiling
-    // lands inside the axis rather than on its edge -- and still leave the data legible. The two
-    // bounded scales keep their old reach: stretching them to 6x or beyond would squeeze everything
-    // that matters into the left quarter of the plot, and the ceiling is not worth that.
-    const float past_white =
-        scale == AxisScale_Linear ? 1.2f : (scale == AxisScale_SRGB ? 1.5f : std::max(4.f, headroom * 1.15f));
+    // Each scale reaches some multiple past display white, which sits at 2^-e. Asinh and sRGB both
+    // compress their far end, so they can afford to clear the display's ceiling -- with a little margin,
+    // so the ceiling lands inside the axis rather than on its edge -- and still leave the data legible.
+    // sRGB pays more for it than asinh does: at 16x headroom white falls around a third of the way
+    // across rather than two thirds. Linear pays far more still and keeps its old fixed reach, since
+    // stretching it that far would leave everything that matters in the first twentieth of the plot.
+    const float past_white = scale == AxisScale_Linear ? 1.2f
+                             : scale == AxisScale_SRGB ? std::max(1.5f, headroom * 1.15f)
+                                                       : std::max(4.f, headroom * 1.15f);
 
     float2 ret;
     ret[1] = pow(2.f, -e) * past_white;
@@ -308,7 +310,12 @@ float2 PixelStats::x_limits(float e, AxisScale scale, float headroom) const
         // mirror, so genuinely signed data cannot crowd out the range the exposure is set for.
         ret[0] = std::max(-ret[1], 1.05f * summary.minimum);
     else
-        ret[0] = ret[1] / 10000.f;
+        // A ten-thousandth of display white, not of the axis top. The top grows with the display's
+        // headroom, and a floor tied to it carries display 0 further outside the axis the more headroom
+        // there is -- past about 14x, far enough for the SDR band's own lower boundary to count as off
+        // the plot and lose its bracket leg. Against white it stays the same hair outside at any
+        // headroom, and the axis it hides is empty in either case.
+        ret[0] = pow(2.f, -e) / 10000.f;
 
     return ret;
 }
