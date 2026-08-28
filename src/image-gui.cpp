@@ -289,22 +289,25 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     // exactly along one and be invisible. Out here it caps its arrow instead.
     const float mark_end = opposite ? y - 0.5f * txt_h : y + 0.5f * txt_h;
 
+    // Clamped to the plot, the same as the arrow ends are, so a boundary that has run off an edge is
+    // marked at the edge it ran off and its arrow still reads as capped. The black point needs this: the
+    // axis starts fractionally above zero, which leaves display 0 a couple of pixels outside it.
     auto mark = [&](double v)
     {
-        const float x = IM_ROUND((float)ImPlot::PlotToPixels(v, 0.0).x);
-        if (x < x_lo || x > x_hi)
-            return;
+        const float x = IM_ROUND(ImClamp((float)ImPlot::PlotToPixels(v, 0.0).x, x_lo, x_hi));
         draw_list->AddLine(ImVec2{x, ax.Datum1}, ImVec2{x, mark_end}, ax.ColorTick, style.MajorTickSize.x);
     };
 
-    // The shaft stops at the head's base rather than running on to its tip, so a thin head is never
-    // pierced by the line behind it.
+    // Both heads are wound the same way round rather than being mirror images: ImGui's antialiased fill
+    // grows or shrinks a polygon by half a pixel according to its winding, so reflecting one head gives
+    // the other a visibly different size. The shaft runs the whole way under the head to its tip, which
+    // costs nothing -- the two are the same color -- and leaves no seam where they meet.
     auto arrow = [&](float from, float to)
     {
         const float f = IM_ROUND(from), t = IM_ROUND(to);
-        const float base = t + (t > f ? -head_l : head_l);
-        draw_list->AddLine(ImVec2{f, y}, ImVec2{base, y}, ax.ColorTxt);
-        draw_list->AddTriangleFilled(ImVec2{t, y}, ImVec2{base, y - head_h}, ImVec2{base, y + head_h}, ax.ColorTxt);
+        const float base = t + (t > f ? -head_l : head_l), h = t > f ? head_h : -head_h;
+        draw_list->AddLine(ImVec2{f, y}, ImVec2{t, y}, ax.ColorTxt);
+        draw_list->AddTriangleFilled(ImVec2{t, y}, ImVec2{base, y + h}, ImVec2{base, y - h}, ax.ColorTxt);
     };
 
     auto span = [&](double va, double vb, const char *name)
