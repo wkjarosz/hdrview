@@ -138,8 +138,9 @@ Display color space is sRGB/BT.709 gamut with Linear transfer, 80 nits SDR white
   0-417.712 nits range (supports HDR).
 ```
 
-Headroom is 417.712/80 = **5.22x**, about 2.4 stops. Peak and full-frame agree on this panel, so the
-choice above is untested against a display where they differ.
+Headroom is 417.712/80 = **5.22x**, about 2.4 stops, and the bands draw correctly against it. Peak
+and full-frame agree on this panel, so the choice above is untested against a display where they
+differ.
 
 Two things worth knowing when testing here:
 
@@ -191,7 +192,7 @@ Most of this is not platform-specific, and is testable on any machine.
 3. ~~**macOS `NSScreen` query.**~~ -- done, in `display_headroom_cocoa.mm`, verified on an XDR panel
    and on two SDR externals.
 4. ~~**Windows DXGI query.**~~ -- done, in `display_luminance_win32.cpp`, verified on an HDR400 panel
-   with advanced color both on and off.
+   with advanced color both on and off, bands included.
 
 All four platforms now report a real headroom. What is left is the open question below, and deleting
 this file.
