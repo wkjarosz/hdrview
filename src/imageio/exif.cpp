@@ -235,6 +235,111 @@ void           Exif::reset() { m_impl.reset(); }
 size_t         Exif::size() const { return m_impl ? m_impl->data.size() : 0; }
 const uint8_t *Exif::data() const { return m_impl ? m_impl->data.data() : nullptr; }
 
+//! Walk the entries of an Apple maker note, which libexif has no decoder for.
+/*!
+    The note is a TIFF-style IFD preceded by a 12-byte "Apple iOS" header, with its own byte order and
+    with entry offsets counted from the start of the note rather than the start of the EXIF block.
+
+    \param ed     EXIF data to read the maker note from
+    \param visit  Called as visit(tag, format, components, data, endian) for each well-formed entry.
+                  \p format is the entry's EXIF format, already substituted with SLONG when the file
+                  declares one this build cannot size.
+    \return       False when the note is Apple's but too short to hold the entries it claims; true
+                  otherwise, including when there is no Apple maker note to walk.
+*/
+template <typename F>
+static bool for_each_apple_makernote_entry(ExifData *ed, F &&visit)
+{
+    static constexpr auto APPLE_SIGNATURE = "Apple iOS";
+
+    ExifEntry *maker_note = exif_data_get_entry(ed, EXIF_TAG_MAKER_NOTE);
+    if (!maker_note || !maker_note->data || maker_note->size == 0)
+        return true;
+
+    if (maker_note->size < strlen(APPLE_SIGNATURE) + 1 ||
+        memcmp((const char *)maker_note->data, APPLE_SIGNATURE, strlen(APPLE_SIGNATURE)) != 0)
+        return true;
+
+    const uint8_t *mn_data = maker_note->data;
+    size_t         mn_size = maker_note->size;
+
+    Endian endian = Endian::Intel;
+    if (mn_size >= 14)
+    {
+        /* Byte order (offset 12, length 2) */
+        if (!memcmp(mn_data + 12, "II", 2))
+            endian = Endian::Intel;
+        else if (!memcmp(mn_data + 12, "MM", 2))
+            endian = Endian::Motorola;
+    }
+
+    uint16_t tcount = 0;
+    if (mn_size >= 16)
+        tcount = read_as<uint16_t>(mn_data + 14, endian);
+
+    spdlog::debug("ExifMnoteApple: detected {} tags", tcount);
+
+    // Sanity check the offset
+    if (mn_size < size_t(6 + 16 + tcount * 12 + 4))
+    {
+        spdlog::error("ExifMnoteApple: Short MakerNote");
+        return false;
+    }
+
+    size_t ofs = 16;
+    for (uint32_t i = 0; i < tcount; ++i, ofs += 12)
+    {
+        if (ofs + 12 > mn_size)
+        {
+            spdlog::error("ExifMnoteApple: Tag size overflow detected ({} vs size {})", ofs + 12, mn_size);
+            break;
+        }
+
+        auto tag        = read_as<uint16_t>(mn_data + ofs, endian);
+        auto format     = read_as<uint16_t>(mn_data + ofs + 2, endian);
+        auto components = read_as<uint32_t>(mn_data + ofs + 4, endian);
+
+        spdlog::debug("tag {}; format {}; nComponents {}", tag, format, components);
+
+        unsigned size_per_component = exif_format_get_size((ExifFormat)format);
+
+        if (size_per_component == 0)
+        {
+            spdlog::warn("Unknown data format, assuming 32-bit int");
+            size_per_component = 4;
+            format             = EXIF_FORMAT_SLONG;
+        }
+
+        if ((components > 0) && (mn_size / components < size_per_component))
+        {
+            spdlog::error("ExifMnoteApple: Tag size overflow detected (components {} vs size {})", components, mn_size);
+            continue;
+        }
+
+        auto entry_size = components * size_per_component;
+
+        if ((entry_size > 65536) || (entry_size > mn_size))
+        {
+            // Corrupt data: EXIF data size is limited to the maximum size of a JPEG segment (64 kb).
+            spdlog::error("ExifMnoteApple: Tag size overflow detected (entry_size {} vs size {})", entry_size, mn_size);
+            break;
+        }
+
+        // if the data fits in 4 bytes, it sits at location 8, otherwise location 8 stores a 32-bit offset
+        // to where the data is
+        size_t entry_offset = (entry_size > 4) ? read_as<uint32_t>(mn_data + ofs + 8, endian) : (ofs + 8);
+        if (entry_offset + entry_size > mn_size)
+        {
+            spdlog::warn("skipping");
+            continue;
+        }
+
+        visit(tag, format, components, mn_data + entry_offset, endian);
+    }
+
+    return true;
+}
+
 static json get_makernote(ExifData *ed)
 {
     ExifEntry *maker_note = exif_data_get_entry(ed, EXIF_TAG_MAKER_NOTE);
@@ -281,223 +386,165 @@ static json get_makernote(ExifData *ed)
     }
 
     // Additionally, since libexif doesn't decode Apple-specific maker notes, try to decode them ourselves
-    static constexpr auto APPLE_SIGNATURE = "Apple iOS";
-
-    if (maker_note->size >= strlen(APPLE_SIGNATURE) + 1 &&
-        memcmp((const char *)maker_note->data, APPLE_SIGNATURE, strlen(APPLE_SIGNATURE)) == 0)
-    {
-        const uint8_t *mn_data = maker_note->data;
-        size_t         mn_size = maker_note->size;
-
-        Endian endian = Endian::Intel;
-        if (mn_size >= 14)
-        {
-            /* Byte order (offset 12, length 2) */
-            if (!memcmp(mn_data + 12, "II", 2))
-                endian = Endian::Intel;
-            else if (!memcmp(mn_data + 12, "MM", 2))
-                endian = Endian::Motorola;
-        }
-
-        uint16_t tcount = 0;
-        if (mn_size >= 16)
-            tcount = read_as<uint16_t>(mn_data + 14, endian);
-
-        spdlog::debug("ExifMnoteApple: detected {} tags", tcount);
-
-        // Sanity check the offset
-        if (mn_size < size_t(6 + 16 + tcount * 12 + 4))
-        {
-            spdlog::error("ExifMnoteApple Short MakerNote");
-            return nullptr;
-        }
-
-        size_t ofs = 16;
-        for (uint32_t i = 0; i < tcount; ++i, ofs += 12)
-        {
-            if (ofs + 12 > mn_size)
+    if (!for_each_apple_makernote_entry(
+            ed,
+            [&mn](uint16_t tag, uint16_t format, uint32_t components, const uint8_t *data, Endian endian)
             {
-                spdlog::error("ExifMnoteApple: Tag size overflow detected ({} vs size {})", ofs + 12, mn_size);
-                break;
-            }
-
-            auto tag        = read_as<uint16_t>(mn_data + ofs, endian);
-            auto format     = read_as<uint16_t>(mn_data + ofs + 2, endian);
-            auto components = read_as<uint32_t>(mn_data + ofs + 4, endian);
-
-            spdlog::debug("tag {}; format {}; nComponents {}", tag, format, components);
-
-            unsigned size_per_component = exif_format_get_size((ExifFormat)format);
-
-            if (size_per_component == 0)
-            {
-                spdlog::warn("Unknown data format, assuming 32-bit int");
-                size_per_component = 4;
-                format             = EXIF_FORMAT_SLONG;
-            }
-
-            if ((components > 0) && (mn_size / components < size_per_component))
-            {
-                spdlog::error("ExifMnoteApple: Tag size overflow detected (components {} vs size {})", components,
-                              mn_size);
-                continue;
-            }
-
-            auto entry_size = components * size_per_component;
-
-            if ((entry_size > 65536) || (entry_size > mn_size))
-            {
-                // Corrupt data: EXIF data size is limited to the maximum size of a JPEG segment (64 kb).
-                spdlog::error("ExifMnoteApple: Tag size overflow detected (entry_size {} vs size {})", entry_size,
-                              mn_size);
-                break;
-            }
-
-            // if the data fits in 4 bytes, it sits at location 8, otherwise location 8 stores a 32-bit offset
-            // to where the data is
-            size_t entry_offset = (entry_size > 4) ? read_as<uint32_t>(mn_data + ofs + 8, endian) : (ofs + 8);
-            if (entry_offset + entry_size > mn_size)
-            {
-                spdlog::warn("skipping");
-                continue;
-            }
-
-            const uint8_t *data = mn_data + entry_offset;
-
-            try
-            {
-                json value = json::object();
-
-                // if (auto desc_ptr = exif_tag_get_description_in_ifd((ExifTag)tag, EXIF_IFD_0))
-                //     value["description"] = std::string(desc_ptr);
-
-                if (auto format_name = exif_format_get_name((ExifFormat)format))
-                    value["type"] = format_name;
-                else
-                    value["type"] = "unknown";
-
-                value["tag"]    = tag;
-                value["value"]  = get_value((ExifFormat)format, components, data, endian);
-                value["string"] = value["value"].empty() ? "n/a" : value["value"].dump();
-
-                string tag_name = fmt::format("Tag {:05} (0x{:04x})", tag, tag);
-                switch (tag)
+                try
                 {
-                case 0x0001: tag_name = "Maker Note Version"; break; // MakerNoteVersion
-                case 0x0002: tag_name = "AE Matrix"; break;          // AEMatrix?
-                case 0x0003:                                         // RunTime (PLIST)
-                    tag_name             = "RunTime";
-                    value["description"] = "The amount of time the phone has been running since the last boot, not "
-                                           "including standby time.";
-                    break;
-                case 0x0004: // AEStable
-                    tag_name        = "AE Stable";
-                    value["string"] = !value["value"].empty() && value["value"].get<int32_t>() != 0 ? "Yes" : "No";
-                    break;
-                case 0x0005: tag_name = "AE Target"; break;  // AETarget
-                case 0x0006: tag_name = "AE Average"; break; // AEAverage
-                case 0x0007:                                 // AFStable
-                    tag_name        = "AF Stable";
-                    value["string"] = !value["value"].empty() && value["value"].get<int32_t>() != 0 ? "Yes" : "No";
-                    break;
-                case 0x0008: // AccelerationVector
-                    tag_name = "Acceleration Vector";
-                    value["description"] =
-                        "XYZ coordinates of the acceleration vector in units of g. As viewed from the front of "
-                        "the phone, positive X is toward the left side, positive Y is toward the bottom, and "
-                        "positive Z points into the face of the phone";
-                    break;
-                case 0x000d: tag_name = "Sphere Health Average Current"; break; // 0,1,6,20,24,32,40
-                case 0x000e: tag_name = "Sphere Motion Data Status"; break;     // 0,1,4,12 (0=landscape? 4=portrait?)
-                case 0x0010: tag_name = "Sphere Status"; break;                 //
-                case 0x000A: tag_name = "HDR Image Type"; break;                // HDRImageType
-                case 0x000B: tag_name = "Burst UUID"; break;                    // BurstUUID
-                case 0x000C: tag_name = "Focus Distance Range"; break;          // FocusDistanceRange
-                case 0x000F: tag_name = "OIS Mode"; break;                      // OISMode
-                case 0x0011: tag_name = "Content Identifier"; break;            // ContentIdentifier / MediaGroupUUID
-                case 0x0014:                                                    // ImageCaptureType
+                    json value = json::object();
+
+                    // if (auto desc_ptr = exif_tag_get_description_in_ifd((ExifTag)tag, EXIF_IFD_0))
+                    //     value["description"] = std::string(desc_ptr);
+
+                    if (auto format_name = exif_format_get_name((ExifFormat)format))
+                        value["type"] = format_name;
+                    else
+                        value["type"] = "unknown";
+
+                    value["tag"]    = tag;
+                    value["value"]  = get_value((ExifFormat)format, components, data, endian);
+                    value["string"] = value["value"].empty() ? "n/a" : value["value"].dump();
+
+                    string tag_name = fmt::format("Tag {:05} (0x{:04x})", tag, tag);
+                    switch (tag)
+                    {
+                    case 0x0001: tag_name = "Maker Note Version"; break; // MakerNoteVersion
+                    case 0x0002: tag_name = "AE Matrix"; break;          // AEMatrix?
+                    case 0x0003:                                         // RunTime (PLIST)
+                        tag_name             = "RunTime";
+                        value["description"] = "The amount of time the phone has been running since the last boot, not "
+                                               "including standby time.";
+                        break;
+                    case 0x0004: // AEStable
+                        tag_name        = "AE Stable";
+                        value["string"] = !value["value"].empty() && value["value"].get<int32_t>() != 0 ? "Yes" : "No";
+                        break;
+                    case 0x0005: tag_name = "AE Target"; break;  // AETarget
+                    case 0x0006: tag_name = "AE Average"; break; // AEAverage
+                    case 0x0007:                                 // AFStable
+                        tag_name        = "AF Stable";
+                        value["string"] = !value["value"].empty() && value["value"].get<int32_t>() != 0 ? "Yes" : "No";
+                        break;
+                    case 0x0008: // AccelerationVector
+                        tag_name = "Acceleration Vector";
+                        value["description"] =
+                            "XYZ coordinates of the acceleration vector in units of g. As viewed from the front of "
+                            "the phone, positive X is toward the left side, positive Y is toward the bottom, and "
+                            "positive Z points into the face of the phone";
+                        break;
+                    case 0x000d: tag_name = "Sphere Health Average Current"; break; // 0,1,6,20,24,32,40
+                    case 0x000e: tag_name = "Sphere Motion Data Status"; break; // 0,1,4,12 (0=landscape? 4=portrait?)
+                    case 0x0010: tag_name = "Sphere Status"; break;             //
+                    case 0x000A: tag_name = "HDR Image Type"; break;            // HDRImageType
+                    case 0x000B: tag_name = "Burst UUID"; break;                // BurstUUID
+                    case 0x000C: tag_name = "Focus Distance Range"; break;      // FocusDistanceRange
+                    case 0x000F: tag_name = "OIS Mode"; break;                  // OISMode
+                    case 0x0011: tag_name = "Content Identifier"; break;        // ContentIdentifier / MediaGroupUUID
+                    case 0x0014:                                                // ImageCaptureType
+                    {
+                        tag_name = "Image Capture Type";
+                        auto m   = std::map<int, string>{
+                            {1, "ProRAW"}, {2, "Portrait"}, {10, "Photo"}, {11, "Manual Focus"}, {12, "Scene"}};
+                        value["string"] = value["value"].get<int32_t>() && m.count(value["value"].get<int32_t>()) > 0
+                                              ? m[value["value"].get<int32_t>()]
+                                              : "Unknown";
+                        value["description"] = "Type of image captured.\n1  = ProRAW\n2  = Portrait\n10 = Photo\n11 = "
+                                               "Manual Focus\n12 = Scene";
+                        break;
+                    }
+                    case 0x0015: tag_name = "Image Unique ID"; break;        // ImageUniqueID
+                    case 0x0017: tag_name = "Live Photo Video Index"; break; // LivePhotoVideoIndex
+                    case 0x0019:
+                        tag_name        = "Image Processing Flags";
+                        value["string"] = fmt::format("{:032b}", value["value"].get<int32_t>());
+                        break;                                                  // ImageProcessingFlags
+                    case 0x001A: tag_name = "Quality Hint"; break;              // QualityHint
+                    case 0x001D: tag_name = "Luminance Noise Amplitude"; break; // LuminanceNoiseAmplitude
+                    case 0x001F:                                                // PhotosAppFeatureFlags
+                        tag_name             = "Photos App Feature Flags";
+                        value["string"]      = fmt::format("{:032b}", value["value"].get<int32_t>());
+                        value["description"] = "Set if a person or pet is detected in the image";
+                        break;
+                    case 0x0020: tag_name = "Image Capture Request ID"; break; // ImageCaptureRequestID
+                    case 0x0021: tag_name = "HDR Headroom"; break;             // HDRHeadroom
+                    case 0x0023: tag_name = "AF Performance"; break;           // AFPerformance
+                    case 0x0025:                                               // SceneFlags
+                        tag_name        = "Scene Flags";
+                        value["string"] = fmt::format("{:032b}", value["value"].get<int32_t>());
+                        break;
+                    case 0x0026: tag_name = "Signal To Noise Ratio Type"; break; // SignalToNoiseRatioType
+                    case 0x0027: tag_name = "Signal To Noise Ratio"; break;      // SignalToNoiseRatio
+                    case 0x002B: tag_name = "Photo Identifier"; break;           // PhotoIdentifier
+                    case 0x002D: tag_name = "Color Temperature"; break;          // ColorTemperature
+                    case 0x002E:                                                 // CameraType
+                        tag_name        = "Camera Type";
+                        value["string"] = value["value"].get<int32_t>() == 0
+                                              ? "Back Wide Angle"
+                                              : (value["value"].get<int32_t>() == 1
+                                                     ? "Back Normal"
+                                                     : (value["value"].get<int32_t>() == 6 ? "Front" : "Unknown"));
+                        break;
+                    case 0x002F: tag_name = "Focus Position"; break; // FocusPosition
+                    case 0x0030: tag_name = "HDR Gain"; break;       // HDRGain
+
+                    case 0x0031: tag_name = "Still Image Processing Homography"; break;
+                    case 0x0032: tag_name = "Intelligent Distortion Correction"; break;
+                    case 0x0033: tag_name = "NRF Status"; break;
+                    case 0x0034: tag_name = "NRF Input Bracket Count"; break;
+                    // case 0x0034: tag_name = "Flash on"; break;
+                    case 0x0035: tag_name = "NRF Registered Bracket Count"; break;
+                    // case 0x0035: tag_name = "0 for flash on"; break;
+                    case 0x0036: tag_name = "Lux Level"; break;
+                    case 0x0037: tag_name = "Last Focusing Method"; break;
+                    case 0x0038: tag_name = "AF Measured Depth"; break;             // AFMeasuredDepth
+                    case 0x003D: tag_name = "AF Confidence"; break;                 // AFConfidence
+                    case 0x003E: tag_name = "Color Correction Matrix"; break;       // ColorCorrectionMatrix
+                    case 0x003F: tag_name = "Green Ghost Mitigation Status"; break; // GreenGhostMitigationStatus
+                    case 0x0040: tag_name = "Semantic Style"; break;                // SemanticStyle
+                    case 0x0041: tag_name = "Semantic Style Rendering Ver"; break;  // SemanticStyleRenderingVer
+                    case 0x0042:
+                        tag_name = "Semantic Style Preset";
+                        break; // SemanticStylePreset
+                    // case 0x004E: tag_name = "Apple_0x004e"; break;
+                    // case 0x004F: tag_name = "Apple_0x004f"; break;
+                    // case 0x0054: tag_name = "Apple_0x0054"; break;
+                    // case 0x005A: tag_name = "Apple_0x005a"; break;
+                    default: break;
+                    }
+
+                    mn[tag_name] = value;
+                }
+                catch (const std::exception &e)
                 {
-                    tag_name = "Image Capture Type";
-                    auto m   = std::map<int, string>{
-                        {1, "ProRAW"}, {2, "Portrait"}, {10, "Photo"}, {11, "Manual Focus"}, {12, "Scene"}};
-                    value["string"]      = value["value"].get<int32_t>() && m.count(value["value"].get<int32_t>()) > 0
-                                               ? m[value["value"].get<int32_t>()]
-                                               : "Unknown";
-                    value["description"] = "Type of image captured.\n1  = ProRAW\n2  = Portrait\n10 = Photo\n11 = "
-                                           "Manual Focus\n12 = Scene";
-                    break;
+                    // continue;
+                    spdlog::error("Exception while parsing Apple MakerNote tag {}; {}", tag, e.what());
                 }
-                case 0x0015: tag_name = "Image Unique ID"; break;        // ImageUniqueID
-                case 0x0017: tag_name = "Live Photo Video Index"; break; // LivePhotoVideoIndex
-                case 0x0019:
-                    tag_name        = "Image Processing Flags";
-                    value["string"] = fmt::format("{:032b}", value["value"].get<int32_t>());
-                    break;                                                  // ImageProcessingFlags
-                case 0x001A: tag_name = "Quality Hint"; break;              // QualityHint
-                case 0x001D: tag_name = "Luminance Noise Amplitude"; break; // LuminanceNoiseAmplitude
-                case 0x001F:                                                // PhotosAppFeatureFlags
-                    tag_name             = "Photos App Feature Flags";
-                    value["string"]      = fmt::format("{:032b}", value["value"].get<int32_t>());
-                    value["description"] = "Set if a person or pet is detected in the image";
-                    break;
-                case 0x0020: tag_name = "Image Capture Request ID"; break; // ImageCaptureRequestID
-                case 0x0021: tag_name = "HDR Headroom"; break;             // HDRHeadroom
-                case 0x0023: tag_name = "AF Performance"; break;           // AFPerformance
-                case 0x0025:                                               // SceneFlags
-                    tag_name        = "Scene Flags";
-                    value["string"] = fmt::format("{:032b}", value["value"].get<int32_t>());
-                    break;
-                case 0x0026: tag_name = "Signal To Noise Ratio Type"; break; // SignalToNoiseRatioType
-                case 0x0027: tag_name = "Signal To Noise Ratio"; break;      // SignalToNoiseRatio
-                case 0x002B: tag_name = "Photo Identifier"; break;           // PhotoIdentifier
-                case 0x002D: tag_name = "Color Temperature"; break;          // ColorTemperature
-                case 0x002E:                                                 // CameraType
-                    tag_name        = "Camera Type";
-                    value["string"] = value["value"].get<int32_t>() == 0
-                                          ? "Back Wide Angle"
-                                          : (value["value"].get<int32_t>() == 1
-                                                 ? "Back Normal"
-                                                 : (value["value"].get<int32_t>() == 6 ? "Front" : "Unknown"));
-                    break;
-                case 0x002F: tag_name = "Focus Position"; break; // FocusPosition
-                case 0x0030: tag_name = "HDR Gain"; break;       // HDRGain
-
-                case 0x0031: tag_name = "Still Image Processing Homography"; break;
-                case 0x0032: tag_name = "Intelligent Distortion Correction"; break;
-                case 0x0033: tag_name = "NRF Status"; break;
-                case 0x0034: tag_name = "NRF Input Bracket Count"; break;
-                // case 0x0034: tag_name = "Flash on"; break;
-                case 0x0035: tag_name = "NRF Registered Bracket Count"; break;
-                // case 0x0035: tag_name = "0 for flash on"; break;
-                case 0x0036: tag_name = "Lux Level"; break;
-                case 0x0037: tag_name = "Last Focusing Method"; break;
-                case 0x0038: tag_name = "AF Measured Depth"; break;             // AFMeasuredDepth
-                case 0x003D: tag_name = "AF Confidence"; break;                 // AFConfidence
-                case 0x003E: tag_name = "Color Correction Matrix"; break;       // ColorCorrectionMatrix
-                case 0x003F: tag_name = "Green Ghost Mitigation Status"; break; // GreenGhostMitigationStatus
-                case 0x0040: tag_name = "Semantic Style"; break;                // SemanticStyle
-                case 0x0041: tag_name = "Semantic Style Rendering Ver"; break;  // SemanticStyleRenderingVer
-                case 0x0042:
-                    tag_name = "Semantic Style Preset";
-                    break; // SemanticStylePreset
-                // case 0x004E: tag_name = "Apple_0x004e"; break;
-                // case 0x004F: tag_name = "Apple_0x004f"; break;
-                // case 0x0054: tag_name = "Apple_0x0054"; break;
-                // case 0x005A: tag_name = "Apple_0x005a"; break;
-                default: break;
-                }
-
-                mn[tag_name] = value;
-            }
-            catch (const std::exception &e)
-            {
-                // continue;
-                spdlog::error("Exception while parsing Apple MakerNote tag {}; {}", tag, e.what());
-            }
-        }
-    }
+            }))
+        return nullptr;
 
     return mn;
+}
+
+std::optional<double> Exif::apple_makernote_value(uint16_t wanted_tag) const
+{
+    if (!m_impl || !m_impl->exif_data)
+        return std::nullopt;
+
+    std::optional<double> result;
+    for_each_apple_makernote_entry(
+        m_impl->exif_data.get(),
+        [&](uint16_t tag, uint16_t format, uint32_t components, const uint8_t *data, Endian endian)
+        {
+            // The note may repeat a tag; the first well-formed one wins.
+            if (result || tag != wanted_tag)
+                return;
+
+            if (auto v = get_value(format, components, data, endian); v.is_number())
+                result = v.get<double>();
+        });
+
+    return result;
 }
 
 json Exif::to_json() const

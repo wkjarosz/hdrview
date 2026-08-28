@@ -2,6 +2,7 @@
 
 #include "colorspace.h"
 #include "fwd.h"
+#include "imageio/gainmap.h"
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -38,6 +39,23 @@ struct ImageLoadOptions
     //! If true, keep the file's primaries and only linearize the pixel values on load. If false, convert to Rec709/sRGB
     //! or Gray at D65 primaries as appropriate.
     bool keep_primaries = true;
+
+    //! Ceiling, in stops, on how much of an HDR gain map to reconstruct when a file carries one.
+    /*!
+        A gain map says how much brighter an image's HDR rendition is than the SDR pixels stored
+        alongside it. Infinity reconstructs all of it, which is the default since HDRView's working
+        space is unbounded; zero leaves the SDR rendition alone. See imageio/gainmap.h.
+    */
+    float gainmap_headroom = k_full_gainmap_headroom;
+
+    //! Whether to keep what a gain-mapped file actually stores, alongside the rendition built from it.
+    /*!
+        A gain-mapped file holds a base rendition and a map, and the image HDRView shows is the two
+        combined. With this on, both are kept as their own `base.*` and `gainmap.*` channel groups,
+        so everything in the file is loaded rather than only the result. Costs roughly 75% more
+        memory for a three-channel image with a single-channel map.
+    */
+    bool gainmap_renditions = true;
 };
 
 /**

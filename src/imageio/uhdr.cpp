@@ -8,10 +8,12 @@
 #include "app.h"
 #include "colorspace.h"
 #include "exif.h"
+#include "gainmap.h"
 #include "image.h"
 #include "imageio/image_loader.h"
 #include "imgui.h"
 #include "timer.h"
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -202,6 +204,16 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
         };
         throw_if_error(uhdr_dec_set_image(decoder.get(), &compressed_image));
         throw_if_error(uhdr_dec_set_out_color_transfer(decoder.get(), UHDR_CT_LINEAR));
+
+        // libultrahdr applies the gain map itself, so the target headroom has to be handed to it
+        // rather than applied afterwards. Left unset it reconstructs the map in full, which is what
+        // an unbounded target asks for anyway.
+        if (std::isfinite(opts.gainmap_headroom))
+        {
+            const float boost = std::max(std::exp2(opts.gainmap_headroom), 1.f);
+            spdlog::info("Limiting gain map reconstruction to {:.3f} stops ({:.3f}x).", opts.gainmap_headroom, boost);
+            throw_if_error(uhdr_dec_set_out_max_display_boost(decoder.get(), boost));
+        }
         throw_if_error(uhdr_dec_set_out_img_format(decoder.get(), UHDR_IMG_FMT_64bppRGBAHalfFloat));
         throw_if_error(uhdr_dec_probe(decoder.get()));
         spdlog::debug("base image: {}x{}", uhdr_dec_get_image_width(decoder.get()),
@@ -325,12 +337,24 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
     const uhdr_mem_block_t *icc_data = uhdr_dec_get_icc(decoder.get());
     if (icc_data && icc_data->data && icc_data->data_sz > 0)
     {
-        spdlog::debug("Found ICC data of size {} bytes", icc_data->data_sz);
-        // HACK: for the same file the icc size reported by libuhdr is 14 bytes larger than what libjpeg reports and is
-        // able to successfully load. Skipping it seems to extract an ICC profile that we can load. I assume this is
-        // some additional header
-        image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data) + 14,
-                               reinterpret_cast<uint8_t *>(icc_data->data) + icc_data->data_sz);
+        // libuhdr hands back the APP2 marker's whole payload rather than just the profile: the
+        // "ICC_PROFILE\0" signature, then this chunk's sequence number and the chunk count, and only
+        // then the profile itself. libjpeg-based readers strip that 14-byte header, which is why the
+        // sizes the two report for one file differ by exactly that much.
+        //
+        // libuhdr keeps only the first such marker, so a profile large enough to have been split
+        // across several arrives truncated; ICCProfile then rejects it and the file falls back to its
+        // CICP-derived gamut, handled above.
+        static constexpr uint8_t icc_sig[]  = {'I', 'C', 'C', '_', 'P', 'R', 'O', 'F', 'I', 'L', 'E', '\0'};
+        static constexpr size_t  icc_hdr_sz = sizeof(icc_sig) + 2;
+
+        auto         bytes = reinterpret_cast<const uint8_t *>(icc_data->data);
+        const size_t skip =
+            (icc_data->data_sz > icc_hdr_sz && memcmp(bytes, icc_sig, sizeof(icc_sig)) == 0) ? icc_hdr_sz : 0;
+
+        spdlog::debug("Found ICC data of size {} bytes, {} of which is APP2 header", icc_data->data_sz, skip);
+
+        image->icc_data.assign(bytes + skip, bytes + icc_data->data_sz);
         image->metadata["color profile"] = ICCProfile(image->icc_data).description();
     }
 
@@ -386,48 +410,38 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
          gainmap->fmt != UHDR_IMG_FMT_24bppRGB888))
         return {image};
 
-    // otherwise, extract the gain map as a separate channel group
+    if (!opts.gainmap_renditions)
+        return {image};
 
-    int num_components =
+    // otherwise, keep the gain map as its own channel group. Only the gain map: libuhdr applies the
+    // map inside its own decoder and returns just the result, so unlike HDRView's own gain-map paths
+    // this one never has the base rendition in hand to keep.
+
+    const int num_components =
         gainmap->fmt == UHDR_IMG_FMT_32bppRGBA8888 ? 4 : (gainmap->fmt == UHDR_IMG_FMT_24bppRGB888 ? 3 : 1);
 
-    if (num_components == 1)
-        image->channels.emplace_back("gainmap.Y", size);
-    if (num_components >= 3)
     {
-        image->channels.emplace_back("gainmap.R", size);
-        image->channels.emplace_back("gainmap.G", size);
-        image->channels.emplace_back("gainmap.B", size);
-    }
-    if (num_components == 4)
-        image->channels.emplace_back("gainmap.A", size);
-
-    {
-        auto  byte_data = reinterpret_cast<uint8_t *>(gainmap->planes[UHDR_PLANE_PACKED]);
-        int   stride_y  = gainmap->stride[UHDR_PLANE_PACKED] * num_components;
         Timer timer;
-        for (int c = 0; c < num_components; ++c)
-            image->channels[4 + c].copy_from_interleaved(
-                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return dequantize_full(v); },
-                stride_y);
+
+        GainmapImage gm;
+        gm.size     = gainmap_size;
+        gm.channels = num_components;
+        gm.pixels.resize((size_t)gainmap_size.x * gainmap_size.y * num_components);
+
+        const auto byte_data = reinterpret_cast<const uint8_t *>(gainmap->planes[UHDR_PLANE_PACKED]);
+        const int  stride_y  = gainmap->stride[UHDR_PLANE_PACKED] * num_components;
+        for (int y = 0; y < gainmap_size.y; ++y)
+            for (int x = 0; x < gainmap_size.x; ++x)
+                for (int c = 0; c < num_components; ++c)
+                    gm.pixels[((size_t)y * gainmap_size.x + x) * num_components + c] =
+                        dequantize_full(byte_data[(size_t)y * stride_y + x * num_components + c]);
+
+        // libuhdr has already applied the map to produce the pixels above, so these channels exist to
+        // be inspected. They keep the file's own encoding: an ISO 21496-1 map is not sRGB-encoded, and
+        // linearizing it as if it were would misreport every value.
+        append_gainmap_channels(*image, resample_gainmap(gm, size, false));
 
         spdlog::debug("Copying gainmap data took: {} seconds.", (timer.elapsed() / 1000.f));
-    }
-
-    // resize the data in the channels if necessary
-    if (gainmap_size.x < size.x && gainmap_size.y < size.y)
-    {
-        int xs = size.x / gainmap_size.x;
-        int ys = size.x / gainmap_size.x;
-        spdlog::debug("Resizing gainmap resolution {}x{} by factor {}x{} to match image resolution {}x{}.",
-                      gainmap_size.x, gainmap_size.y, xs, ys, size.x, size.y);
-        for (int c = 0; c < num_components; ++c)
-        {
-            Array2Df tmp = image->channels[4 + c];
-
-            for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) image->channels[4 + c](x, y) = tmp(x / xs, y / ys);
-        }
     }
 
     return {image};

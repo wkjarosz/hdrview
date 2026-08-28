@@ -1532,6 +1532,7 @@ set(HDRVIEW_SOURCES
     src/imageio/exif.cpp
     src/imageio/xmp.cpp
     src/imageio/exr.cpp
+    src/imageio/gainmap.cpp
     src/imageio/heif.cpp
     src/imageio/icc.cpp
     src/imageio/jpg.cpp
@@ -1634,7 +1635,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
-                                tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp
+                                tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
                                 tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_numeric_edge_cases.cpp tests/test_loader_limits.cpp
                                 tests/test_short_names.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
                                 tests/test_icc_gray_alpha.cpp
