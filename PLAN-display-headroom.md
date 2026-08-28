@@ -47,7 +47,9 @@ by ImPlot's axis transform rather than by this code.
 
 ### Degenerate cases
 
-- **headroom unknown (0)** -- draw nothing new; behave exactly as today.
+- **headroom unknown (0)** -- draw nothing new; behave exactly as today. Note this is also the state
+  during the first second on Wayland, before the compositor's preferred description arrives, so the
+  band appearing slightly after launch is expected rather than a bug.
 - **headroom <= 1 (SDR display)** -- no HDR band. Consider labeling the `[0,1]` band `SDR` anyway, or
   suppressing both labels; decide when it can be seen on a real display.
 
@@ -105,7 +107,7 @@ Two traps:
 
 Note the ceiling is static but the SDR white level is user-adjustable, so headroom still moves live.
 
-### Wayland -- plumbed, but currently reports nothing useful
+### Wayland -- works today
 
 The GLFW fork already does this correctly, and `query_display_colorspace()` already reads the result
 into `m_display_cs.max_nits` / `.sdr_white_nits`. It takes the compositor's *preferred* image
@@ -114,39 +116,45 @@ event. That is the right event: the protocol describes the alternative, `target_
 theoretical and [it] may not correspond to the luminance of light emitted on an actual display"* --
 and the fork correctly leaves that handler empty.
 
-**But measured on KDE Plasma / KWin 6.7.4, on an HDR-enabled display, it reports a headroom of 1.0:**
+Measured on KDE Plasma / KWin 6.7.4 against an HDR display whose peak brightness is overridden to
+1850 nits:
 
 ```
-kscreen-doctor:  HDR: enabled -- SDR brightness: 80 nits
-                 Peak brightness: 418 nits, overridden with: 1850 nits
-
-HDRView:         Got a floating-point precision framebuffer.
-                 Display color space is sRGB/BT.709 gamut with Linear transfer,
-                 80 nits SDR white, 0.2-80 nits range (does not support HDR).
+22:14:41  ... 80 nits SDR white, 0.2-80 nits range   (does not support HDR)
+22:14:42  ... 80 nits SDR white, 0-1850 nits range   (colorpass active)
 ```
 
-The fp16 buffer was granted and the transfer is `ext_linear`, so the extended path did engage. The
-values are genuinely arriving from the compositor (a 0.2 nit minimum could not come from anywhere
-else). KWin simply reports `max_lum == reference_lum == 80`.
+`max_nits` matches the display's configured peak exactly, so headroom is 1850/80 = **23.1x**, about
+4.5 stops.
 
-Unresolved: whether KWin describes the preferred description this way by design, or whether GLFW is
-asking the wrong question. Worth settling before trusting the Wayland number, but it does not block
-the feature -- it degrades to "unknown/SDR" and draws nothing.
+Two things to know when testing:
+
+- **The real values arrive asynchronously**, roughly a second after startup, once the compositor
+  delivers the preferred image description. The first line above is a transient: before it arrives,
+  max and reference are both 80 and the display reads as SDR. Anything that samples headroom once at
+  startup will latch that wrong value -- another reason to read it per frame, as `update_colorpass()`
+  already does.
+- **`max_nits` is fixed; `sdr_white_nits` moves with the monitor's brightness control.** So headroom
+  changes via the denominator: turning brightness down raises it. This is exactly the behavior the
+  band is meant to visualize, and it makes Wayland the most convenient platform to develop against --
+  the band can be made to expand and contract with a brightness key.
 
 ## Suggested order of work
 
 Most of this is not platform-specific, and is testable on any machine.
 
-1. **`display_headroom()` plus a manual override.** A `--headroom <x>` flag (and/or a debug control)
-   that forces a value. Needed regardless: without it the feature cannot be exercised on Linux at all
-   given the KWin finding above, and on macOS it is the only way to see the band move on demand
-   rather than waiting for a thermal event.
-2. **The histogram UI**, against that override. Pure ImPlot drawing -- fully verifiable without any
-   HDR display.
+1. **`display_headroom()`**, from `m_display_cs` where that is populated. Optionally a
+   `--headroom <x>` override: not needed on Wayland, where the brightness control already moves the
+   real value, but useful for pinning a specific number, for exercising the degenerate cases, and on
+   macOS, where real headroom only moves on thermal and power events you cannot summon on demand.
+2. **The histogram UI.** Pure ImPlot drawing, and on Wayland it can be verified against a real
+   headroom that moves with the brightness control.
 3. **macOS `NSScreen` query.** Small and isolated; needs a Mac to compile and a real EDR display to
    confirm the number is sane and the band tracks the brightness slider.
 4. **Windows DXGI query.** Independent of 3.
-5. **Wayland investigation.** Independent of everything else.
+
+Steps 1 and 2 are fully verifiable on Wayland against a real, live-changing headroom, so the
+platform-specific steps reduce to making macOS and Windows report the same number.
 
 ## Open questions
 
