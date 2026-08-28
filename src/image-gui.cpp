@@ -287,7 +287,15 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     const float head_h  = ImMax(2.f, ImFloor(ImMin(EmSize(0.28f), 0.3f * txt_h)));
     const float head_l  = ImFloor(2.2f * head_h);
     const float gap     = EmSize(0.3f);
-    const float tip_gap = 2.f; // between an arrow's tip and the mark it points at
+
+    // How far back from a mark an arrow's tip is placed, for tip_gap pixels of daylight between the two.
+    //
+    // The tip is not where the head ends. Antialiasing offsets each edge outward along its own normal
+    // and miters them at the corners, and at a point this acute that miter carries the apex a further
+    // 1.1 pixels forward -- enough, against a 2 pixel nominal gap either side of a mark one pixel wide,
+    // to leave a sliver too thin to survive rounding evenly on both sides.
+    const float tip_gap   = 2.f;
+    const float tip_inset = tip_gap + 1.2f + 0.5f * style.MajorTickSize.x;
 
     // The marks run outward from the axis line to the far edge of the label row, rather than inward the
     // way an ordinary tick does. Every boundary they mark already carries a line the full height of the
@@ -329,14 +337,14 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
         const float a = boundary_x(va), b = boundary_x(vb);
         const float w = ImGui::CalcTextSize(name).x;
         // A head with no shaft behind it does not read as an arrow, so demand at least its length again.
-        if (b - a < w + 2.f * (gap + tip_gap + 2.f * head_l))
+        if (b - a < w + 2.f * (gap + tip_inset + 2.f * head_l))
             return;
 
         // Stopping short of the marks rather than touching them, so each reads as a cap the arrow points
         // at rather than as a continuation of it.
         const float center = 0.5f * (a + b);
-        arrow(center - 0.5f * w - gap, a + tip_gap);
-        arrow(center + 0.5f * w + gap, b - tip_gap);
+        arrow(center - 0.5f * w - gap, a + tip_inset);
+        arrow(center + 0.5f * w + gap, b - tip_inset);
     };
 
     mark(sdr_x.min.x);
