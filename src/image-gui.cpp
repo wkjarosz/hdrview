@@ -149,6 +149,9 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
     }
 }
 
+//! Fraction of its usual alpha a display-range mark keeps while the range it describes is out of reach.
+static constexpr float unreachable_alpha = 0.5f;
+
 /*!
     Names the two halves of what the display can show, the way Lightroom does, as tick labels on a second
     x axis along the top of the plot.
@@ -156,6 +159,10 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
     Up to display value 1 is ordinary SDR; above that, up to \p ceiling_x, is the headroom the display
     currently has, which grows as the display is dimmed (see HDRViewApp::display_headroom()). Highlighting
     that whole span and dimming beyond it is the caller's DragRects; this only supplies the two names.
+
+    ImPlot colors every tick on an axis alike, so a name that has to differ from its neighbor cannot be one
+    of them: when the HDR band is out of reach its name is withheld and handed back for the caller to draw
+    itself, in the row and at the offset ImPlot would have used.
 
     They are handed to ImPlot as ticks rather than drawn directly so that they get exactly the treatment
     the bottom axis's tick labels get: ImPlot reserves room for them above the plot and clips them to the
@@ -170,12 +177,15 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
     settled on. Being set up rather than drawn, the labels follow the exposure a frame behind a drag in
     progress -- the same frame behind as X1's own ticks, which are fixed at setup for the same reason.
 
-    \param sdr_x      Plot-space x of display values 0 and 1
-    \param ceiling_x  Plot-space x of the headroom ceiling
-    \param has_hdr    Whether there is any headroom to name; when false only the SDR band is labeled
-    \param x_scale    The scale X1 was just given, needed to center each label within its band
+    \param sdr_x       Plot-space x of display values 0 and 1
+    \param ceiling_x   Plot-space x of the headroom ceiling
+    \param has_hdr     Whether there is any headroom to name; when false only the SDR band is labeled
+    \param hdr_dimmed  Whether the HDR band is out of reach, and so is to be named by the caller
+    \param x_scale     The scale X1 was just given, needed to center each label within its band
+    \return            Plot-space x of the withheld HDR name, or nullopt when the caller has none to draw
 */
-static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool has_hdr, AxisScale x_scale)
+static optional<double> setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool has_hdr, bool hdr_dimmed,
+                                                 AxisScale x_scale)
 {
     const ImPlotPlot *plot  = ImPlot::GetCurrentPlot();
     const ImPlotRange range = plot->Axes[ImAxis_X1].Range;
@@ -189,10 +199,11 @@ static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool 
     const char *labels[2];
     int         n = 0;
 
-    auto name_band = [&](double a, double b, const char *label)
+    // Where a band's name centers, or nullopt if it has nowhere to go.
+    auto name_pos = [&](double a, double b, const char *label) -> optional<double>
     {
         if (span <= 0.0)
-            return;
+            return {};
 
         // Clamp to what is on screen, so a band running off an edge still centers its label within the
         // part that can be read.
@@ -205,18 +216,33 @@ static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool 
         // layout.
         const float plot_w = plot->PlotRect.GetWidth();
         if (plot_w > 0.f && (float)((wb - wa) / span) * plot_w < ImGui::CalcTextSize(label).x + EmSize(0.5f))
-            return;
+            return {};
 
         // Midway along the band's *pixels*, which is where the label centers. Midway in value space would
         // sit visibly off-center on the nonlinear scales.
-        values[n] = axis_scale_inv(0.5 * (wa + wb), x_scale);
+        return axis_scale_inv(0.5 * (wa + wb), x_scale);
+    };
+
+    auto add_tick = [&](optional<double> v, const char *label)
+    {
+        if (!v)
+            return;
+        values[n] = *v;
         labels[n] = label;
         ++n;
     };
 
-    name_band(sdr_x.min.x, sdr_x.max.x, "SDR");
+    add_tick(name_pos(sdr_x.min.x, sdr_x.max.x, "SDR"), "SDR");
+
+    optional<double> dimmed_hdr_name;
     if (has_hdr)
-        name_band(sdr_x.max.x, ceiling_x, "HDR");
+    {
+        auto hdr_name = name_pos(sdr_x.max.x, ceiling_x, "HDR");
+        if (hdr_dimmed)
+            dimmed_hdr_name = hdr_name;
+        else
+            add_tick(hdr_name, "HDR");
+    }
 
     // Face the way X1 faces and take whichever side it leaves free, rather than being fixed to the top
     // pointing right: X1's context menu lets the user invert it or send it to the opposite side, and this
@@ -241,6 +267,8 @@ static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool 
     ImPlot::SetupAxisScale(ImAxis_X2, axis_scale_fwd_xform, axis_scale_inv_xform, &hdrview()->histogram_x_scale());
     ImPlot::SetupAxisLimits(ImAxis_X2, range.Min, range.Max, ImPlotCond_Always);
     ImPlot::SetupAxisTicks(ImAxis_X2, values, n, labels);
+
+    return dimmed_hdr_name;
 }
 
 /*!
@@ -259,8 +287,13 @@ static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool 
 
     Call between BeginPlot and EndPlot. Takes plot-space x, and follows whichever side and direction the
     axis ended up on, so it rides the bottom axis's Invert and Opposite along with everything else.
+
+    \param hdr_dimmed       Whether the HDR band is out of reach, and so drawn dimmed
+    \param dimmed_hdr_name  Where to draw that band's name, when setup_display_range_axis() withheld it from
+                            the axis rather than let it take the same color as its neighbor
 */
-static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, bool has_hdr)
+static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, bool has_hdr, bool hdr_dimmed,
+                                       optional<double> dimmed_hdr_name)
 {
     const ImPlotPlot *plot = ImPlot::GetCurrentPlot();
     const ImPlotAxis &ax   = plot->Axes[ImAxis_X2];
@@ -302,27 +335,24 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     // Strokes are rects rather than lines, since a filled rect carries no antialiased fringe and so stays
     // crisp on whole-pixel bounds. The color is semitransparent, so the corner belongs to the leg alone
     // and the run stops against it: overlapping the two would print a darker square there.
-    auto stroke = [&](float x0, float y0, float x1, float y1)
-    {
-        draw_list->AddRectFilled(ImVec2{ImMin(x0, x1), ImMin(y0, y1)}, ImVec2{ImMax(x0, x1), ImMax(y0, y1)},
-                                 ax.ColorTxt);
-    };
+    auto stroke = [&](float x0, float y0, float x1, float y1, ImU32 col)
+    { draw_list->AddRectFilled(ImVec2{ImMin(x0, x1), ImMin(y0, y1)}, ImVec2{ImMax(x0, x1), ImMax(y0, y1)}, col); };
 
     // One side of a bracket: the run out from the name, and the leg turning back towards the axis line at
     // the end of it. \p dir is +1 for the side running right, so the run stops half a pixel short on the
     // side the leg occupies. Without a leg the run carries on to the boundary and off the plot.
-    auto side = [&](float from, float edge, bool leg, float dir)
+    auto side = [&](float from, float edge, bool leg, float dir, ImU32 col)
     {
         const float x = edge - dir * leg_inset;
-        stroke(from, y - 0.5f, leg ? x - dir * 0.5f : edge, y + 0.5f);
+        stroke(from, y - 0.5f, leg ? x - dir * 0.5f : edge, y + 0.5f, col);
         if (leg)
             // Spanning the run's whole row, not just down from one side of it. Reaching from y - 0.5
             // meets the run where the axis is above the plot and the leg descends, but falls a row short
             // of it where the axis is below and the leg climbs, leaving the corner visibly unjoined.
-            stroke(x - 0.5f, ImMin(y - 0.5f, leg_end), x + 0.5f, ImMax(y + 0.5f, leg_end));
+            stroke(x - 0.5f, ImMin(y - 0.5f, leg_end), x + 0.5f, ImMax(y + 0.5f, leg_end), col);
     };
 
-    auto bracket = [&](double va, double vb, const char *name)
+    auto bracket = [&](double va, double vb, const char *name, ImU32 col)
     {
         const float pa = boundary_px(va), pb = boundary_px(vb);
         const float a = snap(pa), b = snap(pb);
@@ -339,13 +369,23 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
         // space maps to pixels linearly, so the two midpoints are the same point.
         const float center = IM_ROUND(0.5f * (ImClamp(pa, x_lo, x_hi) + ImClamp(pb, x_lo, x_hi)));
         const float reach  = IM_ROUND(0.5f * w + gap);
-        side(center - reach, a, on_plot(pa), -1.f);
-        side(center + reach, b, on_plot(pb), +1.f);
+        side(center - reach, a, on_plot(pa), -1.f, col);
+        side(center + reach, b, on_plot(pb), +1.f, col);
     };
 
-    bracket(sdr_x.min.x, sdr_x.max.x, "SDR");
+    const ImU32 dim_col = ImGui::GetColorU32(ax.ColorTxt, unreachable_alpha);
+
+    bracket(sdr_x.min.x, sdr_x.max.x, "SDR", ax.ColorTxt);
     if (has_hdr)
-        bracket(sdr_x.max.x, ceiling_x, "HDR");
+        bracket(sdr_x.max.x, ceiling_x, "HDR", hdr_dimmed ? dim_col : ax.ColorTxt);
+
+    // The name ImPlot was not given, placed where it would have put it: centered on its tick, and one
+    // LabelPadding out from the axis line -- the same row the runs above straddle the middle of.
+    if (dimmed_hdr_name)
+    {
+        const float tx = (float)ImPlot::PlotToPixels(*dimmed_hdr_name, 0.0).x - 0.5f * ImGui::CalcTextSize("HDR").x;
+        draw_list->AddText(ImVec2{tx, y_row - 0.5f * txt_h}, dim_col, "HDR");
+    }
 }
 
 /*!
@@ -360,7 +400,7 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     Call between BeginPlot and EndPlot. Takes plot-space x, so it follows the exposure and rides all three
     x-axis scales without knowing which is active.
 */
-static void draw_display_ceiling_line(double ceiling_x)
+static void draw_display_ceiling_line(double ceiling_x, bool dimmed)
 {
     // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive fill
     // and the CIE diagram elsewhere in this file.
@@ -369,7 +409,7 @@ static void draw_display_ceiling_line(double ceiling_x)
     const ImVec2 plot_size = ImPlot::GetPlotSize();
     const float  x         = ImPlot::PlotToPixels(ceiling_x, 0.0).x;
     ImPlot::GetPlotDrawList()->AddLine(ImVec2{x, plot_pos.y}, ImVec2{x, plot_pos.y + plot_size.y},
-                                       ImGui::GetColorU32(ImGuiCol_Text, 0.5f));
+                                       ImGui::GetColorU32(ImGuiCol_Text, dimmed ? 0.5f * unreachable_alpha : 0.5f));
     ImPlot::PopPlotClipRect();
 }
 
@@ -534,13 +574,20 @@ void Image::draw_histogram()
         }
         }
 
+        // "Clamp to LDR" caps the output at display white, so whatever headroom the display has above it
+        // cannot be shown: the highlighted region ends at white, and everything naming the range beyond --
+        // the HDR name and bracket, the ceiling line and its tag -- is dimmed along with it.
+        const bool hdr_dimmed = hdrview()->clamp_to_LDR();
+        // Set during the plot's setup phase, drawn once it is open; see setup_display_range_axis().
+        optional<double> dimmed_hdr_name;
         {
             // 0 means the display never told us its ceiling, which is not the same as having none, so
             // there is no HDR band to name in that case.
             const float headroom = hdrview()->display_headroom();
             const bool  has_hdr  = headroom > 1.f;
-            setup_display_range_axis(Box1d{display_to_plot(0.0), display_to_plot(1.0)},
-                                     display_to_plot(has_hdr ? headroom : 1.0), has_hdr, x_scale);
+            dimmed_hdr_name =
+                setup_display_range_axis(Box1d{display_to_plot(0.0), display_to_plot(1.0)},
+                                         display_to_plot(has_hdr ? headroom : 1.0), has_hdr, hdr_dimmed, x_scale);
         }
 
         //
@@ -686,15 +733,17 @@ void Image::draw_histogram()
         // case fall back to dimming above display 1, the pre-headroom behavior.
         const float headroom = hdrview()->display_headroom();
         const bool  has_hdr  = headroom > 1.f;
+        double      ceiling_x = has_hdr ? display_to_plot(headroom) : xrange.max.x;
         // Non-const: DragRect takes a mutable pointer, though NoInputs keeps it from ever writing back.
-        double ceiling_x = has_hdr ? display_to_plot(headroom) : xrange.max.x;
+        double dim_from_x = hdr_dimmed ? xrange.max.x : ceiling_x;
 
         auto plt_range = ImPlot::GetPlotLimits(ImAxis_X1);
         ImPlot::DragRect(0, &plt_range.X.Min, &plt_range.Y.Min, &xrange.min.x, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
-        // Dim from the display's ceiling rather than from white: the range between the two is real
-        // headroom this display can show, so it belongs to the highlighted region.
-        ImPlot::DragRect(0, &ceiling_x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
+        // Dim from the display's ceiling rather than from white: the range between the two is real headroom
+        // this display can show, so it belongs to the highlighted region -- until clamping puts it out of
+        // reach, and white is once again as far as the display goes.
+        ImPlot::DragRect(0, &dim_from_x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
 
         // Displayed values (d) are related to stored values (p) via the exposure and offset:
@@ -732,12 +781,12 @@ void Image::draw_histogram()
         if (has_hdr)
         {
             ceiling_x = display_to_plot(headroom);
-            draw_display_ceiling_line(ceiling_x);
+            draw_display_ceiling_line(ceiling_x, hdr_dimmed);
             // Grey rather than white: this is the display telling us where it stops, not a control the
             // user set, and it should not read as a third handle alongside the black and white points.
-            ImPlot::TagX(ceiling_x, ImVec4(0.6f, 0.6f, 0.6f, 1.f), "%.3gx", headroom);
+            ImPlot::TagX(ceiling_x, ImVec4(0.6f, 0.6f, 0.6f, hdr_dimmed ? unreachable_alpha : 1.f), "%.3gx", headroom);
         }
-        draw_display_range_extents(xrange, ceiling_x, has_hdr);
+        draw_display_range_extents(xrange, ceiling_x, has_hdr, hdr_dimmed, dimmed_hdr_name);
 
         // The shader compares clip_range against display values (d = p * gain + offset), so map it into plot
         // space -- which holds stored values p -- the same way the black/white points above do.
