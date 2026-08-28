@@ -1361,6 +1361,17 @@ if(HDRVIEW_ENABLE_LIBRAW)
       message(STATUS "Will build libraw library")
       mark_as_system_library(libraw::libraw_r)
       disable_target_warnings(libraw::libraw_r)
+      # LibRaw sizes its raw store from raw_width x raw_height but its unpackers fill only the active area,
+      # so on a sensor whose frame carries a masked margin the rest is whatever malloc last held. HDRView
+      # keeps that margin (see the CFA part in imageio/raw.cpp), so this switches those allocations to
+      # calloc and makes the untouched photosites a deterministic zero instead. Both of LibRaw-cmake's
+      # targets get it: they compile the same sources under the same symbol names and both reach the link
+      # line, so whichever one resolves has to behave the same. A system LibRaw decides this for itself.
+      foreach(libraw_target raw raw_r)
+        if(TARGET ${libraw_target})
+          target_compile_definitions(${libraw_target} PRIVATE LIBRAW_CALLOC_RAWSTORE)
+        endif()
+      endforeach()
   elseif(LibRaw_FOUND AND TARGET libraw::libraw_r)
     message(STATUS "Using system-installed libraw library (version ${LIBRAW_VERSION})")
   else()
