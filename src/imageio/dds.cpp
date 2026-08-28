@@ -745,11 +745,15 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
             image->filename = filename;
             if (image->partname.empty())
                 image->partname = dds.array_size() > 1 ? cubemap_face_names[p % 6] : "";
-            image->alpha_type =
-                image->channels.size() >= 4 || image->channels.size() == 2
-                    ? (dds.alpha_mode == DDSFile::ALPHA_MODE_PREMULTIPLIED ? AlphaType_PremultipliedLinear
-                                                                           : AlphaType_Straight)
-                    : AlphaType_None;
+            // DXT2 and DXT4 are the premultiplied-alpha spellings of DXT3 and DXT5, and a DX9 file carries
+            // that only in its FourCC -- there is no misc_flags2 to read it from. Without this the values,
+            // which arrive already multiplied by alpha, would be premultiplied a second time by finalize().
+            const bool premultiplied = dds.alpha_mode == DDSFile::ALPHA_MODE_PREMULTIPLIED ||
+                                       dds.compression == DDSFile::Compression::BC2_DXT2 ||
+                                       dds.compression == DDSFile::Compression::BC3_DXT4;
+            image->alpha_type         = image->channels.size() >= 4 || image->channels.size() == 2
+                                            ? (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight)
+                                            : AlphaType_None;
             image->metadata["loader"] = "smalldds";
             image->metadata["pixel format"] =
                 dds.bitmasked ? header["bitmask_string"]["string"].get<string>()
