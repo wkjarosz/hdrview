@@ -244,17 +244,16 @@ static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool 
 }
 
 /*!
-    Draws each display range's extent into the top axis: a tick mark at every band boundary, and a solid
-    bar spanning each band out to them, broken around the band's name.
+    Draws each display range's extent into the top axis: a tick mark at every band boundary, and a
+    double-headed arrow spanning each band out to them, interrupted by the band's name.
 
     ImPlot draws the names themselves, as that axis's tick labels (see setup_display_range_axis()), and
-    does so after this runs, so they are laid over the bars. The bars stand exactly as tall as those names
-    and share their row, which is why they are placed off the same expression ImPlot's own rendering uses
-    for a tick label's top edge.
+    does so after this runs -- so they land over the arrows, and the gap left for them here is only to
+    keep a shaft from showing through the glyphs.
 
-    A band too narrow to hold its name and a bar wider than it is tall on either side gets no bars; at
-    that width they stop reading as a span and become a pair of blocks. The boundary marks are always
-    drawn: they are what the bars run out to, and a bare tick stays legible at any width.
+    A band too narrow to hold its name and an arrow long enough to read as one on either side gets no
+    arrow; at that width the heads crowd the text into noise. The boundary marks are always drawn: they
+    are what the arrows point at, and a bare tick stays legible at any width.
 
     Call between BeginPlot and EndPlot. Takes plot-space x, and follows whichever side and direction the
     axis ended up on, so it rides the bottom axis's Invert and Opposite along with everything else.
@@ -272,27 +271,41 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     const float        txt_h     = ImGui::GetTextLineHeight();
     const float        x_lo = plot->PlotRect.Min.x, x_hi = plot->PlotRect.Max.x;
 
-    // One LabelPadding out from the axis line, then a line of text: the rows ImPlot's own axis rendering
-    // puts a tick label in. Snapped to whole rows, since a filled rect carries no antialiased fringe to
-    // soften an edge that lands mid-pixel.
-    const float bar_top =
-        ImFloor(opposite ? ax.Datum1 - style.LabelPadding.y - txt_h : ax.Datum1 + style.LabelPadding.y);
-    const float bar_bot = bar_top + ImMax(1.f, ImFloor(txt_h));
+    // Down the middle of the row ImPlot puts this axis's tick labels in, mirroring the placement in its
+    // own axis rendering: one LabelPadding out from the axis line, then half a line of text.
+    //
+    // Landed on a pixel *center* rather than a boundary. A one-pixel line centered on a whole y covers
+    // half the row above and half the row below, which both dilutes it and puts it half a pixel below the
+    // center of a head whose base spans whole rows. Every x here is snapped the same way, so that the
+    // marks come out as single crisp columns.
+    const float y_row =
+        opposite ? ax.Datum1 - style.LabelPadding.y - 0.5f * txt_h : ax.Datum1 + style.LabelPadding.y + 0.5f * txt_h;
+    const float y = ImFloor(y_row) + 0.5f;
 
-    const float gap = EmSize(0.3f);
-    // From a mark's center line to the end of its bar: the daylight wanted between the two, plus the
-    // mark's own half width.
-    const float end_inset = 2.f + 0.5f * style.MajorTickSize.x;
+    // Half again as long as it is wide. Sized in whole pixels, since at this size a fractional head
+    // rasterizes differently depending on where it falls.
+    const float head_h  = ImMax(2.f, ImFloor(ImMin(EmSize(0.28f), 0.3f * txt_h)));
+    const float head_l  = ImFloor(2.2f * head_h);
+    const float gap     = EmSize(0.3f);
+
+    // How far back from a mark an arrow's tip is placed, for tip_gap pixels of daylight between the two.
+    //
+    // The tip is not where the head ends. Antialiasing offsets each edge outward along its own normal
+    // and miters them at the corners, and at a point this acute that miter carries the apex a further
+    // 1.1 pixels forward -- enough, against a 2 pixel nominal gap either side of a mark one pixel wide,
+    // to leave a sliver too thin to survive rounding evenly on both sides.
+    const float tip_gap   = 2.f;
+    const float tip_inset = tip_gap + 1.2f + 0.5f * style.MajorTickSize.x;
 
     // The marks run outward from the axis line to the far edge of the label row, rather than inward the
     // way an ordinary tick does. Every boundary they mark already carries a line the full height of the
     // plot -- the black and white point handles, and the ceiling -- so a tick drawn inside would land
-    // exactly along one and be invisible. Out here it caps its bar instead.
-    const float mark_end = opposite ? bar_top : bar_bot;
+    // exactly along one and be invisible. Out here it caps its arrow instead.
+    const float mark_end = opposite ? y - 0.5f * txt_h : y + 0.5f * txt_h;
 
-    // Clamped to the plot, the same as the bar ends are, so a boundary that has run off an edge is marked
-    // at the edge it ran off and its bar still reads as capped. The black point needs this: the axis
-    // starts fractionally above zero, which leaves display 0 a couple of pixels outside it.
+    // Clamped to the plot, the same as the arrow ends are, so a boundary that has run off an edge is
+    // marked at the edge it ran off and its arrow still reads as capped. The black point needs this: the
+    // axis starts fractionally above zero, which leaves display 0 a couple of pixels outside it.
     auto boundary_x = [&](double v)
     { return ImFloor(ImClamp((float)ImPlot::PlotToPixels(v, 0.0).x, x_lo, x_hi)) + 0.5f; };
 
@@ -302,24 +315,36 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
         draw_list->AddLine(ImVec2{x, ax.Datum1}, ImVec2{x, mark_end}, ax.ColorTick, style.MajorTickSize.x);
     };
 
-    auto bar = [&](float from, float to)
+    // The shaft stops dead at the head's base and never runs beneath it: this color is semitransparent,
+    // so the two would compound where they overlapped and draw a denser streak down the middle of the
+    // head. It is a rect rather than a line so that it fills its pixel row exactly, leaving no seam
+    // against the base for the head's own edge to fall short of.
+    //
+    // Both heads are wound the same way round rather than being mirror images. ImGui's antialiased fill
+    // offsets each edge along its right-hand normal, so reflecting a head pushes that fringe the other
+    // way and it comes out a pixel different in size from its twin.
+    auto arrow = [&](float from, float to)
     {
-        draw_list->AddRectFilled(ImVec2{IM_ROUND(ImMin(from, to)), bar_top}, ImVec2{IM_ROUND(ImMax(from, to)), bar_bot},
-                                 ax.ColorTxt);
+        const float dir  = to > from ? 1.f : -1.f;
+        const float base = to - dir * head_l;
+        draw_list->AddRectFilled(ImVec2{ImMin(from, base), y - 0.5f}, ImVec2{ImMax(from, base), y + 0.5f}, ax.ColorTxt);
+        draw_list->AddTriangleFilled(ImVec2{to, y}, ImVec2{base, y + dir * head_h}, ImVec2{base, y - dir * head_h},
+                                     ax.ColorTxt);
     };
 
     auto span = [&](double va, double vb, const char *name)
     {
         const float a = boundary_x(va), b = boundary_x(vb);
         const float w = ImGui::CalcTextSize(name).x;
-        if (b - a < w + 2.f * (gap + end_inset + txt_h))
+        // A head with no shaft behind it does not read as an arrow, so demand at least its length again.
+        if (b - a < w + 2.f * (gap + tip_inset + 2.f * head_l))
             return;
 
-        // Stopping short of the marks rather than touching them, so each reads as a cap the bar runs out
-        // to rather than as a continuation of it.
+        // Stopping short of the marks rather than touching them, so each reads as a cap the arrow points
+        // at rather than as a continuation of it.
         const float center = 0.5f * (a + b);
-        bar(center - 0.5f * w - gap, a + end_inset);
-        bar(center + 0.5f * w + gap, b - end_inset);
+        arrow(center - 0.5f * w - gap, a + tip_inset);
+        arrow(center + 0.5f * w + gap, b - tip_inset);
     };
 
     mark(sdr_x.min.x);
