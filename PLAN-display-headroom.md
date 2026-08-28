@@ -170,12 +170,19 @@ platform-specific steps reduce to making macOS and Windows report the same numbe
 ## Settled
 
 - **Label format**: a multiplier, `6.25x`, in grey rather than white so it does not read as a third
-  handle beside the black and white points. Band labels sit in a strip *above* the data rectangle,
-  mirroring the tick labels below it -- inside the plot they were hard to read against the histogram,
-  and the plot's top edge is already owned by the legend (`ImPlotLocation_North`) and the clip-warning
-  toggles. ImPlot's `PlotPadding` covers all but ~2.5 px of that strip, which `draw_histogram()`
-  reserves before `BeginPlot()`; the labels are drawn under a widened clip rect, since they reach past
-  the frame ImPlot clips to.
+  handle beside the black and white points. The `SDR`/`HDR` band names are tick labels on a second x
+  axis (`ImAxis_X2`, `ImPlotAxisFlags_AuxDefault` = `NoGridLines | Opposite`) along the top, with
+  `SetupAxisTicks()` placing one tick per band. Handing them to ImPlot as ticks is what gets them the
+  layout the bottom axis's labels get -- room reserved above the plot, clipped to the widget. Drawing
+  the text directly did not work: inside the plot it competed with the histogram, and above it there is
+  no space that belongs to us, so it spilled past the window border.
+
+  Two details. X2 is given X1's range and scale so the two track together, read back from
+  `Axes[ImAxis_X1].Range` *after* `SetupAxesLimits()` rather than recomputed, since with
+  `plot_cond == ImPlotCond_Once` the range is wherever panning left it. And each tick goes at the
+  midpoint of its band in the axis's *warped* space, not in value space, or the label sits visibly
+  off-center on the nonlinear scales.
+
 - **Axis range**: `x_limits()` capped the asinh axis at 4x display white, so any real headroom put the
   ceiling permanently off the plot. Asinh now reaches `max(4x, headroom * 1.15)`; linear and sRGB are
   unchanged.

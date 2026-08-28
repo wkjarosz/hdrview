@@ -150,13 +150,86 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
 }
 
 /*!
-    Marks the boundary between what an SDR display can show and the extra range this one adds, labeling
-    the two bands the way Lightroom does.
+    Names the two halves of what the display can show, the way Lightroom does, as tick labels on a second
+    x axis along the top of the plot.
 
-    The undimmed part of the plot is everything the display can reproduce. Its lower half, up to display
-    value 1, is ordinary SDR; above that, up to \p ceiling_x, is the headroom the display currently has,
-    which grows as the display is dimmed (see HDRViewApp::display_headroom()). Dimming what lies beyond
-    is left to the caller's DragRect, so this only draws the ceiling line and the labels.
+    Up to display value 1 is ordinary SDR; above that, up to \p ceiling_x, is the headroom the display
+    currently has, which grows as the display is dimmed (see HDRViewApp::display_headroom()). Highlighting
+    that whole span and dimming beyond it is the caller's DragRects; this only supplies the two names.
+
+    They are handed to ImPlot as ticks rather than drawn directly so that they get exactly the treatment
+    the bottom axis's tick labels get: ImPlot reserves room for them above the plot and clips them to the
+    widget. Drawing the text ourselves meant either covering the histogram or spilling past the window
+    border, since the space above the plot belongs to ImPlot's layout, not to us.
+
+    The axis has no gridlines, tick marks or interaction of its own -- a tick mark would point into the
+    middle of a band as though it marked a value there. Its range and scale are copied from X1 so the two
+    stay in lockstep as the exposure moves and the user pans.
+
+    Call during the plot's setup phase, *after* X1's limits and scale are set, since it reads the range X1
+    settled on. Being set up rather than drawn, the labels follow the exposure a frame behind a drag in
+    progress -- the same frame behind as X1's own ticks, which are fixed at setup for the same reason.
+
+    \param sdr_x      Plot-space x of display values 0 and 1
+    \param ceiling_x  Plot-space x of the headroom ceiling
+    \param has_hdr    Whether there is any headroom to name; when false only the SDR band is labeled
+    \param x_scale    The scale X1 was just given, needed to center each label within its band
+*/
+static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool has_hdr, AxisScale x_scale)
+{
+    const ImPlotPlot *plot  = ImPlot::GetCurrentPlot();
+    const ImPlotRange range = plot->Axes[ImAxis_X1].Range;
+
+    // Work in the axis's warped space, the one ImPlot lays the axis out linearly in, so that a fraction
+    // of the range is also a fraction of the plot's width.
+    const double lo = axis_scale_fwd(range.Min, x_scale), hi = axis_scale_fwd(range.Max, x_scale);
+    const double span = hi - lo;
+
+    double      values[2];
+    const char *labels[2];
+    int         n = 0;
+
+    auto name_band = [&](double a, double b, const char *label)
+    {
+        if (span <= 0.0)
+            return;
+
+        // Clamp to what is on screen, so a band running off an edge still centers its label within the
+        // part that can be read.
+        const double wa = ImMax(axis_scale_fwd(a, x_scale), lo), wb = ImMin(axis_scale_fwd(b, x_scale), hi);
+
+        // Leave a band too narrow for its name unlabeled. ImPlot draws every tick it is handed, so two
+        // that no longer fit side by side would overlap rather than drop out. The plot rect is a frame
+        // stale here, which is plenty for deciding whether three characters fit -- but it is empty on the
+        // very first frame, where assuming they fit keeps the axis from appearing late and jogging the
+        // layout.
+        const float plot_w = plot->PlotRect.GetWidth();
+        if (plot_w > 0.f && (float)((wb - wa) / span) * plot_w < ImGui::CalcTextSize(label).x + EmSize(0.5f))
+            return;
+
+        // Midway along the band's *pixels*, which is where the label centers. Midway in value space would
+        // sit visibly off-center on the nonlinear scales.
+        values[n] = axis_scale_inv(0.5 * (wa + wb), x_scale);
+        labels[n] = label;
+        ++n;
+    };
+
+    name_band(sdr_x.min.x, sdr_x.max.x, "SDR");
+    if (has_hdr)
+        name_band(sdr_x.max.x, ceiling_x, "HDR");
+
+    ImPlot::SetupAxis(ImAxis_X2, nullptr,
+                      ImPlotAxisFlags_AuxDefault | ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoMenus |
+                          ImPlotAxisFlags_NoHighlight | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_Lock);
+    // The custom transform covers AxisScale_Linear too, where it is the identity, so X2 needs no
+    // equivalent of the switch X1 is set up with.
+    ImPlot::SetupAxisScale(ImAxis_X2, axis_scale_fwd_xform, axis_scale_inv_xform, &hdrview()->histogram_x_scale());
+    ImPlot::SetupAxisLimits(ImAxis_X2, range.Min, range.Max, ImPlotCond_Always);
+    ImPlot::SetupAxisTicks(ImAxis_X2, values, n, labels);
+}
+
+/*!
+    Draws the vertical line marking the ceiling of what the display can currently show.
 
     The ceiling is only ever as good as the peak the display reports, which on Wayland is whatever the
     compositor was told -- KDE writes a maxPeakBrightnessOverride from its HDR calibration wizard, and a
@@ -164,72 +237,20 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
     the reported numbers distinguishes that from an honest peak, so a ceiling that sits far from where
     values visibly clip is a reason to suspect the display's configuration, not this code.
 
-    Call between BeginPlot and EndPlot. Everything here takes plot-space x, so it follows the exposure
-    and rides all three x-axis scales without knowing which is active.
-
-    \param sdr_x      Plot-space x of display values 0 and 1
-    \param ceiling_x  Plot-space x of the headroom ceiling
-    \param has_hdr    Whether there is any headroom to label; when false only the SDR band is marked
+    Call between BeginPlot and EndPlot. Takes plot-space x, so it follows the exposure and rides all three
+    x-axis scales without knowing which is active.
 */
-static void draw_display_range_bands(const Box1d &sdr_x, double ceiling_x, bool has_hdr)
+static void draw_display_ceiling_line(double ceiling_x)
 {
-    ImDrawList  *draw_list = ImPlot::GetPlotDrawList();
+    // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive fill
+    // and the CIE diagram elsewhere in this file.
+    ImPlot::PushPlotClipRect();
     const ImVec2 plot_pos  = ImPlot::GetPlotPos();
     const ImVec2 plot_size = ImPlot::GetPlotSize();
-    const float  pad       = EmSize(0.25f);
-    const ImU32  col       = ImGui::GetColorU32(ImGuiCol_Text, 0.5f);
-
-    if (has_hdr)
-    {
-        // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive
-        // fill and the CIE diagram elsewhere in this file.
-        ImPlot::PushPlotClipRect();
-        const float x = ImPlot::PlotToPixels(ceiling_x, 0.0).x;
-        draw_list->AddLine(ImVec2{x, plot_pos.y}, ImVec2{x, plot_pos.y + plot_size.y}, col);
-        ImPlot::PopPlotClipRect();
-    }
-
-    // The labels go above the data rectangle, mirroring the tick labels below it, where they read
-    // cleanly instead of competing with the histogram behind them. That also keeps them clear of the
-    // legend (ImPlotLocation_North) and the clip-warning toggles, which own the plot's top edge.
-    //
-    // They reach past the frame ImPlot clips to, so the clip rect has to be widened to let them through;
-    // draw_histogram() reserves the matching space with display_range_label_overhang().
-    const float text_y = plot_pos.y - pad - ImGui::GetTextLineHeight();
-    ImGui::PushClipRect(ImVec2{plot_pos.x, text_y}, ImVec2{plot_pos.x + plot_size.x, plot_pos.y}, false);
-
-    auto label_band = [&](double xa, double xb, const char *text)
-    {
-        // Clamp to the visible span before centering, so a band running off the edge keeps its label
-        // where it can still be read instead of centering it out of view.
-        const float a = ImMax(ImPlot::PlotToPixels(xa, 0.0).x, plot_pos.x);
-        const float b = ImMin(ImPlot::PlotToPixels(xb, 0.0).x, plot_pos.x + plot_size.x);
-        const float w = ImGui::CalcTextSize(text).x;
-        if (b - a < w + 2.f * pad)
-            return; // too narrow to label without overflowing into the neighbouring band
-
-        draw_list->AddText(ImVec2{0.5f * (a + b) - 0.5f * w, text_y}, col, text);
-    };
-
-    label_band(sdr_x.min.x, sdr_x.max.x, "SDR");
-    if (has_hdr)
-        label_band(sdr_x.max.x, ceiling_x, "HDR");
-
-    ImGui::PopClipRect();
-}
-
-/*!
-    How far draw_display_range_bands()' labels reach above the plot's frame, in pixels.
-
-    They sit above the data rectangle, and ImPlot's own PlotPadding accounts for part of that gap; only
-    the remainder has to be reserved before BeginPlot(), or the labels would be drawn over whatever the
-    layout put above the plot. Zero when the padding already covers them.
-
-    Call with the plot's font current, so the line height matches the one the labels are drawn with.
-*/
-static float display_range_label_overhang()
-{
-    return ImMax(0.f, ImGui::GetTextLineHeight() + EmSize(0.25f) - ImPlot::GetStyle().PlotPadding.y);
+    const float  x         = ImPlot::PlotToPixels(ceiling_x, 0.0).x;
+    ImPlot::GetPlotDrawList()->AddLine(ImVec2{x, plot_pos.y}, ImVec2{x, plot_pos.y + plot_size.y},
+                                       ImGui::GetColorU32(ImGuiCol_Text, 0.5f));
+    ImPlot::PopPlotClipRect();
 }
 
 /*!
@@ -347,11 +368,13 @@ void Image::draw_histogram()
     // Capture it first, for the widgets inside the plot that want ordinary UI text.
     const float ui_font_size = ImGui::GetStyle().FontSizeBase;
 
+    // Display values map into plot space through the live exposure and offset. Needed both to set up the
+    // SDR/HDR axis, during the plot's setup phase, and to place the drag handles once it is open.
+    auto display_to_plot = [](double d)
+    { return (d - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live()); };
+
     ImGui::PushFont(hdrview()->font("sans regular"), ui_font_size * 10.f / 14.f);
     ImPlot::PushStyleVar(ImPlotStyleVar_AnnotationPadding, ImVec2{2.0, 0.0});
-    // Keep the strip the SDR/HDR band labels are drawn into clear of the toolbar row above. Sized with
-    // the plot's font, which the PushFont above has just made current.
-    ImGui::Dummy(ImVec2{0.f, display_range_label_overhang()});
     // float4 plot_bg{0.35f, 0.35f, 0.35f, 1.f};
     // ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
     if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, EmSize(hdrview()->histogram_height()))))
@@ -389,6 +412,15 @@ void Image::draw_histogram()
                                    &hdrview()->histogram_x_scale());
             break;
         }
+        }
+
+        {
+            // 0 means the display never told us its ceiling, which is not the same as having none, so
+            // there is no HDR band to name in that case.
+            const float headroom = hdrview()->display_headroom();
+            const bool  has_hdr  = headroom > 1.f;
+            setup_display_range_axis(Box1d{display_to_plot(0.0), display_to_plot(1.0)},
+                                     display_to_plot(has_hdr ? headroom : 1.0), has_hdr, x_scale);
         }
 
         //
@@ -530,11 +562,6 @@ void Image::draw_histogram()
         Box1d xrange{-hdrview()->offset_live() * pow(2.f, -hdrview()->exposure_live()),
                      (1.0 - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live())};
 
-        // Display values map into plot space through the same exposure and offset as the black/white
-        // points below; headroom is just another display value, so it maps the same way.
-        auto display_to_plot = [](double d)
-        { return (d - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live()); };
-
         // 0 means the display never told us its ceiling, which is not the same as having none -- in that
         // case fall back to dimming above display 1, the pre-headroom behavior.
         const float headroom = hdrview()->display_headroom();
@@ -580,15 +607,16 @@ void Image::draw_histogram()
         ImPlot::TagX(xrange.min.x, ImVec4(0, 0, 0, 1), "0");
         ImPlot::TagX(xrange.max.x, ImVec4(1, 1, 1, 1), "1");
 
-        // Re-derived from the exposure the drags just settled on, so the bands track the handles within
-        // the same frame rather than lagging them by one.
+        // Re-derived from the exposure the drags just settled on, so the ceiling tracks the handles
+        // within the same frame rather than lagging them by one.
         if (has_hdr)
+        {
             ceiling_x = display_to_plot(headroom);
-        draw_display_range_bands(xrange, ceiling_x, has_hdr);
-        if (has_hdr)
+            draw_display_ceiling_line(ceiling_x);
             // Grey rather than white: this is the display telling us where it stops, not a control the
             // user set, and it should not read as a third handle alongside the black and white points.
             ImPlot::TagX(ceiling_x, ImVec4(0.6f, 0.6f, 0.6f, 1.f), "%.3gx", headroom);
+        }
 
         // The shader compares clip_range against display values (d = p * gain + offset), so map it into plot
         // space -- which holds stored values p -- the same way the black/white points above do.
