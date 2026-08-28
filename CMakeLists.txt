@@ -391,7 +391,11 @@ if(APPLE AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_HAS_METAL ON)
   set(HELLOIMGUI_USE_GLFW3 ON)
 
-  list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm)
+  # display_headroom_cocoa.mm queries the one display property GLFW's Cocoa backend leaves unreported; the
+  # others are the Metal rendering backend.
+  list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm
+       src/display_headroom_cocoa.mm
+  )
 
   # need to enable OBJC language for the custom glfw fork below
   enable_language(OBJC)
@@ -421,6 +425,12 @@ if((APPLE OR ((WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND HDRVIEW_ENABLE_
   if(NOT APPLE)
     # macOS selects Metal above; Windows/Linux render through OpenGL/GLES.
     set(HELLOIMGUI_HAS_OPENGL3 ON)
+  endif()
+  if(WIN32)
+    # display_luminance_win32.cpp supplies the one display property the fork's Win32 backend reports only as
+    # a flag; DXGI is where the real peak luminance lives. Wayland needs no such supplement.
+    list(APPEND EXTRA_SOURCES src/display_luminance_win32.cpp)
+    list(APPEND HDRVIEW_DEPENDENCIES dxgi)
   endif()
   CPMAddPackage(
     NAME glfw

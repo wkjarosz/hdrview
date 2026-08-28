@@ -164,30 +164,40 @@ DisplayColorSpace query_display_colorspace([[maybe_unused]] void *window)
     cs.tf     = transfer_from_wp(glfwGetWindowTransfer(w));
     cs.chroma = chromaticities_from_wp(glfwGetWindowPrimaries(w));
 
+    cs.min_nits = glfwGetWindowMinLuminance(w);
+    cs.max_nits = glfwGetWindowMaxLuminance(w);
+
 #if defined(_WIN32)
-    // On Windows this goes through QueryDisplayConfig, which is far too expensive to call every frame
-    // (nanogui gives up and caches it once at startup). Re-query a few times a second instead: still fast
-    // enough to follow the "SDR content brightness" slider live, without the per-frame cost.
+    // Both of the queries below walk every display path -- QueryDisplayConfig for the white level, DXGI's
+    // adapter/output enumeration for the ceiling -- which is far too expensive to do every frame (nanogui
+    // gives up and caches it once at startup). Re-query a few times a second instead: still fast enough to
+    // follow the "SDR content brightness" slider live, without the per-frame cost.
     // These are function-local statics rather than per-window state because HDRView only ever has one
     // window; if that ever changes, this cache would need to move to a per-window key.
     static auto  last_query       = std::chrono::steady_clock::now() - std::chrono::hours(1);
     static float cached_sdr_white = 0.f;
+    static float cached_max_nits  = 0.f;
 
     auto now = std::chrono::steady_clock::now();
     if (now - last_query >= std::chrono::milliseconds(250))
     {
         cached_sdr_white = glfwGetWindowSdrWhiteLevel(w);
-        last_query       = now;
+        // GLFW's Win32 backend reports max luminance as a flag rather than a measurement: 80 nits when the
+        // display is not in HDR mode, and 0 -- "unknown" -- when it is. Only that unknown is worth asking
+        // DXGI about, and only it gets replaced below; the definite SDR answer stands.
+        cached_max_nits = cs.max_nits == 0.f ? win32_display_max_nits(w) : 0.f;
+        last_query      = now;
     }
+
     float sdr_white = cached_sdr_white;
+    if (cs.max_nits == 0.f)
+        cs.max_nits = cached_max_nits;
 #else
     float sdr_white = glfwGetWindowSdrWhiteLevel(w);
 #endif
 
     // 0 from GLFW means "unknown", not "no limit".
     cs.sdr_white_nits = sdr_white > 0.f ? sdr_white : 80.f;
-    cs.min_nits       = glfwGetWindowMinLuminance(w);
-    cs.max_nits       = glfwGetWindowMaxLuminance(w);
 #endif
 
     return cs;

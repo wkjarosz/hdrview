@@ -288,14 +288,39 @@ bool Image::loadable(const std::string &ext)
 // end static methods
 //
 
-float2 PixelStats::x_limits(float e, AxisScale scale) const
+float2 PixelStats::x_limits(float e, AxisScale scale, float headroom) const
 {
+    // Each scale reaches some multiple past display white, which sits at 2^-e. Asinh and sRGB both
+    // compress their far end, so they can afford to clear the display's ceiling -- with a little margin,
+    // so the ceiling lands inside the axis rather than on its edge -- and still leave the data legible.
+    // sRGB pays more for it than asinh does: at 16x headroom white falls around a third of the way
+    // across rather than two thirds. Linear pays far more still and keeps its old fixed reach, since
+    // stretching it that far would leave everything that matters in the first twentieth of the plot.
+    const float past_white = scale == AxisScale_Linear ? 1.2f
+                             : scale == AxisScale_SRGB ? std::max(1.5f, headroom * 1.15f)
+                                                       : std::max(4.f, headroom * 1.15f);
+
     float2 ret;
-    ret[1] = pow(2.f, -e) * (scale == AxisScale_Linear ? 1.2f : (scale == AxisScale_SRGB ? 1.5f : 4.f));
+    ret[1] = pow(2.f, -e) * past_white;
     if (summary.minimum < -summary.maximum / 255.f)
-        ret[0] = -ret[1];
+        // Negatives get the room they actually occupy, plus a sliver so the extreme value does not land on
+        // the axis itself. Mirroring the positive reach instead spends half the plot on whatever ringing a
+        // lossy codec left around black -- a hundredth of a stop below zero in one channel is enough to
+        // trigger it -- and makes two encodes of the same image look nothing alike. Still capped at that
+        // mirror, so genuinely signed data cannot crowd out the range the exposure is set for.
+        ret[0] = std::max(-ret[1], 1.05f * summary.minimum);
     else
-        ret[0] = ret[1] / 10000.f;
+        // A fixed fraction of display white, not of the axis top. The top grows with the display's
+        // headroom, and a floor tied to it carries display 0 further outside the axis the more headroom
+        // there is -- past about 14x, far enough for the SDR band's own lower boundary to count as off
+        // the plot and lose its bracket leg. Against white it stays the same hair outside at any
+        // headroom, and the axis it hides is empty in either case.
+        //
+        // A two-thousandth rather than a ten-thousandth, which is about what the old floor came to at the
+        // axis's shortest reach. It has to stay clear of a ten-thousandth: the asinh scale is very nearly
+        // linear that far below its knee, so an axis starting on that decade picks up ticks for both it
+        // and the next, a couple of pixels apart, and their labels land on top of each other.
+        ret[0] = pow(2.f, -e) / 2000.f;
 
     return ret;
 }

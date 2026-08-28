@@ -62,3 +62,42 @@ struct DisplayColorSpace
     it.
 */
 DisplayColorSpace query_display_colorspace(void *window);
+
+#if defined(__APPLE__)
+/**
+    Ask Cocoa how much headroom the window's screen currently has, as a multiple of SDR reference white.
+
+    macOS reports this ratio directly (`NSScreen`'s
+    `maximumExtendedDynamicRangeColorComponentValue`), so unlike every other platform there are no nits to
+    divide. It is also the one display property GLFW's Cocoa backend does not forward -- its luminance
+    getters are stubs -- which is why this sits beside query_display_colorspace() rather than inside it.
+
+    Moves on its own -- with the brightness slider, and with whatever else AppKit decides -- and no
+    notification is posted for any of it, so poll rather than caching. It is a couple of Objective-C
+    message sends, ~35 ns.
+
+    Returns 1 for a display with no headroom, and 0 only if the window is on no screen at all.
+
+    `window` is a GLFWwindow*, kept as void* for the same reason as above.
+*/
+float cocoa_display_headroom(void *window);
+#endif
+
+#if defined(_WIN32)
+/**
+    Ask DXGI for the peak luminance, in nits, of the display the window is on.
+
+    This is the one display property the GLFW fork's Win32 backend does not measure: its max-luminance getter
+    is a flag, returning 80 nits for "not HDR" and 0 for "HDR, ceiling unknown". `IDXGIOutput6::GetDesc1`
+    has the real number, so query_display_colorspace() calls this to fill in what GLFW left unknown.
+
+    The value is fixed for a given display, but the SDR white level it is divided by is not, so headroom
+    still moves with the "SDR content brightness" slider.
+
+    Returns 0 when the ceiling is unknown -- no matching DXGI output, or a Windows too old for
+    IDXGIOutput6. Enumerating adapters is far too slow to do every frame; the caller throttles it.
+
+    `window` is a GLFWwindow*, kept as void* for the same reason as above.
+*/
+float win32_display_max_nits(void *window);
+#endif

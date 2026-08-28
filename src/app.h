@@ -266,6 +266,21 @@ public:
     /// Height of the Pixel statistics histogram plot, in em, when it has never been resized
     static constexpr float default_histogram_height = 9.f;
 
+    /// How much brighter than SDR reference white this display can currently go, as a multiple of it.
+    /*!
+        HDRView renders in extended sRGB, where 1.0 *is* the display's SDR reference white, so this is
+        also the largest value the display can show: 1 means no headroom, 8 means three stops of it.
+
+        Not a fixed property of the panel. It is a ratio of the display's ceiling to its SDR white, and
+        it is the denominator that moves: dimming the display lowers SDR white while the panel's peak
+        stays put, so headroom *grows*. Read it per frame rather than caching it -- on Wayland the real
+        values also arrive a moment after startup, so an early read sees the placeholder below.
+
+        Returns 0 when the display has not told us, which is *not* the same as "no headroom": callers
+        should omit headroom-dependent UI in that case rather than treating it as SDR.
+    */
+    float display_headroom() const;
+
 private:
     void load_fonts();
 

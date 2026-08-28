@@ -70,6 +70,33 @@ bool HDRViewApp::supports_hdr() const
 #endif
 }
 
+float HDRViewApp::display_headroom() const
+{
+    // --sdr asks us to behave as an SDR display, and an SDR display's ceiling is exactly its white.
+    // Reported rather than left unknown, so the histogram still marks where that ceiling falls.
+    if (m_force_sdr)
+        return 1.f;
+
+#if defined(__APPLE__)
+    // Without the float buffer we are drawing into a plain 8-bit sRGB layer, so white is our ceiling no
+    // matter what the panel could reach. That framebuffer is decided once, at startup, from *all* the
+    // screens attached then (hasEdrSupport()); the headroom below is the current screen's alone, which is
+    // what makes moving the window between an XDR panel and an SDR monitor show up here.
+    if (!m_float_buffer)
+        return 1.f;
+
+    return cocoa_display_headroom(m_params.backendPointers.glfwWindow);
+#else
+    // Wayland (and Windows, once its ceiling is real) fills these in from the compositor.
+    if (m_display_cs.max_nits <= 0.f || m_display_cs.sdr_white_nits <= 0.f)
+        return 0.f;
+
+    // A ceiling below SDR white is a display describing itself incoherently; clamp rather than report a
+    // headroom that would place the display's limit below its own reference white.
+    return std::max(1.f, m_display_cs.max_nits / m_display_cs.sdr_white_nits);
+#endif
+}
+
 //
 // The colorpass: when m_color_managed is true, everything HDRView draws -- the image content
 // (draw_background()) and Dear ImGui's own UI alike -- keeps emitting HDRView's usual extended-sRGB colors

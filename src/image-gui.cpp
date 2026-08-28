@@ -150,6 +150,230 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
 }
 
 /*!
+    Names the two halves of what the display can show, the way Lightroom does, as tick labels on a second
+    x axis along the top of the plot.
+
+    Up to display value 1 is ordinary SDR; above that, up to \p ceiling_x, is the headroom the display
+    currently has, which grows as the display is dimmed (see HDRViewApp::display_headroom()). Highlighting
+    that whole span and dimming beyond it is the caller's DragRects; this only supplies the two names.
+
+    They are handed to ImPlot as ticks rather than drawn directly so that they get exactly the treatment
+    the bottom axis's tick labels get: ImPlot reserves room for them above the plot and clips them to the
+    widget. Drawing the text ourselves meant either covering the histogram or spilling past the window
+    border, since the space above the plot belongs to ImPlot's layout, not to us.
+
+    The axis has no gridlines, tick marks or interaction of its own -- a tick mark would point into the
+    middle of a band as though it marked a value there. Its range and scale are copied from X1 so the two
+    stay in lockstep as the exposure moves and the user pans.
+
+    Call during the plot's setup phase, *after* X1's limits and scale are set, since it reads the range X1
+    settled on. Being set up rather than drawn, the labels follow the exposure a frame behind a drag in
+    progress -- the same frame behind as X1's own ticks, which are fixed at setup for the same reason.
+
+    \param sdr_x      Plot-space x of display values 0 and 1
+    \param ceiling_x  Plot-space x of the headroom ceiling
+    \param has_hdr    Whether there is any headroom to name; when false only the SDR band is labeled
+    \param x_scale    The scale X1 was just given, needed to center each label within its band
+*/
+static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool has_hdr, AxisScale x_scale)
+{
+    const ImPlotPlot *plot  = ImPlot::GetCurrentPlot();
+    const ImPlotRange range = plot->Axes[ImAxis_X1].Range;
+
+    // Work in the axis's warped space, the one ImPlot lays the axis out linearly in, so that a fraction
+    // of the range is also a fraction of the plot's width.
+    const double lo = axis_scale_fwd(range.Min, x_scale), hi = axis_scale_fwd(range.Max, x_scale);
+    const double span = hi - lo;
+
+    double      values[2];
+    const char *labels[2];
+    int         n = 0;
+
+    auto name_band = [&](double a, double b, const char *label)
+    {
+        if (span <= 0.0)
+            return;
+
+        // Clamp to what is on screen, so a band running off an edge still centers its label within the
+        // part that can be read.
+        const double wa = ImMax(axis_scale_fwd(a, x_scale), lo), wb = ImMin(axis_scale_fwd(b, x_scale), hi);
+
+        // Leave a band too narrow for its name unlabeled. ImPlot draws every tick it is handed, so two
+        // that no longer fit side by side would overlap rather than drop out. The plot rect is a frame
+        // stale here, which is plenty for deciding whether three characters fit -- but it is empty on the
+        // very first frame, where assuming they fit keeps the axis from appearing late and jogging the
+        // layout.
+        const float plot_w = plot->PlotRect.GetWidth();
+        if (plot_w > 0.f && (float)((wb - wa) / span) * plot_w < ImGui::CalcTextSize(label).x + EmSize(0.5f))
+            return;
+
+        // Midway along the band's *pixels*, which is where the label centers. Midway in value space would
+        // sit visibly off-center on the nonlinear scales.
+        values[n] = axis_scale_inv(0.5 * (wa + wb), x_scale);
+        labels[n] = label;
+        ++n;
+    };
+
+    name_band(sdr_x.min.x, sdr_x.max.x, "SDR");
+    if (has_hdr)
+        name_band(sdr_x.max.x, ceiling_x, "HDR");
+
+    // Face the way X1 faces and take whichever side it leaves free, rather than being fixed to the top
+    // pointing right: X1's context menu lets the user invert it or send it to the opposite side, and this
+    // is a second labeling of that axis, not an independent one. Its flags survive from frame to frame
+    // (ImPlotAxis::Reset() leaves them alone), so they can simply be read back here.
+    //
+    // It gets no menu of its own for the same reason. ImPlot's axis menu writes Invert and Opposite
+    // straight into the axis flags with no way to omit just those entries, and a toggle there would stick
+    // rather than be corrected on the next frame -- SetupAxis only reapplies flags that have themselves
+    // changed since it was last called.
+    const ImPlotAxisFlags x1_flags = plot->Axes[ImAxis_X1].Flags;
+    ImPlotAxisFlags x2_flags = ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoMenus |
+                               ImPlotAxisFlags_NoHighlight | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_Lock;
+    if (!(x1_flags & ImPlotAxisFlags_Opposite))
+        x2_flags |= ImPlotAxisFlags_Opposite;
+    if (x1_flags & ImPlotAxisFlags_Invert)
+        x2_flags |= ImPlotAxisFlags_Invert;
+
+    ImPlot::SetupAxis(ImAxis_X2, nullptr, x2_flags);
+    // The custom transform covers AxisScale_Linear too, where it is the identity, so X2 needs no
+    // equivalent of the switch X1 is set up with.
+    ImPlot::SetupAxisScale(ImAxis_X2, axis_scale_fwd_xform, axis_scale_inv_xform, &hdrview()->histogram_x_scale());
+    ImPlot::SetupAxisLimits(ImAxis_X2, range.Min, range.Max, ImPlotCond_Always);
+    ImPlot::SetupAxisTicks(ImAxis_X2, values, n, labels);
+}
+
+/*!
+    Draws each display range's extent into the top axis as a square bracket over the band: a run out from
+    either side of the band's name, each turning back toward the axis at the boundary it reaches.
+
+    ImPlot draws the names themselves, as that axis's tick labels (see setup_display_range_axis()), and
+    does so after this runs, so they are laid over the gap the bracket leaves between its two runs.
+
+    A boundary that has run off the plot gets no leg, and that side simply carries on to the edge, which
+    is what says the band continues past it. Two quite different things land outside: display 0 misses by
+    a hair, the axis starting fractionally above zero rather than at it, so a boundary all but inside is
+    pulled in rather than dropped; the headroom ceiling misses by a mile on the linear and sRGB scales,
+    which stop a fixed distance past white instead of widening to reach it, and so cannot show a ceiling
+    at all once the display has real headroom.
+
+    Call between BeginPlot and EndPlot. Takes plot-space x, and follows whichever side and direction the
+    axis ended up on, so it rides the bottom axis's Invert and Opposite along with everything else.
+*/
+static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, bool has_hdr)
+{
+    const ImPlotPlot *plot = ImPlot::GetCurrentPlot();
+    const ImPlotAxis &ax   = plot->Axes[ImAxis_X2];
+    if (!ax.Enabled)
+        return;
+
+    ImDrawList        *draw_list = ImPlot::GetPlotDrawList();
+    const ImPlotStyle &style     = ImPlot::GetStyle();
+    const bool         opposite  = ax.IsOpposite();
+    const float        txt_h     = ImGui::GetTextLineHeight();
+    const float        x_lo = plot->PlotRect.Min.x, x_hi = plot->PlotRect.Max.x;
+
+    // Down the middle of the row ImPlot puts this axis's tick labels in, mirroring the placement in its
+    // own axis rendering: one LabelPadding out from the axis line, then half a line of text.
+    //
+    // Landed on a pixel center rather than a boundary, so a one-pixel stroke covers a single row exactly
+    // instead of half of each row either side of it. Every x below is snapped the same way.
+    const float y_row =
+        opposite ? ax.Datum1 - style.LabelPadding.y - 0.5f * txt_h : ax.Datum1 + style.LabelPadding.y + 0.5f * txt_h;
+    const float y = ImFloor(y_row) + 0.5f;
+
+    const float gap = EmSize(0.3f);
+    // Below this the runs are too stubby to read as a bracket rather than as a pair of stray marks.
+    const float min_run = EmSize(0.5f);
+    // How far outside the plot a boundary may be and still be pulled in to the edge; see above.
+    const float near_tol = 0.02f * (x_hi - x_lo);
+
+    // A leg stops short of the boundary it marks, and short of the axis line it turns towards. The first
+    // keeps neighbouring brackets apart where they meet -- one band's upper boundary is the next one's
+    // lower -- so the two read as separate spans rather than one fused rail. The second keeps the bracket
+    // sitting above the plot instead of welded to its edge.
+    const float leg_inset = 2.f;
+    const float leg_end   = ax.Datum1 + (opposite ? -2.f : 2.f);
+
+    auto boundary_px = [&](double v) { return (float)ImPlot::PlotToPixels(v, 0.0).x; };
+    auto on_plot     = [&](float px) { return px >= x_lo - near_tol && px <= x_hi + near_tol; };
+    auto snap        = [&](float px) { return ImFloor(ImClamp(px, x_lo, x_hi)) + 0.5f; };
+
+    // Strokes are rects rather than lines, since a filled rect carries no antialiased fringe and so stays
+    // crisp on whole-pixel bounds. The color is semitransparent, so the corner belongs to the leg alone
+    // and the run stops against it: overlapping the two would print a darker square there.
+    auto stroke = [&](float x0, float y0, float x1, float y1)
+    {
+        draw_list->AddRectFilled(ImVec2{ImMin(x0, x1), ImMin(y0, y1)}, ImVec2{ImMax(x0, x1), ImMax(y0, y1)},
+                                 ax.ColorTxt);
+    };
+
+    // One side of a bracket: the run out from the name, and the leg turning back towards the axis line at
+    // the end of it. \p dir is +1 for the side running right, so the run stops half a pixel short on the
+    // side the leg occupies. Without a leg the run carries on to the boundary and off the plot.
+    auto side = [&](float from, float edge, bool leg, float dir)
+    {
+        const float x = edge - dir * leg_inset;
+        stroke(from, y - 0.5f, leg ? x - dir * 0.5f : edge, y + 0.5f);
+        if (leg)
+            // Spanning the run's whole row, not just down from one side of it. Reaching from y - 0.5
+            // meets the run where the axis is above the plot and the leg descends, but falls a row short
+            // of it where the axis is below and the leg climbs, leaving the corner visibly unjoined.
+            stroke(x - 0.5f, ImMin(y - 0.5f, leg_end), x + 0.5f, ImMax(y + 0.5f, leg_end));
+    };
+
+    auto bracket = [&](double va, double vb, const char *name)
+    {
+        const float pa = boundary_px(va), pb = boundary_px(vb);
+        const float a = snap(pa), b = snap(pb);
+        const float w = ImGui::CalcTextSize(name).x;
+        if (b - a < w + 2.f * (gap + min_run + leg_inset))
+            return;
+
+        // Both runs are placed by one offset either side of one center, so that the two gaps around the
+        // name are equal by construction. Rounding each end on its own left them up to a pixel apart,
+        // which is plainly visible against letters this size.
+        //
+        // The center is the midpoint of the *unsnapped* boundaries, which is exactly where ImPlot centers
+        // the name: it puts the tick at the middle of the band in the axis's warped space, and warped
+        // space maps to pixels linearly, so the two midpoints are the same point.
+        const float center = IM_ROUND(0.5f * (ImClamp(pa, x_lo, x_hi) + ImClamp(pb, x_lo, x_hi)));
+        const float reach  = IM_ROUND(0.5f * w + gap);
+        side(center - reach, a, on_plot(pa), -1.f);
+        side(center + reach, b, on_plot(pb), +1.f);
+    };
+
+    bracket(sdr_x.min.x, sdr_x.max.x, "SDR");
+    if (has_hdr)
+        bracket(sdr_x.max.x, ceiling_x, "HDR");
+}
+
+/*!
+    Draws the vertical line marking the ceiling of what the display can currently show.
+
+    The ceiling is only ever as good as the peak the display reports, which on Wayland is whatever the
+    compositor was told -- KDE writes a maxPeakBrightnessOverride from its HDR calibration wizard, and a
+    careless run of it puts the ceiling several times further right than the panel can reach. Nothing in
+    the reported numbers distinguishes that from an honest peak, so a ceiling that sits far from where
+    values visibly clip is a reason to suspect the display's configuration, not this code.
+
+    Call between BeginPlot and EndPlot. Takes plot-space x, so it follows the exposure and rides all three
+    x-axis scales without knowing which is active.
+*/
+static void draw_display_ceiling_line(double ceiling_x)
+{
+    // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive fill
+    // and the CIE diagram elsewhere in this file.
+    ImPlot::PushPlotClipRect();
+    const ImVec2 plot_pos  = ImPlot::GetPlotPos();
+    const ImVec2 plot_size = ImPlot::GetPlotSize();
+    const float  x         = ImPlot::PlotToPixels(ceiling_x, 0.0).x;
+    ImPlot::GetPlotDrawList()->AddLine(ImVec2{x, plot_pos.y}, ImVec2{x, plot_pos.y + plot_size.y},
+                                       ImGui::GetColorU32(ImGuiCol_Text, 0.5f));
+    ImPlot::PopPlotClipRect();
+}
+
+/*!
     Draws the drag-to-resize grip below the histogram, modeled on the column-resize divider of a PE table:
     ImGui's TableUpdateBorders()/TableGetColumnBorderCol() rotated 90 degrees, reusing its 4px hit band, its
     delayed hover feedback, its Separator colors, and its double-click-to-restore gesture.
@@ -251,7 +475,7 @@ void Image::draw_histogram()
         stats[c]    = channel.get_stats();
         y_limits[0] = std::min(y_limits[0], stats[c]->hist_y_limits[x_scale][0]);
         y_limits[1] = std::max(y_limits[1], stats[c]->hist_y_limits[x_scale][1]);
-        auto xl     = stats[c]->x_limits(hdrview()->exposure_live(), x_scale);
+        auto xl     = stats[c]->x_limits(hdrview()->exposure_live(), x_scale, hdrview()->display_headroom());
         x_limits[0] = std::min(x_limits[0], xl[0]);
         x_limits[1] = std::max(x_limits[1], xl[1]);
         names[c]    = Channel::tail(channel.name);
@@ -263,6 +487,11 @@ void Image::draw_histogram()
     // the plot's reduced font below makes the style's value unusable as "the app's normal size" from here on.
     // Capture it first, for the widgets inside the plot that want ordinary UI text.
     const float ui_font_size = ImGui::GetStyle().FontSizeBase;
+
+    // Display values map into plot space through the live exposure and offset. Needed both to set up the
+    // SDR/HDR axis, during the plot's setup phase, and to place the drag handles once it is open.
+    auto display_to_plot = [](double d)
+    { return (d - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live()); };
 
     ImGui::PushFont(hdrview()->font("sans regular"), ui_font_size * 10.f / 14.f);
     ImPlot::PushStyleVar(ImPlotStyleVar_AnnotationPadding, ImVec2{2.0, 0.0});
@@ -303,6 +532,15 @@ void Image::draw_histogram()
                                    &hdrview()->histogram_x_scale());
             break;
         }
+        }
+
+        {
+            // 0 means the display never told us its ceiling, which is not the same as having none, so
+            // there is no HDR band to name in that case.
+            const float headroom = hdrview()->display_headroom();
+            const bool  has_hdr  = headroom > 1.f;
+            setup_display_range_axis(Box1d{display_to_plot(0.0), display_to_plot(1.0)},
+                                     display_to_plot(has_hdr ? headroom : 1.0), has_hdr, x_scale);
         }
 
         //
@@ -444,10 +682,19 @@ void Image::draw_histogram()
         Box1d xrange{-hdrview()->offset_live() * pow(2.f, -hdrview()->exposure_live()),
                      (1.0 - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live())};
 
+        // 0 means the display never told us its ceiling, which is not the same as having none -- in that
+        // case fall back to dimming above display 1, the pre-headroom behavior.
+        const float headroom = hdrview()->display_headroom();
+        const bool  has_hdr  = headroom > 1.f;
+        // Non-const: DragRect takes a mutable pointer, though NoInputs keeps it from ever writing back.
+        double ceiling_x = has_hdr ? display_to_plot(headroom) : xrange.max.x;
+
         auto plt_range = ImPlot::GetPlotLimits(ImAxis_X1);
         ImPlot::DragRect(0, &plt_range.X.Min, &plt_range.Y.Min, &xrange.min.x, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
-        ImPlot::DragRect(0, &xrange.max.x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
+        // Dim from the display's ceiling rather than from white: the range between the two is real
+        // headroom this display can show, so it belongs to the highlighted region.
+        ImPlot::DragRect(0, &ceiling_x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
 
         // Displayed values (d) are related to stored values (p) via the exposure and offset:
@@ -479,6 +726,18 @@ void Image::draw_histogram()
 
         ImPlot::TagX(xrange.min.x, ImVec4(0, 0, 0, 1), "0");
         ImPlot::TagX(xrange.max.x, ImVec4(1, 1, 1, 1), "1");
+
+        // Re-derived from the exposure the drags just settled on, so the ceiling tracks the handles
+        // within the same frame rather than lagging them by one.
+        if (has_hdr)
+        {
+            ceiling_x = display_to_plot(headroom);
+            draw_display_ceiling_line(ceiling_x);
+            // Grey rather than white: this is the display telling us where it stops, not a control the
+            // user set, and it should not read as a third handle alongside the black and white points.
+            ImPlot::TagX(ceiling_x, ImVec4(0.6f, 0.6f, 0.6f, 1.f), "%.3gx", headroom);
+        }
+        draw_display_range_extents(xrange, ceiling_x, has_hdr);
 
         // The shader compares clip_range against display values (d = p * gain + offset), so map it into plot
         // space -- which holds stored values p -- the same way the black/white points above do.
