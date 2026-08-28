@@ -315,7 +315,7 @@ void Image::draw_histogram()
         stats[c]    = channel.get_stats();
         y_limits[0] = std::min(y_limits[0], stats[c]->hist_y_limits[x_scale][0]);
         y_limits[1] = std::max(y_limits[1], stats[c]->hist_y_limits[x_scale][1]);
-        auto xl     = stats[c]->x_limits(hdrview()->exposure_live(), x_scale);
+        auto xl     = stats[c]->x_limits(hdrview()->exposure_live(), x_scale, hdrview()->display_headroom());
         x_limits[0] = std::min(x_limits[0], xl[0]);
         x_limits[1] = std::max(x_limits[1], xl[1]);
         names[c]    = Channel::tail(channel.name);

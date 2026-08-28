@@ -288,10 +288,18 @@ bool Image::loadable(const std::string &ext)
 // end static methods
 //
 
-float2 PixelStats::x_limits(float e, AxisScale scale) const
+float2 PixelStats::x_limits(float e, AxisScale scale, float headroom) const
 {
+    // Each scale reaches a fixed multiple past display white, which sits at 2^-e. Asinh compresses its
+    // far end, so it can afford to clear the display's ceiling -- with a little margin, so the ceiling
+    // lands inside the axis rather than on its edge -- and still leave the data legible. The two
+    // bounded scales keep their old reach: stretching them to 6x or beyond would squeeze everything
+    // that matters into the left quarter of the plot, and the ceiling is not worth that.
+    const float past_white =
+        scale == AxisScale_Linear ? 1.2f : (scale == AxisScale_SRGB ? 1.5f : std::max(4.f, headroom * 1.15f));
+
     float2 ret;
-    ret[1] = pow(2.f, -e) * (scale == AxisScale_Linear ? 1.2f : (scale == AxisScale_SRGB ? 1.5f : 4.f));
+    ret[1] = pow(2.f, -e) * past_white;
     if (summary.minimum < -summary.maximum / 255.f)
         ret[0] = -ret[1];
     else

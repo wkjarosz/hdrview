@@ -192,7 +192,15 @@ struct PixelStats
                               x_scale);
     }
 
-    float2 x_limits(float exposure, AxisScale x_scale) const;
+    //! Plot-space range the histogram's x axis should cover at \p exposure.
+    /*!
+        \param exposure  The live exposure; display white sits at 2^-exposure
+        \param x_scale   Which axis scale is active, since each shows a different amount past white
+        \param headroom  The display's headroom, as a multiple of SDR white, or 0 when unknown. Widens
+                         the asinh axis enough to bring the display's ceiling into view; the two
+                         bounded scales ignore it, having no room to spare
+    */
+    float2 x_limits(float exposure, AxisScale x_scale, float headroom = 0.f) const;
 };
 
 struct Channel : public Array2Df
