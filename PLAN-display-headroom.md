@@ -98,7 +98,7 @@ Kuycon G27P                    1.0000     0.0000     1.0000
 - **`maximumReference...` is 0 here** -- it is only populated in an HDR reference preset, so it is not a
   usable fallback.
 
-### Windows -- looks plumbed, is not
+### Windows -- done
 
 `_glfwGetWindowMaxLuminanceWin32()` returns **only `0.0f` or `80.0f`**:
 
@@ -110,17 +110,45 @@ That is a flag, never a measurement -- and `0.0` means *unknown* in `DisplayColo
 The SDR white level, by contrast, is real: the fork walks the display paths and calls
 `DisplayConfigGetDeviceInfo` for it.
 
-For a real ceiling: `IDXGIOutput6::GetDesc1` -> `DXGI_OUTPUT_DESC1`. No D3D device needed --
-`CreateDXGIFactory1` -> `EnumAdapters` -> `EnumOutputs` -> QI for `IDXGIOutput6`, matching the
-window's `HMONITOR`. Either in HDRView directly or upstreamed into the GLFW fork.
+`src/display_luminance_win32.cpp` supplies the missing ceiling from
+`IDXGIOutput6::GetDesc1` -> `DXGI_OUTPUT_DESC1`, matching the window's `HMONITOR`. No D3D device is
+needed: `CreateDXGIFactory1` -> `EnumAdapters1` -> `EnumOutputs` -> QI for `IDXGIOutput6`. Done in
+HDRView rather than upstreamed into the fork, so the fork stays a pinned commit we do not carry
+patches against. `query_display_colorspace()` substitutes it **only for GLFW's `0`**, sharing the
+existing 250 ms Windows throttle -- when GLFW says 80 the display is definitely not in HDR mode, and
+that answer stands. So `--sdr` and an HDR-off display behave exactly as they did before.
 
-Two traps:
+Two traps, one of which is now a decision:
 
 - `MaxLuminance` is *small-area peak*; `MaxFullFrameLuminance` is *sustained full-field*. On OLED
-  these differ severalfold. Pick deliberately -- full-frame is the honest one for judging an image.
-- Both come from EDID, which displays routinely overstate.
+  these differ severalfold. **The peak is what is reported**, matching what Wayland compositors and
+  macOS's EDR headroom describe, and fitting an image whose highlights are small. The full-frame value
+  is logged beside it, since it appears nowhere else and explains an image that clips well below the
+  ceiling the histogram draws.
+- Both come from EDID, which displays routinely overstate. Same caveat as KDE's
+  `maxPeakBrightnessOverride` under "Trusting the ceiling" below.
 
 Note the ceiling is static but the SDR white level is user-adjustable, so headroom still moves live.
+
+Measured on Windows 11 26200, RTX 2080 Ti, an HDR400-class panel with advanced color on:
+
+```
+Display reports 417.712 nits peak luminance (417.712 nits full-frame, 0 nits black).
+Display color space is sRGB/BT.709 gamut with Linear transfer, 80 nits SDR white,
+  0-417.712 nits range (supports HDR).
+```
+
+Headroom is 417.712/80 = **5.22x**, about 2.4 stops. Peak and full-frame agree on this panel, so the
+choice above is untested against a display where they differ.
+
+Two things worth knowing when testing here:
+
+- **HDRView's log does not survive a pipe.** `main()` calls `AttachConsole(ATTACH_PARENT_PROCESS)` and
+  `freopen("CONOUT$")`, which writes past any redirection. Launch it from a process that has *no*
+  console (e.g. `FreeConsole()` first, then `Process.Start` with `RedirectStandardOutput`) and
+  `AttachConsole` fails, leaving stdout pointed at the pipe.
+- **Do not try to verify the band by screen-capturing the window.** GDI/DWM capture of an fp16 scRGB
+  window does not reliably return what is on screen. Look at the real display.
 
 ### Wayland -- works today
 
@@ -162,10 +190,11 @@ Most of this is not platform-specific, and is testable on any machine.
 2. ~~**The histogram UI.**~~ -- done, verified on Wayland against a live headroom.
 3. ~~**macOS `NSScreen` query.**~~ -- done, in `display_headroom_cocoa.mm`, verified on an XDR panel
    and on two SDR externals.
-4. **Windows DXGI query.** Independent of 3.
+4. ~~**Windows DXGI query.**~~ -- done, in `display_luminance_win32.cpp`, verified on an HDR400 panel
+   with advanced color both on and off.
 
-Steps 1 and 2 are fully verifiable on Wayland against a real, live-changing headroom, so the
-platform-specific steps reduce to making macOS and Windows report the same number.
+All four platforms now report a real headroom. What is left is the open question below, and deleting
+this file.
 
 ## Settled
 

@@ -426,6 +426,12 @@ if((APPLE OR ((WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND HDRVIEW_ENABLE_
     # macOS selects Metal above; Windows/Linux render through OpenGL/GLES.
     set(HELLOIMGUI_HAS_OPENGL3 ON)
   endif()
+  if(WIN32)
+    # display_luminance_win32.cpp supplies the one display property the fork's Win32 backend reports only as
+    # a flag; DXGI is where the real peak luminance lives. Wayland needs no such supplement.
+    list(APPEND EXTRA_SOURCES src/display_luminance_win32.cpp)
+    list(APPEND HDRVIEW_DEPENDENCIES dxgi)
+  endif()
   CPMAddPackage(
     NAME glfw
     GITHUB_REPOSITORY Tom94/glfw
