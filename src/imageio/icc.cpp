@@ -423,10 +423,11 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
 bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, string *tf_description,
                                   Chromaticities *c) const
 {
-    // When the profile's own `cicp` tag declares PQ or HLG, it is the only part of the profile that can
-    // describe the encoding: the ICC PCS is normalized to media white, so transforming an HDR image through
-    // the profile clamps everything above it and the extra range is gone. Linearize from the code points.
-    if (auto codes = cicp(); codes.valid() && codes.is_HDR())
+    // A `cicp` tag is the profile stating its encoding in CICP's own terms (ICC.1:2022), so it is taken as
+    // authoritative -- the same standing a PNG cICP chunk has over an iCCP profile. For HDR it is also the
+    // only part of the profile that *can* describe the encoding: the ICC PCS is normalized to media white,
+    // so transforming a PQ or HLG image through the profile clamps away everything above it.
+    if (auto codes = cicp(); codes.valid())
         return codes.linearize_pixels(pixels, size, keep_primaries, tf_description, c);
 
     ICCProfile profile_out = nullptr;
@@ -499,6 +500,13 @@ bool ICCProfile::linearize_pixels(float * /*pixels*/, int3 /*size*/, bool /*keep
 #endif // HDRVIEW_ENABLE_LCMS2
 
 CICPProfile ICCProfile::cicp() const { return CICPProfile{m_cicp}; }
+
+CICPProfile icc_cicp_tag(const uint8_t *icc_profile, size_t icc_profile_size)
+{
+    std::array<int, 4> quad{{-1, -1, -1, -1}};
+    parse_icc_cicp_tag(icc_profile, icc_profile_size, quad);
+    return CICPProfile{quad};
+}
 
 // --- CICPProfile implementation -------------------------------------------------
 

@@ -296,6 +296,14 @@ private:
     std::array<int, 4> m_quad;
 };
 
+/*! The code points from an ICC profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
+
+    Reads the profile bytes directly, needing neither LCMS nor a constructed ICCProfile: LCMS only learned
+    the tag in 2.16, and a caller may need the code points -- the range flag in particular -- before it has
+    decided how to read the pixels at all.
+*/
+CICPProfile icc_cicp_tag(const uint8_t *icc_profile, size_t icc_profile_size);
+
 // version of linearize_pixels that uses chromaticities and transfer function (instead of ICC or CICP profiles)
 bool linearize_pixels(float *pixels, int3 size, const Chromaticities &gamut, const TransferFunction &tf,
                       bool keep_primaries, std::string *profile_description, Chromaticities *c,

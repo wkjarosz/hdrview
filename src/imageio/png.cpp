@@ -509,6 +509,18 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             {"value", "<not present>"}, {"string", "<not present>"}, {"type", "array"}, {"description", cicp_desc}};
     }
 
+    // A file can carry its code points in the ICC profile's `cicp` tag (ICC.1:2022) instead of a cICP chunk,
+    // and that tag holds the same narrow/full range flag. Read it here, before the samples are dequantized
+    // below, since without it a narrow-range file is stretched as though it were full range. The chunk wins
+    // when both are present, matching the PNG-3 priority order that puts cICP ahead of iCCP.
+    if (!cicp.valid() && !icc_profile.empty())
+        if (auto codes = icc_cicp_tag(icc_profile.data(), icc_profile.size()); codes.valid())
+        {
+            video_full_range_flag = codes.fr() ? 1 : 0;
+            spdlog::info("No cICP chunk; taking the video range ({}) from the ICC profile's cicp tag.",
+                         video_full_range_flag ? "full" : "narrow");
+        }
+
     // Done reading color chunks
     //
 
