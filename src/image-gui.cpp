@@ -218,9 +218,24 @@ static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool 
     if (has_hdr)
         name_band(sdr_x.max.x, ceiling_x, "HDR");
 
-    ImPlot::SetupAxis(ImAxis_X2, nullptr,
-                      ImPlotAxisFlags_AuxDefault | ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoMenus |
-                          ImPlotAxisFlags_NoHighlight | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_Lock);
+    // Face the way X1 faces and take whichever side it leaves free, rather than being fixed to the top
+    // pointing right: X1's context menu lets the user invert it or send it to the opposite side, and this
+    // is a second labeling of that axis, not an independent one. Its flags survive from frame to frame
+    // (ImPlotAxis::Reset() leaves them alone), so they can simply be read back here.
+    //
+    // It gets no menu of its own for the same reason. ImPlot's axis menu writes Invert and Opposite
+    // straight into the axis flags with no way to omit just those entries, and a toggle there would stick
+    // rather than be corrected on the next frame -- SetupAxis only reapplies flags that have themselves
+    // changed since it was last called.
+    const ImPlotAxisFlags x1_flags = plot->Axes[ImAxis_X1].Flags;
+    ImPlotAxisFlags x2_flags = ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoMenus |
+                               ImPlotAxisFlags_NoHighlight | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_Lock;
+    if (!(x1_flags & ImPlotAxisFlags_Opposite))
+        x2_flags |= ImPlotAxisFlags_Opposite;
+    if (x1_flags & ImPlotAxisFlags_Invert)
+        x2_flags |= ImPlotAxisFlags_Invert;
+
+    ImPlot::SetupAxis(ImAxis_X2, nullptr, x2_flags);
     // The custom transform covers AxisScale_Linear too, where it is the identity, so X2 needs no
     // equivalent of the switch X1 is set up with.
     ImPlot::SetupAxisScale(ImAxis_X2, axis_scale_fwd_xform, axis_scale_inv_xform, &hdrview()->histogram_x_scale());
