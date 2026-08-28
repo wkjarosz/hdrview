@@ -470,9 +470,7 @@ void HDRViewApp::draw_menus()
 
     if (ImGui::BeginMenu("Tools"))
     {
-        MenuItem(action("Pan and zoom"));
-        MenuItem(action("Rectangular select"));
-        MenuItem(action("Pixel/color inspector"));
+        for (int i = 0; i < MouseMode_COUNT; ++i) MenuItem(action(mouse_mode_action_name(i)));
 
         ImGui::EndMenu();
     }
@@ -518,6 +516,7 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Show top toolbar"));
+        MenuItem(action("Show tool palette"));
         MenuItem(action("Show status bar"));
         MenuItem(action("Show FPS in status bar"));
 

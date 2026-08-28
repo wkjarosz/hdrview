@@ -29,6 +29,14 @@ void HDRViewApp::run()
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
 void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *))
 {
+    // The test binary drives a real HDRViewApp, which otherwise reads and rewrites the very settings file
+    // the installed HDRView uses: a run would leave its fixture images in the recent-file list and persist
+    // whatever exposure, gamma and window layout the tests happened to leave behind. iniDisable makes
+    // IniSettingsLocation() return nothing, which both the ImGui layout and HelloImGui's LoadUserPref/
+    // SaveUserPref (the "UserSettings" JSON in setup_persistence_callbacks) treat as "don't". Tests then
+    // start from the built-in defaults every run, which is what they should be asserting against anyway.
+    m_params.iniDisable = true;
+
     m_params.useImGuiTestEngine      = true;
     m_params.callbacks.RegisterTests = [register_tests]()
     {
@@ -64,6 +72,97 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
     };
 }
 #endif
+
+void HDRViewApp::draw_tool_palette()
+{
+    if (!m_show_tool_palette)
+        return;
+
+    // Anchor to a corner of the central dockspace node rather than the whole window, so the palette floats
+    // over the image and never over the docked panels. calculate_viewport() has already run this frame,
+    // from the CustomBackground callback, so the rect below is current.
+    const float2 pivot{(m_tool_palette_corner & 1) ? 1.f : 0.f, (m_tool_palette_corner & 2) ? 1.f : 0.f};
+    const float2 margin{EmSize(0.5f)};
+    const float2 anchor = m_viewport_min + margin + pivot * max(m_viewport_size - 2.f * margin, float2{0.f});
+
+    // While the user is dragging the palette, ImGui owns its position; we take it back on release and snap
+    // it to whichever corner it landed nearest.
+    if (!m_tool_palette_dragging)
+        ImGui::SetNextWindowPos(anchor, ImGuiCond_Always, pivot);
+
+    // Whole pixels: ImGui truncates the layout cursor to integers as it stacks items, so fractional padding
+    // or spacing drifts out of step with the auto-fit size and leaves the bottom edge tighter than the top.
+    const float gap = ImTrunc(ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ImTrunc(EmSize(0.3f)), ImTrunc(EmSize(0.3f))));
+
+    // Opaque: the palette sits over image content of arbitrary brightness, which at a high exposure would
+    // wash a translucent background right out.
+    ImGui::SetNextWindowBgAlpha(1.f);
+
+    // ImGui owns the collapsed state from here on; seed it from ours once, and read it back below.
+    ImGui::SetNextWindowCollapsed(m_tool_palette_collapsed, ImGuiCond_Once);
+
+    // ImGui renders the title bar inside Begin() and sizes its collapse arrow from the current font, which
+    // has no style var of its own, so shrink the font to shrink the arrow. Padding makes up the difference,
+    // keeping the bar a standard frame tall and - since ImGui insets the arrow by that same padding - the
+    // arrow centred within it.
+    const float bar_height = ImGui::GetFrameHeight();
+    ImGui::PushFont(nullptr, 0.75f * ImGui::GetStyle().FontSizeBase);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(ImGui::GetStyle().FramePadding.x, 0.5f * (bar_height - ImGui::GetFontSize())));
+
+    // The stock title bar supplies the drag handle and the collapse arrow, and a "##" name suppresses its
+    // text. No close button: it would widen the palette past its buttons, and the Windows menu already
+    // hides it. AlwaysAutoResize keeps this a compact box hugging its buttons rather than a full-width bar;
+    // NoDocking is required, since the app runs in ProvideFullScreenDockSpace mode and the dockspace would
+    // otherwise swallow the window; NoSavedSettings keeps a stale position in imgui.ini from fighting the
+    // anchoring above.
+    bool open = ImGui::Begin("##ToolPalette", nullptr,
+                             ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
+                                 ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
+                                 ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNavFocus |
+                                 ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::PopStyleVar(2);
+    ImGui::PopFont();
+    m_tool_palette_collapsed = ImGui::IsWindowCollapsed();
+    if (open)
+    {
+        // The same gap between buttons whichever way they run; ItemSpacing supplies it down a column.
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(gap, gap));
+        for (int i = 0; i < MouseMode_COUNT; ++i)
+        {
+            if (!m_tool_palette_vertical && i)
+                ImGui::SameLine(0.f, gap);
+            ImGui::IconButton(action(mouse_mode_action_name(i)));
+        }
+        ImGui::PopStyleVar();
+
+        if (ImGui::BeginPopupContextWindow())
+        {
+            if (ImGui::MenuItem("Vertical", nullptr, m_tool_palette_vertical))
+                m_tool_palette_vertical = true;
+            if (ImGui::MenuItem("Horizontal", nullptr, !m_tool_palette_vertical))
+                m_tool_palette_vertical = false;
+            ImGui::EndPopup();
+        }
+    }
+
+    // Dragging the title bar has ImGui move the window itself; asking it which window that is beats
+    // inferring it from mouse state, since the title bar is an item of its own and so defeats the usual
+    // "pressed the background" tests. Outside the open block, so the drop still registers on a frame the
+    // window is collapsed or clipped away.
+    if (ImGuiContext *g = ImGui::GetCurrentContext(); g->MovingWindow == ImGui::GetCurrentWindow())
+        m_tool_palette_dragging = true;
+    else if (m_tool_palette_dragging)
+    {
+        m_tool_palette_dragging = false;
+
+        float2 center         = float2{ImGui::GetWindowPos()} + 0.5f * float2{ImGui::GetWindowSize()};
+        float2 rel            = center - m_viewport_min;
+        m_tool_palette_corner = (rel.x > 0.5f * m_viewport_size.x ? 1 : 0) | (rel.y > 0.5f * m_viewport_size.y ? 2 : 0);
+    }
+    ImGui::End();
+}
 
 void HDRViewApp::draw_tweak_window()
 {

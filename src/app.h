@@ -41,6 +41,10 @@ using std::string_view;
 using std::unique_ptr;
 using std::vector;
 
+/// Name of the action that switches to the given tool. This is the only mapping from MouseMode_ to the
+/// action registry, so the Tools menu, the tool palette, and the tests can all be driven by the enum.
+const char *mouse_mode_action_name(MouseMode m);
+
 class HDRViewApp
 {
 public:
@@ -231,6 +235,13 @@ public:
 
     ImGui::Action &action(const string &name) { return m_actions[name]; }
 
+    /// The tool the mouse is currently in.
+    MouseMode mouse_mode() const { return m_mouse_mode; }
+    /// Switch to the given tool. The tools are mutually exclusive, so this is the only way to set the
+    /// mode: it also updates the whole m_mouse_mode_enabled array the tool actions expose as their
+    /// selected state.
+    void set_mouse_mode(MouseMode m);
+
     float      &gamma_live() { return m_gamma_live; }
     float      &gamma() { return m_gamma; }
     float      &exposure_live() { return m_exposure_live; }
@@ -298,6 +309,7 @@ private:
     void draw_tool_decorations() const;
     void draw_file_window();
     void draw_top_toolbar();
+    void draw_tool_palette();
     void draw_menus();
     void draw_status_bar();
     void draw_developer_windows();
@@ -444,6 +456,10 @@ private:
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
     MouseMode m_mouse_mode = MouseMode_PanZoom;
+    /// Selected state of each tool action, kept in sync with m_mouse_mode by set_mouse_mode(). The tool
+    /// actions point their Action::p_selected at these, which is what draws the checkmark in the Tools
+    /// menu and the pressed look in the tool palette.
+    bool m_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
 
     HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
 
@@ -495,6 +511,15 @@ private:
     bool  m_short_names          = false;
     int   m_file_list_mode       = 1;    // 0: images only; 1: list; 2: tree;
     float m_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
+
+    //-----------------------------------------------------------------------------
+    // Floating tool palette (see draw_tool_palette())
+    //-----------------------------------------------------------------------------
+    bool m_show_tool_palette      = true;  ///< Whether the palette is drawn over the viewport at all
+    bool m_tool_palette_collapsed = false; ///< Folded down to a single button showing the active tool
+    bool m_tool_palette_vertical  = true;  ///< Lay the buttons out as a column rather than a row
+    int  m_tool_palette_corner    = 0;     ///< Viewport corner it is anchored to: 0=TL, 1=TR, 2=BL, 3=BR
+    bool m_tool_palette_dragging  = false; ///< The user is dragging it, so don't re-anchor it this frame
 
     //-----------------------------------------------------------------------------
     // Popup dialogs

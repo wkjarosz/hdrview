@@ -132,11 +132,13 @@ inline const char *target_name(Target_ t)
 }
 
 using MouseMode = int;
+/// The tools the mouse can be in. The order is the order they are presented in the Tools menu and the
+/// floating tool palette, both of which iterate the enum rather than listing the tools by hand.
 enum MouseMode_ : MouseMode
 {
     MouseMode_PanZoom = 0,
-    MouseMode_ColorInspector,
     MouseMode_RectangularSelection,
+    MouseMode_ColorInspector,
 
     MouseMode_COUNT
 };
