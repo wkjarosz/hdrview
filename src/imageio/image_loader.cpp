@@ -271,11 +271,10 @@ struct BackgroundImageLoader::PendingImages
     }
 };
 
-void BackgroundImageLoader::load_recent_file(int index)
+string BackgroundImageLoader::recent_file(int index) const
 {
     int idx = int(m_recent_files.size()) - 1 - index;
-    if (idx >= 0 && idx < int(m_recent_files.size()))
-        background_load(m_recent_files[idx], {}, true, nullptr, load_image_options());
+    return (idx >= 0 && idx < int(m_recent_files.size())) ? m_recent_files[idx] : string{};
 }
 
 void BackgroundImageLoader::add_recent_file(const string &f)

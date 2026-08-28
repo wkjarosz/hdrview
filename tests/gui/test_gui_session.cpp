@@ -1,20 +1,22 @@
 /** \file test_gui_session.cpp
     \author Wojciech Jarosz
 
-    Coverage for two properties of session save/load (see
+    Coverage for three properties of session save/load (see
     HDRViewApp::save_session()/load_session()/begin_session_load()/finish_pending_session() in
     src/app-file-io.cpp):
 
     1. A `.hsess` session file arriving through the same code path as an image (drag-and-drop, CLI args,
        Finder "Open With", the "Open image..." dialog - all of which funnel through
        HDRViewApp::load_images()) is routed to session loading rather than treated as an unsupported image.
-    2. Listing the same image path more than once in one session (e.g. to compare two channel groups of it
+    2. A `.hsess` picked from the "Open recent" menu is routed to session loading too - that menu opens
+       whatever path it holds, and its entries can be sessions as readily as images.
+    3. Listing the same image path more than once in one session (e.g. to compare two channel groups of it
        side by side) resolves each occurrence to its own distinct pending load, since identity isn't
        tracked by path alone; current/reference don't collapse onto the same image.
 
-    These don't drive the "Save session..."/"Load session..." menu items (which open native file dialogs
+    None of these drive the "Save session..."/"Load session..." menu items (which open native file dialogs
     that can't be automated here) - instead they write a hand-crafted .hsess file directly and exercise
-    load_images()/load_session() exactly as those entry points do.
+    load_images()/load_session()/"Open recent" exactly as those entry points do.
 */
 
 #include "app.h"
@@ -72,6 +74,60 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         hdrview()->load_images({session_path.string()});
         for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
 
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "session", "hsess_from_open_recent_loads_as_session");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        json j;
+        j["type"]    = "HDRView session";
+        j["version"] = current_version_string();
+        json entry;
+        entry["path"]         = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
+        j["images"]           = json::array({entry});
+        j["current"]          = 0;
+        j["reference"]        = -1;
+        j["blend_mode"]       = "normal";
+        j["view"]             = json::object();
+        fs::path session_path = write_temp_session(j, "hdrview_test_recent.hsess");
+
+        // Other tests leave their own entries in the recent list, and an entry is addressed below by the
+        // path prefix its (32-char-truncated) label exposes - start from an empty list so only this
+        // session's temp-directory path can match.
+        ctx->SetRef("##MainMenuBar"); // the menu bar is its own top-level window (see test_gui_dialogs.cpp)
+        ctx->MenuClick("File/Open recent/Clear recently opened");
+
+        // Loading the session once is what puts it in the recent list; the "Load session..." menu item
+        // itself opens a native file dialog that can't be driven here.
+        hdrview()->close_all_images();
+        hdrview()->load_session(session_path.string());
+        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+
+        hdrview()->close_all_images();
+        ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), 0);
+
+        // Entries are labeled with the (middle-elided) path, so their IDs aren't predictable, and
+        // ImGuiTestItemInfo::DebugLabel truncates to 32 chars - only the leading part of the path survives.
+        // That's still enough to pick out the one entry under the temp directory.
+        ctx->SetRef("##MainMenuBar");
+        ctx->MenuAction(ImGuiTestAction_Open, "File/Open recent");
+        ImGuiTestItemList entries;
+        ctx->GatherItems(&entries, "//$FOCUSED", -1);
+        ImGuiID recent_id = 0;
+        for (const ImGuiTestItemInfo &item : entries)
+            if (session_path.string().rfind(item.DebugLabel, 0) == 0)
+            {
+                IM_CHECK_EQ(recent_id, (ImGuiID)0); // the entry must be unambiguous
+                recent_id = item.ID;
+            }
+        IM_CHECK(recent_id != 0);
+        ctx->ItemClick(recent_id);
+
+        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK_EQ(hdrview()->current_image_index(), 0);
     };

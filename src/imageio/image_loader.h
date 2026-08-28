@@ -97,7 +97,6 @@ struct BackgroundImageLoader
 {
     void background_load(const string filename, const string_view = string_view{}, bool should_select = false,
                          ImagePtr to_replace = nullptr, const ImageLoadOptions &opts = {});
-    void load_recent_file(int index);
     void get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback);
     int  num_pending_images() const { return (int)pending_images.size(); }
 
@@ -112,6 +111,10 @@ struct BackgroundImageLoader
     void                  clear_recent_files() { set_recent_files({}); }
     const vector<string> &recent_files() const { return m_recent_files; }
     vector<string>        recent_files_short(int head_length = 32, int tail_length = 25) const;
+    //! The recent file at `index` in the most-recently-used-first order that recent_files_short() returns,
+    //! or an empty string if `index` is out of range. Opening it is left to the caller, since what a path
+    //! means (image, session, session bundle) is an app-level decision.
+    string recent_file(int index) const;
     //! Adds (or moves to the front of) the recent-files list. Public so callers that load something outside
     //! background_load()'s own paths (e.g. HDRViewApp's session loading) can still register it as recent.
     void add_recent_file(const string &f);

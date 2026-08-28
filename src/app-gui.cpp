@@ -346,7 +346,7 @@ void HDRViewApp::draw_menus()
             {
                 if (ImGui::MenuItem(fmt::format("{}##File{}", *f, i).c_str()))
                 {
-                    m_image_loader.load_recent_file(i);
+                    load_images({m_image_loader.recent_file(i)});
                     break;
                 }
             }
@@ -773,7 +773,8 @@ void HDRViewApp::draw_command_palette(bool &open)
                                        ImCmd::Prompt(m_image_loader.recent_files_short());
                                        ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                    },
-                                   [this](int selected_option) { m_image_loader.load_recent_file(selected_option); },
+                                   [this](int selected_option)
+                                   { load_images({m_image_loader.recent_file(selected_option)}); },
                                    nullptr,
                                    nullptr,
                                    []() { open_recent_last_used = ++last_used; },
