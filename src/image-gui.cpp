@@ -288,6 +288,13 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     // How far outside the plot a boundary may be and still be pulled in to the edge; see above.
     const float near_tol = 0.02f * (x_hi - x_lo);
 
+    // A leg stops short of the boundary it marks, and short of the axis line it turns towards. The first
+    // keeps neighbouring brackets apart where they meet -- one band's upper boundary is the next one's
+    // lower -- so the two read as separate spans rather than one fused rail. The second keeps the bracket
+    // sitting above the plot instead of welded to its edge.
+    const float leg_inset = 2.f;
+    const float leg_end   = ax.Datum1 + (opposite ? -2.f : 2.f);
+
     auto boundary_px = [&](double v) { return (float)ImPlot::PlotToPixels(v, 0.0).x; };
     auto on_plot     = [&](float px) { return px >= x_lo - near_tol && px <= x_hi + near_tol; };
     auto snap        = [&](float px) { return ImFloor(ImClamp(px, x_lo, x_hi)) + 0.5f; };
@@ -301,14 +308,15 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
                                  ax.ColorTxt);
     };
 
-    // One side of a bracket: the run out from the name, and the leg turning back to the axis line at the
-    // end of it. \p dir is +1 for the side running right, so the run stops half a pixel short on the side
-    // the leg occupies.
+    // One side of a bracket: the run out from the name, and the leg turning back towards the axis line at
+    // the end of it. \p dir is +1 for the side running right, so the run stops half a pixel short on the
+    // side the leg occupies. Without a leg the run carries on to the boundary and off the plot.
     auto side = [&](float from, float edge, bool leg, float dir)
     {
-        stroke(IM_ROUND(from), y - 0.5f, leg ? edge - dir * 0.5f : edge, y + 0.5f);
+        const float x = edge - dir * leg_inset;
+        stroke(from, y - 0.5f, leg ? x - dir * 0.5f : edge, y + 0.5f);
         if (leg)
-            stroke(edge - 0.5f, y - 0.5f, edge + 0.5f, ax.Datum1);
+            stroke(x - 0.5f, y - 0.5f, x + 0.5f, leg_end);
     };
 
     auto bracket = [&](double va, double vb, const char *name)
@@ -316,12 +324,20 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
         const float pa = boundary_px(va), pb = boundary_px(vb);
         const float a = snap(pa), b = snap(pb);
         const float w = ImGui::CalcTextSize(name).x;
-        if (b - a < w + 2.f * (gap + min_run))
+        if (b - a < w + 2.f * (gap + min_run + leg_inset))
             return;
 
-        const float center = 0.5f * (a + b);
-        side(center - 0.5f * w - gap, a, on_plot(pa), -1.f);
-        side(center + 0.5f * w + gap, b, on_plot(pb), +1.f);
+        // Both runs are placed by one offset either side of one center, so that the two gaps around the
+        // name are equal by construction. Rounding each end on its own left them up to a pixel apart,
+        // which is plainly visible against letters this size.
+        //
+        // The center is the midpoint of the *unsnapped* boundaries, which is exactly where ImPlot centers
+        // the name: it puts the tick at the middle of the band in the axis's warped space, and warped
+        // space maps to pixels linearly, so the two midpoints are the same point.
+        const float center = IM_ROUND(0.5f * (ImClamp(pa, x_lo, x_hi) + ImClamp(pb, x_lo, x_hi)));
+        const float reach  = IM_ROUND(0.5f * w + gap);
+        side(center - reach, a, on_plot(pa), -1.f);
+        side(center + reach, b, on_plot(pb), +1.f);
     };
 
     bracket(sdr_x.min.x, sdr_x.max.x, "SDR");
