@@ -303,15 +303,28 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     // exactly along one and be invisible. Out here it caps its arrow instead.
     const float mark_end = opposite ? y - 0.5f * txt_h : y + 0.5f * txt_h;
 
-    // Clamped to the plot, the same as the arrow ends are, so a boundary that has run off an edge is
-    // marked at the edge it ran off and its arrow still reads as capped. The black point needs this: the
-    // axis starts fractionally above zero, which leaves display 0 a couple of pixels outside it.
-    auto boundary_x = [&](double v)
-    { return ImFloor(ImClamp((float)ImPlot::PlotToPixels(v, 0.0).x, x_lo, x_hi)) + 0.5f; };
+    // A boundary can fall outside the plot two very different ways. Display 0 always does, by a hair,
+    // because the axis starts fractionally above zero rather than at it. The headroom ceiling can too, by
+    // a lot: only the asinh scale widens to reach it, so on the linear and sRGB scales -- which stop a
+    // fixed distance past white -- it goes off the right edge as soon as the display has any real
+    // headroom.
+    //
+    // The first is worth pulling in to the edge. The second is not: a mark pinned there would claim the
+    // band ends at the edge of the plot, and would sit motionless while the brightness moved the very
+    // value it purports to show. So only a boundary already all but inside is clamped; one genuinely off
+    // the plot gets no mark, and its arrow simply runs to the edge and off.
+    const float near_tol = 0.02f * (x_hi - x_lo);
+
+    auto boundary_px = [&](double v) { return (float)ImPlot::PlotToPixels(v, 0.0).x; };
+    auto on_plot     = [&](float px) { return px >= x_lo - near_tol && px <= x_hi + near_tol; };
+    auto snap        = [&](float px) { return ImFloor(ImClamp(px, x_lo, x_hi)) + 0.5f; };
 
     auto mark = [&](double v)
     {
-        const float x = boundary_x(v);
+        const float px = boundary_px(v);
+        if (!on_plot(px))
+            return;
+        const float x = snap(px);
         draw_list->AddLine(ImVec2{x, ax.Datum1}, ImVec2{x, mark_end}, ax.ColorTick, style.MajorTickSize.x);
     };
 
@@ -334,17 +347,20 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
 
     auto span = [&](double va, double vb, const char *name)
     {
-        const float a = boundary_x(va), b = boundary_x(vb);
-        const float w = ImGui::CalcTextSize(name).x;
+        const float pa = boundary_px(va), pb = boundary_px(vb);
+        const float a = snap(pa), b = snap(pb);
+        // Only stop short at an end that has a mark to stop short of. Where the band runs off the plot
+        // instead, the arrow goes all the way to the edge, which is what says it continues past it.
+        const float inset_a = on_plot(pa) ? tip_inset : 0.f;
+        const float inset_b = on_plot(pb) ? tip_inset : 0.f;
+        const float w       = ImGui::CalcTextSize(name).x;
         // A head with no shaft behind it does not read as an arrow, so demand at least its length again.
-        if (b - a < w + 2.f * (gap + tip_inset + 2.f * head_l))
+        if (b - a < w + 2.f * gap + inset_a + inset_b + 4.f * head_l)
             return;
 
-        // Stopping short of the marks rather than touching them, so each reads as a cap the arrow points
-        // at rather than as a continuation of it.
         const float center = 0.5f * (a + b);
-        arrow(center - 0.5f * w - gap, a + tip_inset);
-        arrow(center + 0.5f * w + gap, b - tip_inset);
+        arrow(center - 0.5f * w - gap, a + inset_a);
+        arrow(center + 0.5f * w + gap, b - inset_b);
     };
 
     mark(sdr_x.min.x);
