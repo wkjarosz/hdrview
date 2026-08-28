@@ -276,26 +276,35 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     const float y =
         opposite ? ax.Datum1 - style.LabelPadding.y - 0.5f * txt_h : ax.Datum1 + style.LabelPadding.y + 0.5f * txt_h;
 
-    const float head = ImMin(EmSize(0.3f), 0.4f * txt_h);
-    const float gap  = EmSize(0.3f);
+    // Half again as long as it is wide, and snapped to whole pixels along with everything else here: at
+    // this size an unsnapped head rasterizes differently depending on where it falls, so the two ends of
+    // one span come out visibly unlike each other.
+    const float head_h = IM_ROUND(ImMax(2.f, ImMin(EmSize(0.28f), 0.3f * txt_h)));
+    const float head_l = IM_ROUND(2.2f * head_h);
+    const float gap    = EmSize(0.3f);
 
-    // Ticks point into the plot from the axis line, the same way and by the same amount as the ones the
-    // bottom axis draws for itself.
+    // The marks run outward from the axis line to the far edge of the label row, rather than inward the
+    // way an ordinary tick does. Every boundary they mark already carries a line the full height of the
+    // plot -- the black and white point handles, and the ceiling -- so a tick drawn inside would land
+    // exactly along one and be invisible. Out here it caps its arrow instead.
+    const float mark_end = opposite ? y - 0.5f * txt_h : y + 0.5f * txt_h;
+
     auto mark = [&](double v)
     {
-        const float x = (float)ImPlot::PlotToPixels(v, 0.0).x;
+        const float x = IM_ROUND((float)ImPlot::PlotToPixels(v, 0.0).x);
         if (x < x_lo || x > x_hi)
             return;
-        draw_list->AddLine(ImVec2{x, ax.Datum1}, ImVec2{x, ax.Datum1 + (opposite ? 1.f : -1.f) * style.MajorTickLen.x},
-                           ax.ColorTick, style.MajorTickSize.x);
+        draw_list->AddLine(ImVec2{x, ax.Datum1}, ImVec2{x, mark_end}, ax.ColorTick, style.MajorTickSize.x);
     };
 
+    // The shaft stops at the head's base rather than running on to its tip, so a thin head is never
+    // pierced by the line behind it.
     auto arrow = [&](float from, float to)
     {
-        const float dir = to > from ? 1.f : -1.f;
-        draw_list->AddLine(ImVec2{from, y}, ImVec2{to, y}, ax.ColorTxt);
-        draw_list->AddTriangleFilled(ImVec2{to, y}, ImVec2{to - dir * head, y - head},
-                                     ImVec2{to - dir * head, y + head}, ax.ColorTxt);
+        const float f = IM_ROUND(from), t = IM_ROUND(to);
+        const float base = t + (t > f ? -head_l : head_l);
+        draw_list->AddLine(ImVec2{f, y}, ImVec2{base, y}, ax.ColorTxt);
+        draw_list->AddTriangleFilled(ImVec2{t, y}, ImVec2{base, y - head_h}, ImVec2{base, y + head_h}, ax.ColorTxt);
     };
 
     auto span = [&](double va, double vb, const char *name)
@@ -303,8 +312,8 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
         const float a = ImMax((float)ImPlot::PlotToPixels(va, 0.0).x, x_lo);
         const float b = ImMin((float)ImPlot::PlotToPixels(vb, 0.0).x, x_hi);
         const float w = ImGui::CalcTextSize(name).x;
-        // A shaft shorter than its own head is not an arrow, so require one of at least that again.
-        if (b - a < w + 2.f * (gap + 2.f * head))
+        // A head with no shaft behind it does not read as an arrow, so demand at least its length again.
+        if (b - a < w + 2.f * (gap + 2.f * head_l))
             return;
 
         const float center = 0.5f * (a + b);
