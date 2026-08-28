@@ -127,7 +127,7 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
         image->channels[c].copy_from_interleaved(reinterpret_cast<uint8_t *>(decoded_data.get()), size.x, size.y,
                                                  size.z, c, [](uint8_t v) { return dequantize_full(v); });
     // then apply transfer function
-    if (opts.tf_override.type != TransferFunction::Linear)
+    if (tf.type != TransferFunction::Linear)
     {
         int num_color_channels = size.z >= 3 ? 3 : 1;
         to_linear(image->channels[0].data(), size.z > 1 ? image->channels[1].data() : nullptr,

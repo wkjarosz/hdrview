@@ -111,15 +111,18 @@ bool split_zip_entry(string_view filename, string &zip_path, string &entry_path)
     }
 }
 
+// The three functions below each stream over `input` line by line. They take a copy rather than reading
+// through input.data(): a string_view need not be null-terminated, so a view over part of a larger buffer
+// would otherwise be read well past its end.
 void process_lines(string_view input, function<void(string_view)> op)
 {
-    istringstream iss(input.data());
+    istringstream iss{string(input)};
     for (string line; getline(iss, line);) op(line);
 }
 
 string add_line_numbers(string_view input)
 {
-    istringstream iss(input.data());
+    istringstream iss{string(input)};
     ostringstream oss;
     size_t        line_number = 1;
 
@@ -139,7 +142,7 @@ string add_line_numbers(string_view input)
 
 string indent(string_view input, bool also_indent_first, int amount)
 {
-    istringstream iss(input.data());
+    istringstream iss{string(input)};
     ostringstream oss;
     string        spacer(amount, ' ');
     bool          first_line = !also_indent_first;

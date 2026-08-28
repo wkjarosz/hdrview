@@ -9,6 +9,44 @@ using std::string_view;
 using std::vector;
 using namespace stp;
 
+namespace
+{
+
+// Reads the four code points of an ICC `cicp` tag (ICC.1:2022, 9.2.16) out of a profile's bytes, leaving
+// `quad` untouched when the profile has no such tag. The tag table is walked directly rather than through
+// LCMS because LCMS only gained cmsSigcicpTag in 2.16, and HDRView links whichever LCMS the build supplies.
+void parse_icc_cicp_tag(const uint8_t *data, size_t size, std::array<int, 4> &quad)
+{
+    // Header is 128 bytes, followed by a 4-byte tag count and that many 12-byte tag table entries.
+    if (!data || size < 132)
+        return;
+
+    auto be32 = [data](size_t o)
+    { return (uint32_t)data[o] << 24 | (uint32_t)data[o + 1] << 16 | (uint32_t)data[o + 2] << 8 | data[o + 3]; };
+
+    const uint64_t tag_count = be32(128);
+    if (132 + tag_count * 12 > size)
+        return;
+
+    for (uint64_t t = 0; t < tag_count; ++t)
+    {
+        const size_t   entry  = 132 + (size_t)t * 12;
+        const uint64_t offset = be32(entry + 4), tag_size = be32(entry + 8);
+
+        // The tag's own type signature repeats in its first four bytes, then four reserved bytes, then the
+        // four code points -- twelve in all, which is also the smallest a well-formed tag can be.
+        if (be32(entry) != 0x63696370u || tag_size < 12 || offset + tag_size > size)
+            continue;
+        if (be32((size_t)offset) != 0x63696370u)
+            continue;
+
+        for (int i = 0; i < 4; ++i) quad[i] = data[(size_t)offset + 8 + i];
+        return;
+    }
+}
+
+} // namespace
+
 #if HDRVIEW_ENABLE_LCMS2
 #include <lcms2.h>
 
@@ -75,7 +113,7 @@ ICCProfile::ICCProfile(const uint8_t *icc_profile, size_t icc_profile_size) :
     m_profile(cmsOpenProfileFromMemTHR(CmsContext::thread_local_instance().get(), (const void *)icc_profile,
                                        (cmsUInt32Number)icc_profile_size))
 {
-    // empty
+    parse_icc_cicp_tag(icc_profile, icc_profile_size, m_cicp);
 }
 
 ICCProfile::~ICCProfile()
@@ -385,6 +423,13 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
 bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, string *tf_description,
                                   Chromaticities *c) const
 {
+    // A `cicp` tag is the profile stating its encoding in CICP's own terms (ICC.1:2022), so it is taken as
+    // authoritative -- the same standing a PNG cICP chunk has over an iCCP profile. For HDR it is also the
+    // only part of the profile that *can* describe the encoding: the ICC PCS is normalized to media white,
+    // so transforming a PQ or HLG image through the profile clamps away everything above it.
+    if (auto codes = cicp(); codes.valid())
+        return codes.linearize_pixels(pixels, size, keep_primaries, tf_description, c);
+
     ICCProfile profile_out = nullptr;
     // create the output profile and store either the input or output primaries in c
     if (keep_primaries)
@@ -425,7 +470,10 @@ std::vector<uint8_t> ICCProfile::dump_to_memory() const
 
 // Stubs for builds without LCMS2 which just return failure for operations that require LCMS functionality.
 
-ICCProfile::ICCProfile(const uint8_t * /*icc_profile*/, size_t /*icc_profile_size*/) : m_profile(nullptr) {}
+ICCProfile::ICCProfile(const uint8_t *icc_profile, size_t icc_profile_size) : m_profile(nullptr)
+{
+    parse_icc_cicp_tag(icc_profile, icc_profile_size, m_cicp);
+}
 ICCProfile::~ICCProfile() {}
 ICCProfile           ICCProfile::linear_RGB(const Chromaticities           &/*chr*/) { return ICCProfile(nullptr); }
 ICCProfile           ICCProfile::linear_Gray(const float2           &/*whitepoint*/) { return ICCProfile(nullptr); }
@@ -450,6 +498,15 @@ bool ICCProfile::linearize_pixels(float * /*pixels*/, int3 /*size*/, bool /*keep
 }
 
 #endif // HDRVIEW_ENABLE_LCMS2
+
+CICPProfile ICCProfile::cicp() const { return CICPProfile{m_cicp}; }
+
+CICPProfile icc_cicp_tag(const uint8_t *icc_profile, size_t icc_profile_size)
+{
+    std::array<int, 4> quad{{-1, -1, -1, -1}};
+    parse_icc_cicp_tag(icc_profile, icc_profile_size, quad);
+    return CICPProfile{quad};
+}
 
 // --- CICPProfile implementation -------------------------------------------------
 

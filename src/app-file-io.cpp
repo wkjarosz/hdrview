@@ -1204,6 +1204,11 @@ void HDRViewApp::finish_pending_session()
 
     m_request_sort = true;
     m_pending_session.reset();
+
+    // m_images was rebuilt above, and m_visible_images indexes into it -- the file list reads one through
+    // the other, so leaving the old indices in place walks off the end of the new vector. Every other path
+    // that touches m_images ends here too.
+    update_visibility();
 }
 
 void HDRViewApp::draw_confirm_load_session_dialog(bool &open)

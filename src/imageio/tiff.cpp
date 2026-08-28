@@ -537,10 +537,24 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             const uint64_t int_max_value = file_bits_per_sample == 0    ? 1ull
                                            : file_bits_per_sample >= 64 ? ~0ull
                                                                         : ((1ull << file_bits_per_sample) - 1);
-            const float    int_inv_divisor = 1.0f / (float)int_max_value;
-            const float    int_bias        = sample_format == SAMPLEFORMAT_INT && file_bits_per_sample > 0
+            float          int_inv_divisor = 1.0f / (float)int_max_value;
+            float          int_bias        = sample_format == SAMPLEFORMAT_INT && file_bits_per_sample > 0
                                                  ? (float)(1ull << (file_bits_per_sample - 1))
                                                  : 0.0f;
+
+            // TIFF has no field of its own for the video range, but a profile carrying CICP code points
+            // (ICC.1:2022) states it there. Narrow range puts black at 16 and white at 235, scaled by the
+            // sample depth, so it is the same normalization with a different divisor and offset -- and
+            // deliberately not clamped, since a narrow-range image may carry excursions beyond both.
+            if (sample_format == SAMPLEFORMAT_UINT && file_bits_per_sample >= 8 && file_bits_per_sample <= 16)
+                if (auto codes = icc_cicp_tag(image->icc_data.data(), image->icc_data.size());
+                    codes.valid() && !codes.fr())
+                {
+                    const float scale = (float)(1ull << (file_bits_per_sample - 8));
+                    int_inv_divisor   = 1.f / (219.f * scale);
+                    int_bias          = -16.f * scale;
+                    spdlog::info("ICC cicp tag declares narrow video range; dequantizing 16..235 accordingly.");
+                }
 
             // Helper function to unpack bits (handles both byte-aligned and bit-packed data)
             auto unpack_bits =

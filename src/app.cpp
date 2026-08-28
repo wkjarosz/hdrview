@@ -49,6 +49,12 @@ void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool
     spdlog::info("Overriding Apple-keyboard behavior: {}", apple_keys.has_value());
 
     g_hdrview = new HDRViewApp(exposure, gamma, dither, force_sdr, apple_keys, in_files);
+
+    // Loading is deliberately not part of construction: it reaches code that calls hdrview(), and until
+    // the assignment above returns there is nothing for that to return. A session is the case that gets
+    // there synchronously -- it resolves its entries and refreshes the textures on the spot -- so
+    // `HDRView some.hsess` used to dereference a null singleton before the window ever opened.
+    g_hdrview->load_images(in_files);
 }
 
 HDRViewApp *hdrview() { return g_hdrview; }
@@ -82,9 +88,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     setup_frame_callbacks();
     setup_dialogs(in_files);
     setup_actions(window_setup.mod_key, window_setup.window_info);
-
-    // load any passed-in images
-    load_images(in_files);
 }
 
 void HDRViewApp::setup_window_and_backend(optional<bool> force_sdr)
