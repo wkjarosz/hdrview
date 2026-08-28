@@ -273,15 +273,21 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
 
     // Down the middle of the row ImPlot puts this axis's tick labels in, mirroring the placement in its
     // own axis rendering: one LabelPadding out from the axis line, then half a line of text.
-    const float y =
+    //
+    // Landed on a pixel *center* rather than a boundary. A one-pixel line centered on a whole y covers
+    // half the row above and half the row below, which both dilutes it and puts it half a pixel below the
+    // center of a head whose base spans whole rows. Every x here is snapped the same way, so that the
+    // marks come out as single crisp columns.
+    const float y_row =
         opposite ? ax.Datum1 - style.LabelPadding.y - 0.5f * txt_h : ax.Datum1 + style.LabelPadding.y + 0.5f * txt_h;
+    const float y = ImFloor(y_row) + 0.5f;
 
-    // Half again as long as it is wide, and snapped to whole pixels along with everything else here: at
-    // this size an unsnapped head rasterizes differently depending on where it falls, so the two ends of
-    // one span come out visibly unlike each other.
-    const float head_h = IM_ROUND(ImMax(2.f, ImMin(EmSize(0.28f), 0.3f * txt_h)));
-    const float head_l = IM_ROUND(2.2f * head_h);
-    const float gap    = EmSize(0.3f);
+    // Half again as long as it is wide. Sized in whole pixels, since at this size a fractional head
+    // rasterizes differently depending on where it falls.
+    const float head_h  = ImMax(2.f, ImFloor(ImMin(EmSize(0.28f), 0.3f * txt_h)));
+    const float head_l  = ImFloor(2.2f * head_h);
+    const float gap     = EmSize(0.3f);
+    const float tip_gap = 2.f; // between an arrow's tip and the mark it points at
 
     // The marks run outward from the axis line to the far edge of the label row, rather than inward the
     // way an ordinary tick does. Every boundary they mark already carries a line the full height of the
@@ -292,36 +298,45 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     // Clamped to the plot, the same as the arrow ends are, so a boundary that has run off an edge is
     // marked at the edge it ran off and its arrow still reads as capped. The black point needs this: the
     // axis starts fractionally above zero, which leaves display 0 a couple of pixels outside it.
+    auto boundary_x = [&](double v)
+    { return ImFloor(ImClamp((float)ImPlot::PlotToPixels(v, 0.0).x, x_lo, x_hi)) + 0.5f; };
+
     auto mark = [&](double v)
     {
-        const float x = IM_ROUND(ImClamp((float)ImPlot::PlotToPixels(v, 0.0).x, x_lo, x_hi));
+        const float x = boundary_x(v);
         draw_list->AddLine(ImVec2{x, ax.Datum1}, ImVec2{x, mark_end}, ax.ColorTick, style.MajorTickSize.x);
     };
 
-    // Both heads are wound the same way round rather than being mirror images: ImGui's antialiased fill
-    // grows or shrinks a polygon by half a pixel according to its winding, so reflecting one head gives
-    // the other a visibly different size. The shaft runs the whole way under the head to its tip, which
-    // costs nothing -- the two are the same color -- and leaves no seam where they meet.
+    // The shaft stops dead at the head's base and never runs beneath it: this color is semitransparent,
+    // so the two would compound where they overlapped and draw a denser streak down the middle of the
+    // head. It is a rect rather than a line so that it fills its pixel row exactly, leaving no seam
+    // against the base for the head's own edge to fall short of.
+    //
+    // Both heads are wound the same way round rather than being mirror images. ImGui's antialiased fill
+    // offsets each edge along its right-hand normal, so reflecting a head pushes that fringe the other
+    // way and it comes out a pixel different in size from its twin.
     auto arrow = [&](float from, float to)
     {
-        const float f = IM_ROUND(from), t = IM_ROUND(to);
-        const float base = t + (t > f ? -head_l : head_l), h = t > f ? head_h : -head_h;
-        draw_list->AddLine(ImVec2{f, y}, ImVec2{t, y}, ax.ColorTxt);
-        draw_list->AddTriangleFilled(ImVec2{t, y}, ImVec2{base, y + h}, ImVec2{base, y - h}, ax.ColorTxt);
+        const float dir  = to > from ? 1.f : -1.f;
+        const float base = to - dir * head_l;
+        draw_list->AddRectFilled(ImVec2{ImMin(from, base), y - 0.5f}, ImVec2{ImMax(from, base), y + 0.5f}, ax.ColorTxt);
+        draw_list->AddTriangleFilled(ImVec2{to, y}, ImVec2{base, y + dir * head_h}, ImVec2{base, y - dir * head_h},
+                                     ax.ColorTxt);
     };
 
     auto span = [&](double va, double vb, const char *name)
     {
-        const float a = ImMax((float)ImPlot::PlotToPixels(va, 0.0).x, x_lo);
-        const float b = ImMin((float)ImPlot::PlotToPixels(vb, 0.0).x, x_hi);
+        const float a = boundary_x(va), b = boundary_x(vb);
         const float w = ImGui::CalcTextSize(name).x;
         // A head with no shaft behind it does not read as an arrow, so demand at least its length again.
-        if (b - a < w + 2.f * (gap + 2.f * head_l))
+        if (b - a < w + 2.f * (gap + tip_gap + 2.f * head_l))
             return;
 
+        // Stopping short of the marks rather than touching them, so each reads as a cap the arrow points
+        // at rather than as a continuation of it.
         const float center = 0.5f * (a + b);
-        arrow(center - 0.5f * w - gap, a);
-        arrow(center + 0.5f * w + gap, b);
+        arrow(center - 0.5f * w - gap, a + tip_gap);
+        arrow(center + 0.5f * w + gap, b - tip_gap);
     };
 
     mark(sdr_x.min.x);
