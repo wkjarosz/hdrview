@@ -954,13 +954,20 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
 
             if (pass_cfa_filter)
             {
-                int raw_w = idata.sizes.raw_width;
-                int raw_h = idata.sizes.raw_height;
+                // The sensor's active area within the raw frame. LibRaw sizes rawdata.raw_image from
+                // raw_width x raw_height, but its unpackers only fill this rectangle; a frame that carries
+                // masked columns or rows around it leaves those holding whatever the allocation did, which
+                // for several Olympus bodies is values no 12-bit sensor could produce, differing from one
+                // build to the next. Only what LibRaw actually decodes is exposed.
+                const int cfa_w = idata.sizes.width;
+                const int cfa_h = idata.sizes.height;
+                const int x0    = idata.sizes.left_margin;
+                const int y0    = idata.sizes.top_margin;
 
-                // Expose the raw CFA data as a grayscale Image if available.
-                if (pass_cfa_filter && idata.rawdata.raw_image && raw_w > 0 && raw_h > 0)
+                if (idata.rawdata.raw_image && cfa_w > 0 && cfa_h > 0 && x0 + cfa_w <= idata.sizes.raw_width &&
+                    y0 + cfa_h <= idata.sizes.raw_height)
                 {
-                    auto cfa_img                      = std::make_shared<Image>(int2{raw_w, raw_h}, 1);
+                    auto cfa_img                      = std::make_shared<Image>(int2{cfa_w, cfa_h}, 1);
                     cfa_img->filename                 = filename;
                     cfa_img->partname                 = "cfa";
                     cfa_img->metadata["loader"]       = "LibRaw (CFA)";
@@ -969,21 +976,30 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                     if (!exif_ctx.metadata.empty())
                         cfa_img->metadata["exif"] = exif_ctx.metadata;
 
-                    // Copy raw ushort values into float buffer without scaling
-                    std::vector<float> cfa_pixels((size_t)raw_w * raw_h);
-                    ushort            *rawp = idata.rawdata.raw_image;
+                    // Copy raw ushort values into float buffer without scaling. raw_image is LibRaw's
+                    // one-component (Bayer) buffer, and it sets raw_pitch to raw_width * 2 for it; the
+                    // three- and four-component sensors that stride differently leave raw_image null and
+                    // are skipped above.
+                    std::vector<float> cfa_pixels((size_t)cfa_w * cfa_h);
+                    const ushort      *rawp       = idata.rawdata.raw_image;
+                    const size_t       raw_stride = idata.sizes.raw_width;
 
                     constexpr float scale = 1.0f / 65535.0f;
-                    stp::parallel_for(stp::blocked_range<int>(0, raw_w * raw_h, 1024),
+                    stp::parallel_for(stp::blocked_range<int>(0, cfa_h, 64),
                                       [&](int begin, int end, int /*unit_index*/, int /*thread_index*/)
                                       {
-                                          for (int i = begin; i < end; ++i) cfa_pixels[i] = rawp[i] * scale;
+                                          for (int y = begin; y < end; ++y)
+                                          {
+                                              const ushort *src = rawp + (size_t)(y0 + y) * raw_stride + x0;
+                                              float        *dst = cfa_pixels.data() + (size_t)y * cfa_w;
+                                              for (int x = 0; x < cfa_w; ++x) dst[x] = src[x] * scale;
+                                          }
                                       });
 
                     // Copy into single channel
-                    cfa_img->channels[0].copy_from_interleaved<float>(cfa_pixels.data(), raw_w, raw_h, 1, 0,
+                    cfa_img->channels[0].copy_from_interleaved<float>(cfa_pixels.data(), cfa_w, cfa_h, 1, 0,
                                                                       [](float v) { return v; });
-                    cfa_img->display_window = Box2i{{0, 0}, {raw_w, raw_h}};
+                    cfa_img->display_window = Box2i{{0, 0}, {cfa_w, cfa_h}};
 
                     images.push_back(cfa_img);
                 }
