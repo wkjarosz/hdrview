@@ -110,20 +110,27 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         ctx->Yield();
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
-        // Entries are labeled with the (middle-elided) path, so their IDs aren't predictable, and
-        // ImGuiTestItemInfo::DebugLabel truncates to 32 chars - only the leading part of the path survives.
-        // That's still enough to pick out the one entry under the temp directory.
+        // Entries are labeled with the (middle-elided) path, so their IDs aren't predictable. Match on the
+        // leading part of the path that survives ImGuiTestItemInfo::DebugLabel's 32-char truncation, which
+        // is enough to pick out the one entry under the temp directory.
         ctx->SetRef("##MainMenuBar");
         ctx->MenuAction(ImGuiTestAction_Open, "File/Open recent");
         ImGuiTestItemList entries;
         ctx->GatherItems(&entries, "//$FOCUSED", -1);
         ImGuiID recent_id = 0;
         for (const ImGuiTestItemInfo &item : entries)
-            if (session_path.string().rfind(item.DebugLabel, 0) == 0)
+        {
+            // Each label is "<path>##File<n>", and where the path is short enough part of that ID suffix
+            // survives the truncation - possibly just one of its two '#', so cut at the first. Nothing
+            // matches without this on a platform whose temp directory is briefly named, like Linux's /tmp.
+            string label{item.DebugLabel};
+            label = label.substr(0, label.find('#'));
+            if (!label.empty() && session_path.string().rfind(label, 0) == 0)
             {
                 IM_CHECK_EQ(recent_id, (ImGuiID)0); // the entry must be unambiguous
                 recent_id = item.ID;
             }
+        }
         IM_CHECK(recent_id != 0);
         ctx->ItemClick(recent_id);
 
