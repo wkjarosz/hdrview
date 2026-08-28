@@ -244,16 +244,18 @@ static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool 
 }
 
 /*!
-    Draws each display range's extent into the top axis: a tick mark at every band boundary, and a
-    double-headed arrow spanning each band out to them, interrupted by the band's name.
+    Draws each display range's extent into the top axis as a square bracket over the band: a run out from
+    either side of the band's name, each turning back toward the axis at the boundary it reaches.
 
     ImPlot draws the names themselves, as that axis's tick labels (see setup_display_range_axis()), and
-    does so after this runs -- so they land over the arrows, and the gap left for them here is only to
-    keep a shaft from showing through the glyphs.
+    does so after this runs, so they are laid over the gap the bracket leaves between its two runs.
 
-    A band too narrow to hold its name and an arrow long enough to read as one on either side gets no
-    arrow; at that width the heads crowd the text into noise. The boundary marks are always drawn: they
-    are what the arrows point at, and a bare tick stays legible at any width.
+    A boundary that has run off the plot gets no leg, and that side simply carries on to the edge, which
+    is what says the band continues past it. Two quite different things land outside: display 0 misses by
+    a hair, the axis starting fractionally above zero rather than at it, so a boundary all but inside is
+    pulled in rather than dropped; the headroom ceiling misses by a mile on the linear and sRGB scales,
+    which stop a fixed distance past white instead of widening to reach it, and so cannot show a ceiling
+    at all once the display has real headroom.
 
     Call between BeginPlot and EndPlot. Takes plot-space x, and follows whichever side and direction the
     axis ended up on, so it rides the bottom axis's Invert and Opposite along with everything else.
@@ -274,103 +276,57 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     // Down the middle of the row ImPlot puts this axis's tick labels in, mirroring the placement in its
     // own axis rendering: one LabelPadding out from the axis line, then half a line of text.
     //
-    // Landed on a pixel *center* rather than a boundary. A one-pixel line centered on a whole y covers
-    // half the row above and half the row below, which both dilutes it and puts it half a pixel below the
-    // center of a head whose base spans whole rows. Every x here is snapped the same way, so that the
-    // marks come out as single crisp columns.
+    // Landed on a pixel center rather than a boundary, so a one-pixel stroke covers a single row exactly
+    // instead of half of each row either side of it. Every x below is snapped the same way.
     const float y_row =
         opposite ? ax.Datum1 - style.LabelPadding.y - 0.5f * txt_h : ax.Datum1 + style.LabelPadding.y + 0.5f * txt_h;
     const float y = ImFloor(y_row) + 0.5f;
 
-    // Half again as long as it is wide. Sized in whole pixels, since at this size a fractional head
-    // rasterizes differently depending on where it falls.
-    const float head_h  = ImMax(2.f, ImFloor(ImMin(EmSize(0.28f), 0.3f * txt_h)));
-    const float head_l  = ImFloor(2.2f * head_h);
-    const float gap     = EmSize(0.3f);
-
-    // How far back from a mark an arrow's tip is placed, for tip_gap pixels of daylight between the two.
-    //
-    // The tip is not where the head ends. Antialiasing offsets each edge outward along its own normal
-    // and miters them at the corners, and at a point this acute that miter carries the apex a further
-    // 1.1 pixels forward -- enough, against a 2 pixel nominal gap either side of a mark one pixel wide,
-    // to leave a sliver too thin to survive rounding evenly on both sides.
-    const float tip_gap   = 2.f;
-    const float tip_inset = tip_gap + 1.2f + 0.5f * style.MajorTickSize.x;
-
-    // The marks run outward from the axis line to the far edge of the label row, rather than inward the
-    // way an ordinary tick does. Every boundary they mark already carries a line the full height of the
-    // plot -- the black and white point handles, and the ceiling -- so a tick drawn inside would land
-    // exactly along one and be invisible. Out here it caps its arrow instead.
-    const float mark_end = opposite ? y - 0.5f * txt_h : y + 0.5f * txt_h;
-
-    // A boundary can fall outside the plot two very different ways. Display 0 always does, by a hair,
-    // because the axis starts fractionally above zero rather than at it. The headroom ceiling can too, by
-    // a lot: only the asinh scale widens to reach it, so on the linear and sRGB scales -- which stop a
-    // fixed distance past white -- it goes off the right edge as soon as the display has any real
-    // headroom.
-    //
-    // The first is worth pulling in to the edge. The second is not: a mark pinned there would claim the
-    // band ends at the edge of the plot, and would sit motionless while the brightness moved the very
-    // value it purports to show. So only a boundary already all but inside is clamped; one genuinely off
-    // the plot gets no mark, and its arrow simply runs to the edge and off.
+    const float gap = EmSize(0.3f);
+    // Below this the runs are too stubby to read as a bracket rather than as a pair of stray marks.
+    const float min_run = EmSize(0.5f);
+    // How far outside the plot a boundary may be and still be pulled in to the edge; see above.
     const float near_tol = 0.02f * (x_hi - x_lo);
 
     auto boundary_px = [&](double v) { return (float)ImPlot::PlotToPixels(v, 0.0).x; };
     auto on_plot     = [&](float px) { return px >= x_lo - near_tol && px <= x_hi + near_tol; };
     auto snap        = [&](float px) { return ImFloor(ImClamp(px, x_lo, x_hi)) + 0.5f; };
 
-    auto mark = [&](double v)
+    // Strokes are rects rather than lines, since a filled rect carries no antialiased fringe and so stays
+    // crisp on whole-pixel bounds. The color is semitransparent, so the corner belongs to the leg alone
+    // and the run stops against it: overlapping the two would print a darker square there.
+    auto stroke = [&](float x0, float y0, float x1, float y1)
     {
-        const float px = boundary_px(v);
-        if (!on_plot(px))
-            return;
-        const float x = snap(px);
-        draw_list->AddLine(ImVec2{x, ax.Datum1}, ImVec2{x, mark_end}, ax.ColorTick, style.MajorTickSize.x);
+        draw_list->AddRectFilled(ImVec2{ImMin(x0, x1), ImMin(y0, y1)}, ImVec2{ImMax(x0, x1), ImMax(y0, y1)},
+                                 ax.ColorTxt);
     };
 
-    // The shaft stops dead at the head's base and never runs beneath it: this color is semitransparent,
-    // so the two would compound where they overlapped and draw a denser streak down the middle of the
-    // head. It is a rect rather than a line so that it fills its pixel row exactly, leaving no seam
-    // against the base for the head's own edge to fall short of.
-    //
-    // Both heads are wound the same way round rather than being mirror images. ImGui's antialiased fill
-    // offsets each edge along its right-hand normal, so reflecting a head pushes that fringe the other
-    // way and it comes out a pixel different in size from its twin.
-    auto arrow = [&](float from, float to)
+    // One side of a bracket: the run out from the name, and the leg turning back to the axis line at the
+    // end of it. \p dir is +1 for the side running right, so the run stops half a pixel short on the side
+    // the leg occupies.
+    auto side = [&](float from, float edge, bool leg, float dir)
     {
-        const float dir  = to > from ? 1.f : -1.f;
-        const float base = to - dir * head_l;
-        draw_list->AddRectFilled(ImVec2{ImMin(from, base), y - 0.5f}, ImVec2{ImMax(from, base), y + 0.5f}, ax.ColorTxt);
-        draw_list->AddTriangleFilled(ImVec2{to, y}, ImVec2{base, y + dir * head_h}, ImVec2{base, y - dir * head_h},
-                                     ax.ColorTxt);
+        stroke(IM_ROUND(from), y - 0.5f, leg ? edge - dir * 0.5f : edge, y + 0.5f);
+        if (leg)
+            stroke(edge - 0.5f, y - 0.5f, edge + 0.5f, ax.Datum1);
     };
 
-    auto span = [&](double va, double vb, const char *name)
+    auto bracket = [&](double va, double vb, const char *name)
     {
         const float pa = boundary_px(va), pb = boundary_px(vb);
         const float a = snap(pa), b = snap(pb);
-        // Only stop short at an end that has a mark to stop short of. Where the band runs off the plot
-        // instead, the arrow goes all the way to the edge, which is what says it continues past it.
-        const float inset_a = on_plot(pa) ? tip_inset : 0.f;
-        const float inset_b = on_plot(pb) ? tip_inset : 0.f;
-        const float w       = ImGui::CalcTextSize(name).x;
-        // A head with no shaft behind it does not read as an arrow, so demand at least its length again.
-        if (b - a < w + 2.f * gap + inset_a + inset_b + 4.f * head_l)
+        const float w = ImGui::CalcTextSize(name).x;
+        if (b - a < w + 2.f * (gap + min_run))
             return;
 
         const float center = 0.5f * (a + b);
-        arrow(center - 0.5f * w - gap, a + inset_a);
-        arrow(center + 0.5f * w + gap, b - inset_b);
+        side(center - 0.5f * w - gap, a, on_plot(pa), -1.f);
+        side(center + 0.5f * w + gap, b, on_plot(pb), +1.f);
     };
 
-    mark(sdr_x.min.x);
-    mark(sdr_x.max.x);
-    span(sdr_x.min.x, sdr_x.max.x, "SDR");
+    bracket(sdr_x.min.x, sdr_x.max.x, "SDR");
     if (has_hdr)
-    {
-        mark(ceiling_x);
-        span(sdr_x.max.x, ceiling_x, "HDR");
-    }
+        bracket(sdr_x.max.x, ceiling_x, "HDR");
 }
 
 /*!
