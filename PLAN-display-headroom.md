@@ -170,8 +170,12 @@ platform-specific steps reduce to making macOS and Windows report the same numbe
 ## Settled
 
 - **Label format**: a multiplier, `6.25x`, in grey rather than white so it does not read as a third
-  handle beside the black and white points. Bands are labeled along the bottom edge; the legend
-  (`ImPlotLocation_North`) and the clip-warning toggles already own the top.
+  handle beside the black and white points. Band labels sit in a strip *above* the data rectangle,
+  mirroring the tick labels below it -- inside the plot they were hard to read against the histogram,
+  and the plot's top edge is already owned by the legend (`ImPlotLocation_North`) and the clip-warning
+  toggles. ImPlot's `PlotPadding` covers all but ~2.5 px of that strip, which `draw_histogram()`
+  reserves before `BeginPlot()`; the labels are drawn under a widened clip rect, since they reach past
+  the frame ImPlot clips to.
 - **Axis range**: `x_limits()` capped the asinh axis at 4x display white, so any real headroom put the
   ceiling permanently off the plot. Asinh now reaches `max(4x, headroom * 1.15)`; linear and sRGB are
   unchanged.

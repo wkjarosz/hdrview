@@ -179,19 +179,24 @@ static void draw_display_range_bands(const Box1d &sdr_x, double ceiling_x, bool 
     const float  pad       = EmSize(0.25f);
     const ImU32  col       = ImGui::GetColorU32(ImGuiCol_Text, 0.5f);
 
-    // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive fill
-    // and the CIE diagram elsewhere in this file.
-    ImPlot::PushPlotClipRect();
-
     if (has_hdr)
     {
+        // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive
+        // fill and the CIE diagram elsewhere in this file.
+        ImPlot::PushPlotClipRect();
         const float x = ImPlot::PlotToPixels(ceiling_x, 0.0).x;
         draw_list->AddLine(ImVec2{x, plot_pos.y}, ImVec2{x, plot_pos.y + plot_size.y}, col);
+        ImPlot::PopPlotClipRect();
     }
 
-    // The labels sit along the bottom edge rather than the top, which the legend (ImPlotLocation_North)
-    // and the two clip-warning toggles have already claimed.
-    const float text_y = plot_pos.y + plot_size.y - pad - ImGui::GetTextLineHeight();
+    // The labels go above the data rectangle, mirroring the tick labels below it, where they read
+    // cleanly instead of competing with the histogram behind them. That also keeps them clear of the
+    // legend (ImPlotLocation_North) and the clip-warning toggles, which own the plot's top edge.
+    //
+    // They reach past the frame ImPlot clips to, so the clip rect has to be widened to let them through;
+    // draw_histogram() reserves the matching space with display_range_label_overhang().
+    const float text_y = plot_pos.y - pad - ImGui::GetTextLineHeight();
+    ImGui::PushClipRect(ImVec2{plot_pos.x, text_y}, ImVec2{plot_pos.x + plot_size.x, plot_pos.y}, false);
 
     auto label_band = [&](double xa, double xb, const char *text)
     {
@@ -210,7 +215,21 @@ static void draw_display_range_bands(const Box1d &sdr_x, double ceiling_x, bool 
     if (has_hdr)
         label_band(sdr_x.max.x, ceiling_x, "HDR");
 
-    ImPlot::PopPlotClipRect();
+    ImGui::PopClipRect();
+}
+
+/*!
+    How far draw_display_range_bands()' labels reach above the plot's frame, in pixels.
+
+    They sit above the data rectangle, and ImPlot's own PlotPadding accounts for part of that gap; only
+    the remainder has to be reserved before BeginPlot(), or the labels would be drawn over whatever the
+    layout put above the plot. Zero when the padding already covers them.
+
+    Call with the plot's font current, so the line height matches the one the labels are drawn with.
+*/
+static float display_range_label_overhang()
+{
+    return ImMax(0.f, ImGui::GetTextLineHeight() + EmSize(0.25f) - ImPlot::GetStyle().PlotPadding.y);
 }
 
 /*!
@@ -330,6 +349,9 @@ void Image::draw_histogram()
 
     ImGui::PushFont(hdrview()->font("sans regular"), ui_font_size * 10.f / 14.f);
     ImPlot::PushStyleVar(ImPlotStyleVar_AnnotationPadding, ImVec2{2.0, 0.0});
+    // Keep the strip the SDR/HDR band labels are drawn into clear of the toolbar row above. Sized with
+    // the plot's font, which the PushFont above has just made current.
+    ImGui::Dummy(ImVec2{0.f, display_range_label_overhang()});
     // float4 plot_bg{0.35f, 0.35f, 0.35f, 1.f};
     // ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
     if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, EmSize(hdrview()->histogram_height()))))
