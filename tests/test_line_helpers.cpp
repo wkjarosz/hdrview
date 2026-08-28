@@ -8,6 +8,9 @@
 
 #include "common.h"
 
+// doctest only forward-declares std::basic_ostream, and MSVC's operator<<(ostream&, string_view) needs the
+// complete type -- so asserting on a string_view below does not compile there without this.
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
