@@ -160,6 +160,12 @@ platform-specific steps reduce to making macOS and Windows report the same numbe
 - **Axis range**: `x_limits()` capped the asinh axis at 4x display white, so any real headroom put the
   ceiling permanently off the plot. Asinh now reaches `max(4x, headroom * 1.15)`; linear and sRGB are
   unchanged.
+- **Dim style beyond the ceiling**: one style for both dimmed regions, the existing
+  `DragRect(..., ImVec4(0,0,0,1.5), NoInputs | NoFit)`. The two edges do now mean different things --
+  the left one is the black point the exposure put there, the right one is a limit of the hardware
+  that no drag will move -- but a second dim style would cost more in visual noise than the
+  distinction is worth, and the ceiling's own tag already marks that edge as something else. Revisit
+  only if the shared appearance actually misleads in use.
 - **Trusting the ceiling**: it is only as good as the peak the display reports. KDE writes a
   `maxPeakBrightnessOverride` in `~/.config/kwinoutputconfig.json` from its HDR calibration wizard
   (`/usr/bin/hdrcalibrator`), and a careless run leaves a value the panel cannot reach -- 1850 nits
@@ -172,7 +178,3 @@ platform-specific steps reduce to making macOS and Windows report the same numbe
   under thermal throttling and on battery, so the band will visibly drift while nothing about the
   image changed. A second, fainter tick at `maximumPotential...` would make that legible instead of
   mysterious. Needs a real display to judge.
-- **Dim style beyond the ceiling.** Currently reuses the existing out-of-range dimming,
-  `DragRect(..., ImVec4(0,0,0,1.5), NoInputs | NoFit)`, which keeps the look consistent. Whether
-  "beyond what the display can show" deserves something distinct from "outside the exposure range" is
-  still worth a look now that the boundary is visible.
