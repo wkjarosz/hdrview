@@ -54,4 +54,48 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         IM_CHECK(s.average <= s.maximum);
         IM_CHECK(s.stddev >= 0.0);
     };
+
+    t           = IM_REGISTER_TEST(engine, "stats", "selection_off_the_image_computes_empty_stats");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        // The app-level counterpart to test_pixel_stats.cpp's "A selection that misses the channel" case:
+        // a selection is not clamped to the image anywhere, so one dragged into the empty area beside it
+        // reaches PixelStats::calculate() as a region that intersects the data window into an inverted box.
+        if (hdrview()->num_images() == 0)
+        {
+            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
+            for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        }
+        IM_CHECK(hdrview()->num_images() > 0);
+
+        auto img = hdrview()->current_image();
+        IM_CHECK(img != nullptr);
+
+        // Well past the data window in y, overlapping it in x -- the one-axis miss, whose volume() is
+        // negative rather than spuriously positive. The gap has to exceed the statistics pass's block size
+        // (1 << 20) once multiplied by the width, or the same overflow lands on a block count of zero and
+        // nothing runs; one block's worth of rows clears that for any width.
+        constexpr int gap = 1 << 20;
+        const int2    lo = img->data_window.min, hi = img->data_window.max;
+        hdrview()->roi() = hdrview()->roi_live() = Box2i{int2{lo.x, hi.y + gap}, int2{hi.x, hi.y + 2 * gap}};
+
+        auto &group = img->groups[img->selected_group];
+        IM_CHECK(group.num_channels > 0);
+
+        PixelStats *stats = nullptr;
+        for (int frame = 0; frame < 240; ++frame)
+        {
+            stats = img->channels[group.channels[0]].get_stats();
+            if (stats->computed && stats->settings.roi == hdrview()->roi())
+                break;
+            ctx->Yield();
+        }
+        IM_CHECK(stats != nullptr);
+        IM_CHECK(stats->computed);
+        IM_CHECK_EQ(stats->summary.valid_pixels, 0);
+
+        // Put the selection back so later tests see the default state.
+        hdrview()->roi() = hdrview()->roi_live() = Box2i{int2{0}};
+        ctx->Yield(3);
+    };
 }

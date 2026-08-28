@@ -321,6 +321,10 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
         return false;
     }
 
+    // The format has to describe the buffer's real stride, since cmsDoTransform() advances by the
+    // format's own channel count. For a buffer that carries alpha, that means a format with EXTRA_SH(1):
+    // it is what makes lcms step over the alpha, and what gives cmsFLAGS_COPY_ALPHA below an extra
+    // channel to carry across untouched.
     cmsUInt32Number format_in = TYPE_GRAY_FLT, format_out = TYPE_GRAY_FLT;
     if (is_rgb)
     {
@@ -330,6 +334,15 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
             format_in = format_out = TYPE_RGBA_FLT;
         else
             format_in = format_out = TYPE_GRAY_FLT;
+    }
+    else if (is_gray)
+    {
+        // Spelled out from lcms's format primitives rather than by its TYPE_GRAYA_FLT name, which
+        // postdates lcms2 releases still shipping on current distributions. This is TYPE_GRAY_FLT plus
+        // the one extra channel.
+        constexpr cmsUInt32Number gray_alpha_flt =
+            FLOAT_SH(1) | COLORSPACE_SH(PT_GRAY) | CHANNELS_SH(1) | BYTES_SH(4) | EXTRA_SH(1);
+        format_in = format_out = size.z == 2 ? gray_alpha_flt : TYPE_GRAY_FLT;
     }
     else if (is_cmyk)
     {

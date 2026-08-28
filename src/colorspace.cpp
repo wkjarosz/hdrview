@@ -1029,6 +1029,7 @@ float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
     case BlendMode_Add: return float2(top.x + bottom.x, alpha);
     case BlendMode_Average: return 0.5f * (top + bottom);
     case BlendMode_Subtract: return float2(diff, alpha);
+    case BlendMode_Relative_Subtract: return float2(diff / (bottom.x + 0.01f), alpha);
     case BlendMode_Difference: return float2(abs(diff), alpha);
     case BlendMode_Relative_Difference: return float2(abs(diff) / (bottom.x + 0.01f), alpha);
     }

@@ -410,11 +410,11 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
                 m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
                 m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
-                m_gamma_live = m_gamma = j.value<float>("gamma", m_gamma);
-                m_tonemap              = j.value<Tonemap_>("tonemap", m_tonemap);
+                m_gamma_live = m_gamma = std::max(MIN_GAMMA, j.value<float>("gamma", m_gamma));
+                m_tonemap = (Tonemap_)clamp<int>(j.value<Tonemap_>("tonemap", m_tonemap), 0, Tonemap_COUNT - 1);
                 m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
                 m_dither               = j.value<bool>("dither", m_dither);
-                m_file_list_mode       = j.value<int>("file list mode", m_file_list_mode);
+                m_file_list_mode = clamp<int>(j.value<int>("file list mode", m_file_list_mode), 0, 2);
                 m_short_names          = j.value<bool>("short names", m_short_names);
                 // "draw clip warnings" is the older key, a single toggle covering both ends; fall back to it
                 // so settings written by an earlier version still take effect
@@ -428,7 +428,8 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_y_scale =
                     clamp<int>(j.value<int>("histogram y scale", m_y_scale), 0, AxisScale_COUNT - 1);
                 m_playback_speed      = j.value<float>("playback speed", m_playback_speed);
-                m_colormap_index      = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
+                m_colormap_index =
+                    clamp<int>(j.value<int>("colormap index", 0), 0, (int)std::size(m_colormaps) - 1);
                 m_show_developer_menu = j.value<bool>("show developer menu", m_show_developer_menu);
             }
             catch (json::exception &e)
@@ -445,8 +446,10 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
 
         if (force_exposure.has_value())
             m_exposure_live = m_exposure = *force_exposure;
+        // Only the floor: gamma is inverted before use, so zero divides by zero and a negative value sends
+        // a black pixel to infinity. Large values are just steep curves and are left alone.
         if (force_gamma.has_value())
-            m_gamma_live = m_gamma = *force_gamma;
+            m_gamma_live = m_gamma = std::max(MIN_GAMMA, *force_gamma);
         if (force_dither.has_value())
             m_dither = *force_dither;
 

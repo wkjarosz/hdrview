@@ -11,6 +11,12 @@
 #include <cstring>
 #include <type_traits>
 
+#if defined(_MSC_VER)
+// Declares _byteswap_ushort/_byteswap_ulong/_byteswap_uint64, which the #pragma intrinsic below only
+// asks to be inlined -- it does not introduce the names.
+#include <stdlib.h>
+#endif
+
 //! Endianness indicator
 enum class Endian
 {
@@ -113,6 +119,34 @@ T read_as(const unsigned char *ptr, Endian data_endian)
     if (data_endian != host_endian())
         value = swap_bytes(value);
 
+    return value;
+}
+
+/*!
+ * @brief Read an unsigned value stored in fewer bytes than T from a byte array.
+ *
+ * Unlike read_as(), which copies sizeof(T) bytes whole, this assembles `num_bytes` of them and
+ * zero-extends. That is what a format with a variable sample width needs -- a DDS bitmasked pixel
+ * occupies 1 to 4 bytes -- and it reads only the bytes the sample actually has, at any alignment.
+ *
+ * Assembling arithmetically rather than swapping also makes the result independent of the host's own
+ * endianness, so there is no branch on it.
+ *
+ * @tparam T Unsigned type to assemble into
+ * @param ptr Pointer to the byte array to read from
+ * @param num_bytes Width of the stored value, from 1 to sizeof(T)
+ * @param data_endian The endianness of the data in the byte array
+ */
+template <typename T>
+T read_partial_as(const unsigned char *ptr, size_t num_bytes, Endian data_endian)
+{
+    static_assert(std::is_unsigned_v<T>, "read_partial_as needs an unsigned destination type");
+
+    T value = 0;
+    if (data_endian == Endian::Little)
+        for (size_t i = 0; i < num_bytes; ++i) value |= T(ptr[i]) << (8 * i);
+    else
+        for (size_t i = 0; i < num_bytes; ++i) value = T(value << 8) | T(ptr[i]);
     return value;
 }
 

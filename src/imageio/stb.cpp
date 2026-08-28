@@ -218,7 +218,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
             auto &header = j["header"];
 
             header["Color mode"] = {{"value", psd_metadata.color_mode},
-                                    {"string", PSDMetadata::color_mode_names[psd_metadata.color_mode]},
+                                    {"string", PSDMetadata::color_mode_name(psd_metadata.color_mode)},
                                     {"type", "enum"}};
             if (psd_metadata.is_copyright != uint8_t(-1))
                 header["Copyright flag"] = {{"value", (bool)psd_metadata.is_copyright},

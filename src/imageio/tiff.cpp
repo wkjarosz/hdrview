@@ -530,35 +530,47 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         }
         else
         {
-            // Pre-compute bias and inverse divisor for integer formats based on file bit depth
-            const float int_inv_divisor = 1.0f / (float)((1ull << file_bits_per_sample) - 1);
-            const float int_bias =
-                sample_format == SAMPLEFORMAT_INT ? (float)(1ull << (file_bits_per_sample - 1)) : 0.0f;
+            // Pre-compute bias and inverse divisor for integer formats based on file bit depth.
+            // file_bits_per_sample comes straight from the file's tag and reaches 64 for a 64-bit sample
+            // (libtiff's own caspian.tif is one), where 1ull << 64 is undefined; what is wanted is the mask
+            // of that many low bits. A file declaring zero bits per sample would likewise shift by -1.
+            const uint64_t int_max_value = file_bits_per_sample == 0    ? 1ull
+                                           : file_bits_per_sample >= 64 ? ~0ull
+                                                                        : ((1ull << file_bits_per_sample) - 1);
+            const float    int_inv_divisor = 1.0f / (float)int_max_value;
+            const float    int_bias        = sample_format == SAMPLEFORMAT_INT && file_bits_per_sample > 0
+                                                 ? (float)(1ull << (file_bits_per_sample - 1))
+                                                 : 0.0f;
 
             // Helper function to unpack bits (handles both byte-aligned and bit-packed data)
             auto unpack_bits =
                 [&](const uint8_t *input, size_t input_size, int bitwidth, vector<uint32_t> &output, bool handle_sign)
             {
-                // If the bitwidth is byte aligned (multiple of 8), data is already in machine endianness
+                // Masks for a sample exactly as wide as the accumulator: 1u << 32 is undefined, and a
+                // 32-bit sample needs every bit anyway, so its "sign extension" is a no-op. Wider samples
+                // are rejected before any of this runs, but neither expression may shift off the end.
+                const uint32_t value_mask = bitwidth >= 32 ? ~0u : ((1u << bitwidth) - 1);
+                const uint32_t sign_bit   = (bitwidth >= 1 && bitwidth <= 32) ? (1u << (bitwidth - 1)) : 0u;
+
+                // A byte-aligned sample arrives in host order: libtiff byte-swaps 8-, 16-, 24- and 32-bit
+                // samples on the way out (tif_dir.c installs _TIFFSwab*BitData whenever the file's byte
+                // order differs from ours), so the sample is as many bytes as it is wide, ordered the way
+                // this machine orders that many bytes.
                 if (bitwidth % 8 == 0)
                 {
-                    const uint32_t bytes_per_sample = bitwidth / 8;
-                    for (size_t i = 0; i < output.size(); ++i)
+                    const size_t bytes_per_sample = bitwidth / 8;
+                    const size_t count            = std::min(output.size(), input_size / bytes_per_sample);
+                    for (size_t i = 0; i < count; ++i)
                     {
-                        output[i] = 0;
-                        for (uint32_t j = 0; j < bytes_per_sample; ++j)
-                        {
-                            if (is_little_endian())
-                                output[i] |= (uint32_t)input[i * bytes_per_sample + j] << (8 * j);
-                            else
-                                output[i] |= (uint32_t)input[i * bytes_per_sample + j]
-                                             << ((sizeof(uint32_t) * 8 - 8) - 8 * j);
-                        }
+                        output[i] = read_partial_as<uint32_t>(input + i * bytes_per_sample, bytes_per_sample,
+                                                              host_endian());
 
                         // If signbit is set, set all bits to the left to 1
-                        if (handle_sign && (output[i] & (1u << (bitwidth - 1))))
-                            output[i] |= ~((1u << bitwidth) - 1);
+                        if (handle_sign && (output[i] & sign_bit))
+                            output[i] |= ~value_mask;
                     }
+                    // A row that ran short leaves the rest of the buffer defined rather than stale.
+                    for (size_t i = count; i < output.size(); ++i) output[i] = 0;
                     return;
                 }
 
@@ -575,11 +587,11 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                     while (bits_available >= bitwidth && i < output.size())
                     {
                         bits_available -= bitwidth;
-                        output[i] = (current_bits >> bits_available) & ((1u << bitwidth) - 1);
+                        output[i] = (uint32_t)(current_bits >> bits_available) & value_mask;
 
                         // If signbit is set, set all bits to the left to 1
-                        if (handle_sign && (output[i] & (1u << (bitwidth - 1))))
-                            output[i] |= ~((1u << bitwidth) - 1);
+                        if (handle_sign && (output[i] & sign_bit))
+                            output[i] |= ~value_mask;
 
                         ++i;
                     }
@@ -592,8 +604,12 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 if (unpacked)
                 {
                     // Handle integer data (already unpacked - both byte-aligned and bit-packed)
-                    // Works for both UINT (bias=0) and INT (bias=2^(n-1))
-                    return ((float)unpacked[buffer_idx] + int_bias) * int_inv_divisor;
+                    // Works for both UINT (bias=0) and INT (bias=2^(n-1)).
+                    // unpack_bits sign-extends a signed sample across the 32-bit accumulator, so it has to
+                    // be read back as signed for the bias to land it in [0,1].
+                    const float value = sample_format == SAMPLEFORMAT_INT ? (float)(int32_t)unpacked[buffer_idx]
+                                                                         : (float)unpacked[buffer_idx];
+                    return (value + int_bias) * int_inv_divisor;
                 }
                 else // SAMPLEFORMAT_IEEEFP
                 {
@@ -658,6 +674,19 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             // Always unpack integer formats (unpack_bits handles both byte-aligned and bit-packed efficiently)
             const bool       needs_unpacking = sample_format != SAMPLEFORMAT_IEEEFP;
             vector<uint32_t> unpacked_buffer;
+
+            // unpack_bits accumulates into uint32_t, so a wider integer sample has nowhere to land and its
+            // masks would shift by 32 or more. Floating point never reaches it -- a 64-bit float sample is
+            // ordinary and is read directly.
+            if (needs_unpacking && file_bits_per_sample > 32)
+                throw invalid_argument{
+                    fmt::format("TIFF: {}-bit integer samples are not supported", file_bits_per_sample)};
+
+            // convert_to_float() reads a float sample as half, float or double, and has no meaning to
+            // give any other width.
+            if (!needs_unpacking && bits_per_sample != 16 && bits_per_sample != 32 && bits_per_sample != 64)
+                throw invalid_argument{
+                    fmt::format("TIFF: {}-bit floating-point samples are not supported", bits_per_sample)};
 
             // Store tile/strip information in metadata
             image->metadata["header"]["Pixel organization"] = {

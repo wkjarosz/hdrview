@@ -517,10 +517,16 @@ template <typename T>
 std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, bool dither,
                                            bool unpremultiply, bool convert_to_sRGB) const
 {
-    *w                   = size().x;
-    *h                   = size().y;
-    *n                   = groups[selected_group].num_channels;
-    const Channel *alpha = *n > 3 ? &channels[groups[selected_group].channels[3]] : nullptr;
+    const ChannelGroup &group = groups[selected_group];
+
+    *w = size().x;
+    *h = size().y;
+    *n = group.num_channels;
+
+    // Alpha is not a color: it takes neither the exposure gain nor the transfer function, and the group's
+    // remaining channels are divided back out by it when the caller wants straight alpha. It is always the
+    // group's last channel.
+    const Channel *alpha = group_has_alpha(group.type) ? &channels[group.channels[*n - 1]] : nullptr;
 
     std::unique_ptr<T[]> pixels(new T[(*w) * (*h) * (*n)]);
 
@@ -568,21 +574,34 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     }
     else
     {
+        // A one- or two-channel group: a lone channel, a U,V pair, or gray plus alpha.
         parallel_for(blocked_range<int>(0, *h, block_size),
-                     [this, w = *w, n = *n, data = pixels.get(), gain, tf, dither](int begin_y, int end_y, int, int)
+                     [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither,
+                      unpremultiply](int begin_y, int end_y, int, int)
                      {
-                         int y_stride = w * n;
+                         int y_stride  = w * n;
+                         int num_color = alpha ? n - 1 : n;
                          for (int y = begin_y; y < end_y; ++y)
                              for (int x = 0; x < w; ++x)
                              {
-                                 auto rgba_pixel = data + y * y_stride + n * x;
-                                 for (int c = 0; c < n; ++c)
+                                 auto out = data + y * y_stride + n * x;
+                                 for (int c = 0; c < num_color; ++c)
                                  {
                                      float v = channels[groups[selected_group].channels[c]](x, y);
                                      v *= gain;
-                                     v             = from_linear(v, tf);
-                                     rgba_pixel[c] = std::is_integral_v<T> ? quantize_full<T>(v, x, y, dither) : T(v);
+
+                                     // unpremultiply alpha
+                                     if (alpha && unpremultiply)
+                                         v /= std::max(k_small_alpha, (*alpha)(x, y));
+
+                                     v      = from_linear(v, tf);
+                                     out[c] = std::is_integral_v<T> ? quantize_full<T>(v, x, y, dither) : T(v);
                                  }
+
+                                 if (alpha)
+                                     out[num_color] = std::is_integral_v<T>
+                                                          ? quantize_full<T>((*alpha)(x, y), x, y, dither)
+                                                          : T((*alpha)(x, y));
                              }
                      });
     }

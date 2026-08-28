@@ -522,40 +522,11 @@ void HDRViewApp::update_visibility()
     //
     // compute short (i.e. unique) names for visible images
 
-    // determine common vs. unique parts of visible filenames
-    auto [begin_short_offset, end_short_offset] = find_common_prefix_suffix(visible_image_names);
-    // we'll add ellipses, so don't shorten if we don't save much space
-    if (begin_short_offset <= 4)
-        begin_short_offset = 0;
-    if (end_short_offset <= 4)
-        end_short_offset = 0;
-    for (auto img : m_images)
-    {
-        if (!img->visible)
-            continue;
-
-        auto   long_name   = img->file_and_partname();
-        size_t short_begin = begin_short_offset;
-        size_t short_end   = std::max(long_name.size() - (size_t)end_short_offset, short_begin);
-
-        // Extend beginning and ending of short region to entire word/number
-        if (isalnum(long_name[short_begin]))
-            while (short_begin > 0 && isalnum(long_name[short_begin - 1])) --short_begin;
-        if (isalnum(long_name[short_end - 1]))
-            while (short_end < long_name.size() && isalnum(long_name[short_end])) ++short_end;
-
-        // just use the filename if all file paths are identical
-        if (short_begin == short_end)
-            img->short_name = get_filename(img->file_and_partname());
-        else
-            img->short_name = long_name.substr(short_begin, short_end - short_begin);
-
-        // add ellipses to indicate where we shortened
-        if (short_begin != 0)
-            img->short_name = "..." + img->short_name;
-        if (short_end != long_name.size())
-            img->short_name = img->short_name + "...";
-    }
+    // m_visible_images and visible_image_names were appended to together above, so they index each other:
+    // one shortened name per visible image, in the same order.
+    auto short_names = shorten_names(visible_image_names);
+    for (size_t n = 0; n < m_visible_images.size(); ++n)
+        m_images[m_visible_images[n]]->short_name = short_names[n];
 
     set_image_textures();
 }

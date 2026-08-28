@@ -571,7 +571,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                 {
                     spdlog::trace("Clearing reference image");
                     hdrview()->set_reference_image_index(-1, true);
-                    reference_group = 0;
+                    reference_group = -1;
                 }
                 else
                 {
