@@ -150,22 +150,27 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
 }
 
 /*!
-    Marks the boundary between what an SDR display can show and the extra range this one adds, labeling
-    the two bands the way Lightroom does.
+    Labels the part of the histogram an SDR display could show, and the part above it that needs this
+    display's headroom, the way Lightroom does.
 
-    The undimmed part of the plot is everything the display can reproduce. Its lower half, up to display
-    value 1, is ordinary SDR; above that, up to \p ceiling_x, is the headroom the display currently has,
-    which grows as the display is dimmed (see HDRViewApp::display_headroom()). Dimming what lies beyond
-    is left to the caller's DragRect, so this only draws the ceiling line and the labels.
+    Only the boundary between them is drawn, never the far end of the HDR band. Headroom itself is a
+    sound quantity -- the display's peak over its SDR white, which genuinely grows as the display is
+    dimmed, since the panel's peak stays put while its white drops -- but the peak it divides is only as
+    good as what the display reports. On the machine this was developed against, KDE carries a
+    user-supplied peak override of 1850 nits for a panel whose real peak is 418, so every ceiling drawn
+    from it sat 4.4x too far right, well beyond where values were observed to actually clip.
 
-    Call between BeginPlot and EndPlot. Everything here takes plot-space x, so it follows the exposure
+    Nothing in the reported numbers distinguishes an honest peak from an overridden one, so the band is
+    left open-ended: it says "above here needs headroom", which holds whatever the display claims,
+    rather than naming a ceiling that may be off by a factor.
+
+    Call between BeginPlot and EndPlot. Everything here is in plot-space x, so it follows the exposure
     and rides all three x-axis scales without knowing which is active.
 
-    \param sdr_x      Plot-space x of display values 0 and 1
-    \param ceiling_x  Plot-space x of the headroom ceiling
-    \param has_hdr    Whether there is any headroom to label; when false only the SDR band is marked
+    \param sdr_x    Plot-space x of display values 0 and 1
+    \param has_hdr  Whether this display can exceed SDR white at all; when false only SDR is labeled
 */
-static void draw_display_range_bands(const Box1d &sdr_x, double ceiling_x, bool has_hdr)
+static void draw_display_range_bands(const Box1d &sdr_x, bool has_hdr)
 {
     ImDrawList  *draw_list = ImPlot::GetPlotDrawList();
     const ImVec2 plot_pos  = ImPlot::GetPlotPos();
@@ -176,12 +181,6 @@ static void draw_display_range_bands(const Box1d &sdr_x, double ceiling_x, bool 
     // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive fill
     // and the CIE diagram elsewhere in this file.
     ImPlot::PushPlotClipRect();
-
-    if (has_hdr)
-    {
-        const float x = ImPlot::PlotToPixels(ceiling_x, 0.0).x;
-        draw_list->AddLine(ImVec2{x, plot_pos.y}, ImVec2{x, plot_pos.y + plot_size.y}, col);
-    }
 
     // The labels sit along the bottom edge rather than the top, which the legend (ImPlotLocation_North)
     // and the two clip-warning toggles have already claimed.
@@ -202,7 +201,9 @@ static void draw_display_range_bands(const Box1d &sdr_x, double ceiling_x, bool 
 
     label_band(sdr_x.min.x, sdr_x.max.x, "SDR");
     if (has_hdr)
-        label_band(sdr_x.max.x, ceiling_x, "HDR");
+        // Open-ended on purpose: everything to the right of white needs headroom, and the plot's own
+        // edge stands in for a ceiling we cannot state honestly.
+        label_band(sdr_x.max.x, ImPlot::GetPlotLimits(ImAxis_X1).X.Max, "HDR");
 
     ImPlot::PopPlotClipRect();
 }
@@ -502,24 +503,14 @@ void Image::draw_histogram()
         Box1d xrange{-hdrview()->offset_live() * pow(2.f, -hdrview()->exposure_live()),
                      (1.0 - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live())};
 
-        // Display values map into plot space through the same exposure and offset as the black/white
-        // points below; headroom is just another display value, so it maps the same way.
-        auto display_to_plot = [](double d)
-        { return (d - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live()); };
-
-        // 0 means the display never told us its ceiling, which is not the same as having none -- in that
-        // case fall back to dimming above display 1, the pre-headroom behavior.
-        const float headroom = hdrview()->display_headroom();
-        const bool  has_hdr  = headroom > 1.f;
-        // Non-const: DragRect takes a mutable pointer, though NoInputs keeps it from ever writing back.
-        double ceiling_x = has_hdr ? display_to_plot(headroom) : xrange.max.x;
+        // Whether this display can show anything above SDR white at all. How *much* above is a number we
+        // deliberately do not draw -- see draw_display_range_bands().
+        const bool has_hdr = hdrview()->display_headroom() > 1.f;
 
         auto plt_range = ImPlot::GetPlotLimits(ImAxis_X1);
         ImPlot::DragRect(0, &plt_range.X.Min, &plt_range.Y.Min, &xrange.min.x, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
-        // Dim from the display's ceiling rather than from white: the range between the two is real
-        // headroom this display can show, so it belongs to the highlighted region.
-        ImPlot::DragRect(0, &ceiling_x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
+        ImPlot::DragRect(0, &xrange.max.x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
 
         // Displayed values (d) are related to stored values (p) via the exposure and offset:
@@ -552,15 +543,9 @@ void Image::draw_histogram()
         ImPlot::TagX(xrange.min.x, ImVec4(0, 0, 0, 1), "0");
         ImPlot::TagX(xrange.max.x, ImVec4(1, 1, 1, 1), "1");
 
-        // Re-derived from the exposure the drags just settled on, so the bands track the handles within
-        // the same frame rather than lagging them by one.
-        if (has_hdr)
-            ceiling_x = display_to_plot(headroom);
-        draw_display_range_bands(xrange, ceiling_x, has_hdr);
-        if (has_hdr)
-            // Grey rather than white: this is the display telling us where it stops, not a control the
-            // user set, and it should not read as a third handle alongside the black and white points.
-            ImPlot::TagX(ceiling_x, ImVec4(0.6f, 0.6f, 0.6f, 1.f), "%.3gx", headroom);
+        // After the drags, so the labels sit against the exposure the handles just settled on rather
+        // than lagging it by a frame.
+        draw_display_range_bands(xrange, has_hdr);
 
         // The shader compares clip_range against display values (d = p * gain + offset), so map it into plot
         // space -- which holds stored values p -- the same way the black/white points above do.
