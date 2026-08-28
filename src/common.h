@@ -422,7 +422,7 @@ std::pair<float, std::string> human_readable_size(size_t bytes);
 bool split_zip_entry(std::string_view filename, std::string &zip_path, std::string &entry_path);
 
 /// Run func on each line of the input string
-void process_lines(std::string_view input, std::function<void(std::string_view &)> op);
+void process_lines(std::string_view input, std::function<void(std::string_view)> op);
 /// Indent the input string by amount spaces. Skips the first line by default, unless also_indent_first is true
 std::string                     indent(std::string_view input, bool also_indent_first = false, int amount = 2);
 std::string                     add_line_numbers(std::string_view input);

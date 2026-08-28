@@ -1033,8 +1033,38 @@ void Image::apply_exif_orientation()
     if (orientation != 1)
     {
         spdlog::debug("Applying EXIF orientation: {}", orientation);
+
+        // These move the samples, so the windows have to move with them. Only matters when the display
+        // window is something other than the whole frame -- a raw CFA part marks the sensor's active area
+        // with it -- but then a flip lands it on the opposite edge from where it belongs.
+        auto reflect_windows = [this](bool horizontal)
+        {
+            const int extent =
+                horizontal ? data_window.min.x + data_window.max.x : data_window.min.y + data_window.max.y;
+            auto reflect = [extent, horizontal](Box2i &b)
+            {
+                int      &lo     = horizontal ? b.min.x : b.min.y;
+                int      &hi     = horizontal ? b.max.x : b.max.y;
+                const int new_lo = extent - hi, new_hi = extent - lo;
+                lo = new_lo;
+                hi = new_hi;
+            };
+            reflect(display_window);
+            reflect(data_window);
+        };
+        auto transpose_windows = [this]()
+        {
+            auto swap_axes = [](Box2i &b)
+            {
+                std::swap(b.min.x, b.min.y);
+                std::swap(b.max.x, b.max.y);
+            };
+            swap_axes(display_window);
+            swap_axes(data_window);
+        };
+
         // Helper lambdas for flipping/rotating
-        auto flip_horizontal = [this]()
+        auto flip_horizontal = [this, &reflect_windows]()
         {
             for (auto &channel : channels)
             {
@@ -1049,8 +1079,9 @@ void Image::apply_exif_orientation()
                                               std::swap(channel(x, y), channel(w - 1 - x, y));
                                   });
             }
+            reflect_windows(true);
         };
-        auto flip_vertical = [this]()
+        auto flip_vertical = [this, &reflect_windows]()
         {
             for (auto &channel : channels)
             {
@@ -1065,8 +1096,9 @@ void Image::apply_exif_orientation()
                                               std::swap(channel(x, y), channel(x, h - 1 - y));
                                   });
             }
+            reflect_windows(false);
         };
-        auto transpose = [this]()
+        auto transpose = [this, &transpose_windows]()
         {
             for (auto &channel : channels)
             {
@@ -1086,8 +1118,7 @@ void Image::apply_exif_orientation()
                                           for (int x = 0; x < tmp.width(); ++x) channel(x, y) = tmp(x, y);
                                   });
             }
-            std::swap(data_window.max.x, data_window.max.y);
-            std::swap(display_window.max.x, display_window.max.y);
+            transpose_windows();
         };
 
         // Apply orientation according to EXIF spec

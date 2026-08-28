@@ -49,9 +49,32 @@ void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool
     spdlog::info("Overriding Apple-keyboard behavior: {}", apple_keys.has_value());
 
     g_hdrview = new HDRViewApp(exposure, gamma, dither, force_sdr, apple_keys, in_files);
+
+    // Loading is deliberately not part of construction: it reaches code that calls hdrview(), and until
+    // the assignment above returns there is nothing for that to return. A session is the case that gets
+    // there synchronously -- it resolves its entries and refreshes the textures on the spot -- so
+    // `HDRView some.hsess` used to dereference a null singleton before the window ever opened.
+    g_hdrview->load_images(in_files);
 }
 
 HDRViewApp *hdrview() { return g_hdrview; }
+
+const char *mouse_mode_action_name(MouseMode m)
+{
+    switch (m)
+    {
+    case MouseMode_PanZoom: return "Pan and zoom";
+    case MouseMode_RectangularSelection: return "Rectangular select";
+    case MouseMode_ColorInspector: return "Pixel/color inspector";
+    default: return "Pan and zoom";
+    }
+}
+
+void HDRViewApp::set_mouse_mode(MouseMode m)
+{
+    m_mouse_mode = m;
+    for (int i = 0; i < MouseMode_COUNT; ++i) m_mouse_mode_enabled[i] = (i == m);
+}
 
 HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gamma, optional<bool> force_dither,
                        optional<bool> force_sdr, optional<bool> force_apple_keys, vector<string> in_files)
@@ -65,9 +88,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     setup_frame_callbacks();
     setup_dialogs(in_files);
     setup_actions(window_setup.mod_key, window_setup.window_info);
-
-    // load any passed-in images
-    load_images(in_files);
 }
 
 void HDRViewApp::setup_window_and_backend(optional<bool> force_sdr)
@@ -431,6 +451,10 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_colormap_index =
                     clamp<int>(j.value<int>("colormap index", 0), 0, (int)std::size(m_colormaps) - 1);
                 m_show_developer_menu = j.value<bool>("show developer menu", m_show_developer_menu);
+                m_show_tool_palette      = j.value<bool>("show tool palette", m_show_tool_palette);
+                m_tool_palette_collapsed = j.value<bool>("tool palette collapsed", m_tool_palette_collapsed);
+                m_tool_palette_vertical  = j.value<bool>("tool palette vertical", m_tool_palette_vertical);
+                m_tool_palette_corner    = clamp<int>(j.value<int>("tool palette corner", m_tool_palette_corner), 0, 3);
             }
             catch (json::exception &e)
             {
@@ -502,6 +526,10 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         j["histogram x scale"]       = m_x_scale;
         j["histogram y scale"]       = m_y_scale;
         j["show developer menu"]     = m_show_developer_menu;
+        j["show tool palette"]       = m_show_tool_palette;
+        j["tool palette collapsed"]  = m_tool_palette_collapsed;
+        j["tool palette vertical"]   = m_tool_palette_vertical;
+        j["tool palette corner"]     = m_tool_palette_corner;
         j["playback speed"]          = m_playback_speed;
         j["colormap index"]          = m_colormap_index;
 
@@ -616,6 +644,7 @@ void HDRViewApp::setup_frame_callbacks()
         if (m_pending_session && m_image_loader.num_pending_images() == 0)
             finish_pending_session();
 
+        draw_tool_palette();
         draw_tweak_window();
         draw_developer_windows();
     };
@@ -905,6 +934,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    always_enabled,
                    false,
                    &toolbar_on});
+        add(Action{{"Show tool palette"}, ICON_MY_TOOLBAR, 0, 0, []() {}, always_enabled, false, &m_show_tool_palette});
         add(Action{{"Show menu bar"},
                    ICON_MY_HIDE_ALL_WINDOWS,
                    0,
@@ -970,12 +1000,13 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        m_params.imGuiWindowParams.showStatusBar = true;
                        m_params.callbacks.AddEdgeToolbar(
                            EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
-                       toolbar_on = true;
+                       toolbar_on          = true;
+                       m_show_tool_palette = true;
                    },
                    [this, any_window_hidden]()
                    {
                        return any_window_hidden() || !m_params.imGuiWindowParams.showMenuBar ||
-                              !m_params.imGuiWindowParams.showStatusBar || !toolbar_on;
+                              !m_params.imGuiWindowParams.showStatusBar || !toolbar_on || !m_show_tool_palette;
                    }});
 
         add(Action{{"Hide entire GUI"},
@@ -990,12 +1021,13 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        m_params.imGuiWindowParams.showMenuBar   = false;
                        m_params.imGuiWindowParams.showStatusBar = false;
                        m_params.callbacks.edgesToolbars.erase(EdgeToolbarType::Top);
-                       toolbar_on = false;
+                       toolbar_on          = false;
+                       m_show_tool_palette = false;
                    },
                    [this, any_window_hidden]()
                    {
                        return !any_window_hidden() || m_params.imGuiWindowParams.showMenuBar ||
-                              m_params.imGuiWindowParams.showStatusBar || toolbar_on;
+                              m_params.imGuiWindowParams.showStatusBar || toolbar_on || m_show_tool_palette;
                    }});
 
         add(Action{{"Restore default layout"},
@@ -1181,47 +1213,20 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    },
                    always_enabled});
 
-        static bool s_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
-
-        add(Action{{"Pan and zoom"},
-                   ICON_MY_PAN_ZOOM_TOOL,
-                   ImGuiKey_P,
-                   0,
-                   [this]()
-                   {
-                       for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
-                       m_mouse_mode                            = MouseMode_PanZoom;
-                       s_mouse_mode_enabled[MouseMode_PanZoom] = true;
-                   },
-                   always_enabled,
-                   false,
-                   &s_mouse_mode_enabled[MouseMode_PanZoom]});
-        add(Action{{"Rectangular select"},
-                   ICON_MY_SELECT,
-                   ImGuiKey_M,
-                   0,
-                   [this]()
-                   {
-                       for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
-                       m_mouse_mode                                         = MouseMode_RectangularSelection;
-                       s_mouse_mode_enabled[MouseMode_RectangularSelection] = true;
-                   },
-                   always_enabled,
-                   false,
-                   &s_mouse_mode_enabled[MouseMode_RectangularSelection]});
-        add(Action{{"Pixel/color inspector"},
-                   ICON_MY_WATCHED_PIXEL,
-                   ImGuiKey_I,
-                   0,
-                   [this]()
-                   {
-                       for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
-                       m_mouse_mode                                   = MouseMode_ColorInspector;
-                       s_mouse_mode_enabled[MouseMode_ColorInspector] = true;
-                   },
-                   always_enabled,
-                   false,
-                   &s_mouse_mode_enabled[MouseMode_ColorInspector]});
+        // The tools are a radio group: each callback routes through set_mouse_mode(), which clears the
+        // other tools' selected flags. mouse_mode_action_name() maps back the other way, for the Tools
+        // menu and the tool palette.
+        const ImGuiKeyChord tool_chords[MouseMode_COUNT] = {ImGuiKey_P, ImGuiKey_M, ImGuiKey_I};
+        const char *tool_icons[MouseMode_COUNT] = {ICON_MY_PAN_ZOOM_TOOL, ICON_MY_SELECT, ICON_MY_WATCHED_PIXEL};
+        for (int i = 0; i < MouseMode_COUNT; ++i)
+            add(Action{{mouse_mode_action_name(i)},
+                       tool_icons[i],
+                       tool_chords[i],
+                       0,
+                       [this, i]() { set_mouse_mode(i); },
+                       always_enabled,
+                       false,
+                       &m_mouse_mode_enabled[i]});
 
         // below actions are only available if there is an image
 
