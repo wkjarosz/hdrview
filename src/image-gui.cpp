@@ -244,6 +244,85 @@ static void setup_display_range_axis(const Box1d &sdr_x, double ceiling_x, bool 
 }
 
 /*!
+    Draws each display range's extent into the top axis: a tick mark at every band boundary, and a
+    double-headed arrow spanning each band out to them, interrupted by the band's name.
+
+    ImPlot draws the names themselves, as that axis's tick labels (see setup_display_range_axis()), and
+    does so after this runs -- so they land over the arrows, and the gap left for them here is only to
+    keep a shaft from showing through the glyphs.
+
+    A band too narrow to hold its name and an arrow long enough to read as one on either side gets no
+    arrow; at that width the heads crowd the text into noise. The boundary marks are always drawn: they
+    are what the arrows point at, and a bare tick stays legible at any width.
+
+    Call between BeginPlot and EndPlot. Takes plot-space x, and follows whichever side and direction the
+    axis ended up on, so it rides the bottom axis's Invert and Opposite along with everything else.
+*/
+static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, bool has_hdr)
+{
+    const ImPlotPlot *plot = ImPlot::GetCurrentPlot();
+    const ImPlotAxis &ax   = plot->Axes[ImAxis_X2];
+    if (!ax.Enabled)
+        return;
+
+    ImDrawList        *draw_list = ImPlot::GetPlotDrawList();
+    const ImPlotStyle &style     = ImPlot::GetStyle();
+    const bool         opposite  = ax.IsOpposite();
+    const float        txt_h     = ImGui::GetTextLineHeight();
+    const float        x_lo = plot->PlotRect.Min.x, x_hi = plot->PlotRect.Max.x;
+
+    // Down the middle of the row ImPlot puts this axis's tick labels in, mirroring the placement in its
+    // own axis rendering: one LabelPadding out from the axis line, then half a line of text.
+    const float y =
+        opposite ? ax.Datum1 - style.LabelPadding.y - 0.5f * txt_h : ax.Datum1 + style.LabelPadding.y + 0.5f * txt_h;
+
+    const float head = ImMin(EmSize(0.3f), 0.4f * txt_h);
+    const float gap  = EmSize(0.3f);
+
+    // Ticks point into the plot from the axis line, the same way and by the same amount as the ones the
+    // bottom axis draws for itself.
+    auto mark = [&](double v)
+    {
+        const float x = (float)ImPlot::PlotToPixels(v, 0.0).x;
+        if (x < x_lo || x > x_hi)
+            return;
+        draw_list->AddLine(ImVec2{x, ax.Datum1}, ImVec2{x, ax.Datum1 + (opposite ? 1.f : -1.f) * style.MajorTickLen.x},
+                           ax.ColorTick, style.MajorTickSize.x);
+    };
+
+    auto arrow = [&](float from, float to)
+    {
+        const float dir = to > from ? 1.f : -1.f;
+        draw_list->AddLine(ImVec2{from, y}, ImVec2{to, y}, ax.ColorTxt);
+        draw_list->AddTriangleFilled(ImVec2{to, y}, ImVec2{to - dir * head, y - head},
+                                     ImVec2{to - dir * head, y + head}, ax.ColorTxt);
+    };
+
+    auto span = [&](double va, double vb, const char *name)
+    {
+        const float a = ImMax((float)ImPlot::PlotToPixels(va, 0.0).x, x_lo);
+        const float b = ImMin((float)ImPlot::PlotToPixels(vb, 0.0).x, x_hi);
+        const float w = ImGui::CalcTextSize(name).x;
+        // A shaft shorter than its own head is not an arrow, so require one of at least that again.
+        if (b - a < w + 2.f * (gap + 2.f * head))
+            return;
+
+        const float center = 0.5f * (a + b);
+        arrow(center - 0.5f * w - gap, a);
+        arrow(center + 0.5f * w + gap, b);
+    };
+
+    mark(sdr_x.min.x);
+    mark(sdr_x.max.x);
+    span(sdr_x.min.x, sdr_x.max.x, "SDR");
+    if (has_hdr)
+    {
+        mark(ceiling_x);
+        span(sdr_x.max.x, ceiling_x, "HDR");
+    }
+}
+
+/*!
     Draws the vertical line marking the ceiling of what the display can currently show.
 
     The ceiling is only ever as good as the peak the display reports, which on Wayland is whatever the
@@ -632,6 +711,7 @@ void Image::draw_histogram()
             // user set, and it should not read as a third handle alongside the black and white points.
             ImPlot::TagX(ceiling_x, ImVec4(0.6f, 0.6f, 0.6f, 1.f), "%.3gx", headroom);
         }
+        draw_display_range_extents(xrange, ceiling_x, has_hdr);
 
         // The shader compares clip_range against display values (d = p * gain + offset), so map it into plot
         // space -- which holds stored values p -- the same way the black/white points above do.
