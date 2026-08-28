@@ -1374,6 +1374,12 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info += fmt::format("{:<16} : {}\n", "ImGui version", ImGui::GetVersion());
                     info += fmt::format("{:<16} : {}\n", "HDR support", supports_hdr() ? "yes" : "no");
                     info += fmt::format("{:<16} : {}\n", "Display", m_display_cs.name());
+                    // Worth showing even though the histogram already draws it: this is the one display
+                    // property that moves on its own, and reading it here is how you tell a band that
+                    // shifted from a band that was always wrong.
+                    const float headroom = display_headroom();
+                    info += fmt::format("{:<16} : {}\n", "Display headroom",
+                                        headroom > 0.f ? fmt::format("{:.3g}x SDR white", headroom) : "unknown");
 
                     info += fmt::format("{:<16} : {}\n", "__EMSCRIPTEN__",
 #ifdef __EMSCRIPTEN__

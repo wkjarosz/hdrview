@@ -391,7 +391,11 @@ if(APPLE AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_HAS_METAL ON)
   set(HELLOIMGUI_USE_GLFW3 ON)
 
-  list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm)
+  # display_headroom_cocoa.mm queries the one display property GLFW's Cocoa backend leaves unreported; the
+  # others are the Metal rendering backend.
+  list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm
+       src/display_headroom_cocoa.mm
+  )
 
   # need to enable OBJC language for the custom glfw fork below
   enable_language(OBJC)

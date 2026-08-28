@@ -77,15 +77,24 @@ float HDRViewApp::display_headroom() const
     if (m_force_sdr)
         return 1.f;
 
-    // Wayland (and Windows, once its ceiling is real) fills these in from the compositor; macOS leaves
-    // m_display_cs at its defaults, since the colorpass never runs there and NSScreen is not queried
-    // yet, so this correctly falls through to "unknown". See PLAN-display-headroom.md.
+#if defined(__APPLE__)
+    // Without the float buffer we are drawing into a plain 8-bit sRGB layer, so white is our ceiling no
+    // matter what the panel could reach. That framebuffer is decided once, at startup, from *all* the
+    // screens attached then (hasEdrSupport()); the headroom below is the current screen's alone, which is
+    // what makes moving the window between an XDR panel and an SDR monitor show up here.
+    if (!m_float_buffer)
+        return 1.f;
+
+    return cocoa_display_headroom(m_params.backendPointers.glfwWindow);
+#else
+    // Wayland (and Windows, once its ceiling is real) fills these in from the compositor.
     if (m_display_cs.max_nits <= 0.f || m_display_cs.sdr_white_nits <= 0.f)
         return 0.f;
 
     // A ceiling below SDR white is a display describing itself incoherently; clamp rather than report a
     // headroom that would place the display's limit below its own reference white.
     return std::max(1.f, m_display_cs.max_nits / m_display_cs.sdr_white_nits);
+#endif
 }
 
 //

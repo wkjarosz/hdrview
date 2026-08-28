@@ -59,14 +59,12 @@ Headroom is `max_luminance / SDR_white_luminance` everywhere except macOS, which
 directly. Proposed single accessor: `float display_headroom()`, returning a multiple of SDR white,
 `0` for unknown.
 
-### macOS -- easiest, not yet wired up
+### macOS -- done
 
-`NSScreen.maximumExtendedDynamicRangeColorComponentValue` on the *window's* screen
-(`glfwGetCocoaWindow(w).screen`). Already in units of SDR white.
-
-Apple documents it as changing dynamically with brightness, thermal state, and power source, and
-posts **no notification** for it -- so poll. That is fine: `update_colorpass()` already re-queries
-display state once per frame.
+`src/display_headroom_cocoa.mm` reads `NSScreen.maximumExtendedDynamicRangeColorComponentValue` on the
+*window's* screen (`glfwGetCocoaWindow(w).screen`), already in units of SDR white. `display_headroom()`
+calls it directly rather than going through `m_display_cs`, which on macOS never leaves its defaults --
+`update_colorpass()` is empty there, its whole body being under `#if defined(HELLOIMGUI_HAS_OPENGL)`.
 
 Nothing existing gives us this:
 
@@ -76,12 +74,29 @@ Nothing existing gives us this:
   `maximumPotentialExtendedDynamicRangeColorComponentValue` across *all* screens -- the static
   ceiling, not the current value, and not per-window.
 
-So: a new `src/display_headroom_cocoa.mm`. `GLFW_EXPOSE_NATIVE_COCOA` is already defined
-(`src/app.cpp:26`), `enable_language(OBJC)` is already on, and `.mm` files are already in
-`EXTRA_SOURCES` (`CMakeLists.txt:394`). Expect ~15 lines.
+Queried live on every call, not cached: measured at **34 ns** (46 ns wrapped in an autoreleasepool), so
+the handful of calls `draw_histogram()` makes per frame cost well under a microsecond. That also sidesteps
+having to invent a per-frame refresh hook on the one platform that has none.
 
-Also available: `maximumReferenceExtendedDynamicRangeColorComponentValue` (headroom for reference
-rendering) and `maximumPotential...` (static ceiling). See the open question below.
+Gated on `m_float_buffer`. Without it we are drawing into a plain 8-bit sRGB layer, so white is the
+ceiling whatever the panel could reach. The framebuffer is decided once at startup across *all* attached
+screens (`hasEdrSupport()`), while the headroom is the current screen's alone -- which is what makes
+dragging the window between an XDR panel and an SDR monitor change the band.
+
+Measured on an M1 Max, macOS 26.5, three displays:
+
+```
+screen                        current  reference  potential
+LG UltraFine                   1.0000     0.0000     1.0000
+Built-in Retina Display        5.3056     0.0000    16.0000
+Kuycon G27P                    1.0000     0.0000     1.0000
+```
+
+- **An SDR display reports 1.0, never 0.** So the "unknown" state does not arise on macOS the way it does
+  on Wayland, and `has_hdr` correctly reads false on the externals: SDR band only, dimmed above white,
+  exactly as on master. The degenerate case the plan left open is therefore just fine unlabeled-HDR.
+- **`maximumReference...` is 0 here** -- it is only populated in an HDR reference preset, so it is not a
+  usable fallback.
 
 ### Windows -- looks plumbed, is not
 
@@ -145,8 +160,8 @@ Most of this is not platform-specific, and is testable on any machine.
 
 1. ~~**`display_headroom()`**~~ -- done, in `app-colorpass.cpp`, from `m_display_cs`.
 2. ~~**The histogram UI.**~~ -- done, verified on Wayland against a live headroom.
-3. **macOS `NSScreen` query.** Small and isolated; needs a Mac to compile and a real EDR display to
-   confirm the number is sane and the band tracks the brightness slider.
+3. ~~**macOS `NSScreen` query.**~~ -- done, in `display_headroom_cocoa.mm`, verified on an XDR panel
+   and on two SDR externals.
 4. **Windows DXGI query.** Independent of 3.
 
 Steps 1 and 2 are fully verifiable on Wayland against a real, live-changing headroom, so the
@@ -174,7 +189,22 @@ platform-specific steps reduce to making macOS and Windows report the same numbe
 
 ## Open questions
 
-- **Current vs. potential headroom on macOS.** The dynamic value is the truthful one, but it sags
-  under thermal throttling and on battery, so the band will visibly drift while nothing about the
-  image changed. A second, fainter tick at `maximumPotential...` would make that legible instead of
-  mysterious. Needs a real display to judge.
+- **Current vs. potential headroom on macOS -- the drift is much bigger than expected.** The current
+  value was measured collapsing from **5.31x to 1.0x in a smooth ~2 s ramp**, unprompted, on AC power
+  with no system thermal warning (`pmset -g therm` clean, `UserIsActive 1`), while
+  `maximumPotential...` sat rock-steady at 16.0 throughout. It then *stayed* at 1.0 across an app quit
+  and relaunch and several minutes of polling. Brightness alone does not explain it: the panel was at
+  381.8 nits SDR white against a 1600 nit peak (`ioreg -c AppleARMBacklight` ->
+  `BrightnessMilliNits`), a ratio of 4.19, so EDR appears to be gated off outright rather than merely
+  reduced.
+
+  So on macOS the HDR band does not just drift -- it can vanish entirely and stay vanished, on hardware
+  that is nominally 16x capable. Reporting the current value is still the *truthful* choice (when it
+  reads 1.0 the display genuinely will not show you anything above white), but it is worth deciding
+  whether a band that disappears for minutes at a time reads as informative or as broken. The obvious
+  mitigations, in increasing order of dishonesty: a faint second tick at `maximumPotential...`; holding
+  the band at a recent maximum with a decay; or using `maximumPotential...` outright.
+
+  Root cause is unidentified and is Apple's; what is established is that it is real, large, abrupt, and
+  sticky. Reproduce by putting an EDR window on an XDR panel and polling
+  `maximumExtendedDynamicRangeColorComponentValue`.
