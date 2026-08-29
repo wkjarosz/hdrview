@@ -285,6 +285,9 @@ TEST_CASE("An all-NaN channel produces an empty but valid histogram")
     auto stats = compute(c);
     CHECK(stats.computed);
     CHECK(stats.summary.valid_pixels == 0);
+    // NaN compares false against either clip bound, so it leaves the clip extremes unset as well.
+    CHECK(!std::isfinite(stats.summary.extreme_minimum));
+    CHECK(!std::isfinite(stats.summary.extreme_maximum));
     for (int s = 0; s < AxisScale_COUNT; ++s)
     {
         CAPTURE(s);
@@ -415,6 +418,92 @@ TEST_CASE("PixelStats::calculate counts NaN/Inf pixels separately and excludes t
     CHECK(stats.summary.valid_pixels == 13); // 16 - 1 NaN - 2 Inf
     CHECK(stats.summary.minimum == doctest::Approx(0.f));
     CHECK(stats.summary.maximum == doctest::Approx(15.f));
+}
+
+TEST_CASE("PixelStats::calculate counts FLT_MAX markers apart from the measurements")
+{
+    // The shape of a depth channel out of a renderer: real depths over most of the image, and FLT_MAX
+    // wherever the ray hit nothing (OpenEXR's own Blobbies.exr is a third such pixels). Left in the range,
+    // one of these fixes the maximum at 3.4e38, which no exposure can fit -- and which is not a depth
+    // anyone measured.
+    Channel c("Z", int2{4, 4});
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x) c(x, y) = 7.f + float(x + 4 * y);
+    c(0, 0) = std::numeric_limits<float>::max();
+    c(3, 3) = std::numeric_limits<float>::max();
+    c(1, 1) = std::numeric_limits<float>::lowest(); //< the same marker at the other end of the range
+
+    auto stats = compute(c);
+
+    CHECK(stats.summary.huge_pixels == 3);
+    CHECK(stats.summary.nan_pixels == 0);
+    CHECK(stats.summary.inf_pixels == 0);
+    CHECK(stats.summary.valid_pixels == 13);
+    // The surviving measurements are 7+1 .. 7+14, skipping the three replaced pixels.
+    CHECK(stats.summary.minimum == doctest::Approx(8.f));
+    CHECK(stats.summary.maximum == doctest::Approx(21.f));
+    CHECK(stats.summary.average == doctest::Approx(14.6923f).epsilon(1e-4));
+
+    // Binned like the NaNs and infinities are: left out entirely, rather than piled into the end bin the
+    // narrowed range now stops at.
+    for (int s = 0; s < AxisScale_COUNT; ++s)
+    {
+        CAPTURE(s);
+        CHECK(total_bin_count(stats, (AxisScale)s) == doctest::Approx(13.0));
+    }
+}
+
+TEST_CASE("The clip warnings see the samples the measurement range leaves out")
+{
+    // The extremes the histogram's warning triangles test against take in everything the shader stripes,
+    // so a channel whose only content past a bound is an infinity or a marker still reports crossing it.
+    Channel c("test", int2{4, 4});
+    c.apply([](float, int, int) { return 0.5f; });
+    c(0, 0) = std::numeric_limits<float>::max();
+    c(1, 0) = -std::numeric_limits<float>::infinity();
+    c(2, 0) = std::numeric_limits<float>::quiet_NaN();
+
+    auto stats = compute(c);
+
+    // The measurement range is the flat 0.5 that is left.
+    CHECK(stats.summary.minimum == doctest::Approx(0.5f));
+    CHECK(stats.summary.maximum == doctest::Approx(0.5f));
+    // The clip range reaches past both bounds, and NaN moves neither end.
+    CHECK(stats.summary.extreme_maximum == std::numeric_limits<float>::max());
+    CHECK(stats.summary.extreme_minimum == -std::numeric_limits<float>::infinity());
+}
+
+TEST_CASE("A channel holding only markers produces an empty but valid histogram")
+{
+    // Same contract an all-NaN channel has: no range to bin over, and nothing that pretends otherwise.
+    Channel c("Z", int2{4, 4});
+    c.apply([](float, int, int) { return std::numeric_limits<float>::max(); });
+
+    auto stats = compute(c);
+    CHECK(stats.computed);
+    CHECK(stats.summary.huge_pixels == 16);
+    CHECK(stats.summary.valid_pixels == 0);
+    CHECK(!std::isfinite(stats.summary.minimum));
+    CHECK(!std::isfinite(stats.summary.maximum));
+    for (int s = 0; s < AxisScale_COUNT; ++s)
+    {
+        CAPTURE(s);
+        CHECK(total_bin_count(stats, (AxisScale)s) == doctest::Approx(0.0));
+    }
+}
+
+TEST_CASE("Values just short of FLT_MAX are measurements, not markers")
+{
+    // The line is at the top of the float range itself. A merely enormous sample is still something the
+    // image records, and stays in the range.
+    Channel c("test", int2{2, 2});
+    c.apply([](float, int, int) { return 1.f; });
+    c(0, 0) = std::nextafterf(std::numeric_limits<float>::max(), 0.f);
+
+    auto stats = compute(c);
+    CHECK(stats.summary.huge_pixels == 0);
+    CHECK(stats.summary.valid_pixels == 4);
+    CHECK(stats.summary.maximum == c(0, 0));
 }
 
 TEST_CASE("PixelStats::calculate applies each blend mode against a reference image")

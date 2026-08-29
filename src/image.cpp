@@ -421,19 +421,29 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
 
                         if (isnan(val))
                             ++partial.nan_pixels;
-                        else if (isinf(val))
-                            ++partial.inf_pixels;
                         else
                         {
-                            ++partial.valid_pixels;
-                            partial.maximum = std::max(partial.maximum, val);
-                            partial.minimum = std::min(partial.minimum, val);
+                            // Every non-NaN sample takes part in the clip warnings, whether or not it is a
+                            // measurement -- see Summary::extreme_minimum.
+                            partial.extreme_maximum = std::max(partial.extreme_maximum, val);
+                            partial.extreme_minimum = std::min(partial.extreme_minimum, val);
 
-                            // Welford's online algorithm for mean and variance
-                            double delta = val - partial.average;
-                            partial.average += delta / partial.valid_pixels;
-                            double delta2 = val - partial.average;
-                            partial.M2 += delta * delta2;
+                            if (isinf(val))
+                                ++partial.inf_pixels;
+                            else if (is_marker(val))
+                                ++partial.huge_pixels;
+                            else
+                            {
+                                ++partial.valid_pixels;
+                                partial.maximum = std::max(partial.maximum, val);
+                                partial.minimum = std::min(partial.minimum, val);
+
+                                // Welford's online algorithm for mean and variance
+                                double delta = val - partial.average;
+                                partial.average += delta / partial.valid_pixels;
+                                double delta2 = val - partial.average;
+                                partial.M2 += delta * delta2;
+                            }
                         }
                     }
 
@@ -447,8 +457,11 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
             {
                 summary.minimum = std::min(p.minimum, summary.minimum);
                 summary.maximum = std::max(p.maximum, summary.maximum);
+                summary.extreme_minimum = std::min(p.extreme_minimum, summary.extreme_minimum);
+                summary.extreme_maximum = std::max(p.extreme_maximum, summary.extreme_maximum);
                 summary.nan_pixels += p.nan_pixels;
                 summary.inf_pixels += p.inf_pixels;
+                summary.huge_pixels += p.huge_pixels;
 
                 if (p.valid_pixels > 0)
                 {
@@ -501,7 +514,8 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
         // reference; it stays the best available bound on how many distinct values can show up.
         num_bins = bins_for_bit_depth(img.bits_per_sample);
 
-        // An all-NaN channel has no range to bin over, and leaves every histogram empty.
+        // A channel holding nothing but NaNs, infinities and markers has no range to bin over, and leaves
+        // every histogram empty.
         if (std::isfinite(summary.minimum) && std::isfinite(summary.maximum))
         {
             for (int s = 0; s < AxisScale_COUNT; ++s)
@@ -540,7 +554,7 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
                             throw std::runtime_error("Canceling histogram accumulation");
 
                         float val = pixel_value((int)i);
-                        if (!std::isfinite(val)) //< the summary counts these instead
+                        if (!std::isfinite(val) || is_marker(val)) //< the summary counts these instead
                             continue;
 
                         for (int s = 0; s < AxisScale_COUNT; ++s)

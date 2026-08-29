@@ -809,7 +809,9 @@ void Image::draw_histogram()
         // Color each triangle by which channels cross its bound, summing their canonical colors additively
         // the way the histogram fill does -- red plus blue reads magenta, all three read white. Alpha is
         // left out, matching the shader, which only tests rgb. Both bounds are already in plot space, so
-        // they compare directly against the stored per-channel extremes.
+        // they compare directly against the stored per-channel extremes -- the ones taking in the
+        // infinities and markers rather than the measurement range, since the viewport stripes those
+        // samples too, and a channel whose only content above white is a marker still has to light up.
         float4 clip_colors[2] = {float4{0.f}, float4{0.f}};
         for (int e = 0; e < 2; ++e)
         {
@@ -818,7 +820,8 @@ void Image::draw_histogram()
             {
                 if (c == alpha_channel_index(group) || !stats[c])
                     continue;
-                if (e == 0 ? stats[c]->summary.minimum < clip_range.x : stats[c]->summary.maximum > clip_range.y)
+                if (e == 0 ? stats[c]->summary.extreme_minimum < clip_range.x
+                           : stats[c]->summary.extreme_maximum > clip_range.y)
                     col += colors[c].xyz();
             }
             if (col != float3{0.f})
@@ -2000,10 +2003,12 @@ void Image::draw_channel_stats()
     // fine since only one image's stats are ever shown at a time.
     static int mode_min = ImGui::ChannelDisplayMode_Raw, mode_avg = ImGui::ChannelDisplayMode_Raw,
                mode_max = ImGui::ChannelDisplayMode_Raw, mode_stddev = ImGui::ChannelDisplayMode_Raw,
-               mode_nan = ImGui::ChannelDisplayMode_Raw, mode_inf = ImGui::ChannelDisplayMode_Raw;
+               mode_nan = ImGui::ChannelDisplayMode_Raw, mode_inf = ImGui::ChannelDisplayMode_Raw,
+               mode_huge = ImGui::ChannelDisplayMode_Raw;
 
     auto stat_row = [&](auto &&accessor, ImGuiDataType data_type, const char *format, bool show_swatch,
-                        ImGui::ChannelDisplayModeMask enabled_modes, int *mode, const string &label)
+                        ImGui::ChannelDisplayModeMask enabled_modes, int *mode, const string &label,
+                        const string &tooltip = {})
     {
         float raw[4] = {0.f, 0.f, 0.f, 1.f};
         for (int c = 0; c < components; ++c) raw[c] = (float)accessor(c);
@@ -2021,16 +2026,18 @@ void Image::draw_channel_stats()
             displayed = linear_to_sRGB(hdrview()->tonemap_value(finite));
         }
 
-        ImGui::PE::Entry(label,
-                         [&]
-                         {
-                             ImGui::ChannelValuesRow(label.c_str(), raw, show_swatch ? &displayed.x : nullptr,
-                                                     components, data_type, format, exposure_gain, mode, enabled_modes,
-                                                     /*allow_copy=*/true, show_swatch,
-                                                     ImVec4{displayed.x, displayed.y, displayed.z, displayed.w},
-                                                     /*label=*/{}, ImGui::PE::ColumnWidth(1));
-                             return false;
-                         });
+        ImGui::PE::Entry(
+            label,
+            [&]
+            {
+                ImGui::ChannelValuesRow(label.c_str(), raw, show_swatch ? &displayed.x : nullptr, components, data_type,
+                                        format, exposure_gain, mode, enabled_modes,
+                                        /*allow_copy=*/true, show_swatch,
+                                        ImVec4{displayed.x, displayed.y, displayed.z, displayed.w},
+                                        /*label=*/{}, ImGui::PE::ColumnWidth(1));
+                return false;
+            },
+            tooltip);
     };
 
     // Channel names as a row of their own, positioned via the PE table's actual value-column width -- a PE
@@ -2059,4 +2066,8 @@ void Image::draw_channel_stats()
              ImGui::ChannelDisplayMode_RawOnlyMask, &mode_nan, "# NaNs");
     stat_row([&](int c) { return channel_stats[c]->summary.inf_pixels; }, ImGuiDataType_S32, "%d", false,
              ImGui::ChannelDisplayMode_RawOnlyMask, &mode_inf, "# Infs");
+    stat_row([&](int c) { return channel_stats[c]->summary.huge_pixels; }, ImGuiDataType_S32, "%d", false,
+             ImGui::ChannelDisplayMode_RawOnlyMask, &mode_huge, "# Huge",
+             "Pixels at \u00b1FLT_MAX (3.40282e+38), the largest magnitude finite 32-bit float. These are "
+             "excluded from the summary statistics above.");
 }

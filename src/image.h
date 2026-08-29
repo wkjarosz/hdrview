@@ -125,6 +125,19 @@ struct PixelStats
 
     Settings settings;
 
+    //! Whether \p v is a marker rather than a measurement.
+    /*!
+        OpenEXR's own sample images store FLT_MAX in a depth channel wherever the ray hit nothing, and
+        such a value says only "no sample here" -- at the top of the float range the gap to the next
+        representable value is itself larger than any radiance ever recorded. Left in the minimum and
+        maximum it sets a range no exposure can fit, so it is counted apart from the measurements, next
+        to the NaNs and infinities.
+    */
+    static bool is_marker(float v)
+    {
+        return v >= std::numeric_limits<float>::max() || v <= std::numeric_limits<float>::lowest();
+    }
+
     struct Summary
     {
         float  minimum      = std::numeric_limits<float>::infinity();
@@ -133,7 +146,19 @@ struct PixelStats
         double stddev       = 0.0;
         int    nan_pixels   = 0;
         int    inf_pixels   = 0;
+        int    huge_pixels  = 0; ///< Finite, but a marker rather than a measurement; see is_marker()
         int    valid_pixels = 0;
+
+        //! Extremes over every sample, markers and infinities included -- unlike minimum/maximum, which
+        //! cover the measurements alone.
+        /*!
+            What the clip warnings ask about: the shader tests each sample itself against the clip bounds
+            and stripes an infinity or a marker like anything else past them, so the histogram's warning
+            triangles have to see the same samples the viewport does. NaN is left out of both, matching the
+            shader, where it compares false against either bound.
+        */
+        float extreme_minimum = std::numeric_limits<float>::infinity();
+        float extreme_maximum = -std::numeric_limits<float>::infinity();
     };
 
     Summary summary;

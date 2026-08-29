@@ -1305,7 +1305,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        if (auto img = current_image())
                        {
                            float minimum = numeric_limits<float>::max();
-                           float maximum = numeric_limits<float>::min();
+                           float maximum = numeric_limits<float>::lowest();
                            auto &group   = img->groups[img->selected_group];
 
                            bool3 should_include[Channels_COUNT] = {
@@ -1321,11 +1321,22 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                            {
                                if (group.num_channels >= 3 && !should_include[m_channel][c])
                                    continue;
-                               minimum =
-                                   std::min(minimum, img->channels[group.channels[c]].get_stats()->summary.minimum);
-                               maximum =
-                                   std::max(maximum, img->channels[group.channels[c]].get_stats()->summary.maximum);
+                               // A summary's min/max already leave out NaNs, infinities and FLT_MAX-style
+                               // markers (see PixelStats::is_marker()), so what gets fitted is the range of
+                               // the channel's real measurements. A channel with no measurements at all
+                               // would otherwise contribute the infinities its summary starts at.
+                               const auto &s = img->channels[group.channels[c]].get_stats()->summary;
+                               if (!isfinite(s.minimum) || !isfinite(s.maximum))
+                                   continue;
+                               minimum = std::min(minimum, s.minimum);
+                               maximum = std::max(maximum, s.maximum);
                            }
+
+                           // Nothing measured, or every measurement the same value. Dividing by that span
+                           // sends the exposure to infinity or NaN, from which no further adjustment
+                           // recovers -- leaving it alone is the better answer to "fit this to [0, 1]".
+                           if (!(maximum > minimum))
+                               return;
 
                            float factor    = 1.0f / (maximum - minimum);
                            m_exposure_live = m_exposure = log2(factor);
