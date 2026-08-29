@@ -158,6 +158,13 @@ Comments accumulate cruft across multi-step edits, so at the end of a multi-iter
 every touched file as a whole — not just the diffs — and revise for clean design and concise, logically
 ordered comments.
 
+### Spelling
+Use American English: **color** not colour, **behavior** not behaviour, **normalize**/**initialize**/
+**recognize** not `-ise`, **honor**, **gray**, **center**, **analyze**. This applies to comments and commit
+messages as much as to identifiers — the API bakes it in (`colorspace.h`, `color_conversion_matrix()`,
+`ColorGamut_`, `colormap.cpp`), so a comment spelling it the other way reads as a different codebase and, more
+practically, hides from a grep for `color`.
+
 ## Architecture
 
 ### Application core: the `HDRViewApp` god-object
