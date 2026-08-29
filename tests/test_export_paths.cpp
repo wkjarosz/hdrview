@@ -188,6 +188,8 @@ TEST_CASE("save_heif_image()'s explicit-parameter overload reports a missing enc
 }
 #endif
 
+#if HDRVIEW_ENABLE_LIBTIFF
+
 namespace
 {
 
@@ -266,7 +268,6 @@ std::string tiff_with_transfer_function(std::array<uint8_t, 3> pixel_1_0)
 
 } // namespace
 
-#if HDRVIEW_ENABLE_LIBTIFF
 TEST_CASE("An 8-bit TIFF's TransferFunction curve is indexed over its own length, not the 16-bit range")
 {
     const std::array<uint8_t, 3> stored{24, 72, 136};
@@ -280,9 +281,6 @@ TEST_CASE("An 8-bit TIFF's TransferFunction curve is indexed over its own length
     // the identity curve has to give the stored samples back
     for (int c = 0; c < 3; ++c) CHECK(imgs[0]->channels[c](1, 0) == doctest::Approx(stored[c] / 255.f).epsilon(1e-4));
 }
-#endif
-
-#if HDRVIEW_ENABLE_LIBTIFF
 TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples are in")
 {
     // The TIFF writer asks as_interleaved() not to convert to sRGB, so it keeps the image's own
