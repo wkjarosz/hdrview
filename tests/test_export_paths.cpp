@@ -61,3 +61,23 @@ TEST_CASE("save_pfm_image()'s explicit-parameter overload applies its transfer f
     REQUIRE(reloaded.size() == 1);
     CHECK(reloaded[0]->channels[0](1, 0) == doctest::Approx(img->channels[0](1, 0)).epsilon(1e-5));
 }
+
+TEST_CASE("save_exr_image() with default options writes every group, not an empty channel list")
+{
+    // The GUI sizes EXRSaveOptions::group_enabled per image; without it the static default enables
+    // nothing, and OpenEXR refuses a header whose channel list is empty.
+    auto               img = make_named({"R", "G", "B"});
+    std::ostringstream out(std::ios::binary);
+    REQUIRE_NOTHROW(save_exr_image(*img, out, "test.exr"));
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_exr_image(in, "test.exr");
+    REQUIRE(reloaded.size() == 1);
+    REQUIRE(reloaded[0]->channels.size() == 3);
+    reloaded[0]->finalize(); // the per-format loaders leave this to load_image()
+    // compared through the group, since OpenEXR stores channels in alphabetical order, and to half
+    // precision, which is what EXRSaveOptions defaults to
+    float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
+    float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
+    for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
+}
