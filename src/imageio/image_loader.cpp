@@ -595,6 +595,7 @@ bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &d
         return false;
     }
     m_directories.emplace(canon_p);
+    m_explicit_directories.emplace(canon_p);
 
     if (!ignore_existing)
         return true;
@@ -614,11 +615,25 @@ bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &d
 
 void BackgroundImageLoader::remove_watched_directories(std::function<bool(const fs::path &)> criterion)
 {
+    remove_watched_directories_if(criterion, /* keep_explicit */ false);
+}
+
+void BackgroundImageLoader::remove_implicitly_watched_directories(std::function<bool(const fs::path &)> criterion)
+{
+    remove_watched_directories_if(criterion, /* keep_explicit */ true);
+}
+
+void BackgroundImageLoader::remove_watched_directories_if(const std::function<bool(const fs::path &)> &criterion,
+                                                          bool                                         keep_explicit)
+{
     // Remove directories that match the criterion
     for (auto it = m_directories.begin(); it != m_directories.end();)
     {
-        if (criterion(*it))
+        if (criterion(*it) && !(keep_explicit && m_explicit_directories.count(*it)))
+        {
+            m_explicit_directories.erase(*it);
             it = m_directories.erase(it);
+        }
         else
             ++it;
     }

@@ -79,6 +79,9 @@ public:
     void close_image(int index = -1);
     void close_all_images();
     void reload_image(ImagePtr image, bool shall_select = false);
+    /// The background loader, which also owns the watched-directory and recent-file lists.
+    BackgroundImageLoader       &image_loader() { return m_image_loader; }
+    const BackgroundImageLoader &image_loader() const { return m_image_loader; }
 
     //-----------------------------------------------------------------------------
     // saving/loading an entire session (loaded images, current/reference selection, blend mode,

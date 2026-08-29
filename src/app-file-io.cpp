@@ -705,7 +705,7 @@ void HDRViewApp::close_image(int index)
         }
 
         spdlog::debug("Watched directories after closing image:");
-        m_image_loader.remove_watched_directories(
+        m_image_loader.remove_implicitly_watched_directories(
             [this](const fs::path &path)
             {
                 spdlog::debug("{} watched directory: {}",
@@ -754,7 +754,9 @@ void HDRViewApp::close_all_images()
     m_current   = -1;
     m_reference = -1;
     m_active_directories.clear();
-    m_image_loader.remove_watched_directories([](const fs::path &) { return true; });
+    // Only the folders opened alongside these images; one the user asked to watch stays watched, since
+    // what it is for -- files that do not exist yet -- has nothing to do with what is currently loaded.
+    m_image_loader.remove_implicitly_watched_directories([](const fs::path &) { return true; });
     update_visibility(); // this also calls set_image_textures();
 }
 
@@ -1054,7 +1056,7 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
             continue;
 
         PendingSession::Entry e;
-        e.path             = resolve(rel);
+        e.path                  = resolve(rel);
         e.channel_selector      = entry.value<string>("channel_selector", "");
         e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
         e.selected_group        = entry.value<int>("selected_group", 0);
@@ -1096,7 +1098,7 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         // images (image_loader.cpp's extract_and_schedule) -- this is also why "reveal in file manager" and
         // reload_image() already handle these correctly with no session-specific work.
         PendingSession::Entry e;
-        e.path             = fs::path(zip_name) / fs::u8path(rel);
+        e.path                  = fs::path(zip_name) / fs::u8path(rel);
         e.channel_selector      = entry.value<string>("channel_selector", "");
         e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
         e.selected_group        = entry.value<int>("selected_group", 0);
@@ -1176,17 +1178,17 @@ void HDRViewApp::finish_pending_session()
     m_exposure_live = m_exposure = view.value<float>("exposure", m_exposure);
     // Only the floor; see MIN_GAMMA. Exposure and offset have no unsafe values, and a session has to be
     // able to carry back whatever the sliders' Ctrl+click entry and keyboard shortcuts can set.
-    m_gamma_live = m_gamma   = std::max(MIN_GAMMA, view.value<float>("gamma", m_gamma));
+    m_gamma_live = m_gamma = std::max(MIN_GAMMA, view.value<float>("gamma", m_gamma));
     m_offset_live = m_offset = view.value<float>("offset", m_offset);
     m_tonemap                = id_to_enum(view, "tonemap", g_tonemap_ids, m_tonemap);
     m_channel                = id_to_enum(view, "channel", g_channel_ids, m_channel);
     m_colormap_index =
         clamp<int>(view.value<int>("colormap_index", m_colormap_index), 0, (int)std::size(m_colormaps) - 1);
-    m_reverse_colormap   = view.value<bool>("reverse_colormap", m_reverse_colormap);
-    m_clamp_to_LDR       = view.value<bool>("clamp_to_LDR", m_clamp_to_LDR);
-    m_dither             = view.value<bool>("dither", m_dither);
-    m_bg_mode            = id_to_enum(view, "bg_mode", g_bg_mode_ids, m_bg_mode);
-    m_bg_color.xyz()     = view.value<float3>("bg_color", m_bg_color.xyz());
+    m_reverse_colormap = view.value<bool>("reverse_colormap", m_reverse_colormap);
+    m_clamp_to_LDR     = view.value<bool>("clamp_to_LDR", m_clamp_to_LDR);
+    m_dither           = view.value<bool>("dither", m_dither);
+    m_bg_mode          = id_to_enum(view, "bg_mode", g_bg_mode_ids, m_bg_mode);
+    m_bg_color.xyz()   = view.value<float3>("bg_color", m_bg_color.xyz());
     set_zoom(view.value<float>("zoom", m_zoom));
     m_translate          = view.value<float2>("translate", m_translate);
     m_flip               = view.value<bool2>("flip", m_flip);
