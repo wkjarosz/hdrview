@@ -1,8 +1,8 @@
 /** \file test_gui_loader.cpp
     \author Wojciech Jarosz
 
-    BackgroundImageLoader driven through a running app: which directories it watches, and what stops it
-    watching them.
+    BackgroundImageLoader driven through a running app: which directories it watches and what stops it
+    watching them, and what it does with an archive whose contents it has to discover for itself.
 
     Distinct from test_gui_image_io.cpp, which loads a file the caller named. Here the loader is the one
     deciding what to open, so the tests are about the decisions rather than the decode.
@@ -15,8 +15,15 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include <miniz.h>
+#include <spdlog/sinks/base_sink.h>
+#include <spdlog/spdlog.h>
+
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <mutex>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
@@ -47,6 +54,75 @@ fs::path place_fixture(const fs::path &dir, const char *name)
 }
 
 bool is_watched(const fs::path &dir) { return hdrview()->image_loader().watched_directories().count(dir) != 0; }
+
+//! Collects everything logged while it is in scope. See the same helper in tests/test_loader_limits.cpp:
+//! refusing an entry up front and failing to extract it look identical from outside, so the warning is the
+//! only thing that tells them apart.
+struct LogCapture
+{
+    struct Sink : spdlog::sinks::base_sink<std::mutex>
+    {
+        std::vector<std::string> messages;
+        void                     sink_it_(const spdlog::details::log_msg &msg) override
+        {
+            messages.emplace_back(msg.payload.data(), msg.payload.size());
+        }
+        void flush_() override {}
+    };
+
+    std::shared_ptr<Sink> sink = std::make_shared<Sink>();
+
+    LogCapture() { spdlog::default_logger()->sinks().push_back(sink); }
+    ~LogCapture()
+    {
+        auto &sinks = spdlog::default_logger()->sinks();
+        sinks.erase(std::remove(sinks.begin(), sinks.end(), sink), sinks.end());
+    }
+
+    bool saw(const std::string &substring) const
+    {
+        return std::any_of(sink->messages.begin(), sink->messages.end(),
+                           [&](const std::string &m) { return m.find(substring) != std::string::npos; });
+    }
+};
+
+//! Writes a zip holding `contents` under "inside.png". A non-zero `declared` overwrites the entry's
+//! uncompressed size in both of its headers, so the archive claims more than it stores; zero leaves the
+//! real archive alone. See the equivalent fixture in tests/test_loader_limits.cpp for the header offsets.
+fs::path write_zip(const fs::path &dir, const char *name, uint32_t declared, const std::string &contents)
+{
+    mz_zip_archive zip;
+    memset(&zip, 0, sizeof(zip));
+    void  *buf  = nullptr;
+    size_t size = 0;
+    if (!mz_zip_writer_init_heap(&zip, 0, 0) ||
+        !mz_zip_writer_add_mem(&zip, "inside.png", contents.data(), contents.size(), MZ_BEST_COMPRESSION) ||
+        !mz_zip_writer_finalize_heap_archive(&zip, &buf, &size))
+    {
+        mz_zip_writer_end(&zip);
+        return {}; // the caller checks for this
+    }
+    std::string bytes(reinterpret_cast<char *>(buf), size);
+    mz_zip_writer_end(&zip);
+
+    if (declared)
+    {
+        auto patch_at = [&](const char *sig, size_t field_offset)
+        {
+            size_t pos = bytes.find(sig, 0, 4);
+            if (pos == std::string::npos)
+                return;
+            for (int b = 0; b < 4; ++b) bytes[pos + field_offset + b] = char((declared >> (8 * b)) & 0xff);
+        };
+        patch_at("PK\x03\x04", 22);
+        patch_at("PK\x01\x02", 24);
+    }
+
+    fs::path      out = dir / name;
+    std::ofstream os{out, std::ios::binary};
+    os.write(bytes.data(), (std::streamsize)bytes.size());
+    return out;
+}
 
 void reset_images(ImGuiTestContext *ctx)
 {
@@ -115,5 +191,49 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         std::error_code ec;
         fs::remove_all(watch_dir, ec);
         fs::remove_all(image_dir, ec);
+    };
+
+    /*
+        Opening a zip is the path where the loader discovers the entries itself, so the sizes it allocates
+        from are whatever the archive claims. A claim its own stored bytes cannot back has to be refused
+        before the allocation, not after the extraction fails -- the buffer is value-initialized, so the
+        pages are really touched and overcommit does not soften it. tests/test_loader_limits.cpp covers the
+        same guard on the two session-manifest paths; this is the one a user reaches by opening a file.
+    */
+    t           = IM_REGISTER_TEST(engine, "loader", "an_archive_lying_about_an_entry_is_refused_up_front");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        const fs::path dir = make_temp_dir("zip");
+        // Well past deflate's 1032:1 ceiling, but small enough that a build without the guard merely wastes
+        // the allocation rather than exhausting the machine.
+        // A small, highly compressible payload: the claim has to exceed what deflate could have expanded
+        // the *stored* bytes to, and an already-compressed entry (a PNG, say) barely shrinks, so the same
+        // declared size against one would be a ratio deflate can legitimately reach.
+        const fs::path lying = write_zip(dir, "lying.zip", 64u << 20, std::string(64, 'x'));
+        IM_CHECK(!lying.empty());
+
+        reset_images(ctx);
+        {
+            LogCapture log;
+            hdrview()->load_images({lying.u8string()});
+            for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+            IM_CHECK_EQ(hdrview()->num_images(), 0);
+            IM_CHECK(log.saw("Skipping zip entry 'inside.png'"));
+        }
+
+        // The same image in an honest archive still opens, so the guard is refusing the claim rather than
+        // the format.
+        std::ifstream     in{HDRVIEW_GUI_TEST_IMAGE, std::ios::binary};
+        const std::string fixture{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        const fs::path    honest = write_zip(dir, "honest.zip", 0, fixture);
+        IM_CHECK(!honest.empty());
+        reset_images(ctx);
+        hdrview()->load_images({honest.u8string()});
+        for (int frame = 0; frame < 240 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+
+        reset_images(ctx);
+        std::error_code ec;
+        fs::remove_all(dir, ec);
     };
 }

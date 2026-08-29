@@ -3,6 +3,7 @@
 #include "colorspace.h"
 #include "fwd.h"
 #include "imageio/gainmap.h"
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -71,6 +72,19 @@ struct ImageLoadOptions
 */
 void check_image_dimensions(int64_t width, int64_t height, string_view format);
 
+/**
+    Whether a zip entry's declared uncompressed size is one the archive could actually be holding.
+
+    Every entry is read whole into memory before anything looks at it, sized from what the archive's
+    directory claims rather than from the bytes present -- so a declared size costs that much memory, and
+    the time to decompress into it, whether or not the data is there. The same reasoning as
+    check_image_dimensions(), one layer further out.
+
+    \param [] uncompressed_size  Size the archive's directory declares for the entry
+    \param [] compressed_size    Size the archive's directory says it stores it in
+    \param [] entry_name         Entry name, for the warning
+*/
+bool zip_entry_size_is_plausible(uint64_t uncompressed_size, uint64_t compressed_size, string_view entry_name);
 
 const ImageLoadOptions &load_image_options();
 void                    draw_load_image_options_dialog(bool &open);

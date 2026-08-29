@@ -331,6 +331,9 @@ vector<std::pair<string, string>> zip_root_entries_with_suffix(string_view zip_b
             to_lower(name.substr(name.size() - suffix_lower.size())) != suffix_lower)
             continue;
 
+        if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, name))
+            continue;
+
         std::vector<char> buffer(stat.m_uncomp_size);
         if (!mz_zip_reader_extract_to_mem(&zip, i, buffer.data(), buffer.size(), 0))
         {
@@ -360,6 +363,12 @@ std::optional<string> zip_extract_entry(string_view zip_bytes, const string &ent
 
     mz_zip_archive_file_stat stat;
     if (!mz_zip_reader_file_stat(&zip, index, &stat))
+    {
+        mz_zip_reader_end(&zip);
+        return std::nullopt;
+    }
+
+    if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, entry_path))
     {
         mz_zip_reader_end(&zip);
         return std::nullopt;
@@ -434,6 +443,9 @@ void BackgroundImageLoader::background_load(const string filename, const string_
 
             // If entry_pattern is set, skip entries that don't match
             if (!entry_pattern.empty() && entry_path.u8string() != entry_pattern)
+                continue;
+
+            if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, entry_path.u8string()))
                 continue;
 
             buffer.resize(stat.m_uncomp_size);
@@ -808,6 +820,37 @@ void check_image_dimensions(int64_t width, int64_t height, string_view format)
     if (width > k_max_image_dimension || height > k_max_image_dimension || width * height > k_max_image_pixels)
         throw std::invalid_argument{
             fmt::format("{}: image dimensions {}x{} are implausibly large.", format, width, height)};
+}
+
+// DEFLATE cannot expand data by more than 1032:1, so a larger ratio is a claim the archive's own bytes
+// cannot back, whatever wrote it. Stored (uncompressed) entries are covered by the same test, since their
+// ratio is 1.
+static constexpr uint64_t k_max_zip_expansion_ratio = 1032;
+// And a bound on the honest case, which the ratio test cannot catch: an archive really can hold gigabytes
+// of compressible data, and HDRView would read the entry whole into memory before finding out it is not an
+// image. No file it can load is anywhere near this large.
+static constexpr uint64_t k_max_zip_entry_bytes = 2ull << 30;
+
+bool zip_entry_size_is_plausible(uint64_t uncompressed_size, uint64_t compressed_size, string_view entry_name)
+{
+    if (uncompressed_size > k_max_zip_entry_bytes)
+    {
+        spdlog::warn("Skipping zip entry '{}': it declares {:.0h}, more than any image HDRView can load.", entry_name,
+                     human_readible{(size_t)uncompressed_size});
+        return false;
+    }
+
+    // An empty entry compresses to a non-empty stream, so only guard the ratio once there is something to
+    // expand; a zero compressed size cannot back anything anyway.
+    if (uncompressed_size > k_max_zip_expansion_ratio * std::max<uint64_t>(compressed_size, 1))
+    {
+        spdlog::warn("Skipping zip entry '{}': it declares {:.0h} stored in {:.0h}, which no deflate stream "
+                     "could expand to.",
+                     entry_name, human_readible{(size_t)uncompressed_size}, human_readible{(size_t)compressed_size});
+        return false;
+    }
+
+    return true;
 }
 
 const ImageLoadOptions &load_image_options() { return s_opts; }
