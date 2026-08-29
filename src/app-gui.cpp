@@ -40,7 +40,7 @@ using namespace std;
 using namespace HelloImGui;
 
 void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy, float width,
-                                    const string &trailing_label) const
+                                    const string &trailing_label, const std::function<void()> &extra_popup_items) const
 {
     // Shares ImGui::ChannelValuesRow with Image::draw_channel_stats() -- both use the exact same row shape,
     // including its Copy/Display-as popup. Pixel rows always offer the full mode set: unlike stats, a
@@ -89,7 +89,8 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
     ImGui::ChannelValuesRow(fmt::format("##pixel_color_{}", which_image).c_str(), &raw.x, &displayed.x, components,
                             ImGuiDataType_Float, "%g", exposure_gain, &color_mode, ImGui::ChannelDisplayMode_AllMask,
                             allow_copy, show_swatch, ImVec4{displayed.x, displayed.y, displayed.z, displayed.w},
-                            trailing_label, width, /*content_disabled=*/!inside);
+                            trailing_label, width, /*content_disabled=*/!inside, /*show_color_markers=*/false,
+                            extra_popup_items);
 }
 
 void HDRViewApp::draw_status_bar()
@@ -229,7 +230,7 @@ void HDRViewApp::draw_status_bar()
         x += item_width + spacing;
     };
 
-    if (auto img = current_image())
+    if (current_image())
     {
         // sized_text() right-aligns the zoom text within its reserved EmSize(10.f) column (see the call
         // below), so the column's own start (right_zone_x) sits to the left of the text's actual visual
@@ -255,17 +256,7 @@ void HDRViewApp::draw_status_bar()
         {
             if (auto hp = last_hovered_pixel())
             {
-                auto   hovered_pixel = *hp;
-                auto   ref           = reference_image();
-                float4 top           = img->raw_pixel(hovered_pixel);
-                float4 pixel         = top;
-                if (ref && ref->data_window.contains(hovered_pixel))
-                {
-                    float4 bottom = ref->raw_pixel(hovered_pixel);
-                    // blend with reference image if available
-                    pixel = float4{blend(top.x, bottom.x, m_blend_mode), blend(top.y, bottom.y, m_blend_mode),
-                                   blend(top.z, bottom.z, m_blend_mode), blend(top.w, bottom.w, m_blend_mode)};
-                }
+                auto hovered_pixel = *hp;
 
                 ImGui::SameLine(hover_x);
                 // ReadOnly alone doesn't block DragInt's drag gesture, only keyboard entry -- these
@@ -283,9 +274,26 @@ void HDRViewApp::draw_status_bar()
                 float x = hover_x + 2.f * drag_size + 2.f * inner_sp;
                 sized_text(x, 0.5f, "=", 0.5f);
 
-                ImGui::PushID("Current");
+                // Which pixel this reports is a choice, not a given, and the numbers already open a popup
+                // for the other one (their format) -- so it goes in there rather than costing the bar its
+                // own control. See m_status_pixel_target.
+                static const char *target_names[] = {"Current", "Reference", "Composite"};
+                auto               choose_target  = [this]
+                {
+                    ImGui::SeparatorText("Show:");
+                    for (int t = 0; t < IM_ARRAYSIZE(target_names); ++t)
+                    {
+                        ImGui::BeginDisabled(t == 1 && !reference_image());
+                        if (ImGui::Selectable(target_names[t], m_status_pixel_target == t))
+                            m_status_pixel_target = t;
+                        ImGui::EndDisabled();
+                    }
+                };
+
+                ImGui::PushID("status pixel");
                 ImGui::SameLine(x);
-                pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, color_w);
+                pixel_color_widget(hovered_pixel, m_status_color_mode, m_status_pixel_target, false, color_w, {},
+                                   choose_target);
 
                 ImGui::PopID();
             }

@@ -63,16 +63,22 @@ void HDRViewApp::draw_pixel_info() const
     if (!img || !m_draw_pixel_info)
         return;
 
-    auto ref = reference_image();
+    // These numbers report the same pixel the status bar does (see m_status_pixel_target), values and
+    // labels alike, so the two readouts can never disagree about what is being shown. The composite is a
+    // blend of both images and has no channel layout of its own, so it borrows the current image's.
+    const bool from_reference = m_status_pixel_target == 1;
+    auto       src            = from_reference ? reference_image() : img;
+    if (!src)
+        return; //< the reference was chosen and has since been closed; nothing to report
 
     static constexpr float2 align = {0.5f, 0.5f};
 
-    auto  &group = img->groups[img->selected_group];
+    auto  &group = src->groups[src->active_group_index(from_reference ? Target_Secondary : Target_Primary)];
     string names[4];
     string longest_name;
     for (int c = 0; c < group.num_channels; ++c)
     {
-        auto &channel = img->channels[group.channels[c]];
+        auto &channel = src->channels[group.channels[c]];
         names[c]      = Channel::tail(channel.name);
         if (names[c].length() > longest_name.length())
             longest_name = names[c];
@@ -113,10 +119,13 @@ void HDRViewApp::draw_pixel_info() const
         for (int x = bounds.min.x; x < bounds.max.x; ++x)
         {
             auto   pos        = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
-            float4 r_pixel    = pixel_value({x, y}, true, 2);
-            float4 t_pixel    = linear_to_sRGB(pixel_value({x, y}, false, 2));
-            float4 pixel      = m_status_color_mode == 0 ? r_pixel : t_pixel;
-            float3 text_color = contrasting_color(t_pixel.xyz());
+            float4 r_pixel = pixel_value({x, y}, true, m_status_pixel_target);
+            float4 t_pixel = linear_to_sRGB(pixel_value({x, y}, false, m_status_pixel_target));
+            float4 pixel   = m_status_color_mode == 0 ? r_pixel : t_pixel;
+            // Legibility is against what is on screen, which is the composite however the numbers
+            // themselves are sourced.
+            float4 displayed  = m_status_pixel_target == 2 ? t_pixel : linear_to_sRGB(pixel_value({x, y}, false, 2));
+            float3 text_color = contrasting_color(displayed.xyz());
             float3 shadow     = contrasting_color(text_color);
             if (alpha2 > 0.f)
             {

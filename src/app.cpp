@@ -443,6 +443,9 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_show_FPS            = j.value<bool>("show FPS", m_show_FPS);
                 m_clip_range          = j.value<float2>("clip range", m_clip_range);
                 m_histogram_height    = j.value<float>("histogram height", m_histogram_height);
+                // Clamped: it indexes pixel_color_widget()'s current/reference/composite choices, and the
+                // settings file is ordinary user-editable text.
+                m_status_pixel_target = clamp<int>(j.value<int>("status pixel target", m_status_pixel_target), 0, 2);
                 m_x_scale =
                     clamp<int>(j.value<int>("histogram x scale", m_x_scale), 0, AxisScale_COUNT - 1);
                 m_y_scale =
@@ -523,6 +526,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         j["show FPS"]                = m_show_FPS;
         j["clip range"]              = m_clip_range;
         j["histogram height"]        = m_histogram_height;
+        j["status pixel target"]     = m_status_pixel_target;
         j["histogram x scale"]       = m_x_scale;
         j["histogram y scale"]       = m_y_scale;
         j["show developer menu"]     = m_show_developer_menu;

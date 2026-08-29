@@ -11,6 +11,7 @@
 #include "imgui.h"
 #include "ringbuffer_color_sink.h"
 
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -247,6 +248,9 @@ constexpr ChannelDisplayModeMask ChannelDisplayMode_AllMask = (1u << ChannelDisp
 //! The click target stays active under `content_disabled`; only the boxes/swatch/label gray out (e.g. for
 //! a meaningless/out-of-bounds sample). `*mode` is the caller-owned current selection. `raw` is required;
 //! `displayed` may be null unless a Displayed* mode is enabled. `id` scopes the row's widget IDs.
+//! `extra_popup_items`, if given, is drawn at the top of the row's click-to-open popup, above its own
+//! "Display as:" section -- for a caller with a further choice to offer about the value it is showing.
+//!
 //! `total_width`, if nonzero, overrides the row's natural (CalcItemWidth-based) width. `show_color_markers`
 //! tints each box's left edge per component (only meaningful with `show_swatch`). Row height follows the
 //! ambient FramePadding -- push ImGuiStyleVar_FramePadding for a more compact row; there is no compact
@@ -256,7 +260,7 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
                       ChannelDisplayModeMask enabled_modes = ChannelDisplayMode_AllMask, bool allow_copy = true,
                       bool show_swatch = false, const ImVec4 &swatch_color = ImVec4(0, 0, 0, 1),
                       const std::string &label = {}, float total_width = 0.f, bool content_disabled = false,
-                      bool show_color_markers = false);
+                      bool show_color_markers = false, const std::function<void()> &extra_popup_items = {});
 
 //! Draws a row of `num_components` text labels (e.g. channel names), each left-aligned over the column
 //! ChannelValuesRow(..., num_components, ...) would draw for the same `total_width` -- for a

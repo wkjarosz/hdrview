@@ -486,7 +486,7 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
                       ImGuiDataType data_type, const char *format, float exposure_gain, int *mode,
                       ChannelDisplayModeMask enabled_modes, bool allow_copy, bool show_swatch,
                       const ImVec4 &swatch_color, const std::string &label, float total_width, bool content_disabled,
-                      bool show_color_markers)
+                      bool show_color_markers, const std::function<void()> &extra_popup_items)
 {
     ImGui::PushID(id);
 
@@ -540,7 +540,9 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
     bool clicked = ImGui::InvisibleButton("##click", ImVec2{row_width, sz});
     if (clicked)
         ImGui::OpenPopup("##dropdown");
-    ImGui::SetItemTooltip("Click to change value format%s", allow_copy ? " or copy to clipboard." : ".");
+    ImGui::SetItemTooltip(extra_popup_items ? "Click to change what is shown and how%s"
+                                            : "Click to change value format%s",
+                          allow_copy ? ", or copy to clipboard." : ".");
 
     ImVec2            row_pos   = ImGui::GetItemRectMin();
     ImDrawList       *draw_list = ImGui::GetWindowDrawList();
@@ -692,6 +694,8 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
             }
             ImGui::SetClipboardText(buf.c_str());
         }
+        if (extra_popup_items)
+            extra_popup_items();
         ImGui::SeparatorText("Display as:");
         for (int m = 0; m < ChannelDisplayMode_COUNT; ++m)
         {

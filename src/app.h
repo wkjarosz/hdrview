@@ -348,7 +348,8 @@ private:
     bool supports_hdr() const;
 
     void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
-                            float width = 0.f, const string &trailing_label = {}) const;
+                            float width = 0.f, const string &trailing_label = {},
+                            const std::function<void()> &extra_popup_items = {}) const;
 
 private:
     //-----------------------------------------------------------------------------
@@ -504,6 +505,10 @@ private:
     };
     vector<WatchedPixel> m_watched_pixels;
     int                  m_status_color_mode = 0;
+    //! Which pixel the status bar reports: 0 current, 1 reference, 2 composite -- the `which_image`
+    //! argument pixel_color_widget() takes. Persisted, unlike the value format beside it: this chooses
+    //! which data is shown rather than how, and is not something to re-pick every launch.
+    int m_status_pixel_target = 2;
 
     //-----------------------------------------------------------------------------
     // Playback
