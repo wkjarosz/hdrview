@@ -1262,8 +1262,14 @@ void Image::draw_info()
                         "Is transparency",
                         [this]
                         {
-                            bool value = alpha_is_transparency;
-                            if (!ImGui::Checkbox("##Alpha is transparency", &value))
+                            // Squat like the Colorspace panel's checkboxes, which drop their vertical frame
+                            // padding: a checkbox is square, so the default padding makes it taller than the
+                            // text beside it.
+                            ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+                            bool       value   = alpha_is_transparency;
+                            const bool toggled = ImGui::Checkbox("##Alpha is transparency", &value);
+                            ImGui::PopStyleVar();
+                            if (!toggled)
                                 return false;
                             // The premultiply happens in-place on load, so switching interpretation means
                             // re-reading the file; reload_image() carries the new setting through.

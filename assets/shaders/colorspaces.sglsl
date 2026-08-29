@@ -50,6 +50,11 @@ vec4 sRGBToLinear(vec4 color) { return vec4(sRGBToLinear(color.rgb), color.a); }
 // returns the luminance of a linear rgb color
 float RGBToY(vec3 rgb, vec3 weights) { return dot(weights, rgb); }
 
+// Luminance weights for linear sRGB/BT.709 primaries: the middle row of RGB2XYZ below, and what
+// colorspace.h's sRGB_Yw() computes. Any value already converted into those primaries is weighed by
+// these, whatever gamut it arrived in.
+const vec3 sRGB_Yw = vec3(0.212671, 0.715160, 0.072169);
+
 // Converts a color from linear RGB to XYZ space
 vec3 RGBToXYZ(vec3 rgb)
 {
