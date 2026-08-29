@@ -281,6 +281,58 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
     };
 
     /*
+        Open Recent should list places that opened. The file path is careful about this -- it drops the name
+        first and only puts it back once a load has actually succeeded -- and so is the zip path, but a
+        folder was recorded the moment it was looked at, whether or not it turned out to hold anything or
+        could even be read. Picking it from the menu then does nothing at all.
+    */
+    t           = IM_REGISTER_TEST(engine, "loader", "only_folders_that_opened_something_become_recent");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        const fs::path empty_dir = make_temp_dir("recent_empty");
+        const fs::path junk_dir  = make_temp_dir("recent_junk");
+        const fs::path full_dir  = make_temp_dir("recent_full");
+        place_fixture(full_dir, "a.png");
+        {
+            // A file no loader claims, so the folder is non-empty but yields nothing.
+            std::ofstream junk{junk_dir / "notes.txt"};
+            junk << "not an image";
+        }
+
+        auto is_recent = [](const fs::path &p)
+        {
+            const auto &recents = hdrview()->image_loader().recent_files();
+            return std::find(recents.begin(), recents.end(), p.u8string()) != recents.end();
+        };
+
+        reset_images(ctx);
+        hdrview()->image_loader().clear_recent_files();
+
+        hdrview()->load_images({empty_dir.u8string()});
+        for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), 0);
+        IM_CHECK(!is_recent(empty_dir));
+
+        hdrview()->load_images({junk_dir.u8string()});
+        for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), 0);
+        IM_CHECK(!is_recent(junk_dir));
+
+        // And a folder that does hold an image is still recorded.
+        hdrview()->load_images({full_dir.u8string()});
+        for (int frame = 0; frame < 240 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+        IM_CHECK(is_recent(full_dir));
+
+        reset_images(ctx);
+        hdrview()->image_loader().clear_recent_files();
+        std::error_code ec;
+        fs::remove_all(empty_dir, ec);
+        fs::remove_all(junk_dir, ec);
+        fs::remove_all(full_dir, ec);
+    };
+
+    /*
         An entry with no bytes in it. A zip can hold one, and the loader decided where to read from by
         asking whether the buffer it was handed was empty -- so a zero-byte entry fell through to "open
         this path", against a name assembled for display (archive.zip/inside.png) that no filesystem has.

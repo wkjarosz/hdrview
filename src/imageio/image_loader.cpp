@@ -534,6 +534,9 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
             }
         }
 
+        if (ec)
+            spdlog::error("Could not list directory '{}': {}.", filename, ec.message());
+
         sort(begin(entries), end(entries),
              [](const auto &a, const auto &b) { return natural_less(a.path().string(), b.path().string()); });
 
@@ -543,8 +546,12 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
             load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, opts);
         }
 
-        // this moves the file to the top of the recent files list
-        add_recent_file(filename);
+        // Only somewhere that opened something belongs in the recent list, the same rule the file and zip
+        // paths follow; picking a folder that held no images does nothing at all.
+        if (entries.empty())
+            spdlog::warn("No loadable images found in '{}'.", filename);
+        else
+            add_recent_file(filename); // this moves the folder to the top of the recent files list
     }
 #endif
     else // a regular file
