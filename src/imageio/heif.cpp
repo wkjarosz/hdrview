@@ -374,46 +374,53 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                         bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
         }
 
-        if (opts.override_profile)
+        // Alpha is not a colour: it carries neither a transfer function nor primaries, so it is copied
+        // through as decoded. Only the monochrome path reaches this with a separate alpha plane -- the
+        // interleaved paths hand alpha to linearize_pixels(), which already leaves the last channel alone.
+        if (out_planes[p] != heif_channel_Alpha)
         {
-            spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
-                         color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
-
-            string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
-            Chromaticities chr;
-            if (linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, gamut_chromaticities(opts.gamut_override),
-                                 opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
+            if (opts.override_profile)
             {
-                image->chromaticities = chr;
-                profile_desc += " (override)";
+                spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
+                             color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
+
+                string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+                Chromaticities chr;
+                if (linearize_pixels(float_pixels.data(), int3{size.xy(), cpp},
+                                     gamut_chromaticities(opts.gamut_override), opts.tf_override, opts.keep_primaries,
+                                     &profile_desc, &chr))
+                {
+                    image->chromaticities = chr;
+                    profile_desc += " (override)";
+                }
+                image->metadata["color profile"] = profile_desc;
             }
-            image->metadata["color profile"] = profile_desc;
-        }
-        else
-        {
-            // only prefer the nclx if it exists and it specifies an HDR transfer function
-            bool prefer_icc =
-                !image->icc_data.empty() &&
-                (!nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
-                           nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
-
-            spdlog::debug("prefer_icc: {}, nclx transfer function: {}", prefer_icc,
-                          nclx ? int(nclx->transfer_characteristics) : -1);
-            string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
-            Chromaticities chr;
-            // for SDR profiles, try to transform the interleaved data using the icc profile.
-            // Then try the nclx profile
-            if ((prefer_icc && ICCProfile(image->icc_data)
-                                   .linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries,
-                                                     &profile_desc, &chr)) ||
-                linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries, nclx, &profile_desc,
-                                 &chr))
-                image->chromaticities = chr;
             else
-                // icc and nclx profiles failed or not present, so we can only assume we are sRGB/BT709
-                to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction::Unspecified);
+            {
+                // only prefer the nclx if it exists and it specifies an HDR transfer function
+                bool prefer_icc =
+                    !image->icc_data.empty() &&
+                    (!nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
+                               nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
 
-            image->metadata["color profile"] = profile_desc;
+                spdlog::debug("prefer_icc: {}, nclx transfer function: {}", prefer_icc,
+                              nclx ? int(nclx->transfer_characteristics) : -1);
+                string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+                Chromaticities chr;
+                // for SDR profiles, try to transform the interleaved data using the icc profile.
+                // Then try the nclx profile
+                if ((prefer_icc && ICCProfile(image->icc_data)
+                                       .linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries,
+                                                         &profile_desc, &chr)) ||
+                    linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries, nclx,
+                                     &profile_desc, &chr))
+                    image->chromaticities = chr;
+                else
+                    // icc and nclx profiles failed or not present, so we can only assume we are sRGB/BT709
+                    to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction::Unspecified);
+
+                image->metadata["color profile"] = profile_desc;
+            }
         }
 
         // copy the interleaved float pixels into the channels
@@ -984,26 +991,33 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         std::unique_ptr<uint8_t[]> pixels8;
         void                      *pixels = nullptr;
         pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, params->gain, params->tf, true, true, true);
-        if (!params->use_alpha && n == 4)
+
+        // HEIF stores one or three colour channels, each optionally with alpha. A group carrying alpha
+        // loses it when the caller asked for none; a two-channel U,V pair carries no alpha and has no
+        // one-channel reading, so it pads out to RGB with a zero third channel, as the viewport draws it.
+        const bool group_alpha = group_has_alpha(img.groups[img.selected_group].type);
+        const int  n_out       = (group_alpha && !params->use_alpha) ? n - 1 : (n == 2 && !group_alpha ? 3 : n);
+        if (n_out != n)
         {
-            size_t                     num_pixels = w * h;
-            std::unique_ptr<uint8_t[]> rgb_pixels(new uint8_t[num_pixels * 3]);
-            for (size_t i = 0, j = 0; i < num_pixels; ++i, j += 4)
-            {
-                rgb_pixels[i * 3 + 0] = pixels8[j + 0];
-                rgb_pixels[i * 3 + 1] = pixels8[j + 1];
-                rgb_pixels[i * 3 + 2] = pixels8[j + 2];
-            }
-            pixels8.swap(rgb_pixels);
-            n = 3;
+            const size_t               num_pixels = (size_t)w * h;
+            std::unique_ptr<uint8_t[]> repacked(new uint8_t[num_pixels * n_out]);
+            for (size_t i = 0; i < num_pixels; ++i)
+                for (int c = 0; c < n_out; ++c) repacked[i * n_out + c] = (c < n) ? pixels8[i * n + c] : uint8_t(0);
+            pixels8.swap(repacked);
+            n = n_out;
         }
         pixels = pixels8.get();
 
         if (!pixels || w <= 0 || h <= 0)
             throw std::runtime_error("HEIF: empty image or invalid image dimensions");
 
-        if (n != 3 && n != 4)
-            throw std::invalid_argument("HEIF/AVIF output only supports 3 or 4 channels (RGB or RGBA)");
+        if (n < 1 || n > 4)
+            throw std::invalid_argument("HEIF/AVIF output supports at most 4 channels");
+
+        // One or two channels is a gray image, which HEIF stores as 4:0:0 monochrome rather than as three
+        // equal colour planes -- the same form load_heif_image() already decodes.
+        const bool mono      = n <= 2;
+        const bool has_alpha = n == 2 || n == 4;
 
         // Create heif image via C API
         HeifContextPtr ctx(heif_context_alloc(), heif_context_free);
@@ -1014,22 +1028,48 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             [&]
             {
                 heif_image *raw_heif_img = nullptr;
-                throw_on_error(heif_image_create(w, h, heif_colorspace_RGB,
-                                                 (n == 4) ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB,
-                                                 &raw_heif_img),
-                               "HEIF: Failed to create heif image");
+                throw_on_error(
+                    heif_image_create(w, h, mono ? heif_colorspace_monochrome : heif_colorspace_RGB,
+                                      mono ? heif_chroma_monochrome
+                                           : (n == 4 ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB),
+                                      &raw_heif_img),
+                    "HEIF: Failed to create heif image");
                 return raw_heif_img;
             }(),
             heif_image_release);
 
-        throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_interleaved, w, h, 8),
-                       "HEIF: Failed to add interleaved plane");
+        if (mono)
+        {
+            // Monochrome keeps its channels in separate planes, so the interleaved buffer is split apart.
+            throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Y, w, h, 8),
+                           "HEIF: Failed to add luma plane");
+            if (has_alpha)
+                throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Alpha, w, h, 8),
+                               "HEIF: Failed to add alpha plane");
 
-        int      stride = 0;
-        uint8_t *plane  = heif_image_get_plane(heif_img.get(), heif_channel_interleaved, &stride);
-        // Copy pixel data
-        size_t row_bytes = w * n * sizeof(uint8_t);
-        for (int y = 0; y < h; ++y) memcpy(plane + y * (size_t)stride, pixels8.get() + y * w * n, row_bytes);
+            int      y_stride = 0, a_stride = 0;
+            uint8_t *y_plane = heif_image_get_plane(heif_img.get(), heif_channel_Y, &y_stride);
+            uint8_t *a_plane =
+                has_alpha ? heif_image_get_plane(heif_img.get(), heif_channel_Alpha, &a_stride) : nullptr;
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < w; ++x)
+                {
+                    const uint8_t *src                = pixels8.get() + ((size_t)y * w + x) * n;
+                    y_plane[y * (size_t)y_stride + x] = src[0];
+                    if (a_plane)
+                        a_plane[y * (size_t)a_stride + x] = src[1];
+                }
+        }
+        else
+        {
+            throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_interleaved, w, h, 8),
+                           "HEIF: Failed to add interleaved plane");
+
+            int      stride    = 0;
+            uint8_t *plane     = heif_image_get_plane(heif_img.get(), heif_channel_interleaved, &stride);
+            size_t   row_bytes = w * n * sizeof(uint8_t);
+            for (int y = 0; y < h; ++y) memcpy(plane + y * (size_t)stride, pixels8.get() + y * w * n, row_bytes);
+        }
 
         // Set color profile (nclx)
         {

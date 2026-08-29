@@ -327,3 +327,62 @@ TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples ar
     for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
 }
 #endif
+
+#if HDRVIEW_ENABLE_LIBHEIF
+// Builds a gray image with a chosen alpha, kept high enough that unpremultiplying on the way out does
+// not clamp the luma.
+static ImagePtr make_gray(float luma, float alpha, bool with_alpha)
+{
+    const int2 size{16, 16};
+    auto       img = std::make_shared<Image>();
+    img->channels.emplace_back("Y", size);
+    if (with_alpha)
+        img->channels.emplace_back("A", size);
+    img->display_window = img->data_window = Box2i{int2{0}, size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            img->channels[0](x, y) = luma;
+            if (with_alpha)
+                img->channels[1](x, y) = alpha;
+        }
+    img->finalize();
+    return img;
+}
+
+TEST_CASE("HEIF stores a grayscale group as monochrome rather than three equal colour planes")
+{
+    // libheif has a monochrome colourspace, every encoder here accepts it, and load_heif_image() already
+    // decodes one -- the writer was the only part still fixed at RGB, so gray could not be saved at all.
+    auto               img = make_gray(0.30f, 1.f, /*with_alpha*/ false);
+    std::ostringstream mono(std::ios::binary);
+    REQUIRE_NOTHROW(save_heif_image(*img, mono, "gray.heif", 1.f, 100, true, true, 0, TransferFunction::sRGB));
+
+    std::istringstream in(mono.str(), std::ios::binary);
+    auto               reloaded = load_heif_image(in, "gray.heif");
+    REQUIRE(reloaded.size() == 1);
+    CHECK(reloaded[0]->channels.size() == 1); // one channel, not three
+    CHECK(reloaded[0]->channels[0](3, 2) == doctest::Approx(0.30f).epsilon(5e-3));
+}
+
+TEST_CASE("A monochrome HEIF's alpha plane is stored and read back without a transfer function")
+{
+    // Alpha is not a colour. The interleaved paths hand it to linearize_pixels(), which leaves the last
+    // channel alone, but a monochrome image keeps alpha in its own plane -- and the per-plane loop ran
+    // the full colour linearization over it, so 0.55 came back as sRGB-decoded 0.26.
+    auto               img  = make_gray(0.30f, 0.90f, /*with_alpha*/ true);
+    float4             want = img->rgba_pixel(int2{3, 2}, Target_Primary);
+    std::ostringstream out(std::ios::binary);
+    REQUIRE_NOTHROW(save_heif_image(*img, out, "graya.heif", 1.f, 100, true, true, 0, TransferFunction::sRGB));
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_heif_image(in, "graya.heif");
+    REQUIRE(reloaded.size() == 1);
+    REQUIRE(reloaded[0]->channels.size() == 2);
+    reloaded[0]->finalize(); // the per-format loaders leave this to load_image()
+
+    float4 got = reloaded[0]->rgba_pixel(int2{3, 2}, Target_Primary);
+    CHECK(got[3] == doctest::Approx(want[3]).epsilon(5e-3));
+    CHECK(got[0] == doctest::Approx(want[0]).epsilon(5e-3));
+}
+#endif
