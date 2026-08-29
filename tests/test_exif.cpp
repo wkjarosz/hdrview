@@ -160,3 +160,24 @@ TEST_CASE("One tag the file describes oddly does not discard the rest of the EXI
         CHECK(has_tag_named(j, "Manufacturer"));
     }
 }
+
+TEST_CASE("A maker-note tag's range is bounded without the arithmetic wrapping")
+{
+    // Ranges that genuinely fit, including the empty and exactly-full ones.
+    CHECK(maker_note_range_within(0, 0, 0));
+    CHECK(maker_note_range_within(0, 100, 100));
+    CHECK(maker_note_range_within(90, 10, 100));
+    CHECK(maker_note_range_within(100, 0, 100));
+
+    // Ranges that do not.
+    CHECK_FALSE(maker_note_range_within(91, 10, 100));
+    CHECK_FALSE(maker_note_range_within(101, 0, 100));
+    CHECK_FALSE(maker_note_range_within(0, 101, 100));
+
+    // And the ones the file gets to choose: an offset high enough that adding the size wraps back into
+    // range. Checked by adding, these read as "fits" -- which is what happens where size_t is 32 bits
+    // wide, as it is in the wasm build.
+    CHECK_FALSE(maker_note_range_within(0xFFFFFFF8u, 32u, 100u));
+    CHECK_FALSE(maker_note_range_within(0xFFFFFFFFu, 1u, 100u));
+    CHECK_FALSE(maker_note_range_within(0x80000000u, 0x80000000u, 100u));
+}
