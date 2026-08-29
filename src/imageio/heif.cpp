@@ -12,6 +12,7 @@
 #include <stdexcept>
 
 #include "app.h"
+#include "heif.h" // for HEIFCodec, which the stubs below need as much as the real implementation
 #include "imgui.h"
 
 using namespace std;

@@ -226,6 +226,11 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
             {
                 save_error = e.what();
             }
+            // Which codecs libheif can encode depends on the plugins the build has: the Windows CPM build
+            // has no HEVC encoder at all, and a distribution one may have neither. That is a statement
+            // about the build, not a defect, so the row steps aside instead of failing.
+            if (save_error.find("no encoder available") != std::string::npos)
+                continue;
             CHECK_MESSAGE(save_error.empty(), "save threw: ", save_error);
             if (!save_error.empty() || out.str().empty())
                 continue;
@@ -308,6 +313,8 @@ TEST_CASE("every writer either converts a wide-gamut image to sRGB or records th
         {
             error = e.what();
         }
+        if (error.find("no encoder available") != std::string::npos)
+            continue; // see the note on codec availability in the layout table above
         CHECK_MESSAGE(error.empty(), "save threw: ", error);
         if (!error.empty())
             continue;
