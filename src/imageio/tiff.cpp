@@ -10,6 +10,8 @@
 #include "image.h"
 #include "imageio/image_loader.h"
 
+#include <cmath>
+
 using namespace std;
 
 struct TIFFSaveOptions

@@ -17,6 +17,7 @@
 #include "imageio/tiff.h"
 
 #include <array>
+#include <iterator>
 #include <sstream>
 
 #if HDRVIEW_ENABLE_LIBJXL
