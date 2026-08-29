@@ -110,8 +110,14 @@ std::optional<string> zip_extract_entry(string_view zip_bytes, const string &ent
 
 struct BackgroundImageLoader
 {
-    void background_load(const string filename, const string_view = string_view{}, bool should_select = false,
-                         ImagePtr to_replace = nullptr, const ImageLoadOptions &opts = {});
+    //! Load `filename`, from `buffer` when one is supplied and from disk otherwise.
+    /*!
+        An absent buffer and an empty one are different things: a zip can hold a zero-byte entry, and a
+        download can return nothing, neither of which means "go and read this path". The path in those
+        cases is a name built for display (`archive.zip/entry.png`), which nothing can open.
+    */
+    void background_load(const string filename, std::optional<string_view> buffer = std::nullopt,
+                         bool should_select = false, ImagePtr to_replace = nullptr, const ImageLoadOptions &opts = {});
     void get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback);
     int  num_pending_images() const { return (int)pending_images.size(); }
 

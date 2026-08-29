@@ -16,6 +16,7 @@
 #include <fstream>
 #include <hello_imgui/dpi_aware.h>
 #include <miniz.h>
+#include <optional>
 #include <sstream>
 
 #include "imageio/dds.h"
@@ -221,17 +222,17 @@ struct BackgroundImageLoader::PendingImages
     bool                    add_to_recent;         ///< Whether to add the loaded images to the recent files list
     bool                    should_select = false; ///< Whether to select the first loaded image
     ImagePtr                to_replace = nullptr;  ///< If not null, this image will be replaced with the loaded images
-    PendingImages(const string &f, const string_view buffer, const fs::path &path, ImageLoadOptions opts,
+    PendingImages(const string &f, std::optional<string_view> buffer, const fs::path &path, ImageLoadOptions opts,
                   bool recent = true, bool should_select = false, ImagePtr to_replace = nullptr) :
         filename(f), add_to_recent(recent), should_select(should_select), to_replace(to_replace)
     {
         computation = do_async(
-            // convert the buffer (if any) to a string so the async thread has its own copy,
-            // then load from the string or filename depending on whether the buffer is empty
-            [this, buffer_str = string(buffer), path, opts]()
+            // give the async thread its own copy of the buffer, if there is one; whether there is decides
+            // where the bytes come from, which an empty buffer must not be mistaken for
+            [this, buffer_str = buffer ? std::optional<string>{string(*buffer)} : std::nullopt, path, opts]()
             {
                 fs::file_time_type last_modified = fs::file_time_type::clock::now();
-                if (buffer_str.empty())
+                if (!buffer_str)
                 {
                     std::error_code ec;
                     if (!fs::exists(path, ec) || ec)
@@ -256,9 +257,17 @@ struct BackgroundImageLoader::PendingImages
                         return;
                     }
                 }
+                else if (buffer_str->empty())
+                {
+                    // A zero-byte zip entry, or a download that returned nothing. The path here is a
+                    // display name rather than something on disk, so falling through to the branch above
+                    // would blame the filesystem for a file that was never meant to be there.
+                    spdlog::error("'{}' is empty.", path.u8string());
+                    return;
+                }
                 else
                 {
-                    std::istringstream is{buffer_str};
+                    std::istringstream is{*buffer_str};
                     images = load_image(is, path.u8string(), opts);
                 }
 
@@ -383,14 +392,14 @@ std::optional<string> zip_extract_entry(string_view zip_bytes, const string &ent
     return string(buffer.begin(), buffer.end());
 }
 
-void BackgroundImageLoader::background_load(const string filename, const string_view buffer, bool should_select,
-                                            ImagePtr to_replace, const ImageLoadOptions &opts)
+void BackgroundImageLoader::background_load(const string filename, std::optional<string_view> buffer,
+                                            bool should_select, ImagePtr to_replace, const ImageLoadOptions &opts)
 {
     if (should_select)
         spdlog::debug("will select image '{}'", filename);
 
-    auto load_one = [this](const fs::path &path, const string_view buffer, bool add_to_recent, bool should_select,
-                           ImagePtr to_replace, const ImageLoadOptions &opts)
+    auto load_one = [this](const fs::path &path, std::optional<string_view> buffer, bool add_to_recent,
+                           bool should_select, ImagePtr to_replace, const ImageLoadOptions &opts)
     {
         try
         {
@@ -480,19 +489,18 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     auto path = fs::u8path(filename);
 
     std::error_code path_ec;
-    if (!buffer.empty())
+    if (buffer)
     {
-        // if we have a buffer, we assume it is a file that has been downloaded
-        // and we load it directly from the buffer
-        spdlog::info("Loading image '{}' from {:.0h} buffer.", filename, human_readible{buffer.size()});
+        // a buffer was supplied, so the bytes are in hand and `filename` is only a name
+        spdlog::info("Loading image '{}' from {:.0h} buffer.", filename, human_readible{buffer->size()});
 
         if (to_lower(get_extension(filename)) == ".zip")
         {
-            if (zip_bundle_hook && zip_bundle_hook(buffer, filename))
+            if (zip_bundle_hook && zip_bundle_hook(*buffer, filename))
                 return;
 
             remove_recent_file(filename);
-            if (extract_and_schedule(buffer, filename, should_select, to_replace))
+            if (extract_and_schedule(*buffer, filename, should_select, to_replace))
                 add_recent_file(filename);
         }
         else

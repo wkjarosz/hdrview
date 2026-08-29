@@ -281,6 +281,36 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
     };
 
     /*
+        An entry with no bytes in it. A zip can hold one, and the loader decided where to read from by
+        asking whether the buffer it was handed was empty -- so a zero-byte entry fell through to "open
+        this path", against a name assembled for display (archive.zip/inside.png) that no filesystem has.
+        The complaint was that the file did not exist, about a file that was never supposed to.
+    */
+    t           = IM_REGISTER_TEST(engine, "loader", "an_empty_zip_entry_is_reported_as_empty");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        const fs::path dir   = make_temp_dir("empty_entry");
+        const fs::path empty = write_zip(dir, "empty.zip", 0, std::string{});
+        IM_CHECK(!empty.empty());
+
+        reset_images(ctx);
+        {
+            LogCapture log;
+            hdrview()->load_images({empty.u8string()});
+            for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+            IM_CHECK_EQ(hdrview()->num_images(), 0);
+            IM_CHECK(log.saw("is empty"));
+            // Whatever it says, it must not claim something is missing from the filesystem: the name it
+            // would be talking about was assembled for display and was never a path.
+            IM_CHECK(!log.saw("doesn't exist"));
+        }
+
+        reset_images(ctx);
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+    };
+
+    /*
         The same identity matching, in the other direction: an image closed while its reload was still in
         flight. The arrival has a slot to fill that no longer exists, and appending it puts the image the
         user just closed back in the list.

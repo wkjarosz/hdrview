@@ -73,7 +73,7 @@ public:
     void open_image();
     void open_folder();
     void load_images(const vector<string> &filenames);
-    void load_image(const string filename, const string_view buffer = string_view{}, bool should_select = true,
+    void load_image(const string filename, std::optional<string_view> buffer = std::nullopt, bool should_select = true,
                     const ImageLoadOptions &opts = {});
     void load_url(const string_view url);
     void close_image(int index = -1);
@@ -400,6 +400,18 @@ private:
 
     int m_remaining_download = 0;
 
+public:
+    /// Percent of a download still outstanding, for the status bar's progress readout.
+    /*!
+        Split out from the Emscripten download callbacks so the arithmetic is exercised on every platform.
+        It guards the two things the raw byte counts do not: a total of zero, which a server that sends no
+        content length reports and which the callbacks can also see before the headers arrive; and integer
+        division, which sends every partial fraction to zero. Rounds what is left up, so the bar stays
+        visible until the download is genuinely finished rather than vanishing on the last few bytes.
+    */
+    static int download_percent_remaining(int64_t bytes_loaded, int64_t total_bytes);
+
+private:
     ImGuiTextFilter m_file_filter, m_channel_filter;
     vector<size_t>  m_visible_images;
 
