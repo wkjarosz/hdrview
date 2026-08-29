@@ -506,7 +506,16 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
         &w, &h, &n, opts->gain,
         opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, true);
 
-    // WebP supports RGB or RGBA
+    // libwebp encodes only YUV420(A) and its API takes only RGB/RGBA, so a narrower group is widened
+    // rather than refused: the file then holds what the viewport shows, at three times the samples.
+    if (n < 3)
+    {
+        const bool gray = n == 1 || group_has_alpha(img.groups[img.selected_group].type);
+        spdlog::warn("WebP stores no grayscale; widening {} channel{} to RGB{}.", n, n == 1 ? "" : "s",
+                     gray && n == 2 ? "A" : "");
+        pixels = widen_to_rgb(pixels.get(), w, h, n, gray, &n);
+    }
+
     if (n != 3 && n != 4)
         throw runtime_error{fmt::format("WebP only supports RGB or RGBA images, but image has {} channels", n)};
 

@@ -546,6 +546,18 @@ private:
                        int level = 0) const;
 };
 
+/**
+    Widen an interleaved 8-bit buffer to three or four channels, for a format that stores nothing narrower.
+
+    A gray group's luma is replicated across red, green and blue, which is what the viewport shows for it;
+    a U,V pair, which has no third channel, gets a zero one. Alpha, when the group carries it, stays last.
+
+    \param [] src    Interleaved samples, `w * h * n` of them
+    \param [] gray   True when the group is a lone luma channel or luma plus alpha, false for a U,V pair
+    \param [out] n_out  Channel count of the returned buffer: 3, or 4 when the group carries alpha
+*/
+std::unique_ptr<uint8_t[]> widen_to_rgb(const uint8_t *src, int w, int h, int n, bool gray, int *n_out);
+
 template <typename T>
 std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, bool dither,
                                            bool unpremultiply, bool convert_to_sRGB) const

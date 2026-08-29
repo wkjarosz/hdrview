@@ -14,7 +14,9 @@
 #include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
+#include "imageio/qoi.h"
 #include "imageio/tiff.h"
+#include "imageio/webp.h"
 
 #include <array>
 #include <iterator>
@@ -386,3 +388,36 @@ TEST_CASE("A monochrome HEIF's alpha plane is stored and read back without a tra
     CHECK(got[0] == doctest::Approx(want[0]).epsilon(5e-3));
 }
 #endif
+
+TEST_CASE("QOI and WebP widen a grayscale group to RGB instead of refusing it")
+{
+    // Neither format can store gray: QOI's header describes only 3 = RGB and 4 = RGBA, and libwebp
+    // encodes only YUV420(A). Widening writes what the viewport shows, where refusing wrote nothing.
+    auto img = make_named({"Y"});
+
+#if HDRVIEW_ENABLE_LIBWEBP
+    {
+        std::ostringstream out(std::ios::binary);
+        REQUIRE_NOTHROW(save_webp_image(*img, out, "gray.webp", /*gain*/ 1.f, /*quality*/ 100.f,
+                                        /*lossless*/ true, TransferFunction::sRGB));
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_webp_image(in, "gray.webp");
+        REQUIRE(reloaded.size() == 1);
+        REQUIRE(reloaded[0]->channels.size() >= 3);
+        // the luma is replicated, so every colour channel carries it
+        for (int c = 0; c < 3; ++c)
+            CHECK(reloaded[0]->channels[c](1, 0) == doctest::Approx(img->channels[0](1, 0)).epsilon(5e-3));
+    }
+#endif
+
+    {
+        std::ostringstream out(std::ios::binary);
+        REQUIRE_NOTHROW(save_qoi_image(*img, out, "gray.qoi", /*gain*/ 1.f, /*sRGB*/ true, /*dither*/ false));
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_qoi_image(in, "gray.qoi");
+        REQUIRE(reloaded.size() == 1);
+        REQUIRE(reloaded[0]->channels.size() >= 3);
+        for (int c = 0; c < 3; ++c)
+            CHECK(reloaded[0]->channels[c](1, 0) == doctest::Approx(img->channels[0](1, 0)).epsilon(5e-3));
+    }
+}
