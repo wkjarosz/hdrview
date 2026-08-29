@@ -148,6 +148,17 @@ public:
     /// Reposition the image so that the specified image pixel coordinate lies under the provided viewport position
     void reposition_pixel_to_vp_pos(float2 vp_pos, float2 pixel);
 
+    /// Mirrors a pixel coordinate about the current image's display window along the flipped axes; an
+    /// involution, and the only place the flip enters the pixel <-> viewport transforms.
+    float2 flip_pixel(float2 pixel) const;
+
+    /// Where the quad the image shader samples \p img over starts, as a fraction of the viewport: the
+    /// viewport position of the image's data-window min corner. Derived from vp_pos_at_pixel(), so what is
+    /// drawn and what the overlays and pixel readouts report can never describe different places.
+    float2 image_position(ConstImagePtr img) const;
+    /// The extent of that same quad, as a fraction of the viewport. Negative along a flipped axis.
+    float2 image_scale(ConstImagePtr img) const;
+
     float  pixel_ratio() const;
     float2 viewport_size() const { return m_viewport_size; }
     bool   vp_pos_in_viewport(float2 vp_pos) const
@@ -306,9 +317,6 @@ private:
     void   calculate_viewport();
     float2 center_offset() const;
     Box2f  scaled_display_window(ConstImagePtr img) const;
-    Box2f  scaled_data_window(ConstImagePtr img) const;
-    float2 image_position(ConstImagePtr img) const;
-    float2 image_scale(ConstImagePtr img) const;
 
     void draw_background();
     void draw_statistics_window();

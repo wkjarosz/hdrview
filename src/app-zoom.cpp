@@ -11,20 +11,28 @@
 using namespace std;
 using namespace HelloImGui;
 
+/*!
+    Mirrors a pixel coordinate about the current image's display window, along whichever axes are flipped.
+
+    Pixel coordinates are continuous, with pixel \c i covering <tt>[i, i+1)</tt>, so the mirror of the
+    whole window <tt>[0, max)</tt> is <tt>max - p</tt> -- the same convention image_position() hands the
+    shader. The involution makes pixel_at_vp_pos() and vp_pos_at_pixel() inverses whether flipped or not.
+*/
+float2 HDRViewApp::flip_pixel(float2 pixel) const
+{
+    if (auto img = current_image())
+        return select(m_flip, float2{img->display_window.max} - pixel, pixel);
+    return pixel;
+}
+
 float2 HDRViewApp::pixel_at_vp_pos(float2 vp_pos) const
 {
-    float2 pixel = (vp_pos - (m_translate + center_offset())) / m_zoom;
-    if (auto img = current_image())
-        pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
-    return pixel;
+    return flip_pixel((vp_pos - (m_translate + center_offset())) / m_zoom);
 }
 
 float2 HDRViewApp::vp_pos_at_pixel(float2 pixel) const
 {
-    if (auto img = current_image())
-        pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
-
-    return m_zoom * pixel + (m_translate + center_offset());
+    return m_zoom * flip_pixel(pixel) + (m_translate + center_offset());
 }
 
 void HDRViewApp::set_zoom(float zoom)
@@ -80,10 +88,7 @@ void HDRViewApp::auto_fit_viewport()
 
 float HDRViewApp::zoom_level() const { return log(m_zoom * pixel_ratio()) / log(m_zoom_sensitivity); }
 
-void HDRViewApp::set_zoom_level(float level)
-{
-    set_zoom(std::pow(m_zoom_sensitivity, level) / pixel_ratio());
-}
+void HDRViewApp::set_zoom_level(float level) { set_zoom(std::pow(m_zoom_sensitivity, level) / pixel_ratio()); }
 
 void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
 {
@@ -125,11 +130,8 @@ void HDRViewApp::zoom_out()
 
 void HDRViewApp::reposition_pixel_to_vp_pos(float2 position, float2 pixel)
 {
-    if (auto img = current_image())
-        pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
-
     // Calculate where the new offset must be in order to satisfy the image position equation.
-    m_translate = position - (pixel * m_zoom) - center_offset();
+    m_translate = position - (flip_pixel(pixel) * m_zoom) - center_offset();
 }
 
 Box2f HDRViewApp::scaled_display_window(ConstImagePtr img) const
@@ -140,63 +142,31 @@ Box2f HDRViewApp::scaled_display_window(ConstImagePtr img) const
     return dw;
 }
 
-Box2f HDRViewApp::scaled_data_window(ConstImagePtr img) const
-{
-    Box2f dw = img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}};
-    dw.min *= m_zoom;
-    dw.max *= m_zoom;
-    return dw;
-}
-
 float HDRViewApp::pixel_ratio() const { return ImGui::GetIO().DisplayFramebufferScale.x; }
 
 float2 HDRViewApp::center_offset() const
 {
-    auto   dw     = scaled_display_window(current_image());
-    float2 offset = (viewport_size() - dw.size()) / 2.f - dw.min;
-
-    // Adjust for flipping: if flipped, offset from the opposite side
-    // if (current_image())
-    {
-        if (m_flip.x)
-            offset.x += dw.min.x;
-        if (m_flip.y)
-            offset.y += dw.min.y;
-    }
-    return offset;
+    const Box2f dw = scaled_display_window(current_image());
+    // Center the display window in the viewport. Unflipped, the mapping is zoom*pixel + offset, so the
+    // window's min corner still has to be pulled back to the viewport's margin; flipped, it is
+    // zoom*(display_window.max - pixel) + offset, which already puts that corner at zero.
+    return (viewport_size() - dw.size()) / 2.f - select(m_flip, float2{0.f}, dw.min);
 }
 
+// The quad the image shader samples an image over spans its data window, uv 0 at the min corner and uv 1
+// at the max one. Both ends come from vp_pos_at_pixel(), so the drawn image, the overlays and the pixel
+// readouts share one transform -- including which display window a flip mirrors about, which is always the
+// current image's, never the reference's own.
 float2 HDRViewApp::image_position(ConstImagePtr img) const
 {
-    auto   dw  = scaled_data_window(img);
-    auto   dsw = scaled_display_window(img);
-    float2 pos = m_translate + center_offset() + select(m_flip, dsw.max - dw.min, dw.min);
-
-    // Adjust for flipping: move the image to the opposite side if flipped
-    // if (img)
-    // {
-    //     if (m_flip.x)
-    //         pos.x += m_offset.x + center_offset().x + (dsw.max.x - dw.min.x);
-    //     if (m_flip.y)
-    //         pos.y += m_offset.y + center_offset().y + (dsw.max.y - dw.min.y);
-    // }
-    return pos / viewport_size();
+    const Box2f dw = img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}};
+    return vp_pos_at_pixel(dw.min) / viewport_size();
 }
 
 float2 HDRViewApp::image_scale(ConstImagePtr img) const
 {
-    auto   dw    = scaled_data_window(img);
-    float2 scale = dw.size() / viewport_size();
-
-    // Negate scale for flipped axes
-    // if (img)
-    {
-        if (m_flip.x)
-            scale.x = -scale.x;
-        if (m_flip.y)
-            scale.y = -scale.y;
-    }
-    return scale;
+    const Box2f dw = img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}};
+    return (vp_pos_at_pixel(dw.max) - vp_pos_at_pixel(dw.min)) / viewport_size();
 }
 
 int HDRViewApp::next_visible_image_index(int index, Direction_ direction) const

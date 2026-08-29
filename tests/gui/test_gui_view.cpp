@@ -5,6 +5,7 @@
 */
 
 #include "app.h"
+#include "image.h"
 #include "test_gui_registry.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
@@ -46,6 +47,9 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->zoom_level(), 0.f);
     };
 
+    // Flipping mirrors the image inside the rectangle it already occupies, so the two menu items toggle
+    // their state without the image moving or resizing on screen. The transforms behind that rectangle are
+    // exercised in their own right by the "viewport" tests.
     t           = IM_REGISTER_TEST(engine, "view", "flip_toggle");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -53,11 +57,23 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         bool orig_h = *hdrview()->action("Flip horizontally").p_selected;
         bool orig_v = *hdrview()->action("Flip vertically").p_selected;
 
+        const Box2i dw        = hdrview()->current_image()->display_window;
+        auto        on_screen = [&dw] {
+            return Box2f{hdrview()->vp_pos_at_pixel(float2{dw.min}), hdrview()->vp_pos_at_pixel(float2{dw.max})}
+                .make_valid();
+        };
+        const Box2f before = on_screen();
+
         ctx->SetRef("##MainMenuBar");
         ctx->MenuClick("View/Flip horizontally");
         IM_CHECK_EQ(*hdrview()->action("Flip horizontally").p_selected, !orig_h);
+        IM_CHECK(la::maxelem(la::abs(on_screen().min - before.min)) < 1e-2f);
+        IM_CHECK(la::maxelem(la::abs(on_screen().max - before.max)) < 1e-2f);
+
         ctx->MenuClick("View/Flip vertically");
         IM_CHECK_EQ(*hdrview()->action("Flip vertically").p_selected, !orig_v);
+        IM_CHECK(la::maxelem(la::abs(on_screen().min - before.min)) < 1e-2f);
+        IM_CHECK(la::maxelem(la::abs(on_screen().max - before.max)) < 1e-2f);
 
         // restore
         ctx->MenuClick("View/Flip horizontally");
