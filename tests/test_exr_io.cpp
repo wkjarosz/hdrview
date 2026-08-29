@@ -18,6 +18,7 @@
 #include <ImfFrameBuffer.h>
 #include <ImfHeader.h>
 #include <ImfOutputFile.h>
+#include <ImfRationalAttribute.h>
 #include <ImfStdIO.h>
 
 #ifdef HDRVIEW_TEST_OPENEXR_DIR
@@ -105,11 +106,11 @@ TEST_CASE("EXR load respects channel_selector, including selectors matching noth
     SUBCASE("selecting a single channel")
     {
         std::ostringstream out(std::ios::binary);
-        auto                opts = exr_default_save_options(*img);
+        auto               opts = exr_default_save_options(*img);
         save_exr_image(*img, out, "test.exr", &opts);
 
-        std::istringstream    in(out.str(), std::ios::binary);
-        ImageLoadOptions       load_opts;
+        std::istringstream in(out.str(), std::ios::binary);
+        ImageLoadOptions   load_opts;
         load_opts.channel_selector = "R";
         auto reloaded              = load_exr_image(in, "test.exr", load_opts);
 
@@ -146,11 +147,11 @@ TEST_CASE("EXR load respects channel_selector, including selectors matching noth
     SUBCASE("selector matching no channels yields no images")
     {
         std::ostringstream out(std::ios::binary);
-        auto                opts = exr_default_save_options(*img);
+        auto               opts = exr_default_save_options(*img);
         save_exr_image(*img, out, "test.exr", &opts);
 
-        std::istringstream    in(out.str(), std::ios::binary);
-        ImageLoadOptions       load_opts;
+        std::istringstream in(out.str(), std::ios::binary);
+        ImageLoadOptions   load_opts;
         load_opts.channel_selector = "NoSuchChannel";
         auto reloaded              = load_exr_image(in, "test.exr", load_opts);
 
@@ -195,14 +196,14 @@ TEST_CASE("EXR save/load precision depends on the chosen pixel type")
 
     SUBCASE("HALF (default)")
     {
-        auto opts        = exr_default_save_options(*img);
-        opts.pixel_type  = 1; // HALF
-        auto reloaded    = save_and_reload(*img, opts);
+        auto opts       = exr_default_save_options(*img);
+        opts.pixel_type = 1; // HALF
+        auto reloaded   = save_and_reload(*img, opts);
         REQUIRE(reloaded.size() == 1);
         CHECK(reloaded[0]->channels[0].bits_per_sample == 0); //< floating point, so no quantization lattice
         float value = reloaded[0]->channels[0](0, 0);
-        CHECK(value != doctest::Approx(0.1f).epsilon(1e-6));  // not exact
-        CHECK(value == doctest::Approx(0.1f).epsilon(1e-3));  // but close, within half precision
+        CHECK(value != doctest::Approx(0.1f).epsilon(1e-6)); // not exact
+        CHECK(value == doctest::Approx(0.1f).epsilon(1e-3)); // but close, within half precision
     }
 
     SUBCASE("FLOAT")
@@ -262,7 +263,7 @@ TEST_CASE("is_exr_image correctly identifies real EXR bytes and rejects garbage"
     auto img = make_test_image(int2{1, 1});
 
     std::ostringstream out(std::ios::binary);
-    auto                opts = exr_default_save_options(*img);
+    auto               opts = exr_default_save_options(*img);
     save_exr_image(*img, out, "test.exr", &opts);
 
     std::istringstream valid(out.str(), std::ios::binary);
@@ -287,7 +288,7 @@ namespace
 
 std::ifstream open_test_exr(const char *filename)
 {
-    std::string path = std::string(HDRVIEW_TEST_OPENEXR_DIR) + "/" + filename;
+    std::string   path = std::string(HDRVIEW_TEST_OPENEXR_DIR) + "/" + filename;
     std::ifstream file(path, std::ios::binary);
     REQUIRE_MESSAGE(file.good(), "Could not open vendored test EXR: ", path);
     return file;
@@ -302,9 +303,9 @@ TEST_CASE("EXR load splits a real multi-part file into one Image per part, with 
 
     REQUIRE(reloaded.size() == 10);
 
-    std::set<std::string> expected_names = {"rgba_right",        "depth_left",  "forward_left", "whitebarmask_left",
-                                            "rgba_left",         "depth_right", "forward_right", "disparityL",
-                                            "disparityR",        "whitebarmask_right"};
+    std::set<std::string> expected_names = {"rgba_right", "depth_left",        "forward_left",  "whitebarmask_left",
+                                            "rgba_left",  "depth_right",       "forward_right", "disparityL",
+                                            "disparityR", "whitebarmask_right"};
     std::set<std::string> actual_names;
     for (const auto &img : reloaded) actual_names.insert(img->partname);
     CHECK(actual_names == expected_names);
@@ -405,4 +406,40 @@ TEST_CASE("save_exr_image() with default options writes every group, not an empt
     float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
     float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
     for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
+}
+
+TEST_CASE("An EXR rational attribute with a zero denominator does not divide by it")
+{
+    // Imf::Rational is two numbers read out of the file -- an int over an unsigned int -- and nothing in
+    // the format stops the denominator being zero. Framing rates and capture intervals are written this
+    // way, and 0/0 is how some writers spell "not set".
+    const std::string path = (std::filesystem::temp_directory_path() / "hdrview_rational.exr").string();
+
+    {
+        Imf::Header header{4, 4};
+        header.insert("framesPerSecond", Imf::RationalAttribute{Imf::Rational{24, 0}});
+        header.channels().insert("Y", Imf::Channel{Imf::FLOAT});
+
+        std::vector<float> pixels(16, 0.5f);
+        Imf::OutputFile    out{path.c_str(), header};
+        Imf::FrameBuffer   fb;
+        fb.insert("Y", Imf::Slice{Imf::FLOAT, (char *)pixels.data(), sizeof(float), sizeof(float) * 4});
+        out.setFrameBuffer(fb);
+        out.writePixels(4);
+    }
+
+    std::ifstream is{path, std::ios::binary};
+    REQUIRE(is);
+    std::vector<ImagePtr> images;
+    CHECK_NOTHROW(images = load_image(is, path));
+    REQUIRE(images.size() == 1);
+
+    // And the attribute is still reported, with both halves intact rather than a quotient.
+    const json &header_json = images[0]->metadata["header"];
+    REQUIRE(header_json.contains("framesPerSecond"));
+    const json &fps = header_json["framesPerSecond"]["value"];
+    CHECK(fps["numerator"] == 24);
+    CHECK(fps["denominator"] == 0);
+
+    std::filesystem::remove(path);
 }
