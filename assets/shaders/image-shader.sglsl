@@ -186,7 +186,11 @@ vec4 isolate(vec4 rgba, int straight_alpha)
 // Applied to each image separately, before any blending: an isolated channel is then undone with its own
 // file's alpha rather than a composite's, and comparison blend modes operate on the values being compared
 // instead of on premultiplied ones.
-vec4 choose_channel(vec4 rgba, int straight_alpha, vec3 yw)
+//
+// Runs after the gamut conversion, so Channels_Y weighs with sRGB's luminance weights, not the source
+// gamut's: those belong to the YC decode above, which is the one step that still sees the file's own
+// primaries.
+vec4 choose_channel(vec4 rgba, int straight_alpha)
 {
     switch (fsp.channel)
     {
@@ -196,7 +200,7 @@ vec4 choose_channel(vec4 rgba, int straight_alpha, vec3 yw)
     case Channels_Green: return isolate(rgba.ggga, straight_alpha);
     case Channels_Blue: return isolate(rgba.bbba, straight_alpha);
     case Channels_Alpha: return vec4(rgba.aaa, 1.0);
-    case Channels_Y: return vec4(vec3(dot(rgba.rgb, yw)), rgba.a);
+    case Channels_Y: return vec4(vec3(RGBToY(rgba.rgb, sRGB_Yw)), rgba.a);
     }
     return rgba;
 }
@@ -265,7 +269,7 @@ void main()
         value.xyz = YC_to_RGB(value.xyz, fsp.primary_yw);
 
     value = fsp.primary_M_to_sRGB * value;
-    value = choose_channel(value, fsp.primary_straight_alpha, fsp.primary_yw);
+    value = choose_channel(value, fsp.primary_straight_alpha);
 
     if (fsp.has_reference != 0)
     {
@@ -278,7 +282,7 @@ void main()
             reference_val.xyz = YC_to_RGB(reference_val.xyz, fsp.secondary_yw);
 
         reference_val = fsp.secondary_M_to_sRGB * reference_val;
-        reference_val = choose_channel(reference_val, fsp.secondary_straight_alpha, fsp.secondary_yw);
+        reference_val = choose_channel(reference_val, fsp.secondary_straight_alpha);
 
         value = blend(value, reference_val);
     }
