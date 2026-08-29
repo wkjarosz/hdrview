@@ -830,7 +830,13 @@ void convert_primaries(float *pixels, int3 size, const Chromaticities &src, cons
 Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap);
 inline Color4 tonemap(const Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
-    return Color4(tonemap(color.xyz(), gamma, tonemap_mode, colormap, reverse_colormap), color.w);
+    Color3 rgb = tonemap(color.xyz(), gamma, tonemap_mode, colormap, reverse_colormap);
+    // A colormap lookup answers with a straight color, while everything around it is premultiplied, so the
+    // two false-color modes premultiply their result -- the gamma curve, applied to values that already
+    // are, does not. Mirrors tonemap() in assets/shaders/image-shader.sglsl.
+    if (tonemap_mode == Tonemap_FalseColor || tonemap_mode == Tonemap_PositiveNegative)
+        rgb *= color.w;
+    return Color4(rgb, color.w);
 }
 
 float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode);

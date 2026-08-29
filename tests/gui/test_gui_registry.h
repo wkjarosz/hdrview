@@ -11,6 +11,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine);
 void RegisterTests_ImageIO(ImGuiTestEngine *engine);
 void RegisterTests_View(ImGuiTestEngine *engine);
 void RegisterTests_Viewport(ImGuiTestEngine *engine);
+void RegisterTests_Display(ImGuiTestEngine *engine);
 void RegisterTests_Tools(ImGuiTestEngine *engine);
 void RegisterTests_Stats(ImGuiTestEngine *engine);
 void RegisterTests_Filtering(ImGuiTestEngine *engine);
@@ -27,6 +28,7 @@ inline void RegisterAllGuiTests(ImGuiTestEngine *engine)
     RegisterTests_ImageIO(engine);
     RegisterTests_View(engine);
     RegisterTests_Viewport(engine);
+    RegisterTests_Display(engine);
     RegisterTests_Tools(engine);
     RegisterTests_Stats(engine);
     RegisterTests_Filtering(engine);

@@ -261,6 +261,7 @@ public:
     float      &offset() { return m_offset; }
     Tonemap_   &tonemap() { return m_tonemap; }
     Colormap_   colormap() { return m_colormaps[m_colormap_index]; }
+    bool       &reverse_colormap() { return m_reverse_colormap; }
     BlendMode_ &blend_mode() { return m_blend_mode; }
     bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
     bool       &dithering_on() { return m_dither; }
