@@ -236,4 +236,78 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         std::error_code ec;
         fs::remove_all(dir, ec);
     };
+
+    /*
+        Two reloads in flight for one image. The watch loop schedules a reload whenever a file's timestamp
+        moves, and it polls four times a second, so a file being written repeatedly -- which is exactly what
+        a watched render folder is -- outruns the load. "Reload all images" pressed twice does the same.
+
+        The arrival is matched to its slot by pointer identity, so once the first reload has replaced the
+        image, the second no longer finds the object it was told to replace.
+    */
+    t           = IM_REGISTER_TEST(engine, "loader", "overlapping_reloads_replace_rather_than_accumulate");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        const fs::path dir  = make_temp_dir("reload");
+        const fs::path file = place_fixture(dir, "a.png");
+
+        reset_images(ctx);
+        load_and_wait(ctx, file);
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+
+        auto original = hdrview()->image(0);
+        IM_CHECK(original != nullptr);
+
+        // Both scheduled before either can finish, the way the watch loop schedules them.
+        hdrview()->reload_image(original);
+        hdrview()->reload_image(original);
+        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+
+        // One file, one entry -- whichever reload landed last.
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+        IM_CHECK(hdrview()->image(0) != original);
+        IM_CHECK(hdrview()->image(0)->path == fs::path(file));
+
+        // However many pile up, not just two.
+        auto current = hdrview()->image(0);
+        for (int i = 0; i < 4; ++i) hdrview()->reload_image(current);
+        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+        IM_CHECK(hdrview()->image(0)->path == fs::path(file));
+
+        reset_images(ctx);
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+    };
+
+    /*
+        The same identity matching, in the other direction: an image closed while its reload was still in
+        flight. The arrival has a slot to fill that no longer exists, and appending it puts the image the
+        user just closed back in the list.
+    */
+    t           = IM_REGISTER_TEST(engine, "loader", "closing_an_image_mid_reload_does_not_resurrect_it");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        const fs::path dir  = make_temp_dir("closed_reload");
+        const fs::path file = place_fixture(dir, "a.png");
+
+        reset_images(ctx);
+        load_and_wait(ctx, file);
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+
+        hdrview()->reload_image(hdrview()->image(0));
+        hdrview()->close_image(0);
+        IM_CHECK_EQ(hdrview()->num_images(), 0);
+
+        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), 0);
+
+        // An ordinary load still adds, so this is not refusing arrivals in general.
+        load_and_wait(ctx, file);
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+
+        reset_images(ctx);
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+    };
 }

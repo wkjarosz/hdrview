@@ -663,45 +663,69 @@ void BackgroundImageLoader::remove_watched_directories_if(const std::function<bo
 
 void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback)
 {
-    // move elements matching the criterion to the end of the vector, and then erase all matching elements
-    pending_images.erase(
-        std::remove_if(pending_images.begin(), pending_images.end(),
-                       [this, &callback](shared_ptr<PendingImages> p)
-                       {
-                           // if the computation isn't ready, we return false to indicate that we can't
-                           // yet remove this entry
-                           if (!p->computation.ready())
-                               return false;
+    // Take the finished loads out of the pending list before running any callbacks: the callback reaches
+    // back into the app, which is free to schedule further loads, and nothing should be walking
+    // pending_images while that happens.
+    vector<shared_ptr<PendingImages>> finished;
+    for (auto it = pending_images.begin(); it != pending_images.end();)
+    {
+        if ((*it)->computation.ready())
+        {
+            finished.push_back(std::move(*it));
+            it = pending_images.erase(it);
+        }
+        else
+            ++it;
+    }
 
-                           // finalize the computation
-                           try
-                           {
-                               p->computation.wait();
-                           }
-                           catch (const std::exception &e)
-                           {
-                               spdlog::error("Could not load image \"{}\": {}.", p->filename, e.what());
-                               return true;
-                           }
+    for (auto &p : finished)
+    {
+        // finalize the computation
+        try
+        {
+            p->computation.wait();
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::error("Could not load image \"{}\": {}.", p->filename, e.what());
+            continue;
+        }
 
-                           // once the async computation is ready, we can access the resulting
-                           // images and return true to report that we can remove this entry from
-                           // pending_images
-                           if (p->images.empty())
-                               return true;
+        if (p->images.empty())
+            continue;
 
-                           for (size_t i = 0; i < p->images.size(); ++i)
-                               callback(p->images[i], p->to_replace,
-                                        p->should_select && i == 0); // i == 0 to always select the first of the
-                                                                     // possibly multiple 'should_select' images
+        // i == 0 both selects the first of possibly several images and claims the slot being replaced.
+        // Exactly one arrival can take a replaced image's place; any others are ordinary additions. That
+        // matters because the app reads "asked to replace, but the target is gone" as "the image was
+        // closed while loading" and drops the arrival -- a reading only this split makes safe. A reload
+        // happens to yield a single image today, since it carries the replaced image's channel selector
+        // and so re-reads only that part of a multi-part file, but nothing here should depend on that.
+        for (size_t i = 0; i < p->images.size(); ++i)
+            callback(p->images[i], i == 0 ? p->to_replace : ImagePtr{}, p->should_select && i == 0);
 
-                           // if loading was successful, add the filename to the recent list
-                           if (p->add_to_recent)
-                               add_recent_file(p->filename);
+        // if loading was successful, add the filename to the recent list
+        if (p->add_to_recent)
+            add_recent_file(p->filename);
 
-                           return true;
-                       }),
-        pending_images.end());
+        // Another reload of the same image can still be in flight: the watch loop polls four times a
+        // second and schedules one on every timestamp change, so a file being written repeatedly -- a
+        // watched render folder, say -- outruns the load, and "Reload all images" pressed twice does the
+        // same. Each was told to replace an image that has now been replaced itself, and the arrival is
+        // matched to its slot by identity, so without this the later one finds nothing to replace and
+        // arrives as a second copy of the same file. Point it at whatever took that image's place.
+        if (p->to_replace)
+        {
+            auto replacement = p->images.front();
+            auto retarget    = [&](vector<shared_ptr<PendingImages>> &v)
+            {
+                for (auto &q : v)
+                    if (q && q != p && q->to_replace == p->to_replace)
+                        q->to_replace = replacement;
+            };
+            retarget(finished);
+            retarget(pending_images);
+        }
+    }
 }
 
 void BackgroundImageLoader::load_new_and_modified_files()
