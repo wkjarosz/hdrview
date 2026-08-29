@@ -14,7 +14,7 @@
     here saves an image, reads it back, and compares against what Image::rgba_pixel() shows for it,
     which is the definition of what the file should have held.
 
-    The comparison is on straight (unpremultiplied) colour, so a format that cannot store alpha is
+    The comparison is on straight (unpremultiplied) color, so a format that cannot store alpha is
     judged on the same footing as one that can, and alpha itself is checked only where it survives.
 */
 
@@ -177,7 +177,7 @@ ImagePtr make_image(const Layout &layout, float alpha)
     return img;
 }
 
-//! Colour with the premultiply divided back out, which is comparable whether or not alpha survived.
+//! Color with the premultiply divided back out, which is comparable whether or not alpha survived.
 float3 straight_rgb(const float4 &premultiplied)
 {
     const float a = std::max(1e-4f, premultiplied[3]);
@@ -255,11 +255,11 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
 
             // Two cells do not yet agree with the viewport, for reasons that are open questions about
             // what the file should hold rather than defects with an obvious fix. They still run this far,
-            // so a crash or a failed decode would be caught; only the colour comparison is skipped.
+            // so a crash or a failed decode would be caught; only the color comparison is skipped.
             //
             //  - Any writer storing two channels natively puts a U,V pair in a gray+alpha container, so V
             //    becomes transparency and the reload displays gray. The writers that cannot store two
-            //    channels pad to RGB instead, which is what the viewport shows. The two behaviours
+            //    channels pad to RGB instead, which is what the viewport shows. The two behaviors
             //    disagree and neither is obviously right for a pair that is chroma, not coverage.
             //  - PFM's own spec has no four-channel form. HDRView writes one as an extension, with alpha
             //    divided back out, but load_pfm_image() does not read the fourth channel back as alpha --
@@ -287,7 +287,7 @@ TEST_CASE("every writer either converts a wide-gamut image to sRGB or records th
 {
     // as_interleaved() converts to sRGB unless a writer opts out, and a writer that opts out has to say
     // which primaries its samples are in. Doing neither leaves a file that reads back as sRGB and shows
-    // the wrong colours, which is what TIFF did until it started writing WhitePoint and
+    // the wrong colors, which is what TIFF did until it started writing WhitePoint and
     // PrimaryChromaticities.
     const Chromaticities bt2020{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
 

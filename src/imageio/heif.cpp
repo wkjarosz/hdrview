@@ -465,7 +465,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                         bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
         }
 
-        // Alpha is not a colour: it carries neither a transfer function nor primaries, so it is copied
+        // Alpha is not a color: it carries neither a transfer function nor primaries, so it is copied
         // through as decoded. Only the monochrome path reaches this with a separate alpha plane -- the
         // interleaved paths hand alpha to linearize_pixels(), which already leaves the last channel alone.
         if (out_planes[p] != heif_channel_Alpha)
@@ -1105,7 +1105,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             keep_alpha = false;
         }
 
-        // HEIF stores one or three colour channels, each optionally with alpha. A group carrying alpha
+        // HEIF stores one or three color channels, each optionally with alpha. A group carrying alpha
         // loses it when it cannot be kept; a two-channel U,V pair carries no alpha and has no
         // one-channel reading, so it pads out to RGB with a zero third channel, as the viewport draws it.
         const int n_out = (group_alpha && !keep_alpha) ? n - 1 : (n == 2 && !group_alpha ? 3 : n);
@@ -1127,7 +1127,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             throw std::invalid_argument("HEIF/AVIF output supports at most 4 channels");
 
         // One or two channels is a gray image, which HEIF stores as 4:0:0 monochrome rather than as three
-        // equal colour planes -- the same form load_heif_image() already decodes.
+        // equal color planes -- the same form load_heif_image() already decodes.
         const bool mono      = n <= 2;
         const bool has_alpha = n == 2 || n == 4;
 
