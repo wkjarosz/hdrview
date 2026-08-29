@@ -261,7 +261,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         case Format_HEIF:
         case Format_AVIF:
         {
-            auto opts = heif_parameters_gui(save_format == Format_AVIF ? HEIFCodec::AV1 : HEIFCodec::Any);
+            auto opts = heif_parameters_gui(save_format == Format_AVIF ? HEIFCodec::AV1 : HEIFCodec::HEIF);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_heif_image(img, os, filename, opts); };
         }

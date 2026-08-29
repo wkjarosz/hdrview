@@ -7,6 +7,8 @@
 #pragma once
 
 #include <istream>
+#include <string>
+#include <vector>
 
 #include "fwd.h"
 #include "image_loader.h"
@@ -27,14 +29,22 @@ std::vector<ImagePtr> load_heif_image(std::istream &is, std::string_view filenam
 */
 enum class HEIFCodec
 {
-    Any = 0, //!< whatever is available, preferring HEVC
-    HEVC,    //!< .heif / .heic
-    AV1,     //!< .avif
+    Any = 0, //!< whatever the build has, preferring HEVC and then AV1; the default for non-GUI callers
+    HEIF,    //!< any codec a .heif may carry -- HEVC, JPEG, JPEG 2000 -- but not AV1
+    HEVC,    //!< HEVC specifically
+    AV1,     //!< AV1, which libheif brands 'avif' whatever the file is named, so it is AVIF's alone
 };
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f, int quality = 95,
                      bool lossless = false, bool use_alpha = true, HEIFCodec codec = HEIFCodec::Any,
                      TransferFunction tf = TransferFunction::sRGB);
+
+//! Names of the encoders offered for `codec`, in the order the save dialog lists them.
+/*!
+    Empty when the libheif build has none, which is a real possibility: distributions package each codec
+    separately, so a system may be able to read HEIF without being able to write it.
+*/
+std::vector<std::string> heif_encoder_names(HEIFCodec codec);
 
 struct HEIFSaveOptions;
 //! Draws the options for `codec`, listing only the encoders that implement it.

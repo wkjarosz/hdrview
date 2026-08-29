@@ -40,6 +40,8 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
+std::vector<std::string> heif_encoder_names(HEIFCodec) { return {}; }
+
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 
 #else
@@ -58,6 +60,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <map>
 #include <mutex>
 
 #include <libheif/heif.h>
@@ -120,30 +123,31 @@ static void ensure_heif_initialized()
 //! JPEG has no alpha channel; every other codec HEIF can carry does.
 static bool codec_stores_alpha(heif_compression_format format) { return format != heif_compression_JPEG; }
 
-static heif_compression_format to_heif_format(HEIFCodec codec)
+//! Whether `format` may be written under `codec`.
+/*!
+    An AV1 image item reports the 'avif' brand, and libheif makes the primary item's brand the file's
+    major brand -- so an AV1 payload is an AVIF whatever the file is named. AV1 is therefore AVIF's
+    alone, and the HEIF entry offers the codecs a .heif may actually carry.
+*/
+static bool codec_admits(HEIFCodec codec, heif_compression_format format)
 {
     switch (codec)
     {
-    case HEIFCodec::HEVC: return heif_compression_HEVC;
-    case HEIFCodec::AV1: return heif_compression_AV1;
-    default: return heif_compression_undefined;
+    case HEIFCodec::HEVC: return format == heif_compression_HEVC;
+    case HEIFCodec::AV1: return format == heif_compression_AV1;
+    case HEIFCodec::HEIF: return format != heif_compression_AV1;
+    default: return true;
     }
 }
 
-//! Indices into s_encoders whose codec matches `codec`, in the order libheif reports them.
+//! Indices into s_encoders whose codec `codec` admits, in the order libheif reports them.
 static std::vector<size_t> encoders_for(HEIFCodec codec)
 {
-    const auto          wanted = to_heif_format(codec);
     std::vector<size_t> result;
     for (size_t i = 0; i < s_encoder_descriptors.size(); ++i)
-    {
-        if (!s_encoders[i])
-            continue;
-        if (wanted != heif_compression_undefined &&
-            heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i]) != wanted)
-            continue;
-        result.push_back(i);
-    }
+        if (s_encoders[i] &&
+            codec_admits(codec, heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i])))
+            result.push_back(i);
     return result;
 }
 
@@ -163,8 +167,8 @@ static size_t default_encoder_for(HEIFCodec codec, bool need_alpha)
         return nullptr;
     };
 
-    // "any" means a .heif, whose conventional codec is HEVC, with AV1 the next best thing
-    if (codec == HEIFCodec::Any)
+    // a .heif conventionally holds HEVC, and a caller that named no codec takes AV1 as the next best
+    if (codec == HEIFCodec::Any || codec == HEIFCodec::HEIF)
         for (auto format : {heif_compression_HEVC, heif_compression_AV1})
             if (auto *i = first_matching(format))
                 return *i;
@@ -1263,16 +1267,30 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 // GUI parameter function
+std::vector<std::string> heif_encoder_names(HEIFCodec codec)
+{
+    init_heif_supported_formats();
+
+    std::vector<std::string> names;
+    for (size_t i : encoders_for(codec)) names.emplace_back(heif_encoder_descriptor_get_name(s_encoder_descriptors[i]));
+    return names;
+}
+
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
 {
     init_heif_supported_formats();
 
     // The dialog's format list already chose the codec, so the combo below picks only among the encoders
-    // implementing it -- and a selection carried over from the other entry is replaced rather than kept.
+    // implementing it. Each entry remembers its own choice: switching to AVIF and back must not leave
+    // HEIF on the AV1 encoder AVIF had to move to, nor the other way round.
+    static std::map<HEIFCodec, size_t> s_encoder_choice;
+
     s_opts.codec          = codec;
     const auto candidates = encoders_for(codec);
-    if (std::find(candidates.begin(), candidates.end(), s_opts.encoder) == candidates.end())
-        s_opts.encoder = default_encoder_for(codec, s_opts.use_alpha);
+    auto      &remembered = s_encoder_choice[codec];
+    if (std::find(candidates.begin(), candidates.end(), remembered) == candidates.end())
+        remembered = default_encoder_for(codec, s_opts.use_alpha);
+    s_opts.encoder = remembered;
 
     if (ImGui::PE::Begin("HEIF/AVIF Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
@@ -1342,8 +1360,13 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         {
+            // A build often has just one encoder for a given codec -- AV1 has three implementations in
+            // libheif but distributions package them separately -- and a dropdown offering one choice is
+            // only a dropdown by accident. Then it is simply named.
             if (candidates.empty())
                 ImGui::TextUnformatted("No encoder available");
+            else if (candidates.size() == 1)
+                ImGui::TextUnformatted(heif_encoder_descriptor_get_name(s_encoder_descriptors[candidates.front()]));
             else if (ImGui::BeginCombo("##Encoder",
                                        heif_encoder_descriptor_get_id_name(s_encoder_descriptors[s_opts.encoder])))
             {
@@ -1351,7 +1374,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
                 {
                     bool selected = (s_opts.encoder == i);
                     if (ImGui::Selectable(heif_encoder_descriptor_get_name(s_encoder_descriptors[i]), selected))
-                        s_opts.encoder = i;
+                        s_opts.encoder = remembered = i;
                     if (selected)
                         ImGui::SetItemDefaultFocus();
                 }
