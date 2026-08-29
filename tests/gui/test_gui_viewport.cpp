@@ -197,7 +197,7 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
 
                     // The same thing in the terms a user would check it in: the pixel reported half a pixel
                     // inside the leading corner of the drawn image. Flipped horizontally, the leftmost
-                    // column on screen is the image's rightmost, not its neighbour.
+                    // column on screen is the image's rightmost, not its neighbor.
                     const Box2i  dw = img->data_window;
                     const Box2f  drawn{expected_vp_pos(float2{dw.min}), expected_vp_pos(float2{dw.max})};
                     const Box2f  rect = Box2f{drawn}.make_valid();
