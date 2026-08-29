@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring> // for memcmp
+#include <cstring>  // for memcmp
 #include <iterator> // for std::size
 #include <libexif/exif-byte-order.h>
 #include <libexif/exif-data.h>
@@ -582,7 +582,19 @@ json Exif::to_json() const
             }
 
             spdlog::debug("Exif::to_json: Processing entry {} (tag 0x{:04x}) in IFD {}", i, (int)entry->tag, ifd_idx);
-            ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
+
+            // One tag is not worth the rest of them. entry_to_json() names a tag's value by reading it back
+            // out of JSON as the scalar the tag number implies -- at forty-odd sites, none of which the file
+            // is obliged to agree with -- and the throw would otherwise leave this loop, abandoning every
+            // tag in the image including the ones already decoded.
+            try
+            {
+                ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
+            }
+            catch (const std::exception &e)
+            {
+                spdlog::warn("Skipping EXIF tag 0x{:04x} in {}: {}.", (int)entry->tag, ExifIfdTable[ifd_idx], e.what());
+            }
         }
     }
 
