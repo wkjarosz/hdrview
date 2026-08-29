@@ -199,12 +199,11 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
     os.write((const char *)data, (std::streamsize)((size_t)width * height * num_channels * sizeof(float)));
 }
 
-void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction::Type_ tf,
-                    float gamma)
+void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction tf)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<float>(&w, &h, &n, gain, tf, gamma);
+    auto  pixels = img.as_interleaved<float>(&w, &h, &n, gain, tf);
     write_pfm_image(os, filename, w, h, n, pixels.get());
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
