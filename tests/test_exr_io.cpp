@@ -428,10 +428,14 @@ TEST_CASE("An EXR rational attribute with a zero denominator does not divide by 
         out.writePixels(4);
     }
 
-    std::ifstream is{path, std::ios::binary};
-    REQUIRE(is);
+    // Scoped like the writer above: Windows refuses to delete a file that is still open, so the stream
+    // has to be closed before the remove() at the end of the test.
     std::vector<ImagePtr> images;
-    CHECK_NOTHROW(images = load_image(is, path));
+    {
+        std::ifstream is{path, std::ios::binary};
+        REQUIRE(is);
+        CHECK_NOTHROW(images = load_image(is, path));
+    }
     REQUIRE(images.size() == 1);
 
     // And the attribute is still reported, with both halves intact rather than a quotient.
