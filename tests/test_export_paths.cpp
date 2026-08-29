@@ -45,21 +45,28 @@ ImagePtr make_named(std::initializer_list<const char *> names, int2 size = int2{
 
 } // namespace
 
-TEST_CASE("save_pfm_image()'s explicit-parameter overload applies its transfer function")
+TEST_CASE("A luminance-chroma group is converted to RGB on export, as the viewport shows it")
 {
-    // The declaration and the definition had drifted apart: the header advertised a TransferFunction
-    // where the definition still took (Type_, gamma), so this overload did not link, and the stray
-    // gamma landed in as_interleaved()'s dither flag.
-    auto               img = make_named({"R", "G", "B"});
-    std::ostringstream lin(std::ios::binary), srgb(std::ios::binary);
-    REQUIRE_NOTHROW(save_pfm_image(*img, lin, "test.pfm", 1.f, TransferFunction::Linear));
-    REQUIRE_NOTHROW(save_pfm_image(*img, srgb, "test.pfm", 1.f, TransferFunction::sRGB));
-    CHECK(lin.str() != srgb.str());
+    // OpenEXR writes RY,Y,BY for luminance-chroma images; the viewport converts them with YC_to_RGB()
+    // (see Image::rgba_pixel), and an exported file has to agree or it shows different colours.
+    for (auto names : {std::initializer_list<const char *>{"RY", "Y", "BY"},
+                       std::initializer_list<const char *>{"RY", "Y", "BY", "A"}})
+    {
+        auto img = make_named(names);
+        REQUIRE((img->groups[img->selected_group].type == ChannelGroup::YC_Channels ||
+                 img->groups[img->selected_group].type == ChannelGroup::YCA_Channels));
 
-    std::istringstream in(lin.str(), std::ios::binary);
-    auto               reloaded = load_pfm_image(in, "test.pfm");
-    REQUIRE(reloaded.size() == 1);
-    CHECK(reloaded[0]->channels[0](1, 0) == doctest::Approx(img->channels[0](1, 0)).epsilon(1e-5));
+        int  w = 0, h = 0, n = 0;
+        auto px = img->as_interleaved<float>(&w, &h, &n, 1.f, TransferFunction::Linear, /*dither*/ false,
+                                             /*unpremultiply*/ false, /*convert_to_sRGB*/ true);
+
+        // the viewport's own value for the same pixel, which does not unpremultiply either
+        float4 expected = img->rgba_pixel(int2{1, 0}, Target_Primary);
+        for (int c = 0; c < 3; ++c) CHECK(px[n * 1 + c] == doctest::Approx(expected[c]).epsilon(1e-5));
+
+        // and the raw stored triple is *not* what gets written
+        CHECK(px[n * 1 + 0] != doctest::Approx(img->channels[0](1, 0)).epsilon(1e-5));
+    }
 }
 
 TEST_CASE("save_exr_image() with default options writes every group, not an empty channel list")
@@ -81,26 +88,6 @@ TEST_CASE("save_exr_image() with default options writes every group, not an empt
     float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
     for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
 }
-
-#if HDRVIEW_ENABLE_LIBHEIF
-TEST_CASE("save_heif_image()'s explicit-parameter overload reports a missing encoder instead of crashing")
-{
-    // The encoder table is filled lazily by heif_parameters_gui(). A non-GUI caller found it empty,
-    // and clamping an index against a size of zero yields SIZE_MAX.
-    auto               img = make_named({"R", "G", "B"});
-    std::ostringstream out(std::ios::binary);
-    // Either it encodes, or it says there is no encoder -- but it must not fault.
-    try
-    {
-        save_heif_image(*img, out, "test.heif", 1.f, 90, false, true, 0, TransferFunction::sRGB);
-        CHECK(out.str().size() > 0);
-    }
-    catch (const std::exception &e)
-    {
-        CHECK(std::string(e.what()).find("encoder") != std::string::npos);
-    }
-}
-#endif
 
 #if HDRVIEW_ENABLE_LIBJPEG
 TEST_CASE("Saving a gray+alpha group as JPEG writes a grayscale file instead of terminating")
@@ -159,6 +146,43 @@ TEST_CASE("JPEG-XL writes grayscale and gray+alpha groups")
         float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
         float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
         for (int c = 0; c < 4; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(2e-3));
+    }
+}
+#endif
+
+TEST_CASE("save_pfm_image()'s explicit-parameter overload applies its transfer function")
+{
+    // The declaration and the definition had drifted apart: the header advertised a TransferFunction
+    // where the definition still took (Type_, gamma), so this overload did not link, and the stray
+    // gamma landed in as_interleaved()'s dither flag.
+    auto               img = make_named({"R", "G", "B"});
+    std::ostringstream lin(std::ios::binary), srgb(std::ios::binary);
+    REQUIRE_NOTHROW(save_pfm_image(*img, lin, "test.pfm", 1.f, TransferFunction::Linear));
+    REQUIRE_NOTHROW(save_pfm_image(*img, srgb, "test.pfm", 1.f, TransferFunction::sRGB));
+    CHECK(lin.str() != srgb.str());
+
+    std::istringstream in(lin.str(), std::ios::binary);
+    auto               reloaded = load_pfm_image(in, "test.pfm");
+    REQUIRE(reloaded.size() == 1);
+    CHECK(reloaded[0]->channels[0](1, 0) == doctest::Approx(img->channels[0](1, 0)).epsilon(1e-5));
+}
+
+#if HDRVIEW_ENABLE_LIBHEIF
+TEST_CASE("save_heif_image()'s explicit-parameter overload reports a missing encoder instead of crashing")
+{
+    // The encoder table is filled lazily by heif_parameters_gui(). A non-GUI caller found it empty,
+    // and clamping an index against a size of zero yields SIZE_MAX.
+    auto               img = make_named({"R", "G", "B"});
+    std::ostringstream out(std::ios::binary);
+    // Either it encodes, or it says there is no encoder -- but it must not fault.
+    try
+    {
+        save_heif_image(*img, out, "test.heif", 1.f, 90, false, true, 0, TransferFunction::sRGB);
+        CHECK(out.str().size() > 0);
+    }
+    catch (const std::exception &e)
+    {
+        CHECK(std::string(e.what()).find("encoder") != std::string::npos);
     }
 }
 #endif
