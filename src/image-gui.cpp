@@ -322,7 +322,7 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     const float near_tol = 0.02f * (x_hi - x_lo);
 
     // A leg stops short of the boundary it marks, and short of the axis line it turns towards. The first
-    // keeps neighbouring brackets apart where they meet -- one band's upper boundary is the next one's
+    // keeps neighboring brackets apart where they meet -- one band's upper boundary is the next one's
     // lower -- so the two read as separate spans rather than one fused rail. The second keeps the bracket
     // sitting above the plot instead of welded to its edge.
     const float leg_inset = 2.f;
@@ -782,7 +782,7 @@ void Image::draw_histogram()
         {
             ceiling_x = display_to_plot(headroom);
             draw_display_ceiling_line(ceiling_x, hdr_dimmed);
-            // Grey rather than white: this is the display telling us where it stops, not a control the
+            // Gray rather than white: this is the display telling us where it stops, not a control the
             // user set, and it should not read as a third handle alongside the black and white points.
             ImPlot::TagX(ceiling_x, ImVec4(0.6f, 0.6f, 0.6f, hdr_dimmed ? unreachable_alpha : 1.f), "%.3gx", headroom);
         }

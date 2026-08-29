@@ -823,7 +823,7 @@ struct TransferSignalling
     bool   srgb_chunk     = false; ///< the sRGB chunk describes it, if the primaries are sRGB's too
 };
 
-TransferSignalling transfer_signalling(TransferFunction tf)
+TransferSignalling transfer_signaling(TransferFunction tf)
 {
     switch (tf.type)
     {
@@ -949,17 +949,17 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, flo
     // and a reader assumes sRGB), or unrecognized (< 0, where the pixels were converted to sRGB above). A
     // genuinely wide gamut -- BT.2020, Display P3 -- gets cHRM and gAMA instead.
     const bool primaries_are_srgb = cicp_primaries < 0 || cicp_primaries == 1 || cicp_primaries == 2;
-    const auto signalling         = transfer_signalling(tf);
+    const auto signaling          = transfer_signaling(tf);
 
-    if (signalling.srgb_chunk && primaries_are_srgb)
+    if (signaling.srgb_chunk && primaries_are_srgb)
         png_set_sRGB(png_ptr, info_ptr.get(), PNG_sRGB_INTENT_PERCEPTUAL);
 
-    if (signalling.file_gamma > 0.0)
+    if (signaling.file_gamma > 0.0)
     {
-        png_set_gAMA(png_ptr, info_ptr.get(), signalling.file_gamma);
-        if (!signalling.gamma_is_exact)
+        png_set_gAMA(png_ptr, info_ptr.get(), signaling.file_gamma);
+        if (!signaling.gamma_is_exact)
             spdlog::debug("PNG: approximating the {} curve as gAMA {:.5f} for readers that ignore cICP",
-                          transfer_function_name(tf), signalling.file_gamma);
+                          transfer_function_name(tf), signaling.file_gamma);
     }
     else if (!k_can_write_cicp)
         // Writing the file regardless would encode the pixels with this curve while recording no curve at
@@ -1055,7 +1055,7 @@ PNGSaveOptions *png_parameters_gui()
     // How faithfully the chosen curve can be recorded, said here rather than only in the log after the fact:
     // this is the moment the user can still pick a different curve or a different format. The classification
     // is the writer's own, so the two cannot disagree.
-    if (const auto signalling = transfer_signalling(s_opts.tf); signalling.file_gamma <= 0.0)
+    if (const auto signaling = transfer_signaling(s_opts.tf); signaling.file_gamma <= 0.0)
     {
         const string name = transfer_function_name(s_opts.tf);
         const string note =

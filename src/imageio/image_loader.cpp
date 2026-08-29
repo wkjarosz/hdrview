@@ -926,7 +926,7 @@ void draw_load_image_options_dialog(bool &open)
             ImGui::Tooltip("A gain-mapped file holds a base rendition plus a map, and the image above is the two "
                            "combined. With this on, both are kept as their own \"base\" and \"gainmap\" channel "
                            "groups, so everything in the file is loaded rather than only the result.\n\nCosts "
-                           "roughly 75% more memory for a colour image with a single-channel map.");
+                           "roughly 75% more memory for a color image with a single-channel map.");
         }
 
         ImGui::Spacing();

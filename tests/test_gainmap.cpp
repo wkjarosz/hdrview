@@ -187,7 +187,7 @@ TEST_CASE("What the file stores is kept alongside what is built from it")
         REQUIRE(g >= 0);
         REQUIRE(b >= 0);
 
-        // The colour channels were brightened; base.* still reads what the file held.
+        // The color channels were brightened; base.* still reads what the file held.
         CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * std::exp2(1.8f)));
         CHECK(img->channels[r](0, 0) == doctest::Approx(0.25f));
         CHECK(img->channels[g](3, 2) == doctest::Approx(0.25f));
