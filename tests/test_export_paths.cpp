@@ -162,3 +162,97 @@ TEST_CASE("JPEG-XL writes grayscale and gray+alpha groups")
     }
 }
 #endif
+
+namespace
+{
+
+// A 4x4 8-bit RGB baseline TIFF carrying a TransferFunction tag (tag 301). TIFF sizes that curve at
+// 2^BitsPerSample entries -- 256 here -- so a reader that indexes it over the full 16-bit range runs
+// far off the end of it. The curve written is the identity, which makes a correct decode recover the
+// stored samples exactly.
+std::string tiff_with_transfer_function(std::array<uint8_t, 3> pixel_1_0)
+{
+    std::string out;
+    auto        u16 = [&out](uint16_t v)
+    {
+        out.push_back(char(v & 0xff));
+        out.push_back(char(v >> 8));
+    };
+    auto u32 = [&out](uint32_t v)
+    {
+        for (int i = 0; i < 4; ++i) out.push_back(char((v >> (8 * i)) & 0xff));
+    };
+
+    out += "II"; // little-endian
+    u16(42);     // magic
+    const size_t ifd_offset_pos = out.size();
+    u32(0); // patched below
+
+    const uint32_t pixels_off = (uint32_t)out.size();
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+            for (int c = 0; c < 3; ++c) out.push_back(char((x == 1 && y == 0) ? pixel_1_0[c] : uint8_t(0)));
+
+    const uint32_t bps_off = (uint32_t)out.size();
+    for (int i = 0; i < 3; ++i) u16(8);
+
+    const uint32_t lut_off = (uint32_t)out.size();
+    for (int c = 0; c < 3; ++c)
+        for (int i = 0; i < 256; ++i) u16(uint16_t(i * 257)); // identity, 8-bit index to 16-bit value
+
+    const uint32_t ifd_off = (uint32_t)out.size();
+    struct Entry
+    {
+        uint16_t tag, type;
+        uint32_t count, value;
+    };
+    const Entry entries[] = {
+        {256, 3, 1, 4},          // ImageWidth
+        {257, 3, 1, 4},          // ImageLength
+        {258, 3, 3, bps_off},    // BitsPerSample
+        {259, 3, 1, 1},          // Compression: none
+        {262, 3, 1, 2},          // Photometric: RGB
+        {273, 4, 1, pixels_off}, // StripOffsets
+        {277, 3, 1, 3},          // SamplesPerPixel
+        {278, 3, 1, 4},          // RowsPerStrip
+        {279, 4, 1, 48},         // StripByteCounts
+        {301, 3, 768, lut_off},  // TransferFunction
+    };
+    u16((uint16_t)std::size(entries));
+    for (auto &e : entries)
+    {
+        u16(e.tag);
+        u16(e.type);
+        u32(e.count);
+        // a SHORT value with count 1 sits in the low half of the value field
+        if (e.type == 3 && e.count == 1)
+        {
+            u16((uint16_t)e.value);
+            u16(0);
+        }
+        else
+            u32(e.value);
+    }
+    u32(0); // no next IFD
+
+    for (int i = 0; i < 4; ++i) out[ifd_offset_pos + i] = char((ifd_off >> (8 * i)) & 0xff);
+    return out;
+}
+
+} // namespace
+
+#if HDRVIEW_ENABLE_LIBTIFF
+TEST_CASE("An 8-bit TIFF's TransferFunction curve is indexed over its own length, not the 16-bit range")
+{
+    const std::array<uint8_t, 3> stored{24, 72, 136};
+    auto                         bytes = tiff_with_transfer_function(stored);
+
+    std::istringstream in(bytes, std::ios::binary);
+    auto               imgs = load_tiff_image(in, "tf.tif");
+    REQUIRE(imgs.size() == 1);
+    REQUIRE(imgs[0]->channels.size() == 3);
+
+    // the identity curve has to give the stored samples back
+    for (int c = 0; c < 3; ++c) CHECK(imgs[0]->channels[c](1, 0) == doctest::Approx(stored[c] / 255.f).epsilon(1e-4));
+}
+#endif
