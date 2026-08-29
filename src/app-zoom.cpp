@@ -102,16 +102,18 @@ void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
     reposition_pixel_to_vp_pos(focus_vp_pos, focused_pixel);
 }
 
+//! The nudge that keeps a zoom already sitting on a power of two from being rounded to the wrong side of
+//! it by float error in log2(), while being far too small to reach the neighbouring stop.
+static constexpr float k_zoom_step_epsilon = 1e-4f;
+
 void HDRViewApp::zoom_in()
 {
     // keep position at center of window fixed while zooming
     auto center_pos   = float2(viewport_size() / 2.f);
     auto center_pixel = pixel_at_vp_pos(center_pos);
 
-    // determine next higher power of 2 zoom level
-    float level_for_sensitivity = ceil(log(m_zoom) / log(2.f) + 0.5f);
-    float new_scale             = std::pow(2.f, level_for_sensitivity);
-    set_zoom(new_scale);
+    // the next power of two strictly above the current zoom, whether or not the zoom is one itself
+    set_zoom(std::pow(2.f, std::floor(std::log2(m_zoom) + k_zoom_step_epsilon) + 1.f));
     reposition_pixel_to_vp_pos(center_pos, center_pixel);
 }
 
@@ -121,10 +123,8 @@ void HDRViewApp::zoom_out()
     auto center_pos   = float2(viewport_size() / 2.f);
     auto center_pixel = pixel_at_vp_pos(center_pos);
 
-    // determine next lower power of 2 zoom level
-    float level_for_sensitivity = std::floor(log(m_zoom) / log(2.f) - 0.5f);
-    float new_scale             = std::pow(2.f, level_for_sensitivity);
-    set_zoom(new_scale);
+    // the next power of two strictly below the current zoom, whether or not the zoom is one itself
+    set_zoom(std::pow(2.f, std::ceil(std::log2(m_zoom) - k_zoom_step_epsilon) - 1.f));
     reposition_pixel_to_vp_pos(center_pos, center_pixel);
 }
 
