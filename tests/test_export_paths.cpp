@@ -281,3 +281,36 @@ TEST_CASE("An 8-bit TIFF's TransferFunction curve is indexed over its own length
     for (int c = 0; c < 3; ++c) CHECK(imgs[0]->channels[c](1, 0) == doctest::Approx(stored[c] / 255.f).epsilon(1e-4));
 }
 #endif
+
+#if HDRVIEW_ENABLE_LIBTIFF
+TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples are in")
+{
+    // The TIFF writer asks as_interleaved() not to convert to sRGB, so it keeps the image's own
+    // primaries -- and every other writer either converts or records the gamut. Writing neither made
+    // the file read back as sRGB: a Rec.2020 image round-tripped to visibly different colours.
+    Chromaticities bt2020{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
+
+    auto img            = make_named({"R", "G", "B"});
+    img->chromaticities = bt2020;
+    color_conversion_matrix(img->M_to_sRGB, bt2020, gamut_chromaticities(ColorGamut_sRGB_BT709));
+    float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
+
+    // 32-bit float, so the transfer function plays no part in what comes back
+    std::ostringstream out(std::ios::binary);
+    REQUIRE_NOTHROW(save_tiff_image(*img, out, "wide.tif", /*gain*/ 1.f, TransferFunction::Linear,
+                                    /*compression*/ 1, /*data_type*/ 2));
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_tiff_image(in, "wide.tif");
+    REQUIRE(reloaded.size() == 1);
+    reloaded[0]->finalize(); // the per-format loaders leave this to load_image()
+
+    REQUIRE(reloaded[0]->chromaticities.has_value());
+    CHECK(reloaded[0]->chromaticities->red.x == doctest::Approx(bt2020.red.x).epsilon(1e-4));
+    CHECK(reloaded[0]->chromaticities->green.y == doctest::Approx(bt2020.green.y).epsilon(1e-4));
+    CHECK(reloaded[0]->chromaticities->white.x == doctest::Approx(bt2020.white.x).epsilon(1e-4));
+
+    float4 got = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
+    for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
+}
+#endif

@@ -1350,6 +1350,19 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     else
         TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
 
+    // The samples below keep the image's own primaries -- as_interleaved() is asked not to convert to
+    // sRGB -- so the file has to say which those are, or it reads back as though it were sRGB. The
+    // loader takes them from exactly these two tags.
+    if (img.chromaticities && n >= 3)
+    {
+        const float white[2]     = {img.chromaticities->white.x, img.chromaticities->white.y};
+        const float primaries[6] = {img.chromaticities->red.x,   img.chromaticities->red.y,
+                                    img.chromaticities->green.x, img.chromaticities->green.y,
+                                    img.chromaticities->blue.x,  img.chromaticities->blue.y};
+        TIFFSetField(tif, TIFFTAG_WHITEPOINT, white);
+        TIFFSetField(tif, TIFFTAG_PRIMARYCHROMATICITIES, primaries);
+    }
+
     // Set compression
     uint16_t compression = COMPRESSION_NONE;
     switch (opts->compression)
