@@ -101,7 +101,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         {
             Format_BMP_STB = 0,
             Format_HDR_STB,
-            Format_HEIF_AVIF,
+            Format_HEIF,
+            Format_AVIF,
             Format_JPEG_LIBJPEG,
             Format_JPEG_STB,
             Format_JPEG_UHDR,
@@ -120,9 +121,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         static bool format_enabled[Format_Last + 1] = {true, true,
 #if HDRVIEW_ENABLE_LIBHEIF
-                                                       true,
+                                                       true, true,
 #else
-                                                       false,
+                                                       false, false,
 #endif
 #if HDRVIEW_ENABLE_LIBJPEG
                                                        true,
@@ -164,7 +165,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         static const char *save_format_names[Format_Last + 1] = {
             "BMP (stb)",
             "HDR (stb)",
-            "HEIF/AVIF",
+            "HEIF",
+            "AVIF",
             "JPEG (libjpeg)",
             "JPEG (stb)",
             "JPEG (UltraHDR)",
@@ -186,6 +188,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             ".bmp",
             ".hdr",
             ".heif",
+            ".avif",
             ".jpg",
             ".jpg",
             ".jpg",
@@ -253,9 +256,12 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         }
         break;
 
-        case Format_HEIF_AVIF:
+        // Two entries rather than one, so the file's extension and the codec inside it cannot disagree:
+        // AVIF is AV1 by definition, while a .heif may hold HEVC, JPEG or JPEG 2000.
+        case Format_HEIF:
+        case Format_AVIF:
         {
-            auto opts = heif_parameters_gui();
+            auto opts = heif_parameters_gui(save_format == Format_AVIF ? HEIFCodec::AV1 : HEIFCodec::Any);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_heif_image(img, os, filename, opts); };
         }

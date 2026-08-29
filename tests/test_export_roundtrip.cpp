@@ -123,9 +123,13 @@ const Writer k_writers[] = {
      { save_jxl_image(i, o, "a.jxl", 1.f, /*lossless*/ true, 100.f, t, JXL_TYPE_UINT16); }},
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
+    // both codecs the dialog can now choose between, since they take different paths through libheif
     {"heif", ".heif", Cap_Alpha | Cap_Lossy,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_heif_image(i, o, "a.heif", 1.f, 100, true, true, 0, t); }},
+     { save_heif_image(i, o, "a.heif", 1.f, 100, true, true, HEIFCodec::HEVC, t); }},
+    {"avif", ".avif", Cap_Alpha | Cap_Lossy,
+     [](const Image &i, std::ostream &o, TransferFunction t)
+     { save_heif_image(i, o, "a.avif", 1.f, 100, true, true, HEIFCodec::AV1, t); }},
 #endif
 };
 

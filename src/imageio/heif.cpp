@@ -28,8 +28,8 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
     throw runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, float, int, bool, int, bool, bool,
-                     TransferFunction::Type, float)
+void save_heif_image(const Image &, std::ostream &, std::string_view, float, int, bool, bool, HEIFCodec,
+                     TransferFunction)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
@@ -39,7 +39,7 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 
 #else
 
@@ -50,11 +50,14 @@ HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
 #include "gainmap.h"
 #include "heif.h"
 #include "icc.h"
+
 #include "imgui_ext.h"
 #include "json.h"
 #include "timer.h"
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <mutex>
 
 #include <libheif/heif.h>
 // Sequences and HTJ2K were added in libheif 1.20.0
@@ -84,6 +87,7 @@ struct HEIFSaveOptions
     bool             use_alpha = true;
     TransferFunction tf        = {TransferFunction::sRGB, 2.2f};
     size_t           encoder   = 0u;
+    HEIFCodec        codec     = HEIFCodec::Any;
 };
 
 static HEIFSaveOptions s_opts;
@@ -92,10 +96,92 @@ static std::vector<const heif_encoder_descriptor *> s_encoder_descriptors;
 static std::vector<HeifEncoderPtr>                  s_encoders;
 static bool                                         s_encoders_initialized = false;
 
+//! libheif registers its codec plugins in heif_init().
+/*!
+    Distributions that ship those codecs as separate shared objects -- Ubuntu, Debian and Fedora all do --
+    register none of them until it is called, leaving only whatever was compiled into the library itself.
+    Without this HDRView finds no HEVC or AV1 encoder on such a system, and silently falls back to the
+    built-in JPEG one, which cannot store alpha. There is no matching heif_deinit(): the plugins stay
+    loaded for the life of the process, which is exactly as long as they are wanted.
+*/
+static void ensure_heif_initialized()
+{
+    static std::once_flag once;
+    std::call_once(once,
+                   []
+                   {
+                       if (auto err = heif_init(nullptr); err.code != heif_error_Ok)
+                           spdlog::warn("HEIF: heif_init() failed ({}); codec plugins may be unavailable.",
+                                        err.message);
+                   });
+}
+
+//! JPEG has no alpha channel; every other codec HEIF can carry does.
+static bool codec_stores_alpha(heif_compression_format format) { return format != heif_compression_JPEG; }
+
+static heif_compression_format to_heif_format(HEIFCodec codec)
+{
+    switch (codec)
+    {
+    case HEIFCodec::HEVC: return heif_compression_HEVC;
+    case HEIFCodec::AV1: return heif_compression_AV1;
+    default: return heif_compression_undefined;
+    }
+}
+
+//! Indices into s_encoders whose codec matches `codec`, in the order libheif reports them.
+static std::vector<size_t> encoders_for(HEIFCodec codec)
+{
+    const auto          wanted = to_heif_format(codec);
+    std::vector<size_t> result;
+    for (size_t i = 0; i < s_encoder_descriptors.size(); ++i)
+    {
+        if (!s_encoders[i])
+            continue;
+        if (wanted != heif_compression_undefined &&
+            heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i]) != wanted)
+            continue;
+        result.push_back(i);
+    }
+    return result;
+}
+
+//! The encoder to start on: the first that implements `codec`, preferring HEVC when anything goes and,
+//! where there is a choice, one that can store alpha.
+static size_t default_encoder_for(HEIFCodec codec, bool need_alpha)
+{
+    auto candidates = encoders_for(codec);
+    if (candidates.empty())
+        return 0u;
+
+    auto first_matching = [&](heif_compression_format format) -> const size_t *
+    {
+        for (const auto &i : candidates)
+            if (heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i]) == format)
+                return &i;
+        return nullptr;
+    };
+
+    // "any" means a .heif, whose conventional codec is HEVC, with AV1 the next best thing
+    if (codec == HEIFCodec::Any)
+        for (auto format : {heif_compression_HEVC, heif_compression_AV1})
+            if (auto *i = first_matching(format))
+                return *i;
+
+    if (need_alpha)
+        for (const auto &i : candidates)
+            if (codec_stores_alpha(heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i])))
+                return i;
+
+    return candidates.front();
+}
+
 static void init_heif_supported_formats()
 {
     if (s_encoders_initialized)
         return;
+
+    ensure_heif_initialized();
 
     int num = heif_get_encoder_descriptors(heif_compression_undefined, nullptr, nullptr, 0);
     if (num > 0)
@@ -978,11 +1064,20 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     if (!params)
         throw std::invalid_argument("HEIFSaveOptions pointer is null");
 
-    if (params->encoder >= s_encoders.size() || !s_encoders[params->encoder])
+    ensure_heif_initialized();
+
+    // The encoder the options name has to actually implement the codec they ask for -- a stale index, or
+    // one left over from the other of the two dialog entries, would otherwise write the wrong thing.
+    size_t     encoder_index = params->encoder;
+    const auto candidates    = encoders_for(params->codec);
+    if (std::find(candidates.begin(), candidates.end(), encoder_index) == candidates.end())
+        encoder_index = default_encoder_for(params->codec, params->use_alpha);
+
+    if (encoder_index >= s_encoders.size() || !s_encoders[encoder_index])
         throw std::runtime_error("HEIF: no encoder available");
 
     // Grab the shared C encoder instance configured by the GUI.
-    auto enc = s_encoders[params->encoder].get();
+    auto enc = s_encoders[encoder_index].get();
     try
     {
         Timer timer;
@@ -992,11 +1087,23 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         void                      *pixels = nullptr;
         pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, params->gain, params->tf, true, true, true);
 
-        // HEIF stores one or three colour channels, each optionally with alpha. A group carrying alpha
-        // loses it when the caller asked for none; a two-channel U,V pair carries no alpha and has no
-        // one-channel reading, so it pads out to RGB with a zero third channel, as the viewport draws it.
+        // Not every codec a HEIF can hold has an alpha channel -- JPEG does not -- and losing one is a real
+        // change to the image, so it is said out loud rather than written quietly.
+        const auto encoder_format =
+            heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[encoder_index]);
         const bool group_alpha = group_has_alpha(img.groups[img.selected_group].type);
-        const int  n_out       = (group_alpha && !params->use_alpha) ? n - 1 : (n == 2 && !group_alpha ? 3 : n);
+        bool       keep_alpha  = params->use_alpha;
+        if (keep_alpha && group_alpha && !codec_stores_alpha(encoder_format))
+        {
+            spdlog::warn("HEIF: the {} encoder stores no alpha channel; saving without it.",
+                         heif_encoder_descriptor_get_name(s_encoder_descriptors[encoder_index]));
+            keep_alpha = false;
+        }
+
+        // HEIF stores one or three colour channels, each optionally with alpha. A group carrying alpha
+        // loses it when it cannot be kept; a two-channel U,V pair carries no alpha and has no
+        // one-channel reading, so it pads out to RGB with a zero third channel, as the viewport draws it.
+        const int n_out = (group_alpha && !keep_alpha) ? n - 1 : (n == 2 && !group_alpha ? 3 : n);
         if (n_out != n)
         {
             const size_t               num_pixels = (size_t)w * h;
@@ -1132,13 +1239,13 @@ catch (const std::exception &err) { throw std::runtime_error(fmt::format("HEIF e
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
-                     bool lossless, bool use_alpha, int format_index, TransferFunction tf)
+                     bool lossless, bool use_alpha, HEIFCodec codec, TransferFunction tf)
 {
-    // The encoder table is built lazily, and only heif_parameters_gui() does it. Without this a
-    // non-GUI caller finds it empty, and the clamp below has an upper bound below its lower one.
+    // The encoder table is built lazily, and only heif_parameters_gui() does it; a non-GUI caller would
+    // otherwise find it empty.
     init_heif_supported_formats();
-    if (s_encoders.empty())
-        throw std::runtime_error("HEIF: no encoder available");
+    if (encoders_for(codec).empty())
+        throw std::runtime_error("HEIF: no encoder available for the requested codec");
 
     HEIFSaveOptions params;
     params.gain      = gain;
@@ -1146,7 +1253,8 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     params.lossless  = lossless;
     params.use_alpha = use_alpha;
     params.tf        = tf;
-    params.encoder   = (size_t)clamp(format_index, 0, int(s_encoders.size()) - 1);
+    params.codec     = codec;
+    params.encoder   = default_encoder_for(codec, use_alpha);
     heif_encoder_set_lossless(s_encoders[params.encoder].get(), lossless);
     heif_encoder_set_lossy_quality(s_encoders[params.encoder].get(), quality);
 
@@ -1154,9 +1262,16 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 // GUI parameter function
-HEIFSaveOptions *heif_parameters_gui()
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
 {
     init_heif_supported_formats();
+
+    // The dialog's format list already chose the codec, so the combo below picks only among the encoders
+    // implementing it -- and a selection carried over from the other entry is replaced rather than kept.
+    s_opts.codec          = codec;
+    const auto candidates = encoders_for(codec);
+    if (std::find(candidates.begin(), candidates.end(), s_opts.encoder) == candidates.end())
+        s_opts.encoder = default_encoder_for(codec, s_opts.use_alpha);
 
     if (ImGui::PE::Begin("HEIF/AVIF Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
@@ -1226,10 +1341,12 @@ HEIFSaveOptions *heif_parameters_gui()
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         {
-            if (ImGui::BeginCombo("##Encoder",
-                                  heif_encoder_descriptor_get_id_name(s_encoder_descriptors[s_opts.encoder])))
+            if (candidates.empty())
+                ImGui::TextUnformatted("No encoder available");
+            else if (ImGui::BeginCombo("##Encoder",
+                                       heif_encoder_descriptor_get_id_name(s_encoder_descriptors[s_opts.encoder])))
             {
-                for (size_t i = 0; i < s_encoder_descriptors.size(); ++i)
+                for (size_t i : candidates)
                 {
                     bool selected = (s_opts.encoder == i);
                     if (ImGui::Selectable(heif_encoder_descriptor_get_name(s_encoder_descriptors[i]), selected))
@@ -1241,7 +1358,7 @@ HEIFSaveOptions *heif_parameters_gui()
             }
         }
 
-        if (enc_open)
+        if (enc_open && !candidates.empty())
         {
             auto selected_encoder = s_encoder_descriptors[s_opts.encoder];
             auto enc              = s_encoders[s_opts.encoder].get();
