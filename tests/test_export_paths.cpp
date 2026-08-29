@@ -81,3 +81,23 @@ TEST_CASE("save_exr_image() with default options writes every group, not an empt
     float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
     for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
 }
+
+#if HDRVIEW_ENABLE_LIBHEIF
+TEST_CASE("save_heif_image()'s explicit-parameter overload reports a missing encoder instead of crashing")
+{
+    // The encoder table is filled lazily by heif_parameters_gui(). A non-GUI caller found it empty,
+    // and clamping an index against a size of zero yields SIZE_MAX.
+    auto               img = make_named({"R", "G", "B"});
+    std::ostringstream out(std::ios::binary);
+    // Either it encodes, or it says there is no encoder -- but it must not fault.
+    try
+    {
+        save_heif_image(*img, out, "test.heif", 1.f, 90, false, true, 0, TransferFunction::sRGB);
+        CHECK(out.str().size() > 0);
+    }
+    catch (const std::exception &e)
+    {
+        CHECK(std::string(e.what()).find("encoder") != std::string::npos);
+    }
+}
+#endif

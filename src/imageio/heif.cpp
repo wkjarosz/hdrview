@@ -1094,6 +1094,12 @@ catch (const std::exception &err) { throw std::runtime_error(fmt::format("HEIF e
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
                      bool lossless, bool use_alpha, int format_index, TransferFunction tf)
 {
+    // The encoder table is built lazily, and only heif_parameters_gui() does it. Without this a
+    // non-GUI caller finds it empty, and the clamp below has an upper bound below its lower one.
+    init_heif_supported_formats();
+    if (s_encoders.empty())
+        throw std::runtime_error("HEIF: no encoder available");
+
     HEIFSaveOptions params;
     params.gain      = gain;
     params.quality   = quality;
