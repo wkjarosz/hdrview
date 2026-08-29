@@ -12,6 +12,8 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include <cstring>
+
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
 #endif
@@ -67,6 +69,51 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         ctx->SetRef("Save as...");
         ctx->ItemClick("Cancel");
 
+        ctx->SetRef("");
+        wait_for_window_closed(ctx, "Save as...");
+        IM_CHECK(ctx->WindowInfo("Save as...", ImGuiTestOpFlags_NoError).Window == nullptr);
+    };
+
+    // Each format in the list draws its own options panel, and several of those read static state that
+    // only drawing them fills in. Selecting one at a time is what runs every *_parameters_gui().
+    t           = IM_REGISTER_TEST(engine, "dialogs", "save_as_every_format_options_panel");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (hdrview()->num_images() == 0)
+        {
+            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
+            for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        }
+        IM_CHECK(hdrview()->num_images() > 0);
+
+        ctx->SetRef("##MainMenuBar");
+        ctx->MenuClick("File/Save as...");
+        ctx->SetRef("");
+        IM_CHECK(ctx->WindowInfo("Save as...").Window != nullptr);
+
+        // The format list is a BeginListBox(), whose child window carries a runtime ID-hash suffix
+        // ("Save as.../<hex>"), so the entries cannot be addressed by a written-out path. Gather them
+        // and click by id instead.
+        ImGuiTestItemList items;
+        ctx->GatherItems(&items, "//Save as...", -1);
+        ImVector<ImGuiID> format_ids;
+        for (auto &item : items)
+            if (item.Depth == 1 && strstr(item.Window->Name, "Save as.../") != nullptr)
+                format_ids.push_back(item.ID);
+        // Eight entries are present whatever the build enables (BMP, HDR, JPEG and PNG via stb, OpenEXR,
+        // PFM, QOI, TGA); the rest are gated on their HDRVIEW_ENABLE_* option, so this cannot expect all
+        // fifteen.
+        ctx->LogInfo("format list holds %d entries", format_ids.Size);
+        IM_CHECK_GE(format_ids.Size, 8);
+
+        for (ImGuiID id : format_ids)
+        {
+            ctx->ItemClick(id);
+            ctx->Yield(3); // let the newly selected format's options panel draw
+        }
+
+        ctx->SetRef("Save as...");
+        ctx->ItemClick("Cancel");
         ctx->SetRef("");
         wait_for_window_closed(ctx, "Save as...");
         IM_CHECK(ctx->WindowInfo("Save as...", ImGuiTestOpFlags_NoError).Window == nullptr);
