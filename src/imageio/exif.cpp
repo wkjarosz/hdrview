@@ -138,6 +138,14 @@ struct Exif::Impl
     vector<uint8_t>                                       data;
     std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data{nullptr, &exif_data_unref};
     std::unique_ptr<ExifLog, decltype(&exif_log_unref)>   exif_log{nullptr, &exif_log_unref};
+
+    //! Set by the log callback below, which libexif keeps calling for as long as exif_log lives.
+    /*!
+        It must therefore live that long too. The callback fires well after loading -- reading an entry's
+        value logs, so exif_entry_get_value() during to_json() reaches it -- and a flag local to the
+        constructor would by then be a dead stack slot.
+    */
+    bool load_error = false;
 };
 
 Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<Impl>())
@@ -161,8 +169,6 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
             m_impl->data.assign(data_ptr, data_ptr + data_size);
 
         // 2) Create ExifData and ExifLog with custom log function
-        bool error = false;
-
         m_impl->exif_data = std::unique_ptr<ExifData, decltype(&exif_data_unref)>(exif_data_new(), &exif_data_unref);
         if (!m_impl->exif_data)
             throw std::invalid_argument("Failed to allocate ExifData.");
@@ -191,14 +197,14 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
                     break;
                 }
             },
-            &error);
+            &m_impl->load_error);
 
         exif_data_log(m_impl->exif_data.get(), m_impl->exif_log.get());
 
         // 3) Load the EXIF data from memory buffer
         exif_data_load_data(m_impl->exif_data.get(), m_impl->data.data(), (unsigned)m_impl->data.size());
 
-        if (error)
+        if (m_impl->load_error)
             spdlog::warn("There were errors while loading EXIF data, but trying to continue.");
 
         if (!m_impl->exif_data)
