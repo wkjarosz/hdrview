@@ -383,3 +383,26 @@ TEST_CASE("EXR load doesn't crash across the full vendored real-world test image
 }
 
 #endif // HDRVIEW_TEST_OPENEXR_DIR
+
+TEST_CASE("save_exr_image() with default options writes every group, not an empty channel list")
+{
+    // The GUI sizes EXRSaveOptions::group_enabled per image through exr_parameters_gui(); the static
+    // default it otherwise falls back to is empty, which enables no groups at all and leaves OpenEXR
+    // with a header whose channel list is empty -- a file it refuses to open. This is the documented
+    // default-argument call, so it has to work without the GUI having run.
+    auto               img = make_test_image(int2{2, 2});
+    std::ostringstream out(std::ios::binary);
+    REQUIRE_NOTHROW(save_exr_image(*img, out, "test.exr"));
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_exr_image(in, "test.exr");
+    REQUIRE(reloaded.size() == 1);
+    REQUIRE(reloaded[0]->channels.size() == 3);
+
+    // through the group, since OpenEXR stores channels in alphabetical order, and to half precision,
+    // which is what EXRSaveOptions defaults to
+    reloaded[0]->finalize(); // the per-format loaders leave this to load_image()
+    float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
+    float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
+    for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
+}

@@ -1422,6 +1422,32 @@ float4 Image::raw_pixel(int2 p, Target_ target) const
 }
 
 /// Reconstruct the raw pixel value into an RGBA value (like the first stage of the fragment shader)
+std::unique_ptr<uint8_t[]> widen_to_rgb(const uint8_t *src, int w, int h, int n, bool gray, int *n_out)
+{
+    const bool   has_alpha  = gray && n == 2;
+    const int    out        = has_alpha ? 4 : 3;
+    const size_t num_pixels = (size_t)w * h;
+
+    std::unique_ptr<uint8_t[]> dst(new uint8_t[num_pixels * out]);
+    for (size_t i = 0; i < num_pixels; ++i)
+    {
+        const uint8_t *in = src + i * n;
+        uint8_t       *o  = dst.get() + i * out;
+        if (gray)
+            o[0] = o[1] = o[2] = in[0];
+        else
+        {
+            o[0] = in[0];
+            o[1] = n > 1 ? in[1] : uint8_t(0);
+            o[2] = uint8_t(0);
+        }
+        if (has_alpha)
+            o[3] = in[1];
+    }
+    *n_out = out;
+    return dst;
+}
+
 float4 Image::rgba_pixel(int2 p, Target_ target) const
 {
     if (!contains(p))

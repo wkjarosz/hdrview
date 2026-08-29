@@ -546,6 +546,18 @@ private:
                        int level = 0) const;
 };
 
+/**
+    Widen an interleaved 8-bit buffer to three or four channels, for a format that stores nothing narrower.
+
+    A gray group's luma is replicated across red, green and blue, which is what the viewport shows for it;
+    a U,V pair, which has no third channel, gets a zero one. Alpha, when the group carries it, stays last.
+
+    \param [] src    Interleaved samples, `w * h * n` of them
+    \param [] gray   True when the group is a lone luma channel or luma plus alpha, false for a U,V pair
+    \param [out] n_out  Channel count of the returned buffer: 3, or 4 when the group carries alpha
+*/
+std::unique_ptr<uint8_t[]> widen_to_rgb(const uint8_t *src, int w, int h, int n, bool gray, int *n_out);
+
 template <typename T>
 std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, bool dither,
                                            bool unpremultiply, bool convert_to_sRGB) const
@@ -561,6 +573,8 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     // group's last channel.
     const Channel *alpha = group_has_alpha(group.type) ? &channels[group.channels[*n - 1]] : nullptr;
 
+    const bool luminance_chroma = group.type == ChannelGroup::YC_Channels || group.type == ChannelGroup::YCA_Channels;
+
     std::unique_ptr<T[]> pixels(new T[(*w) * (*h) * (*n)]);
 
     int block_size = std::max(1, 1024 * 1024 / (*w));
@@ -570,7 +584,7 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
         // process RGB channels together
         parallel_for(blocked_range<int>(0, *h, block_size),
                      [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither, unpremultiply,
-                      convert_to_sRGB](int begin_y, int end_y, int, int)
+                      convert_to_sRGB, luminance_chroma](int begin_y, int end_y, int, int)
                      {
                          int y_stride = w * n;
                          for (int y = begin_y; y < end_y; ++y)
@@ -579,6 +593,12 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
                                  float3 rgb{channels[groups[selected_group].channels[0]](x, y),
                                             channels[groups[selected_group].channels[1]](x, y),
                                             channels[groups[selected_group].channels[2]](x, y)};
+
+                                 // A luminance-chroma group stores RY,Y,BY, not RGB. Convert as the
+                                 // viewport does, so an exported file matches what it displays.
+                                 if (luminance_chroma)
+                                     rgb = YC_to_RGB(rgb, luminance_weights);
+
                                  rgb *= gain;
 
                                  if (convert_to_sRGB)

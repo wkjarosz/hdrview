@@ -4,3 +4,14 @@
 # comments the limitation ("FIXME: Positive values only.").
 float-cast-overflow:imgui_internal.h
 float-cast-overflow:implot_internal.h
+
+# stb_image_write's JPEG encoder accumulates its bit buffer in a signed int and shifts it left once it
+# has gone negative (stbiw__jpg_writeBits, "bitBuf <<= 8"), which is undefined before C++20 though it is
+# what every two's-complement target does anyway. The whole reported stack is stb's, HDRView only hands
+# it pixels, and the file is vendored -- so it is suppressed rather than patched.
+shift-base:stb_image_write.h
+
+# libheif's StreamReader_memory::read() does memcpy(dst, &m_data[m_position], size), and taking that
+# address on an empty buffer yields a null pointer that memcpy is declared never to accept -- even when
+# size is zero and nothing is copied. Reported inside libheif on files HDRView only hands it bytes for.
+nonnull-attribute:bitstream.cc

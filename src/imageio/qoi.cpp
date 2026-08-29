@@ -150,7 +150,16 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
         &w, &h, &n, opts->gain,
         opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, opts->dither);
 
-    // The QOI image format only supports RGB or RGBA data.
+    // QOI's header describes only 3 = RGB and 4 = RGBA, so a narrower group is widened rather than
+    // refused: the file then holds what the viewport shows, at three times the samples.
+    if (n < 3)
+    {
+        const bool gray = n == 1 || group_has_alpha(img.groups[img.selected_group].type);
+        spdlog::warn("QOI stores no grayscale; widening {} channel{} to RGB{}.", n, n == 1 ? "" : "s",
+                     gray && n == 2 ? "A" : "");
+        pixels = widen_to_rgb(pixels.get(), w, h, n, gray, &n);
+    }
+
     if (n != 4 && n != 3)
         throw invalid_argument{
             fmt::format("Invalid number of channels {}. QOI format expects either 3 or 4 channels.", n)};

@@ -12,6 +12,7 @@
 #include <stdexcept>
 
 #include "app.h"
+#include "heif.h" // for HEIFCodec, which the stubs below need as much as the real implementation
 #include "imgui.h"
 
 using namespace std;
@@ -28,8 +29,8 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
     throw runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, float, int, bool, int, bool, bool,
-                     TransferFunction::Type, float)
+void save_heif_image(const Image &, std::ostream &, std::string_view, float, int, bool, bool, HEIFCodec,
+                     TransferFunction)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
@@ -39,7 +40,9 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
+std::vector<std::string> heif_encoder_names(HEIFCodec) { return {}; }
+
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 
 #else
 
@@ -50,11 +53,15 @@ HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
 #include "gainmap.h"
 #include "heif.h"
 #include "icc.h"
+
 #include "imgui_ext.h"
 #include "json.h"
 #include "timer.h"
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <map>
+#include <mutex>
 
 #include <libheif/heif.h>
 // Sequences and HTJ2K were added in libheif 1.20.0
@@ -84,6 +91,7 @@ struct HEIFSaveOptions
     bool             use_alpha = true;
     TransferFunction tf        = {TransferFunction::sRGB, 2.2f};
     size_t           encoder   = 0u;
+    HEIFCodec        codec     = HEIFCodec::Any;
 };
 
 static HEIFSaveOptions s_opts;
@@ -92,10 +100,93 @@ static std::vector<const heif_encoder_descriptor *> s_encoder_descriptors;
 static std::vector<HeifEncoderPtr>                  s_encoders;
 static bool                                         s_encoders_initialized = false;
 
+//! libheif registers its codec plugins in heif_init().
+/*!
+    Distributions that ship those codecs as separate shared objects -- Ubuntu, Debian and Fedora all do --
+    register none of them until it is called, leaving only whatever was compiled into the library itself.
+    Without this HDRView finds no HEVC or AV1 encoder on such a system, and silently falls back to the
+    built-in JPEG one, which cannot store alpha. There is no matching heif_deinit(): the plugins stay
+    loaded for the life of the process, which is exactly as long as they are wanted.
+*/
+static void ensure_heif_initialized()
+{
+    static std::once_flag once;
+    std::call_once(once,
+                   []
+                   {
+                       if (auto err = heif_init(nullptr); err.code != heif_error_Ok)
+                           spdlog::warn("HEIF: heif_init() failed ({}); codec plugins may be unavailable.",
+                                        err.message);
+                   });
+}
+
+//! JPEG has no alpha channel; every other codec HEIF can carry does.
+static bool codec_stores_alpha(heif_compression_format format) { return format != heif_compression_JPEG; }
+
+//! Whether `format` may be written under `codec`.
+/*!
+    An AV1 image item reports the 'avif' brand, and libheif makes the primary item's brand the file's
+    major brand -- so an AV1 payload is an AVIF whatever the file is named. AV1 is therefore AVIF's
+    alone, and the HEIF entry offers the codecs a .heif may actually carry.
+*/
+static bool codec_admits(HEIFCodec codec, heif_compression_format format)
+{
+    switch (codec)
+    {
+    case HEIFCodec::HEVC: return format == heif_compression_HEVC;
+    case HEIFCodec::AV1: return format == heif_compression_AV1;
+    case HEIFCodec::HEIF: return format != heif_compression_AV1;
+    default: return true;
+    }
+}
+
+//! Indices into s_encoders whose codec `codec` admits, in the order libheif reports them.
+static std::vector<size_t> encoders_for(HEIFCodec codec)
+{
+    std::vector<size_t> result;
+    for (size_t i = 0; i < s_encoder_descriptors.size(); ++i)
+        if (s_encoders[i] &&
+            codec_admits(codec, heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i])))
+            result.push_back(i);
+    return result;
+}
+
+//! The encoder to start on: the first that implements `codec`, preferring HEVC when anything goes and,
+//! where there is a choice, one that can store alpha.
+static size_t default_encoder_for(HEIFCodec codec, bool need_alpha)
+{
+    auto candidates = encoders_for(codec);
+    if (candidates.empty())
+        return 0u;
+
+    auto first_matching = [&](heif_compression_format format) -> const size_t *
+    {
+        for (const auto &i : candidates)
+            if (heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i]) == format)
+                return &i;
+        return nullptr;
+    };
+
+    // a .heif conventionally holds HEVC, and a caller that named no codec takes AV1 as the next best
+    if (codec == HEIFCodec::Any || codec == HEIFCodec::HEIF)
+        for (auto format : {heif_compression_HEVC, heif_compression_AV1})
+            if (auto *i = first_matching(format))
+                return *i;
+
+    if (need_alpha)
+        for (const auto &i : candidates)
+            if (codec_stores_alpha(heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i])))
+                return i;
+
+    return candidates.front();
+}
+
 static void init_heif_supported_formats()
 {
     if (s_encoders_initialized)
         return;
+
+    ensure_heif_initialized();
 
     int num = heif_get_encoder_descriptors(heif_compression_undefined, nullptr, nullptr, 0);
     if (num > 0)
@@ -374,46 +465,53 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                         bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
         }
 
-        if (opts.override_profile)
+        // Alpha is not a color: it carries neither a transfer function nor primaries, so it is copied
+        // through as decoded. Only the monochrome path reaches this with a separate alpha plane -- the
+        // interleaved paths hand alpha to linearize_pixels(), which already leaves the last channel alone.
+        if (out_planes[p] != heif_channel_Alpha)
         {
-            spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
-                         color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
-
-            string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
-            Chromaticities chr;
-            if (linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, gamut_chromaticities(opts.gamut_override),
-                                 opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
+            if (opts.override_profile)
             {
-                image->chromaticities = chr;
-                profile_desc += " (override)";
+                spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
+                             color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
+
+                string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+                Chromaticities chr;
+                if (linearize_pixels(float_pixels.data(), int3{size.xy(), cpp},
+                                     gamut_chromaticities(opts.gamut_override), opts.tf_override, opts.keep_primaries,
+                                     &profile_desc, &chr))
+                {
+                    image->chromaticities = chr;
+                    profile_desc += " (override)";
+                }
+                image->metadata["color profile"] = profile_desc;
             }
-            image->metadata["color profile"] = profile_desc;
-        }
-        else
-        {
-            // only prefer the nclx if it exists and it specifies an HDR transfer function
-            bool prefer_icc =
-                !image->icc_data.empty() &&
-                (!nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
-                           nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
-
-            spdlog::debug("prefer_icc: {}, nclx transfer function: {}", prefer_icc,
-                          nclx ? int(nclx->transfer_characteristics) : -1);
-            string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
-            Chromaticities chr;
-            // for SDR profiles, try to transform the interleaved data using the icc profile.
-            // Then try the nclx profile
-            if ((prefer_icc && ICCProfile(image->icc_data)
-                                   .linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries,
-                                                     &profile_desc, &chr)) ||
-                linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries, nclx, &profile_desc,
-                                 &chr))
-                image->chromaticities = chr;
             else
-                // icc and nclx profiles failed or not present, so we can only assume we are sRGB/BT709
-                to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction::Unspecified);
+            {
+                // only prefer the nclx if it exists and it specifies an HDR transfer function
+                bool prefer_icc =
+                    !image->icc_data.empty() &&
+                    (!nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
+                               nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
 
-            image->metadata["color profile"] = profile_desc;
+                spdlog::debug("prefer_icc: {}, nclx transfer function: {}", prefer_icc,
+                              nclx ? int(nclx->transfer_characteristics) : -1);
+                string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+                Chromaticities chr;
+                // for SDR profiles, try to transform the interleaved data using the icc profile.
+                // Then try the nclx profile
+                if ((prefer_icc && ICCProfile(image->icc_data)
+                                       .linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries,
+                                                         &profile_desc, &chr)) ||
+                    linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries, nclx,
+                                     &profile_desc, &chr))
+                    image->chromaticities = chr;
+                else
+                    // icc and nclx profiles failed or not present, so we can only assume we are sRGB/BT709
+                    to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction::Unspecified);
+
+                image->metadata["color profile"] = profile_desc;
+            }
         }
 
         // copy the interleaved float pixels into the channels
@@ -971,11 +1069,20 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     if (!params)
         throw std::invalid_argument("HEIFSaveOptions pointer is null");
 
-    if (params->encoder >= s_encoders.size() || !s_encoders[params->encoder])
+    ensure_heif_initialized();
+
+    // The encoder the options name has to actually implement the codec they ask for -- a stale index, or
+    // one left over from the other of the two dialog entries, would otherwise write the wrong thing.
+    size_t     encoder_index = params->encoder;
+    const auto candidates    = encoders_for(params->codec);
+    if (std::find(candidates.begin(), candidates.end(), encoder_index) == candidates.end())
+        encoder_index = default_encoder_for(params->codec, params->use_alpha);
+
+    if (encoder_index >= s_encoders.size() || !s_encoders[encoder_index])
         throw std::runtime_error("HEIF: no encoder available");
 
     // Grab the shared C encoder instance configured by the GUI.
-    auto enc = s_encoders[params->encoder].get();
+    auto enc = s_encoders[encoder_index].get();
     try
     {
         Timer timer;
@@ -984,26 +1091,45 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         std::unique_ptr<uint8_t[]> pixels8;
         void                      *pixels = nullptr;
         pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, params->gain, params->tf, true, true, true);
-        if (!params->use_alpha && n == 4)
+
+        // Not every codec a HEIF can hold has an alpha channel -- JPEG does not -- and losing one is a real
+        // change to the image, so it is said out loud rather than written quietly.
+        const auto encoder_format =
+            heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[encoder_index]);
+        const bool group_alpha = group_has_alpha(img.groups[img.selected_group].type);
+        bool       keep_alpha  = params->use_alpha;
+        if (keep_alpha && group_alpha && !codec_stores_alpha(encoder_format))
         {
-            size_t                     num_pixels = w * h;
-            std::unique_ptr<uint8_t[]> rgb_pixels(new uint8_t[num_pixels * 3]);
-            for (size_t i = 0, j = 0; i < num_pixels; ++i, j += 4)
-            {
-                rgb_pixels[i * 3 + 0] = pixels8[j + 0];
-                rgb_pixels[i * 3 + 1] = pixels8[j + 1];
-                rgb_pixels[i * 3 + 2] = pixels8[j + 2];
-            }
-            pixels8.swap(rgb_pixels);
-            n = 3;
+            spdlog::warn("HEIF: the {} encoder stores no alpha channel; saving without it.",
+                         heif_encoder_descriptor_get_name(s_encoder_descriptors[encoder_index]));
+            keep_alpha = false;
+        }
+
+        // HEIF stores one or three color channels, each optionally with alpha. A group carrying alpha
+        // loses it when it cannot be kept; a two-channel U,V pair carries no alpha and has no
+        // one-channel reading, so it pads out to RGB with a zero third channel, as the viewport draws it.
+        const int n_out = (group_alpha && !keep_alpha) ? n - 1 : (n == 2 && !group_alpha ? 3 : n);
+        if (n_out != n)
+        {
+            const size_t               num_pixels = (size_t)w * h;
+            std::unique_ptr<uint8_t[]> repacked(new uint8_t[num_pixels * n_out]);
+            for (size_t i = 0; i < num_pixels; ++i)
+                for (int c = 0; c < n_out; ++c) repacked[i * n_out + c] = (c < n) ? pixels8[i * n + c] : uint8_t(0);
+            pixels8.swap(repacked);
+            n = n_out;
         }
         pixels = pixels8.get();
 
         if (!pixels || w <= 0 || h <= 0)
             throw std::runtime_error("HEIF: empty image or invalid image dimensions");
 
-        if (n != 3 && n != 4)
-            throw std::invalid_argument("HEIF/AVIF output only supports 3 or 4 channels (RGB or RGBA)");
+        if (n < 1 || n > 4)
+            throw std::invalid_argument("HEIF/AVIF output supports at most 4 channels");
+
+        // One or two channels is a gray image, which HEIF stores as 4:0:0 monochrome rather than as three
+        // equal color planes -- the same form load_heif_image() already decodes.
+        const bool mono      = n <= 2;
+        const bool has_alpha = n == 2 || n == 4;
 
         // Create heif image via C API
         HeifContextPtr ctx(heif_context_alloc(), heif_context_free);
@@ -1014,22 +1140,48 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             [&]
             {
                 heif_image *raw_heif_img = nullptr;
-                throw_on_error(heif_image_create(w, h, heif_colorspace_RGB,
-                                                 (n == 4) ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB,
-                                                 &raw_heif_img),
-                               "HEIF: Failed to create heif image");
+                throw_on_error(
+                    heif_image_create(w, h, mono ? heif_colorspace_monochrome : heif_colorspace_RGB,
+                                      mono ? heif_chroma_monochrome
+                                           : (n == 4 ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB),
+                                      &raw_heif_img),
+                    "HEIF: Failed to create heif image");
                 return raw_heif_img;
             }(),
             heif_image_release);
 
-        throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_interleaved, w, h, 8),
-                       "HEIF: Failed to add interleaved plane");
+        if (mono)
+        {
+            // Monochrome keeps its channels in separate planes, so the interleaved buffer is split apart.
+            throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Y, w, h, 8),
+                           "HEIF: Failed to add luma plane");
+            if (has_alpha)
+                throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Alpha, w, h, 8),
+                               "HEIF: Failed to add alpha plane");
 
-        int      stride = 0;
-        uint8_t *plane  = heif_image_get_plane(heif_img.get(), heif_channel_interleaved, &stride);
-        // Copy pixel data
-        size_t row_bytes = w * n * sizeof(uint8_t);
-        for (int y = 0; y < h; ++y) memcpy(plane + y * (size_t)stride, pixels8.get() + y * w * n, row_bytes);
+            int      y_stride = 0, a_stride = 0;
+            uint8_t *y_plane = heif_image_get_plane(heif_img.get(), heif_channel_Y, &y_stride);
+            uint8_t *a_plane =
+                has_alpha ? heif_image_get_plane(heif_img.get(), heif_channel_Alpha, &a_stride) : nullptr;
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < w; ++x)
+                {
+                    const uint8_t *src                = pixels8.get() + ((size_t)y * w + x) * n;
+                    y_plane[y * (size_t)y_stride + x] = src[0];
+                    if (a_plane)
+                        a_plane[y * (size_t)a_stride + x] = src[1];
+                }
+        }
+        else
+        {
+            throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_interleaved, w, h, 8),
+                           "HEIF: Failed to add interleaved plane");
+
+            int      stride    = 0;
+            uint8_t *plane     = heif_image_get_plane(heif_img.get(), heif_channel_interleaved, &stride);
+            size_t   row_bytes = w * n * sizeof(uint8_t);
+            for (int y = 0; y < h; ++y) memcpy(plane + y * (size_t)stride, pixels8.get() + y * w * n, row_bytes);
+        }
 
         // Set color profile (nclx)
         {
@@ -1092,15 +1244,22 @@ catch (const std::exception &err) { throw std::runtime_error(fmt::format("HEIF e
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
-                     bool lossless, bool use_alpha, int format_index, TransferFunction tf)
+                     bool lossless, bool use_alpha, HEIFCodec codec, TransferFunction tf)
 {
+    // The encoder table is built lazily, and only heif_parameters_gui() does it; a non-GUI caller would
+    // otherwise find it empty.
+    init_heif_supported_formats();
+    if (encoders_for(codec).empty())
+        throw std::runtime_error("HEIF: no encoder available for the requested codec");
+
     HEIFSaveOptions params;
     params.gain      = gain;
     params.quality   = quality;
     params.lossless  = lossless;
     params.use_alpha = use_alpha;
     params.tf        = tf;
-    params.encoder   = (size_t)clamp(format_index, 0, int(s_encoders.size()) - 1);
+    params.codec     = codec;
+    params.encoder   = default_encoder_for(codec, use_alpha);
     heif_encoder_set_lossless(s_encoders[params.encoder].get(), lossless);
     heif_encoder_set_lossy_quality(s_encoders[params.encoder].get(), quality);
 
@@ -1108,9 +1267,30 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 // GUI parameter function
-HEIFSaveOptions *heif_parameters_gui()
+std::vector<std::string> heif_encoder_names(HEIFCodec codec)
 {
     init_heif_supported_formats();
+
+    std::vector<std::string> names;
+    for (size_t i : encoders_for(codec)) names.emplace_back(heif_encoder_descriptor_get_name(s_encoder_descriptors[i]));
+    return names;
+}
+
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
+{
+    init_heif_supported_formats();
+
+    // The dialog's format list already chose the codec, so the combo below picks only among the encoders
+    // implementing it. Each entry remembers its own choice: switching to AVIF and back must not leave
+    // HEIF on the AV1 encoder AVIF had to move to, nor the other way round.
+    static std::map<HEIFCodec, size_t> s_encoder_choice;
+
+    s_opts.codec          = codec;
+    const auto candidates = encoders_for(codec);
+    auto      &remembered = s_encoder_choice[codec];
+    if (std::find(candidates.begin(), candidates.end(), remembered) == candidates.end())
+        remembered = default_encoder_for(codec, s_opts.use_alpha);
+    s_opts.encoder = remembered;
 
     if (ImGui::PE::Begin("HEIF/AVIF Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
@@ -1180,14 +1360,21 @@ HEIFSaveOptions *heif_parameters_gui()
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         {
-            if (ImGui::BeginCombo("##Encoder",
-                                  heif_encoder_descriptor_get_id_name(s_encoder_descriptors[s_opts.encoder])))
+            // A build often has just one encoder for a given codec -- AV1 has three implementations in
+            // libheif but distributions package them separately -- and a dropdown offering one choice is
+            // only a dropdown by accident. Then it is simply named.
+            if (candidates.empty())
+                ImGui::TextUnformatted("No encoder available");
+            else if (candidates.size() == 1)
+                ImGui::TextUnformatted(heif_encoder_descriptor_get_name(s_encoder_descriptors[candidates.front()]));
+            else if (ImGui::BeginCombo("##Encoder",
+                                       heif_encoder_descriptor_get_id_name(s_encoder_descriptors[s_opts.encoder])))
             {
-                for (size_t i = 0; i < s_encoder_descriptors.size(); ++i)
+                for (size_t i : candidates)
                 {
                     bool selected = (s_opts.encoder == i);
                     if (ImGui::Selectable(heif_encoder_descriptor_get_name(s_encoder_descriptors[i]), selected))
-                        s_opts.encoder = i;
+                        s_opts.encoder = remembered = i;
                     if (selected)
                         ImGui::SetItemDefaultFocus();
                 }
@@ -1195,7 +1382,7 @@ HEIFSaveOptions *heif_parameters_gui()
             }
         }
 
-        if (enc_open)
+        if (enc_open && !candidates.empty())
         {
             auto selected_encoder = s_encoder_descriptors[s_opts.encoder];
             auto enc              = s_encoders[s_opts.encoder].get();

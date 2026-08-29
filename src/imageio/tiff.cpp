@@ -10,6 +10,8 @@
 #include "image.h"
 #include "imageio/image_loader.h"
 
+#include <cmath>
+
 using namespace std;
 
 struct TIFFSaveOptions
@@ -900,20 +902,24 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         }
         else
         {
-            // Priority 3: TRANSFERFUNCTION tag + chromaticities
-            if (has_transfer_function && tf_r && tf_g && tf_b)
+            // Priority 3: TRANSFERFUNCTION tag + chromaticities. The curve is a table of 2^BitsPerSample
+            // entries, which only a palette or integer image small enough to index is meant to carry.
+            if (has_transfer_function && tf_r && tf_g && tf_b && file_bits_per_sample <= 16)
             {
                 spdlog::debug("Applying TRANSFERFUNCTION tag for linearization");
-                // Apply the transfer function LUT to linearize the pixels
-                int block_size = std::max(1, 1024 * 1024 / num_channels);
+                // TIFF sizes each curve at 2^BitsPerSample entries, using the depth recorded in the
+                // file -- which is what libtiff allocated when it read the directory, and need not be
+                // the depth the pixels were widened to. The index therefore spans that table, not the
+                // 16-bit range its entries are quantized to.
+                const uint32_t lut_max    = (1u << file_bits_per_sample) - 1u;
+                int            block_size = std::max(1, 1024 * 1024 / num_channels);
                 parallel_for(blocked_range<int>(0, (int)(width * height), block_size),
-                             [&float_pixels, num_channels, tf_r, tf_g, tf_b](int begin, int end, int, int)
+                             [&float_pixels, num_channels, tf_r, tf_g, tf_b, lut_max](int begin, int end, int, int)
                              {
                                  for (int i = begin * num_channels; i < end * num_channels; ++i)
                                  {
-                                     // Map float value (0-1) to 16-bit index, look up in LUT, convert back to float
-                                     uint16_t index =
-                                         (uint16_t)(std::min(std::max(float_pixels[i], 0.0f), 1.0f) * 65535.0f);
+                                     uint32_t index = (uint32_t)std::lround(
+                                         std::min(std::max(float_pixels[i], 0.0f), 1.0f) * float(lut_max));
                                      // Determine which transfer function to use based on channel
                                      int       c  = i % num_channels;
                                      uint16_t *tf = (c == 0) ? tf_r : ((c == 1 && tf_g) ? tf_g : (tf_b ? tf_b : tf_r));
@@ -1343,6 +1349,19 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
     else
         TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+
+    // The samples below keep the image's own primaries -- as_interleaved() is asked not to convert to
+    // sRGB -- so the file has to say which those are, or it reads back as though it were sRGB. The
+    // loader takes them from exactly these two tags.
+    if (img.chromaticities && n >= 3)
+    {
+        const float white[2]     = {img.chromaticities->white.x, img.chromaticities->white.y};
+        const float primaries[6] = {img.chromaticities->red.x,   img.chromaticities->red.y,
+                                    img.chromaticities->green.x, img.chromaticities->green.y,
+                                    img.chromaticities->blue.x,  img.chromaticities->blue.y};
+        TIFFSetField(tif, TIFFTAG_WHITEPOINT, white);
+        TIFFSetField(tif, TIFFTAG_PRIMARYCHROMATICITIES, primaries);
+    }
 
     // Set compression
     uint16_t compression = COMPRESSION_NONE;

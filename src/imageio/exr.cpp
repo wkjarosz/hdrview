@@ -559,8 +559,14 @@ void save_exr_image(const Image &img, ostream &os_, string_view filename, const 
 {
     try
     {
+        // s_opts is only meaningful once exr_parameters_gui() has sized group_enabled for this image;
+        // without the GUI it is empty, which would enable no groups and write an empty channel list.
+        EXRSaveOptions defaults;
         if (!params)
-            params = &s_opts;
+        {
+            defaults = exr_default_save_options(img);
+            params   = &defaults;
+        }
         Timer timer;
         // OpenEXR expects the display window to be inclusive, while our images are exclusive
         auto displayWindow = Imath::Box2i(Imath::V2i(img.display_window.min.x, img.display_window.min.y),
