@@ -1110,11 +1110,14 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
     info.xsize                 = w;
     info.ysize                 = h;
-    info.num_color_channels    = n == 1 ? 1 : 3;
+    // One or two channels is a gray image, with the second channel its alpha; three or four is RGB.
+    info.num_color_channels    = n <= 2 ? 1 : 3;
     info.num_extra_channels    = (n == 2 || n == 4) ? 1 : 0;
     info.alpha_bits            = (n == 2 || n == 4) ? info.bits_per_sample : 0;
     info.alpha_exponent_bits   = (n == 2 || n == 4) ? info.exponent_bits_per_sample : 0;
-    info.uses_original_profile = 0;
+    // libjxl rejects lossless encoding of an XYB-encoded frame, and XYB is what it uses whenever the
+    // original profile is not kept -- so a lossless request has to keep it.
+    info.uses_original_profile = lossless ? JXL_TRUE : JXL_FALSE;
 
     JxlEncoderPtr enc    = JxlEncoderMake(nullptr);
     auto          runner = JxlResizableParallelRunnerMake(nullptr);
@@ -1127,7 +1130,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     // Set color encoding
     JxlColorEncoding color_encoding;
     memset(&color_encoding, 0, sizeof(color_encoding));
-    color_encoding.color_space       = JXL_COLOR_SPACE_RGB;
+    color_encoding.color_space       = n <= 2 ? JXL_COLOR_SPACE_GRAY : JXL_COLOR_SPACE_RGB;
     color_encoding.transfer_function = jtf;
     color_encoding.gamma             = tf.gamma;
     color_encoding.rendering_intent  = JXL_RENDERING_INTENT_RELATIVE;

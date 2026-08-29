@@ -123,3 +123,42 @@ TEST_CASE("Saving a gray+alpha group as JPEG writes a grayscale file instead of 
 }
 
 #endif
+
+#if HDRVIEW_ENABLE_LIBJXL
+TEST_CASE("JPEG-XL lossless encoding succeeds and round-trips its samples exactly")
+{
+    // libjxl refuses lossless on an XYB-encoded frame, so the encoder has to keep the original profile.
+    auto               img = make_named({"R", "G", "B"});
+    std::ostringstream out(std::ios::binary);
+    REQUIRE_NOTHROW(save_jxl_image(*img, out, "test.jxl", /*gain*/ 1.f, /*lossless*/ true, /*quality*/ 100.f,
+                                   TransferFunction::Linear, JXL_TYPE_UINT16));
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_jxl_image(in, "test.jxl");
+    REQUIRE(reloaded.size() == 1);
+    for (int c = 0; c < 3; ++c)
+        CHECK(reloaded[0]->channels[c](1, 0) == doctest::Approx(img->channels[c](1, 0)).epsilon(1e-4));
+}
+
+TEST_CASE("JPEG-XL writes grayscale and gray+alpha groups")
+{
+    // num_color_channels and the colour encoding both have to say gray; declaring RGB for a one- or
+    // two-channel buffer makes libjxl reject the encode outright.
+    for (auto names : {std::initializer_list<const char *>{"Y"}, std::initializer_list<const char *>{"Y", "A"}})
+    {
+        auto               img = make_named(names);
+        std::ostringstream out(std::ios::binary);
+        REQUIRE_NOTHROW(
+            save_jxl_image(*img, out, "test.jxl", 1.f, false, 100.f, TransferFunction::sRGB, JXL_TYPE_UINT16));
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               reloaded = load_jxl_image(in, "test.jxl");
+        REQUIRE(reloaded.size() == 1);
+        reloaded[0]->finalize(); // the per-format loaders leave this to load_image()
+        // via rgba_pixel so both sides are premultiplied alike, whatever the group's alpha
+        float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
+        float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
+        for (int c = 0; c < 4; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(2e-3));
+    }
+}
+#endif
