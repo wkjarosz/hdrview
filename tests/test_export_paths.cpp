@@ -101,3 +101,25 @@ TEST_CASE("save_heif_image()'s explicit-parameter overload reports a missing enc
     }
 }
 #endif
+
+#if HDRVIEW_ENABLE_LIBJPEG
+TEST_CASE("Saving a gray+alpha group as JPEG writes a grayscale file instead of terminating")
+{
+    // JPEG stores one or three components. A Y,A group is two, and the colour space was picked from
+    // the image's total channel count rather than the group's, so libjpeg was handed a combination it
+    // rejects -- through a default error handler that exits the process rather than reporting.
+    auto img = make_named({"Y", "A"});
+    REQUIRE(img->groups[img->selected_group].type == ChannelGroup::YA_Channels);
+
+    std::ostringstream out(std::ios::binary);
+    REQUIRE_NOTHROW(save_jpg_image(*img, out, "test.jpg", /*gain*/ 1.f, /*sRGB*/ true, /*dither*/ false,
+                                   /*quality*/ 100, /*progressive*/ false));
+    CHECK(out.str().size() > 0);
+
+    std::istringstream in(out.str(), std::ios::binary);
+    auto               reloaded = load_jpg_image(in, "test.jpg");
+    REQUIRE(reloaded.size() == 1);
+    CHECK(reloaded[0]->channels.size() == 1);
+}
+
+#endif

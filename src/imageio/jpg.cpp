@@ -753,23 +753,31 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
     if (!pixels || w <= 0 || h <= 0)
         throw runtime_error("JPEG: empty image or invalid image dimensions");
 
-    if (n > 3)
+    // JPEG stores one or three components, so repack anything else: drop the alpha a group carries,
+    // and pad a two-channel U,V pair out to RGB with a zero third channel, as the viewport shows it.
+    const int n_out = group_has_alpha(img.groups[img.selected_group].type) ? n - 1 : (n == 2 ? 3 : n);
+    if (n_out != n)
     {
-        // Remove alpha channel: convert RGBA to RGB in-place
-        std::unique_ptr<uint8_t[]> rgb_pixels(new uint8_t[(size_t)w * h * 3]);
-        for (size_t i = 0, j = 0, num_pixels = (size_t)w * h; i < num_pixels; ++i, j += n)
-        {
-            rgb_pixels[i * 3 + 0] = pixels[j + 0];
-            rgb_pixels[i * 3 + 1] = pixels[j + 1];
-            rgb_pixels[i * 3 + 2] = pixels[j + 2];
-        }
-        pixels.swap(rgb_pixels);
-        n = 3;
+        std::unique_ptr<uint8_t[]> repacked(new uint8_t[(size_t)w * h * n_out]);
+        for (size_t i = 0, num_pixels = (size_t)w * h; i < num_pixels; ++i)
+            for (int c = 0; c < n_out; ++c) repacked[i * n_out + c] = (c < n) ? pixels[i * n + c] : uint8_t(0);
+        pixels.swap(repacked);
+        n = n_out;
     }
+
+    if (n != 1 && n != 3)
+        throw runtime_error(fmt::format("JPEG: unsupported channel count {}", n));
 
     jpeg_compress_struct cinfo;
     jpeg_error_mgr       jerr;
     cinfo.err = jpeg_std_error(&jerr);
+    // libjpeg's default error_exit calls exit(); throw instead, as the loader above does.
+    jerr.error_exit = [](j_common_ptr cinfo)
+    {
+        char buffer[JMSG_LENGTH_MAX];
+        (*cinfo->err->format_message)(cinfo, buffer);
+        throw std::invalid_argument{buffer};
+    };
 
     auto cinfo_deleter = [](jpeg_compress_struct *cinfo) { jpeg_destroy_compress(cinfo); };
     std::unique_ptr<jpeg_compress_struct, decltype(cinfo_deleter)> cinfo_guard(&cinfo, cinfo_deleter);
@@ -810,7 +818,9 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
     cinfo.image_width      = w;
     cinfo.image_height     = h;
     cinfo.input_components = n;
-    cinfo.in_color_space   = (img.channels.size() == 1) ? JCS_GRAYSCALE : JCS_RGB;
+    // Chosen from the channel count actually being written, not from the image's total channel count:
+    // the group selected for export can be narrower than the image it came from.
+    cinfo.in_color_space = (n == 1) ? JCS_GRAYSCALE : JCS_RGB;
     jpeg_set_defaults(&cinfo);
     jpeg_set_quality(&cinfo, quality, TRUE);
     if (progressive)
