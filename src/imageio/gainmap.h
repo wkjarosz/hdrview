@@ -84,7 +84,7 @@ GainmapImage resample_gainmap(const GainmapImage &gainmap, int2 size, bool linea
 //! Append \p gainmap to \p image as a `gainmap.*` channel group. It must already be \p image's size.
 void append_gainmap_channels(Image &image, const GainmapImage &gainmap);
 
-//! Copy \p image's colour channels into a `base.*` group, before a gain map is applied to them.
+//! Copy \p image's color channels into a `base.*` group, before a gain map is applied to them.
 /*!
     Called "base" rather than "sdr" because which rendition a file stores is the file's choice: a
     base-HDR JPEG XL keeps its HDR rendition here and derives an SDR one from the map. Alpha is not

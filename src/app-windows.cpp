@@ -105,7 +105,7 @@ void HDRViewApp::draw_tool_palette()
     // ImGui renders the title bar inside Begin() and sizes its collapse arrow from the current font, which
     // has no style var of its own, so shrink the font to shrink the arrow. Padding makes up the difference,
     // keeping the bar a standard frame tall and - since ImGui insets the arrow by that same padding - the
-    // arrow centred within it.
+    // arrow centered within it.
     const float bar_height = ImGui::GetFrameHeight();
     ImGui::PushFont(nullptr, 0.75f * ImGui::GetStyle().FontSizeBase);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,

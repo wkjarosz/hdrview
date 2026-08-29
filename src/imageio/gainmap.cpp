@@ -184,14 +184,14 @@ void append_base_rendition(Image &image, int num_base)
 
     const int2 size = image.channels.front().size();
 
-    // The colour channels only. Alpha is not part of the rendition the gain map converts, and
+    // The color channels only. Alpha is not part of the rendition the gain map converts, and
     // duplicating it would just cost memory.
-    std::vector<int> colour;
+    std::vector<int> color;
     for (int c = 0; c < num_base && c < (int)image.channels.size(); ++c)
         if (image.channels[c].name != "A")
-            colour.push_back(c);
+            color.push_back(c);
 
-    if (colour.empty())
+    if (color.empty())
         return;
 
     // "base", not "sdr": which rendition is stored is the file's choice, and a base-HDR JPEG XL
@@ -200,14 +200,14 @@ void append_base_rendition(Image &image, int num_base)
     static const char *rgb[]  = {"base.R", "base.G", "base.B"};
 
     const int first = (int)image.channels.size();
-    for (size_t c = 0; c < colour.size(); ++c) image.channels.emplace_back(colour.size() < 3 ? mono[c] : rgb[c], size);
+    for (size_t c = 0; c < color.size(); ++c) image.channels.emplace_back(color.size() < 3 ? mono[c] : rgb[c], size);
 
     parallel_for(blocked_range<int>(0, size.y, 128),
                  [&, first](int begin_y, int end_y, int, int)
                  {
-                     for (size_t c = 0; c < colour.size(); ++c)
+                     for (size_t c = 0; c < color.size(); ++c)
                      {
-                         const auto &from = image.channels[colour[c]];
+                         const auto &from = image.channels[color[c]];
                          auto       &to   = image.channels[first + (int)c];
                          for (int y = begin_y; y < end_y; ++y)
                              for (int x = 0; x < size.x; ++x) to(x, y) = from(x, y);

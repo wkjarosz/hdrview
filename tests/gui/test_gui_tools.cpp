@@ -61,7 +61,7 @@ static void show_and_expand_palette(ImGuiTestContext *ctx)
 }
 
 //! A point on the palette's title bar clear of its collapse arrow. Not GetWindowTitlebarPoint(), which
-//! returns the bar's centre - on a palette only as wide as its buttons, that is the arrow itself.
+//! returns the bar's center - on a palette only as wide as its buttons, that is the arrow itself.
 static float2 palette_grab_point(ImGuiTestContext *ctx)
 {
     ImGuiWindow *w = ctx->WindowInfo(palette_window_ref).Window;
@@ -138,7 +138,7 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
         ImGuiWindow *w = ctx->WindowInfo(palette_window_ref).Window;
         IM_CHECK(w != nullptr);
 
-        // The buttons sit centred in the window's padding. ImGui truncates the layout cursor to whole
+        // The buttons sit centered in the window's padding. ImGui truncates the layout cursor to whole
         // pixels as it stacks items, so fractional padding or spacing shows up here as a bottom edge
         // tighter than the top one.
         {

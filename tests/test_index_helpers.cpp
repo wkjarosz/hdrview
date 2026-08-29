@@ -92,7 +92,7 @@ TEST_CASE("nth_matching_index finds the nth match or reports past-the-end")
 
 TEST_CASE("next_matching_index holds its invariants over every small vector and starting index")
 {
-    // The hand-picked cases above name the behaviours worth reading; this pins them over the whole
+    // The hand-picked cases above name the behaviors worth reading; this pins them over the whole
     // small-input space, where the interesting starting indices are the ones outside the vector -- -1
     // for "nothing selected", and anything a stale session file might name.
     auto is_set = [](size_t, const bool &b) { return b; };
