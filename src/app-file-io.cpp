@@ -1,4 +1,5 @@
 #include "app.h"
+#include "common.h"
 
 #include "image.h"
 #include "version.h"
@@ -564,15 +565,6 @@ void HDRViewApp::load_image(const string filename, std::optional<string_view> bu
                             const ImageLoadOptions &opts)
 {
     m_image_loader.background_load(filename, buffer, should_select, nullptr, opts);
-}
-
-int HDRViewApp::download_percent_remaining(int64_t bytes_loaded, int64_t total_bytes)
-{
-    if (total_bytes <= 0)
-        return 100; // nothing to measure against yet; leave the bar where it started
-
-    const int64_t remaining = std::max<int64_t>(0, total_bytes - bytes_loaded);
-    return (int)std::min<int64_t>(100, (100 * remaining + total_bytes - 1) / total_bytes);
 }
 
 void HDRViewApp::load_url(const string_view url)
