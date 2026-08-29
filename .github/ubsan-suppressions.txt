@@ -4,3 +4,9 @@
 # comments the limitation ("FIXME: Positive values only.").
 float-cast-overflow:imgui_internal.h
 float-cast-overflow:implot_internal.h
+
+# stb_image_write's JPEG encoder accumulates its bit buffer in a signed int and shifts it left once it
+# has gone negative (stbiw__jpg_writeBits, "bitBuf <<= 8"), which is undefined before C++20 though it is
+# what every two's-complement target does anyway. The whole reported stack is stb's, HDRView only hands
+# it pixels, and the file is vendored -- so it is suppressed rather than patched.
+shift-base:stb_image_write.h

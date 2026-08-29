@@ -43,6 +43,22 @@
 #include <jxl/types.h>
 #endif
 
+// AddressSanitizer reports a stack-use-after-scope inside libjxl's own JxlEncoderSetBasicInfo, in
+// SizeHeader::Set -> FixedAspectRatios (lib/jxl/headers.cc). The read is kRatios[ratio - 1] with
+// 0 < ratio < 8, in bounds of a 56-byte array, and ASan names the address as a *global* while
+// classifying its shadow as stack -- the signature of use-after-scope instrumentation applied to a
+// function-local constexpr array the optimizer emitted into .rodata. It depends only on the image's
+// dimensions, so nothing of HDRView's reaches it, and stack-use-after-scope is not something an ASan
+// suppressions file can filter. So the JPEG-XL row drops out of the table under ASan alone; every
+// uninstrumented job still runs it.
+#if defined(__SANITIZE_ADDRESS__)
+#define HDRVIEW_TEST_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HDRVIEW_TEST_ASAN 1
+#endif
+#endif
+
 namespace
 {
 
@@ -101,7 +117,7 @@ const Writer k_writers[] = {
     {"webp", ".webp", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 1.f, 100.f, true, t); }},
 #endif
-#if HDRVIEW_ENABLE_LIBJXL
+#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN)
     {"jxl", ".jxl", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_jxl_image(i, o, "a.jxl", 1.f, /*lossless*/ true, 100.f, t, JXL_TYPE_UINT16); }},
@@ -134,7 +150,8 @@ const Layout k_layouts[] = {
 //! Values low enough that unpremultiplying on the way out cannot clamp, and distinct per channel.
 ImagePtr make_image(const Layout &layout, float alpha)
 {
-    const int2 size{8, 8};
+    // deliberately not square: a transposed stride is invisible in a square image
+    const int2 size{8, 6};
     auto       img = std::make_shared<Image>();
     for (auto name : layout.channels) img->channels.emplace_back(name, size);
     img->display_window = img->data_window = Box2i{int2{0}, size};
