@@ -28,6 +28,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #include <filesystem>
 #include <fstream>
 
@@ -72,7 +76,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // through (see load_images() in src/app-file-io.cpp) - calling it directly with a .hsess path is a
         // faithful stand-in for dragging one onto the app.
         hdrview()->load_images({session_path.string()});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK_EQ(hdrview()->current_image_index(), 0);
@@ -103,7 +107,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // itself opens a native file dialog that can't be driven here.
         hdrview()->close_all_images();
         hdrview()->load_session(session_path.string());
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
         hdrview()->close_all_images();
@@ -134,7 +138,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         IM_CHECK(recent_id != 0);
         ctx->ItemClick(recent_id);
 
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK_EQ(hdrview()->current_image_index(), 0);
     };
@@ -165,7 +169,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // load_session(const string&) is the non-dialog overload load_images() dispatches .hsess paths to;
         // calling it directly here skips the native file-picker, which can't be driven by the test engine.
         hdrview()->load_session(session_path.string());
-        for (int frame = 0; frame < 120 && hdrview()->num_images() < 2; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 2);
         // The core of the bug: both occurrences of the same path must resolve to distinct Image instances,
@@ -202,7 +206,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
 
         hdrview()->close_all_images();
         hdrview()->load_session(session_path.string());
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         // The missing entry never arrives; only the good one should load, and reference (entry 1) should
         // stay unset rather than the modal hanging or the app crashing.
@@ -218,7 +222,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // divisors. None of these values is reachable through the GUI; they stand in for a hand-edited,
         // truncated, or version-skewed file.
         json entry;
-        entry["path"]            = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
+        entry["path"]           = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
         entry["selected_group"] = 9999; // indexed unchecked by raw_pixel() via active_group_index()
 
         json view;
@@ -241,7 +245,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
 
         hdrview()->close_all_images();
         hdrview()->load_session(session_path.string());
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(hdrview()->current_image() != nullptr);

@@ -12,6 +12,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #include <cstring>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
@@ -23,8 +27,7 @@
 // disappear rather than assuming one Yield() is enough.
 static void wait_for_window_closed(ImGuiTestContext *ctx, const char *window_name)
 {
-    for (int frame = 0; frame < 30 && ctx->WindowInfo(window_name, ImGuiTestOpFlags_NoError).Window != nullptr; ++frame)
-        ctx->Yield();
+    wait_until(ctx, [&] { return ctx->WindowInfo(window_name, ImGuiTestOpFlags_NoError).Window == nullptr; });
 }
 
 void RegisterTests_Dialogs(ImGuiTestEngine *engine)
@@ -56,7 +59,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         if (hdrview()->num_images() == 0)
         {
             hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-            for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+            wait_for_loads(ctx);
         }
         IM_CHECK(hdrview()->num_images() > 0);
 
@@ -82,7 +85,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         if (hdrview()->num_images() == 0)
         {
             hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-            for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+            wait_for_loads(ctx);
         }
         IM_CHECK(hdrview()->num_images() > 0);
 

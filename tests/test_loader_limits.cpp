@@ -16,9 +16,9 @@
 #include "imageio/raw.h"
 #include "imageio/stb.h"
 
+#include "test_log_capture.h"
+
 #include <miniz.h>
-#include <spdlog/sinks/base_sink.h>
-#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <memory>
@@ -170,40 +170,6 @@ void declare_uncompressed_size(std::string &zip, uint32_t declared)
     patch_at("PK\x03\x04", 22);
     patch_at("PK\x01\x02", 24);
 }
-
-//! Collects everything logged while it is in scope, so a test can assert that a call site was reached.
-/*!
-    The guard's only observable effect is that the extraction is not attempted: an archive lying about an
-    entry's size fails to extract either way, just with a large allocation and a decompression first. So the
-    warning is what distinguishes "refused up front" from "tried and failed", and the log is where it shows.
-*/
-struct LogCapture
-{
-    struct Sink : spdlog::sinks::base_sink<std::mutex>
-    {
-        std::vector<std::string> messages;
-        void                     sink_it_(const spdlog::details::log_msg &msg) override
-        {
-            messages.emplace_back(msg.payload.data(), msg.payload.size());
-        }
-        void flush_() override {}
-    };
-
-    std::shared_ptr<Sink> sink = std::make_shared<Sink>();
-
-    LogCapture() { spdlog::default_logger()->sinks().push_back(sink); }
-    ~LogCapture()
-    {
-        auto &sinks = spdlog::default_logger()->sinks();
-        sinks.erase(std::remove(sinks.begin(), sinks.end(), sink), sinks.end());
-    }
-
-    bool saw(const std::string &substring) const
-    {
-        return std::any_of(sink->messages.begin(), sink->messages.end(),
-                           [&](const std::string &m) { return m.find(substring) != std::string::npos; });
-    }
-};
 
 } // namespace
 

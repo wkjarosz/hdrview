@@ -12,6 +12,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #include <filesystem>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
@@ -30,7 +34,7 @@ void RegisterTests_ImageIO(ImGuiTestEngine *engine)
 
         // Loading happens on a background thread and is drained into m_images from ShowGui() one frame at a
         // time, so give it a bounded number of frames to land rather than assuming it's ready immediately.
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK(hdrview()->num_images() > 0);
 
         const float target_exposure = 2.5f;
@@ -52,7 +56,7 @@ void RegisterTests_ImageIO(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
         hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() < 2; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 2);
 
         hdrview()->set_current_image_index(1);
@@ -91,8 +95,8 @@ void RegisterTests_ImageIO(ImGuiTestEngine *engine)
         if (ec)
         {
             ctx->LogWarning("Skipping: could not create a >260 character path (%s). This requires the "
-                             "system-wide \"Enable Win32 long paths\" policy.",
-                             ec.message().c_str());
+                            "system-wide \"Enable Win32 long paths\" policy.",
+                            ec.message().c_str());
             return;
         }
 
@@ -101,7 +105,7 @@ void RegisterTests_ImageIO(ImGuiTestEngine *engine)
         IM_CHECK(!ec);
 
         hdrview()->load_images({long_path.u8string()});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK(hdrview()->num_images() > 0);
 
         hdrview()->close_all_images();

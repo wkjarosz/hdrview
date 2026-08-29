@@ -14,6 +14,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #include <cmath>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
@@ -25,16 +29,6 @@
 
 namespace
 {
-
-//! Loads `paths` and waits for all of them to arrive.
-void load_and_wait(ImGuiTestContext *ctx, const std::vector<std::string> &paths)
-{
-    hdrview()->close_all_images();
-    for (int frame = 0; frame < 60 && hdrview()->num_images() != 0; ++frame) ctx->Yield();
-    hdrview()->load_images(paths);
-    for (int frame = 0; frame < 240 && hdrview()->num_images() < (int)paths.size(); ++frame) ctx->Yield();
-    IM_CHECK_EQ(hdrview()->num_images(), (int)paths.size());
-}
 
 bool approx(float2 a, float2 b, float eps = 1e-2f) { return la::maxelem(la::abs(a - b)) < eps; }
 
@@ -90,7 +84,8 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
     ImGuiTest *t = IM_REGISTER_TEST(engine, "viewport", "pixel_transform_is_affine_and_invertible");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
-        load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE});
+        reset_images(ctx);
+        IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE}), 1);
 
         auto      img = hdrview()->current_image();
         FlipState flip;
@@ -146,7 +141,8 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
     {
         // Two images of different sizes, so a reference whose windows differ from the current image's is
         // exercised rather than the coincidence of them matching.
-        load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2});
+        reset_images(ctx);
+        IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}), 2);
         hdrview()->set_current_image_index(0);
         hdrview()->set_reference_image_index(1);
         auto img = hdrview()->current_image();

@@ -37,6 +37,19 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
     // start from the built-in defaults every run, which is what they should be asserting against anyway.
     m_params.iniDisable = true;
 
+    // The suite is a long sequence of "yield until this becomes true", so what it costs is frames, and
+    // both of these make a frame wait rather than run. Idling throttles the rate whenever nothing is
+    // animating, which during a test run is nearly always; vsync then blocks every remaining frame until
+    // the monitor is ready. Together they were almost the entire wall clock: 57 seconds became 4.
+    //
+    // This applies to the interactive run too, where the display would otherwise pace it. Watching the
+    // suite go past at full speed is less useful than watching it at 60 Hz, but a run that finishes in
+    // seconds is the better tool for finding out why a test fails, and the alternative is a knob nobody
+    // would remember to set. rememberEnableIdling is off so a run cannot inherit the user's own setting.
+    m_params.fpsIdling.enableIdling         = false;
+    m_params.fpsIdling.rememberEnableIdling = false;
+    m_params.fpsIdling.vsyncToMonitor       = false;
+
     m_params.useImGuiTestEngine      = true;
     m_params.callbacks.RegisterTests = [register_tests]()
     {
@@ -624,8 +637,7 @@ void HDRViewApp::update_visibility()
     // m_visible_images and visible_image_names were appended to together above, so they index each other:
     // one shortened name per visible image, in the same order.
     auto short_names = shorten_names(visible_image_names);
-    for (size_t n = 0; n < m_visible_images.size(); ++n)
-        m_images[m_visible_images[n]]->short_name = short_names[n];
+    for (size_t n = 0; n < m_visible_images.size(); ++n) m_images[m_visible_images[n]]->short_name = short_names[n];
 
     set_image_textures();
 }
