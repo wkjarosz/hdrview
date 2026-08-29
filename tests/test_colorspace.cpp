@@ -169,6 +169,47 @@ TEST_CASE("color_conversion_matrix generalizes to the colorpass's other reachabl
                                         gamut_chromaticities(ColorGamut_sRGB_BT709)));
 }
 
+TEST_CASE("the image shader isolates luminance in the primaries it has already converted to")
+{
+    // assets/shaders/image-shader.sglsl converts every image into sRGB/BT.709 primaries before
+    // choose_channel() runs, so the Channels_Y case weighs with sRGB's own luminance weights -- spelled out
+    // in colorspaces.sglsl as sRGB_Yw, since GLSL can't include colorspace.h. If you edit either side, edit
+    // both.
+    // The shader spells them as the middle row of its own RGB2XYZ, the classic rounded sRGB matrix, while
+    // colorspace.h derives them from the BT.709 chromaticities; the two agree to about 3e-5 per weight,
+    // which is well under a code value at any bit depth HDRView displays.
+    const float3 glsl_sRGB_Yw{0.212671f, 0.715160f, 0.072169f};
+    INFO("colorspace.h says ", sRGB_Yw().x, ", ", sRGB_Yw().y, ", ", sRGB_Yw().z);
+    CHECK(approx_equal(sRGB_Yw(), glsl_sRGB_Yw, 1e-4f));
+    CHECK(glsl_sRGB_Yw.x + glsl_sRGB_Yw.y + glsl_sRGB_Yw.z == doctest::Approx(1.f).epsilon(1e-5));
+
+    // What makes those the right weights for a value that arrived in some other gamut: luminance is a
+    // property of the color, not of the primaries it is written in, so converting into sRGB and weighing
+    // with sRGB's weights recovers the luminance the source gamut's own weights describe. Restricted to
+    // gamuts that share sRGB's D65 white, since a chromatic adaptation is free to move Y.
+    for (ColorGamut_ gamut : {ColorGamut_Display_P3_SMPTE432, ColorGamut_BT2020_2100, ColorGamut_AdobeRGB})
+    {
+        const Chromaticities chr = gamut_chromaticities(gamut);
+        INFO("gamut = ", color_gamut_name(gamut));
+        REQUIRE(approx_equal(chr.white, Chromaticities{}.white, 1e-4f));
+
+        float3x3 M;
+        color_conversion_matrix(M, chr, Chromaticities{});
+
+        const float3 native_Yw = computeYw(chr);
+        for (const float3 &rgb :
+             {float3{1, 1, 1}, float3{1, 0, 0}, float3{0, 1, 0}, float3{0, 0, 1}, float3{0.2f, 0.7f, 0.4f}})
+        {
+            INFO("rgb = ", rgb);
+            CHECK(dot(mul(M, rgb), sRGB_Yw()) == doctest::Approx(dot(rgb, native_Yw)).epsilon(1e-4));
+        }
+
+        // And that the weights actually differ, so the check above is not passing on a coincidence: this
+        // is the whole reason using the source gamut's weights after the conversion is wrong.
+        CHECK_FALSE(approx_equal(native_Yw, sRGB_Yw(), 1e-3f));
+    }
+}
+
 TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_PQ")
 {
     // assets/shaders/colorspaces.sglsl's pq_encode() hand-duplicates the five ST.2084 constants as decimal

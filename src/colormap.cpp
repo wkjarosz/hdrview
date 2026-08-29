@@ -420,6 +420,8 @@ const std::vector<ImU32> &Colormap::values(Colormap_ idx)
 
 ImVec4 Colormap::sample(Colormap_ idx, float t)
 {
-    float cmap_size = (float)Colormap::values(idx).size();
-    return ImPlot::SampleColormap(saturate(lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, t)), idx);
+    // t runs edge to edge: 0 is the colormap's first color and 1 its last, matching what the shader gets
+    // out of texture(). That shader has to shift t to the first and last texel *centers* to land there;
+    // ImPlot's own lookup is already parameterized over the colors themselves, so it must not.
+    return ImPlot::SampleColormap(saturate(t), idx);
 }
