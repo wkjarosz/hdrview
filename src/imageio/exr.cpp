@@ -305,7 +305,6 @@ json attribute_to_json(const Imf::Attribute &a)
     }
     if (const auto *ta = dynamic_cast<const Imf::RationalAttribute *>(&a))
     {
-        j["value"]["numerator"]   = ta->value().n / ta->value().d;
         j["value"]["numerator"]   = ta->value().n;
         j["value"]["denominator"] = ta->value().d;
         j["string"] = fmt::format("{}/{} ({})", ta->value().n, ta->value().d, static_cast<double>(ta->value()));

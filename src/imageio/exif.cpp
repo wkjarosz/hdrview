@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring> // for memcmp
+#include <cstring>  // for memcmp
 #include <iterator> // for std::size
 #include <libexif/exif-byte-order.h>
 #include <libexif/exif-data.h>
@@ -138,6 +138,14 @@ struct Exif::Impl
     vector<uint8_t>                                       data;
     std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data{nullptr, &exif_data_unref};
     std::unique_ptr<ExifLog, decltype(&exif_log_unref)>   exif_log{nullptr, &exif_log_unref};
+
+    //! Set by the log callback below, which libexif keeps calling for as long as exif_log lives.
+    /*!
+        It must therefore live that long too. The callback fires well after loading -- reading an entry's
+        value logs, so exif_entry_get_value() during to_json() reaches it -- and a flag local to the
+        constructor would by then be a dead stack slot.
+    */
+    bool load_error = false;
 };
 
 Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<Impl>())
@@ -161,8 +169,6 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
             m_impl->data.assign(data_ptr, data_ptr + data_size);
 
         // 2) Create ExifData and ExifLog with custom log function
-        bool error = false;
-
         m_impl->exif_data = std::unique_ptr<ExifData, decltype(&exif_data_unref)>(exif_data_new(), &exif_data_unref);
         if (!m_impl->exif_data)
             throw std::invalid_argument("Failed to allocate ExifData.");
@@ -191,14 +197,14 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
                     break;
                 }
             },
-            &error);
+            &m_impl->load_error);
 
         exif_data_log(m_impl->exif_data.get(), m_impl->exif_log.get());
 
         // 3) Load the EXIF data from memory buffer
         exif_data_load_data(m_impl->exif_data.get(), m_impl->data.data(), (unsigned)m_impl->data.size());
 
-        if (error)
+        if (m_impl->load_error)
             spdlog::warn("There were errors while loading EXIF data, but trying to continue.");
 
         if (!m_impl->exif_data)
@@ -235,6 +241,12 @@ void           Exif::reset() { m_impl.reset(); }
 size_t         Exif::size() const { return m_impl ? m_impl->data.size() : 0; }
 const uint8_t *Exif::data() const { return m_impl ? m_impl->data.data() : nullptr; }
 
+// Declared in exif.h, where the reasoning behind the subtraction lives.
+bool maker_note_range_within(uint32_t offset, uint32_t size, uint32_t bound)
+{
+    return offset <= bound && size <= bound - offset;
+}
+
 //! Walk the entries of an Apple maker note, which libexif has no decoder for.
 /*!
     The note is a TIFF-style IFD preceded by a 12-byte "Apple iOS" header, with its own byte order and
@@ -247,6 +259,7 @@ const uint8_t *Exif::data() const { return m_impl ? m_impl->data.data() : nullpt
     \return       False when the note is Apple's but too short to hold the entries it claims; true
                   otherwise, including when there is no Apple maker note to walk.
 */
+
 template <typename F>
 static bool for_each_apple_makernote_entry(ExifData *ed, F &&visit)
 {
@@ -327,10 +340,10 @@ static bool for_each_apple_makernote_entry(ExifData *ed, F &&visit)
 
         // if the data fits in 4 bytes, it sits at location 8, otherwise location 8 stores a 32-bit offset
         // to where the data is
-        size_t entry_offset = (entry_size > 4) ? read_as<uint32_t>(mn_data + ofs + 8, endian) : (ofs + 8);
-        if (entry_offset + entry_size > mn_size)
+        uint32_t entry_offset = (entry_size > 4) ? read_as<uint32_t>(mn_data + ofs + 8, endian) : uint32_t(ofs + 8);
+        if (!maker_note_range_within(entry_offset, entry_size, uint32_t(mn_size)))
         {
-            spdlog::warn("skipping");
+            spdlog::warn("ExifMnoteApple: tag 0x{:04x} points outside the maker note; skipping.", tag);
             continue;
         }
 
@@ -582,7 +595,19 @@ json Exif::to_json() const
             }
 
             spdlog::debug("Exif::to_json: Processing entry {} (tag 0x{:04x}) in IFD {}", i, (int)entry->tag, ifd_idx);
-            ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
+
+            // One tag is not worth the rest of them. entry_to_json() names a tag's value by reading it back
+            // out of JSON as the scalar the tag number implies -- at forty-odd sites, none of which the file
+            // is obliged to agree with -- and the throw would otherwise leave this loop, abandoning every
+            // tag in the image including the ones already decoded.
+            try
+            {
+                ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));
+            }
+            catch (const std::exception &e)
+            {
+                spdlog::warn("Skipping EXIF tag 0x{:04x} in {}: {}.", (int)entry->tag, ExifIfdTable[ifd_idx], e.what());
+            }
         }
     }
 
