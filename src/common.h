@@ -14,6 +14,7 @@
 
 #include "fwd.h"
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -506,6 +507,16 @@ std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &na
     \returns One short name per input, in the same order.
 */
 std::vector<std::string> shorten_names(const std::vector<std::string> &names);
+
+/// Percent of a download still outstanding, for the status bar's progress readout.
+/*!
+    Kept apart from the Emscripten download callbacks so the arithmetic is exercised on every platform.
+    It guards the two things the raw byte counts do not: a total of zero, which a server that sends no
+    content length reports and which the callbacks can also see before the headers arrive; and integer
+    division, which sends every partial fraction to zero. Rounds what is left up, so the bar stays
+    visible until the download is genuinely finished rather than vanishing on the last few bytes.
+*/
+int download_percent_remaining(int64_t bytes_loaded, int64_t total_bytes);
 
 // Compare two strings in "natural" order (e.g. file2 < file10)
 bool natural_less(const std::string_view a, const std::string_view b);

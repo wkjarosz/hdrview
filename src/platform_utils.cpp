@@ -142,7 +142,7 @@ extern "C"
         }
         else
         {
-            hdrview()->load_image(filename, {buffer, buffer_size}, should_select);
+            hdrview()->load_image(filename, string_view{buffer, buffer_size}, should_select);
             return 0;
         }
     }

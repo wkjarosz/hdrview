@@ -3,6 +3,7 @@
 #include "colorspace.h"
 #include "fwd.h"
 #include "imageio/gainmap.h"
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -71,6 +72,20 @@ struct ImageLoadOptions
 */
 void check_image_dimensions(int64_t width, int64_t height, string_view format);
 
+/**
+    Whether a zip entry's declared uncompressed size is one the archive could actually be holding.
+
+    Every entry is read whole into memory before anything looks at it, sized from what the archive's
+    directory claims rather than from the bytes present -- so a declared size costs that much memory, and
+    the time to decompress into it, whether or not the data is there. The same reasoning as
+    check_image_dimensions(), one layer further out.
+
+    \param [] uncompressed_size  Size the archive's directory declares for the entry
+    \param [] compressed_size    Size the archive's directory says it stores it in
+    \param [] entry_name         Entry name, for the warning
+*/
+bool zip_entry_size_is_plausible(uint64_t uncompressed_size, uint64_t compressed_size, string_view entry_name);
+
 const ImageLoadOptions &load_image_options();
 void                    draw_load_image_options_dialog(bool &open);
 
@@ -95,15 +110,29 @@ std::optional<string> zip_extract_entry(string_view zip_bytes, const string &ent
 
 struct BackgroundImageLoader
 {
-    void background_load(const string filename, const string_view = string_view{}, bool should_select = false,
-                         ImagePtr to_replace = nullptr, const ImageLoadOptions &opts = {});
+    //! Load `filename`, from `buffer` when one is supplied and from disk otherwise.
+    /*!
+        An absent buffer and an empty one are different things: a zip can hold a zero-byte entry, and a
+        download can return nothing, neither of which means "go and read this path". The path in those
+        cases is a name built for display (`archive.zip/entry.png`), which nothing can open.
+    */
+    void background_load(const string filename, std::optional<string_view> buffer = std::nullopt,
+                         bool should_select = false, ImagePtr to_replace = nullptr, const ImageLoadOptions &opts = {});
     void get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback);
     int  num_pending_images() const { return (int)pending_images.size(); }
 
     const set<fs::path> &watched_directories() const { return m_directories; }
-    bool                 add_watched_directory(const fs::path &dir, bool ignore_existing);
-    //! Remove all watched directories that match the criterion.
+    //! Watch `dir` in its own right, whether or not anything has been loaded from it.
+    bool add_watched_directory(const fs::path &dir, bool ignore_existing);
+    //! Remove all watched directories that match the criterion, however they came to be watched.
     void remove_watched_directories(function<bool(const fs::path &)> remove_criterion);
+    //! Same, but keeps the ones add_watched_directory() was asked for.
+    /*!
+        Callers prune by "no loaded image came from here", which is the right rule for a directory that is
+        only watched because its images were opened. A directory the user asked for holds no loaded images
+        of its own -- that is the point of it -- so that rule would always throw it away.
+    */
+    void remove_implicitly_watched_directories(function<bool(const fs::path &)> remove_criterion);
 
     void load_new_and_modified_files();
 
@@ -136,6 +165,12 @@ private:
     void remove_recent_file(const string &f);
 
     set<fs::path> m_directories;
+
+    // The subset of m_directories that add_watched_directory() was asked for, rather than ones picked up
+    // from the folder an image was opened from.
+    set<fs::path> m_explicit_directories;
+
+    void remove_watched_directories_if(const function<bool(const fs::path &)> &criterion, bool keep_explicit);
 
     // don't treat these files as new (they are either currently loaded, or we've previously loaded them from a watched
     // directory and manually closed them, so don't want to automatically reload them)

@@ -16,7 +16,16 @@
 #include "imageio/raw.h"
 #include "imageio/stb.h"
 
+#include <miniz.h>
+#include <spdlog/sinks/base_sink.h>
+#include <spdlog/spdlog.h>
+
+#include <algorithm>
+#include <memory>
+#include <mutex>
+
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -72,13 +81,13 @@ std::string dds_header(uint32_t w, uint32_t h)
     v[1] = 'D';
     v[2] = 'S';
     v[3] = ' ';
-    put_le32(4, 124);      // dwSize
-    put_le32(8, 0x1007);   // caps | height | width | pixelformat
-    put_le32(12, h);       // dwHeight
-    put_le32(16, w);       // dwWidth
-    put_le32(76, 32);      // ddspf.dwSize
-    put_le32(80, 0x41);    // ddspf.dwFlags: RGB | alpha
-    put_le32(88, 32);      // ddspf.dwRGBBitCount
+    put_le32(4, 124);    // dwSize
+    put_le32(8, 0x1007); // caps | height | width | pixelformat
+    put_le32(12, h);     // dwHeight
+    put_le32(16, w);     // dwWidth
+    put_le32(76, 32);    // ddspf.dwSize
+    put_le32(80, 0x41);  // ddspf.dwFlags: RGB | alpha
+    put_le32(88, 32);    // ddspf.dwRGBBitCount
     put_le32(92, 0x00ff0000);
     put_le32(96, 0x0000ff00);
     put_le32(100, 0x000000ff);
@@ -120,12 +129,141 @@ std::string rejection_reason(Loader &&loader, const std::string &bytes, const ch
 }
 
 //! Whether \p reason is the dimension check's complaint rather than some later decode failure.
-bool blames_dimensions(const std::string &reason)
-{
-    return reason.find("implausibly large") != std::string::npos;
-}
+bool blames_dimensions(const std::string &reason) { return reason.find("implausibly large") != std::string::npos; }
 
 } // namespace
+
+namespace
+{
+
+//! A one-entry deflated zip holding `contents` under `name`.
+std::string make_zip(const std::string &name, const std::string &contents)
+{
+    mz_zip_archive zip;
+    memset(&zip, 0, sizeof(zip));
+    REQUIRE(mz_zip_writer_init_heap(&zip, 0, 0));
+    REQUIRE(mz_zip_writer_add_mem(&zip, name.c_str(), contents.data(), contents.size(), MZ_BEST_COMPRESSION));
+    void  *buf  = nullptr;
+    size_t size = 0;
+    REQUIRE(mz_zip_writer_finalize_heap_archive(&zip, &buf, &size));
+    std::string out(reinterpret_cast<char *>(buf), size);
+    mz_zip_writer_end(&zip);
+    return out;
+}
+
+/*!
+    Overwrites the uncompressed-size field in both of an entry's headers, leaving the stored bytes alone --
+    a zip whose directory claims far more than the archive is holding. Real-world equivalents are a
+    truncated or hand-edited archive and a deliberate decompression bomb; both reach the same code.
+
+    The field sits at offset 22 of a local file header (PK\3\4) and offset 24 of a central directory
+    header (PK\1\2).
+*/
+void declare_uncompressed_size(std::string &zip, uint32_t declared)
+{
+    auto patch_at = [&](const char *sig, size_t field_offset)
+    {
+        size_t pos = zip.find(sig, 0, 4);
+        REQUIRE(pos != std::string::npos);
+        for (int b = 0; b < 4; ++b) zip[pos + field_offset + b] = char((declared >> (8 * b)) & 0xff);
+    };
+    patch_at("PK\x03\x04", 22);
+    patch_at("PK\x01\x02", 24);
+}
+
+//! Collects everything logged while it is in scope, so a test can assert that a call site was reached.
+/*!
+    The guard's only observable effect is that the extraction is not attempted: an archive lying about an
+    entry's size fails to extract either way, just with a large allocation and a decompression first. So the
+    warning is what distinguishes "refused up front" from "tried and failed", and the log is where it shows.
+*/
+struct LogCapture
+{
+    struct Sink : spdlog::sinks::base_sink<std::mutex>
+    {
+        std::vector<std::string> messages;
+        void                     sink_it_(const spdlog::details::log_msg &msg) override
+        {
+            messages.emplace_back(msg.payload.data(), msg.payload.size());
+        }
+        void flush_() override {}
+    };
+
+    std::shared_ptr<Sink> sink = std::make_shared<Sink>();
+
+    LogCapture() { spdlog::default_logger()->sinks().push_back(sink); }
+    ~LogCapture()
+    {
+        auto &sinks = spdlog::default_logger()->sinks();
+        sinks.erase(std::remove(sinks.begin(), sinks.end(), sink), sinks.end());
+    }
+
+    bool saw(const std::string &substring) const
+    {
+        return std::any_of(sink->messages.begin(), sink->messages.end(),
+                           [&](const std::string &m) { return m.find(substring) != std::string::npos; });
+    }
+};
+
+} // namespace
+
+TEST_CASE("A zip entry declaring more than the archive holds is skipped before it is allocated for")
+{
+    // Same reasoning as the image headers above, one layer out: an entry is read whole into memory, sized
+    // from what the archive's directory claims. A claim the stored bytes cannot back costs that memory --
+    // and the decompression time to fill it -- before anything discovers it is not an image.
+    const std::string manifest = R"({"type": "HDRView session"})";
+
+    SUBCASE("an honest archive is untouched")
+    {
+        const std::string zip = make_zip("manifest.json", manifest);
+
+        auto found = zip_root_entries_with_suffix(zip, ".json");
+        REQUIRE(found.size() == 1);
+        CHECK(found[0].first == "manifest.json");
+        CHECK(found[0].second == manifest);
+
+        auto one = zip_extract_entry(zip, "manifest.json");
+        REQUIRE(one.has_value());
+        CHECK(*one == manifest);
+    }
+
+    SUBCASE("a ratio no deflate stream could produce is refused before extraction is attempted")
+    {
+        std::string zip = make_zip("manifest.json", manifest);
+        // Well past deflate's 1032:1 ceiling, but small enough that a build without the guard merely wastes
+        // the allocation instead of exhausting the machine -- vector<char>(n) zero-fills, so the pages are
+        // really touched.
+        declare_uncompressed_size(zip, 64u << 20);
+
+        {
+            LogCapture log;
+            CHECK(zip_root_entries_with_suffix(zip, ".json").empty());
+            CHECK(log.saw("Skipping zip entry 'manifest.json'"));
+        }
+        {
+            LogCapture log;
+            CHECK_FALSE(zip_extract_entry(zip, "manifest.json").has_value());
+            CHECK(log.saw("Skipping zip entry 'manifest.json'"));
+        }
+    }
+
+    SUBCASE("the ratio and the absolute bound are both enforced, and neither rejects a real entry")
+    {
+        // Plausible: an ordinary entry, and one compressed as hard as deflate can manage.
+        CHECK(zip_entry_size_is_plausible(1024, 512, "ordinary"));
+        CHECK(zip_entry_size_is_plausible(1032 * 4096, 4096, "maximally compressible"));
+        // A stored (ratio 1) entry of any workable size, and an empty one.
+        CHECK(zip_entry_size_is_plausible(64 * 1024 * 1024, 64 * 1024 * 1024, "stored"));
+        CHECK(zip_entry_size_is_plausible(0, 2, "empty"));
+
+        // Beyond what deflate can expand to, however large the archive says it is.
+        CHECK_FALSE(zip_entry_size_is_plausible(1033 * 4096, 4096, "past the ratio"));
+        CHECK_FALSE(zip_entry_size_is_plausible(1ull << 40, 8, "wildly past the ratio"));
+        // And an honestly-compressible bomb, which the ratio test alone would let through.
+        CHECK_FALSE(zip_entry_size_is_plausible(8ull << 30, 8ull << 20, "decompression bomb"));
+    }
+}
 
 TEST_CASE("check_image_dimensions accepts real sizes and rejects degenerate ones")
 {

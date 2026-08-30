@@ -363,3 +363,12 @@ bool natural_less(const string_view a, const string_view b)
     }
     return a.size() < b.size();
 }
+
+int download_percent_remaining(int64_t bytes_loaded, int64_t total_bytes)
+{
+    if (total_bytes <= 0)
+        return 100; // nothing to measure against yet; leave the bar where it started
+
+    const int64_t remaining = std::max<int64_t>(0, total_bytes - bytes_loaded);
+    return (int)std::min<int64_t>(100, (100 * remaining + total_bytes - 1) / total_bytes);
+}

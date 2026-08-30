@@ -103,7 +103,7 @@ void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
 }
 
 //! The nudge that keeps a zoom already sitting on a power of two from being rounded to the wrong side of
-//! it by float error in log2(), while being far too small to reach the neighbouring stop.
+//! it by float error in log2(), while being far too small to reach the neighboring stop.
 static constexpr float k_zoom_step_epsilon = 1e-4f;
 
 void HDRViewApp::zoom_in()
