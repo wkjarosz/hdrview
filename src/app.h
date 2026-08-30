@@ -210,6 +210,17 @@ public:
         the same place before and after the zoom.
     */
     void zoom_at_vp_pos(float amount, float2 focus_vp_pos);
+
+    //! Respond to a touch gesture the browser reported. \see install_touch_handlers() in platform_utils
+    /*!
+        \param [] num_touches    Fingers currently on the screen
+        \param [] relative_delta Change in the first two fingers' separation, as a fraction of it
+        \param [] app_pos        Point to zoom about, midway between them
+
+        Public because Emscripten's event API takes a plain function pointer, so the listener that calls
+        this cannot be a member.
+    */
+    void touch_gesture(int num_touches, float relative_delta, float2 app_pos);
     /// Zoom in to the next power of two
     void zoom_in();
     /// Zoom out to the previous power of two
@@ -342,7 +353,6 @@ private:
     void draw_developer_windows();
     void draw_tweak_window();
     void process_shortcuts();
-    bool process_event(void *event);
     void set_image_textures();
     void update_visibility();
 
@@ -399,6 +409,14 @@ private:
     BackgroundImageLoader m_image_loader;
 
     int m_remaining_download = 0;
+
+    //! Number of fingers currently on the screen, tracked only under Emscripten.
+    /*!
+        The GLFW port synthesizes mouse events from the first touch and drops the rest ("we don't handle
+        multitouch", Context.cpp), so during a two-finger pinch it is still reporting a left-drag. Panning
+        is suppressed while this exceeds one, or the image would pan and zoom at the same time.
+    */
+    int m_active_touches = 0;
 
     ImGuiTextFilter m_file_filter, m_channel_filter;
     vector<size_t>  m_visible_images;

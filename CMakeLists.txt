@@ -635,15 +635,6 @@ if(EMSCRIPTEN)
   target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
   list(APPEND HDRVIEW_DEPENDENCIES "emscripten-browser-file")
 
-  CPMAddPackage("gh:Armchair-Software/emscripten-browser-clipboard#bcba48fee22551b458fe5e1e513f6402c810d886")
-  if(NOT emscripten-browser-clipboard_ADDED)
-    message(FATAL_ERROR "Could not download emscripten-browser-clipboard library.")
-  endif()
-  message(STATUS "emscripten-browser-clipboard library added")
-  add_library(emscripten-browser-clipboard INTERFACE IMPORTED)
-  target_include_directories(emscripten-browser-clipboard INTERFACE "${emscripten-browser-clipboard_SOURCE_DIR}")
-  list(APPEND HDRVIEW_DEPENDENCIES "emscripten-browser-clipboard")
-
 else()
 
   CPMAddPackage(

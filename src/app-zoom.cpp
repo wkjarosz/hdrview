@@ -4,10 +4,6 @@
 
 #include <cmath>
 
-#ifdef HELLOIMGUI_USE_SDL2
-#include <SDL.h>
-#endif
-
 using namespace std;
 using namespace HelloImGui;
 
@@ -291,7 +287,9 @@ void HDRViewApp::handle_mouse_interaction()
     else
     {
         float2 drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+        // A second finger means a pinch, and the first one is still driving a synthesized left-drag; pan
+        // would fight the zoom for the same gesture.
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) && m_active_touches < 2)
         {
             cancel_autofit = true;
             reposition_pixel_to_vp_pos(vp_mouse_pos + drag_delta, pixel_at_vp_pos(vp_mouse_pos));
@@ -303,43 +301,13 @@ void HDRViewApp::handle_mouse_interaction()
         this->cancel_autofit();
 }
 
-bool HDRViewApp::process_event(void *e)
+void HDRViewApp::touch_gesture(int num_touches, float relative_delta, float2 app_pos)
 {
-#ifdef HELLOIMGUI_USE_SDL2
-    auto &io = ImGui::GetIO();
-    if (io.WantCaptureMouse)
-        return false;
+    m_active_touches = num_touches;
 
-    SDL_Event *event = static_cast<SDL_Event *>(e);
-    switch (event->type)
-    {
-    case SDL_QUIT: spdlog::trace("Got an SDL_QUIT event"); break;
-    case SDL_WINDOWEVENT: spdlog::trace("Got an SDL_WINDOWEVENT event"); break;
-    case SDL_MOUSEWHEEL: spdlog::trace("Got an SDL_MOUSEWHEEL event"); break;
-    case SDL_MOUSEMOTION: spdlog::trace("Got an SDL_MOUSEMOTION event"); break;
-    case SDL_MOUSEBUTTONDOWN: spdlog::trace("Got an SDL_MOUSEBUTTONDOWN event"); break;
-    case SDL_MOUSEBUTTONUP: spdlog::trace("Got an SDL_MOUSEBUTTONUP event"); break;
-    case SDL_FINGERMOTION: spdlog::trace("Got an SDL_FINGERMOTION event"); break;
-    case SDL_FINGERDOWN: spdlog::trace("Got an SDL_FINGERDOWN event"); break;
-    case SDL_MULTIGESTURE:
-    {
-        spdlog::trace("Got an SDL_MULTIGESTURE event; numFingers: {}; dDist: {}; x: {}, y: {}; io.MousePos: {}, {}; "
-                      "io.MousePosFrac: {}, {}",
-                      event->mgesture.numFingers, event->mgesture.dDist, event->mgesture.x, event->mgesture.y,
-                      io.MousePos.x, io.MousePos.y, io.MousePos.x / io.DisplaySize.x, io.MousePos.y / io.DisplaySize.y);
-        constexpr float cPinchZoomThreshold(0.0001f);
-        constexpr float cPinchScale(80.0f);
-        if (event->mgesture.numFingers == 2 && fabs(event->mgesture.dDist) >= cPinchZoomThreshold)
-        {
-            // Zoom in/out by positive/negative mPinch distance
-            zoom_at_vp_pos(event->mgesture.dDist * cPinchScale, vp_pos_at_app_pos(io.MousePos));
-            return true;
-        }
-    }
-    break;
-    case SDL_FINGERUP: spdlog::trace("Got an SDL_FINGERUP event"); break;
-    }
-#endif
-    (void)e; // prevent unreferenced formal parameter warning
-    return false;
+    // Scaled by the fingers' own separation, so the same travel zooms by the same amount whether they
+    // started close together or far apart.
+    constexpr float k_pinch_scale = 8.f;
+    if (relative_delta != 0.f)
+        zoom_at_vp_pos(k_pinch_scale * relative_delta, vp_pos_at_app_pos(app_pos));
 }

@@ -1,6 +1,5 @@
 #pragma once
 
-void        setup_imgui_clipboard();
 bool        host_is_apple();
 bool        host_is_safari();
 const char *file_manager_name();
@@ -9,6 +8,9 @@ void        show_in_file_manager(const char *filename);
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
+
+//! Register the browser touch listeners that supply pinch-to-zoom, which no backend provides.
+void install_touch_handlers();
 
 extern "C"
 {
