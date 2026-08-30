@@ -1,5 +1,6 @@
 #include "psd.h"
 #include <cstring>
+#include <spdlog/spdlog.h>
 
 static uint16_t read_uint16_be(std::istream &stream)
 {
@@ -112,9 +113,18 @@ void PSDMetadata::read(std::istream &stream)
         // Read resource data size
         uint32_t data_size = read_uint32_be(stream);
 
-        // Sanity check
-        if (data_size > 100 * 1024 * 1024) // 100MB limit
-            throw std::runtime_error("Resource data size too large");
+        // A resource lives inside the Image Resources section, so it cannot be larger than what is left of
+        // it. Without this the read runs on into the layer and pixel data that follows, and whatever it
+        // picks up is handed onwards as this image's XMP, EXIF or ICC profile -- and a block declaring
+        // megabytes is allocated for before the stream reports it has run out.
+        const std::streamoff remaining = section_end - stream.tellg();
+        if (remaining < 0 || data_size > uint64_t(remaining))
+        {
+            spdlog::warn("PSD resource 0x{:04x} claims {} bytes, more than the {} left in the image "
+                         "resources section; ignoring the rest of the section.",
+                         resource_id, data_size, remaining < 0 ? 0 : remaining);
+            break;
+        }
 
         // Extract metadata based on resource ID
         if (resource_id == 1028 && iptc.empty()) // IPTC-NAA

@@ -455,8 +455,8 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
             Partial total;
             for (const auto &p : partials)
             {
-                summary.minimum = std::min(p.minimum, summary.minimum);
-                summary.maximum = std::max(p.maximum, summary.maximum);
+                summary.minimum         = std::min(p.minimum, summary.minimum);
+                summary.maximum         = std::max(p.maximum, summary.maximum);
                 summary.extreme_minimum = std::min(p.extreme_minimum, summary.extreme_minimum);
                 summary.extreme_maximum = std::max(p.extreme_maximum, summary.extreme_maximum);
                 summary.nan_pixels += p.nan_pixels;
@@ -557,8 +557,7 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
                         if (!std::isfinite(val) || is_marker(val)) //< the summary counts these instead
                             continue;
 
-                        for (int s = 0; s < AxisScale_COUNT; ++s)
-                            ++bins[s][clamp_idx(value_to_bin(val, (AxisScale)s))];
+                        for (int s = 0; s < AxisScale_COUNT; ++s) ++bins[s][clamp_idx(value_to_bin(val, (AxisScale)s))];
                     }
                 },
                 (int)num_threads);
@@ -1187,56 +1186,67 @@ void Image::finalize()
 
     // Centralized XMP parsing: if loaders stored raw XMP into image->xmp_data or into exif metadata,
     // parse it once here and populate metadata["xmp"] with structured JSON.
-    if (!metadata.contains("xmp"))
+    // XMP decorates an image; it does not describe its pixels. Anything thrown while deriving it -- by the
+    // parser, or by a JSON value not having the type this code reads it as -- costs the metadata and
+    // nothing else. Without this it left finalize() and the image never arrived.
+    try
     {
-        // spdlog::warn("XMP metadata not yet parsed; attempting to parse from raw data.");
-        if (metadata.contains("exif") && metadata["exif"].is_object())
+        if (!metadata.contains("xmp"))
         {
-            // Check EXIF entries for raw XMP stored by exif parser (tag 700)
-            for (auto &it : metadata["exif"].items())
+            // spdlog::warn("XMP metadata not yet parsed; attempting to parse from raw data.");
+            if (metadata.contains("exif") && metadata["exif"].is_object())
             {
-                auto &v = it.value();
-                if (!v.is_object())
-                    continue;
-
-                if (v.contains("XMP Metadata") && v["XMP Metadata"].is_object() && v["XMP Metadata"].contains("value"))
+                // Check EXIF entries for raw XMP stored by exif parser (tag 700)
+                for (auto &it : metadata["exif"].items())
                 {
-                    std::string s = v["XMP Metadata"]["value"].get<std::string>();
-                    if (s.find("http://ns.adobe.com/xap/1.0/") != std::string::npos ||
-                        s.find("x:xmpmeta") != std::string::npos || s.find("<?xpacket") != std::string::npos)
+                    auto &v = it.value();
+                    if (!v.is_object())
+                        continue;
+
+                    if (v.contains("XMP Metadata") && v["XMP Metadata"].is_object() &&
+                        v["XMP Metadata"]["value"].is_string())
                     {
-                        if (xmp_data.empty())
+                        std::string s = v["XMP Metadata"]["value"].get<std::string>();
+                        if (s.find("http://ns.adobe.com/xap/1.0/") != std::string::npos ||
+                            s.find("x:xmpmeta") != std::string::npos || s.find("<?xpacket") != std::string::npos)
                         {
-                            xmp_data.assign(s.begin(), s.end());
-                            spdlog::debug("Reading XMP data from EXIF XMP Metadata tag.");
+                            if (xmp_data.empty())
+                            {
+                                xmp_data.assign(s.begin(), s.end());
+                                spdlog::debug("Reading XMP data from EXIF XMP Metadata tag.");
+                            }
+                            else
+                            {
+                                spdlog::warn("Image contains both xpacket XMP data ({} bytes) and an XMP EXIF tag; "
+                                             "prioritizing xpacket buffer.",
+                                             xmp_data.size());
+                            }
+                            break;
                         }
-                        else
-                        {
-                            spdlog::warn("Image contains both xpacket XMP data ({} bytes) and an XMP EXIF tag; "
-                                         "prioritizing xpacket buffer.",
-                                         xmp_data.size());
-                        }
-                        break;
                     }
                 }
             }
-        }
 
-        if (!xmp_data.empty())
-        {
-            spdlog::debug("Parsing XMP from {} byte buffer:\n{}", xmp_data.size(),
-                          std::string(reinterpret_cast<const char *>(xmp_data.data()), xmp_data.size()));
-            Xmp xmp(reinterpret_cast<const char *>(xmp_data.data()), xmp_data.size());
-            if (xmp.valid())
+            if (!xmp_data.empty())
             {
-                spdlog::debug("Successfully parsed XMP metadata.");
-                metadata["xmp"] = xmp.to_json();
-            }
-            else
-            {
-                spdlog::warn("Failed to parse XMP metadata from raw xmp_data buffer.");
+                spdlog::debug("Parsing XMP from {} byte buffer:\n{}", xmp_data.size(),
+                              std::string(reinterpret_cast<const char *>(xmp_data.data()), xmp_data.size()));
+                Xmp xmp(reinterpret_cast<const char *>(xmp_data.data()), xmp_data.size());
+                if (xmp.valid())
+                {
+                    spdlog::debug("Successfully parsed XMP metadata.");
+                    metadata["xmp"] = xmp.to_json();
+                }
+                else
+                {
+                    spdlog::warn("Failed to parse XMP metadata from raw xmp_data buffer.");
+                }
             }
         }
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::warn("Could not read this image's XMP metadata: {}. Loading it without.", e.what());
     }
 
     // sanity check all channels have the same size as the data window

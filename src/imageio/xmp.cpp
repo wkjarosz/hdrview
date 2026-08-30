@@ -75,6 +75,25 @@ static std::string_view extract_XMP_content(const string &xmp_blob)
     return sv.substr(first, last - first + 1);
 }
 
+//! Stores `value` under `prefix`.`local`, without assuming what may already be at `prefix`.
+/*!
+    Both loops below group a prefixed name into a nested object. Nothing guarantees the prefix is free:
+    an unprefixed attribute of the same name may already have put a plain string there, and indexing into
+    that throws -- out of Image::finalize(), which parses XMP with nothing catching around the call, so a
+    packet HDRView disliked cost the whole image. Fall back to the flat "prefix:local" key, which collides
+    with nothing and keeps both values.
+*/
+static void assign_prefixed(json &result, const std::string &prefix, const std::string &local, json value)
+{
+    if (!result.contains(prefix))
+        result[prefix] = json::object();
+
+    if (result[prefix].is_object())
+        result[prefix][local] = std::move(value);
+    else
+        result[prefix + ":" + local] = std::move(value);
+}
+
 json parse_xml_element(const XMLElement *element, const std::string &parent_ns = "")
 {
     json result;
@@ -97,6 +116,15 @@ json parse_xml_element(const XMLElement *element, const std::string &parent_ns =
     {
         std::string attr_name  = attr->Name();
         std::string attr_value = attr->Value();
+        // Namespace declarations describe the document, not the image. add_xmlns_entries() collects them
+        // into their own table; storing them here as well duplicated that, and a default declaration
+        // (plain "xmlns", no colon) landed as a string under the same key that "xmlns:dc" then wanted to
+        // index into as an object.
+        if (attr_name == "xmlns" || attr_name.rfind("xmlns:", 0) == 0)
+        {
+            attr = attr->Next();
+            continue;
+        }
         // Special-case: preserve the full "xml:lang" key and value instead of
         // splitting into namespace/object. This keeps language tags as plain
         // key/value pairs in the resulting JSON.
@@ -118,11 +146,7 @@ json parse_xml_element(const XMLElement *element, const std::string &parent_ns =
                 if (ns_prefix == current_ns && !current_ns.empty())
                     result[local_name] = attr_value;
                 else
-                {
-                    if (!result.contains(ns_prefix))
-                        result[ns_prefix] = json::object();
-                    result[ns_prefix][local_name] = attr_value;
-                }
+                    assign_prefixed(result, ns_prefix, local_name, attr_value);
             }
             else
                 result[attr_name] = attr_value;
@@ -222,11 +246,7 @@ json parse_xml_element(const XMLElement *element, const std::string &parent_ns =
             if (ns_prefix == current_ns && !current_ns.empty())
                 result[local_name] = child_json;
             else
-            {
-                if (!result.contains(ns_prefix))
-                    result[ns_prefix] = json::object();
-                result[ns_prefix][local_name] = child_json;
-            }
+                assign_prefixed(result, ns_prefix, local_name, child_json);
         }
         else
         {
