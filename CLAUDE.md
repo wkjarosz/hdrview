@@ -73,8 +73,13 @@ cmake --preset macos-arm64-cpm -DHDRVIEW_BUILD_TESTS=ON
 cmake --build --preset macos-arm64-cpm-release
 ctest --test-dir build/macos-arm64-cpm -C Release --output-on-failure
 ```
-Coverage: `test_colorspace.cpp` (gamut/transfer-function round-trips), `test_pixel_stats.cpp`, and
-`test_exr_io.cpp`/`test_png_io.cpp` (loader correctness). The EXR/PNG tests conditionally compile in extra
+Coverage is roughly two dozen files: color math (`test_colorspace.cpp`, `test_icc_cicp.cpp`,
+`test_cicp_video_range.cpp`, `test_gainmap.cpp`), the loaders and their edge cases
+(`test_exr_io.cpp`/`test_png_io.cpp`/`test_tiff_io.cpp`/`test_dds_io.cpp`/`test_heif_io.cpp`/`test_qoi_io.cpp`,
+`test_loader_limits.cpp`, `test_numeric_edge_cases.cpp`), metadata (`test_exif.cpp`, `test_xmp.cpp`,
+`test_psd_metadata.cpp`), export round-trips (`test_export_roundtrip.cpp`), and assorted helpers. There are
+also libFuzzer targets for the loaders under `tests/fuzz/`, behind `HDRVIEW_BUILD_FUZZERS` (Clang only). The
+EXR/PNG tests conditionally compile in extra
 cases against vendored real-world test images (OpenEXR's test suite, libpng's pngsuite/testpngs) that are
 only present when CPM fetched those libraries from source — i.e. only on `-cpm`/`-universal` presets, not
 `-local` ones; see the `HDRVIEW_TEST_OPENEXR_DIR`/`HDRVIEW_TEST_PNG_CONTRIB_DIR` guards in `CMakeLists.txt`
@@ -95,9 +100,11 @@ vendoring:
 ```bash
 cmake --preset macos-arm64-cpm -DHDRVIEW_BUILD_GUI_TESTS=ON
 cmake --build --preset macos-arm64-cpm-release --target hdrview_gui_tests
-./build/macos-arm64-cpm/Release/hdrview_gui_tests            # interactive: real HDRView UI + Test Engine overlay
-./build/macos-arm64-cpm/Release/hdrview_gui_tests -nogui -nopause   # headless/CI: prints a pass/fail summary, exit code reflects result
+./build/macos-arm64-cpm/Release/hdrview_gui_tests   # runs the queued tests, prints a pass/fail summary, exits with the result
 ```
+The binary takes no arguments — it always opens a real HDRView window, runs every registered test, and
+exits. There is no headless mode: capture and input both go through a live GL context, so CI runs it under
+`xvfb-run` rather than without a display.
 Test source lives under `tests/gui/`, one file per category (mirroring Dear ImGui's own `imgui_test_suite`
 convention), each exposing a `RegisterTests_X(ImGuiTestEngine*)` aggregated by
 `tests/gui/test_gui_registry.h`. `src/app.h`/`src/app-windows.cpp` add a small
@@ -137,6 +144,26 @@ assertions against a vendored multi-part OpenEXR fixture (`HDRVIEW_TEST_OPENEXR_
 simple single-layer PNG fixtures (`HDRVIEW_GUI_TEST_IMAGE`/`_2`) the rest of the suite uses. Note a multi-part
 EXR loads as multiple separate `Image`s (one per part), not as multiple `ChannelGroup`s within one `Image` —
 that's only how a single-part *multi-layer* EXR behaves.
+
+`tests/gui/test_gui_screenshots.cpp` rides the same harness for a different purpose: it regenerates the
+README's screenshots. It registers zero tests unless `HDRVIEW_SCREENSHOT_DIR` is set, so an ordinary `ctest`
+run never sees it; `resources/regenerate-screenshots.sh` is the entry point, and `HDRVIEW_SCREENSHOT_IMAGES`
+points it at subject images other than the in-tree fixtures. Capture rides hello_imgui's test-engine
+integration, which installs `ImGuiApp_ImplGL_CaptureFramebuffer` as the engine's `ScreenCaptureFunc` — but
+only under `#ifdef HELLOIMGUI_HAS_OPENGL`, so this is an OpenGL-backend-only facility and cannot produce
+macOS screenshots. `enable_gui_test_engine()` also honors `HDRVIEW_SCREENSHOT_SIZE`/`_SCALE` so the window
+geometry and UI density are stated rather than inherited.
+
+**A screenshot must be read back from the colorpass's offscreen target, not from the window.** Hello ImGui's
+capture reads the window, which is display-referred: whenever the colorpass runs, that buffer holds whatever
+transfer function the display negotiated — linear light under a Wayland compositor reporting a linear
+transfer, PQ on an HDR display — and a PNG holding linear light is read back as sRGB and looks markedly too
+dark. So `enable_gui_test_engine()` overrides `ScreenCaptureFunc` with `capture_colorpass_framebuffer()`
+(`app-windows.cpp`), which binds `HDRViewApp::capture_source()`'s FBO for the read. That target still holds
+HDRView's extended sRGB — already sRGB-encoded, 1.0 at SDR white — so reading it as fixed-point clamps to
+[0, 1] and quantizes, which is exactly the SDR rendition a PNG wants, with no inverse of the display
+conversion needed and the app still rendering in HDR. `capture_source()` returns nullptr when no color
+management is in force, and then the window's framebuffer is already the sRGB one.
 
 The imgui_test_engine license is non-standard (not MIT) but free for OSI-licensed open-source projects like
 HDRView (see `LICENSE.txt` in the fetched package). CI runs it headlessly only on Linux (`ci-linux.yml`'s
@@ -241,7 +268,7 @@ of `assets/shaders/image-shader.sglsl`). How that reaches the display differs by
 - **Windows/Linux (GLFW+OpenGL)**: the display may instead want scRGB linear, a power curve, or PQ, possibly
   over a wider gamut. So the whole frame is redirected into an offscreen `RGBA16F` target and a final
   full-screen "colorpass" converts it — `update_colorpass()`/`begin_colorpass_frame()`/`end_colorpass_frame()`
-  in `app-draw.cpp`, plus `assets/shaders/colorpass.sglsl`. The two halves straddle Dear ImGui's rendering
+  in `app-colorpass.cpp`, plus `assets/shaders/colorpass.sglsl`. The two halves straddle Dear ImGui's rendering
   (`CustomBackground` … `BeforeSwap`), which is why `update_colorpass()` makes the decision once per frame
   up front rather than letting each half decide.
 

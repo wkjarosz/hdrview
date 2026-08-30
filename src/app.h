@@ -62,6 +62,10 @@ public:
     void enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *));
     /// Valid only after run() returns; {tested, succeeded} counts from the Test Engine queue.
     std::pair<int, int> test_engine_result() const { return {m_test_engine_tested, m_test_engine_succeeded}; }
+    /// The buffer a screenshot should be read back from, or nullptr when that is the window's own
+    /// framebuffer. Only the colorpass's offscreen target still holds HDRView's extended sRGB; the window
+    /// holds display-referred values, which a PNG cannot represent. See app-windows.cpp.
+    const RenderPass *capture_source() const { return m_color_managed ? m_colorpass_pass.get() : nullptr; }
 #endif
 
     RenderPass *renderpass() { return m_render_pass.get(); }
@@ -289,14 +293,16 @@ public:
     bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
     bool       &dithering_on() { return m_dither; }
     bool       &draw_grid_on() { return m_draw_grid; }
-    bool       &draw_pixel_info_on() { return m_draw_pixel_info; }
-    AxisScale  &histogram_x_scale() { return m_x_scale; }
-    AxisScale  &histogram_y_scale() { return m_y_scale; }
-    float      &histogram_height() { return m_histogram_height; }
-    Box2i      &roi_live() { return m_roi_live; }
-    Box2i      &roi() { return m_roi; }
-    bool2      &clip_warnings() { return m_clip_warnings; }
-    float2     &clip_range() { return m_clip_range; }
+    //! Whether the image list shows only the unique portion of each file name.
+    bool      &short_names() { return m_short_names; }
+    bool      &draw_pixel_info_on() { return m_draw_pixel_info; }
+    AxisScale &histogram_x_scale() { return m_x_scale; }
+    AxisScale &histogram_y_scale() { return m_y_scale; }
+    float     &histogram_height() { return m_histogram_height; }
+    Box2i     &roi_live() { return m_roi_live; }
+    Box2i     &roi() { return m_roi; }
+    bool2     &clip_warnings() { return m_clip_warnings; }
+    float2    &clip_range() { return m_clip_range; }
 
     /// Height of the Pixel statistics histogram plot, in em, when it has never been resized
     static constexpr float default_histogram_height = 9.f;

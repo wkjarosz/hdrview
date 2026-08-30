@@ -14,6 +14,12 @@
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
+#include <cstdio>
+#include <cstdlib>
+#if defined(HELLOIMGUI_HAS_OPENGL)
+#include <hello_imgui/hello_imgui_include_opengl.h>
+#include <hello_imgui/internal/backend_impls/opengl_setup_helper/opengl_screenshot.h>
+#endif
 #endif
 
 using namespace std;
@@ -27,6 +33,48 @@ void HDRViewApp::run()
 }
 
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
+
+#if defined(HELLOIMGUI_HAS_OPENGL)
+//! Screen capture that reads the colorpass's offscreen target rather than the window's framebuffer.
+/*!
+    Hello ImGui's default capture reads the window, which is display-referred: whenever the colorpass is
+    running, that holds whatever transfer function the display asked for -- linear light on a Wayland
+    compositor that negotiated a linear transfer, PQ on an HDR display. Saved into a PNG, which is read back
+    as sRGB, linear light in particular comes out markedly too dark.
+
+    The pass's own target is the buffer worth capturing: it holds HDRView's extended sRGB, which is already
+    sRGB-encoded with 1.0 at SDR white (see the tail of assets/shaders/image-shader.sglsl and colorpass.sglsl,
+    which linearizes it back out). Reading it as fixed-point clamps that to [0, 1] and quantizes, which is
+    exactly the SDR rendition a screenshot should hold -- no inverse of the display conversion required, and
+    the app goes on rendering in HDR while being photographed.
+
+    Everything else -- the y-flip, the framebuffer scale -- is Hello ImGui's, which only ever reads whatever
+    framebuffer is bound.
+*/
+static bool capture_colorpass_framebuffer(ImGuiID viewport_id, int x, int y, int w, int h, unsigned int *pixels,
+                                          void *user_data)
+{
+    // Null whenever the frame went straight to the window -- a display needing no color management, or
+    // before the pass exists -- and then the window's framebuffer is already the sRGB one to read.
+    const RenderPass *pass = ((const HDRViewApp *)user_data)->capture_source();
+    const uint32_t    fbo  = pass ? pass->framebuffer_handle() : 0;
+
+    GLint previous = 0;
+    if (fbo)
+    {
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    }
+
+    const bool ok = HelloImGui::ImGuiApp_ImplGL_CaptureFramebuffer(viewport_id, x, y, w, h, pixels, nullptr);
+
+    if (fbo)
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)previous);
+
+    return ok;
+}
+#endif
+
 void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *))
 {
     // The test binary drives a real HDRViewApp, which otherwise reads and rewrites the very settings file
@@ -50,13 +98,43 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
     m_params.fpsIdling.rememberEnableIdling = false;
     m_params.fpsIdling.vsyncToMonitor       = false;
 
+    // A screenshot run wants a window of a stated size rather than whatever the last one happened to be:
+    // the pictures sit next to each other in the README, and a layout that reflows with the window would
+    // make every one of them a different composition.
+    if (const char *size = getenv("HDRVIEW_SCREENSHOT_SIZE"))
+    {
+        int w = 0, h = 0;
+        if (sscanf(size, "%dx%d", &w, &h) == 2 && w > 0 && h > 0)
+            m_params.appWindowParams.windowGeometry.size = {w, h};
+        else
+            spdlog::warn("Ignoring HDRVIEW_SCREENSHOT_SIZE='{}'; expected e.g. '1400x880'.", size);
+    }
+
+    // The size above is in 96-PPI units, which this factor turns into pixels -- and it scales the fonts and
+    // widget paddings with them, so a factor of 2 is a genuinely 2x-density picture rather than the same
+    // interface stretched. Screenshots are viewed scaled down, where 1x text stops being legible.
+    if (const char *scale = getenv("HDRVIEW_SCREENSHOT_SCALE"))
+    {
+        const float f = strtof(scale, nullptr);
+        if (f > 0.f)
+            m_params.dpiAwareParams.dpiWindowSizeFactor = f;
+        else
+            spdlog::warn("Ignoring HDRVIEW_SCREENSHOT_SCALE='{}'; expected a positive number.", scale);
+    }
+
     m_params.useImGuiTestEngine      = true;
-    m_params.callbacks.RegisterTests = [register_tests]()
+    m_params.callbacks.RegisterTests = [register_tests, this]()
     {
         ImGuiTestEngine   *engine = GetImGuiTestEngine();
         ImGuiTestEngineIO &io     = ImGuiTestEngine_GetIO(engine);
-        // Defaults to off, since it's meant for the interactive Test Engine UI; this binary has no other way
-        // to report *why* a test failed when run in headless/CI (-nogui) mode.
+#if defined(HELLOIMGUI_HAS_OPENGL)
+        // Hello ImGui's Setup() has already pointed this at the window's framebuffer; redirect it to the
+        // buffer that still holds sRGB. This callback runs after that Setup(), so the override sticks.
+        io.ScreenCaptureFunc     = capture_colorpass_framebuffer;
+        io.ScreenCaptureUserData = this;
+#endif
+        // Defaults to off, since it's meant for the interactive Test Engine UI; the terminal is this
+        // binary's only way to report *why* a test failed under CI.
         io.ConfigLogToTTY            = true;
         io.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
         // Hello ImGui's own test-engine Setup() (called before this callback runs) hardcodes
