@@ -23,6 +23,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -94,7 +98,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
         hdrview()->close_all_images();
         // The same entry point drag-and-drop and CLI args use.
         hdrview()->load_images({zip_path.string()});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK_EQ(hdrview()->current_image_index(), 0);
@@ -111,7 +115,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
 
         hdrview()->close_all_images();
         hdrview()->load_images({zip_path.string()});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() < 2; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 2);
     };
@@ -144,7 +148,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
 
         hdrview()->close_all_images();
         hdrview()->load_images({zip_path.string()});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() < 2; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 2);
         IM_CHECK(hdrview()->current_image_index() != hdrview()->reference_image_index());
@@ -178,7 +182,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
 
         hdrview()->close_all_images();
         hdrview()->load_session(zip_path.string());
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK_EQ(hdrview()->current_image_index(), 0);
@@ -227,7 +231,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
 
         hdrview()->close_all_images();
         hdrview()->load_images({zip_path.string()});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         auto img = hdrview()->image(0);

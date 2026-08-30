@@ -13,6 +13,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
 #endif
@@ -22,7 +26,7 @@ static void ensure_image_loaded(ImGuiTestContext *ctx)
     if (hdrview()->num_images() == 0)
     {
         hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
     }
     IM_CHECK(hdrview()->num_images() > 0);
 }
@@ -76,9 +80,9 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         ctx->MenuClick("View/100%");
     };
 
-    // Flipping mirrors the image inside the rectangle it already occupies, so the two menu items toggle
-    // their state without the image moving or resizing on screen. The transforms behind that rectangle are
-    // exercised in their own right by the "viewport" tests.
+    // That the two menu items toggle the two axes. Where the image then lands is the "viewport" tests'
+    // subject: they state the placement against a specification rather than against another part of the
+    // transform, and there is only one flip state for a menu click and an action-pointer write to reach.
     t           = IM_REGISTER_TEST(engine, "view", "flip_toggle");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -86,23 +90,11 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         bool orig_h = *hdrview()->action("Flip horizontally").p_selected;
         bool orig_v = *hdrview()->action("Flip vertically").p_selected;
 
-        const Box2i dw        = hdrview()->current_image()->display_window;
-        auto        on_screen = [&dw] {
-            return Box2f{hdrview()->vp_pos_at_pixel(float2{dw.min}), hdrview()->vp_pos_at_pixel(float2{dw.max})}
-                .make_valid();
-        };
-        const Box2f before = on_screen();
-
         ctx->SetRef("##MainMenuBar");
         ctx->MenuClick("View/Flip horizontally");
         IM_CHECK_EQ(*hdrview()->action("Flip horizontally").p_selected, !orig_h);
-        IM_CHECK(la::maxelem(la::abs(on_screen().min - before.min)) < 1e-2f);
-        IM_CHECK(la::maxelem(la::abs(on_screen().max - before.max)) < 1e-2f);
-
         ctx->MenuClick("View/Flip vertically");
         IM_CHECK_EQ(*hdrview()->action("Flip vertically").p_selected, !orig_v);
-        IM_CHECK(la::maxelem(la::abs(on_screen().min - before.min)) < 1e-2f);
-        IM_CHECK(la::maxelem(la::abs(on_screen().max - before.max)) < 1e-2f);
 
         // restore
         ctx->MenuClick("View/Flip horizontally");

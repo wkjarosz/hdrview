@@ -13,6 +13,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
 #endif
@@ -25,7 +29,7 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         if (hdrview()->num_images() == 0)
         {
             hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-            for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+            wait_for_loads(ctx);
         }
         IM_CHECK(hdrview()->num_images() > 0);
 
@@ -34,14 +38,7 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         auto &group = img->groups[img->selected_group];
         IM_CHECK(group.num_channels > 0);
 
-        PixelStats *stats = nullptr;
-        for (int frame = 0; frame < 120; ++frame)
-        {
-            stats = img->channels[group.channels[0]].get_stats();
-            if (stats->computed)
-                break;
-            ctx->Yield();
-        }
+        PixelStats *stats = wait_for_stats(ctx, img->channels[group.channels[0]]);
         IM_CHECK(stats != nullptr);
         IM_CHECK(stats->computed);
 
@@ -64,7 +61,7 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         if (hdrview()->num_images() == 0)
         {
             hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-            for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+            wait_for_loads(ctx);
         }
         IM_CHECK(hdrview()->num_images() > 0);
 
@@ -82,14 +79,8 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         auto &group = img->groups[img->selected_group];
         IM_CHECK(group.num_channels > 0);
 
-        PixelStats *stats = nullptr;
-        for (int frame = 0; frame < 240; ++frame)
-        {
-            stats = img->channels[group.channels[0]].get_stats();
-            if (stats->computed && stats->settings.roi == hdrview()->roi())
-                break;
-            ctx->Yield();
-        }
+        PixelStats *stats = wait_for_stats(ctx, img->channels[group.channels[0]],
+                                           [](const PixelStats *s) { return s->settings.roi == hdrview()->roi(); });
         IM_CHECK(stats != nullptr);
         IM_CHECK(stats->computed);
         IM_CHECK_EQ(stats->summary.valid_pixels, 0);

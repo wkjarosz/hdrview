@@ -15,15 +15,13 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
-#include <miniz.h>
-#include <spdlog/sinks/base_sink.h>
-#include <spdlog/spdlog.h>
+#include "../test_log_capture.h"
+#include "test_gui_support.h"
 
-#include <algorithm>
+#include <miniz.h>
+
 #include <filesystem>
 #include <fstream>
-#include <memory>
-#include <mutex>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
@@ -33,16 +31,6 @@ namespace fs = std::filesystem;
 
 namespace
 {
-
-//! A fresh, empty directory under the system temp dir, canonicalized the way the loader stores paths.
-fs::path make_temp_dir(const char *stem)
-{
-    std::error_code ec;
-    fs::path        d = fs::temp_directory_path(ec) / fmt::format("hdrview_watch_test_{}", stem);
-    fs::remove_all(d, ec);
-    fs::create_directories(d, ec);
-    return fs::weakly_canonical(d, ec);
-}
 
 //! Copies the fixture into `dir` under `name`, returning its path.
 fs::path place_fixture(const fs::path &dir, const char *name)
@@ -54,37 +42,6 @@ fs::path place_fixture(const fs::path &dir, const char *name)
 }
 
 bool is_watched(const fs::path &dir) { return hdrview()->image_loader().watched_directories().count(dir) != 0; }
-
-//! Collects everything logged while it is in scope. See the same helper in tests/test_loader_limits.cpp:
-//! refusing an entry up front and failing to extract it look identical from outside, so the warning is the
-//! only thing that tells them apart.
-struct LogCapture
-{
-    struct Sink : spdlog::sinks::base_sink<std::mutex>
-    {
-        std::vector<std::string> messages;
-        void                     sink_it_(const spdlog::details::log_msg &msg) override
-        {
-            messages.emplace_back(msg.payload.data(), msg.payload.size());
-        }
-        void flush_() override {}
-    };
-
-    std::shared_ptr<Sink> sink = std::make_shared<Sink>();
-
-    LogCapture() { spdlog::default_logger()->sinks().push_back(sink); }
-    ~LogCapture()
-    {
-        auto &sinks = spdlog::default_logger()->sinks();
-        sinks.erase(std::remove(sinks.begin(), sinks.end(), sink), sinks.end());
-    }
-
-    bool saw(const std::string &substring) const
-    {
-        return std::any_of(sink->messages.begin(), sink->messages.end(),
-                           [&](const std::string &m) { return m.find(substring) != std::string::npos; });
-    }
-};
 
 //! Writes a zip holding `contents` under "inside.png". A non-zero `declared` overwrites the entry's
 //! uncompressed size in both of its headers, so the archive claims more than it stores; zero leaves the
@@ -124,18 +81,7 @@ fs::path write_zip(const fs::path &dir, const char *name, uint32_t declared, con
     return out;
 }
 
-void reset_images(ImGuiTestContext *ctx)
-{
-    hdrview()->close_all_images();
-    for (int frame = 0; frame < 60 && hdrview()->num_images() != 0; ++frame) ctx->Yield();
-}
-
-void load_and_wait(ImGuiTestContext *ctx, const fs::path &file)
-{
-    const int before = hdrview()->num_images();
-    hdrview()->load_images({file.u8string()});
-    for (int frame = 0; frame < 240 && hdrview()->num_images() <= before; ++frame) ctx->Yield();
-}
+using namespace hdrview_test;
 
 } // namespace
 
@@ -161,7 +107,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK(is_watched(watch_dir));
 
         // An image from somewhere else entirely; the watched folder stays empty throughout.
-        load_and_wait(ctx, image);
+        load_and_wait(ctx, {image.u8string()});
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(is_watched(watch_dir));
 
@@ -170,7 +116,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK(is_watched(watch_dir));
 
         // Nor may closing everything, for the same reason: the folder was asked for in its own right.
-        load_and_wait(ctx, image);
+        load_and_wait(ctx, {image.u8string()});
         hdrview()->close_all_images();
         IM_CHECK(is_watched(watch_dir));
 
@@ -182,7 +128,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         // only because its images were opened is still dropped once none of them is loaded.
         reset_images(ctx);
         hdrview()->load_images({image_dir.u8string()});
-        for (int frame = 0; frame < 240 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(is_watched(image_dir));
         hdrview()->close_image(0);
@@ -216,7 +162,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         {
             LogCapture log;
             hdrview()->load_images({lying.u8string()});
-            for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+            wait_for_loads(ctx);
             IM_CHECK_EQ(hdrview()->num_images(), 0);
             IM_CHECK(log.saw("Skipping zip entry 'inside.png'"));
         }
@@ -229,7 +175,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK(!honest.empty());
         reset_images(ctx);
         hdrview()->load_images({honest.u8string()});
-        for (int frame = 0; frame < 240 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
         reset_images(ctx);
@@ -252,7 +198,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         const fs::path file = place_fixture(dir, "a.png");
 
         reset_images(ctx);
-        load_and_wait(ctx, file);
+        load_and_wait(ctx, {file.u8string()});
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
         auto original = hdrview()->image(0);
@@ -261,7 +207,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         // Both scheduled before either can finish, the way the watch loop schedules them.
         hdrview()->reload_image(original);
         hdrview()->reload_image(original);
-        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
 
         // One file, one entry -- whichever reload landed last.
         IM_CHECK_EQ(hdrview()->num_images(), 1);
@@ -271,7 +217,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         // However many pile up, not just two.
         auto current = hdrview()->image(0);
         for (int i = 0; i < 4; ++i) hdrview()->reload_image(current);
-        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(hdrview()->image(0)->path == fs::path(file));
 
@@ -309,18 +255,18 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         hdrview()->image_loader().clear_recent_files();
 
         hdrview()->load_images({empty_dir.u8string()});
-        for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 0);
         IM_CHECK(!is_recent(empty_dir));
 
         hdrview()->load_images({junk_dir.u8string()});
-        for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 0);
         IM_CHECK(!is_recent(junk_dir));
 
         // And a folder that does hold an image is still recorded.
         hdrview()->load_images({full_dir.u8string()});
-        for (int frame = 0; frame < 240 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(is_recent(full_dir));
 
@@ -349,7 +295,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         {
             LogCapture log;
             hdrview()->load_images({empty.u8string()});
-            for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+            wait_for_loads(ctx);
             IM_CHECK_EQ(hdrview()->num_images(), 0);
             IM_CHECK(log.saw("is empty"));
             // Whatever it says, it must not claim something is missing from the filesystem: the name it
@@ -374,18 +320,18 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         const fs::path file = place_fixture(dir, "a.png");
 
         reset_images(ctx);
-        load_and_wait(ctx, file);
+        load_and_wait(ctx, {file.u8string()});
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
         hdrview()->reload_image(hdrview()->image(0));
         hdrview()->close_image(0);
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
-        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
         // An ordinary load still adds, so this is not refusing arrivals in general.
-        load_and_wait(ctx, file);
+        load_and_wait(ctx, {file.u8string()});
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
         reset_images(ctx);

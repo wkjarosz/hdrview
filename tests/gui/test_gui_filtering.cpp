@@ -15,6 +15,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
 #endif
@@ -31,7 +35,7 @@ static void load_both_fixtures(ImGuiTestContext *ctx)
 
     hdrview()->close_all_images();
     hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2});
-    for (int frame = 0; frame < 120 && hdrview()->num_images() < 2; ++frame) ctx->Yield();
+    wait_for_loads(ctx);
     IM_CHECK_EQ(hdrview()->num_images(), 2);
     IM_CHECK_EQ(hdrview()->num_visible_images(), 2);
 }

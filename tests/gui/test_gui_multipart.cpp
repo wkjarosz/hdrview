@@ -23,6 +23,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #include <string>
 
 // Loads the multi-part fixture and waits for its image count to stabilize (all parts loaded) rather than a
@@ -35,15 +39,9 @@ static void load_multipart(ImGuiTestContext *ctx)
     hdrview()->close_all_images();
     hdrview()->load_images({std::string(HDRVIEW_TEST_OPENEXR_DIR) + "/multipart.0001.exr"});
 
-    int last_count = -1;
-    for (int frame = 0; frame < 240; ++frame)
-    {
-        int count = hdrview()->num_images();
-        if (count > 0 && count == last_count)
-            break;
-        last_count = count;
-        ctx->Yield();
-    }
+    // Every part arrives from one background load, so an empty queue means all of them have -- no need
+    // to watch for the count to stop changing.
+    hdrview_test::wait_for_loads(ctx);
     IM_CHECK(hdrview()->num_images() > 1);
     hdrview()->set_current_image_index(0);
 }
@@ -81,14 +79,14 @@ void RegisterTests_Multipart(ImGuiTestEngine *engine)
         IM_CHECK(parts > 1);
 
         hdrview()->reload_image(hdrview()->image(0));
-        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        hdrview_test::wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), parts);
 
         // And with a second reload already queued behind the first, which is what a file being written
         // repeatedly produces.
         hdrview()->reload_image(hdrview()->image(0));
         hdrview()->reload_image(hdrview()->image(0));
-        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        hdrview_test::wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), parts);
 
         for (int i = 0; i < hdrview()->num_images(); ++i) IM_CHECK(hdrview()->image(i) != nullptr);
@@ -104,14 +102,7 @@ void RegisterTests_Multipart(ImGuiTestEngine *engine)
         auto &group = img->groups[img->selected_group];
         IM_CHECK(group.num_channels > 0);
 
-        PixelStats *stats = nullptr;
-        for (int frame = 0; frame < 120; ++frame)
-        {
-            stats = img->channels[group.channels[0]].get_stats();
-            if (stats->computed)
-                break;
-            ctx->Yield();
-        }
+        PixelStats *stats = wait_for_stats(ctx, img->channels[group.channels[0]]);
         IM_CHECK(stats != nullptr);
         IM_CHECK(stats->computed);
 

@@ -14,6 +14,10 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "test_gui_support.h"
+
+using namespace hdrview_test;
+
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
 #endif
@@ -26,12 +30,9 @@ void RegisterTests_Lifetime(ImGuiTestEngine *engine)
     ImGuiTest *t = IM_REGISTER_TEST(engine, "lifetime", "close_reference_during_stats");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
-        while (hdrview()->num_images() > 0) hdrview()->close_image(0);
-        ctx->Yield();
+        reset_images(ctx);
 
-        hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2});
-        for (int frame = 0; frame < 240 && hdrview()->num_images() < 2; ++frame) ctx->Yield();
-        IM_CHECK(hdrview()->num_images() == 2);
+        IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}), 2);
 
         // Compare image 0 against image 1: only a blend mode other than Normal makes calculate() sample
         // the reference, which is what puts the reference's channels behind the raw pointers.
@@ -45,13 +46,15 @@ void RegisterTests_Lifetime(ImGuiTestEngine *engine)
         IM_CHECK(img != nullptr);
         auto &group = img->groups[img->selected_group];
         for (int c = 0; c < group.num_channels; ++c)
-            img->channels[group.channels[c]].update_stats(c, hdrview()->current_image(),
-                                                          hdrview()->reference_image());
+            img->channels[group.channels[c]].update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
 
         hdrview()->close_image(1);
 
-        // Let the worker run against the freed channels.
-        for (int frame = 0; frame < 120; ++frame) ctx->Yield();
+        // Deliberately a soak rather than a wait for some condition: there is no state to wait for, and
+        // the point is to give the worker a window in which to touch the channels it no longer owns. What
+        // catches that is the sanitizer job, so the window has to exist even though nothing observable
+        // changes -- and it is a duration, since frames are no longer paced by anything.
+        soak(ctx, std::chrono::milliseconds(250));
 
         IM_CHECK(hdrview()->num_images() == 1);
     };

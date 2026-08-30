@@ -9,6 +9,7 @@
 #include "app.h"
 #include "image.h"
 #include "test_gui_registry.h"
+#include "test_gui_support.h"
 
 #include "imgui_internal.h"
 #include "imgui_test_engine/imgui_te_context.h"
@@ -27,8 +28,7 @@ static void load_fixture_and_show_info(ImGuiTestContext *ctx)
 {
     if (hdrview()->num_images() == 0)
     {
-        hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-        for (int frame = 0; frame < 120 && hdrview()->num_images() == 0; ++frame) ctx->Yield();
+        hdrview_test::load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE});
     }
     IM_CHECK(hdrview()->num_images() > 0);
 
