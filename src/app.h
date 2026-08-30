@@ -210,6 +210,17 @@ public:
         the same place before and after the zoom.
     */
     void zoom_at_vp_pos(float amount, float2 focus_vp_pos);
+
+#if defined(__EMSCRIPTEN__)
+    //! Register the browser touch listeners that supply pinch-to-zoom. \see on_touch in app-zoom.cpp
+    /*!
+        Public because that listener is a plain function: Emscripten's event API takes a function pointer,
+        so it cannot be a member, and it drives the two calls below from outside the class.
+    */
+    void install_touch_handlers();
+    //! Fingers currently on the screen, as those listeners last reported them.
+    void set_active_touches(int n) { m_active_touches = n; }
+#endif
     /// Zoom in to the next power of two
     void zoom_in();
     /// Zoom out to the previous power of two
@@ -343,13 +354,6 @@ private:
     void draw_tweak_window();
     void process_shortcuts();
     bool process_event(void *event);
-
-#if defined(__EMSCRIPTEN__)
-    //! Register the browser touch listeners that supply pinch-to-zoom. \see on_touch in app-zoom.cpp
-    void install_touch_handlers();
-    //! Fingers currently on the screen, from those listeners.
-    void set_active_touches(int n) { m_active_touches = n; }
-#endif
     void set_image_textures();
     void update_visibility();
 
