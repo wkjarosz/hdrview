@@ -1723,10 +1723,6 @@ void HDRViewApp::process_shortcuts()
                 if (a.second.p_selected)
                     *a.second.p_selected = !*a.second.p_selected;
                 a.second.callback();
-#ifdef __EMSCRIPTEN__
-                ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
-                                                 // modifiers) needs to be pressed before this chord is detected again
-#endif
                 break;
             }
 
