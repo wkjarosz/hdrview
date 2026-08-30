@@ -64,6 +64,36 @@ void RegisterTests_Multipart(ImGuiTestEngine *engine)
         }
     };
 
+    /*
+        Reloading one part of a multi-part file has to leave the image list the same length: the part
+        replaces itself, and none of its siblings is disturbed. The watch loop reloads on every timestamp
+        change, so a multi-part file being rewritten reaches this constantly, and it does so on a list where
+        ten images share one path -- the case most likely to confuse a replacement for an addition.
+
+        (Reloading a part re-reads only that part, since it carries the part's own channel selector, so
+        each of these arrivals is a single image.)
+    */
+    t           = IM_REGISTER_TEST(engine, "multipart", "reloading_keeps_one_image_per_part");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        load_multipart(ctx);
+        const int parts = hdrview()->num_images();
+        IM_CHECK(parts > 1);
+
+        hdrview()->reload_image(hdrview()->image(0));
+        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), parts);
+
+        // And with a second reload already queued behind the first, which is what a file being written
+        // repeatedly produces.
+        hdrview()->reload_image(hdrview()->image(0));
+        hdrview()->reload_image(hdrview()->image(0));
+        for (int frame = 0; frame < 240; ++frame) ctx->Yield();
+        IM_CHECK_EQ(hdrview()->num_images(), parts);
+
+        for (int i = 0; i < hdrview()->num_images(); ++i) IM_CHECK(hdrview()->image(i) != nullptr);
+    };
+
     t           = IM_REGISTER_TEST(engine, "multipart", "each_part_computes_valid_stats");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

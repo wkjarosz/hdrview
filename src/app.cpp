@@ -431,29 +431,26 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
                 m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
                 m_gamma_live = m_gamma = std::max(MIN_GAMMA, j.value<float>("gamma", m_gamma));
-                m_tonemap = (Tonemap_)clamp<int>(j.value<Tonemap_>("tonemap", m_tonemap), 0, Tonemap_COUNT - 1);
-                m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
-                m_dither               = j.value<bool>("dither", m_dither);
+                m_tonemap        = (Tonemap_)clamp<int>(j.value<Tonemap_>("tonemap", m_tonemap), 0, Tonemap_COUNT - 1);
+                m_clamp_to_LDR   = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
+                m_dither         = j.value<bool>("dither", m_dither);
                 m_file_list_mode = clamp<int>(j.value<int>("file list mode", m_file_list_mode), 0, 2);
-                m_short_names          = j.value<bool>("short names", m_short_names);
+                m_short_names    = j.value<bool>("short names", m_short_names);
                 // "draw clip warnings" is the older key, a single toggle covering both ends; fall back to it
                 // so settings written by an earlier version still take effect
-                bool both             = j.value<bool>("draw clip warnings", false);
-                m_clip_warnings       = j.value<bool2>("clip warnings", bool2{both, both});
-                m_show_FPS            = j.value<bool>("show FPS", m_show_FPS);
-                m_clip_range          = j.value<float2>("clip range", m_clip_range);
-                m_histogram_height    = j.value<float>("histogram height", m_histogram_height);
+                bool both          = j.value<bool>("draw clip warnings", false);
+                m_clip_warnings    = j.value<bool2>("clip warnings", bool2{both, both});
+                m_show_FPS         = j.value<bool>("show FPS", m_show_FPS);
+                m_clip_range       = j.value<float2>("clip range", m_clip_range);
+                m_histogram_height = j.value<float>("histogram height", m_histogram_height);
                 // Clamped: it indexes pixel_color_widget()'s current/reference/composite choices, and the
                 // settings file is ordinary user-editable text.
                 m_status_pixel_target = clamp<int>(j.value<int>("status pixel target", m_status_pixel_target), 0, 2);
-                m_x_scale =
-                    clamp<int>(j.value<int>("histogram x scale", m_x_scale), 0, AxisScale_COUNT - 1);
-                m_y_scale =
-                    clamp<int>(j.value<int>("histogram y scale", m_y_scale), 0, AxisScale_COUNT - 1);
-                m_playback_speed      = j.value<float>("playback speed", m_playback_speed);
-                m_colormap_index =
-                    clamp<int>(j.value<int>("colormap index", 0), 0, (int)std::size(m_colormaps) - 1);
-                m_show_developer_menu = j.value<bool>("show developer menu", m_show_developer_menu);
+                m_x_scale        = clamp<int>(j.value<int>("histogram x scale", m_x_scale), 0, AxisScale_COUNT - 1);
+                m_y_scale        = clamp<int>(j.value<int>("histogram y scale", m_y_scale), 0, AxisScale_COUNT - 1);
+                m_playback_speed = j.value<float>("playback speed", m_playback_speed);
+                m_colormap_index = clamp<int>(j.value<int>("colormap index", 0), 0, (int)std::size(m_colormaps) - 1);
+                m_show_developer_menu    = j.value<bool>("show developer menu", m_show_developer_menu);
                 m_show_tool_palette      = j.value<bool>("show tool palette", m_show_tool_palette);
                 m_tool_palette_collapsed = j.value<bool>("tool palette collapsed", m_tool_palette_collapsed);
                 m_tool_palette_vertical  = j.value<bool>("tool palette vertical", m_tool_palette_vertical);
@@ -602,6 +599,15 @@ void HDRViewApp::setup_frame_callbacks()
         m_image_loader.get_loaded_images(
             [this](ImagePtr new_image, ImagePtr to_replace, bool should_select)
             {
+                // A replacement whose target has gone was a reload of an image closed while it was still
+                // loading. Appending it would put back the image that was just closed, so let it go.
+                const int idx = to_replace ? image_index(to_replace) : -1;
+                if (to_replace && !is_valid(idx))
+                {
+                    spdlog::debug("Discarding reload of '{}': it was closed while loading.", new_image->filename);
+                    return;
+                }
+
 #if !defined(__EMSCRIPTEN__)
                 std::error_code ec;
                 auto            path = fs::weakly_canonical(new_image->filename, ec);
@@ -611,7 +617,6 @@ void HDRViewApp::setup_frame_callbacks()
                 m_active_directories.insert(path.parent_path());
 #endif
 
-                int idx = (to_replace) ? image_index(to_replace) : -1;
                 if (is_valid(idx))
                     m_images[idx] = new_image;
                 else
@@ -844,22 +849,16 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         auto add = [this](const Action &a) { m_actions[a.names[0]] = a; };
         add(Action{{"Open image..."}, ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
-        add(Action{{"Create gradient image..."},
-                   ICON_MY_DITHER,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Create gradient image...").open = true; }});
-        add(Action{{"Create dither image..."},
-                   ICON_MY_DITHER,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Create dither image...").open = true; }});
+        add(Action{{"Create gradient image..."}, ICON_MY_DITHER, ImGuiKey_None, 0, [this]() {
+                       dialog("Create gradient image...").open = true;
+                   }});
+        add(Action{{"Create dither image..."}, ICON_MY_DITHER, ImGuiKey_None, 0, [this]() {
+                       dialog("Create dither image...").open = true;
+                   }});
 
-        add(Action{{"Image loading options..."},
-                   ICON_MY_SETTINGS_WINDOW,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Image loading options...").open = true; }});
+        add(Action{{"Image loading options..."}, ICON_MY_SETTINGS_WINDOW, ImGuiKey_None, 0, [this]() {
+                       dialog("Image loading options...").open = true;
+                   }});
 
 #if !defined(__EMSCRIPTEN__)
         add(Action{{"Open folder..."}, ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0, [this]() { open_folder(); }});
@@ -1092,11 +1091,9 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        &w.isVisible});
         }
 
-        add(Action{{"Decrease exposure"},
-                   ICON_MY_DECREASE_EXPOSURE,
-                   ImGuiKey_E,
-                   ImGuiInputFlags_Repeat,
-                   [this]() { m_exposure_live = m_exposure -= 0.25f; }});
+        add(Action{{"Decrease exposure"}, ICON_MY_DECREASE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat, [this]() {
+                       m_exposure_live = m_exposure -= 0.25f;
+                   }});
         add(Action{{"Increase exposure"},
                    ICON_MY_INCREASE_EXPOSURE,
                    ImGuiMod_Shift | ImGuiKey_E,
@@ -1232,7 +1229,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        false,
                        &m_mouse_mode_enabled[i]});
 
-        // below actions are only available if there is an image
+            // below actions are only available if there is an image
 
 #if !defined(__EMSCRIPTEN__)
         add(Action{{"Reload image"},

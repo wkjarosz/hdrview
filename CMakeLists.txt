@@ -1839,6 +1839,7 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_multipart.cpp
     tests/gui/test_gui_session.cpp
     tests/gui/test_gui_session_bundle.cpp tests/gui/test_gui_lifetime.cpp
+    tests/gui/test_gui_loader.cpp
   )
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)

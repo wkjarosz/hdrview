@@ -16,6 +16,7 @@
 #include <fstream>
 #include <hello_imgui/dpi_aware.h>
 #include <miniz.h>
+#include <optional>
 #include <sstream>
 
 #include "imageio/dds.h"
@@ -221,17 +222,17 @@ struct BackgroundImageLoader::PendingImages
     bool                    add_to_recent;         ///< Whether to add the loaded images to the recent files list
     bool                    should_select = false; ///< Whether to select the first loaded image
     ImagePtr                to_replace = nullptr;  ///< If not null, this image will be replaced with the loaded images
-    PendingImages(const string &f, const string_view buffer, const fs::path &path, ImageLoadOptions opts,
+    PendingImages(const string &f, std::optional<string_view> buffer, const fs::path &path, ImageLoadOptions opts,
                   bool recent = true, bool should_select = false, ImagePtr to_replace = nullptr) :
         filename(f), add_to_recent(recent), should_select(should_select), to_replace(to_replace)
     {
         computation = do_async(
-            // convert the buffer (if any) to a string so the async thread has its own copy,
-            // then load from the string or filename depending on whether the buffer is empty
-            [this, buffer_str = string(buffer), path, opts]()
+            // give the async thread its own copy of the buffer, if there is one; whether there is decides
+            // where the bytes come from, which an empty buffer must not be mistaken for
+            [this, buffer_str = buffer ? std::optional<string>{string(*buffer)} : std::nullopt, path, opts]()
             {
                 fs::file_time_type last_modified = fs::file_time_type::clock::now();
-                if (buffer_str.empty())
+                if (!buffer_str)
                 {
                     std::error_code ec;
                     if (!fs::exists(path, ec) || ec)
@@ -256,9 +257,17 @@ struct BackgroundImageLoader::PendingImages
                         return;
                     }
                 }
+                else if (buffer_str->empty())
+                {
+                    // A zero-byte zip entry, or a download that returned nothing. The path here is a
+                    // display name rather than something on disk, so falling through to the branch above
+                    // would blame the filesystem for a file that was never meant to be there.
+                    spdlog::error("'{}' is empty.", path.u8string());
+                    return;
+                }
                 else
                 {
-                    std::istringstream is{buffer_str};
+                    std::istringstream is{*buffer_str};
                     images = load_image(is, path.u8string(), opts);
                 }
 
@@ -331,6 +340,9 @@ vector<std::pair<string, string>> zip_root_entries_with_suffix(string_view zip_b
             to_lower(name.substr(name.size() - suffix_lower.size())) != suffix_lower)
             continue;
 
+        if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, name))
+            continue;
+
         std::vector<char> buffer(stat.m_uncomp_size);
         if (!mz_zip_reader_extract_to_mem(&zip, i, buffer.data(), buffer.size(), 0))
         {
@@ -365,6 +377,12 @@ std::optional<string> zip_extract_entry(string_view zip_bytes, const string &ent
         return std::nullopt;
     }
 
+    if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, entry_path))
+    {
+        mz_zip_reader_end(&zip);
+        return std::nullopt;
+    }
+
     std::vector<char> buffer(stat.m_uncomp_size);
     bool              ok = mz_zip_reader_extract_to_mem(&zip, index, buffer.data(), buffer.size(), 0);
     mz_zip_reader_end(&zip);
@@ -374,14 +392,14 @@ std::optional<string> zip_extract_entry(string_view zip_bytes, const string &ent
     return string(buffer.begin(), buffer.end());
 }
 
-void BackgroundImageLoader::background_load(const string filename, const string_view buffer, bool should_select,
-                                            ImagePtr to_replace, const ImageLoadOptions &opts)
+void BackgroundImageLoader::background_load(const string filename, std::optional<string_view> buffer,
+                                            bool should_select, ImagePtr to_replace, const ImageLoadOptions &opts)
 {
     if (should_select)
         spdlog::debug("will select image '{}'", filename);
 
-    auto load_one = [this](const fs::path &path, const string_view buffer, bool add_to_recent, bool should_select,
-                           ImagePtr to_replace, const ImageLoadOptions &opts)
+    auto load_one = [this](const fs::path &path, std::optional<string_view> buffer, bool add_to_recent,
+                           bool should_select, ImagePtr to_replace, const ImageLoadOptions &opts)
     {
         try
         {
@@ -436,6 +454,9 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             if (!entry_pattern.empty() && entry_path.u8string() != entry_pattern)
                 continue;
 
+            if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, entry_path.u8string()))
+                continue;
+
             buffer.resize(stat.m_uncomp_size);
             if (!mz_zip_reader_extract_to_mem(&zip, i, buffer.data(), buffer.size(), 0))
             {
@@ -468,19 +489,18 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     auto path = fs::u8path(filename);
 
     std::error_code path_ec;
-    if (!buffer.empty())
+    if (buffer)
     {
-        // if we have a buffer, we assume it is a file that has been downloaded
-        // and we load it directly from the buffer
-        spdlog::info("Loading image '{}' from {:.0h} buffer.", filename, human_readible{buffer.size()});
+        // a buffer was supplied, so the bytes are in hand and `filename` is only a name
+        spdlog::info("Loading image '{}' from {:.0h} buffer.", filename, human_readible{buffer->size()});
 
         if (to_lower(get_extension(filename)) == ".zip")
         {
-            if (zip_bundle_hook && zip_bundle_hook(buffer, filename))
+            if (zip_bundle_hook && zip_bundle_hook(*buffer, filename))
                 return;
 
             remove_recent_file(filename);
-            if (extract_and_schedule(buffer, filename, should_select, to_replace))
+            if (extract_and_schedule(*buffer, filename, should_select, to_replace))
                 add_recent_file(filename);
         }
         else
@@ -514,6 +534,9 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             }
         }
 
+        if (ec)
+            spdlog::error("Could not list directory '{}': {}.", filename, ec.message());
+
         sort(begin(entries), end(entries),
              [](const auto &a, const auto &b) { return natural_less(a.path().string(), b.path().string()); });
 
@@ -523,8 +546,12 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, opts);
         }
 
-        // this moves the file to the top of the recent files list
-        add_recent_file(filename);
+        // Only somewhere that opened something belongs in the recent list, the same rule the file and zip
+        // paths follow; picking a folder that held no images does nothing at all.
+        if (entries.empty())
+            spdlog::warn("No loadable images found in '{}'.", filename);
+        else
+            add_recent_file(filename); // this moves the folder to the top of the recent files list
     }
 #endif
     else // a regular file
@@ -595,6 +622,7 @@ bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &d
         return false;
     }
     m_directories.emplace(canon_p);
+    m_explicit_directories.emplace(canon_p);
 
     if (!ignore_existing)
         return true;
@@ -614,11 +642,25 @@ bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &d
 
 void BackgroundImageLoader::remove_watched_directories(std::function<bool(const fs::path &)> criterion)
 {
+    remove_watched_directories_if(criterion, /* keep_explicit */ false);
+}
+
+void BackgroundImageLoader::remove_implicitly_watched_directories(std::function<bool(const fs::path &)> criterion)
+{
+    remove_watched_directories_if(criterion, /* keep_explicit */ true);
+}
+
+void BackgroundImageLoader::remove_watched_directories_if(const std::function<bool(const fs::path &)> &criterion,
+                                                          bool                                         keep_explicit)
+{
     // Remove directories that match the criterion
     for (auto it = m_directories.begin(); it != m_directories.end();)
     {
-        if (criterion(*it))
+        if (criterion(*it) && !(keep_explicit && m_explicit_directories.count(*it)))
+        {
+            m_explicit_directories.erase(*it);
             it = m_directories.erase(it);
+        }
         else
             ++it;
     }
@@ -636,45 +678,69 @@ void BackgroundImageLoader::remove_watched_directories(std::function<bool(const 
 
 void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback)
 {
-    // move elements matching the criterion to the end of the vector, and then erase all matching elements
-    pending_images.erase(
-        std::remove_if(pending_images.begin(), pending_images.end(),
-                       [this, &callback](shared_ptr<PendingImages> p)
-                       {
-                           // if the computation isn't ready, we return false to indicate that we can't
-                           // yet remove this entry
-                           if (!p->computation.ready())
-                               return false;
+    // Take the finished loads out of the pending list before running any callbacks: the callback reaches
+    // back into the app, which is free to schedule further loads, and nothing should be walking
+    // pending_images while that happens.
+    vector<shared_ptr<PendingImages>> finished;
+    for (auto it = pending_images.begin(); it != pending_images.end();)
+    {
+        if ((*it)->computation.ready())
+        {
+            finished.push_back(std::move(*it));
+            it = pending_images.erase(it);
+        }
+        else
+            ++it;
+    }
 
-                           // finalize the computation
-                           try
-                           {
-                               p->computation.wait();
-                           }
-                           catch (const std::exception &e)
-                           {
-                               spdlog::error("Could not load image \"{}\": {}.", p->filename, e.what());
-                               return true;
-                           }
+    for (auto &p : finished)
+    {
+        // finalize the computation
+        try
+        {
+            p->computation.wait();
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::error("Could not load image \"{}\": {}.", p->filename, e.what());
+            continue;
+        }
 
-                           // once the async computation is ready, we can access the resulting
-                           // images and return true to report that we can remove this entry from
-                           // pending_images
-                           if (p->images.empty())
-                               return true;
+        if (p->images.empty())
+            continue;
 
-                           for (size_t i = 0; i < p->images.size(); ++i)
-                               callback(p->images[i], p->to_replace,
-                                        p->should_select && i == 0); // i == 0 to always select the first of the
-                                                                     // possibly multiple 'should_select' images
+        // i == 0 both selects the first of possibly several images and claims the slot being replaced.
+        // Exactly one arrival can take a replaced image's place; any others are ordinary additions. That
+        // matters because the app reads "asked to replace, but the target is gone" as "the image was
+        // closed while loading" and drops the arrival -- a reading only this split makes safe. A reload
+        // happens to yield a single image today, since it carries the replaced image's channel selector
+        // and so re-reads only that part of a multi-part file, but nothing here should depend on that.
+        for (size_t i = 0; i < p->images.size(); ++i)
+            callback(p->images[i], i == 0 ? p->to_replace : ImagePtr{}, p->should_select && i == 0);
 
-                           // if loading was successful, add the filename to the recent list
-                           if (p->add_to_recent)
-                               add_recent_file(p->filename);
+        // if loading was successful, add the filename to the recent list
+        if (p->add_to_recent)
+            add_recent_file(p->filename);
 
-                           return true;
-                       }),
-        pending_images.end());
+        // Another reload of the same image can still be in flight: the watch loop polls four times a
+        // second and schedules one on every timestamp change, so a file being written repeatedly -- a
+        // watched render folder, say -- outruns the load, and "Reload all images" pressed twice does the
+        // same. Each was told to replace an image that has now been replaced itself, and the arrival is
+        // matched to its slot by identity, so without this the later one finds nothing to replace and
+        // arrives as a second copy of the same file. Point it at whatever took that image's place.
+        if (p->to_replace)
+        {
+            auto replacement = p->images.front();
+            auto retarget    = [&](vector<shared_ptr<PendingImages>> &v)
+            {
+                for (auto &q : v)
+                    if (q && q != p && q->to_replace == p->to_replace)
+                        q->to_replace = replacement;
+            };
+            retarget(finished);
+            retarget(pending_images);
+        }
+    }
 }
 
 void BackgroundImageLoader::load_new_and_modified_files()
@@ -793,6 +859,37 @@ void check_image_dimensions(int64_t width, int64_t height, string_view format)
     if (width > k_max_image_dimension || height > k_max_image_dimension || width * height > k_max_image_pixels)
         throw std::invalid_argument{
             fmt::format("{}: image dimensions {}x{} are implausibly large.", format, width, height)};
+}
+
+// DEFLATE cannot expand data by more than 1032:1, so a larger ratio is a claim the archive's own bytes
+// cannot back, whatever wrote it. Stored (uncompressed) entries are covered by the same test, since their
+// ratio is 1.
+static constexpr uint64_t k_max_zip_expansion_ratio = 1032;
+// And a bound on the honest case, which the ratio test cannot catch: an archive really can hold gigabytes
+// of compressible data, and HDRView would read the entry whole into memory before finding out it is not an
+// image. No file it can load is anywhere near this large.
+static constexpr uint64_t k_max_zip_entry_bytes = 2ull << 30;
+
+bool zip_entry_size_is_plausible(uint64_t uncompressed_size, uint64_t compressed_size, string_view entry_name)
+{
+    if (uncompressed_size > k_max_zip_entry_bytes)
+    {
+        spdlog::warn("Skipping zip entry '{}': it declares {:.0h}, more than any image HDRView can load.", entry_name,
+                     human_readible{(size_t)uncompressed_size});
+        return false;
+    }
+
+    // An empty entry compresses to a non-empty stream, so only guard the ratio once there is something to
+    // expand; a zero compressed size cannot back anything anyway.
+    if (uncompressed_size > k_max_zip_expansion_ratio * std::max<uint64_t>(compressed_size, 1))
+    {
+        spdlog::warn("Skipping zip entry '{}': it declares {:.0h} stored in {:.0h}, which no deflate stream "
+                     "could expand to.",
+                     entry_name, human_readible{(size_t)uncompressed_size}, human_readible{(size_t)compressed_size});
+        return false;
+    }
+
+    return true;
 }
 
 const ImageLoadOptions &load_image_options() { return s_opts; }

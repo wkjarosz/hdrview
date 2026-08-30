@@ -1,4 +1,5 @@
 #include "app.h"
+#include "common.h"
 
 #include "image.h"
 #include "version.h"
@@ -490,7 +491,7 @@ void HDRViewApp::load_images(const vector<string> &filenames)
 
         // A .zip might be a session bundle -- see zip_bundle_hook (wired in the constructor), checked inside
         // background_load() once it has the zip's bytes in hand.
-        load_image(filenames[i], {}, i == 0, opts);
+        load_image(filenames[i], std::nullopt, i == 0, opts);
     }
 }
 
@@ -560,7 +561,7 @@ void HDRViewApp::open_session_bundle()
 }
 
 // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
-void HDRViewApp::load_image(const string filename, const string_view buffer, bool should_select,
+void HDRViewApp::load_image(const string filename, std::optional<string_view> buffer, bool should_select,
                             const ImageLoadOptions &opts)
 {
     m_image_loader.background_load(filename, buffer, should_select, nullptr, opts);
@@ -594,7 +595,8 @@ void HDRViewApp::load_url(const string_view url)
             auto filename    = get_filename(url);
             auto char_buffer = reinterpret_cast<const char *>(buffer);
             spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
-            hdrview()->load_image(url, {char_buffer, (size_t)buffer_size}, true, load_image_options());
+            hdrview()->m_remaining_download = 0; // the last progress callback need not have reported it
+            hdrview()->load_image(url, string_view{char_buffer, (size_t)buffer_size}, true, load_image_options());
         },
         (em_async_wget2_data_onerror_func)[](unsigned, void *data, int err, const char *desc) {
             auto   payload                         = reinterpret_cast<Payload *>(data);
@@ -607,7 +609,7 @@ void HDRViewApp::load_url(const string_view url)
         (em_async_wget2_data_onprogress_func)[](unsigned, void *data, int bytes_loaded, int total_bytes) {
             auto payload = reinterpret_cast<Payload *>(data);
 
-            payload->hdrview->m_remaining_download = (total_bytes - bytes_loaded) / total_bytes;
+            payload->hdrview->m_remaining_download = download_percent_remaining(bytes_loaded, total_bytes);
         });
 
     // emscripten_async_wget_data(
@@ -644,7 +646,7 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     auto opts                  = load_image_options();
     opts.channel_selector      = image->channel_selector;
     opts.alpha_is_transparency = image->alpha_is_transparency;
-    m_image_loader.background_load(image->filename, {}, should_select, image, opts);
+    m_image_loader.background_load(image->filename, std::nullopt, should_select, image, opts);
 }
 
 void HDRViewApp::close_image(int index)
@@ -705,7 +707,7 @@ void HDRViewApp::close_image(int index)
         }
 
         spdlog::debug("Watched directories after closing image:");
-        m_image_loader.remove_watched_directories(
+        m_image_loader.remove_implicitly_watched_directories(
             [this](const fs::path &path)
             {
                 spdlog::debug("{} watched directory: {}",
@@ -754,7 +756,9 @@ void HDRViewApp::close_all_images()
     m_current   = -1;
     m_reference = -1;
     m_active_directories.clear();
-    m_image_loader.remove_watched_directories([](const fs::path &) { return true; });
+    // Only the folders opened alongside these images; one the user asked to watch stays watched, since
+    // what it is for -- files that do not exist yet -- has nothing to do with what is currently loaded.
+    m_image_loader.remove_implicitly_watched_directories([](const fs::path &) { return true; });
     update_visibility(); // this also calls set_image_textures();
 }
 
@@ -1054,7 +1058,7 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
             continue;
 
         PendingSession::Entry e;
-        e.path             = resolve(rel);
+        e.path                  = resolve(rel);
         e.channel_selector      = entry.value<string>("channel_selector", "");
         e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
         e.selected_group        = entry.value<int>("selected_group", 0);
@@ -1096,7 +1100,7 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         // images (image_loader.cpp's extract_and_schedule) -- this is also why "reveal in file manager" and
         // reload_image() already handle these correctly with no session-specific work.
         PendingSession::Entry e;
-        e.path             = fs::path(zip_name) / fs::u8path(rel);
+        e.path                  = fs::path(zip_name) / fs::u8path(rel);
         e.channel_selector      = entry.value<string>("channel_selector", "");
         e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
         e.selected_group        = entry.value<int>("selected_group", 0);
@@ -1176,17 +1180,17 @@ void HDRViewApp::finish_pending_session()
     m_exposure_live = m_exposure = view.value<float>("exposure", m_exposure);
     // Only the floor; see MIN_GAMMA. Exposure and offset have no unsafe values, and a session has to be
     // able to carry back whatever the sliders' Ctrl+click entry and keyboard shortcuts can set.
-    m_gamma_live = m_gamma   = std::max(MIN_GAMMA, view.value<float>("gamma", m_gamma));
+    m_gamma_live = m_gamma = std::max(MIN_GAMMA, view.value<float>("gamma", m_gamma));
     m_offset_live = m_offset = view.value<float>("offset", m_offset);
     m_tonemap                = id_to_enum(view, "tonemap", g_tonemap_ids, m_tonemap);
     m_channel                = id_to_enum(view, "channel", g_channel_ids, m_channel);
     m_colormap_index =
         clamp<int>(view.value<int>("colormap_index", m_colormap_index), 0, (int)std::size(m_colormaps) - 1);
-    m_reverse_colormap   = view.value<bool>("reverse_colormap", m_reverse_colormap);
-    m_clamp_to_LDR       = view.value<bool>("clamp_to_LDR", m_clamp_to_LDR);
-    m_dither             = view.value<bool>("dither", m_dither);
-    m_bg_mode            = id_to_enum(view, "bg_mode", g_bg_mode_ids, m_bg_mode);
-    m_bg_color.xyz()     = view.value<float3>("bg_color", m_bg_color.xyz());
+    m_reverse_colormap = view.value<bool>("reverse_colormap", m_reverse_colormap);
+    m_clamp_to_LDR     = view.value<bool>("clamp_to_LDR", m_clamp_to_LDR);
+    m_dither           = view.value<bool>("dither", m_dither);
+    m_bg_mode          = id_to_enum(view, "bg_mode", g_bg_mode_ids, m_bg_mode);
+    m_bg_color.xyz()   = view.value<float3>("bg_color", m_bg_color.xyz());
     set_zoom(view.value<float>("zoom", m_zoom));
     m_translate          = view.value<float2>("translate", m_translate);
     m_flip               = view.value<bool2>("flip", m_flip);
