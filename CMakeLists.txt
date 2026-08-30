@@ -1343,6 +1343,16 @@ if(HDRVIEW_ENABLE_LIBRAW)
     message(STATUS "No math library needed on Windows/MSVC/Emscripten for LibRaw")
   endif()
 
+  # Emscripten's OpenMP runtime is pthread-backed, so in a non-pthread build it drags the -mt sysroot
+  # libraries onto a link line that already carries the single-threaded ones and every pthread symbol comes
+  # up duplicated. LibRaw-cmake defaults ENABLE_OPENMP to ON and only probes whether OpenMP works, so the
+  # exclusion has to be stated here.
+  if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    set(LIBRAW_OPENMP OFF)
+  else()
+    set(LIBRAW_OPENMP ON)
+  endif()
+
   CPMAddPackage(
       NAME LibRaw
       GITHUB_REPOSITORY LibRaw/LibRaw-cmake
@@ -1354,6 +1364,7 @@ if(HDRVIEW_ENABLE_LIBRAW)
               "LIBRAW_BUILD_TESTS OFF"
               "LIBRAW_BUILD_EXAMPLES OFF"
               "LIBRAW_INSTALL OFF"
+              "ENABLE_OPENMP ${LIBRAW_OPENMP}"
               "ENABLE_X3FTOOLS ${HDRVIEW_ENABLE_X3F}"
       EXCLUDE_FROM_ALL YES
       SYSTEM YES
@@ -1895,7 +1906,9 @@ if(EMSCRIPTEN)
   hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 120)
 endif()
 
-if(UNIX AND NOT IS_MULTI AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
+# Emscripten is excluded even though it sets UNIX: the target file there is the HTML shell, which GNU
+# strip rejects outright (Apple's only warns), and emcc has already stripped the wasm it links.
+if(UNIX AND NOT EMSCRIPTEN AND NOT IS_MULTI AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
   add_custom_command(
     TARGET HDRView
     POST_BUILD

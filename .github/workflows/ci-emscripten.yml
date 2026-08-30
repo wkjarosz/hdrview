@@ -33,32 +33,36 @@ env:
 jobs:
   build_emscripten:
     name: Build and deploy emscripten webapp
-    runs-on: macos-14
+    runs-on: ubuntu-24.04
     # Shared with release.yml's prerelease deploy (same destination_dir: dev), to avoid two runs racing
     # to push gh-pages.
     concurrency:
       group: gh-pages-deploy-dev
 
     steps:
+      # Everything the wasm build links is fetched by CPM and compiled by emcc, so only the host-side build
+      # tools are needed here - none of the -dev packages ci-linux.yml installs.
       - name: Install dependencies
-        # downloading old version of emscripten since 4.0.13 is broken
-        # run: |
-        #   brew install ninja libpng
-        #   curl -O https://raw.githubusercontent.com/Homebrew/homebrew-core/9990c9ddd731e97581a3312ca0358b45b14d1cc6/Formula/e/emscripten.rb
-        #   FORMULA_DIR="$(brew --repository)/Library/Taps/wkjarosz/homebrew-emscripten-old/Formula/"
-        #   mkdir -p "$FORMULA_DIR"
-        #   mv ./emscripten.rb "$FORMULA_DIR"
-        #   brew install wkjarosz/emscripten-old/emscripten
-        run: |
-          brew install ninja emscripten libpng
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink and
-      # every installed Xcode SDK - prohibitively expensive to glob. cpm_modules is always at the workspace root
-      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
+      # Placed after the checkout, whose default clean would otherwise wipe actions-cache-folder back out
+      # of the workspace.
+      #
+      # Pinned rather than tracking latest: this job publishes straight to gh-pages, so a toolchain
+      # regression ships a broken web app with nothing in the diff to explain it. Emscripten 4.0.13 does not
+      # build HDRView; don't pin back to it.
+      - name: Install Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 6.0.8
+          actions-cache-folder: emsdk-cache
+
+      # cpm_modules is always at the workspace root (CPM_SOURCE_CACHE above), so neither path nor hashFiles
+      # needs a "**" that would walk into build/.
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"
@@ -66,13 +70,14 @@ jobs:
           restore-keys: |
             ${{ github.workflow }}-cpm-modules-
 
-      # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
+      # Caching of build artifacts to reduce total build time. This action only installs ccache and restores
+      # its cache; the compiler-launcher flags on the configure step are what route emcc through it.
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.23
 
       - name: Configure CMake
         run: |
-          emcmake cmake --preset emscripten
+          emcmake cmake --preset emscripten -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build/emscripten --parallel

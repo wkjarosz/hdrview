@@ -29,9 +29,11 @@ Windows (Visual Studio generator):
 cmake --preset windows-msvc
 cmake --build --preset windows-msvc-release
 ```
-Emscripten (web build):
+Emscripten (web build) — always through `emcmake`, which points `CMAKE_TOOLCHAIN_FILE` at the active SDK.
+The preset's own `toolchainFile` resolves only against a Homebrew-style `EMSDK`, not an `emsdk`-installed
+one, so `cmake --preset emscripten` on its own is not portable:
 ```bash
-cmake --preset emscripten
+emcmake cmake --preset emscripten
 cmake --build build/emscripten --parallel
 ```
 
