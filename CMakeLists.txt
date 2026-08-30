@@ -1649,7 +1649,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
                                 tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_numeric_edge_cases.cpp tests/test_loader_limits.cpp
-                                tests/test_short_names.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
+                                tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
                                 tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_cicp_video_range.cpp tests/test_orientation_windows.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
   )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -1831,6 +1831,7 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_session.cpp
     tests/gui/test_gui_session_bundle.cpp tests/gui/test_gui_lifetime.cpp
     tests/gui/test_gui_loader.cpp
+    tests/gui/test_gui_info.cpp
   )
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)

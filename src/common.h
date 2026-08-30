@@ -421,6 +421,8 @@ std::string                   to_upper(std::string_view str);
 std::pair<float, std::string> human_readable_size(size_t bytes);
 // Helper to split "archive.zip/entry.png" into zip and entry
 bool split_zip_entry(std::string_view filename, std::string &zip_path, std::string &entry_path);
+//! Whether `path` names an http(s) URL rather than something on the filesystem.
+bool is_url(std::string_view path);
 
 /// Run func on each line of the input string
 void process_lines(std::string_view input, std::function<void(std::string_view)> op);

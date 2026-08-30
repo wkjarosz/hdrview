@@ -562,12 +562,12 @@ void HDRViewApp::open_session_bundle()
 
 // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
 void HDRViewApp::load_image(const string filename, std::optional<string_view> buffer, bool should_select,
-                            const ImageLoadOptions &opts)
+                            const ImageLoadOptions &opts, ImagePtr to_replace)
 {
-    m_image_loader.background_load(filename, buffer, should_select, nullptr, opts);
+    m_image_loader.background_load(filename, buffer, should_select, to_replace, opts);
 }
 
-void HDRViewApp::load_url(const string_view url)
+void HDRViewApp::load_url(string_view url, bool should_select, ImagePtr to_replace, const ImageLoadOptions &opts)
 {
     if (url.empty())
         return;
@@ -577,26 +577,35 @@ void HDRViewApp::load_url(const string_view url)
 #else
     spdlog::info("Entered URL: {}", url);
 
+    // Everything the callbacks need travels through the payload: they are captureless lambdas, since
+    // emscripten takes them as plain function pointers.
     struct Payload
     {
-        string      url;
-        HDRViewApp *hdrview;
+        string           url;
+        HDRViewApp      *hdrview;
+        bool             should_select;
+        ImagePtr         to_replace;
+        ImageLoadOptions opts;
     };
-    auto data = new Payload{string(url), this};
+    auto data = new Payload{string(url), this, should_select, to_replace, opts};
 
     m_remaining_download = 100;
     emscripten_async_wget2_data(
         data->url.c_str(), "GET", nullptr, data, true,
         (em_async_wget2_data_onload_func)[](unsigned, void *data, void *buffer, unsigned buffer_size) {
-            auto   payload = reinterpret_cast<Payload *>(data);
-            string url     = payload->url; // copy the url
+            auto payload = reinterpret_cast<Payload *>(data);
+            // copy out everything needed before the payload goes away
+            string           url           = payload->url;
+            bool             should_select = payload->should_select;
+            ImagePtr         to_replace    = payload->to_replace;
+            ImageLoadOptions opts          = payload->opts;
             delete payload;
 
             auto filename    = get_filename(url);
             auto char_buffer = reinterpret_cast<const char *>(buffer);
             spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
             hdrview()->m_remaining_download = 0; // the last progress callback need not have reported it
-            hdrview()->load_image(url, string_view{char_buffer, (size_t)buffer_size}, true, load_image_options());
+            hdrview()->load_image(url, string_view{char_buffer, (size_t)buffer_size}, should_select, opts, to_replace);
         },
         (em_async_wget2_data_onerror_func)[](unsigned, void *data, int err, const char *desc) {
             auto   payload                         = reinterpret_cast<Payload *>(data);
@@ -634,6 +643,23 @@ void HDRViewApp::load_url(const string_view url)
 #endif
 }
 
+bool HDRViewApp::can_reload(const ConstImagePtr &image) const
+{
+    if (!image)
+        return false;
+
+#if defined(__EMSCRIPTEN__)
+    // A URL can be fetched again. Bytes the browser handed over once -- an upload, or an entry of an
+    // uploaded zip -- carry only a display name, with nothing behind it to read.
+    return is_url(image->filename);
+#else
+    // Every way in reads from disk, so there is always something to read again. Whether it is still there
+    // is reload_image()'s problem: this gates a keyboard shortcut, whose enabled() runs every frame for
+    // every loaded image, and a filesystem probe does not belong on that path.
+    return true;
+#endif
+}
+
 void HDRViewApp::reload_image(ImagePtr image, bool should_select)
 {
     if (!image)
@@ -642,10 +668,26 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
         return;
     }
 
+    if (!can_reload(image))
+    {
+        spdlog::warn("Cannot reload '{}': it was loaded from data with no source to read again.", image->filename);
+        return;
+    }
+
     spdlog::info("Reloading file '{}' with channel selector '{}'...", image->filename, image->channel_selector);
     auto opts                  = load_image_options();
     opts.channel_selector      = image->channel_selector;
     opts.alpha_is_transparency = image->alpha_is_transparency;
+
+#if defined(__EMSCRIPTEN__)
+    // A URL was never on a filesystem to be re-read from; fetch it again instead.
+    if (is_url(image->filename))
+    {
+        load_url(image->filename, should_select, image, opts);
+        return;
+    }
+#endif
+
     m_image_loader.background_load(image->filename, std::nullopt, should_select, image, opts);
 }
 

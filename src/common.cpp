@@ -111,6 +111,12 @@ bool split_zip_entry(string_view filename, string &zip_path, string &entry_path)
     }
 }
 
+bool is_url(string_view path)
+{
+    auto scheme = to_lower(path.substr(0, 8));
+    return starts_with(scheme, "http://") || starts_with(scheme, "https://");
+}
+
 // The three functions below each stream over `input` line by line. They take a copy rather than reading
 // through input.data(): a string_view need not be null-terminated, so a view over part of a larger buffer
 // would otherwise be read well past its end.

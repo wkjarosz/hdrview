@@ -1258,29 +1258,43 @@ void Image::draw_info()
             if (alpha_type != AlphaType_None)
             {
                 if (filter.PassFilter("Alpha is transparency"))
+                {
+                    // draw_info() is only ever drawn for the current image (see the Info window)
+                    const bool reloadable = hdrview()->can_reload(hdrview()->current_image());
+                    string     tooltip =
+                        "Whether the alpha channel means transparency. Turn this off for files whose alpha is "
+                        "really a mask or other data: it is then shown as an ordinary channel of its own and "
+                        "nothing is premultiplied by it.\n\nChanging this re-reads the image from its source.";
+                    if (!reloadable)
+                        tooltip += "\n\nUnavailable for this image: HDRView has nothing left to read it from.";
+
+                    // Drop the vertical frame padding across the whole row, as PE::WrappedText does for the
+                    // text rows: a checkbox is square, so the padding would both make this row taller than
+                    // its neighbors and push the property name below the box.
+                    ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+                    ImGui::BeginDisabled(!reloadable);
                     ImGui::PE::Entry(
                         "Is transparency",
                         [this]
                         {
-                            // Squat like the Colorspace panel's checkboxes, which drop their vertical frame
-                            // padding: a checkbox is square, so the default padding makes it taller than the
-                            // text beside it.
-                            ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
                             bool       value   = alpha_is_transparency;
                             const bool toggled = ImGui::Checkbox("##Alpha is transparency", &value);
-                            ImGui::PopStyleVar();
+                            // A text row is as tall as the smallest child window PE::WrappedText will make,
+                            // one line plus its spacing; reserve the same so the row pitch stays even.
+                            ImGui::SameLine();
+                            ImGui::Dummy(ImVec2(0.f, ImGui::GetTextLineHeightWithSpacing()));
                             if (!toggled)
                                 return false;
                             // The premultiply happens in-place on load, so switching interpretation means
-                            // re-reading the file; reload_image() carries the new setting through.
+                            // reading the image again; reload_image() carries the new setting through.
                             alpha_is_transparency = value;
-                            // draw_info() is only ever drawn for the current image (see the Info window)
                             hdrview()->reload_image(hdrview()->current_image());
                             return true;
                         },
-                        "Whether the alpha channel means transparency. Turn this off for files whose alpha is "
-                        "really a mask or other data: it is then shown as an ordinary channel of its own and "
-                        "nothing is premultiplied by it.\n\nChanging this re-reads the file from disk.");
+                        tooltip);
+                    ImGui::EndDisabled();
+                    ImGui::PopStyleVar();
+                }
             }
             if (exif.valid())
                 filtered_property("EXIF data", fmt::format("{:.0h}", human_readible{exif.size()}),

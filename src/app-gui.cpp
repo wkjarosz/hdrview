@@ -368,11 +368,16 @@ void HDRViewApp::draw_menus()
         ImGui::EndDisabled();
 
         MenuItem(action("Add watched folder..."));
+#endif
 
         ImGui::Separator();
 
+        // Reloading is offered on the web too, where it re-downloads a URL-loaded image; the actions
+        // disable themselves for anything the browser handed over as bytes.
         MenuItem(action("Reload image"));
         MenuItem(action("Reload all images"));
+
+#if !defined(__EMSCRIPTEN__)
         MenuItem(action("Watch for changes"));
 
         ImGui::Separator();

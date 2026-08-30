@@ -1232,22 +1232,36 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
 
             // below actions are only available if there is an image
 
-#if !defined(__EMSCRIPTEN__)
+        // Ctrl+R and Ctrl+Shift+R are the browser's own reload; the emscripten GLFW backend passes them
+        // through to it, so on the web these are menu/command-palette entries without a chord.
+#if defined(__EMSCRIPTEN__)
+        constexpr ImGuiKeyChord reload_chord     = ImGuiKey_None;
+        constexpr ImGuiKeyChord reload_all_chord = ImGuiKey_None;
+#else
+        constexpr ImGuiKeyChord reload_chord     = ImGuiMod_Ctrl | ImGuiKey_R;
+        constexpr ImGuiKeyChord reload_all_chord = ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R;
+#endif
         add(Action{{"Reload image"},
                    ICON_MY_RELOAD,
-                   ImGuiMod_Ctrl | ImGuiKey_R,
+                   reload_chord,
                    0,
                    [this]() { reload_image(current_image()); },
-                   if_img});
+                   [this]() { return can_reload(current_image()); }});
         add(Action{{"Reload all images"},
                    ICON_MY_RELOAD,
-                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R,
+                   reload_all_chord,
                    0,
                    [this]()
                    {
                        for (auto &i : m_images) reload_image(i);
                    },
-                   if_img});
+                   [this]()
+                   {
+                       return std::any_of(m_images.begin(), m_images.end(),
+                                          [this](const ImagePtr &i) { return can_reload(i); });
+                   }});
+
+#if !defined(__EMSCRIPTEN__)
         add(Action{{"Watch for changes"},
                    ICON_MY_WATCH_CHANGES,
                    ImGuiKey_None,

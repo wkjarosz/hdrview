@@ -74,11 +74,20 @@ public:
     void open_folder();
     void load_images(const vector<string> &filenames);
     void load_image(const string filename, std::optional<string_view> buffer = std::nullopt, bool should_select = true,
-                    const ImageLoadOptions &opts = {});
-    void load_url(const string_view url);
+                    const ImageLoadOptions &opts = {}, ImagePtr to_replace = nullptr);
+    //! Download `url` and load it as an image (Emscripten only). `to_replace` reloads in place, as reload_image() does.
+    void load_url(string_view url, bool should_select = true, ImagePtr to_replace = nullptr,
+                  const ImageLoadOptions &opts = load_image_options());
     void close_image(int index = -1);
     void close_all_images();
     void reload_image(ImagePtr image, bool shall_select = false);
+    //! Whether `image` came from somewhere reload_image() could read it again.
+    /*!
+        Answers from how the image was loaded, never from the filesystem: this gates a keyboard shortcut, so
+        it is evaluated every frame. A file that has since been deleted still answers yes, and the reload
+        reports it.
+    */
+    bool can_reload(const ConstImagePtr &image) const;
     /// The background loader, which also owns the watched-directory and recent-file lists.
     BackgroundImageLoader       &image_loader() { return m_image_loader; }
     const BackgroundImageLoader &image_loader() const { return m_image_loader; }
