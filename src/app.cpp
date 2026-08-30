@@ -407,7 +407,9 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
     m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither, force_apple_keys]
     {
 #if defined(__EMSCRIPTEN__)
-        install_touch_handlers(); // see platform_utils
+        // see platform_utils
+        install_touch_handlers();
+        install_navigation_guard();
 #endif
 
         spdlog::info("Loading user settings from '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
@@ -846,6 +848,16 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
     {
         const auto always_enabled = []() { return true; };
         const auto if_img         = [this]() { return current_image() != nullptr; };
+
+        // The emscripten GLFW port calls preventDefault() on every key it receives except cut/copy/paste, so
+        // on the web HDRView's chords reach it rather than the browser -- but only the ones the browser
+        // delivers at all. Ctrl/Cmd+Q, +W and +Shift+W are never sent to the page, so nothing can swallow
+        // them; leaving those bound would advertise a shortcut that quits the browser or closes the tab.
+#if defined(__EMSCRIPTEN__)
+        constexpr bool k_browser_reserved = true;
+#else
+        constexpr bool k_browser_reserved = false;
+#endif
         using ImGui::Action;
         auto add = [this](const Action &a) { m_actions[a.names[0]] = a; };
         add(Action{{"Open image..."}, ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
@@ -910,7 +922,11 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    always_enabled,
                    false,
                    &dialog("About").open});
-        add(Action{{"Quit"}, ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
+        add(Action{{"Quit"},
+                   ICON_MY_QUIT,
+                   k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiKey_Q),
+                   0,
+                   [this]() { m_params.appShallExit = true; }});
 
         add(Action{{"Command palette..."},
                    ICON_MY_COMMAND_PALETTE,
@@ -1232,24 +1248,15 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
 
             // below actions are only available if there is an image
 
-        // Ctrl+R and Ctrl+Shift+R are the browser's own reload; the emscripten GLFW backend passes them
-        // through to it, so on the web these are menu/command-palette entries without a chord.
-#if defined(__EMSCRIPTEN__)
-        constexpr ImGuiKeyChord reload_chord     = ImGuiKey_None;
-        constexpr ImGuiKeyChord reload_all_chord = ImGuiKey_None;
-#else
-        constexpr ImGuiKeyChord reload_chord     = ImGuiMod_Ctrl | ImGuiKey_R;
-        constexpr ImGuiKeyChord reload_all_chord = ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R;
-#endif
         add(Action{{"Reload image"},
                    ICON_MY_RELOAD,
-                   reload_chord,
+                   ImGuiMod_Ctrl | ImGuiKey_R,
                    0,
                    [this]() { reload_image(current_image()); },
                    [this]() { return can_reload(current_image()); }});
         add(Action{{"Reload all images"},
                    ICON_MY_RELOAD,
-                   reload_all_chord,
+                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R,
                    0,
                    [this]()
                    {
@@ -1495,13 +1502,13 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
 
         add(Action{{"Close"},
                    ICON_MY_CLOSE,
-                   ImGuiMod_Ctrl | ImGuiKey_W,
+                   k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiKey_W),
                    ImGuiInputFlags_Repeat,
                    [this]() { close_image(); },
                    if_img});
         add(Action{{"Close all"},
                    ICON_MY_CLOSE_ALL,
-                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W,
+                   k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W),
                    0,
                    [this]() { close_all_images(); },
                    if_img});

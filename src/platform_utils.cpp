@@ -146,6 +146,14 @@ void install_touch_handlers()
     emscripten_set_touchcancel_callback(canvas, nullptr, EM_FALSE, on_touch);
 }
 
+// A non-empty return asks the browser to confirm; it shows its own wording, not this text.
+static const char *on_before_unload(int, const void *, void *)
+{
+    return hdrview()->num_images() > 0 ? "Images are open and are not saved anywhere." : nullptr;
+}
+
+void install_navigation_guard() { emscripten_set_beforeunload_callback(nullptr, on_before_unload); }
+
 extern "C"
 {
     EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size,
