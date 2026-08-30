@@ -7,6 +7,8 @@
 #ifdef __EMSCRIPTEN__
 #include "app.h"
 
+#include <emscripten/html5.h>
+
 EM_JS(bool, isSafari, (), {
     var is_safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     return is_safari;
@@ -92,6 +94,58 @@ void show_in_file_manager(const char *filename)
 //------------------------------------------------------------------------------
 //  Javascript interface functions
 //
+//! Pinch-to-zoom, read straight from the browser's touch events.
+/*!
+    Neither backend supplies it. GLFW has no gesture API on any platform, and the Emscripten port
+    hello_imgui uses tracks a single touch point, synthesizing mouse events from it and discarding the
+    rest -- so the second finger never reaches the application otherwise.
+
+    Registering alongside the port's own listeners leaves that synthesis intact: one finger still pans
+    through the ordinary mouse path. The gesture is reduced here to a dimensionless change in the
+    fingers' separation; what that does to the viewport is HDRViewApp::touch_gesture()'s business.
+*/
+static EM_BOOL on_touch(int event_type, const EmscriptenTouchEvent *event, void *)
+{
+    // The separation of the first two fingers is the gesture; a third changes nothing.
+    static float previous_distance = 0.f;
+
+    const bool pinching =
+        event->numTouches >= 2 && event_type != EMSCRIPTEN_EVENT_TOUCHEND && event_type != EMSCRIPTEN_EVENT_TOUCHCANCEL;
+
+    float  relative_delta = 0.f;
+    float2 midpoint{0.f};
+    if (pinching)
+    {
+        const float2 a{(float)event->touches[0].targetX, (float)event->touches[0].targetY};
+        const float2 b{(float)event->touches[1].targetX, (float)event->touches[1].targetY};
+        const float  distance = length(b - a);
+
+        // The first frame of a pinch has nothing to compare against, so it only sets the baseline.
+        if (previous_distance > 0.f && distance > 0.f)
+            relative_delta = (distance - previous_distance) / previous_distance;
+        previous_distance = distance;
+        midpoint          = 0.5f * (a + b);
+    }
+    else
+        previous_distance = 0.f;
+
+    hdrview()->touch_gesture(event->numTouches, relative_delta, midpoint);
+
+    // Claim the event only while pinching, so one finger still reaches the port's mouse synthesis.
+    return pinching ? EM_TRUE : EM_FALSE;
+}
+
+void install_touch_handlers()
+{
+    // The canvas hello_imgui draws into (id="canvas" in shell.emscripten.html).
+    // EMSCRIPTEN_EVENT_TARGET_WINDOW would also catch touches beginning on the surrounding page.
+    const char *canvas = "#canvas";
+    emscripten_set_touchstart_callback(canvas, nullptr, EM_FALSE, on_touch);
+    emscripten_set_touchmove_callback(canvas, nullptr, EM_FALSE, on_touch);
+    emscripten_set_touchend_callback(canvas, nullptr, EM_FALSE, on_touch);
+    emscripten_set_touchcancel_callback(canvas, nullptr, EM_FALSE, on_touch);
+}
+
 extern "C"
 {
     EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size,

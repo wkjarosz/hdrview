@@ -4,14 +4,6 @@
 
 #include <cmath>
 
-#if defined(__EMSCRIPTEN__)
-#include <emscripten/html5.h>
-#endif
-
-#ifdef HELLOIMGUI_USE_SDL2
-#include <SDL.h>
-#endif
-
 using namespace std;
 using namespace HelloImGui;
 
@@ -309,102 +301,13 @@ void HDRViewApp::handle_mouse_interaction()
         this->cancel_autofit();
 }
 
-#if defined(__EMSCRIPTEN__)
-
-//! Pinch-to-zoom, read straight from the browser's touch events.
-/*!
-    Neither backend can supply this. GLFW has no gesture API on any platform, and the Emscripten port
-    hello_imgui uses tracks a single touch point, synthesizing mouse events from it and discarding the
-    rest -- so the second finger never reaches the application. SDL2's SDL_MULTIGESTURE would, but its
-    Emscripten build has no clipboard at all (no driver entry, so SDL_SetClipboardText only writes a
-    process-local string), which is too much to give up for one gesture.
-
-    Registering here alongside the port's own listeners leaves its single-touch mouse synthesis intact:
-    one finger still pans through the ordinary mouse path, and only the second finger is ours.
-*/
-static EM_BOOL on_touch(int event_type, const EmscriptenTouchEvent *event, void *user_data)
+void HDRViewApp::touch_gesture(int num_touches, float relative_delta, float2 app_pos)
 {
-    auto *app = static_cast<HDRViewApp *>(user_data);
+    m_active_touches = num_touches;
 
-    // Every touch currently on the screen is reported, not just the ones that changed.
-    app->set_active_touches(event->numTouches);
-
-    // The distance between the first two fingers is the gesture; a third changes nothing.
-    static float previous_distance = 0.f;
-    if (event->numTouches < 2 || event_type == EMSCRIPTEN_EVENT_TOUCHEND || event_type == EMSCRIPTEN_EVENT_TOUCHCANCEL)
-    {
-        previous_distance = 0.f;
-        return EM_FALSE; // let the port keep synthesizing mouse events from one finger
-    }
-
-    const float2 a{(float)event->touches[0].targetX, (float)event->touches[0].targetY};
-    const float2 b{(float)event->touches[1].targetX, (float)event->touches[1].targetY};
-    const float  distance = length(b - a);
-
-    // The first frame of a pinch has nothing to compare against, so it only establishes the baseline.
-    if (previous_distance > 0.f && distance > 0.f)
-    {
-        // Scaled by the starting separation so the same finger travel zooms by the same amount whether
-        // the fingers began close together or far apart.
-        constexpr float k_pinch_scale = 8.f;
-        app->zoom_at_vp_pos(k_pinch_scale * (distance - previous_distance) / previous_distance,
-                            app->vp_pos_at_app_pos(0.5f * (a + b)));
-    }
-    previous_distance = distance;
-
-    return EM_TRUE; // ours: do not also scroll or zoom the page
-}
-
-void HDRViewApp::install_touch_handlers()
-{
-    // The canvas hello_imgui draws into. EMSCRIPTEN_EVENT_TARGET_WINDOW would also see touches that
-    // began on the surrounding page.
-    const char *canvas = "#canvas";
-    emscripten_set_touchstart_callback(canvas, this, EM_FALSE, on_touch);
-    emscripten_set_touchmove_callback(canvas, this, EM_FALSE, on_touch);
-    emscripten_set_touchend_callback(canvas, this, EM_FALSE, on_touch);
-    emscripten_set_touchcancel_callback(canvas, this, EM_FALSE, on_touch);
-}
-
-#endif // __EMSCRIPTEN__
-
-bool HDRViewApp::process_event(void *e)
-{
-#ifdef HELLOIMGUI_USE_SDL2
-    auto &io = ImGui::GetIO();
-    if (io.WantCaptureMouse)
-        return false;
-
-    SDL_Event *event = static_cast<SDL_Event *>(e);
-    switch (event->type)
-    {
-    case SDL_QUIT: spdlog::trace("Got an SDL_QUIT event"); break;
-    case SDL_WINDOWEVENT: spdlog::trace("Got an SDL_WINDOWEVENT event"); break;
-    case SDL_MOUSEWHEEL: spdlog::trace("Got an SDL_MOUSEWHEEL event"); break;
-    case SDL_MOUSEMOTION: spdlog::trace("Got an SDL_MOUSEMOTION event"); break;
-    case SDL_MOUSEBUTTONDOWN: spdlog::trace("Got an SDL_MOUSEBUTTONDOWN event"); break;
-    case SDL_MOUSEBUTTONUP: spdlog::trace("Got an SDL_MOUSEBUTTONUP event"); break;
-    case SDL_FINGERMOTION: spdlog::trace("Got an SDL_FINGERMOTION event"); break;
-    case SDL_FINGERDOWN: spdlog::trace("Got an SDL_FINGERDOWN event"); break;
-    case SDL_MULTIGESTURE:
-    {
-        spdlog::trace("Got an SDL_MULTIGESTURE event; numFingers: {}; dDist: {}; x: {}, y: {}; io.MousePos: {}, {}; "
-                      "io.MousePosFrac: {}, {}",
-                      event->mgesture.numFingers, event->mgesture.dDist, event->mgesture.x, event->mgesture.y,
-                      io.MousePos.x, io.MousePos.y, io.MousePos.x / io.DisplaySize.x, io.MousePos.y / io.DisplaySize.y);
-        constexpr float cPinchZoomThreshold(0.0001f);
-        constexpr float cPinchScale(80.0f);
-        if (event->mgesture.numFingers == 2 && fabs(event->mgesture.dDist) >= cPinchZoomThreshold)
-        {
-            // Zoom in/out by positive/negative mPinch distance
-            zoom_at_vp_pos(event->mgesture.dDist * cPinchScale, vp_pos_at_app_pos(io.MousePos));
-            return true;
-        }
-    }
-    break;
-    case SDL_FINGERUP: spdlog::trace("Got an SDL_FINGERUP event"); break;
-    }
-#endif
-    (void)e; // prevent unreferenced formal parameter warning
-    return false;
+    // Scaled by the fingers' own separation, so the same travel zooms by the same amount whether they
+    // started close together or far apart.
+    constexpr float k_pinch_scale = 8.f;
+    if (relative_delta != 0.f)
+        zoom_at_vp_pos(k_pinch_scale * relative_delta, vp_pos_at_app_pos(app_pos));
 }

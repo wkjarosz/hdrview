@@ -9,6 +9,9 @@ void        show_in_file_manager(const char *filename);
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 
+//! Register the browser touch listeners that supply pinch-to-zoom, which no backend provides.
+void install_touch_handlers();
+
 extern "C"
 {
     EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size,

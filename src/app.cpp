@@ -407,7 +407,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
     m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither, force_apple_keys]
     {
 #if defined(__EMSCRIPTEN__)
-        install_touch_handlers();
+        install_touch_handlers(); // see platform_utils
 #endif
 
         spdlog::info("Loading user settings from '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
@@ -661,7 +661,6 @@ void HDRViewApp::setup_frame_callbacks()
     };
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
     m_params.callbacks.BeforeSwap              = [this]() { end_colorpass_frame(); };
-    m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
 }
 
 auto HDRViewApp::dialog(const string &title) -> PopupDialog &
