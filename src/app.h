@@ -343,6 +343,13 @@ private:
     void draw_tweak_window();
     void process_shortcuts();
     bool process_event(void *event);
+
+#if defined(__EMSCRIPTEN__)
+    //! Register the browser touch listeners that supply pinch-to-zoom. \see on_touch in app-zoom.cpp
+    void install_touch_handlers();
+    //! Fingers currently on the screen, from those listeners.
+    void set_active_touches(int n) { m_active_touches = n; }
+#endif
     void set_image_textures();
     void update_visibility();
 
@@ -399,6 +406,14 @@ private:
     BackgroundImageLoader m_image_loader;
 
     int m_remaining_download = 0;
+
+    //! Number of fingers currently on the screen, tracked only under Emscripten.
+    /*!
+        The GLFW port synthesizes mouse events from the first touch and drops the rest ("we don't handle
+        multitouch", Context.cpp), so during a two-finger pinch it is still reporting a left-drag. Panning
+        is suppressed while this exceeds one, or the image would pan and zoom at the same time.
+    */
+    int m_active_touches = 0;
 
     ImGuiTextFilter m_file_filter, m_channel_filter;
     vector<size_t>  m_visible_images;

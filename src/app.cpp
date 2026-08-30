@@ -406,7 +406,9 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
     m_params.iniFilename        = "HDRView/settings.ini";
     m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither, force_apple_keys]
     {
-        setup_imgui_clipboard();
+#if defined(__EMSCRIPTEN__)
+        install_touch_handlers();
+#endif
 
         spdlog::info("Loading user settings from '{}'", IniSettingsLocation(m_params).value_or("(disabled)"));
 

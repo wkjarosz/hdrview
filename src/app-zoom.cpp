@@ -4,6 +4,10 @@
 
 #include <cmath>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/html5.h>
+#endif
+
 #ifdef HELLOIMGUI_USE_SDL2
 #include <SDL.h>
 #endif
@@ -291,7 +295,9 @@ void HDRViewApp::handle_mouse_interaction()
     else
     {
         float2 drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+        // A second finger means a pinch, and the first one is still driving a synthesized left-drag; pan
+        // would fight the zoom for the same gesture.
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) && m_active_touches < 2)
         {
             cancel_autofit = true;
             reposition_pixel_to_vp_pos(vp_mouse_pos + drag_delta, pixel_at_vp_pos(vp_mouse_pos));
@@ -302,6 +308,65 @@ void HDRViewApp::handle_mouse_interaction()
     if (cancel_autofit)
         this->cancel_autofit();
 }
+
+#if defined(__EMSCRIPTEN__)
+
+//! Pinch-to-zoom, read straight from the browser's touch events.
+/*!
+    Neither backend can supply this. GLFW has no gesture API on any platform, and the Emscripten port
+    hello_imgui uses tracks a single touch point, synthesizing mouse events from it and discarding the
+    rest -- so the second finger never reaches the application. SDL2's SDL_MULTIGESTURE would, but its
+    Emscripten build has no clipboard at all (no driver entry, so SDL_SetClipboardText only writes a
+    process-local string), which is too much to give up for one gesture.
+
+    Registering here alongside the port's own listeners leaves its single-touch mouse synthesis intact:
+    one finger still pans through the ordinary mouse path, and only the second finger is ours.
+*/
+static EM_BOOL on_touch(int event_type, const EmscriptenTouchEvent *event, void *user_data)
+{
+    auto *app = static_cast<HDRViewApp *>(user_data);
+
+    // Every touch currently on the screen is reported, not just the ones that changed.
+    app->set_active_touches(event->numTouches);
+
+    // The distance between the first two fingers is the gesture; a third changes nothing.
+    static float previous_distance = 0.f;
+    if (event->numTouches < 2 || event_type == EMSCRIPTEN_EVENT_TOUCHEND || event_type == EMSCRIPTEN_EVENT_TOUCHCANCEL)
+    {
+        previous_distance = 0.f;
+        return EM_FALSE; // let the port keep synthesizing mouse events from one finger
+    }
+
+    const float2 a{(float)event->touches[0].targetX, (float)event->touches[0].targetY};
+    const float2 b{(float)event->touches[1].targetX, (float)event->touches[1].targetY};
+    const float  distance = length(b - a);
+
+    // The first frame of a pinch has nothing to compare against, so it only establishes the baseline.
+    if (previous_distance > 0.f && distance > 0.f)
+    {
+        // Scaled by the starting separation so the same finger travel zooms by the same amount whether
+        // the fingers began close together or far apart.
+        constexpr float k_pinch_scale = 8.f;
+        app->zoom_at_vp_pos(k_pinch_scale * (distance - previous_distance) / previous_distance,
+                            app->vp_pos_at_app_pos(0.5f * (a + b)));
+    }
+    previous_distance = distance;
+
+    return EM_TRUE; // ours: do not also scroll or zoom the page
+}
+
+void HDRViewApp::install_touch_handlers()
+{
+    // The canvas hello_imgui draws into. EMSCRIPTEN_EVENT_TARGET_WINDOW would also see touches that
+    // began on the surrounding page.
+    const char *canvas = "#canvas";
+    emscripten_set_touchstart_callback(canvas, this, EM_FALSE, on_touch);
+    emscripten_set_touchmove_callback(canvas, this, EM_FALSE, on_touch);
+    emscripten_set_touchend_callback(canvas, this, EM_FALSE, on_touch);
+    emscripten_set_touchcancel_callback(canvas, this, EM_FALSE, on_touch);
+}
+
+#endif // __EMSCRIPTEN__
 
 bool HDRViewApp::process_event(void *e)
 {

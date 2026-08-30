@@ -1,6 +1,5 @@
 #pragma once
 
-void        setup_imgui_clipboard();
 bool        host_is_apple();
 bool        host_is_safari();
 const char *file_manager_name();
