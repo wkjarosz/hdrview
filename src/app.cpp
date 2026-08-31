@@ -638,6 +638,7 @@ void HDRViewApp::setup_frame_callbacks()
     m_params.callbacks.ShowGui = [this]()
     {
         drain_main_thread_queue();
+        drain_running_filter();
 
 #if HDRVIEW_ENABLE_IPC
         // See m_ipc_listen_requested: the toggle's Action needs a bool, but the socket is the truth.
@@ -760,6 +761,9 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     m_dialogs.push_back(make_unique<PopupDialog>("Blur...", [this](bool &open) { draw_blur_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Unsharp mask...", [this](bool &open) { draw_unsharp_mask_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Median filter...", [this](bool &open) { draw_median_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Applying filter...", [this](bool &open) { draw_filter_progress_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Loading session...", [this](bool &open) { draw_loading_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>(
@@ -1657,6 +1661,12 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Unsharp mask...").open = true; },
+                   if_editable});
+        add(Action{{"Median filter...", "Remove fireflies and outliers"},
+                   ICON_MY_MEDIAN,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Median filter...").open = true; },
                    if_editable});
 
         add(Action{{"Crop to selection"},

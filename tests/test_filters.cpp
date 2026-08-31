@@ -307,3 +307,103 @@ TEST_CASE("An iterated box over a region agrees with the same over the whole ima
             }
     }
 }
+
+TEST_CASE("A median removes a lone outlier where a mean only spreads it")
+{
+    // The reason to have a median at all: one wild sample -- a firefly -- should vanish rather than be
+    // smeared over its neighbors.
+    Array2Df src{int2{9, 9}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = 0.5f;
+    src(4, 4) = 1000.f;
+
+    const Array2Df med = median_filtered(src, whole(src), 2.f);
+    const Array2Df avg = gaussian_blurred(src, whole(src), 2.f, 2.f);
+
+    // Gone entirely, and its neighbors untouched.
+    CHECK(med(4, 4) == doctest::Approx(0.5f));
+    CHECK(med(5, 4) == doctest::Approx(0.5f));
+
+    // Whereas the blur has pushed it outwards instead.
+    CHECK(avg(4, 4) > 0.6f);
+    CHECK(avg(5, 4) > 0.6f);
+}
+
+TEST_CASE("A median leaves a constant image alone")
+{
+    Array2Df flat{int2{12, 10}};
+    for (int i = 0; i < flat.num_elements(); ++i) flat(i) = 0.25f;
+
+    const Array2Df out = median_filtered(flat, whole(flat), 3.f);
+    for (int i = 0; i < out.num_elements(); ++i) CHECK(out(i) == doctest::Approx(0.25f));
+}
+
+TEST_CASE("A median keeps an edge that a blur would soften")
+{
+    // A median is an order statistic, so on either side of a step it still picks a sample from that side.
+    Array2Df src{int2{16, 16}};
+    for (int y = 0; y < 16; ++y)
+        for (int x = 0; x < 16; ++x) src(x, y) = x < 8 ? 0.f : 1.f;
+
+    const Array2Df med = median_filtered(src, whole(src), 2.f);
+
+    // Two samples clear of the step, the sides are still exactly what they were.
+    CHECK(med(5, 8) == doctest::Approx(0.f));
+    CHECK(med(10, 8) == doctest::Approx(1.f));
+}
+
+TEST_CASE("A median over a region agrees with the same over the whole image")
+{
+    Array2Df src{int2{30, 24}};
+    for (int y = 0; y < 24; ++y)
+        for (int x = 0; x < 24 && x < 30; ++x) src(x, y) = float((x * 5 + y * 3) % 7);
+
+    const Box2i    region{{6, 5}, {19, 16}};
+    const Array2Df all = median_filtered(src, whole(src), 2.f);
+    const Array2Df sub = median_filtered(src, region, 2.f);
+
+    REQUIRE(sub.size() == region.size());
+    for (int y = 0; y < region.size().y; ++y)
+        for (int x = 0; x < region.size().x; ++x)
+        {
+            CAPTURE(x);
+            CAPTURE(y);
+            CHECK(sub(x, y) == doctest::Approx(all(region.min.x + x, region.min.y + y)));
+        }
+}
+
+TEST_CASE("A radius of zero leaves every sample as it was")
+{
+    Array2Df src{int2{8, 6}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i);
+
+    const Array2Df out = median_filtered(src, whole(src), 0.f);
+    for (int i = 0; i < out.num_elements(); ++i) CHECK(out(i) == doctest::Approx(src(i)));
+}
+
+TEST_CASE("A canceled filter stops early and reports that it did")
+{
+    Array2Df src{int2{64, 64}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i % 13);
+
+    // Already canceled before it starts, which is the case the caller has to notice: what comes back is a
+    // partial answer and must be discarded rather than applied.
+    FilterProgress progress;
+    progress.canceled.store(true);
+
+    const Array2Df out = median_filtered(src, whole(src), 4.f, &progress);
+
+    CHECK(progress.stop());
+    CHECK(out.size() == src.size()); // still the right shape, just not filled in
+}
+
+TEST_CASE("An uncancelled filter reports its way to complete")
+{
+    Array2Df src{int2{16, 16}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i % 5);
+
+    FilterProgress progress;
+    median_filtered(src, whole(src), 2.f, &progress);
+
+    CHECK_FALSE(progress.stop());
+    CHECK(progress.fraction.load() == doctest::Approx(1.f));
+}

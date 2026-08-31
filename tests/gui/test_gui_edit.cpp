@@ -675,6 +675,33 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(d_box > d_fast);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "a filter run off the main thread lands as one edit");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const auto original = snapshot(img);
+
+        menu_click(ctx, "Edit/Median filter...");
+        ctx->SetRef("Median filter...");
+        ctx->ItemInputValue("Radius", 1.5f);
+        ctx->ItemClick("Apply");
+
+        // The work happens on another thread and is applied by the frame loop when it finishes, so this
+        // waits for the result rather than for a number of frames.
+        wait_until(ctx, [&] { return img->history.has_undo(); });
+
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_EQ(img->history.undo_name(), std::string("Median filter"));
+
+        // One entry, not one per channel: the whole filter is a single undoable step.
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+        IM_CHECK_EQ(img->history.has_undo(), false);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

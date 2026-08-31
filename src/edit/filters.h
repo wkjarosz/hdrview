@@ -8,6 +8,29 @@
 
 #include "array2d.h"
 #include "box.h"
+#include <atomic>
+
+/*!
+    How far a filter has got, and whether it should stop.
+
+    Passed to the slow filters so a long one can be watched and abandoned. Both members are atomic because
+    the filter runs on worker threads while the frame loop reads them to draw the progress bar and to set
+    the cancel flag.
+
+    A canceled filter returns whatever it had reached, which the caller must then discard rather than
+    apply -- it is a partial answer, not a shorter one.
+*/
+struct FilterProgress
+{
+    //! Fraction complete, in [0, 1].
+    std::atomic<float> fraction{0.f};
+    //! Set from the main thread to ask the filter to stop early.
+    std::atomic<bool> canceled{false};
+
+    //! True once cancellation has been requested; filters check this between units of work.
+    bool stop() const { return canceled.load(std::memory_order_relaxed); }
+    void advance(float f) { fraction.store(f, std::memory_order_relaxed); }
+};
 
 /*!
     Neighborhood filters over a single channel's samples.
@@ -63,6 +86,19 @@ Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x,
 */
 Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
                                int iterations = 6);
+
+/*!
+    Replace each sample with the median of the disc of radius \p radius around it.
+
+    What a blur cannot do: remove a lone bright sample without smearing it into its neighbors. A mean is
+    dragged by an outlier however far out it is, while a median ignores it entirely once it is outnumbered
+    -- which is why this, not a blur, is what takes fireflies out of a render.
+
+    Unlike the blurs there is no separable form, so this costs the area of the disc per sample and is the
+    first filter slow enough to need \p progress. Pass one to have it report and to be able to stop it; a
+    canceled run returns what it had reached, which the caller must discard.
+*/
+Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress *progress = nullptr);
 
 /*!
     Add back a multiple of what a blur removed, which sharpens.

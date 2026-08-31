@@ -7,6 +7,7 @@
 #include "edit/filters.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <smallthreadpool.h>
 #include <vector>
@@ -303,6 +304,63 @@ Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, f
                                   const float v = clamped(src, region.min.x + x, region.min.y + y);
                                   out(x, y)     = v + amount * (v - blurred(x, y));
                               }
+                      });
+
+    return out;
+}
+
+Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress *progress)
+{
+    const int2  extent = region.size();
+    const int   r      = std::max(0, int(std::ceil(radius)));
+    const float r2     = radius * radius;
+
+    Array2Df out{extent};
+    if (r == 0)
+    {
+        for (int y = 0; y < extent.y; ++y)
+            for (int x = 0; x < extent.x; ++x) out(x, y) = clamped(src, region.min.x + x, region.min.y + y);
+        return out;
+    }
+
+    // Rows finished so far, which is what the fraction is reported from. Counted rather than derived from
+    // the loop index because the rows are shared out across threads and finish out of order.
+    std::atomic<int> rows_done{0};
+
+    stp::parallel_for(stp::blocked_range<int>(0, extent.y, 1),
+                      [&](int y0, int y1, int, int)
+                      {
+                          // Reused across the whole block rather than reallocated per sample.
+                          std::vector<float> window;
+                          window.reserve(size_t((2 * r + 1) * (2 * r + 1)));
+
+                          for (int y = y0; y < y1; ++y)
+                          {
+                              if (progress && progress->stop())
+                                  return;
+
+                              for (int x = 0; x < extent.x; ++x)
+                              {
+                                  window.clear();
+                                  for (int dy = -r; dy <= r; ++dy)
+                                      for (int dx = -r; dx <= r; ++dx)
+                                          // A disc rather than a square: a square median has a visible
+                                          // orientation, and its corners reach farther than the radius asked
+                                          // for.
+                                          if (float(dx * dx + dy * dy) <= r2)
+                                              window.push_back(
+                                                  clamped(src, region.min.x + x + dx, region.min.y + y + dy));
+
+                                  // nth_element is enough -- only the middle value is wanted, not a sorted
+                                  // window -- and is linear where a full sort is not.
+                                  const size_t mid = window.size() / 2;
+                                  std::nth_element(window.begin(), window.begin() + long(mid), window.end());
+                                  out(x, y) = window[mid];
+                              }
+
+                              if (progress)
+                                  progress->advance(float(rows_done.fetch_add(1) + 1) / float(extent.y));
+                          }
                       });
 
     return out;

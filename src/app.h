@@ -7,6 +7,7 @@
 #include "box.h"
 #include "colormap.h"
 #include "display_colorspace.h"
+#include "edit/filters.h"
 #include "edit/subject.h"
 #include "edit/undo.h"
 #include "imageio/image_loader.h"
@@ -265,6 +266,24 @@ public:
     bool modify_channels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
                          const std::function<Array2Df(const Array2Df &, const Box2i &)> &filter);
 
+    /*!
+        As modify_channels(), but computed off the main thread with a progress bar that can cancel it.
+
+        For filters slow enough that running them inline would freeze the window with no way out. The
+        filtering happens on a worker; the image is only touched once every channel is done, back on the
+        main thread and through the same chokepoint, so the edit still lands as one undoable step.
+
+        Returns having only started the work. A canceled filter changes nothing at all -- its partial
+        result is discarded rather than applied, since a half-filtered image is not a state anyone asked
+        for.
+    */
+    void modify_channels_async(
+        const ImagePtr &img, const std::string &name, const EditSubject &subject,
+        const std::function<Array2Df(const Array2Df &, const Box2i &, FilterProgress &)> &filter);
+
+    //! Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
+    void draw_filter_progress_dialog(bool &open);
+
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
 
@@ -277,6 +296,7 @@ public:
     void draw_image_size_dialog(bool &open);
     void draw_blur_dialog(bool &open);
     void draw_unsharp_mask_dialog(bool &open);
+    void draw_median_dialog(bool &open);
 
     /// The subject the menu's edits use, shown and changed under Edit > Apply to.
     EditSubject &edit_subject() { return m_edit_subject; }
@@ -634,6 +654,26 @@ private:
     void           draw_confirm_discard_dialog(bool &open);
     //! Do the thing the prompt was asking about, now that it has been confirmed.
     void apply_pending_discard();
+
+    //! A filter running off the main thread, with what is needed to finish or abandon it.
+    /*!
+        Held for as long as the work runs. The worker writes only into `results` and `progress`; the main
+        thread reads `done` once a frame and applies the results, so nothing is shared mutably in both
+        directions.
+    */
+    struct RunningFilter
+    {
+        ImagePtr              image;
+        std::string           name;
+        std::vector<int>      channels;
+        Box2i                 bounds;
+        std::vector<Array2Df> results;
+        FilterProgress        progress;
+        std::atomic<bool>     done{false};
+    };
+    std::unique_ptr<RunningFilter> m_running_filter;
+    //! Applies a finished filter's results, or clears an abandoned one. Called once a frame.
+    void drain_running_filter();
 
     //! What the menu's edits apply to; see Edit > Apply to.
     EditSubject m_edit_subject;
