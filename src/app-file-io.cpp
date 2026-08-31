@@ -648,6 +648,10 @@ bool HDRViewApp::can_reload(const ConstImagePtr &image) const
     if (!image)
         return false;
 
+    // A live image's pixels are pushed in by another process; there is no file to read again.
+    if (image->is_live)
+        return false;
+
 #if defined(__EMSCRIPTEN__)
     // A URL can be fetched again. Bytes the browser handed over once -- an upload, or an entry of an
     // uploaded zip -- carry only a display name, with nothing behind it to read.
@@ -810,9 +814,19 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
     j["type"]    = "HDRView session";
     j["version"] = fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch());
 
-    json images = json::array();
-    for (auto &img : m_images)
+    // A live image's pixels come from a running process, so a session -- which records where to find its
+    // images again -- has nothing it could write for it. Leaving it out renumbers the remaining entries,
+    // so keep a map from image index to manifest entry for the current/reference indices below.
+    json             images = json::array();
+    std::vector<int> entry_of_image(m_images.size(), -1);
+    for (size_t i = 0; i < m_images.size(); ++i)
     {
+        const auto &img = m_images[i];
+        if (img->is_live)
+            continue;
+
+        entry_of_image[i] = int(images.size());
+
         json entry;
         entry["path"]                  = path_of(img);
         entry["channel_selector"]      = img->channel_selector;
@@ -824,9 +838,10 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
     j["images"] = images;
     // Indices into "images", not paths: the same file can legitimately be listed more than once (e.g. to
     // compare two channel groups of it side by side), so a path alone can't identify which occurrence is
-    // current/reference.
-    j["current"]   = image_index(current_image());
-    j["reference"] = image_index(reference_image());
+    // current/reference. -1 when there is no such image, or when it was a live one that was left out.
+    auto entry_index = [&](int idx) { return idx >= 0 && idx < (int)entry_of_image.size() ? entry_of_image[idx] : -1; };
+    j["current"]     = entry_index(image_index(current_image()));
+    j["reference"]   = entry_index(image_index(reference_image()));
 
     j["blend_mode"] = enum_to_id(m_blend_mode, g_blend_mode_ids);
 
@@ -928,6 +943,9 @@ void HDRViewApp::export_session_bundle()
         mz_zip_writer_add_mem(&zip, "session.hsess", manifest_text.data(), manifest_text.size(), MZ_DEFAULT_LEVEL);
     for (size_t i = 0; ok && i < m_images.size(); ++i)
     {
+        if (m_images[i]->is_live)
+            continue; // no file behind it, and build_session_manifest() left it out too
+
         string source = m_images[i]->path.u8string();
         string source_zip, entry_path;
         if (split_zip_entry(source, source_zip, entry_path) && !entry_path.empty())

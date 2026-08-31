@@ -126,6 +126,130 @@ TEST_CASE("PixelStats::Settings::match ignores settings that only affect drawing
         b.roi = Box2i{int2{0}, int2{4}};
         CHECK_FALSE(a.match(b));
     }
+    SUBCASE("and so does the measured image's pixels having changed")
+    {
+        b.content_version = 1;
+        CHECK_FALSE(a.match(b));
+    }
+    SUBCASE("and the reference image's pixels having changed")
+    {
+        b.ref_content_version = 1;
+        CHECK_FALSE(a.match(b));
+    }
+}
+
+TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else")
+{
+    // A tile carries only its own rows; everything outside it has to survive untouched, which is what makes
+    // streaming a render bucket-by-bucket meaningful in the first place.
+    const int w = 8, h = 6;
+
+    SUBCASE("tightly packed rows")
+    {
+        Channel c        = make_identifiable_channel(w, h);
+        Channel expected = make_identifiable_channel(w, h);
+
+        const Box2i        tile{int2{2, 1}, int2{6, 4}};
+        std::vector<float> data(size_t(tile.size().x) * tile.size().y);
+        for (size_t i = 0; i < data.size(); ++i) data[i] = -1.f - float(i);
+
+        c.upload_tile(tile, data.data());
+
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                // Half-open, as upload_tile() treats it; Box::contains() would include the max edge.
+                const bool inside = x >= tile.min.x && x < tile.max.x && y >= tile.min.y && y < tile.max.y;
+                if (inside)
+                    CHECK(c(x, y) == data[size_t(y - tile.min.y) * tile.size().x + (x - tile.min.x)]);
+                else
+                    CHECK(c(x, y) == expected(x, y));
+            }
+    }
+
+    SUBCASE("strided source reads one channel out of an interleaved payload")
+    {
+        Channel c = make_identifiable_channel(w, h);
+
+        // Three channels interleaved, as a renderer would hand over an RGB tile; we want the middle one.
+        const Box2i        tile{int2{0, 0}, int2{4, 3}};
+        const int          n = 3, want = 1;
+        std::vector<float> interleaved(size_t(tile.size().x) * tile.size().y * n);
+        for (size_t i = 0; i < interleaved.size(); ++i) interleaved[i] = float(i);
+
+        c.upload_tile(tile, interleaved.data() + want, n);
+
+        for (int y = 0; y < tile.size().y; ++y)
+            for (int x = 0; x < tile.size().x; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                CHECK(c(x, y) == interleaved[(size_t(y) * tile.size().x + x) * n + want]);
+            }
+    }
+
+    SUBCASE("a tile hanging off the edge writes only the part that lands")
+    {
+        Channel c        = make_identifiable_channel(w, h);
+        Channel expected = make_identifiable_channel(w, h);
+
+        // Straddles the right and bottom edges; rows are as wide as the *requested* tile, not the clipped one.
+        const Box2i        tile{int2{w - 2, h - 2}, int2{w + 2, h + 2}};
+        std::vector<float> data(size_t(tile.size().x) * tile.size().y);
+        for (size_t i = 0; i < data.size(); ++i) data[i] = -1.f - float(i);
+
+        c.upload_tile(tile, data.data());
+
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                if (x >= w - 2 && y >= h - 2)
+                    CHECK(c(x, y) == data[size_t(y - tile.min.y) * tile.size().x + (x - tile.min.x)]);
+                else
+                    CHECK(c(x, y) == expected(x, y));
+            }
+    }
+
+    SUBCASE("a tile entirely outside the channel is a no-op")
+    {
+        Channel c        = make_identifiable_channel(w, h);
+        Channel expected = make_identifiable_channel(w, h);
+
+        std::vector<float> data(16, -1.f);
+        c.upload_tile(Box2i{int2{w, h}, int2{w + 4, h + 4}}, data.data());
+
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) CHECK(c(x, y) == expected(x, y));
+    }
+}
+
+TEST_CASE("statistics computed after a tile lands reflect the new pixels")
+{
+    // Why content has to be versioned at all: measurements taken before a tile arrived describe pixels
+    // that are gone. This measures the channel directly, so it covers the pixels moving, not the cache
+    // invalidation that Settings::match() above is responsible for.
+    const int w = 16, h = 16;
+    Channel   c("streamed", int2{w, h});
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) c(x, y) = 0.f;
+
+    auto before = compute(c);
+    REQUIRE(before.computed);
+    CHECK(before.summary.maximum == 0.f);
+
+    // One bucket finishes, well above everything around it.
+    const Box2i        tile{int2{4, 4}, int2{8, 8}};
+    std::vector<float> data(size_t(tile.size().x) * tile.size().y, 5.f);
+    c.upload_tile(tile, data.data());
+
+    auto after = compute(c);
+    REQUIRE(after.computed);
+    CHECK(after.summary.maximum == 5.f);
+    CHECK(after.summary.average == doctest::Approx(5.f * tile.size().x * tile.size().y / float(w * h)));
 }
 
 TEST_CASE("PixelStats::calculate takes its bin count from the channel's bit depth")

@@ -239,8 +239,15 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
         [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
 
 #if !defined(__EMSCRIPTEN__)
-    DockableWindow watched_folders_window{"Watched Folders", "WatchedFoldersSpace",
-                                          [this] { m_image_loader.draw_gui(); }};
+    // Both halves of this window are images that arrive without being opened: a folder being watched, and a
+    // renderer pushing pixels in. The window keeps its name so existing saved layouts still place it.
+    DockableWindow watched_folders_window{"Watched Folders", "WatchedFoldersSpace", [this]
+                                          {
+#if HDRVIEW_ENABLE_IPC
+                                              draw_ipc_gui();
+#endif
+                                              m_image_loader.draw_gui();
+                                          }};
 #endif
 
 #ifdef _WIN32
@@ -579,10 +586,59 @@ void HDRViewApp::setup_imgui_style_callbacks()
     };
 }
 
+void HDRViewApp::wake_event_loop()
+{
+    // glfwPostEmptyEvent() is the one GLFW entry point documented as callable from any thread, which is
+    // what makes this usable from the IPC receive thread. Every desktop backend HDRView builds is GLFW --
+    // Metal on macOS, OpenGL elsewhere -- so the only build without it is the web one, whose frame loop is
+    // driven by the browser and never waits on events anyway.
+#if defined(HELLOIMGUI_USE_GLFW3)
+    // Nothing to wake before the window exists, and calling into GLFW that early is an error in its own
+    // right. Work posted then simply waits for the first frame, which is already on its way.
+    if (m_params.backendPointers.glfwWindow)
+        glfwPostEmptyEvent();
+#endif
+}
+
+void HDRViewApp::post_to_main_thread(std::function<void()> f)
+{
+    if (!f)
+        return;
+
+    std::lock_guard lock{m_main_thread_mutex};
+    m_main_thread_queue.push_back(std::move(f));
+}
+
+void HDRViewApp::drain_main_thread_queue()
+{
+    // Swap the queue out under the lock and run the callables without it: they reach back into the app and
+    // are free to post further work, which belongs to the next frame rather than to this drain.
+    std::vector<std::function<void()>> todo;
+    {
+        std::lock_guard lock{m_main_thread_mutex};
+        todo.swap(m_main_thread_queue);
+    }
+
+    for (auto &f : todo)
+    {
+        try
+        {
+            f();
+        }
+        catch (const std::exception &e)
+        {
+            // One bad task must not take the frame -- and with it the whole app -- down with it.
+            spdlog::error("Exception while running main-thread task: {}", e.what());
+        }
+    }
+}
+
 void HDRViewApp::setup_frame_callbacks()
 {
     m_params.callbacks.ShowGui = [this]()
     {
+        drain_main_thread_queue();
+
         process_shortcuts();
 
         for (auto &d : m_dialogs) d->draw(d->open);
@@ -661,8 +717,8 @@ void HDRViewApp::setup_frame_callbacks()
         draw_tweak_window();
         draw_developer_windows();
     };
-    m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
-    m_params.callbacks.BeforeSwap              = [this]() { end_colorpass_frame(); };
+    m_params.callbacks.CustomBackground = [this]() { draw_background(); };
+    m_params.callbacks.BeforeSwap       = [this]() { end_colorpass_frame(); };
 }
 
 auto HDRViewApp::dialog(const string &title) -> PopupDialog &
@@ -922,11 +978,10 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    always_enabled,
                    false,
                    &dialog("About").open});
-        add(Action{{"Quit"},
-                   ICON_MY_QUIT,
-                   k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiKey_Q),
-                   0,
-                   [this]() { m_params.appShallExit = true; }});
+        add(Action{
+            {"Quit"}, ICON_MY_QUIT, k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiKey_Q), 0, [this]() {
+                m_params.appShallExit = true;
+            }});
 
         add(Action{{"Command palette..."},
                    ICON_MY_COMMAND_PALETTE,
@@ -1246,7 +1301,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        false,
                        &m_mouse_mode_enabled[i]});
 
-            // below actions are only available if there is an image
+        // below actions are only available if there is an image
 
         add(Action{{"Reload image"},
                    ICON_MY_RELOAD,
@@ -1262,8 +1317,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    {
                        for (auto &i : m_images) reload_image(i);
                    },
-                   [this]()
-                   {
+                   [this]() {
                        return std::any_of(m_images.begin(), m_images.end(),
                                           [this](const ImagePtr &i) { return can_reload(i); });
                    }});

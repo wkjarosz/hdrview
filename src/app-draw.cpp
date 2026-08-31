@@ -118,7 +118,7 @@ void HDRViewApp::draw_pixel_info() const
     {
         for (int x = bounds.min.x; x < bounds.max.x; ++x)
         {
-            auto   pos        = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
+            auto   pos     = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
             float4 r_pixel = pixel_value({x, y}, true, m_status_pixel_target);
             float4 t_pixel = linear_to_sRGB(pixel_value({x, y}, false, m_status_pixel_target));
             float4 pixel   = m_status_color_mode == 0 ? r_pixel : t_pixel;

@@ -73,6 +73,11 @@ int main(int argc, char **argv)
     std::optional<bool>  dither, force_sdr, apple_keys;
     string               url;
 
+#if HDRVIEW_ENABLE_IPC
+    bool listen   = false;
+    int  ipc_port = k_default_ipc_port;
+#endif
+
     vector<string> in_files;
 
     try
@@ -106,6 +111,22 @@ is freely available under a 3-clause BSD license.
 
         app.add_flag("--sdr", force_sdr, "Force standard dynamic range (8-bit per channel) display.")
             ->group("Tone mapping and display");
+
+#if HDRVIEW_ENABLE_IPC
+        app.add_flag("--listen", listen,
+                     R"(Start listening for live image updates from a renderer, over
+the same protocol tev uses. Only accepts connections from this
+machine. Can also be turned on from the Watched Folders panel.)")
+            ->group("Live updates");
+
+        app.add_option("--ipc-port", ipc_port,
+                       R"(Port to listen on for live image updates. The default is what
+tev uses, so existing clients need no changes; change it to run
+HDRView and tev at the same time.)")
+            ->capture_default_str()
+            ->check(CLI::Range(1, 65535))
+            ->group("Live updates");
+#endif
 
         app.add_option("-v,--verbosity", verbosity,
                        R"(Set verbosity threshold T with lower values meaning more
@@ -202,6 +223,15 @@ until another channel selector is encountered.)")
             spdlog::info("Turning Apple-style keyboard behavior {}.", *apple_keys ? "ON" : "OFF");
 
         init_hdrview(exposure, gamma, dither, force_sdr, apple_keys, in_files);
+
+#if HDRVIEW_ENABLE_IPC
+        hdrview()->ipc_port() = uint16_t(ipc_port);
+        // Failing to bind is reported and left at that: the port being taken is a reason not to listen, not
+        // a reason to refuse to show the images the user asked for.
+        if (listen)
+            hdrview()->start_ipc_listening(uint16_t(ipc_port));
+#endif
+
         hdrview()->load_url(url);
         hdrview()->run();
     }
