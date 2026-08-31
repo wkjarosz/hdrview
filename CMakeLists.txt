@@ -1667,7 +1667,7 @@ if(HDRVIEW_ENABLE_IPC)
   list(APPEND EXTRA_SOURCES src/ipc/ipc_packet.cpp src/ipc/ipc_server.cpp src/app-ipc.cpp)
   # Only meaningful when the IPC sources are built; left empty otherwise so the test target's source list
   # does not name a file whose subject was compiled out.
-  set(HDRVIEW_IPC_TESTS tests/test_ipc_packet.cpp tests/test_ipc_server.cpp)
+  set(HDRVIEW_IPC_TESTS tests/test_ipc_packet.cpp tests/test_ipc_server.cpp tests/test_vector_overlay.cpp)
   if(WIN32)
     # Winsock is not among the libraries a Windows link pulls in by default.
     list(APPEND HDRVIEW_DEPENDENCIES ws2_32)
@@ -1720,6 +1720,7 @@ set(HDRVIEW_SOURCES
     src/texture_gl.cpp
     src/texture.cpp
     src/theme.cpp
+    src/vector_overlay.cpp
     ${EXTRA_SOURCES}
 )
 

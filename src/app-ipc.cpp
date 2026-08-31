@@ -66,10 +66,8 @@ bool HDRViewApp::start_ipc_listening(uint16_t port)
                     break;
 
                 case IpcPacketType::VectorGraphics:
-                    // Overlay drawing, which HDRView has nothing to draw with. Ignoring it costs the sender
-                    // nothing: the protocol expects no reply, so a client that draws debug overlays still
-                    // streams its pixels normally.
-                    spdlog::debug("Ignoring a VectorGraphics packet: HDRView does not draw overlays.");
+                    post_to_main_thread([this, info = packet.as_vector_graphics()]
+                                        { apply_ipc_vector_graphics(info); });
                     break;
 
                 default: spdlog::warn("Ignoring an IPC packet of unknown type {}.", int(packet.type())); break;
@@ -290,6 +288,25 @@ void HDRViewApp::apply_ipc_create(const IpcCreateImage &info)
 
     spdlog::info("Created live image '{}' ({}x{}, {} channels).", info.name, info.size.x, info.size.y,
                  info.channel_names.size());
+}
+
+void HDRViewApp::apply_ipc_vector_graphics(const IpcVectorGraphics &info)
+{
+    const int idx = image_index_by_name(info.name);
+    if (!is_valid(idx))
+    {
+        spdlog::warn("Cannot draw over '{}': no such image is open.", info.name);
+        return;
+    }
+
+    auto &overlay = m_images[size_t(idx)]->vector_overlay;
+    if (info.append)
+        overlay.insert(overlay.end(), info.commands.begin(), info.commands.end());
+    else
+        overlay = info.commands;
+
+    if (info.grab_focus)
+        set_current_image_index(idx, true);
 }
 
 void HDRViewApp::apply_ipc_update(const IpcUpdateImage &info)

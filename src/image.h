@@ -14,6 +14,7 @@
 #include "imageio/exif.h"
 #include "json.h"
 #include "texture.h"
+#include "vector_overlay.h"
 #include <algorithm>
 #include <cfloat>
 #include <chrono>
@@ -473,6 +474,13 @@ public:
         ordinary image.
     */
     bool is_live = false;
+
+    //! Drawing commands laid over this image, in its pixel coordinates; empty for almost every image.
+    /*!
+        Only a renderer streaming over IPC sets these, to annotate what it is producing -- box the tile it
+        just finished, label a value. Drawn by the viewport after the image itself; see vector_overlay.h.
+    */
+    std::vector<VgCommand> vector_overlay;
 
     //! Bumped whenever any of this image's pixels change after loading.
     /*!

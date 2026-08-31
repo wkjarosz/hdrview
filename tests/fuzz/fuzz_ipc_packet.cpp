@@ -73,6 +73,21 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
                         (void)sink;
                         break;
                     }
+                    case IpcPacketType::VectorGraphics:
+                    {
+                        // The command stream carries no per-command length -- each type implies its own --
+                        // so a wrong entry in that table walks the parser into the next command's bytes.
+                        // Reading every command's arguments back is what makes such a slip observable.
+                        const auto     vg   = packet.as_vector_graphics();
+                        volatile float sink = 0.f;
+                        for (const auto &cmd : vg.commands)
+                        {
+                            for (float v : cmd.data) sink = v;
+                            sink = float(cmd.text.size());
+                        }
+                        (void)sink;
+                        break;
+                    }
                     default: break; // an unknown or unsupported type is not a parser bug
                     }
                 }

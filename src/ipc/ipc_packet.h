@@ -8,6 +8,7 @@
 
 #include "box.h"
 #include "fwd.h"
+#include "vector_overlay.h"
 
 #include <cstdint>
 #include <functional>
@@ -51,7 +52,7 @@ enum class IpcPacketType : uint8_t
     UpdateImageV2  = 5, //!< adds multiple channels per packet
     UpdateImageV3  = 6, //!< adds per-channel offset/stride into one shared payload
     OpenImageV2    = 7, //!< separates the image name from the channel selector
-    VectorGraphics = 8, //!< overlay drawing commands; recognized but not supported
+    VectorGraphics = 8, //!< overlay drawing commands; see vector_overlay.h
 };
 
 //! Largest packet we are willing to hold, since the sender chooses the length.
@@ -114,6 +115,22 @@ struct IpcUpdateImage
     int64_t row_stride(int c) const { return int64_t(bounds.size().x) * channel_strides[c]; }
 };
 
+//! Drawing commands to lay over an image, in its pixel coordinates.
+/*!
+    `append` is how a renderer accumulates an overlay as it works -- one packet per finished tile, each
+    adding to what is already there -- rather than resending the whole program every time.
+*/
+struct IpcVectorGraphics
+{
+    std::string            name;
+    bool                   grab_focus = false;
+    bool                   append     = false;
+    std::vector<VgCommand> commands;
+};
+
+//! Most drawing commands one packet may carry, so a length field cannot become an allocation.
+inline constexpr int32_t k_max_ipc_vg_commands = 1 << 20;
+
 //! A framed packet: the bytes as they travel, plus typed readers for the payload.
 class IpcPacket
 {
@@ -138,11 +155,12 @@ public:
 
     //@{ \name Payload readers. Each throws std::runtime_error if the packet is not that type, or if its
     //! contents do not describe the bytes present.
-    IpcOpenImage   as_open_image() const;
-    IpcReloadImage as_reload_image() const;
-    IpcCloseImage  as_close_image() const;
-    IpcCreateImage as_create_image() const;
-    IpcUpdateImage as_update_image() const;
+    IpcOpenImage      as_open_image() const;
+    IpcReloadImage    as_reload_image() const;
+    IpcCloseImage     as_close_image() const;
+    IpcCreateImage    as_create_image() const;
+    IpcUpdateImage    as_update_image() const;
+    IpcVectorGraphics as_vector_graphics() const;
     //@}
 
     //@{ \name Builders, which produce exactly what tev's own client would send.
@@ -155,6 +173,8 @@ public:
     static IpcPacket update_image(std::string_view name, bool grab_focus, const std::vector<std::string> &channel_names,
                                   const std::vector<int64_t> &offsets, const std::vector<int64_t> &strides,
                                   const Box2i &bounds, const std::vector<float> &data);
+    static IpcPacket vector_graphics(std::string_view name, bool grab_focus, bool append,
+                                     const std::vector<VgCommand> &commands);
     //@}
 
 private:

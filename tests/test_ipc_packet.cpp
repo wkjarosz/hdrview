@@ -115,6 +115,96 @@ TEST_CASE("IPC packets round-trip through the wire format")
     }
 }
 
+TEST_CASE("VectorGraphics packets round-trip, including the per-type argument counts")
+{
+    // The stream carries no per-command length, so a command's type is the only thing that says where the
+    // next one starts. Round-tripping a mix of every argument-count shape is what checks that table.
+    std::vector<VgCommand> commands{
+        {VgCommand::Type::BeginPath, {}},
+        {VgCommand::Type::StrokeColor, {1.f, 0.5f, 0.f, 1.f}},
+        {VgCommand::Type::StrokeWidth, {2.f, float(VgCommand::Relative)}},
+        {VgCommand::Type::Rect, {4.f, 8.f, 16.f, 32.f}},
+        {VgCommand::Type::MoveTo, {1.f, 2.f}},
+        {VgCommand::Type::BezierTo, {3.f, 4.f, 5.f, 6.f, 7.f, 8.f}},
+        {VgCommand::Type::Stroke, {}},
+        {VgCommand::Type::FontSize, {20.f, float(VgCommand::Relative)}},
+        {VgCommand::Type::TextAlign, {float(VgCommand::AlignLeft | VgCommand::AlignBaseline)}},
+        {VgCommand::Type::FontFace, {}, "sans-bold"},
+        {VgCommand::Type::Text, {5.f, 9.f}, "Tile 7"},
+    };
+
+    auto info = parse(IpcPacket::vector_graphics("render", false, true, commands).bytes()).as_vector_graphics();
+
+    CHECK(info.name == "render");
+    CHECK(info.append);
+    REQUIRE(info.commands.size() == commands.size());
+    for (size_t i = 0; i < commands.size(); ++i)
+    {
+        CAPTURE(i);
+        CHECK(info.commands[i].type == commands[i].type);
+        CHECK(info.commands[i].data == commands[i].data);
+        CHECK(info.commands[i].text == commands[i].text);
+    }
+}
+
+TEST_CASE("A VectorGraphics packet with an unreadable command stream is refused")
+{
+    auto framed_vg = [](const std::vector<char> &tail)
+    {
+        std::vector<char> payload;
+        payload.push_back(0); // grab_focus
+        append_string(payload, "img");
+        payload.push_back(1); // append
+        payload.insert(payload.end(), tail.begin(), tail.end());
+        return framed(IpcPacketType::VectorGraphics, payload);
+    };
+
+    SUBCASE("an unknown command type, whose length is therefore unknown")
+    {
+        // The whole rest of the packet becomes unparseable, so this cannot be skipped past.
+        std::vector<char> tail;
+        append<int32_t>(tail, 1);
+        tail.push_back(99); // not a command we know
+        CHECK_THROWS_AS(parse(framed_vg(tail)).as_vector_graphics(), std::runtime_error);
+    }
+
+    SUBCASE("a command count that would be an allocation attack")
+    {
+        std::vector<char> tail;
+        append<int32_t>(tail, 1 << 30);
+        CHECK_THROWS_AS(parse(framed_vg(tail)).as_vector_graphics(), std::runtime_error);
+    }
+
+    SUBCASE("a command whose arguments run off the end")
+    {
+        std::vector<char> tail;
+        append<int32_t>(tail, 1);
+        tail.push_back(char(VgCommand::Type::BezierTo)); // wants six floats
+        append<float>(tail, 1.f);                        // only one follows
+        CHECK_THROWS_AS(parse(framed_vg(tail)).as_vector_graphics(), std::runtime_error);
+    }
+
+    SUBCASE("a text command with no terminator on its string")
+    {
+        std::vector<char> tail;
+        append<int32_t>(tail, 1);
+        tail.push_back(char(VgCommand::Type::Text));
+        append<float>(tail, 0.f);
+        append<float>(tail, 0.f);
+        tail.insert(tail.end(), {'h', 'i'}); // no NUL
+        CHECK_THROWS_AS(parse(framed_vg(tail)).as_vector_graphics(), std::runtime_error);
+    }
+
+    SUBCASE("an empty command list is legitimate -- it clears the overlay")
+    {
+        std::vector<char> tail;
+        append<int32_t>(tail, 0);
+        auto info = parse(framed_vg(tail)).as_vector_graphics();
+        CHECK(info.commands.empty());
+        CHECK(info.append);
+    }
+}
+
 TEST_CASE("Older UpdateImage versions are read as the newer one's equivalent")
 {
     // V1 had no channel count and exactly one channel; V2 added the count but kept the planes contiguous.

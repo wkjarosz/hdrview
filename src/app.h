@@ -418,6 +418,8 @@ private:
     void draw_image() const;
     void draw_image_border() const;
     void draw_tool_decorations() const;
+    /// Draws the current and reference images' vector overlays, if either has one.
+    void draw_vector_overlays() const;
     void draw_file_window();
     void draw_top_toolbar();
     void draw_tool_palette();
@@ -523,6 +525,7 @@ private:
     void apply_ipc_close(const IpcCloseImage &info);
     void apply_ipc_create(const IpcCreateImage &info);
     void apply_ipc_update(const IpcUpdateImage &info);
+    void apply_ipc_vector_graphics(const IpcVectorGraphics &info);
 #endif
 
     int m_remaining_download = 0;

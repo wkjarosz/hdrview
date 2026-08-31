@@ -324,6 +324,45 @@ IpcUpdateImage IpcPacket::as_update_image() const
     return result;
 }
 
+IpcVectorGraphics IpcPacket::as_vector_graphics() const
+{
+    PacketReader r{m_bytes};
+    if (IpcPacketType(r.read<uint8_t>()) != IpcPacketType::VectorGraphics)
+        throw std::runtime_error{"IPC packet is not a VectorGraphics."};
+
+    IpcVectorGraphics result;
+    result.grab_focus = r.read_bool();
+    result.name       = r.read_string();
+    result.append     = r.read_bool();
+
+    const int32_t count = r.read<int32_t>();
+    if (count < 0 || count > k_max_ipc_vg_commands)
+        throw std::runtime_error{
+            fmt::format("IPC VectorGraphics declares {} commands; expected 0 to {}.", count, k_max_ipc_vg_commands)};
+
+    result.commands.reserve(size_t(count));
+    for (int32_t i = 0; i < count; ++i)
+    {
+        VgCommand cmd;
+        cmd.type = VgCommand::Type(r.read<int8_t>());
+
+        // Nothing in the stream says how long a command is; its type does, via this table. So an
+        // unrecognized type is not a command to skip -- it leaves us with no idea where the next one
+        // starts, and the rest of the packet is unreadable.
+        const int n = VgCommand::num_floats(cmd.type);
+        if (n < 0)
+            throw std::runtime_error{fmt::format("IPC VectorGraphics has an unknown command type {}.", int(cmd.type))};
+
+        cmd.data = r.read_floats(size_t(n));
+        if (VgCommand::has_text(cmd.type))
+            cmd.text = r.read_string();
+
+        result.commands.push_back(std::move(cmd));
+    }
+
+    return result;
+}
+
 IpcPacket IpcPacket::open_image(std::string_view path, std::string_view channel_selector, bool grab_focus)
 {
     PacketWriter w{IpcPacketType::OpenImageV2};
@@ -392,6 +431,32 @@ IpcPacket IpcPacket::update_image(std::string_view name, bool grab_focus, const 
     for (auto o : offsets) w.write<int64_t>(o);
     for (auto s : strides) w.write<int64_t>(s);
     w.write_floats(data);
+
+    IpcPacket p;
+    p.m_bytes = std::move(w).bytes();
+    return p;
+}
+
+IpcPacket IpcPacket::vector_graphics(std::string_view name, bool grab_focus, bool append,
+                                     const std::vector<VgCommand> &commands)
+{
+    PacketWriter w{IpcPacketType::VectorGraphics};
+    w.write_bool(grab_focus);
+    w.write_string(name);
+    w.write_bool(append);
+    w.write<int32_t>(int32_t(commands.size()));
+    for (const auto &c : commands)
+    {
+        const int n = VgCommand::num_floats(c.type);
+        if (n < 0 || int(c.data.size()) != n)
+            throw std::runtime_error{
+                fmt::format("VgCommand of type {} needs {} floats but has {}.", int(c.type), n, c.data.size())};
+
+        w.write<int8_t>(int8_t(c.type));
+        for (float v : c.data) w.write<float>(v);
+        if (VgCommand::has_text(c.type))
+            w.write_string(c.text);
+    }
 
     IpcPacket p;
     p.m_bytes = std::move(w).bytes();
