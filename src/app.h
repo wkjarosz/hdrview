@@ -277,9 +277,8 @@ public:
         result is discarded rather than applied, since a half-filtered image is not a state anyone asked
         for.
     */
-    void modify_channels_async(
-        const ImagePtr &img, const std::string &name, const EditSubject &subject,
-        const std::function<Array2Df(const Array2Df &, const Box2i &, FilterProgress &)> &filter);
+    void modify_channels_async(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                               const std::function<Array2Df(const Array2Df &, const Box2i &, FilterProgress)> &filter);
 
     //! Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
     void draw_filter_progress_dialog(bool &open);
@@ -668,7 +667,7 @@ private:
         std::vector<int>      channels;
         Box2i                 bounds;
         std::vector<Array2Df> results;
-        FilterProgress        progress;
+        FilterProgress        progress{true};
         std::atomic<bool>     done{false};
     };
     std::unique_ptr<RunningFilter> m_running_filter;

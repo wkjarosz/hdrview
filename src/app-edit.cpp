@@ -662,7 +662,7 @@ void HDRViewApp::draw_unsharp_mask_dialog(bool &open)
 
 void HDRViewApp::modify_channels_async(
     const ImagePtr &img, const string &name, const EditSubject &subject,
-    const function<Array2Df(const Array2Df &, const Box2i &, FilterProgress &)> &filter)
+    const function<Array2Df(const Array2Df &, const Box2i &, FilterProgress)> &filter)
 {
     if (!can_edit(img) || m_running_filter)
         return;
@@ -685,35 +685,52 @@ void HDRViewApp::modify_channels_async(
     RunningFilter *raw = running.get();
     m_running_filter   = std::move(running);
 
+    // Filters every channel into raw->results. Runs on a worker where there is one; see below.
+    auto do_the_work = [raw, filter]
+    {
+        const Box2i local{raw->bounds.min - raw->image->data_window.min,
+                          raw->bounds.min - raw->image->data_window.min + raw->bounds.size()};
+
+        const float share = 1.f / float(raw->channels.size());
+        for (size_t i = 0; i < raw->channels.size() && !raw->progress.canceled(); ++i)
+        {
+            // A share of the same total rather than a copy: the filter's own reporting reaches the bar, and
+            // -- what a copy got wrong -- Cancel reaches the filter partway through a channel instead of
+            // only between channels.
+            raw->results[i] =
+                filter(raw->image->channels[size_t(raw->channels[i])], local, FilterProgress{raw->progress, share});
+        }
+
+        if (!raw->progress.canceled())
+            raw->progress.set_done();
+
+        raw->done.store(true);
+    };
+
+#if defined(__EMSCRIPTEN__)
+    // The web build is built without pthreads, so there is no worker to run this on and nothing that could
+    // draw a progress bar while it ran. It happens inline instead: the page stops responding for the
+    // duration, as it would for any other synchronous work, and there is nothing to cancel.
+    //
+    // Making this cooperative would mean filters that can stop and resume rather than ones that return a
+    // finished array, which is a different shape of filter than any of these are.
+    do_the_work();
+    drain_running_filter();
+#else
     dialog("Applying filter...").open = true;
 
     // Reading the channels is safe for as long as this runs: the chokepoint refuses a second edit while a
     // filter is in flight, and the image cannot be closed without cancelling it first.
     std::thread(
-        [this, raw, filter]
+        [this, do_the_work]
         {
-            const Box2i local{raw->bounds.min - raw->image->data_window.min,
-                              raw->bounds.min - raw->image->data_window.min + raw->bounds.size()};
-
-            for (size_t i = 0; i < raw->channels.size() && !raw->progress.stop(); ++i)
-            {
-                // Each channel gets an equal share of the bar, and reports within its own share.
-                FilterProgress per_channel;
-                per_channel.canceled.store(raw->progress.stop());
-
-                raw->results[i] = filter(raw->image->channels[size_t(raw->channels[i])], local, per_channel);
-
-                raw->progress.advance(float(i + 1) / float(raw->channels.size()));
-                if (per_channel.stop())
-                    raw->progress.canceled.store(true);
-            }
-
-            raw->done.store(true);
+            do_the_work();
             // Nothing on screen changes until the frame loop notices, and it may be idle waiting on window
             // events rather than spinning.
             wake_event_loop();
         })
         .detach();
+#endif
 }
 
 void HDRViewApp::drain_running_filter()
@@ -725,7 +742,7 @@ void HDRViewApp::drain_running_filter()
     m_running_filter = nullptr;
 
     // A partial result is not a shorter filter, it is a wrong one, so an abandoned run changes nothing.
-    if (running->progress.stop())
+    if (running->progress.canceled())
     {
         spdlog::debug("Filter '{}' was canceled.", running->name);
         return;
@@ -767,12 +784,12 @@ void HDRViewApp::draw_filter_progress_dialog(bool &open)
         }
 
         ImGui::TextUnformatted(m_running_filter->name.c_str());
-        ImGui::ProgressBar(m_running_filter->progress.fraction.load(), ImVec2(-FLT_MIN, 0.f));
+        ImGui::ProgressBar(m_running_filter->progress.progress(), ImVec2(-FLT_MIN, 0.f));
 
         // Only asks the filter to stop; the work unwinds on its own thread and drain_running_filter()
         // throws the partial result away when it does.
         if (ImGui::Button("Cancel") || ImGui::Shortcut(ImGuiKey_Escape))
-            m_running_filter->progress.canceled.store(true);
+            m_running_filter->progress.cancel();
 
         if (m_running_filter->done.load())
             ImGui::CloseCurrentPopup();
@@ -799,8 +816,8 @@ void HDRViewApp::draw_median_dialog(bool &open)
         {
             const float r = radius;
             modify_channels_async(current_image(), "Median filter", m_edit_subject,
-                                  [r](const Array2Df &src, const Box2i &region, FilterProgress &p)
-                                  { return median_filtered(src, region, r, &p); });
+                                  [r](const Array2Df &src, const Box2i &region, FilterProgress p)
+                                  { return median_filtered(src, region, r, p); });
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)

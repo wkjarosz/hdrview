@@ -54,7 +54,7 @@ std::vector<float> gaussian_taps(float sigma)
     empty tap list along an axis means that axis is left alone.
 */
 Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std::vector<float> &taps_x,
-                            const std::vector<float> &taps_y)
+                            const std::vector<float> &taps_y, FilterProgress progress)
 {
     const int  rx     = taps_x.empty() ? 0 : int(taps_x.size() / 2);
     const int  ry     = taps_y.empty() ? 0 : int(taps_y.size() / 2);
@@ -66,11 +66,17 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
     Array2Df  horizontal{int2{extent.x, rows}};
     const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
 
+    // A pass each, so each reports over half of whatever share this filter was given.
+    FilterProgress h_progress{progress, 0.5f};
+    h_progress.set_num_steps(rows);
+
     stp::parallel_for(stp::blocked_range<int>(0, rows, block_size),
                       [&](int j0, int j1, int, int)
                       {
                           for (int j = j0; j < j1; ++j)
                           {
+                              if (h_progress.canceled())
+                                  return;
                               const int y = region.min.y - ry + j;
                               for (int i = 0; i < extent.x; ++i)
                               {
@@ -85,14 +91,21 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
                                       sum += taps_x[size_t(k + rx)] * clamped(src, x + k, y);
                                   horizontal(i, j) = sum;
                               }
+                              ++h_progress;
                           }
                       });
 
-    Array2Df out{extent};
+    Array2Df       out{extent};
+    FilterProgress v_progress{progress, 0.5f};
+    v_progress.set_num_steps(extent.y);
+
     stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
                       [&](int y0, int y1, int, int)
                       {
                           for (int y = y0; y < y1; ++y)
+                          {
+                              if (v_progress.canceled())
+                                  return;
                               for (int x = 0; x < extent.x; ++x)
                               {
                                   if (taps_y.empty())
@@ -106,6 +119,8 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
                                       sum += taps_y[size_t(k + ry)] * horizontal(x, y + ry + k);
                                   out(x, y) = sum;
                               }
+                              ++v_progress;
+                          }
                       });
 
     return out;
@@ -223,10 +238,11 @@ std::vector<int> box_widths_for_sigma(float sigma, int n)
 
 } // namespace
 
-Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y)
+Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
+                          FilterProgress progress)
 {
     return convolve_separable(src, region, sigma_x > 0.f ? gaussian_taps(sigma_x) : std::vector<float>{},
-                              sigma_y > 0.f ? gaussian_taps(sigma_y) : std::vector<float>{});
+                              sigma_y > 0.f ? gaussian_taps(sigma_y) : std::vector<float>{}, progress);
 }
 
 namespace
@@ -238,7 +254,8 @@ namespace
     by every later pass's reach. Worked out backwards from the rectangle actually wanted, and clipped to the
     image at each step so the clamping matches what the same chain over the whole image would do.
 */
-Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<int2> &half_widths)
+Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<int2> &half_widths,
+                   FilterProgress progress)
 {
     const Box2i bounds{int2{0}, src.size()};
     const int   n = int(half_widths.size());
@@ -251,12 +268,20 @@ Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<i
         cur                = dilated(cur, half_widths[size_t(i)], bounds);
     }
 
+    // Every pass costs the same, so they divide the share evenly.
+    const float    share = 1.f / float(n);
+    FilterProgress pass_progress{progress, share};
+    pass_progress.set_num_steps(1);
+
     Array2Df buffer = box_pass(src, int2{0}, regions[0], half_widths[0].x, half_widths[0].y);
     int2     origin = regions[0].min;
-    for (int i = 1; i < n; ++i)
+    ++pass_progress;
+
+    for (int i = 1; i < n && !progress.canceled(); ++i)
     {
         buffer = box_pass(buffer, origin, regions[size_t(i)], half_widths[size_t(i)].x, half_widths[size_t(i)].y);
         origin = regions[size_t(i)].min;
+        ++pass_progress;
     }
 
     return buffer;
@@ -264,13 +289,15 @@ Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<i
 
 } // namespace
 
-Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y, int iterations)
+Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y, int iterations,
+                     FilterProgress progress)
 {
     const int2 h = int2{std::max(0, half_width_x), std::max(0, half_width_y)};
-    return box_chain(src, region, std::vector<int2>(size_t(std::max(1, iterations)), h));
+    return box_chain(src, region, std::vector<int2>(size_t(std::max(1, iterations)), h), progress);
 }
 
-Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y, int iterations)
+Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y, int iterations,
+                               FilterProgress progress)
 {
     const int n = std::max(1, iterations);
 
@@ -285,12 +312,13 @@ Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float s
     std::vector<int2> half_widths(static_cast<size_t>(n), int2{0});
     for (int i = 0; i < n; ++i) half_widths[size_t(i)] = int2{(wx[size_t(i)] - 1) / 2, (wy[size_t(i)] - 1) / 2};
 
-    return box_chain(src, region, half_widths);
+    return box_chain(src, region, half_widths, progress);
 }
 
-Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount)
+Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount, FilterProgress progress)
 {
-    const Array2Df blurred = gaussian_blurred(src, region, sigma, sigma);
+    // The blur is all of the cost; adding the difference back is one pass over the region.
+    const Array2Df blurred = gaussian_blurred(src, region, sigma, sigma, progress);
     const int2     extent  = region.size();
 
     Array2Df  out{extent};
@@ -309,7 +337,7 @@ Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, f
     return out;
 }
 
-Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress *progress)
+Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress progress)
 {
     const int2  extent = region.size();
     const int   r      = std::max(0, int(std::ceil(radius)));
@@ -323,9 +351,7 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
         return out;
     }
 
-    // Rows finished so far, which is what the fraction is reported from. Counted rather than derived from
-    // the loop index because the rows are shared out across threads and finish out of order.
-    std::atomic<int> rows_done{0};
+    progress.set_num_steps(extent.y);
 
     stp::parallel_for(stp::blocked_range<int>(0, extent.y, 1),
                       [&](int y0, int y1, int, int)
@@ -336,7 +362,7 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
 
                           for (int y = y0; y < y1; ++y)
                           {
-                              if (progress && progress->stop())
+                              if (progress.canceled())
                                   return;
 
                               for (int x = 0; x < extent.x; ++x)
@@ -358,8 +384,7 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
                                   out(x, y) = window[mid];
                               }
 
-                              if (progress)
-                                  progress->advance(float(rows_done.fetch_add(1) + 1) / float(extent.y));
+                              ++progress;
                           }
                       });
 

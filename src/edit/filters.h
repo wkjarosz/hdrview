@@ -8,29 +8,7 @@
 
 #include "array2d.h"
 #include "box.h"
-#include <atomic>
-
-/*!
-    How far a filter has got, and whether it should stop.
-
-    Passed to the slow filters so a long one can be watched and abandoned. Both members are atomic because
-    the filter runs on worker threads while the frame loop reads them to draw the progress bar and to set
-    the cancel flag.
-
-    A canceled filter returns whatever it had reached, which the caller must then discard rather than
-    apply -- it is a partial answer, not a shorter one.
-*/
-struct FilterProgress
-{
-    //! Fraction complete, in [0, 1].
-    std::atomic<float> fraction{0.f};
-    //! Set from the main thread to ask the filter to stop early.
-    std::atomic<bool> canceled{false};
-
-    //! True once cancellation has been requested; filters check this between units of work.
-    bool stop() const { return canceled.load(std::memory_order_relaxed); }
-    void advance(float f) { fraction.store(f, std::memory_order_relaxed); }
-};
+#include "edit/progress.h"
 
 /*!
     Neighborhood filters over a single channel's samples.
@@ -47,6 +25,11 @@ struct FilterProgress
 
     Filtering in place is never right for these, so each returns a new array: a filter that overwrote its
     input as it went would read samples it had already changed.
+
+    Each takes a FilterProgress by value. Reporting costs a filter three lines -- say how many steps it
+    has, increment once per step, and check whether it has been asked to stop -- and no branching on
+    whether anyone is listening, since a default-constructed one is inert. A filter asked to stop returns
+    whatever it had reached, which the caller must discard rather than apply.
 */
 
 //! Blur separably with a Gaussian of the given standard deviations, in samples.
@@ -58,7 +41,8 @@ struct FilterProgress
 
     A sigma of zero along an axis leaves that axis alone.
 */
-Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y);
+Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
+                          FilterProgress progress = {});
 
 /*!
     Average over a box of the given half-widths, \p iterations times.
@@ -71,7 +55,8 @@ Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_
     the box blur as an effect in its own right, where that is what was asked for. To approximate a Gaussian
     of a *stated* width instead, use fast_gaussian_blurred().
 */
-Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y, int iterations = 1);
+Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y, int iterations = 1,
+                     FilterProgress progress = {});
 
 /*!
     Approximate a Gaussian blur by repeated box blurs, in time independent of \p sigma_x and \p sigma_y.
@@ -85,7 +70,7 @@ Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x,
     and what Photoshop is generally held to use.
 */
 Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
-                               int iterations = 6);
+                               int iterations = 6, FilterProgress progress = {});
 
 /*!
     Replace each sample with the median of the disc of radius \p radius around it.
@@ -98,7 +83,7 @@ Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float s
     first filter slow enough to need \p progress. Pass one to have it report and to be able to stop it; a
     canceled run returns what it had reached, which the caller must discard.
 */
-Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress *progress = nullptr);
+Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress progress = {});
 
 /*!
     Add back a multiple of what a blur removed, which sharpens.
@@ -107,4 +92,5 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
     1 doubles the detail the blur would have taken out. \p sigma sets the size of the detail affected --
     small values sharpen fine texture, large ones raise local contrast.
 */
-Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount);
+Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount,
+                        FilterProgress progress = {});
