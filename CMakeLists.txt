@@ -2030,7 +2030,7 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_view.cpp
     tests/gui/test_gui_viewport.cpp
     tests/gui/test_gui_display.cpp
-    tests/gui/test_gui_tools.cpp
+    tests/gui/test_gui_tools.cpp tests/gui/test_gui_edit.cpp
     tests/gui/test_gui_stats.cpp
     tests/gui/test_gui_filtering.cpp
     tests/gui/test_gui_navigation.cpp

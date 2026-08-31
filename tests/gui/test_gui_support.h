@@ -82,9 +82,14 @@ inline int load_and_wait(ImGuiTestContext *ctx, const std::vector<std::string> &
 }
 
 //! Closes everything and waits for the list to empty, so a test starts from a known state.
+/*!
+    Deliberately the unguarded close: close_all_images() asks before discarding edits, and a test that just
+    edited something would sit waiting on a modal that nothing is going to answer. Getting back to an empty
+    list is scaffolding, not a user action.
+*/
 inline void reset_images(ImGuiTestContext *ctx)
 {
-    hdrview()->close_all_images();
+    hdrview()->close_all_images_immediately();
     wait_until(ctx, [] { return hdrview()->num_images() == 0; });
 }
 

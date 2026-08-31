@@ -22,6 +22,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine);
 void RegisterTests_Lifetime(ImGuiTestEngine *engine);
 void RegisterTests_Loader(ImGuiTestEngine *engine);
 void RegisterTests_Info(ImGuiTestEngine *engine);
+void RegisterTests_Edit(ImGuiTestEngine *engine);
 //! Registers nothing unless HDRVIEW_SCREENSHOT_DIR is set; see tests/gui/test_gui_screenshots.cpp.
 void RegisterTests_Screenshots(ImGuiTestEngine *engine);
 
@@ -43,5 +44,6 @@ inline void RegisterAllGuiTests(ImGuiTestEngine *engine)
     RegisterTests_Lifetime(engine);
     RegisterTests_Loader(engine);
     RegisterTests_Info(engine);
+    RegisterTests_Edit(engine);
     RegisterTests_Screenshots(engine);
 }
