@@ -321,6 +321,23 @@ float sample_bilinear(const Array2Df &a, float2 uv)
 
 } // namespace
 
+bool envmap_uv_is_valid(EnvMapping mapping, float2 uv)
+{
+    switch (mapping)
+    {
+    case EnvMapping_Angular:
+    case EnvMapping_MirrorBall:
+        // The sphere fills the inscribed disc; the corners are outside it.
+        return la::length(2.f * uv - float2{1.f}) <= 1.f;
+
+    case EnvMapping_CubeMap:
+        // The upright column of four faces, plus the two side faces beside its second row.
+        return (uv.x >= 1.f / 3.f && uv.x <= 2.f / 3.f) || (uv.y >= 0.25f && uv.y <= 0.5f);
+
+    default: return true;
+    }
+}
+
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
                          int supersample, FilterProgress progress)
 {
@@ -340,6 +357,15 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 
                               for (int x = 0; x < size.x; ++x)
                               {
+                                  // Parts of a disc or a cube cross are not sphere; leave them empty
+                                  // rather than filling them with whatever direction clamping produces.
+                                  if (!envmap_uv_is_valid(dst_mapping, float2{(float(x) + 0.5f) / float(size.x),
+                                                                              (float(y) + 0.5f) / float(size.y)}))
+                                  {
+                                      out(x, y) = 0.f;
+                                      continue;
+                                  }
+
                                   float sum = 0.f;
                                   for (int sy = 0; sy < ss; ++sy)
                                       for (int sx = 0; sx < ss; ++sx)
@@ -360,66 +386,69 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 
 Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, FilterProgress progress)
 {
-    Array2Df   out{size};
-    const int2 in_size = src.size();
+    // Ramamoorthi and Hanrahan: the cosine kernel falls off fast enough in frequency that nine spherical
+    // harmonic coefficients reproduce the irradiance to about a percent. Projecting onto them and then
+    // evaluating costs the two resolutions added rather than multiplied.
+    //
+    // The projection integrates over *directions* spread evenly on the sphere, looking the environment up
+    // at each, rather than over the image's own samples. Either would do for a mapping that varies
+    // smoothly, but the cube cross has seams and the discs have corners that are not sphere at all --
+    // and a measure derived from how far the direction moves per sample goes wrong at exactly those
+    // places. Sampling directions needs no such measure: every one carries the same solid angle whatever
+    // mapping is being read.
+    constexpr int    k_samples = 32768;
+    constexpr double k_weight  = 4.0 * 3.14159265358979323846 / double(k_samples);
 
-    // Precomputed once rather than per output sample: the direction each input sample stands for, and the
-    // solid angle it covers. The latter is what makes this correct for a mapping whose rows are not all
-    // equal in area -- a lat-long's polar rows cover far less sky than its equatorial ones.
-    std::vector<float3> in_dirs(size_t(in_size.x) * size_t(in_size.y));
-    std::vector<float>  in_weights(in_dirs.size());
+    double sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    for (int y = 0; y < in_size.y; ++y)
-        for (int x = 0; x < in_size.x; ++x)
+    progress.set_num_steps(2);
+
+    for (int i = 0; i < k_samples; ++i)
+    {
+        // A Fibonacci spiral, which spreads points over the sphere about as evenly as a closed form can.
+        const double t   = (double(i) + 0.5) / double(k_samples);
+        const double z   = 1.0 - 2.0 * t;
+        const double r   = std::sqrt(std::max(0.0, 1.0 - z * z));
+        const double phi = double(i) * 2.39996322972865332; // golden angle
+
+        const float3 d{float(r * std::cos(phi)), float(z), float(r * std::sin(phi))};
+        const double L = double(sample_bilinear(src, envmap_xyz_to_uv(mapping, d))) * k_weight;
+
+        sh[0] += L * 0.282095;
+        sh[1] += L * 0.488603 * double(d.y);
+        sh[2] += L * 0.488603 * double(d.z);
+        sh[3] += L * 0.488603 * double(d.x);
+        sh[4] += L * 1.092548 * double(d.x) * double(d.y);
+        sh[5] += L * 1.092548 * double(d.y) * double(d.z);
+        sh[6] += L * 0.315392 * (3.0 * double(d.z) * double(d.z) - 1.0);
+        sh[7] += L * 1.092548 * double(d.x) * double(d.z);
+        sh[8] += L * 0.546274 * (double(d.x) * double(d.x) - double(d.y) * double(d.y));
+    }
+
+    ++progress;
+    if (progress.canceled())
+        return Array2Df{size};
+
+    // The constants that turn those coefficients into irradiance, from the same paper.
+    constexpr double c1 = 0.429043, c2 = 0.511664, c3 = 0.743125, c4 = 0.886227, c5 = 0.247708;
+
+    Array2Df out{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
         {
-            const float2 uv{(float(x) + 0.5f) / float(in_size.x), (float(y) + 0.5f) / float(in_size.y)};
-            const size_t i = size_t(y) * size_t(in_size.x) + size_t(x);
-            in_dirs[i]     = envmap_uv_to_xyz(mapping, uv);
+            const float2 uv{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)};
+            const float3 n  = envmap_uv_to_xyz(mapping, uv);
+            const double nx = n.x, ny = n.y, nz = n.z;
 
-            // Estimated by how much the mapping stretches here: a small step in v moves the direction by
-            // an amount that varies over the image, and the solid angle goes with it.
-            const float2 uv_dv{uv.x, std::min(1.f, uv.y + 0.5f / float(in_size.y))};
-            const float2 uv_du{std::min(1.f, uv.x + 0.5f / float(in_size.x)), uv.y};
-            const float3 dv = envmap_uv_to_xyz(mapping, uv_dv) - in_dirs[i];
-            const float3 du = envmap_uv_to_xyz(mapping, uv_du) - in_dirs[i];
-            in_weights[i]   = la::length(la::cross(du, dv));
+            const double e = c1 * sh[8] * (nx * nx - ny * ny) + c3 * sh[6] * nz * nz + c4 * sh[0] - c5 * sh[6] +
+                             2.0 * c1 * (sh[4] * nx * ny + sh[7] * nx * nz + sh[5] * ny * nz) +
+                             2.0 * c2 * (sh[3] * nx + sh[1] * ny + sh[2] * nz);
+
+            // Divided by pi, so this is what a white lambertian surface facing this way reflects rather
+            // than the irradiance arriving at it -- which is the number an environment lookup wants.
+            out(x, y) = float(e / 3.14159265358979323846);
         }
 
-    progress.set_num_steps(size.y);
-
-    stp::parallel_for(stp::blocked_range<int>(0, size.y, 1),
-                      [&](int y0, int y1, int, int)
-                      {
-                          for (int y = y0; y < y1; ++y)
-                          {
-                              if (progress.canceled())
-                                  return;
-
-                              for (int x = 0; x < size.x; ++x)
-                              {
-                                  const float2 uv{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)};
-                                  const float3 n = envmap_uv_to_xyz(mapping, uv);
-
-                                  double sum = 0.0, total_weight = 0.0;
-                                  for (size_t i = 0; i < in_dirs.size(); ++i)
-                                  {
-                                      // Clamped cosine: only the hemisphere the surface faces contributes,
-                                      // and each direction in proportion to how obliquely it arrives.
-                                      const float cos_theta = la::dot(n, in_dirs[i]);
-                                      if (cos_theta <= 0.f)
-                                          continue;
-
-                                      const double w = double(cos_theta) * double(in_weights[i]);
-                                      sum += w * double(src(int(i)));
-                                      total_weight += w;
-                                  }
-
-                                  out(x, y) = total_weight > 0.0 ? float(sum / total_weight) : 0.f;
-                              }
-
-                              ++progress;
-                          }
-                      });
-
+    ++progress;
     return out;
 }

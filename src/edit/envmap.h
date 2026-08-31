@@ -51,6 +51,15 @@ inline float2 convert_envmap_uv(EnvMapping dst, EnvMapping src, float2 uv)
 }
 
 /*!
+    Whether \p uv is part of the sphere at all in \p mapping.
+
+    Two of these do not fill their rectangle. The discs leave their corners empty, and the cube cross
+    leaves four. Points there have no direction, and counting them would integrate some directions twice
+    -- so anything summing over the image has to skip them.
+*/
+bool envmap_uv_is_valid(EnvMapping mapping, float2 uv);
+
+/*!
     Resample \p src, read as the \p src_mapping of a sphere, into \p dst_mapping at \p size.
 
     Every destination sample asks which direction it stands for, converts that direction into the source's
