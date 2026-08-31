@@ -210,19 +210,41 @@ Box2i dilated(const Box2i &b, int2 by, const Box2i &bounds)
 /*!
     Widths for \p n boxes whose combined variance lands as near \p sigma as odd integers allow.
 
-    Rounding a single width to an odd integer is not good enough: the error does not shrink as the count
-    rises -- at sigma 6 it is 5% at six passes and 15% at twelve -- so "more iterations" would visibly
-    change how much blur there is, which is the one thing the control must not do.
+    Compute box blur size for desired sigma and number of iterations:
+    The kernel resulting from repeated box blurs of the same width is the
+    Irwin-Hall distribution
+    (https://en.wikipedia.org/wiki/Irwin-Hall_distribution)
 
-    Splitting the passes between two adjacent odd widths fixes that. Solving for how many take the smaller
-    of the two leaves the total variance within a few percent everywhere, and exact once there are enough
-    passes to choose from.
+    The variance of the Irwin-Hall distribution with n unit-sized boxes:
+
+         V(1, n) = n/12.
+
+    Since V[w * X] = w^2 V[X] where w is a constant, we know that the
+    variance will scale as follows using width-w boxes:
+
+         V(w, n) = w^2*n/12.
+
+    To achieve a certain standard deviation sigma, we want to solve:
+
+         sqrt(V(w, n)) = w*sqrt(n/12) = sigma
+
+    for w, given n and sigma; which is:
+
+         w = sqrt(12/n)*sigma
+
+    Rounding that single width to an odd integer is not good enough here, though: the error does not
+    shrink as the count rises -- at sigma 6 it is 5% at six passes and 15% at twelve -- so "more
+    iterations" would visibly change how much blur there is, which is the one thing this control must not
+    do. Splitting the passes between the two adjacent odd widths and solving for how many take the smaller
+    keeps the total within a few percent everywhere, and exact once there are enough passes to choose from.
 */
 std::vector<int> box_widths_for_sigma(float sigma, int n)
 {
     const double s2 = double(sigma) * double(sigma);
 
-    // Width a single box would need if widths could be continuous.
+    // Width a single box would need if widths could be continuous. If width is odd, then we can use a
+    // centered box and are good to go; if it is even we would need a symmetric pair of off-centered boxes
+    // instead, so round down to the next odd width and let the split below make up the difference.
     int lower = int(std::floor(std::sqrt(12.0 * s2 / n + 1.0)));
     if (lower % 2 == 0)
         --lower;

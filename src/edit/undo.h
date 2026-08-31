@@ -47,7 +47,7 @@ public:
 using UndoPtr = std::unique_ptr<UndoEntry>;
 
 /*!
-    An edit undone and redone by calling a function, storing no pixels at all.
+    Specify the undo and redo commands using lambda expressions, storing no pixels at all.
 
     For operations that are their own inverse (a flip) or whose inverse is another operation of the same
     cost (rotate 90 degrees one way, then the other). Both directions re-derive the pixels rather than
@@ -196,7 +196,11 @@ private:
 
     std::vector<UndoPtr> m_entries;
 
-    // Both index between entries, in [0, size()].
+    // it is best to think of this state as pointing in between the entries in the m_entries vector
+    // it can range from [0,size()]
+    // m_current_state == 0 indicates that there is nothing to undo
+    // m_current_state == size() indicates that there is nothing to redo
     int m_current_state = 0;
-    int m_saved_state   = 0;
+    // where the image last agreed with what is on disk; -1 once that point can no longer be reached
+    int m_saved_state = 0;
 };

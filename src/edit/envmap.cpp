@@ -29,11 +29,11 @@ float sqr(float x) { return x * x; }
 
 float3 angular_to_xyz(float2 uv)
 {
-    // Image plane coordinates over [-1,1], centered on the image.
+    // image plane coordinates going from (-1,1) for x and y
+    // with center of image being (0,0)
     const float2 xy = 2.f * uv - float2{1.f};
 
-    // The polar angle grows linearly with the distance from the center, which is what makes this mapping
-    // cover the whole sphere in one disc.
+    // phi varies linearly with the radius from center
     const float phi   = std::clamp(la::length(xy) * k_pi, 0.f, k_pi);
     const float theta = std::atan2(xy.y, xy.x);
 
@@ -43,10 +43,12 @@ float3 angular_to_xyz(float2 uv)
 
 float3 mirror_ball_to_xyz(float2 uv)
 {
+    // image plane coordinates going from (-1,1) for x and y
+    // with center of image being (0,0)
     const float2 xy = 2.f * uv - float2{1.f};
 
-    // Here it is the *sine* of half the polar angle that grows linearly with the radius, which is what a
-    // photograph of a mirrored sphere records.
+    // sin(phi) varies linearly with the radius from center, which is what a photograph of a mirrored
+    // sphere records
     const float phi   = 2.f * std::asin(std::clamp(la::length(xy), 0.f, 1.f));
     const float theta = std::atan2(xy.y, xy.x);
 
@@ -56,6 +58,8 @@ float3 mirror_ball_to_xyz(float2 uv)
 
 float3 lat_long_to_xyz(float2 uv)
 {
+    // theta varies linearly with U,
+    // and phi varies linearly with V
     const float theta = lerp(1.5f * k_pi, -k_half_pi, uv.x);
     const float phi   = uv.y * k_pi;
 
@@ -65,8 +69,9 @@ float3 lat_long_to_xyz(float2 uv)
 
 float3 cylindrical_to_xyz(float2 uv)
 {
-    // Longitude across as before, but height rather than latitude down -- so every row covers the same
-    // solid angle, which lat-long does not.
+    // theta varies linearly with U,
+    // and y=cosPhi varies linearly with V -- so every row covers the same solid angle, which lat-long
+    // does not
     const float theta   = lerp(1.5f * k_pi, -k_half_pi, uv.x);
     const float cos_phi = lerp(1.f, -1.f, uv.y);
 
@@ -78,8 +83,8 @@ float3 cylindrical_to_xyz(float2 uv)
 //! face coordinates. Its length is what the Jacobian needs, so the two share this.
 float3 cube_map_face_vector(float2 uv)
 {
-    // The six faces laid out as a vertical cross: the upright column of four down the middle third, and
-    // the two side faces either side of it.
+    // This is assuming that the Cubemap is a vertical cross: the upright column of four down the middle
+    // third, and the two side faces either side of it
     float3 xyz{0.f};
 
     if (uv.x >= 1.f / 3.f && uv.x <= 2.f / 3.f)
@@ -186,7 +191,8 @@ float2 xyz_to_cylindrical(float3 xyz)
 
 float2 xyz_to_cube_map(float3 xyz)
 {
-    // Which face: the axis the direction is largest along, and its sign.
+    // Again, the CubeMap is a vertical cross.
+    // Make sure that the infinite norm of xyz == 1; the face tells us which side we're looking at.
     float l    = std::abs(xyz.x);
     int   face = int(sign(xyz.x));
     if (std::abs(xyz.y) > l)

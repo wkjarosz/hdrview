@@ -326,9 +326,15 @@ inline T saturate(T a)
 
 //! Contrast about \p midpoint, as a straight line of the given slope through it.
 /*!
-    The pair a brightness/contrast control produces: contrast sets how steep the line is, brightness moves
-    the point it pivots about. Values outside [0,1] pass through the same line rather than being clamped to
-    it, so an HDR sample keeps its relationship to the ones around it.
+    The pair a brightness/contrast control produces. Brightness moves the midpoint the line pivots about,
+    by b/2; contrast sets the slope of the mapping at that midpoint, where
+
+         -1 -> all gray/no contrast; horizontal line;
+          0 -> no change; 45 degree diagonal line;
+          1 -> no gray/black & white; vertical line.
+
+    This is the linear remapping, which may produce negative values and values > 1 -- deliberately, so that
+    an HDR sample keeps its relationship to the ones around it rather than being clamped into [0,1].
 */
 template <typename T>
 inline T brightness_contrast_linear(T v, T slope, T midpoint)
