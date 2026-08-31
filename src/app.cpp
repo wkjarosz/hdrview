@@ -639,6 +639,11 @@ void HDRViewApp::setup_frame_callbacks()
     {
         drain_main_thread_queue();
 
+#if HDRVIEW_ENABLE_IPC
+        // See m_ipc_listen_requested: the toggle's Action needs a bool, but the socket is the truth.
+        m_ipc_listen_requested = m_ipc_server.is_listening();
+#endif
+
         process_shortcuts();
 
         for (auto &d : m_dialogs) d->draw(d->open);
@@ -1333,6 +1338,20 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    &m_watch_files_for_changes,
                    "Regularly monitor opened files and folders, loading new files, and reloading existing files when "
                    "changes are detected."});
+#if HDRVIEW_ENABLE_IPC
+        // The generic action-to-palette mapping flips p_selected and then calls this, so the callback acts
+        // on the flipped value and set_ipc_listening() settles it back if the port could not be bound.
+        add(Action{{"Listen for image updates"},
+                   ICON_MY_WATCH_CHANGES,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { set_ipc_listening(m_ipc_listen_requested); },
+                   always_enabled,
+                   false,
+                   &m_ipc_listen_requested,
+                   "Accept images pushed in by a renderer while it works, so a render appears here tile by "
+                   "tile. Nothing outside this machine can connect."});
+#endif
         add(Action{{"Add watched folder..."},
                    ICON_MY_ADD_WATCHED_FOLDER,
                    ImGuiKey_None,

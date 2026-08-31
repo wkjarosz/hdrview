@@ -90,6 +90,33 @@ bool HDRViewApp::start_ipc_listening(uint16_t port)
 
 void HDRViewApp::stop_ipc_listening() { m_ipc_server.stop(); }
 
+void HDRViewApp::set_ipc_listening(bool listen)
+{
+    // The one place the toggle's meaning lives, so the panel's checkbox and the command palette's entry
+    // cannot drift apart. Binding can fail -- the port may be held by tev or another HDRView -- so the
+    // request is answered by what the server actually did, not by what was asked for.
+    if (listen)
+        start_ipc_listening(m_ipc_port);
+    else
+        stop_ipc_listening();
+
+    m_ipc_listen_requested = m_ipc_server.is_listening();
+}
+
+void HDRViewApp::set_ipc_port(uint16_t port)
+{
+    if (port == m_ipc_port)
+        return;
+
+    m_ipc_port = port;
+
+    // Rebind straight away when already listening, so the port shown is the port in use. start() stops the
+    // old listener first, so a client connected to it is dropped -- and if the new port turns out to be
+    // taken, nothing is listening and the panel says why.
+    if (m_ipc_server.is_listening())
+        set_ipc_listening(true);
+}
+
 void HDRViewApp::IpcRates::update(const IpcActivity &now, double time)
 {
     // Long enough that the numbers hold still and can be read, short enough that they follow a renderer
@@ -121,28 +148,23 @@ void HDRViewApp::draw_ipc_gui()
 
     const bool listening = m_ipc_server.is_listening();
 
+    // Both this and the "Listen for image updates" command go through set_ipc_listening(); the label differs
+    // because here the sentence continues into the port field beside it.
     bool toggle = listening;
     if (ImGui::Checkbox("Listen for image updates on port:", &toggle))
-    {
-        if (toggle)
-            start_ipc_listening(m_ipc_port);
-        else
-            stop_ipc_listening();
-    }
-    ImGui::Tooltip("Accept images pushed in by a renderer while it works, over the protocol tev uses. "
-                   "Nothing outside this machine can connect. Off unless you turn it on.");
+        set_ipc_listening(toggle);
+    ImGui::Tooltip("Accept images pushed in by a renderer while it works, so a render appears here tile by "
+                   "tile. Nothing outside this machine can connect. Off unless you turn it on.");
 
     // The port reads as the end of the checkbox's sentence, so it carries no label of its own.
     ImGui::SameLine();
-    // It cannot change under a bound socket, and rebinding silently would drop whatever is connected.
-    ImGui::BeginDisabled(listening);
     int port = int(m_ipc_port);
     ImGui::SetNextItemWidth(HelloImGui::EmSize(4.f));
-    if (ImGui::InputInt("##Port", &port, 0, 0, ImGuiInputTextFlags_CharsDecimal))
-        m_ipc_port = uint16_t(std::clamp(port, 1, 65535));
-    ImGui::EndDisabled();
-    ImGui::Tooltip("14158 is what tev listens on, so clients written for it need no changes. Change it to "
-                   "run HDRView and tev side by side.");
+    if (ImGui::InputInt("##Port", &port, 0, 0, ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_EnterReturnsTrue))
+        set_ipc_port(uint16_t(std::clamp(port, 1, 65535)));
+    ImGui::Tooltip("14158 is the port renderers connect to by default, so most need no configuring. Change it "
+                   "if another viewer already holds that port. Changing it while listening rebinds, dropping "
+                   "anything currently connected.");
 
     // Wrapped, not clipped: this panel is usually docked narrow, and both the address and the client count
     // are the point of the line.

@@ -152,6 +152,10 @@ public:
     bool             start_ipc_listening(uint16_t port);
     void             stop_ipc_listening();
     const IpcServer &ipc_server() const { return m_ipc_server; }
+    /// Start or stop listening, and settle `m_ipc_listen_requested` on whatever actually happened.
+    void set_ipc_listening(bool listen);
+    /// Change the port, rebinding if already listening.
+    void set_ipc_port(uint16_t port);
     /// The port the GUI toggle and the CLI flag listen on. Settable so a second HDRView can coexist.
     uint16_t  ipc_port() const { return m_ipc_port; }
     uint16_t &ipc_port() { return m_ipc_port; }
@@ -485,6 +489,15 @@ private:
 #if HDRVIEW_ENABLE_IPC
     IpcServer m_ipc_server;
     uint16_t  m_ipc_port = k_default_ipc_port;
+
+    //! What the "Listen for image updates" toggle shows, mirrored from the server once per frame.
+    /*!
+        An Action needs a bool to point p_selected at, but the truth is whether the socket is bound -- which
+        the toggle does not decide on its own, since binding can fail and --listen can turn it on at
+        startup. Mirroring it every frame (rather than in draw_ipc_gui, which does not run while the panel
+        is collapsed) keeps the palette's checkmark honest.
+    */
+    bool m_ipc_listen_requested = false;
 
     //! Turns the listener's running totals into the rates the activity readout shows.
     /*!
