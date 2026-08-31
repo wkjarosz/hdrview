@@ -1096,7 +1096,9 @@ bool HDRViewApp::try_load_zip_as_session(string_view zip_bytes, const string &zi
 
 void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
 {
-    close_all_images();
+    // Loading a session was already confirmed, by the prompt that warned it would replace what is
+    // open; asking a second time here would stall a load that is already underway.
+    close_all_images_immediately();
 
     auto resolve = [&dir](const string &rel) -> fs::path
     {
@@ -1144,7 +1146,9 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
 
 void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &zip_name, const json &j)
 {
-    close_all_images();
+    // Loading a session was already confirmed, by the prompt that warned it would replace what is
+    // open; asking a second time here would stall a load that is already underway.
+    close_all_images_immediately();
 
     PendingSession pending;
     pending.blend_mode = id_to_enum(j, "blend_mode", g_blend_mode_ids, BlendMode_Normal);
