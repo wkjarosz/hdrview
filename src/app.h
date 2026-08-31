@@ -7,6 +7,7 @@
 #include "box.h"
 #include "colormap.h"
 #include "display_colorspace.h"
+#include "edit/undo.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
 #if HDRVIEW_ENABLE_IPC
@@ -165,6 +166,61 @@ public:
     void draw_ipc_gui();
     //-----------------------------------------------------------------------------
 #endif
+
+    //-----------------------------------------------------------------------------
+    // editing images (see src/app-edit.cpp)
+    //-----------------------------------------------------------------------------
+    /*!
+        Apply one edit to \p img and record how to reverse it. The only thing that writes image pixels.
+
+        Everything an edit has to get right besides the pixels themselves lives here: refusing images
+        that cannot be edited, stopping the statistics tasks that are reading the samples, invalidating
+        the caches keyed on them, and pushing the undo entry. An operation that went around this would
+        leave a histogram describing pixels that are gone and no way back to them, so nothing else may
+        write pixels.
+
+        \param [] img       Image to change
+        \param [] name      Shown beside "Undo"/"Redo", e.g. "Rotate 90 CW"
+        \param [] op        Makes the change
+        \param [] make_undo Builds the entry that reverses it, called *before* `op` so it can capture
+                            whatever `op` is about to overwrite
+        \returns Whether the edit was applied; false when the image refuses edits (see can_edit()).
+    */
+    bool modify_image(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op,
+                      const std::function<UndoPtr(const Image &)> &make_undo);
+
+    /*!
+        A geometric edit, which is reversed by performing its opposite rather than by storing pixels.
+
+        \p forward and \p backward must be exact inverses of each other -- flips and quarter turns are,
+        since every sample survives them.
+    */
+    bool modify_image_reversibly(const ImagePtr &img, const std::string &name,
+                                 const std::function<void(Image &)> &forward,
+                                 const std::function<void(Image &)> &backward);
+
+    /*!
+        Whether \p img accepts edits at all.
+
+        False for an image a renderer is still streaming into: its pixels are owned by the other process,
+        so an edit would be overwritten by the next tile and undoing one would restore samples that have
+        since been replaced.
+    */
+    static bool can_edit(const ConstImagePtr &img);
+
+    /// Reverse the current image's most recent edit. False if there was nothing to undo.
+    bool undo();
+    /// Reapply the edit undo() last reversed. False if there was nothing to redo.
+    bool redo();
+
+    //! Everything a completed edit invalidates, applied to \p img.
+    /*!
+        The derived data an edit makes stale -- the statistics cache, the GPU textures, and, when the
+        channels themselves changed, the layer and group tree built from them. Kept in one place so an
+        edit and an undo of that same edit cannot invalidate different things.
+    */
+    void after_modify(const ImagePtr &img);
+    //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
     // access to images

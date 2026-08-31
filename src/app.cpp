@@ -1586,6 +1586,79 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    [this]() { close_all_images(); },
                    if_img});
 
+        //
+        // Editing. Every one of these goes through modify_image(), which is what pairs the change with
+        // the entry that reverses it; see src/app-edit.cpp.
+        //
+        const auto if_editable = [this]() { return can_edit(current_image()); };
+
+        add(Action{{"Undo"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Ctrl | ImGuiKey_Z,
+                   ImGuiInputFlags_Repeat,
+                   [this]() { undo(); },
+                   [this]()
+                   {
+                       auto img = current_image();
+                       return can_edit(img) && img->history.has_undo();
+                   }});
+        add(Action{{"Redo"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z,
+                   ImGuiInputFlags_Repeat,
+                   [this]() { redo(); },
+                   [this]()
+                   {
+                       auto img = current_image();
+                       return can_edit(img) && img->history.has_redo();
+                   }});
+
+        add(Action{{"Flip horizontally"},
+                   ICON_MY_FLIP_HORIZ,
+                   ImGuiKey_None,
+                   0,
+                   [this]()
+                   {
+                       // Its own inverse, so one function serves both directions.
+                       modify_image_reversibly(
+                           current_image(), "Flip horizontally", [](Image &img) { img.flip_horizontal(); },
+                           [](Image &img) { img.flip_horizontal(); });
+                   },
+                   if_editable});
+        add(Action{{"Flip vertically"},
+                   ICON_MY_FLIP_VERT,
+                   ImGuiKey_None,
+                   0,
+                   [this]()
+                   {
+                       modify_image_reversibly(
+                           current_image(), "Flip vertically", [](Image &img) { img.flip_vertical(); },
+                           [](Image &img) { img.flip_vertical(); });
+                   },
+                   if_editable});
+        add(Action{{"Rotate 90 degrees clockwise", "Turn clockwise"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Ctrl | ImGuiKey_RightBracket,
+                   0,
+                   [this]()
+                   {
+                       modify_image_reversibly(
+                           current_image(), "Rotate 90 degrees clockwise", [](Image &img) { img.rotate_90_cw(); },
+                           [](Image &img) { img.rotate_90_ccw(); });
+                   },
+                   if_editable});
+        add(Action{{"Rotate 90 degrees counter-clockwise", "Turn counter-clockwise"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Ctrl | ImGuiKey_LeftBracket,
+                   0,
+                   [this]()
+                   {
+                       modify_image_reversibly(
+                           current_image(), "Rotate 90 degrees counter-clockwise",
+                           [](Image &img) { img.rotate_90_ccw(); }, [](Image &img) { img.rotate_90_cw(); });
+                   },
+                   if_editable});
+
         add(Action{{"Go to next image"},
                    ICON_MY_BLANK,
                    ImGuiKey_DownArrow,

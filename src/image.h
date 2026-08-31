@@ -11,6 +11,7 @@
 #include "array2d.h"
 #include "box.h"
 #include "colorspace.h"
+#include "edit/undo.h"
 #include "imageio/exif.h"
 #include "json.h"
 #include "texture.h"
@@ -482,6 +483,16 @@ public:
     */
     std::vector<VgCommand> vector_overlay;
 
+    //! This image's undo history. Empty for one that has never been edited.
+    /*!
+        Per image rather than per application: each image is its own document, so undoing is always
+        undoing something done to the image being looked at, and closing one takes its history with it.
+
+        Not written to directly -- HDRViewApp::modify_image() is the only thing that adds to it, which is
+        also what keeps every edit paired with an entry that can reverse it.
+    */
+    CommandHistory history;
+
     //! Bumped whenever any of this image's pixels change after loading.
     /*!
         Statistics and histograms are cached against it (see PixelStats::Settings), so anything that writes
@@ -564,6 +575,33 @@ public:
 
     static void set_null_texture(Target_ target = Target_Primary);
     void        set_as_texture(Target_ target = Target_Primary);
+
+    //! @{ \name Geometric operations
+    /*!
+        Move this image's samples, carrying the data and display windows along with them.
+
+        Each is exact -- every sample survives, none is resampled -- so the pair of them is its own
+        inverse, which is what lets the undo history record one without storing any pixels.
+
+        None of them touches content_version or the statistics cache; the caller that invoked the edit
+        owns that, since it also owns the undo entry. They do mark every channel's texture dirty, because
+        transpose() changes each channel's shape and the texture has to be rebuilt rather than updated in
+        place.
+    */
+    void flip_horizontal();
+    void flip_vertical();
+    void transpose();
+    void rotate_90_cw();
+    void rotate_90_ccw();
+
+private:
+    //! Move the windows the way the samples just moved, so the two stay in the same frame.
+    void reflect_windows(bool horizontal);
+    void transpose_windows();
+
+public:
+    //! @}
+
     float4      raw_pixel(int2 p, Target_ target = Target_Primary) const;
     float4      rgba_pixel(int2 p, Target_ target = Target_Primary) const;
     void        finalize();

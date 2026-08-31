@@ -1739,6 +1739,7 @@ set(HDRVIEW_SOURCES
     src/imageio/xmp.cpp
     src/app-colorpass.cpp
     src/app-draw.cpp
+    src/app-edit.cpp
     src/app-file-io.cpp
     src/app-gui.cpp
     src/app-windows.cpp
@@ -1748,6 +1749,7 @@ set(HDRVIEW_SOURCES
     src/colorspace.cpp
     src/common.cpp
     src/display_colorspace.cpp
+    src/edit/undo.cpp
     src/dithermatrix256.cpp
     src/platform_utils.cpp
     src/fonts.cpp

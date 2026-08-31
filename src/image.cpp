@@ -1082,6 +1082,110 @@ void Image::compute_color_transform()
     }
 }
 
+// These move the samples, so the windows have to move with them. Only matters when the display window is
+// something other than the whole frame -- a raw CFA part marks the sensor's active area with it -- but then
+// a flip lands it on the opposite edge from where it belongs.
+void Image::reflect_windows(bool horizontal)
+{
+    const int extent  = horizontal ? data_window.min.x + data_window.max.x : data_window.min.y + data_window.max.y;
+    auto      reflect = [extent, horizontal](Box2i &b)
+    {
+        int      &lo     = horizontal ? b.min.x : b.min.y;
+        int      &hi     = horizontal ? b.max.x : b.max.y;
+        const int new_lo = extent - hi, new_hi = extent - lo;
+        lo = new_lo;
+        hi = new_hi;
+    };
+    reflect(display_window);
+    reflect(data_window);
+}
+
+void Image::transpose_windows()
+{
+    auto swap_axes = [](Box2i &b)
+    {
+        std::swap(b.min.x, b.min.y);
+        std::swap(b.max.x, b.max.y);
+    };
+    swap_axes(display_window);
+    swap_axes(data_window);
+}
+
+void Image::flip_horizontal()
+{
+    for (auto &channel : channels)
+    {
+        int w          = channel.width();
+        int h          = channel.height();
+        int block_size = std::max(1, 1024 * 1024 / w);
+        stp::parallel_for(stp::blocked_range<int>(0, h, block_size),
+                          [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < w / 2; ++x) std::swap(channel(x, y), channel(w - 1 - x, y));
+                          });
+        channel.texture_is_dirty = true;
+    }
+    reflect_windows(true);
+}
+
+void Image::flip_vertical()
+{
+    for (auto &channel : channels)
+    {
+        int w          = channel.width();
+        int h          = channel.height();
+        int block_size = std::max(1, 1024 * 1024 / h);
+        stp::parallel_for(stp::blocked_range<int>(0, w, block_size),
+                          [&](int x0, int x1, int /*unit*/, int /*thread*/)
+                          {
+                              for (int x = x0; x < x1; ++x)
+                                  for (int y = 0; y < h / 2; ++y) std::swap(channel(x, y), channel(x, h - 1 - y));
+                          });
+        channel.texture_is_dirty = true;
+    }
+    reflect_windows(false);
+}
+
+void Image::transpose()
+{
+    for (auto &channel : channels)
+    {
+        Array2Df tmp(channel.height(), channel.width());
+        int      block_size = std::max(1, 1024 * 1024 / channel.width());
+        stp::parallel_for(stp::blocked_range<int>(0, channel.height(), block_size),
+                          [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < channel.width(); ++x) tmp(y, x) = channel(x, y);
+                          });
+        channel.resize(tmp.size());
+        stp::parallel_for(stp::blocked_range<int>(0, tmp.height(), block_size),
+                          [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < tmp.width(); ++x) channel(x, y) = tmp(x, y);
+                          });
+        // The channel changed shape, so its texture has to be rebuilt rather than sub-updated.
+        channel.texture_is_dirty = true;
+    }
+    transpose_windows();
+}
+
+// Composed from a transpose and a flip, matching how the EXIF orientations below are built. Which flip
+// follows the transpose is what distinguishes the two directions.
+void Image::rotate_90_cw()
+{
+    transpose();
+    flip_horizontal();
+}
+
+void Image::rotate_90_ccw()
+{
+    transpose();
+    flip_vertical();
+}
+
 void Image::apply_exif_orientation()
 {
     // --- EXIF orientation handling ---
@@ -1115,93 +1219,6 @@ void Image::apply_exif_orientation()
     if (orientation != 1)
     {
         spdlog::debug("Applying EXIF orientation: {}", orientation);
-
-        // These move the samples, so the windows have to move with them. Only matters when the display
-        // window is something other than the whole frame -- a raw CFA part marks the sensor's active area
-        // with it -- but then a flip lands it on the opposite edge from where it belongs.
-        auto reflect_windows = [this](bool horizontal)
-        {
-            const int extent =
-                horizontal ? data_window.min.x + data_window.max.x : data_window.min.y + data_window.max.y;
-            auto reflect = [extent, horizontal](Box2i &b)
-            {
-                int      &lo     = horizontal ? b.min.x : b.min.y;
-                int      &hi     = horizontal ? b.max.x : b.max.y;
-                const int new_lo = extent - hi, new_hi = extent - lo;
-                lo = new_lo;
-                hi = new_hi;
-            };
-            reflect(display_window);
-            reflect(data_window);
-        };
-        auto transpose_windows = [this]()
-        {
-            auto swap_axes = [](Box2i &b)
-            {
-                std::swap(b.min.x, b.min.y);
-                std::swap(b.max.x, b.max.y);
-            };
-            swap_axes(display_window);
-            swap_axes(data_window);
-        };
-
-        // Helper lambdas for flipping/rotating
-        auto flip_horizontal = [this, &reflect_windows]()
-        {
-            for (auto &channel : channels)
-            {
-                int w          = channel.width();
-                int h          = channel.height();
-                int block_size = std::max(1, 1024 * 1024 / w);
-                stp::parallel_for(stp::blocked_range<int>(0, h, block_size),
-                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
-                                  {
-                                      for (int y = y0; y < y1; ++y)
-                                          for (int x = 0; x < w / 2; ++x)
-                                              std::swap(channel(x, y), channel(w - 1 - x, y));
-                                  });
-            }
-            reflect_windows(true);
-        };
-        auto flip_vertical = [this, &reflect_windows]()
-        {
-            for (auto &channel : channels)
-            {
-                int w          = channel.width();
-                int h          = channel.height();
-                int block_size = std::max(1, 1024 * 1024 / h);
-                stp::parallel_for(stp::blocked_range<int>(0, w, block_size),
-                                  [&](int x0, int x1, int /*unit*/, int /*thread*/)
-                                  {
-                                      for (int x = x0; x < x1; ++x)
-                                          for (int y = 0; y < h / 2; ++y)
-                                              std::swap(channel(x, y), channel(x, h - 1 - y));
-                                  });
-            }
-            reflect_windows(false);
-        };
-        auto transpose = [this, &transpose_windows]()
-        {
-            for (auto &channel : channels)
-            {
-                Array2Df tmp(channel.height(), channel.width());
-                int      block_size = std::max(1, 1024 * 1024 / channel.width());
-                stp::parallel_for(stp::blocked_range<int>(0, channel.height(), block_size),
-                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
-                                  {
-                                      for (int y = y0; y < y1; ++y)
-                                          for (int x = 0; x < channel.width(); ++x) tmp(y, x) = channel(x, y);
-                                  });
-                channel.resize(tmp.size());
-                stp::parallel_for(stp::blocked_range<int>(0, tmp.height(), block_size),
-                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
-                                  {
-                                      for (int y = y0; y < y1; ++y)
-                                          for (int x = 0; x < tmp.width(); ++x) channel(x, y) = tmp(x, y);
-                                  });
-            }
-            transpose_windows();
-        };
 
         // Apply orientation according to EXIF spec
         // 1 = Horizontal (normal)

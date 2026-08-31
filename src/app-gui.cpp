@@ -408,6 +408,21 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
+    if (ImGui::BeginMenu("Edit"))
+    {
+        MenuItem(action("Undo"));
+        MenuItem(action("Redo"));
+
+        ImGui::Separator();
+
+        MenuItem(action("Flip horizontally"));
+        MenuItem(action("Flip vertically"));
+        MenuItem(action("Rotate 90 degrees clockwise"));
+        MenuItem(action("Rotate 90 degrees counter-clockwise"));
+
+        ImGui::EndMenu();
+    }
+
     if (ImGui::BeginMenu("View"))
     {
         MenuItem(action("Zoom in"));
