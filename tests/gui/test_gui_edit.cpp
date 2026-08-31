@@ -798,6 +798,41 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->roi_live().has_volume(), false);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "filling premultiplies when the image stores it that way");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto        img   = hdrview()->current_image();
+        const auto &group = img->groups[img->selected_group];
+        if (img->alpha_type == AlphaType_None || !group_has_alpha(group.type))
+            return; // nothing to premultiply against
+
+        // Half-transparent red. finalize() premultiplies a straight-alpha image, so what should land in
+        // the channels is the color scaled by its own alpha -- writing it as typed reads as the alpha
+        // having done nothing.
+        const float4 color{0.8f, 0.2f, 0.1f, 0.5f};
+
+        menu_click(ctx, "Edit/Fill...");
+        ctx->SetRef("Fill...");
+        ctx->ItemInputValue("Color/##X", color.x);
+        ctx->ItemInputValue("Color/##Y", color.y);
+        ctx->ItemInputValue("Color/##Z", color.z);
+        ctx->ItemInputValue("Color/##W", color.w);
+        ctx->ItemClick("Fill");
+        ctx->Yield(2);
+
+        for (int c = 0; c < group.num_channels - 1; ++c)
+        {
+            const auto &ch = img->channels[group.channels[c]];
+            IM_CHECK_LT(std::fabs(ch(0, 0) - color[c] * color.w), 1e-4f);
+        }
+        // Alpha itself is stored as given.
+        const auto &alpha = img->channels[group.channels[group.num_channels - 1]];
+        IM_CHECK_LT(std::fabs(alpha(0, 0) - color.w), 1e-4f);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

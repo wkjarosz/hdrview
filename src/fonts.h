@@ -107,6 +107,8 @@
 #define ICON_MY_ARROW_DROP_DOWN     ""
 #define ICON_MY_CURSOR_ARROW        ICON_FA_ARROW_POINTER
 #define ICON_MY_TIMES               ICON_FA_XMARK
+#define ICON_MY_LINK                ICON_FA_LINK
+#define ICON_MY_UNLINK              ICON_FA_LINK_SLASH
 #define ICON_MY_ENVMAP              ICON_FA_GLOBE
 #define ICON_MY_IRRADIANCE          ICON_FA_SUN
 #define ICON_MY_MEDIAN              ICON_FA_BROOM
@@ -245,6 +247,8 @@
 #define ICON_MY_ARROW_DROP_DOWN     ""
 #define ICON_MY_CURSOR_ARROW        ICON_LC_MOUSE_POINTER
 #define ICON_MY_TIMES               ICON_LC_X
+#define ICON_MY_LINK                ICON_LC_LINK
+#define ICON_MY_UNLINK              ICON_LC_UNLINK
 #define ICON_MY_ENVMAP              ICON_LC_GLOBE
 #define ICON_MY_IRRADIANCE          ICON_LC_SUNRISE
 #define ICON_MY_MEDIAN              ICON_LC_GRID_3X3
@@ -386,6 +390,8 @@
 #define ICON_MY_ARROW_DROP_DOWN     ICON_MS_ARROW_DROP_DOWN
 #define ICON_MY_CURSOR_ARROW        ICON_MS_ARROW_SELECTOR_TOOL
 #define ICON_MY_TIMES               ICON_MS_CLOSE
+#define ICON_MY_LINK                ICON_MS_LINK
+#define ICON_MY_UNLINK              ICON_MS_LINK_OFF
 #define ICON_MY_ENVMAP              ICON_MS_PANORAMA_PHOTOSPHERE
 #define ICON_MY_IRRADIANCE          ICON_MS_WB_SUNNY
 #define ICON_MY_MEDIAN              ICON_MS_GRAIN
@@ -521,6 +527,8 @@
 #define ICON_MY_ARROW_DROP_DOWN     ""
 #define ICON_MY_CURSOR_ARROW        ICON_MD_MOUSE
 #define ICON_MY_TIMES               ICON_MD_CLOSE
+#define ICON_MY_LINK                ICON_MD_LINK
+#define ICON_MY_UNLINK              ICON_MD_LINK_OFF
 #define ICON_MY_ENVMAP              ICON_MD_PANORAMA_PHOTOSPHERE
 #define ICON_MY_IRRADIANCE          ICON_MD_WB_SUNNY
 #define ICON_MY_MEDIAN              ICON_MD_GRAIN
@@ -674,6 +682,8 @@
 #define ICON_MY_ROTATE_CW           ICON_MDI_ROTATE_RIGHT
 #define ICON_MY_ROTATE_CCW          ICON_MDI_ROTATE_LEFT
 #define ICON_MY_TIMES               ICON_MDI_CLOSE
+#define ICON_MY_LINK                ICON_MDI_LINK
+#define ICON_MY_UNLINK              ICON_MDI_LINK_OFF
 #define ICON_MY_ENVMAP              ICON_MDI_PANORAMA_SPHERE
 #define ICON_MY_IRRADIANCE          ICON_MDI_WEATHER_SUNNY
 #define ICON_MY_MEDIAN              ICON_MDI_GRAIN

@@ -7,6 +7,7 @@
 #include "app.h"
 #include "edit/envmap.h"
 #include "edit/filters.h"
+#include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
 
@@ -413,10 +414,21 @@ void HDRViewApp::draw_fill_dialog(bool &open)
         const auto result = ImGui::DialogButtons("Fill");
         if (result == ImGui::DialogResult::Confirm)
         {
-            // The one edit so far whose value depends on which channel it is writing: a group's channels
-            // arrive in order, so the slot indexes the color. Beyond four -- an "all channels" subject on a
+            // The one edit whose value depends on which channel it is writing: a group's channels arrive in
+            // order, so the slot indexes the color. Beyond four -- an "all channels" subject on a
             // multi-layer image -- the components repeat rather than running off the end.
-            const float4 c = color;
+            float4 c = color;
+
+            // finalize() premultiplies a straight-alpha image, so the samples in memory are premultiplied
+            // wherever alpha means transparency. Writing the color as typed would be too bright by a factor
+            // of its own alpha, which reads as the alpha having had no effect at all.
+            if (auto img = current_image(); img && img->is_valid_group(img->active_group_index(Target_Primary)))
+            {
+                const auto &group = img->groups[size_t(img->active_group_index(Target_Primary))];
+                if (img->alpha_type != AlphaType_None && group_has_alpha(group.type))
+                    c = float4{c.x * c.w, c.y * c.w, c.z * c.w, c.w};
+            }
+
             modify_pixels(current_image(), "Fill", m_edit_subject, [c](float, int2, int slot) { return c[slot % 4]; });
             ImGui::CloseCurrentPopup();
         }
@@ -427,35 +439,133 @@ void HDRViewApp::draw_fill_dialog(bool &open)
     }
 }
 
+namespace
+{
+
+//! Units a size can be given in.
+enum SizeUnits : int
+{
+    Units_Pixels = 0,
+    Units_Percent
+};
+
+//! The chain-link toggle that ties width and height together, as an icon rather than a checkbox.
+bool aspect_lock_button(bool *locked)
+{
+    const bool clicked = ImGui::Button(*locked ? ICON_MY_LINK : ICON_MY_UNLINK);
+    if (clicked)
+        *locked = !*locked;
+    ImGui::Tooltip(*locked ? "Width and height are tied to the original aspect ratio. Click to unlink."
+                           : "Width and height are set independently. Click to link.");
+    return clicked;
+}
+
+/*!
+    Width and height in \p units, with a lock that keeps their ratio.
+
+    \p size is always in pixels; the fields convert. Editing one side with the lock on drives the other
+    from \p original's ratio rather than from the current values, so a sequence of edits cannot drift.
+
+    Returns whether anything changed.
+*/
+bool size_fields(int2 *size, int *units, bool *locked, int2 original)
+{
+    bool changed = false;
+
+    ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
+    if (ImGui::Combo("Units", units, "Pixels\0Percent\0"))
+        changed = true;
+    ImGui::Tooltip("Drag either field to sweep the size; ctrl-click one to type an exact value.");
+
+    const int2 before = *size;
+
+    if (*units == Units_Percent)
+    {
+        float2 pct{100.f * float(size->x) / float(std::max(1, original.x)),
+                   100.f * float(size->y) / float(std::max(1, original.y))};
+
+        ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
+        if (ImGui::DragFloat("Width##pct", &pct.x, 0.5f, 1.f, 1000.f, "%.1f %%"))
+            changed = true;
+        ImGui::SameLine();
+        aspect_lock_button(locked);
+
+        ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
+        if (ImGui::DragFloat("Height##pct", &pct.y, 0.5f, 1.f, 1000.f, "%.1f %%"))
+            changed = true;
+
+        size->x = std::max(1, int(std::lround(double(pct.x) * 0.01 * double(original.x))));
+        size->y = std::max(1, int(std::lround(double(pct.y) * 0.01 * double(original.y))));
+    }
+    else
+    {
+        ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
+        if (ImGui::DragInt("Width##px", &size->x, 1.f, 1, 65536, "%d px"))
+            changed = true;
+        ImGui::SameLine();
+        aspect_lock_button(locked);
+
+        ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
+        if (ImGui::DragInt("Height##px", &size->y, 1.f, 1, 65536, "%d px"))
+            changed = true;
+
+        *size = la::max(*size, int2{1});
+    }
+
+    // Follow whichever side was just edited, from the original ratio rather than the current one so that
+    // repeated edits do not accumulate rounding.
+    if (*locked && original.x > 0 && original.y > 0)
+    {
+        if (size->x != before.x)
+            size->y = std::max(1, int(std::lround(double(size->x) * double(original.y) / double(original.x))));
+        else if (size->y != before.y)
+            size->x = std::max(1, int(std::lround(double(size->y) * double(original.x) / double(original.y))));
+    }
+
+    return changed;
+}
+
+} // namespace
+
 void HDRViewApp::draw_canvas_size_dialog(bool &open)
 {
-    static int2                width_height{0, 0};
-    static Image::CanvasAnchor anchor = Image::Anchor_MiddleCenter;
+    static int2                size{0, 0};
+    static int                 units    = Units_Pixels;
+    static bool                locked   = false;
+    static bool                relative = false;
+    static Image::CanvasAnchor anchor   = Image::Anchor_MiddleCenter;
 
-    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(30.f * HelloImGui::EmSize(), 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Canvas size...", open, ImGui::DialogPosition::Center))
     {
         auto img = current_image();
         if (!img)
         {
-            // Whatever it was about is gone; close rather than draw against nothing.
             ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
             return;
         }
 
-        // Opens showing what the image currently is, so the dialog starts as a no-op rather than with whatever
-        // was typed into it last time against a different image.
-        if (width_height.x <= 0 || width_height.y <= 0)
-            width_height = img->size();
+        const int2 original = img->size();
+        if (size.x <= 0 || size.y <= 0)
+            size = original;
 
-        ImGui::InputInt2("Width, height", &width_height.x);
-        width_height = la::max(width_height, int2{1});
+        ImGui::TextFmt("Current: {} x {} pixels", original.x, original.y);
+        ImGui::Separator();
+
+        size_fields(&size, &units, &locked, original);
+
+        ImGui::Checkbox("Relative", &relative);
+        ImGui::Tooltip("Add the amounts above to the current size instead of replacing it. Negative "
+                       "values trim.");
+
+        const int2 target = relative ? la::max(original + size, int2{1}) : size;
+        if (relative)
+            ImGui::TextFmt("Result: {} x {} pixels", target.x, target.y);
 
         ImGui::SeparatorText("Anchor");
-        // Which edges absorb the difference. Laid out as the 3x3 it means.
+        ImGui::TextUnformatted("Where the existing pixels sit in the new canvas.");
         for (int row = 0; row < 3; ++row)
-        {
             for (int col = 0; col < 3; ++col)
             {
                 const int i = row * 3 + col;
@@ -464,20 +574,19 @@ void HDRViewApp::draw_canvas_size_dialog(bool &open)
                 if (ImGui::RadioButton(fmt::format("##anchor{}", i).c_str(), int(anchor) == i))
                     anchor = Image::CanvasAnchor(i);
             }
-        }
 
         const auto result = ImGui::DialogButtons("Resize");
         if (result == ImGui::DialogResult::Confirm)
         {
-            const int2 size = width_height;
-            const auto a    = anchor;
-            modify_structure(current_image(), "Canvas size", [size, a](Image &i) { i.resize_canvas(size, a); });
-            width_height = int2{0}; // so the next open reads the new size
+            const int2 out = target;
+            const auto a   = anchor;
+            modify_structure(current_image(), "Canvas size", [out, a](Image &i) { i.resize_canvas(out, a); });
+            size = int2{0};
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
         {
-            width_height = int2{0};
+            size = int2{0};
             ImGui::CloseCurrentPopup();
         }
 
@@ -487,52 +596,48 @@ void HDRViewApp::draw_canvas_size_dialog(bool &open)
 
 void HDRViewApp::draw_image_size_dialog(bool &open)
 {
-    static int2 width_height{0, 0};
-    static bool keep_aspect = true;
+    static int2 size{0, 0};
+    static int  units  = Units_Pixels;
+    static bool locked = true;
 
-    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(30.f * HelloImGui::EmSize(), 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Image size...", open, ImGui::DialogPosition::Center))
     {
         auto img = current_image();
         if (!img)
         {
-            // Whatever it was about is gone; close rather than draw against nothing.
             ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
             return;
         }
 
-        const int2 current = img->size();
-        if (width_height.x <= 0 || width_height.y <= 0)
-            width_height = current;
+        const int2 original = img->size();
+        if (size.x <= 0 || size.y <= 0)
+            size = original;
 
-        const int2 before = width_height;
-        ImGui::InputInt2("Width, height", &width_height.x);
-        width_height = la::max(width_height, int2{1});
+        ImGui::TextFmt("Current: {} x {} pixels", original.x, original.y);
+        ImGui::Separator();
 
-        ImGui::Checkbox("Keep aspect ratio", &keep_aspect);
-        if (keep_aspect && current.x > 0 && current.y > 0)
-        {
-            // Follow whichever the user just changed, so typing into either field drives the other.
-            if (width_height.x != before.x)
-                width_height.y = std::max(1, int(std::lround(double(width_height.x) * current.y / current.x)));
-            else if (width_height.y != before.y)
-                width_height.x = std::max(1, int(std::lround(double(width_height.y) * current.x / current.y)));
-        }
+        size_fields(&size, &units, &locked, original);
 
-        ImGui::TextFmt("From {}x{}", current.x, current.y);
+        // Which way the resampling will go, since the two directions do different things: shrinking
+        // averages over the samples each output covers, growing interpolates between them.
+        if (size.x < original.x || size.y < original.y)
+            ImGui::TextUnformatted("Reducing: samples are averaged.");
+        else if (size.x > original.x || size.y > original.y)
+            ImGui::TextUnformatted("Enlarging: samples are interpolated.");
 
         const auto result = ImGui::DialogButtons("Resize");
         if (result == ImGui::DialogResult::Confirm)
         {
-            const int2 size = width_height;
-            modify_structure(current_image(), "Image size", [size](Image &i) { i.resample(size); });
-            width_height = int2{0};
+            const int2 out = size;
+            modify_structure(current_image(), "Image size", [out](Image &i) { i.resample(out); });
+            size = int2{0};
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
         {
-            width_height = int2{0};
+            size = int2{0};
             ImGui::CloseCurrentPopup();
         }
 
