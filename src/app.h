@@ -252,6 +252,20 @@ public:
     */
     bool modify_structure(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op);
 
+    /*!
+        Apply a neighborhood filter to the subject's channels, as one undoable edit.
+
+        \p filter is handed a whole channel and returns its filtered self. It receives the whole channel
+        rather than only the region being written because a filter reads the samples around each one it
+        writes, including those outside a selection -- filtering only what is selected would otherwise pull
+        the border towards whatever the region was padded with.
+
+        Only the subject's rectangle is then taken from the result, so a filtered selection still costs the
+        selection in history and in bandwidth.
+    */
+    bool modify_channels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                         const std::function<Array2Df(const Array2Df &)> &filter);
+
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
 
@@ -262,6 +276,8 @@ public:
     void draw_fill_dialog(bool &open);
     void draw_canvas_size_dialog(bool &open);
     void draw_image_size_dialog(bool &open);
+    void draw_blur_dialog(bool &open);
+    void draw_unsharp_mask_dialog(bool &open);
 
     /// The subject the menu's edits use, shown and changed under Edit > Apply to.
     EditSubject &edit_subject() { return m_edit_subject; }

@@ -757,6 +757,9 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         make_unique<PopupDialog>("Canvas size...", [this](bool &open) { draw_canvas_size_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Image size...", [this](bool &open) { draw_image_size_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Blur...", [this](bool &open) { draw_blur_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Unsharp mask...", [this](bool &open) { draw_unsharp_mask_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Loading session...", [this](bool &open) { draw_loading_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>(
@@ -1642,6 +1645,19 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        auto img = current_image();
                        return can_edit(img) && img->history.has_redo();
                    }});
+
+        add(Action{{"Blur...", "Gaussian blur", "Box blur"},
+                   ICON_MY_BLANK,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Blur...").open = true; },
+                   if_editable});
+        add(Action{{"Unsharp mask...", "Sharpen"},
+                   ICON_MY_BLANK,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Unsharp mask...").open = true; },
+                   if_editable});
 
         add(Action{{"Crop to selection"},
                    ICON_MY_BLANK,

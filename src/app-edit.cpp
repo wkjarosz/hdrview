@@ -5,6 +5,7 @@
 //
 
 #include "app.h"
+#include "edit/filters.h"
 #include "image.h"
 #include "imgui_ext.h"
 
@@ -72,6 +73,43 @@ bool HDRViewApp::modify_image_reversibly(const ImagePtr &img, const string &name
                             // nothing has to be remembered but the two functions.
                             return std::make_unique<LambdaUndo>(name, backward, forward);
                         });
+}
+
+bool HDRViewApp::modify_channels(const ImagePtr &img, const string &name, const EditSubject &subject,
+                                 const function<Array2Df(const Array2Df &)> &filter)
+{
+    if (!can_edit(img))
+        return false;
+
+    auto [channels, bounds] = resolve_subject(img, subject);
+    if (channels.empty() || !bounds.has_volume())
+        return false;
+
+    return modify_image(
+        img, name,
+        [&channels, &bounds, &filter](Image &image)
+        {
+            const int2 offset = bounds.min - image.data_window.min;
+            const int2 extent = bounds.size();
+
+            for (int c : channels)
+            {
+                Channel &channel = image.channels[size_t(c)];
+
+                // Filtered over the whole channel, then only the subject's rectangle kept: a filter reads
+                // the samples around each one it writes, and those outside a selection are real samples
+                // that belong in the result.
+                const Array2Df filtered = filter(channel);
+
+                Array2Df staging{extent};
+                for (int y = 0; y < extent.y; ++y)
+                    for (int x = 0; x < extent.x; ++x) staging(x, y) = filtered(offset.x + x, offset.y + y);
+
+                channel.upload_tile(Box2i{offset, offset + extent}, staging.data());
+            }
+        },
+        [&channels, &bounds, &name](const Image &image) -> UndoPtr
+        { return std::make_unique<ChannelRectUndo>(image, channels, bounds, name); });
 }
 
 bool HDRViewApp::modify_structure(const ImagePtr &img, const string &name, const function<void(Image &)> &op)
@@ -485,6 +523,88 @@ void HDRViewApp::draw_image_size_dialog(bool &open)
         width_height = int2{0};
         ImGui::CloseCurrentPopup();
     }
+
+    ImGui::EndPopup();
+}
+
+void HDRViewApp::draw_blur_dialog(bool &open)
+{
+    static int   kind         = 0; // 0 = Gaussian, 1 = box
+    static float sigma        = 2.f;
+    static float sigma_y      = 2.f;
+    static int   half_width   = 2;
+    static int   half_width_y = 2;
+    static bool  link_axes    = true;
+
+    if (!ImGui::BeginModalDialog("Blur...", open))
+        return;
+
+    ImGui::RadioButton("Gaussian", &kind, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Box", &kind, 1);
+
+    if (kind == 0)
+    {
+        ImGui::SliderFloat("Sigma", &sigma, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        ImGui::Checkbox("Same in both directions", &link_axes);
+        if (!link_axes)
+            ImGui::SliderFloat("Sigma (vertical)", &sigma_y, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+    }
+    else
+    {
+        ImGui::SliderInt("Half width", &half_width, 0, 64);
+        ImGui::Checkbox("Same in both directions", &link_axes);
+        if (!link_axes)
+            ImGui::SliderInt("Half width (vertical)", &half_width_y, 0, 64);
+    }
+
+    draw_edit_subject_selector();
+
+    const auto result = ImGui::DialogButtons("Apply");
+    if (result == ImGui::DialogResult::Confirm)
+    {
+        if (kind == 0)
+        {
+            const float sx = sigma, sy = link_axes ? sigma : sigma_y;
+            modify_channels(current_image(), "Gaussian blur", m_edit_subject,
+                            [sx, sy](const Array2Df &src) { return gaussian_blurred(src, sx, sy); });
+        }
+        else
+        {
+            const int hx = half_width, hy = link_axes ? half_width : half_width_y;
+            modify_channels(current_image(), "Box blur", m_edit_subject,
+                            [hx, hy](const Array2Df &src) { return box_blurred(src, hx, hy); });
+        }
+        ImGui::CloseCurrentPopup();
+    }
+    else if (result == ImGui::DialogResult::Cancel)
+        ImGui::CloseCurrentPopup();
+
+    ImGui::EndPopup();
+}
+
+void HDRViewApp::draw_unsharp_mask_dialog(bool &open)
+{
+    static float sigma = 2.f, amount = 1.f;
+
+    if (!ImGui::BeginModalDialog("Unsharp mask...", open))
+        return;
+
+    ImGui::SliderFloat("Radius", &sigma, 0.1f, 32.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("Amount", &amount, 0.f, 5.f, "%.2f");
+
+    draw_edit_subject_selector();
+
+    const auto result = ImGui::DialogButtons("Apply");
+    if (result == ImGui::DialogResult::Confirm)
+    {
+        const float s = sigma, a = amount;
+        modify_channels(current_image(), "Unsharp mask", m_edit_subject,
+                        [s, a](const Array2Df &src) { return unsharp_masked(src, s, a); });
+        ImGui::CloseCurrentPopup();
+    }
+    else if (result == ImGui::DialogResult::Cancel)
+        ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();
 }
