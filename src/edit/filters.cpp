@@ -55,7 +55,7 @@ std::vector<float> gaussian_taps(float sigma)
     empty tap list along an axis means that axis is left alone.
 */
 Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std::vector<float> &taps_x,
-                            const std::vector<float> &taps_y, FilterProgress progress)
+                            const std::vector<float> &taps_y, AtomicProgress progress)
 {
     const int  rx     = taps_x.empty() ? 0 : int(taps_x.size() / 2);
     const int  ry     = taps_y.empty() ? 0 : int(taps_y.size() / 2);
@@ -68,7 +68,7 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
     const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
 
     // A pass each, so each reports over half of whatever share this filter was given.
-    FilterProgress h_progress{progress, 0.5f};
+    AtomicProgress h_progress{progress, 0.5f};
     h_progress.set_num_steps(rows);
 
     stp::parallel_for(stp::blocked_range<int>(0, rows, block_size),
@@ -97,7 +97,7 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
                       });
 
     Array2Df       out{extent};
-    FilterProgress v_progress{progress, 0.5f};
+    AtomicProgress v_progress{progress, 0.5f};
     v_progress.set_num_steps(extent.y);
 
     stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
@@ -262,7 +262,7 @@ std::vector<int> box_widths_for_sigma(float sigma, int n)
 } // namespace
 
 Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
-                          FilterProgress progress)
+                          AtomicProgress progress)
 {
     return convolve_separable(src, region, sigma_x > 0.f ? gaussian_taps(sigma_x) : std::vector<float>{},
                               sigma_y > 0.f ? gaussian_taps(sigma_y) : std::vector<float>{}, progress);
@@ -278,7 +278,7 @@ namespace
     image at each step so the clamping matches what the same chain over the whole image would do.
 */
 Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<int2> &half_widths,
-                   FilterProgress progress)
+                   AtomicProgress progress)
 {
     const Box2i bounds{int2{0}, src.size()};
     const int   n = int(half_widths.size());
@@ -293,7 +293,7 @@ Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<i
 
     // Every pass costs the same, so they divide the share evenly.
     const float    share = 1.f / float(n);
-    FilterProgress pass_progress{progress, share};
+    AtomicProgress pass_progress{progress, share};
     pass_progress.set_num_steps(1);
 
     Array2Df buffer = box_pass(src, int2{0}, regions[0], half_widths[0].x, half_widths[0].y);
@@ -313,14 +313,14 @@ Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<i
 } // namespace
 
 Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y, int iterations,
-                     FilterProgress progress)
+                     AtomicProgress progress)
 {
     const int2 h = int2{std::max(0, half_width_x), std::max(0, half_width_y)};
     return box_chain(src, region, std::vector<int2>(size_t(std::max(1, iterations)), h), progress);
 }
 
 Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y, int iterations,
-                               FilterProgress progress)
+                               AtomicProgress progress)
 {
     const int n = std::max(1, iterations);
 
@@ -338,7 +338,7 @@ Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float s
     return box_chain(src, region, half_widths, progress);
 }
 
-Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount, FilterProgress progress)
+Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount, AtomicProgress progress)
 {
     // The blur is all of the cost; adding the difference back is one pass over the region.
     const Array2Df blurred = gaussian_blurred(src, region, sigma, sigma, progress);
@@ -360,7 +360,7 @@ Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, f
     return out;
 }
 
-Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, bool disc, FilterProgress progress)
+Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, bool disc, AtomicProgress progress)
 {
     const int2  extent = region.size();
     const int   r      = std::max(0, int(std::ceil(radius)));

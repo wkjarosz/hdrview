@@ -401,3 +401,44 @@ TEST_CASE("EWA beats point sampling on a heavy reduction")
 
     CHECK(ewa_err < point_err);
 }
+
+TEST_CASE("EWA holds up when the footprint is far wider than it is tall")
+{
+    // The case the whole design is for, and the one a mip level alone cannot serve: reducing hard along
+    // one axis and not at all along the other. Choosing the level from the short axis leaves the long one
+    // to the probes, and too few of them shows up here as the stripes surviving instead of averaging.
+    Array2Df src{int2{512, 64}};
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 512; ++x) src(x, y) = (x % 8 < 2) ? 1.f : 0.f;
+    const double true_mean = 0.25;
+
+    // Sixteen source columns per output column, one source row per output row: an aspect of 16 to 1.
+    const Array2Df out =
+        remapped_envmap(src, int2{32, 64}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 16);
+
+    double err = 0.0;
+    for (int i = 0; i < out.num_elements(); ++i) err += std::abs(double(out(i)) - true_mean);
+    err /= double(out.num_elements());
+
+    CHECK(err < 0.05);
+}
+
+TEST_CASE("Too few taps blurs rather than aliases")
+{
+    // When the probes cannot walk the footprint the level has to rise to cover it, so the failure mode of
+    // an inadequate tap budget is a soft result and not a broken one. Worth pinning: the alternative --
+    // keeping the level and sampling too sparsely -- is what aliases.
+    Array2Df src{int2{512, 64}};
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 512; ++x) src(x, y) = (x % 8 < 2) ? 1.f : 0.f;
+
+    const Array2Df few =
+        remapped_envmap(src, int2{32, 64}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 1);
+
+    // Still near the mean rather than swinging between the stripe's extremes.
+    for (int i = 0; i < few.num_elements(); ++i)
+    {
+        CHECK(few(i) > 0.05f);
+        CHECK(few(i) < 0.6f);
+    }
+}

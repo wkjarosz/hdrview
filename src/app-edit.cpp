@@ -749,7 +749,7 @@ void HDRViewApp::draw_blur_dialog(bool &open)
             {
                 const int hx = half_width, hy = link_axes ? half_width : half_width_y, n = iterations;
                 modify_channels_async(current_image(), "Box blur", m_edit_subject,
-                                      [hx, hy, n](const Array2Df &src, const Box2i &r, FilterProgress p)
+                                      [hx, hy, n](const Array2Df &src, const Box2i &r, AtomicProgress p)
                                       { return box_blurred(src, r, hx, hy, n, p); });
             }
             else if (kind == Kind_FastGaussian)
@@ -757,14 +757,14 @@ void HDRViewApp::draw_blur_dialog(bool &open)
                 const float sx = sigma, sy = link_axes ? sigma : sigma_y;
                 const int   n = iterations;
                 modify_channels_async(current_image(), "Gaussian blur", m_edit_subject,
-                                      [sx, sy, n](const Array2Df &src, const Box2i &r, FilterProgress p)
+                                      [sx, sy, n](const Array2Df &src, const Box2i &r, AtomicProgress p)
                                       { return fast_gaussian_blurred(src, r, sx, sy, n, p); });
             }
             else
             {
                 const float sx = sigma, sy = link_axes ? sigma : sigma_y;
                 modify_channels_async(current_image(), "Gaussian blur", m_edit_subject,
-                                      [sx, sy](const Array2Df &src, const Box2i &r, FilterProgress p)
+                                      [sx, sy](const Array2Df &src, const Box2i &r, AtomicProgress p)
                                       { return gaussian_blurred(src, r, sx, sy, p); });
             }
             ImGui::CloseCurrentPopup();
@@ -793,7 +793,7 @@ void HDRViewApp::draw_unsharp_mask_dialog(bool &open)
         {
             const float s = sigma, a = amount;
             modify_channels_async(current_image(), "Unsharp mask", m_edit_subject,
-                                  [s, a](const Array2Df &src, const Box2i &r, FilterProgress p)
+                                  [s, a](const Array2Df &src, const Box2i &r, AtomicProgress p)
                                   { return unsharp_masked(src, r, s, a, p); });
             ImGui::CloseCurrentPopup();
         }
@@ -806,7 +806,7 @@ void HDRViewApp::draw_unsharp_mask_dialog(bool &open)
 
 void HDRViewApp::modify_channels_async(
     const ImagePtr &img, const string &name, const EditSubject &subject,
-    const function<Array2Df(const Array2Df &, const Box2i &, FilterProgress)> &filter)
+    const function<Array2Df(const Array2Df &, const Box2i &, AtomicProgress)> &filter)
 {
     if (!can_edit(img) || m_running_filter)
         return;
@@ -842,7 +842,7 @@ void HDRViewApp::modify_channels_async(
             // -- what a copy got wrong -- Cancel reaches the filter partway through a channel instead of
             // only between channels.
             raw->results[i] =
-                filter(raw->image->channels[size_t(raw->channels[i])], local, FilterProgress{raw->progress, share});
+                filter(raw->image->channels[size_t(raw->channels[i])], local, AtomicProgress{raw->progress, share});
         }
 
         if (!raw->progress.canceled())
@@ -878,7 +878,7 @@ void HDRViewApp::modify_channels_async(
 }
 
 void HDRViewApp::modify_image_async(const ImagePtr &img, const string &name, int2 size,
-                                    const function<Array2Df(const Array2Df &, FilterProgress)> &op)
+                                    const function<Array2Df(const Array2Df &, AtomicProgress)> &op)
 {
     if (!can_edit(img) || m_running_filter || size.x <= 0 || size.y <= 0)
         return;
@@ -902,7 +902,7 @@ void HDRViewApp::modify_image_async(const ImagePtr &img, const string &name, int
     {
         const float share = 1.f / float(raw->channels.size());
         for (size_t i = 0; i < raw->channels.size() && !raw->progress.canceled(); ++i)
-            raw->results[i] = op(raw->image->channels[i], FilterProgress{raw->progress, share});
+            raw->results[i] = op(raw->image->channels[i], AtomicProgress{raw->progress, share});
 
         if (!raw->progress.canceled())
             raw->progress.set_done();
@@ -1039,7 +1039,7 @@ void HDRViewApp::draw_median_dialog(bool &open)
             const float r = radius;
             const bool  d = disc;
             modify_channels_async(current_image(), "Median filter", m_edit_subject,
-                                  [r, d](const Array2Df &src, const Box2i &region, FilterProgress p)
+                                  [r, d](const Array2Df &src, const Box2i &region, AtomicProgress p)
                                   { return median_filtered(src, region, r, d, p); });
             ImGui::CloseCurrentPopup();
         }
@@ -1055,7 +1055,7 @@ void HDRViewApp::draw_remap_dialog(bool &open)
     static int  src_mapping = EnvMapping_LatLong;
     static int  dst_mapping = EnvMapping_Angular;
     static int2 size{0, 0};
-    static int  supersample = 2;
+    static int  supersample = 8;
 
     ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Remap envmap...", open, ImGui::DialogPosition::Center))
@@ -1099,9 +1099,18 @@ void HDRViewApp::draw_remap_dialog(bool &open)
         ImGui::Tooltip("Averages a grid of samples inside each output pixel. Exact when enlarging, but a "
                        "reduction of more than the sample count still aliases.");
 
-        ImGui::BeginDisabled(sampling != EnvMapSampling_Point);
-        ImGui::SliderInt("Samples per axis", &supersample, 1, 8);
-        ImGui::EndDisabled();
+        if (sampling == EnvMapSampling_EWA)
+        {
+            ImGui::SliderInt("Taps", &supersample, 1, 32);
+            ImGui::Tooltip("Probes strung along the long axis of the footprint. The mip level covers the "
+                           "short axis, so this is what keeps the long one sharp -- too few and it aliases, "
+                           "since the level has to rise to cover what the probes cannot walk.");
+        }
+        else
+        {
+            ImGui::SliderInt("Samples per axis", &supersample, 1, 8);
+            ImGui::Tooltip("Averaged within each output pixel, so the cost is its square.");
+        }
 
         const auto result = ImGui::DialogButtons("Remap");
         if (result == ImGui::DialogResult::Confirm)
@@ -1111,7 +1120,7 @@ void HDRViewApp::draw_remap_dialog(bool &open)
             const int  ss       = supersample;
             const auto mode     = EnvMapSampling(sampling);
             modify_image_async(current_image(), "Remap envmap", out_size,
-                               [s, d, out_size, ss, mode](const Array2Df &src, FilterProgress p)
+                               [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
                                { return remapped_envmap(src, out_size, d, s, mode, ss, p); });
             size = int2{0};
             ImGui::CloseCurrentPopup();
@@ -1161,7 +1170,7 @@ void HDRViewApp::draw_irradiance_dialog(bool &open)
             const auto m        = EnvMapping(mapping);
             const int2 out_size = size;
             modify_image_async(current_image(), "Irradiance envmap", out_size,
-                               [m, out_size](const Array2Df &src, FilterProgress p)
+                               [m, out_size](const Array2Df &src, AtomicProgress p)
                                { return irradiance_envmap(src, out_size, m, p); });
             ImGui::CloseCurrentPopup();
         }

@@ -26,7 +26,7 @@
     Filtering in place is never right for these, so each returns a new array: a filter that overwrote its
     input as it went would read samples it had already changed.
 
-    Each takes a FilterProgress by value. Reporting costs a filter three lines -- say how many steps it
+    Each takes a AtomicProgress by value. Reporting costs a filter three lines -- say how many steps it
     has, increment once per step, and check whether it has been asked to stop -- and no branching on
     whether anyone is listening, since a default-constructed one is inert. A filter asked to stop returns
     whatever it had reached, which the caller must discard rather than apply.
@@ -42,7 +42,7 @@
     A sigma of zero along an axis leaves that axis alone.
 */
 Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
-                          FilterProgress progress = {});
+                          AtomicProgress progress = {});
 
 /*!
     Average over a box of the given half-widths, \p iterations times.
@@ -56,7 +56,7 @@ Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_
     of a *stated* width instead, use fast_gaussian_blurred().
 */
 Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y, int iterations = 1,
-                     FilterProgress progress = {});
+                     AtomicProgress progress = {});
 
 /*!
     Approximate a Gaussian blur by repeated box blurs, in time independent of \p sigma_x and \p sigma_y.
@@ -70,7 +70,7 @@ Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x,
     and what Photoshop is generally held to use.
 */
 Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
-                               int iterations = 6, FilterProgress progress = {});
+                               int iterations = 6, AtomicProgress progress = {});
 
 /*!
     Replace each sample with the median of the disc of radius \p radius around it.
@@ -88,7 +88,7 @@ Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float s
     canceled run returns what it had reached, which the caller must discard.
 */
 Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, bool disc = true,
-                         FilterProgress progress = {});
+                         AtomicProgress progress = {});
 
 /*!
     Replace every non-finite sample with the median of its finite neighbours.
@@ -111,4 +111,4 @@ Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replace
     small values sharpen fine texture, large ones raise local contrast.
 */
 Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount,
-                        FilterProgress progress = {});
+                        AtomicProgress progress = {});

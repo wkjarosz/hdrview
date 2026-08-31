@@ -388,7 +388,7 @@ TEST_CASE("A canceled filter stops early and reports that it did")
 
     // Already canceled before it starts, which is the case the caller has to notice: what comes back is a
     // partial answer and must be discarded rather than applied.
-    FilterProgress progress{true};
+    AtomicProgress progress{true};
     progress.cancel();
 
     const Array2Df out = median_filtered(src, whole(src), 4.f, true, progress);
@@ -402,7 +402,7 @@ TEST_CASE("An uncancelled filter reports its way to complete")
     Array2Df src{int2{16, 16}};
     for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i % 5);
 
-    FilterProgress progress{true};
+    AtomicProgress progress{true};
     median_filtered(src, whole(src), 2.f, true, progress);
 
     CHECK_FALSE(progress.canceled());

@@ -102,7 +102,7 @@ enum EnvMapSampling : int
 
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
                          EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2,
-                         FilterProgress progress = {});
+                         AtomicProgress progress = {});
 
 /*!
     Convolve \p src, a \p mapping of incident radiance, with a clamped cosine.
@@ -114,4 +114,4 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
     resolutions and is by far the slowest thing here. The output is usually tiny for that reason: the
     result is so smooth that a few dozen samples across describe it.
 */
-Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, FilterProgress progress = {});
+Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, AtomicProgress progress = {});

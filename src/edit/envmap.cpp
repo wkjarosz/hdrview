@@ -430,83 +430,76 @@ std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
 }
 
 /*!
-    Sample \p levels at \p uv through an ellipse with the given axes, in image coordinates.
+    Sample \p levels at \p uv through the ellipse \p du by \p dv, using at most \p taps of them.
 
-    Elliptical weighted averaging, after Heckbert: the destination pixel's footprint in the source is an
-    ellipse, and every source sample inside it contributes a Gaussian weight in the ellipse's own space.
-    A mip level is chosen from the *minor* axis so the filter never has to gather more than a few samples
-    along the narrow direction, and the ellipse then does the work along the major one -- which is what
-    keeps a lat-long's pole, stretched hundreds of times more across than down, from either aliasing or
-    turning to mush.
+    Elliptical weighted averaging, in the form a GPU does it: rather than gathering every texel the
+    ellipse encloses, take a row of probes strung along its *major* axis and let the mip level cover the
+    *minor* one. The level is chosen so a texel spans about the minor axis, so each probe already averages
+    across the narrow direction, and the probes then walk the long direction where the footprint actually
+    extends.
+
+    That split is the whole trick, and both halves are needed. Choosing the level from the minor axis alone
+    without walking the major axis leaves the long direction under-sampled, which aliases; choosing it from
+    the major axis instead blurs the short direction away. \p taps is what the eccentricity can be before
+    the level has to rise to meet it -- more taps means a sharper result along the narrow direction and
+    proportionally more work.
 */
-float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv)
+float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv, int taps)
 {
-    // Ellipse axes in samples at level 0, from the two derivatives.
     const float2 base{float(levels[0].width()), float(levels[0].height())};
-    const float2 a = du * base, b = dv * base;
 
-    const float len_a = la::length(a), len_b = la::length(b);
-    const float major = std::max(len_a, len_b), minor = std::min(len_a, len_b);
+    // The two axes as half-extents in level-0 texels: du and dv span a whole destination pixel, and the
+    // ellipse is centered on it.
+    const float2 a = 0.5f * du * base, b = 0.5f * dv * base;
 
-    // A level where the minor axis spans about one sample, so the gather stays small. The ellipse is
-    // clamped to a sane eccentricity first: an unbounded one costs unbounded samples along the major axis.
-    constexpr float k_max_aniso = 16.f;
-    const float     wanted      = std::max(minor, major / k_max_aniso);
-    const int       level = std::clamp(int(std::floor(std::log2(std::max(1e-6f, wanted)))), 0, int(levels.size()) - 1);
+    const float  len_a = la::length(a), len_b = la::length(b);
+    const float2 major_vec = len_a >= len_b ? a : b;
+    const float  major     = std::max(len_a, len_b);
+    const float  minor     = std::max(std::min(len_a, len_b), 1e-6f);
 
+    const int max_taps = std::max(1, taps);
+
+    // How eccentric the footprint is, limited by what the tap budget can walk. Beyond that the level has
+    // to rise, which widens the minor axis -- blurring, but only once the alternative is aliasing.
+    const float aniso   = std::clamp(major / minor, 1.f, float(max_taps));
+    const float lod_len = std::max(minor, major / aniso);
+
+    const int       level = std::clamp(int(std::floor(std::log2(std::max(1e-6f, lod_len)))), 0, int(levels.size()) - 1);
     const Array2Df &lvl   = levels[size_t(level)];
-    const float     scale = 1.f / float(1 << level);
 
-    // The ellipse in this level's coordinates.
-    const float2 ea = a * scale, eb = b * scale;
-    const float2 center{uv.x * float(lvl.width()) - 0.5f, uv.y * float(lvl.height()) - 0.5f};
+    const int n = std::clamp(int(std::ceil(aniso)), 1, max_taps);
+    if (n <= 1)
+        return sample_bilinear(lvl, uv);
 
-    // Implicit form: A x^2 + B x y + C y^2 = F, from the two axis vectors.
-    float A = ea.y * ea.y + eb.y * eb.y;
-    float B = -2.f * (ea.x * ea.y + eb.x * eb.y);
-    float C = ea.x * ea.x + eb.x * eb.x;
-    float F = A * C - 0.25f * B * B;
-    if (!(F > 1e-12f))
-        return sample_bilinear(levels[size_t(level)], uv); // degenerate; nothing to integrate over
-
-    // Normalize so the ellipse's boundary is at 1, then take the box that bounds it.
-    const float inv_f = 1.f / F;
-    A *= inv_f;
-    B *= inv_f;
-    C *= inv_f;
-
-    const float det     = std::max(1e-12f, 4.f * A * C - B * B);
-    const float bound_x = 2.f * std::sqrt(std::max(0.f, C) / det);
-    const float bound_y = 2.f * std::sqrt(std::max(0.f, A) / det);
-
-    const int x0 = int(std::floor(center.x - bound_x)), x1 = int(std::ceil(center.x + bound_x));
-    const int y0 = int(std::floor(center.y - bound_y)), y1 = int(std::ceil(center.y + bound_y));
+    // The probes are spread along the major axis, in image coordinates so the level's own resolution does
+    // not enter into it.
+    const float2 step = (major_vec / base) / float(n);
 
     float sum = 0.f, total = 0.f;
-    for (int y = y0; y <= y1; ++y)
-        for (int x = x0; x <= x1; ++x)
-        {
-            const float dx = float(x) - center.x, dy = float(y) - center.y;
-            const float q = A * dx * dx + B * dx * dy + C * dy * dy;
-            if (q >= 1.f)
-                continue; // outside the ellipse
+    for (int i = 0; i < n; ++i)
+    {
+        // Centered on the pixel: offsets run from just inside one end of the axis to the other.
+        const float t = (float(i) + 0.5f) / float(n) * 2.f - 1.f;
 
-            // Gaussian falling to about 1/e^2 at the boundary, which is the usual EWA choice.
-            const float w = std::exp(-2.f * q);
-            sum += w * lvl(std::clamp(x, 0, lvl.width() - 1), std::clamp(y, 0, lvl.height() - 1));
-            total += w;
-        }
+        // Gaussian along the axis, down to about 1/e^2 at its ends, which is the usual EWA weighting.
+        const float w = std::exp(-2.f * t * t);
 
-    // A footprint smaller than a sample can enclose none of them.
+        sum += w * sample_bilinear(lvl, uv + t * float(n) * step);
+        total += w;
+    }
+
     return total > 0.f ? sum / total : sample_bilinear(lvl, uv);
 }
 
 } // namespace
 
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         EnvMapSampling sampling, int supersample, FilterProgress progress)
+                         EnvMapSampling sampling, int supersample, AtomicProgress progress)
 {
-    Array2Df    out{size};
+    Array2Df out{size};
+
+    // The same control means different things to the two samplers: probes along the ellipse's major axis
+    // for EWA, samples per axis within the pixel for point sampling.
     const int   ss  = std::max(1, supersample);
     const float inv = 1.f / float(ss * ss);
 
@@ -559,7 +552,7 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                             return d;
                         };
 
-                        out(x, y) = sample_ewa(levels, c, shortest(rx - c), shortest(ry - c));
+                        out(x, y) = sample_ewa(levels, c, shortest(rx - c), shortest(ry - c), ss);
                         continue;
                     }
 
@@ -581,7 +574,7 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
     return out;
 }
 
-Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, FilterProgress progress)
+Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, AtomicProgress progress)
 {
     // Ramamoorthi and Hanrahan: the cosine kernel falls off fast enough in frequency that nine spherical
     // harmonic coefficients reproduce the irradiance to about a percent. Projecting onto them and then

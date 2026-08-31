@@ -289,10 +289,10 @@ public:
         results swapped in together, back on the main thread, as one undoable step.
     */
     void modify_image_async(const ImagePtr &img, const std::string &name, int2 size,
-                            const std::function<Array2Df(const Array2Df &, FilterProgress)> &op);
+                            const std::function<Array2Df(const Array2Df &, AtomicProgress)> &op);
 
     void modify_channels_async(const ImagePtr &img, const std::string &name, const EditSubject &subject,
-                               const std::function<Array2Df(const Array2Df &, const Box2i &, FilterProgress)> &filter);
+                               const std::function<Array2Df(const Array2Df &, const Box2i &, AtomicProgress)> &filter);
 
     //! Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
     void draw_filter_progress_dialog(bool &open);
@@ -692,7 +692,7 @@ private:
         std::vector<int>      channels;
         Box2i                 bounds;
         std::vector<Array2Df> results;
-        FilterProgress        progress{true};
+        AtomicProgress        progress{true};
         std::atomic<bool>     done{false};
     };
     //! Set when the running work replaces the image rather than a rectangle of it; see
