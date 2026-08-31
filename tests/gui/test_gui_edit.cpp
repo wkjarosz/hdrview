@@ -316,7 +316,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // A box well inside the image, in image coordinates -- the same space the data window uses.
         const Box2i roi{img->data_window.min + int2{2, 2}, img->data_window.min + int2{6, 5}};
-        hdrview()->roi() = roi;
+        hdrview()->set_selection(roi);
 
         EditSubject subject;
         subject.selection_only = true;
@@ -341,7 +341,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(snapshot(img) == before);
 
-        hdrview()->roi() = Box2i{};
+        hdrview()->set_selection(Box2i{});
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "the scope choice is only offered when it would change anything");
@@ -433,7 +433,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto original = snapshot(img);
 
         const Box2i roi{img->data_window.min + int2{1, 1}, img->data_window.min + int2{5, 4}};
-        hdrview()->roi() = roi;
+        hdrview()->set_selection(roi);
         ctx->Yield();
 
         menu_click(ctx, "Edit/Crop to selection");
@@ -444,6 +444,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         for (const auto &c : img->channels) IM_CHECK(c.size() == img->size());
         // What was selected is the whole image now, so the selection has nothing left to say.
         IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+        IM_CHECK_EQ(hdrview()->roi_live().has_volume(), false);
 
         // A structural entry has to put back the samples, both windows, and the layer tree built from them.
         menu_click(ctx, "Edit/Undo");
@@ -460,21 +461,21 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto &crop = hdrview()->action("Crop to selection");
 
         // No selection at all.
-        hdrview()->roi() = Box2i{};
+        hdrview()->set_selection(Box2i{});
         ctx->Yield();
         IM_CHECK_EQ(crop.enabled(), false);
 
         // A selection covering the whole image would crop it to itself.
-        auto img         = hdrview()->current_image();
-        hdrview()->roi() = img->data_window;
+        auto img = hdrview()->current_image();
+        hdrview()->set_selection(img->data_window);
         ctx->Yield();
         IM_CHECK_EQ(crop.enabled(), false);
 
-        hdrview()->roi() = Box2i{img->data_window.min, img->data_window.min + int2{2, 2}};
+        hdrview()->set_selection(Box2i{img->data_window.min, img->data_window.min + int2{2, 2}});
         ctx->Yield();
         IM_CHECK_EQ(crop.enabled(), true);
 
-        hdrview()->roi() = Box2i{};
+        hdrview()->set_selection(Box2i{});
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "a structural edit refits the view and rebuilds the tree");
@@ -511,7 +512,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // Straight from the menu, with nothing configured: having drawn a selection, this is what the
         // next edit is expected to do.
         const Box2i roi{img->data_window.min + int2{2, 2}, img->data_window.min + int2{6, 5}};
-        hdrview()->roi() = roi;
+        hdrview()->set_selection(roi);
         ctx->Yield();
 
         const auto before = snapshot(img);
@@ -536,7 +537,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         }
         IM_CHECK(any_changed);
 
-        hdrview()->roi() = Box2i{};
+        hdrview()->set_selection(Box2i{});
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "with no selection, an edit covers the whole image");
@@ -607,10 +608,14 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         menu_click(ctx, "Edit/Select all");
         IM_CHECK(hdrview()->roi() == img->data_window);
+        IM_CHECK(hdrview()->roi_live() == img->data_window);
         IM_CHECK_EQ(hdrview()->action("Deselect").enabled(), true);
 
         menu_click(ctx, "Edit/Deselect");
         IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+        // The viewport draws the marquee from roi_live(), so clearing only roi() left the rectangle on
+        // screen with nothing behind it.
+        IM_CHECK_EQ(hdrview()->roi_live().has_volume(), false);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "each blur mode is reachable and brings its own controls");
@@ -753,6 +758,38 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(img->size() == original);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "the deselect shortcut clears the selection");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+        hdrview()->set_selection(img->data_window);
+        ctx->Yield(2);
+        IM_CHECK_EQ(hdrview()->roi().has_volume(), true);
+
+        // Through the keyboard rather than the menu: the action itself is covered above, so a failure here
+        // is in how chords are dispatched.
+        ctx->KeyPress(ImGuiMod_Ctrl | ImGuiKey_D);
+        ctx->Yield(2);
+
+        IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+        IM_CHECK_EQ(hdrview()->roi_live().has_volume(), false);
+
+        // And again once keyboard navigation is showing, which is the state the command palette and the
+        // dialogs leave behind -- shortcuts used to stop working entirely from here on.
+        hdrview()->set_selection(img->data_window);
+        ImGui::GetIO().NavVisible = true;
+        ctx->Yield(2);
+
+        ctx->KeyPress(ImGuiMod_Ctrl | ImGuiKey_D);
+        ctx->Yield(2);
+
+        IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+        IM_CHECK_EQ(hdrview()->roi_live().has_volume(), false);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");

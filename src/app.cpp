@@ -1693,7 +1693,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        const Box2i box = m_roi;
                        modify_structure(current_image(), "Crop to selection", [box](Image &i) { i.crop(box); });
                        // What was selected is now the whole image, so the selection has nothing left to say.
-                       m_roi = Box2i{};
+                       set_selection(Box2i{});
                    },
                    [this]()
                    {
@@ -1740,14 +1740,14 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    [this]()
                    {
                        if (auto img = current_image())
-                           m_roi = img->data_window;
+                           set_selection(img->data_window);
                    },
                    if_img});
         add(Action{{"Deselect", "Clear the selection"},
                    ICON_MY_DESELECT,
                    ImGuiMod_Ctrl | ImGuiKey_D,
                    0,
-                   [this]() { m_roi = Box2i{}; },
+                   [this]() { set_selection(Box2i{}); },
                    [this]() { return m_roi.has_volume(); }});
 
         add(Action{{"Invert", "Negative"},

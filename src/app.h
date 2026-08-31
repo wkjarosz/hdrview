@@ -529,8 +529,16 @@ public:
     float     &histogram_height() { return m_histogram_height; }
     Box2i     &roi_live() { return m_roi_live; }
     Box2i     &roi() { return m_roi; }
-    bool2     &clip_warnings() { return m_clip_warnings; }
-    float2    &clip_range() { return m_clip_range; }
+
+    //! Set the selection, both the committed rectangle and the one drawn over the viewport.
+    /*!
+        The two exist apart only so that a drag can update what is drawn on every frame and commit once on
+        release. Everywhere else they move together: a selection that has been cleared but is still drawn,
+        or drawn but not acted on, is a bug rather than a state worth having.
+    */
+    void    set_selection(const Box2i &box) { m_roi = m_roi_live = box; }
+    bool2  &clip_warnings() { return m_clip_warnings; }
+    float2 &clip_range() { return m_clip_range; }
 
     /// Height of the Pixel statistics histogram plot, in em, when it has never been resized
     static constexpr float default_histogram_height = 9.f;
