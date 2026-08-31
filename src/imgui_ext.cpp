@@ -957,9 +957,9 @@ void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const string &subs
 //     return value_changed;
 // }
 
-void MenuItem(const Action &a, bool include_name)
+//! Shared by both MenuItem() overloads; `name` is what the item is labelled and tooltipped with.
+static void menu_item(const Action &a, const std::string &name, bool include_name)
 {
-    const auto &name = a.names[0];
     if (a.needs_menu)
     {
         if (ImGui::BeginMenuEx(name.c_str(), a.icon.c_str(), a.enabled()))
@@ -984,6 +984,10 @@ void MenuItem(const Action &a, bool include_name)
                                .c_str());
     }
 }
+
+void MenuItem(const Action &a, bool include_name) { menu_item(a, a.names[0], include_name); }
+
+void MenuItem(const Action &a, const std::string &label) { menu_item(a, label, true); }
 
 void IconButton(const Action &a, bool include_name)
 {

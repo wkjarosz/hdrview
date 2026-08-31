@@ -1614,7 +1614,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         const auto if_editable = [this]() { return can_edit(current_image()); };
 
         add(Action{{"Undo"},
-                   ICON_MY_BLANK,
+                   ICON_MY_UNDO,
                    ImGuiMod_Ctrl | ImGuiKey_Z,
                    ImGuiInputFlags_Repeat,
                    [this]() { undo(); },
@@ -1624,7 +1624,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        return can_edit(img) && img->history.has_undo();
                    }});
         add(Action{{"Redo"},
-                   ICON_MY_BLANK,
+                   ICON_MY_REDO,
                    ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z,
                    ImGuiInputFlags_Repeat,
                    [this]() { redo(); },
@@ -1658,7 +1658,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    },
                    if_editable});
         add(Action{{"Rotate 90 degrees clockwise", "Turn clockwise"},
-                   ICON_MY_BLANK,
+                   ICON_MY_ROTATE_CW,
                    ImGuiMod_Ctrl | ImGuiKey_RightBracket,
                    0,
                    [this]()
@@ -1669,7 +1669,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    },
                    if_editable});
         add(Action{{"Rotate 90 degrees counter-clockwise", "Turn counter-clockwise"},
-                   ICON_MY_BLANK,
+                   ICON_MY_ROTATE_CCW,
                    ImGuiMod_Ctrl | ImGuiKey_LeftBracket,
                    0,
                    [this]()

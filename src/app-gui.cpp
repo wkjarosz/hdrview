@@ -410,8 +410,21 @@ void HDRViewApp::draw_menus()
 
     if (ImGui::BeginMenu("Edit"))
     {
-        MenuItem(action("Undo"));
-        MenuItem(action("Redo"));
+        // Naming the edit each would reverse or reapply saves the user remembering what they last did.
+        // The Action keeps its own name, which is what the registry and the command palette key on.
+        auto       img      = current_image();
+        const bool editable = can_edit(img);
+
+        // "###Undo" fixes the item's ImGui id to the part after it, so the visible half can name the edit
+        // without the id moving with it. An id derived from the whole label would change on every edit,
+        // which loses the item's hover and keyboard-navigation state -- and leaves nothing able to address
+        // it by a stable path.
+        MenuItem(action("Undo"), editable && img->history.has_undo()
+                                     ? fmt::format("Undo {}###Undo", img->history.undo_name())
+                                     : string{"Undo###Undo"});
+        MenuItem(action("Redo"), editable && img->history.has_redo()
+                                     ? fmt::format("Redo {}###Redo", img->history.redo_name())
+                                     : string{"Redo###Redo"});
 
         ImGui::Separator();
 

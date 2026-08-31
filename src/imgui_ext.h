@@ -106,6 +106,13 @@ struct Action
 };
 
 void MenuItem(const Action &a, bool inlude_name = true);
+//! MenuItem() with the label spelled out rather than taken from the action's name.
+/*!
+    For an item whose text depends on something the action does not carry -- "Undo Rotate 90 degrees
+    clockwise" -- where the action's own name has to stay put, since it is the key both the action registry
+    and the command palette address it by.
+*/
+void MenuItem(const Action &a, const std::string &label);
 void IconButton(const Action &a, bool include_name = false);
 void Checkbox(const Action &a);
 

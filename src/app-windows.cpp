@@ -122,12 +122,13 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
             spdlog::warn("Ignoring HDRVIEW_SCREENSHOT_SCALE='{}'; expected a positive number.", scale);
     }
 
-    m_params.useImGuiTestEngine      = true;
-    m_params.callbacks.RegisterTests = [
+    m_params.useImGuiTestEngine = true;
+    m_params.callbacks.RegisterTests =
+        [
 #if defined(HELLOIMGUI_HAS_OPENGL)
-        this, // the screen-capture override below is the only thing that needs the app pointer
+            this, // the screen-capture override below is the only thing that needs the app pointer
 #endif
-        register_tests]()
+            register_tests]()
     {
         ImGuiTestEngine   *engine = GetImGuiTestEngine();
         ImGuiTestEngineIO &io     = ImGuiTestEngine_GetIO(engine);
@@ -955,6 +956,11 @@ void HDRViewApp::draw_file_window()
                 string layer_path = Channel::head(channel.name);
                 string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
                                   (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
+
+                // Marks edits that exist only in memory -- the same ones the close prompt asks about.
+                // Appended rather than prefixed because the name below is truncated from the front.
+                if (img->history.is_modified())
+                    filename += " *";
 
                 // Drawn with an empty label -- SpanAllColumns still makes this the row's click target -- so
                 // the icon and front-truncated filename below can be laid out and drawn by hand afterward.

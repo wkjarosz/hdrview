@@ -204,6 +204,29 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(redo.enabled(), true);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "the image list marks an edited image");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        // The row's label is built from the image, so what it says is what the panel draws. Reading the
+        // rendered text back would test ImGui's truncation rather than whether the mark is applied.
+        auto img = hdrview()->current_image();
+        IM_CHECK_EQ(img->history.is_modified(), false);
+
+        menu_click(ctx, "Edit/Flip image horizontally");
+        ctx->Yield(2);
+        IM_CHECK_EQ(img->history.is_modified(), true);
+
+        // The Images panel has to have drawn at least once in the edited state without tripping over it.
+        ctx->SetRef("");
+        IM_CHECK(ctx->WindowInfo("//Images").Window != nullptr);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK_EQ(img->history.is_modified(), false);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
