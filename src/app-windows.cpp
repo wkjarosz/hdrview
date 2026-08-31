@@ -432,6 +432,95 @@ void HDRViewApp::draw_developer_windows()
     }
 }
 
+void HDRViewApp::draw_history_window()
+{
+    auto img = current_image();
+    if (!img)
+    {
+        ImGui::TextDisabled("No image loaded.");
+        return;
+    }
+
+    auto &history = img->history;
+
+    ImGui::IconButton(action("Undo"));
+    ImGui::SameLine();
+    ImGui::IconButton(action("Redo"));
+    ImGui::SameLine();
+
+    // The total is only worth saying once there is one: most of these steps are a pair of lambdas and
+    // hold nothing at all.
+    if (const size_t held = history.memory_usage(); held > 0)
+        ImGui::TextDisabled("%d step%s, %s", history.size(), history.size() == 1 ? "" : "s",
+                            fmt::format("{:.1H}", human_readible{held}).c_str());
+    else
+        ImGui::TextDisabled("%d step%s", history.size(), history.size() == 1 ? "" : "s");
+
+    ImGui::Separator();
+
+    // The state to move to once the list has been drawn: stepping through the history mid-list would
+    // renumber the rows still to be drawn.
+    int target = -1;
+
+    if (ImGui::BeginChild("##History list", ImVec2(0, 0), ImGuiChildFlags_None))
+    {
+        // One row per *state*, not per entry: state 0 is the image as it was opened, and state k is the
+        // image after entries 0 through k-1. That is also how the cursor is numbered, so the highlighted
+        // row is m_current_state directly.
+        for (int state = 0; state <= history.size(); ++state)
+        {
+            ImGui::PushID(state);
+
+            const bool current = state == history.current_state();
+            const bool undone  = state > history.current_state();
+
+            // Everything past the cursor is what redo would reapply, and is not what the image currently
+            // holds -- faded rather than hidden, since it is still reachable.
+            if (undone)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+
+            const string name = state == 0 ? "Opened" : history.entry_name(state - 1);
+            const string icon = state == 0 ? ICON_MY_OPEN_IMAGE : ICON_MY_HISTORY;
+
+            if (ImGui::Selectable(fmt::format("{} {}", icon, name).c_str(), current, ImGuiSelectableFlags_AllowOverlap))
+                target = state;
+
+            // Which state the file on disk holds, so it is clear how far back a save can be undone to.
+            if (state == history.saved_state())
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled(ICON_MY_SAVE_AS);
+                ImGui::Tooltip("This is the state the image was last saved in.");
+            }
+
+            // What this step costs to be able to go back past, right-aligned so the names stay readable.
+            // Blank rather than "0 B" for a step that stores no pixels: a flip is undone by flipping back,
+            // and saying it holds nothing on every such row is noise.
+            if (const size_t held = state > 0 ? history.entry_memory_usage(state - 1) : 0; held > 0)
+            {
+                const string text = fmt::format("{:.1H}", human_readible{held});
+                const float  w    = ImGui::CalcTextSize(text.c_str()).x;
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x - w - ImGui::GetStyle().ItemSpacing.x);
+                ImGui::TextDisabled("%s", text.c_str());
+            }
+
+            if (undone)
+                ImGui::PopStyleColor();
+
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+
+    // Clicking a row walks there one entry at a time, which is the only way to get from one state to
+    // another: each entry knows how to reverse the one edit it describes and nothing knows how to skip.
+    if (target >= 0)
+    {
+        while (history.current_state() > target && undo()) {}
+        while (history.current_state() < target && redo()) {}
+    }
+}
+
 void HDRViewApp::draw_statistics_window()
 {
     if (!current_image())

@@ -234,6 +234,10 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
     colorspace_window.imGuiWindowFlags =
         ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar;
 
+    // Hidden by default, like the log: an image with no history has nothing to show, and the Edit menu
+    // already names what undo and redo would do.
+    DockableWindow history_window{"History", "RightSpace", [this] { draw_history_window(); }, false};
+
     DockableWindow log_window{
         "Log", "LogSpace",
         [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
@@ -262,6 +266,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                               file_window,
                                               info_window,
                                               colorspace_window,
+                                              history_window,
                                               log_window
 #if !defined(__EMSCRIPTEN__)
                                               ,
@@ -278,6 +283,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                                    {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
                                                    {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                                    {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
+                                                   {ImGuiKey_F9, ICON_MY_HISTORY},
                                                    {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
 #if !defined(__EMSCRIPTEN__)
                                                    ,

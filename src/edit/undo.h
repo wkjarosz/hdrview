@@ -233,6 +233,15 @@ public:
     /// Name of the entry "Redo" would apply, or "" if there is none.
     std::string redo_name() const { return has_redo() ? m_entries[size_t(m_current_state)]->name() : ""; }
 
+    //
+    // What the History panel reads. The cursor is between entries, so a state is an index into [0, size()]
+    // while an entry is an index into [0, size()) -- state k is the image after entries 0 through k-1.
+    //
+    int         current_state() const { return m_current_state; }
+    int         saved_state() const { return m_saved_state; }
+    std::string entry_name(int i) const { return m_entries[size_t(i)]->name(); }
+    size_t      entry_memory_usage(int i) const { return m_entries[size_t(i)]->memory_usage(); }
+
     /// Record \p entry as the newest change, discarding anything that had been undone.
     void add(UndoPtr entry);
 

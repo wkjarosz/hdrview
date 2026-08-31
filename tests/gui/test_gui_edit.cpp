@@ -13,6 +13,7 @@
 #include "app.h"
 #include "colorspace.h"
 #include "edit/filters.h"
+#include "fonts.h"
 #include "image.h"
 #include "test_gui_registry.h"
 #include "test_gui_support.h"
@@ -1010,6 +1011,55 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         for (int i = 0; i < img->channels[zi].num_elements(); ++i) IM_CHECK_EQ(img->channels[zi](i), before[i]);
 
         reset_images(ctx);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "the history panel lists every state and moves between them");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const auto original = snapshot(img);
+
+        menu_click(ctx, "Edit/Flip image horizontally");
+        const auto flipped = snapshot(img);
+        menu_click(ctx, "Edit/Rotate 90 degrees clockwise");
+        const auto rotated = snapshot(img);
+
+        // Starts hidden, like the log, so the window has to be asked for before it can be read.
+        ctx->SetRef("");
+        if (ctx->WindowInfo("History", ImGuiTestOpFlags_NoError).Window == nullptr)
+        {
+            *hdrview()->action("Show History window").p_selected = true;
+            ctx->Yield(2);
+        }
+        IM_CHECK(ctx->WindowInfo("History").Window != nullptr);
+
+        // A row per state rather than per entry: the image as opened, plus one for each edit.
+        IM_CHECK_EQ(img->history.size(), 2);
+        IM_CHECK_EQ(img->history.current_state(), 2);
+
+        // Clicking the first row walks all the way back, which is what the panel is for -- the Edit menu
+        // only ever moves one step.
+        ctx->SetRef("History");
+        ctx->ItemClick("**/" ICON_MY_OPEN_IMAGE " Opened");
+        ctx->Yield(2);
+
+        IM_CHECK_EQ(img->history.current_state(), 0);
+        IM_CHECK(snapshot(img) == original);
+
+        // And forward again, to a state in the middle, which is the direction a naive implementation gets
+        // wrong: the entries ahead of the cursor are still there and are what redo reapplies.
+        ctx->ItemClick("**/" ICON_MY_HISTORY " Flip image horizontally");
+        ctx->Yield(2);
+
+        IM_CHECK_EQ(img->history.current_state(), 1);
+        IM_CHECK(snapshot(img) == flipped);
+
+        ctx->ItemClick("**/" ICON_MY_HISTORY " Rotate 90 degrees clockwise");
+        ctx->Yield(2);
+        IM_CHECK(snapshot(img) == rotated);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
