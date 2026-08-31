@@ -492,3 +492,36 @@ TEST_CASE("A mapping's aspect matches the area its image actually covers")
             CHECK(fraction == doctest::Approx(1.0));
     }
 }
+
+TEST_CASE("The mip level is doing something, and the bias moves it")
+{
+    // Proof that the pyramid is reached at all, which the quality tests cannot give: they only show that
+    // the result is close to the mean, and a sharp enough filter over the top level would be too.
+    Array2Df src{int2{256, 256}};
+    for (int y = 0; y < 256; ++y)
+        for (int x = 0; x < 256; ++x) src(x, y) = (x % 16 < 4) ? 1.f : 0.f;
+
+    auto remap = [&](float bias)
+    { return remapped_envmap(src, int2{32, 32}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 8, bias); };
+
+    // Spread of the output, as a stand-in for how much detail survives.
+    auto spread = [](const Array2Df &a)
+    {
+        float lo = a(0), hi = a(0);
+        for (int i = 1; i < a.num_elements(); ++i)
+        {
+            lo = std::min(lo, a(i));
+            hi = std::max(hi, a(i));
+        }
+        return hi - lo;
+    };
+
+    const float sharp   = spread(remap(-4.f));
+    const float neutral = spread(remap(0.f));
+    const float soft    = spread(remap(+4.f));
+
+    // Biasing down reaches levels that still hold the stripes; biasing up reaches ones that do not. If the
+    // level were ignored, all three would be identical.
+    CHECK(sharp > neutral);
+    CHECK(soft <= neutral);
+}

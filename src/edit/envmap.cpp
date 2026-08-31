@@ -455,7 +455,7 @@ std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
     the level has to rise to meet it -- more taps means a sharper result along the narrow direction and
     proportionally more work.
 */
-float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv, int taps)
+float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv, int taps, float mip_bias)
 {
     const float2 base{float(levels[0].width()), float(levels[0].height())};
 
@@ -481,7 +481,8 @@ float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, floa
     // Kept continuous and blended across the two levels either side rather than snapped to one. A snapped
     // level is up to a factor of two too sharp, which aliases in bands wherever the scale crosses a power
     // of two.
-    const float lod   = std::log2(std::max(1e-6f, lod_len));
+    // Biased purely so the level's effect can be seen; zero is what the footprint asks for.
+    const float lod   = std::log2(std::max(1e-6f, lod_len)) + mip_bias;
     const int   lo    = std::clamp(int(std::floor(lod)), 0, int(levels.size()) - 1);
     const int   hi    = std::min(lo + 1, int(levels.size()) - 1);
     const float blend = std::clamp(lod - float(lo), 0.f, 1.f);
@@ -519,7 +520,7 @@ float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, floa
 } // namespace
 
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         EnvMapSampling sampling, int supersample, AtomicProgress progress)
+                         EnvMapSampling sampling, int supersample, float mip_bias, AtomicProgress progress)
 {
     Array2Df out{size};
 
@@ -577,7 +578,7 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                             return d;
                         };
 
-                        out(x, y) = sample_ewa(levels, c, shortest(rx - c), shortest(ry - c), ss);
+                        out(x, y) = sample_ewa(levels, c, shortest(rx - c), shortest(ry - c), ss, mip_bias);
                         continue;
                     }
 

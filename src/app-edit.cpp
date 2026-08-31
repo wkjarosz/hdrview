@@ -1052,10 +1052,11 @@ void HDRViewApp::draw_median_dialog(bool &open)
 
 void HDRViewApp::draw_remap_dialog(bool &open)
 {
-    static int  src_mapping = EnvMapping_LatLong;
-    static int  dst_mapping = EnvMapping_Angular;
-    static int2 size{0, 0};
-    static int  supersample = 8;
+    static int   src_mapping = EnvMapping_LatLong;
+    static int   dst_mapping = EnvMapping_Angular;
+    static int2  size{0, 0};
+    static int   supersample = 8;
+    static float mip_bias    = 0.f;
 
     ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Remap envmap...", open, ImGui::DialogPosition::Center))
@@ -1130,6 +1131,12 @@ void HDRViewApp::draw_remap_dialog(bool &open)
             ImGui::Tooltip("Probes strung along the long axis of the footprint. The mip level covers the "
                            "short axis, so this is what keeps the long one sharp -- too few and it aliases, "
                            "since the level has to rise to cover what the probes cannot walk.");
+
+            ImGui::SliderFloat("Mip bias", &mip_bias, -4.f, 4.f, "%+.2f");
+            ImGui::Tooltip("Shifts the mip level away from the one the footprint asks for, in levels. "
+                           "Negative sharpens until it aliases, positive blurs. Mostly a way to see "
+                           "whether the level is doing anything at all: at -4 the result should be "
+                           "visibly aliased and at +4 visibly soft.");
         }
         else
         {
@@ -1140,13 +1147,14 @@ void HDRViewApp::draw_remap_dialog(bool &open)
         const auto result = ImGui::DialogButtons("Remap");
         if (result == ImGui::DialogResult::Confirm)
         {
-            const auto s = EnvMapping(src_mapping), d = EnvMapping(dst_mapping);
-            const int2 out_size = size;
-            const int  ss       = supersample;
-            const auto mode     = EnvMapSampling(sampling);
+            const auto  s = EnvMapping(src_mapping), d = EnvMapping(dst_mapping);
+            const int2  out_size = size;
+            const int   ss       = supersample;
+            const auto  mode     = EnvMapSampling(sampling);
+            const float bias     = mip_bias;
             modify_image_async(current_image(), "Remap envmap", out_size,
-                               [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
-                               { return remapped_envmap(src, out_size, d, s, mode, ss, p); });
+                               [s, d, out_size, ss, mode, bias](const Array2Df &src, AtomicProgress p)
+                               { return remapped_envmap(src, out_size, d, s, mode, ss, bias, p); });
             size = int2{0};
             ImGui::CloseCurrentPopup();
         }

@@ -102,6 +102,10 @@ float envmap_jacobian(EnvMapping mapping, float2 uv);
       actually covers in the source. That footprint is anisotropic -- a lat-long's pole is stretched
       hundreds of times more across than down -- which is exactly what a mip level alone cannot express,
       and it costs the same whatever the scale.
+
+    \p mip_bias shifts the level EWA computes, in levels: negative is sharper and eventually aliases,
+    positive is blurrier. Zero is the level the footprint asks for, and is what anything other than
+    diagnosing the filter should use.
 */
 enum EnvMapSampling : int
 {
@@ -110,7 +114,7 @@ enum EnvMapSampling : int
 };
 
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2,
+                         EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2, float mip_bias = 0.f,
                          AtomicProgress progress = {});
 
 /*!
