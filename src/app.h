@@ -9,15 +9,20 @@
 #include "display_colorspace.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
+#if HDRVIEW_ENABLE_IPC
+#include "ipc/ipc_server.h"
+#endif
 #include "json.h"
 #include "renderpass.h"
 #include "shader.h"
 #include "theme.h"
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <hello_imgui/runner_callbacks.h>
 #include <hello_imgui/runner_params.h>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -112,6 +117,54 @@ public:
     // the caller can fall back to treating the zip as a plain multi-image archive. Works on native and web.
     bool try_load_zip_as_session(string_view zip_bytes, const string &zip_name);
     //-----------------------------------------------------------------------------
+
+    //-----------------------------------------------------------------------------
+    // running work on the main thread
+    //-----------------------------------------------------------------------------
+    /*!
+        Queue \p f to run on the main thread near the start of the next frame.
+
+        The image list, the images themselves, and the graphics API are all main-thread-only, so anything
+        arriving on another thread -- pixels pushed in by a renderer, say -- has to come through here rather
+        than touch them directly. Safe to call from any thread, including the main one.
+
+        Queued work runs before the frame's GUI is drawn, so a batch of it lands atomically as far as the
+        drawn frame is concerned. Keep each callable short: it runs inline on the frame.
+    */
+    void post_to_main_thread(std::function<void()> f);
+
+    /*!
+        Nudge the frame loop into drawing, from any thread.
+
+        The runner idles by waiting on window events, so when nothing is moving on screen a frame can be up
+        to the idle timeout away. Work that arrives from outside the window system -- pixels pushed in over
+        a socket -- produces no such event, and without this would be drawn whenever the next frame happened
+        to come around.
+    */
+    void wake_event_loop();
+    //-----------------------------------------------------------------------------
+
+#if HDRVIEW_ENABLE_IPC
+    //-----------------------------------------------------------------------------
+    // receiving live images from a renderer (see src/app-ipc.cpp and src/ipc/)
+    //-----------------------------------------------------------------------------
+    /// Begin accepting connections on 127.0.0.1:`port`. False if the port could not be bound.
+    bool             start_ipc_listening(uint16_t port);
+    void             stop_ipc_listening();
+    const IpcServer &ipc_server() const { return m_ipc_server; }
+    /// Start or stop listening, and settle `m_ipc_listen_requested` on whatever actually happened.
+    void set_ipc_listening(bool listen);
+    /// Change the port, rebinding if already listening.
+    void set_ipc_port(uint16_t port);
+    /// The port the GUI toggle and the CLI flag listen on. Settable so a second HDRView can coexist.
+    uint16_t  ipc_port() const { return m_ipc_port; }
+    uint16_t &ipc_port() { return m_ipc_port; }
+    /// Index of the image whose `filename` is `name`, or -1. How the protocol identifies images.
+    int image_index_by_name(std::string_view name) const;
+    /// The listener's controls and status, drawn above the watched-folder list they sit alongside.
+    void draw_ipc_gui();
+    //-----------------------------------------------------------------------------
+#endif
 
     //-----------------------------------------------------------------------------
     // access to images
@@ -365,6 +418,8 @@ private:
     void draw_image() const;
     void draw_image_border() const;
     void draw_tool_decorations() const;
+    /// Draws the current and reference images' vector overlays, if either has one.
+    void draw_vector_overlays() const;
     void draw_file_window();
     void draw_top_toolbar();
     void draw_tool_palette();
@@ -427,6 +482,51 @@ private:
     int              m_current = -1, m_reference = -1;
 
     BackgroundImageLoader m_image_loader;
+
+    //! Work posted from other threads by post_to_main_thread(), drained once per frame.
+    std::mutex                         m_main_thread_mutex;
+    std::vector<std::function<void()>> m_main_thread_queue;
+    void                               drain_main_thread_queue();
+
+#if HDRVIEW_ENABLE_IPC
+    IpcServer m_ipc_server;
+    uint16_t  m_ipc_port = k_default_ipc_port;
+
+    //! What the "Listen for image updates" toggle shows, mirrored from the server once per frame.
+    /*!
+        An Action needs a bool to point p_selected at, but the truth is whether the socket is bound -- which
+        the toggle does not decide on its own, since binding can fail and --listen can turn it on at
+        startup. Mirroring it every frame (rather than in draw_ipc_gui, which does not run while the panel
+        is collapsed) keeps the palette's checkmark honest.
+    */
+    bool m_ipc_listen_requested = false;
+
+    //! Turns the listener's running totals into the rates the activity readout shows.
+    /*!
+        Sampled over a window rather than per frame: at 60 fps the per-frame deltas are one or two packets
+        and the number would be unreadable noise.
+    */
+    struct IpcRates
+    {
+        double   sampled_at    = 0.0; //!< ImGui::GetTime() of the last sample
+        uint64_t last_packets  = 0;
+        uint64_t last_bytes    = 0;
+        double   packets_per_s = 0.0;
+        double   bytes_per_s   = 0.0;
+
+        void update(const IpcActivity &now, double time);
+    };
+    IpcRates m_ipc_rates;
+
+    // Each applies one already-decoded packet, on the main thread. Decoding happens on the receive thread;
+    // see start_ipc_listening().
+    void apply_ipc_open(const IpcOpenImage &info);
+    void apply_ipc_reload(const IpcReloadImage &info);
+    void apply_ipc_close(const IpcCloseImage &info);
+    void apply_ipc_create(const IpcCreateImage &info);
+    void apply_ipc_update(const IpcUpdateImage &info);
+    void apply_ipc_vector_graphics(const IpcVectorGraphics &info);
+#endif
 
     int m_remaining_download = 0;
 

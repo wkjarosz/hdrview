@@ -38,6 +38,13 @@ option(HDRVIEW_ENABLE_LIBWEBP "Enable LIBWEBP support" ON)
 option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
 option(HDRVIEW_ENABLE_X3F "Enable LibRaw X3F support" ON)
+
+# Listening for pixels pushed in by a renderer, over tev's protocol. The listener is off until the user
+# turns it on, so building this in costs nothing at runtime. A browser has no raw sockets to listen on.
+option(HDRVIEW_ENABLE_IPC "Enable receiving live image updates from renderers (tev-compatible)" ON)
+if(EMSCRIPTEN)
+  set(HDRVIEW_ENABLE_IPC OFF)
+endif()
 option(
   HDRVIEW_ENABLE_HDR_DISPLAY
   "Enable true HDR/EDR display output on Windows and Linux/Wayland, via a patched GLFW fork (Tom94/glfw). No effect on macOS, which always uses that fork and gets EDR through Metal."
@@ -1655,6 +1662,7 @@ add_enabled_definition(HDRVIEW_ENABLE_LIBWEBP)
 add_enabled_definition(HDRVIEW_ENABLE_LIBTIFF)
 add_enabled_definition(HDRVIEW_ENABLE_LIBRAW)
 add_enabled_definition(HDRVIEW_ENABLE_X3F)
+add_enabled_definition(HDRVIEW_ENABLE_IPC)
 
 # ============================================================================
 # Compiler warnings for HDRView's own code
@@ -1695,6 +1703,17 @@ if(NOT HDRVIEW_PORTABLE_INSTALL)
       OFF
       CACHE BOOL "" FORCE
   )
+endif()
+
+if(HDRVIEW_ENABLE_IPC)
+  list(APPEND EXTRA_SOURCES src/ipc/ipc_packet.cpp src/ipc/ipc_server.cpp src/app-ipc.cpp)
+  # Only meaningful when the IPC sources are built; left empty otherwise so the test target's source list
+  # does not name a file whose subject was compiled out.
+  set(HDRVIEW_IPC_TESTS tests/test_ipc_packet.cpp tests/test_ipc_server.cpp tests/test_vector_overlay.cpp)
+  if(WIN32)
+    # Winsock is not among the libraries a Windows link pulls in by default.
+    list(APPEND HDRVIEW_DEPENDENCIES ws2_32)
+  endif()
 endif()
 
 set(HDRVIEW_SOURCES
@@ -1743,6 +1762,7 @@ set(HDRVIEW_SOURCES
     src/texture_gl.cpp
     src/texture.cpp
     src/theme.cpp
+    src/vector_overlay.cpp
     ${EXTRA_SOURCES}
 )
 
@@ -1810,6 +1830,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
                                 tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_numeric_edge_cases.cpp tests/test_loader_limits.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
                                 tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_cicp_video_range.cpp tests/test_orientation_windows.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
+                                ${HDRVIEW_IPC_TESTS}
   )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
@@ -1921,15 +1942,13 @@ if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
   endif()
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
-  add_executable(hdrview_fuzz_load_image ${HDRVIEW_SOURCES} tests/fuzz/fuzz_load_image.cpp)
-  target_include_directories(hdrview_fuzz_load_image PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  set_target_properties(hdrview_fuzz_load_image PROPERTIES CXX_STANDARD 17)
-  target_compile_definitions(hdrview_fuzz_load_image PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
-  target_compile_definitions(
-    hdrview_fuzz_load_image PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
-  )
-  target_link_libraries(hdrview_fuzz_load_image PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
-  target_compile_options(hdrview_fuzz_load_image PRIVATE -fsanitize=fuzzer-no-link)
+
+  # One entry per fuzz target: "<target name>|<entry point source>". They differ only in that source, so
+  # everything else below is applied to each in turn.
+  set(HDRVIEW_FUZZERS "hdrview_fuzz_load_image|tests/fuzz/fuzz_load_image.cpp")
+  if(HDRVIEW_ENABLE_IPC)
+    list(APPEND HDRVIEW_FUZZERS "hdrview_fuzz_ipc_packet|tests/fuzz/fuzz_ipc_packet.cpp")
+  endif()
 
   # Apple's clang instruments for libFuzzer but ships no fuzzer runtime, so on macOS one has to be linked
   # explicitly -- from Homebrew's LLVM by default. Everywhere else -fsanitize=fuzzer supplies its own.
@@ -1949,17 +1968,33 @@ if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
     endif()
   endif()
 
-  if(HDRVIEW_FUZZER_RUNTIME)
-    target_link_libraries(hdrview_fuzz_load_image PRIVATE "${HDRVIEW_FUZZER_RUNTIME}")
-  else()
-    target_link_options(hdrview_fuzz_load_image PRIVATE -fsanitize=fuzzer)
-  endif()
+  foreach(fuzzer IN LISTS HDRVIEW_FUZZERS)
+    string(REPLACE "|" ";" fuzzer_parts "${fuzzer}")
+    list(GET fuzzer_parts 0 fuzz_target)
+    list(GET fuzzer_parts 1 fuzz_source)
 
-  if(APPLE)
-    target_compile_options(hdrview_fuzz_load_image PRIVATE "-fobjc-arc")
-    target_link_libraries(hdrview_fuzz_load_image PRIVATE "-framework ApplicationServices")
-    target_compile_definitions(hdrview_fuzz_load_image PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
-  endif()
+    add_executable(${fuzz_target} ${HDRVIEW_SOURCES} ${fuzz_source})
+    target_include_directories(${fuzz_target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    set_target_properties(${fuzz_target} PROPERTIES CXX_STANDARD 17)
+    target_compile_definitions(${fuzz_target} PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
+    target_compile_definitions(
+      ${fuzz_target} PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
+    )
+    target_link_libraries(${fuzz_target} PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+    target_compile_options(${fuzz_target} PRIVATE -fsanitize=fuzzer-no-link)
+
+    if(HDRVIEW_FUZZER_RUNTIME)
+      target_link_libraries(${fuzz_target} PRIVATE "${HDRVIEW_FUZZER_RUNTIME}")
+    else()
+      target_link_options(${fuzz_target} PRIVATE -fsanitize=fuzzer)
+    endif()
+
+    if(APPLE)
+      target_compile_options(${fuzz_target} PRIVATE "-fobjc-arc")
+      target_link_libraries(${fuzz_target} PRIVATE "-framework ApplicationServices")
+      target_compile_definitions(${fuzz_target} PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+    endif()
+  endforeach()
 endif()
 
 # Times this build's libheif AV1 decoder plugins against each other, which is how the choice between dav1d

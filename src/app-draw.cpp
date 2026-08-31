@@ -118,7 +118,7 @@ void HDRViewApp::draw_pixel_info() const
     {
         for (int x = bounds.min.x; x < bounds.max.x; ++x)
         {
-            auto   pos        = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
+            auto   pos     = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
             float4 r_pixel = pixel_value({x, y}, true, m_status_pixel_target);
             float4 t_pixel = linear_to_sRGB(pixel_value({x, y}, false, m_status_pixel_target));
             float4 pixel   = m_status_color_mode == 0 ? r_pixel : t_pixel;
@@ -199,6 +199,47 @@ void HDRViewApp::draw_image_border() const
         Box2f crop_window{app_pos_at_pixel(float2{m_roi_live.min}), app_pos_at_pixel(float2{m_roi_live.max})};
         ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
                                "Selection", {0.5f, 1.f}, true);
+    }
+}
+
+void HDRViewApp::draw_vector_overlays() const
+{
+    // The current image and, when one is set, the reference: a renderer can annotate either, and which is
+    // which has to stay readable, so they get different default colors -- matching what tev does.
+    const std::pair<ConstImagePtr, ImU32> targets[] = {{current_image(), IM_COL32(255, 255, 255, 200)},
+                                                       {reference_image(), IM_COL32(255, 128, 0, 200)}};
+
+    VgTransform xform;
+    xform.to_screen = [this](float2 p) { return app_pos_at_pixel(p); };
+    // Screen pixels per image pixel, read off the transform itself so it stays right under a flip, which
+    // mirrors the mapping but must not give a stroke a negative width.
+    xform.scale        = std::abs(app_pos_at_pixel(float2{1.f, 0.f}).x - app_pos_at_pixel(float2{0.f, 0.f}).x);
+    xform.default_font = font("sans regular");
+    xform.font_for     = [this](const std::string &face) -> void *
+    {
+        // NanoVG face names, as tev's own overlay defaults use them, mapped onto the fonts HDRView loads.
+        if (face == "sans-bold" || face == "bold")
+            return font("sans bold");
+        if (face == "mono" || face == "monospace")
+            return font("mono regular");
+        if (face == "mono-bold")
+            return font("mono bold");
+        return font("sans regular");
+    };
+
+    for (const auto &[img, color] : targets)
+    {
+        if (!img || img->vector_overlay.empty())
+            continue;
+
+        draw_vector_overlay(ImGui::GetBackgroundDrawList(), img->vector_overlay, xform, color,
+                            [](const char *what)
+                            {
+                                // Throttled: an overlay is redrawn every frame, so an unsupported command
+                                // in it would otherwise report itself at the frame rate.
+                                if (static LogThrottle throttle{std::chrono::seconds(10)}; throttle)
+                                    spdlog::warn("Vector overlay uses {}, which HDRView does not draw.", what);
+                            });
     }
 }
 
@@ -378,6 +419,7 @@ void HDRViewApp::draw_background()
         draw_pixel_info();
         draw_pixel_grid();
         draw_image_border();
+        draw_vector_overlays();
         draw_tool_decorations();
     }
     catch (const exception &e)

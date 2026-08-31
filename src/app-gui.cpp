@@ -583,8 +583,7 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::PopFont();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(EmSize(8));
-    ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, EXPOSURE_RANGE[0], EXPOSURE_RANGE[1],
-                       "Exposure: %+5.2f");
+    ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, EXPOSURE_RANGE[0], EXPOSURE_RANGE[1], "Exposure: %+5.2f");
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_exposure = m_exposure_live;
     ImGui::EndGroup();
@@ -914,6 +913,56 @@ void HDRViewApp::draw_command_palette(bool &open)
                  "",
                  nullptr,
                  set_background_last_used});
+
+#if HDRVIEW_ENABLE_IPC
+            // A two-step command for the port the image-update listener binds. PromptInt would be the
+            // obvious fit, but its buffer starts empty and nothing can seed it, so the port would have to be
+            // retyped rather than edited. A widget can be handed the current value, which is the point.
+            static int  set_ipc_port_last_used = 0;
+            static bool first_frame_port       = true;
+            ImCmd::AddCommand({{"Set image update port", "Set IPC port", "Set listening port"},
+                               []()
+                               {
+                                   first_frame_port = true;
+                                   // Captures nothing: everything it touches is static or global, and the
+                                   // widget outlives this callback, so a reference capture would dangle.
+                                   ImCmd::PromptWidget(
+                                       []() -> bool
+                                       {
+                                           static int port = 0;
+                                           if (first_frame_port)
+                                           {
+                                               port = int(hdrview()->ipc_port());
+                                               ImGui::SetKeyboardFocusHere();
+                                               first_frame_port = false;
+                                           }
+
+                                           ImGui::SetNextItemWidth(HelloImGui::EmSize(8.f));
+                                           const bool entered = ImGui::InputInt(
+                                               "Port", &port, 0, 0,
+                                               ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_EnterReturnsTrue);
+
+                                           if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                                               return true; // dismissed; the port is left as it was
+
+                                           if (!entered)
+                                               return false;
+
+                                           hdrview()->set_ipc_port(uint16_t(std::clamp(port, 1, 65535)));
+                                           return true;
+                                       },
+                                       "Enter the port to listen on. 14158 is the one renderers connect to by "
+                                       "default. Press Enter to apply or Escape to cancel.");
+                               },
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               []() { set_ipc_port_last_used = ++last_used; },
+                               ICON_MY_WATCH_CHANGES,
+                               "",
+                               nullptr,
+                               set_ipc_port_last_used});
+#endif
 
             // add two-step theme selection command
             static int set_theme_last_used = 0;

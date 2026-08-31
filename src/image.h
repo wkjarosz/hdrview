@@ -14,8 +14,11 @@
 #include "imageio/exif.h"
 #include "json.h"
 #include "texture.h"
+#include "vector_overlay.h"
 #include <algorithm>
 #include <cfloat>
+#include <chrono>
+#include <cstdint>
 #include <half.h>
 #include <map>
 #include <optional>
@@ -119,6 +122,15 @@ struct PixelStats
         BlendMode_ blend_mode = BlendMode_Normal;
         int        ref_id     = -1;
         int        ref_group  = -1;
+
+        //! Image::content_version of the measured image, and of the reference when one is blended in.
+        /*!
+            Everything else here describes how the image is being looked at; these two describe the pixels
+            themselves. A statistic computed from pixels that have since been overwritten is stale no matter
+            how well the rest of the settings match, which is what these catch.
+        */
+        int content_version     = 0;
+        int ref_content_version = 0;
 
         bool match(const Settings &other) const;
     };
@@ -242,6 +254,17 @@ private:
     PixelStats::Ptr      async_stats;
     PixelStats::Settings async_settings{};
 
+    //! When cached_stats last became a finished computation, for update_stats()'s streaming throttle.
+    std::chrono::steady_clock::time_point stats_ready_at{};
+
+    //! Take the finished async statistics as the cache and start a fresh slot for the next computation.
+    void adopt_async_stats()
+    {
+        cached_stats   = async_stats;
+        async_stats    = std::make_shared<PixelStats>();
+        stats_ready_at = std::chrono::steady_clock::now();
+    }
+
 public:
     static std::pair<std::string, std::string> split(const std::string &full_name);
     static std::vector<std::string>            split_to_path(const std::string &str, char delimiter = '.');
@@ -252,6 +275,14 @@ public:
 
     std::unique_ptr<Texture> texture;
     bool                     texture_is_dirty = true;
+
+    //! Set when the texture's level 0 has changed but its mip chain has not been rebuilt from it yet.
+    /*!
+        Channel textures are created with manual mipmapping so that streaming a tile costs one
+        glTexSubImage2D rather than a full mip-chain rebuild per tile. get_texture() does the rebuild
+        instead, which folds any number of tiles that landed since the last draw into a single one.
+    */
+    bool mipmap_is_dirty = true;
 
     Channel() = delete;
     Channel(const std::string &name, int2 size);
@@ -311,6 +342,29 @@ public:
                              for (int x = 0; x < w; ++x) this->operator()(x, y) = func(data[n * x + c + y * y_stride]);
                      });
     }
+
+    /*!
+        Overwrite a rectangle of this channel's pixels and push just that rectangle to the GPU.
+
+        The counterpart to loading: pixels arriving after the image exists, a tile at a time, as a renderer
+        produces them. \p bounds is in channel-local coordinates (the caller subtracts the data window's
+        origin) and is clipped to the channel, so a tile that hangs off the edge writes the part that lands.
+
+        Any in-flight statistics computation is canceled first -- it reads these very pixels from a worker
+        thread -- so callers should batch a frame's worth of tiles rather than interleaving them with
+        get_stats(). Must be called from the main thread when the channel has a texture, since it touches
+        the graphics API; see HDRViewApp::post_to_main_thread().
+
+        A channel does not know which image owns it, so the caller is the one that has to bump that image's
+        content_version afterwards; without it the histogram keeps describing the pixels this overwrote.
+
+        \param [] bounds   Rectangle to overwrite, in channel-local coordinates
+        \param [] data     Source samples, row-major within \p bounds
+        \param [] x_stride Distance in floats between consecutive samples in a row; >1 reads one channel
+                           out of an interleaved payload without deinterleaving it first
+        \param [] y_stride Distance in floats between consecutive rows, or 0 for tightly packed rows
+    */
+    void upload_tile(const Box2i &bounds, const float *data, int64_t x_stride = 1, int64_t y_stride = 0);
 
     Texture *get_texture();
 
@@ -399,11 +453,11 @@ public:
     AdaptationMethod              adaptation_method = AdaptationMethod_Bradford;
     ColorGamut_                   color_space       = ColorGamut_Unspecified;
     WhitePoint_                   white_point       = WhitePoint_Unspecified;
-    AlphaType            alpha_type = AlphaType_None; //!< Does the image have straight (unpremultiplied) alpha?
-    bool alpha_is_transparency = true; //!< When false, an 'A' channel is grouped on its own as ordinary data
-                                       //!< instead of joining an RGBA/YA/YCA/XYZA group, so nothing is
-                                       //!< premultiplied by it. Read by finalize(), so set it before calling.
-    json                 metadata   = json::object();
+    AlphaType alpha_type            = AlphaType_None; //!< Does the image have straight (unpremultiplied) alpha?
+    bool      alpha_is_transparency = true; //!< When false, an 'A' channel is grouped on its own as ordinary data
+                                            //!< instead of joining an RGBA/YA/YCA/XYZA group, so nothing is
+                                            //!< premultiplied by it. Read by finalize(), so set it before calling.
+    json                 metadata = json::object();
     Exif                 exif;     //!< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any
     std::vector<uint8_t> icc_data; //!< The raw ICC profile data from the file, if any
@@ -412,6 +466,28 @@ public:
     fs::path           path;
     fs::file_time_type last_modified;
     size_t             size_bytes = 0;
+
+    //! True for an image whose pixels arrive from a running process rather than from a file.
+    /*!
+        Nothing on disk backs it, so it cannot be reloaded and is left out of a saved session -- a session
+        records where to find its images again, and there is nowhere to find this one. It is otherwise an
+        ordinary image.
+    */
+    bool is_live = false;
+
+    //! Drawing commands laid over this image, in its pixel coordinates; empty for almost every image.
+    /*!
+        Only a renderer streaming over IPC sets these, to annotate what it is producing -- box the tile it
+        just finished, label a value. Drawn by the viewport after the image itself; see vector_overlay.h.
+    */
+    std::vector<VgCommand> vector_overlay;
+
+    //! Bumped whenever any of this image's pixels change after loading.
+    /*!
+        Statistics and histograms are cached against it (see PixelStats::Settings), so anything that writes
+        pixels must bump it or the cache will keep serving measurements of pixels that are gone.
+    */
+    int content_version = 0;
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().
@@ -438,6 +514,13 @@ public:
     int         reference_group = 0;
 
     Image(int2 size, int num_channels);
+    //! An image with exactly these channels, in this order, named as given.
+    /*!
+        The channel-count constructor names channels itself, which only suits an image whose channels are a
+        plain R,G,B,A or Y,A. A renderer names its own -- `albedo.R`, `variance` -- and the layer and group
+        machinery build themselves out of those names in finalize().
+    */
+    Image(int2 size, const std::vector<std::string> &channel_names);
     Image();
     Image(const Image &) = delete;
     Image(Image &&)      = default;

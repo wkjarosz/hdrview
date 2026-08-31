@@ -628,17 +628,69 @@ Texture *Channel::get_texture()
 #else
         auto min_mode = Texture::InterpolationMode::Trilinear;
 #endif
+        // Mipmapping is driven from here rather than from each upload: upload_tile() writes a rectangle at
+        // a time, and letting every one of those rebuild the whole mip chain would cost far more than the
+        // tile itself.
         texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, size(),
                                             min_mode, Texture::InterpolationMode::Nearest,
-                                            Texture::WrapMode::ClampToEdge, 1, Texture::TextureFlags::ShaderRead);
+                                            Texture::WrapMode::ClampToEdge, 1, Texture::TextureFlags::ShaderRead,
+                                            /* manual_mipmapping */ true);
         if (texture->pixel_format() != Texture::PixelFormat::R)
             throw std::invalid_argument("Pixel format not supported by the hardware!");
 
         texture->upload((const uint8_t *)data());
         texture_is_dirty = false;
+        mipmap_is_dirty  = true;
+    }
+
+    // Once per draw, whatever landed since the last one. Trilinear minification samples the mip chain, so
+    // this has to happen before the texture is used, not lazily at the next upload.
+    if (mipmap_is_dirty)
+    {
+        if (texture->min_interpolation_mode() == Texture::InterpolationMode::Trilinear ||
+            texture->mag_interpolation_mode() == Texture::InterpolationMode::Trilinear)
+            texture->generate_mipmap();
+        mipmap_is_dirty = false;
     }
 
     return texture.get();
+}
+
+void Channel::upload_tile(const Box2i &bounds, const float *data, int64_t x_stride, int64_t y_stride)
+{
+    // Boxes here are half-open, so a clip that collapses a dimension leaves max == min rather than
+    // max < min, and is_empty() would not call that empty.
+    Box2i clipped = bounds;
+    clipped.intersect(Box2i{int2{0}, size()});
+    const int2 extent = clipped.size();
+    if (extent.x <= 0 || extent.y <= 0)
+        return;
+
+    if (y_stride == 0)
+        y_stride = int64_t(bounds.size().x) * x_stride;
+
+    // A statistics task reads these pixels from a worker thread, so it has to be off them before the write.
+    cancel_stats();
+
+    const int2 offset = clipped.min - bounds.min;
+
+    for (int y = 0; y < extent.y; ++y)
+    {
+        const float *src = data + (int64_t(y + offset.y) * y_stride) + (int64_t(offset.x) * x_stride);
+        float       *dst = &operator()(clipped.min.x, clipped.min.y + y);
+        for (int x = 0; x < extent.x; ++x) dst[x] = src[int64_t(x) * x_stride];
+    }
+
+    if (!texture || texture_is_dirty)
+        return; // no texture yet, or one that is about to be rebuilt from the channel wholesale
+
+    // glTexSubImage2D wants the rectangle packed on its own, and the channel's rows are the full width.
+    std::vector<float> staging(size_t(extent.x) * size_t(extent.y));
+    for (int y = 0; y < extent.y; ++y)
+        std::copy_n(&operator()(clipped.min.x, clipped.min.y + y), extent.x, &staging[size_t(y) * extent.x]);
+
+    texture->upload_sub_region((const uint8_t *)staging.data(), clipped.min, extent);
+    mipmap_is_dirty = true;
 }
 
 bool PixelStats::Settings::match(const Settings &other) const
@@ -646,7 +698,8 @@ bool PixelStats::Settings::match(const Settings &other) const
     // Only what changes the computed values counts. exposure never reaches the computation, every x_scale
     // is binned, and y_scale only picks which stored histogram the plot draws.
     return (blend_mode == other.blend_mode && ref_id == other.ref_id && ref_group == other.ref_group) &&
-           other.roi == roi;
+           other.roi == roi && content_version == other.content_version &&
+           ref_content_version == other.ref_content_version;
 }
 
 PixelStats *Channel::get_stats()
@@ -657,8 +710,7 @@ PixelStats *Channel::get_stats()
     if (async_tracker.ready() && async_stats->computed)
     {
         spdlog::trace("Replacing cached channel stats with async computation");
-        cached_stats = async_stats;
-        async_stats  = make_shared<PixelStats>();
+        adopt_async_stats();
     }
 
     return cached_stats.get();
@@ -668,9 +720,26 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
 {
     MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
 
-    PixelStats::Settings desired_settings{
-        hdrview()->exposure(),   hdrview()->histogram_x_scale(), hdrview()->histogram_y_scale(),   hdrview()->roi(),
-        hdrview()->blend_mode(), img2 ? img2->id : -1,           img2 ? img2->reference_group : -1};
+    PixelStats::Settings desired_settings{hdrview()->exposure(),
+                                          hdrview()->histogram_x_scale(),
+                                          hdrview()->histogram_y_scale(),
+                                          hdrview()->roi(),
+                                          hdrview()->blend_mode(),
+                                          img2 ? img2->id : -1,
+                                          img2 ? img2->reference_group : -1,
+                                          img1->content_version,
+                                          img2 ? img2->content_version : 0};
+
+    // Pixels streaming in from a renderer change the content version faster than a full pass over the image
+    // can finish, and chasing every version would cancel each computation partway and show no statistics at
+    // all. So a newer version is only picked up once the cache has stood as a finished result for a moment:
+    // the histogram then refreshes at a bounded rate instead of never.
+    static constexpr auto k_min_stats_age = std::chrono::milliseconds{200};
+    if (cached_stats->computed && std::chrono::steady_clock::now() - stats_ready_at < k_min_stats_age)
+    {
+        desired_settings.content_version     = cached_stats->settings.content_version;
+        desired_settings.ref_content_version = cached_stats->settings.ref_content_version;
+    }
 
     // The group's alpha channel, when this channel needs dividing by it to report the file's values.
     // Null for the alpha channel itself, which is stored as the file had it.
@@ -734,8 +803,7 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
     {
         spdlog::trace("Replacing cached channel stats with async computation");
         // replace cache with newer async stats
-        cached_stats = async_stats;
-        async_stats  = make_shared<PixelStats>();
+        adopt_async_stats();
 
         // if these newer stats are still outdated, schedule a new async computation
         if (!cached_stats->settings.match(desired_settings))
@@ -812,6 +880,17 @@ Image::Image(int2 size, int num_channels) : Image()
         }
     }
     display_window = data_window = Box2i{int2{0}, channels.front().size()};
+}
+
+Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
+{
+    if (channel_names.empty())
+        throw std::invalid_argument("An image must have at least one channel.");
+
+    channels.reserve(channel_names.size());
+    for (const auto &name : channel_names) channels.emplace_back(name, size);
+
+    display_window = data_window = Box2i{int2{0}, size};
 }
 
 map<string, int> Image::channels_in_layer(const string &layer) const

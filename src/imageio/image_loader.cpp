@@ -750,6 +750,9 @@ void BackgroundImageLoader::load_new_and_modified_files()
     {
         auto img = hdrview()->image(i);
 
+        if (img->is_live)
+            continue; // its pixels are pushed in by another process; no file to watch
+
         std::error_code ec;
         if (!fs::exists(img->path, ec) || ec)
         {

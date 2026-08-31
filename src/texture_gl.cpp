@@ -299,7 +299,9 @@ int Texture::max_size()
 
 void Texture::generate_mipmap()
 {
-    spdlog::info("Generating mipmap");
+    // Trace, not info: a streaming image regenerates its mip chain on any frame a tile landed on, which at
+    // info level buries everything else in the log window.
+    spdlog::trace("Generating mipmap");
     GLenum tex_mode = m_samples > 1 ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
     CHK(glBindTexture(tex_mode, m_texture_handle));
     CHK(glGenerateMipmap(tex_mode));
