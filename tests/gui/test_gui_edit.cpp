@@ -417,6 +417,85 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         }
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "cropping to the selection resizes the image and undo restores it");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const int2 size     = img->size();
+        const auto original = snapshot(img);
+
+        const Box2i roi{img->data_window.min + int2{1, 1}, img->data_window.min + int2{5, 4}};
+        hdrview()->roi() = roi;
+        ctx->Yield();
+
+        menu_click(ctx, "Edit/Crop to selection");
+
+        IM_CHECK((img->size() == int2{4, 3}));
+        IM_CHECK((img->data_window.size() == int2{4, 3}));
+        IM_CHECK((img->display_window.size() == int2{4, 3}));
+        for (const auto &c : img->channels) IM_CHECK(c.size() == img->size());
+        // What was selected is the whole image now, so the selection has nothing left to say.
+        IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+
+        // A structural entry has to put back the samples, both windows, and the layer tree built from them.
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(img->size() == size);
+        IM_CHECK(snapshot(img) == original);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "cropping is only offered when it would do something");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto &crop = hdrview()->action("Crop to selection");
+
+        // No selection at all.
+        hdrview()->roi() = Box2i{};
+        ctx->Yield();
+        IM_CHECK_EQ(crop.enabled(), false);
+
+        // A selection covering the whole image would crop it to itself.
+        auto img         = hdrview()->current_image();
+        hdrview()->roi() = img->data_window;
+        ctx->Yield();
+        IM_CHECK_EQ(crop.enabled(), false);
+
+        hdrview()->roi() = Box2i{img->data_window.min, img->data_window.min + int2{2, 2}};
+        ctx->Yield();
+        IM_CHECK_EQ(crop.enabled(), true);
+
+        hdrview()->roi() = Box2i{};
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a structural edit refits the view and rebuilds the tree");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto         img    = hdrview()->current_image();
+        const size_t layers = img->layers.size();
+        const size_t groups = img->groups.size();
+
+        IM_CHECK(hdrview()->modify_structure(img, "Canvas size", [](Image &i)
+                                             { i.resize_canvas(i.size() + int2{4, 4}, Image::Anchor_MiddleCenter); }));
+
+        IM_CHECK(img->size() == int2{img->channels[0].size()});
+        // Rebuilt from the new channels rather than left describing the old ones -- the bug that took the
+        // image down when an edit re-ran finalize() instead.
+        IM_CHECK_EQ(img->layers.size(), layers);
+        IM_CHECK_EQ(img->groups.size(), groups);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK_EQ(img->layers.size(), layers);
+        IM_CHECK_EQ(img->groups.size(), groups);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

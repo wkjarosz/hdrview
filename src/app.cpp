@@ -754,6 +754,10 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
                                                  [this](bool &open) { draw_brightness_contrast_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Fill...", [this](bool &open) { draw_fill_dialog(open); }));
     m_dialogs.push_back(
+        make_unique<PopupDialog>("Canvas size...", [this](bool &open) { draw_canvas_size_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Image size...", [this](bool &open) { draw_image_size_dialog(open); }));
+    m_dialogs.push_back(
         make_unique<PopupDialog>("Loading session...", [this](bool &open) { draw_loading_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>(
         "Create dither image...",
@@ -1638,6 +1642,40 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        auto img = current_image();
                        return can_edit(img) && img->history.has_redo();
                    }});
+
+        add(Action{{"Crop to selection"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Alt | ImGuiKey_C,
+                   0,
+                   [this]()
+                   {
+                       const Box2i box = m_roi;
+                       modify_structure(current_image(), "Crop to selection", [box](Image &i) { i.crop(box); });
+                       // What was selected is now the whole image, so the selection has nothing left to say.
+                       m_roi = Box2i{};
+                   },
+                   [this]()
+                   {
+                       // Needs something to crop to, and cropping to the whole image would do nothing.
+                       auto img = current_image();
+                       if (!can_edit(img) || !m_roi.has_volume())
+                           return false;
+                       Box2i box = m_roi;
+                       box.intersect(img->data_window);
+                       return box.has_volume() && box != img->data_window;
+                   }});
+        add(Action{{"Image size...", "Resize the image"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
+                   0,
+                   [this]() { dialog("Image size...").open = true; },
+                   if_editable});
+        add(Action{{"Canvas size..."},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C,
+                   0,
+                   [this]() { dialog("Canvas size...").open = true; },
+                   if_editable});
 
         add(Action{{"Exposure/gamma..."},
                    ICON_MY_BLANK,

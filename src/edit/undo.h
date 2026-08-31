@@ -14,6 +14,9 @@
 #include <string>
 #include <vector>
 
+//! Declared here as image.h does, rather than in fwd.h, which does not carry it.
+struct Channel;
+
 /*!
     One reversible change to an Image.
 
@@ -108,6 +111,35 @@ private:
     Box2i                 m_bounds; //!< In image coordinates
     std::vector<int>      m_channels;
     std::vector<Array2Df> m_pixels; //!< One per entry of m_channels, sized to m_bounds
+};
+
+/*!
+    An image's whole channel list and windows, for edits that change the shape of the image.
+
+    Cropping, resizing, and anything that adds or removes a channel cannot be described as a rectangle of
+    the samples that were already there, so these keep the entire set. Rare enough that the cost is
+    acceptable, and cheaper than it looks: putting one back swaps the vectors, which moves the sample
+    buffers rather than copying them.
+*/
+class StructureUndo : public UndoEntry
+{
+public:
+    /// Snapshot the channels and windows of \p img, which must be in its pre-edit state.
+    StructureUndo(const Image &img, std::string name);
+    //! Out of line because Channel is incomplete here and the vector has to destroy them.
+    ~StructureUndo() override;
+
+    void        undo(Image &img) override { swap(img); }
+    void        redo(Image &img) override { swap(img); }
+    std::string name() const override { return m_name; }
+    size_t      memory_usage() const override;
+
+private:
+    void swap(Image &img);
+
+    std::string          m_name;
+    std::vector<Channel> m_channels;
+    Box2i                m_data_window, m_display_window;
 };
 
 /*!

@@ -27,9 +27,11 @@ void HDRViewApp::after_modify(const ImagePtr &img)
     // changed. An edit that adds or removes channels needs the tree rebuilt and will have to ask for that
     // specifically; none of the edits so far touches the channel set.
 
-    // The group the viewport is sampling may now be a different set of channels, or the same channels at
-    // a different size.
-    set_image_textures();
+    // Recomputes each group's visibility and the layer tree's per-node counts of visible and hidden
+    // descendants, then rebinds the textures. Both the edit and the undo of it come through here, which is
+    // what keeps them from invalidating different things -- a structural undo rebuilds the layer tree just
+    // as the edit did, and the Images panel walks the result of both.
+    update_visibility();
 }
 
 bool HDRViewApp::modify_image(const ImagePtr &img, const string &name, const function<void(Image &)> &op,
@@ -70,6 +72,25 @@ bool HDRViewApp::modify_image_reversibly(const ImagePtr &img, const string &name
                             // nothing has to be remembered but the two functions.
                             return std::make_unique<LambdaUndo>(name, backward, forward);
                         });
+}
+
+bool HDRViewApp::modify_structure(const ImagePtr &img, const string &name, const function<void(Image &)> &op)
+{
+    const bool applied = modify_image(img, name, op, [&name](const Image &image) -> UndoPtr
+                                      { return std::make_unique<StructureUndo>(image, name); });
+    if (!applied)
+        return false;
+
+    // The channel list changed wholesale, so the layers and groups built from its names have to be built
+    // again -- but only those. finalize() would premultiply a straight-alpha image a second time.
+    img->rebuild_layers();
+    update_visibility();
+
+    // The view was framing an image of a different size; leaving the zoom and pan alone would put the new
+    // one partly or entirely off screen.
+    fit_display_window();
+
+    return true;
 }
 
 bool HDRViewApp::undo()
@@ -363,6 +384,107 @@ void HDRViewApp::draw_fill_dialog(bool &open)
     }
     else if (result == ImGui::DialogResult::Cancel)
         ImGui::CloseCurrentPopup();
+
+    ImGui::EndPopup();
+}
+
+void HDRViewApp::draw_canvas_size_dialog(bool &open)
+{
+    static int2                width_height{0, 0};
+    static Image::CanvasAnchor anchor = Image::Anchor_MiddleCenter;
+
+    auto img = current_image();
+    if (!img)
+        return;
+
+    if (!ImGui::BeginModalDialog("Canvas size...", open))
+        return;
+
+    // Opens showing what the image currently is, so the dialog starts as a no-op rather than with whatever
+    // was typed into it last time against a different image.
+    if (width_height.x <= 0 || width_height.y <= 0)
+        width_height = img->size();
+
+    ImGui::InputInt2("Width, height", &width_height.x);
+    width_height = la::max(width_height, int2{1});
+
+    ImGui::SeparatorText("Anchor");
+    // Which edges absorb the difference. Laid out as the 3x3 it means.
+    for (int row = 0; row < 3; ++row)
+    {
+        for (int col = 0; col < 3; ++col)
+        {
+            const int i = row * 3 + col;
+            if (col)
+                ImGui::SameLine();
+            if (ImGui::RadioButton(fmt::format("##anchor{}", i).c_str(), int(anchor) == i))
+                anchor = Image::CanvasAnchor(i);
+        }
+    }
+
+    const auto result = ImGui::DialogButtons("Resize");
+    if (result == ImGui::DialogResult::Confirm)
+    {
+        const int2 size = width_height;
+        const auto a    = anchor;
+        modify_structure(current_image(), "Canvas size", [size, a](Image &i) { i.resize_canvas(size, a); });
+        width_height = int2{0}; // so the next open reads the new size
+        ImGui::CloseCurrentPopup();
+    }
+    else if (result == ImGui::DialogResult::Cancel)
+    {
+        width_height = int2{0};
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void HDRViewApp::draw_image_size_dialog(bool &open)
+{
+    static int2 width_height{0, 0};
+    static bool keep_aspect = true;
+
+    auto img = current_image();
+    if (!img)
+        return;
+
+    if (!ImGui::BeginModalDialog("Image size...", open))
+        return;
+
+    const int2 current = img->size();
+    if (width_height.x <= 0 || width_height.y <= 0)
+        width_height = current;
+
+    const int2 before = width_height;
+    ImGui::InputInt2("Width, height", &width_height.x);
+    width_height = la::max(width_height, int2{1});
+
+    ImGui::Checkbox("Keep aspect ratio", &keep_aspect);
+    if (keep_aspect && current.x > 0 && current.y > 0)
+    {
+        // Follow whichever the user just changed, so typing into either field drives the other.
+        if (width_height.x != before.x)
+            width_height.y = std::max(1, int(std::lround(double(width_height.x) * current.y / current.x)));
+        else if (width_height.y != before.y)
+            width_height.x = std::max(1, int(std::lround(double(width_height.y) * current.x / current.y)));
+    }
+
+    ImGui::TextFmt("From {}x{}", current.x, current.y);
+
+    const auto result = ImGui::DialogButtons("Resize");
+    if (result == ImGui::DialogResult::Confirm)
+    {
+        const int2 size = width_height;
+        modify_structure(current_image(), "Image size", [size](Image &i) { i.resample(size); });
+        width_height = int2{0};
+        ImGui::CloseCurrentPopup();
+    }
+    else if (result == ImGui::DialogResult::Cancel)
+    {
+        width_height = int2{0};
+        ImGui::CloseCurrentPopup();
+    }
 
     ImGui::EndPopup();
 }

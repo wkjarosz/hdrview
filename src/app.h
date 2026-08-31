@@ -241,6 +241,17 @@ public:
     bool modify_pixels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
                        const std::function<float(float, int2, int)> &op);
 
+    /*!
+        Apply an edit that changes the image's shape, as one undoable step.
+
+        For crop, canvas resize, and anything else that changes how many samples there are or how many
+        channels hold them. The whole channel list is saved rather than a rectangle of it, since there is
+        no rectangle of the old samples that describes the new ones.
+
+        Rebuilds the layer tree afterwards and refits the view, which a shape change invalidates.
+    */
+    bool modify_structure(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op);
+
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
 
@@ -249,6 +260,8 @@ public:
     void draw_exposure_gamma_dialog(bool &open);
     void draw_brightness_contrast_dialog(bool &open);
     void draw_fill_dialog(bool &open);
+    void draw_canvas_size_dialog(bool &open);
+    void draw_image_size_dialog(bool &open);
 
     /// The subject the menu's edits use, shown and changed under Edit > Apply to.
     EditSubject &edit_subject() { return m_edit_subject; }

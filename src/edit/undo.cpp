@@ -132,3 +132,48 @@ void CommandHistory::trim()
     // from here on rather than pretending some later state matches the file.
     m_saved_state = m_saved_state >= dropped ? m_saved_state - dropped : -1;
 }
+
+StructureUndo::StructureUndo(const Image &img, std::string name) :
+    m_name(std::move(name)), m_data_window(img.data_window), m_display_window(img.display_window)
+{
+    // Channel is not copyable -- the deleted copy is what stops a texture and a statistics task being
+    // duplicated by accident -- so the samples are copied into fresh channels, which have neither.
+    m_channels.reserve(img.channels.size());
+    for (const auto &c : img.channels)
+    {
+        Channel copy{c.name, c.size()};
+        copy.bits_per_sample = c.bits_per_sample;
+        std::copy(c.data(), c.data() + c.num_elements(), copy.data());
+        m_channels.push_back(std::move(copy));
+    }
+}
+
+StructureUndo::~StructureUndo() = default;
+
+void StructureUndo::swap(Image &img)
+{
+    std::swap(m_channels, img.channels);
+    std::swap(m_data_window, img.data_window);
+    std::swap(m_display_window, img.display_window);
+
+    // The channels that just arrived may be a different size, or carry no texture at all, so nothing about
+    // the old ones transfers; each is rebuilt from its samples on the next draw.
+    for (auto &c : img.channels)
+    {
+        c.texture_is_dirty = true;
+        c.mipmap_is_dirty  = true;
+    }
+
+    // The layers, groups, and tree are built from the channel names, and the channel list just changed
+    // wholesale. Only that -- finalize() would also premultiply a straight-alpha image a second time.
+    img.rebuild_layers();
+
+    ++img.content_version;
+}
+
+size_t StructureUndo::memory_usage() const
+{
+    size_t total = 0;
+    for (const auto &c : m_channels) total += size_t(c.num_elements()) * sizeof(float);
+    return total;
+}

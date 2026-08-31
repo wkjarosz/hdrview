@@ -368,3 +368,181 @@ TEST_CASE("A geometric edit leaves the layer and group structure alone")
     CHECK(img->groups.size() == groups);
     CHECK(img->channels.size() == channels);
 }
+
+TEST_CASE("Cropping keeps the samples inside the box and makes them the whole image")
+{
+    auto img = make_test_image();
+    img->finalize();
+
+    const Box2i box{{1, 1}, {4, 3}}; // half-open: 3 wide, 2 tall
+    img->crop(box);
+
+    CHECK(img->size() == int2{3, 2});
+    CHECK(img->data_window == box);
+    // What is left is the whole image now, not a crop sitting inside the old canvas.
+    CHECK(img->display_window == box);
+
+    for (int c = 0; c < int(img->channels.size()); ++c)
+    {
+        CHECK(img->channels[size_t(c)].size() == int2{3, 2});
+        for (int y = 0; y < 2; ++y)
+            for (int x = 0; x < 3; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                // The sample that was at box.min + (x,y) before.
+                CHECK(img->channels[size_t(c)](x, y) == expected(c, x + box.min.x, y + box.min.y));
+            }
+    }
+}
+
+TEST_CASE("Cropping to nothing leaves the image alone")
+{
+    auto img = make_test_image();
+    img->finalize();
+
+    // Entirely outside the data window, so the intersection is empty.
+    img->crop(Box2i{{20, 20}, {30, 30}});
+
+    CHECK(img->size() == k_size);
+    CHECK(matches_original(img));
+}
+
+TEST_CASE("Growing the canvas keeps the samples and zero-fills the rest")
+{
+    auto img = make_test_image(1);
+    img->finalize();
+
+    // Anchored top-left, so the old samples stay at the origin and the new space is added right and below.
+    img->resize_canvas(int2{k_size.x + 2, k_size.y + 1}, Image::Anchor_TopLeft);
+
+    CHECK(img->size() == int2{k_size.x + 2, k_size.y + 1});
+
+    const auto &ch = img->channels[0];
+    for (int y = 0; y < ch.size().y; ++y)
+        for (int x = 0; x < ch.size().x; ++x)
+        {
+            CAPTURE(x);
+            CAPTURE(y);
+            const bool inside = x < k_size.x && y < k_size.y;
+            CHECK(ch(x, y) == (inside ? expected(0, x, y) : 0.f));
+        }
+}
+
+TEST_CASE("The anchor decides which edges absorb the change")
+{
+    // Grown by two columns with the samples anchored right: the new space lands on the left, so the old
+    // first column is now the third.
+    auto img = make_test_image(1);
+    img->finalize();
+    img->resize_canvas(int2{k_size.x + 2, k_size.y}, Image::Anchor_MiddleRight);
+
+    const auto &ch = img->channels[0];
+    CHECK(ch(0, 0) == 0.f);
+    CHECK(ch(1, 0) == 0.f);
+    CHECK(ch(2, 0) == expected(0, 0, 0));
+}
+
+TEST_CASE("Shrinking the canvas discards what falls outside it")
+{
+    auto img = make_test_image(1);
+    img->finalize();
+
+    // Anchored top-left, so the right and bottom edges are the ones cut.
+    img->resize_canvas(int2{k_size.x - 2, k_size.y - 1}, Image::Anchor_TopLeft);
+
+    CHECK(img->size() == int2{k_size.x - 2, k_size.y - 1});
+    const auto &ch = img->channels[0];
+    for (int y = 0; y < ch.size().y; ++y)
+        for (int x = 0; x < ch.size().x; ++x) CHECK(ch(x, y) == expected(0, x, y));
+}
+
+TEST_CASE("A structural entry restores the samples, the windows, and the layer tree")
+{
+    auto img = make_test_image();
+    img->finalize();
+
+    const size_t layers  = img->layers.size();
+    const size_t groups  = img->groups.size();
+    const Box2i  data    = img->data_window;
+    const Box2i  display = img->display_window;
+
+    StructureUndo entry{*img, "Crop"};
+    img->crop(Box2i{{1, 1}, {3, 2}});
+    img->rebuild_layers();
+    REQUIRE(img->size() != k_size);
+
+    entry.undo(*img);
+
+    CHECK(img->size() == k_size);
+    CHECK(img->data_window == data);
+    CHECK(img->display_window == display);
+    CHECK(matches_original(img));
+    // Rebuilt from the restored channels rather than left describing the cropped ones.
+    CHECK(img->layers.size() == layers);
+    CHECK(img->groups.size() == groups);
+
+    // And redo returns to the cropped state, since the entry came out holding it.
+    entry.redo(*img);
+    CHECK(img->size() == int2{2, 1});
+}
+
+TEST_CASE("Resampling to the same size changes nothing")
+{
+    auto img = make_test_image();
+    img->finalize();
+    img->resample(k_size);
+    CHECK(matches_original(img));
+}
+
+TEST_CASE("Reducing averages rather than dropping samples")
+{
+    // A row that alternates 0 and 1: point-sampling a halving would return all of one or all of the other,
+    // where averaging returns the mean. This is the difference the box filter exists for.
+    auto  img = std::make_shared<Image>(int2{4, 1}, 1);
+    auto &ch  = img->channels[0];
+    for (int x = 0; x < 4; ++x) ch(x, 0) = float(x % 2);
+    img->finalize();
+
+    img->resample(int2{2, 1});
+
+    REQUIRE(img->size() == int2{2, 1});
+    CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
+    CHECK(img->channels[0](1, 0) == doctest::Approx(0.5f));
+}
+
+TEST_CASE("Enlarging interpolates between the samples it has")
+{
+    auto  img = std::make_shared<Image>(int2{2, 1}, 1);
+    auto &ch  = img->channels[0];
+    ch(0, 0)  = 0.f;
+    ch(1, 0)  = 1.f;
+    img->finalize();
+
+    img->resample(int2{4, 1});
+
+    REQUIRE(img->size() == int2{4, 1});
+    const auto &out = img->channels[0];
+    // Monotonic between the two originals, and never outside them -- an interpolation, not an
+    // extrapolation.
+    for (int x = 0; x < 4; ++x)
+    {
+        CAPTURE(x);
+        CHECK(out(x, 0) >= 0.f);
+        CHECK(out(x, 0) <= 1.f);
+    }
+    CHECK(out(0, 0) < out(3, 0));
+}
+
+TEST_CASE("Resampling resizes every channel and both windows together")
+{
+    auto img = make_test_image();
+    img->finalize();
+
+    img->resample(int2{10, 6});
+
+    CHECK(img->size() == int2{10, 6});
+    CHECK(img->data_window.size() == int2{10, 6});
+    CHECK(img->display_window.size() == int2{10, 6});
+    for (const auto &c : img->channels) CHECK(c.size() == int2{10, 6});
+}

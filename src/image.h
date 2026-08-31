@@ -594,6 +594,55 @@ public:
     void rotate_90_cw();
     void rotate_90_ccw();
 
+    /*!
+        Reduce the image to \p box, in image coordinates, discarding everything outside it.
+
+        Both windows become the box: what is left is the whole image afterwards, not a crop sitting inside
+        the old canvas. Samples are moved, never resampled.
+    */
+    void crop(const Box2i &box);
+
+    /*!
+        Change the canvas to \p size, keeping the samples and placing them per \p anchor.
+
+        Nothing is resampled -- the image keeps its scale and either gains empty margins or loses what
+        falls outside. New samples are zero, which for an image with alpha reads as transparent.
+    */
+    enum CanvasAnchor : int
+    {
+        Anchor_TopLeft = 0,
+        Anchor_TopCenter,
+        Anchor_TopRight,
+        Anchor_MiddleLeft,
+        Anchor_MiddleCenter,
+        Anchor_MiddleRight,
+        Anchor_BottomLeft,
+        Anchor_BottomCenter,
+        Anchor_BottomRight,
+
+        Anchor_COUNT
+    };
+    void resize_canvas(int2 size, CanvasAnchor anchor);
+
+    /*!
+        Rescale the image to \p size, resampling its samples.
+
+        Unlike resize_canvas(), this changes the scale rather than the frame: the same picture, at a
+        different number of samples. Reducing averages over the source samples each destination one covers,
+        so detail is combined rather than dropped -- point-sampling a reduction aliases badly. Enlarging
+        interpolates bilinearly between them.
+    */
+    void resample(int2 size);
+
+    /*!
+        Rebuild the layers, groups, and tree from the channels, and nothing else.
+
+        What a structural edit needs after changing the channel list. Deliberately not finalize(), which
+        would also premultiply a straight-alpha image a second time and re-derive metadata that has not
+        changed.
+    */
+    void rebuild_layers();
+
 private:
     //! Move the windows the way the samples just moved, so the two stay in the same frame.
     void reflect_windows(bool horizontal);

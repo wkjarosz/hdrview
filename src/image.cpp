@@ -1193,6 +1193,156 @@ void Image::rotate_90_ccw()
     flip_vertical();
 }
 
+void Image::resample(int2 size)
+{
+    if (size.x <= 0 || size.y <= 0 || size == data_window.size())
+        return;
+
+    const int2   old_size = data_window.size();
+    const float2 scale{float(old_size.x) / float(size.x), float(old_size.y) / float(size.y)};
+
+    for (auto &channel : channels)
+    {
+        Array2Df out{size};
+
+        const int block_size = std::max(1, 1024 * 1024 / std::max(1, size.x));
+        stp::parallel_for(stp::blocked_range<int>(0, size.y, block_size),
+                          [&](int y0, int y1, int, int)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < size.x; ++x)
+                                  {
+                                      // The source rectangle this destination sample stands for.
+                                      const float2 lo{float(x) * scale.x, float(y) * scale.y};
+                                      const float2 hi{lo.x + scale.x, lo.y + scale.y};
+
+                                      if (scale.x > 1.f || scale.y > 1.f)
+                                      {
+                                          // Reducing: average the source samples the rectangle covers, so that detail
+                                          // between them is combined rather than skipped over.
+                                          const int x0  = std::max(0, int(std::floor(lo.x)));
+                                          const int y0_ = std::max(0, int(std::floor(lo.y)));
+                                          const int x1  = std::min(old_size.x, std::max(x0 + 1, int(std::ceil(hi.x))));
+                                          const int y1_ = std::min(old_size.y, std::max(y0_ + 1, int(std::ceil(hi.y))));
+
+                                          float sum = 0.f;
+                                          for (int sy = y0_; sy < y1_; ++sy)
+                                              for (int sx = x0; sx < x1; ++sx) sum += channel(sx, sy);
+
+                                          out(x, y) = sum / float((x1 - x0) * (y1_ - y0_));
+                                      }
+                                      else
+                                      {
+                                          // Enlarging: bilinear between the four samples around the rectangle's center,
+                                          // clamped at the edges so the border repeats rather than reading past it.
+                                          const float sx  = std::max(0.f, (lo.x + hi.x) * 0.5f - 0.5f);
+                                          const float sy  = std::max(0.f, (lo.y + hi.y) * 0.5f - 0.5f);
+                                          const int   x0  = std::min(old_size.x - 1, int(sx));
+                                          const int   y0_ = std::min(old_size.y - 1, int(sy));
+                                          const int   x1  = std::min(old_size.x - 1, x0 + 1);
+                                          const int   y1_ = std::min(old_size.y - 1, y0_ + 1);
+                                          const float tx = sx - float(x0), ty = sy - float(y0_);
+
+                                          out(x, y) =
+                                              (1.f - ty) * ((1.f - tx) * channel(x0, y0_) + tx * channel(x1, y0_)) +
+                                              ty * ((1.f - tx) * channel(x0, y1_) + tx * channel(x1, y1_));
+                                      }
+                                  }
+                          });
+
+        channel.resize(size);
+        std::copy(out.data(), out.data() + out.num_elements(), channel.data());
+        channel.texture_is_dirty = true;
+    }
+
+    data_window    = Box2i{data_window.min, data_window.min + size};
+    display_window = data_window;
+}
+
+void Image::rebuild_layers()
+{
+    build_layers_and_groups();
+
+    // The channel list may have shrunk, so an index that was valid before need not be now.
+    if (!is_valid_group(selected_group))
+        selected_group = groups.empty() ? -1 : 0;
+    if (!is_valid_group(reference_group))
+        reference_group = -1;
+}
+
+void Image::crop(const Box2i &box)
+{
+    Box2i clipped = box;
+    clipped.intersect(data_window);
+    const int2 extent = clipped.size();
+    if (extent.x <= 0 || extent.y <= 0)
+        return;
+
+    const int2 offset = clipped.min - data_window.min;
+
+    for (auto &channel : channels)
+    {
+        Array2Df  cropped{extent};
+        const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+        stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                          [&](int y0, int y1, int, int)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < extent.x; ++x)
+                                      cropped(x, y) = channel(offset.x + x, offset.y + y);
+                          });
+
+        channel.resize(extent);
+        std::copy(cropped.data(), cropped.data() + cropped.num_elements(), channel.data());
+        // A different shape, so the texture is rebuilt rather than updated in place.
+        channel.texture_is_dirty = true;
+    }
+
+    // What is left is the whole image now, not a crop sitting inside the old canvas.
+    data_window    = clipped;
+    display_window = clipped;
+}
+
+void Image::resize_canvas(int2 size, CanvasAnchor anchor)
+{
+    if (size.x <= 0 || size.y <= 0 || size == data_window.size())
+        return;
+
+    const int2 old_size = data_window.size();
+
+    // Where the old samples land in the new canvas: the anchor picks which edges absorb the difference,
+    // and a negative offset simply means that edge is being cut rather than padded.
+    const int  col = int(anchor) % 3, row = int(anchor) / 3;
+    const int2 offset{(size.x - old_size.x) * col / 2, (size.y - old_size.y) * row / 2};
+
+    for (auto &channel : channels)
+    {
+        Array2Df resized{size}; // zero-filled: transparent wherever the image has alpha
+
+        // Only the overlap is copied; everything else keeps the fill.
+        const int2 lo{std::max(0, offset.x), std::max(0, offset.y)};
+        const int2 hi{std::min(size.x, offset.x + old_size.x), std::min(size.y, offset.y + old_size.y)};
+        if (hi.x > lo.x && hi.y > lo.y)
+        {
+            const int block_size = std::max(1, 1024 * 1024 / std::max(1, hi.x - lo.x));
+            stp::parallel_for(stp::blocked_range<int>(lo.y, hi.y, block_size),
+                              [&](int y0, int y1, int, int)
+                              {
+                                  for (int y = y0; y < y1; ++y)
+                                      for (int x = lo.x; x < hi.x; ++x)
+                                          resized(x, y) = channel(x - offset.x, y - offset.y);
+                              });
+        }
+
+        channel.resize(size);
+        std::copy(resized.data(), resized.data() + resized.num_elements(), channel.data());
+        channel.texture_is_dirty = true;
+    }
+
+    data_window    = Box2i{data_window.min, data_window.min + size};
+    display_window = data_window;
+}
+
 void Image::apply_exif_orientation()
 {
     // --- EXIF orientation handling ---
