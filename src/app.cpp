@@ -1647,20 +1647,20 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    }});
 
         add(Action{{"Blur...", "Gaussian blur", "Box blur"},
-                   ICON_MY_BLANK,
+                   ICON_MY_BLUR,
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Blur...").open = true; },
                    if_editable});
         add(Action{{"Unsharp mask...", "Sharpen"},
-                   ICON_MY_BLANK,
+                   ICON_MY_SHARPEN,
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Unsharp mask...").open = true; },
                    if_editable});
 
         add(Action{{"Crop to selection"},
-                   ICON_MY_BLANK,
+                   ICON_MY_CROP,
                    ImGuiMod_Alt | ImGuiKey_C,
                    0,
                    [this]()
@@ -1681,35 +1681,35 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        return box.has_volume() && box != img->data_window;
                    }});
         add(Action{{"Image size...", "Resize the image"},
-                   ICON_MY_BLANK,
+                   ICON_MY_IMAGE_SIZE,
                    ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
                    0,
                    [this]() { dialog("Image size...").open = true; },
                    if_editable});
         add(Action{{"Canvas size..."},
-                   ICON_MY_BLANK,
+                   ICON_MY_CANVAS_SIZE,
                    ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C,
                    0,
                    [this]() { dialog("Canvas size...").open = true; },
                    if_editable});
 
         add(Action{{"Exposure/gamma..."},
-                   ICON_MY_BLANK,
+                   ICON_MY_EXPOSURE,
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Exposure/gamma...").open = true; },
                    if_editable});
         add(Action{{"Brightness/contrast..."},
-                   ICON_MY_BLANK,
+                   ICON_MY_BRIGHTNESS_CONTRAST,
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Brightness/contrast...").open = true; },
                    if_editable});
         add(Action{
-            {"Fill..."}, ICON_MY_BLANK, ImGuiKey_None, 0, [this]() { dialog("Fill...").open = true; }, if_editable});
+            {"Fill..."}, ICON_MY_FILL, ImGuiKey_None, 0, [this]() { dialog("Fill...").open = true; }, if_editable});
 
         add(Action{{"Select all", "Select the entire image"},
-                   ICON_MY_BLANK,
+                   ICON_MY_SELECT_ALL,
                    ImGuiMod_Ctrl | ImGuiKey_A,
                    0,
                    [this]()
@@ -1719,14 +1719,14 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    },
                    if_img});
         add(Action{{"Deselect", "Clear the selection"},
-                   ICON_MY_BLANK,
+                   ICON_MY_DESELECT,
                    ImGuiMod_Ctrl | ImGuiKey_D,
                    0,
                    [this]() { m_roi = Box2i{}; },
                    [this]() { return m_roi.has_volume(); }});
 
         add(Action{{"Invert", "Negative"},
-                   ICON_MY_BLANK,
+                   ICON_MY_INVERT,
                    ImGuiMod_Ctrl | ImGuiKey_I,
                    0,
                    [this]() {
@@ -1735,7 +1735,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    },
                    if_editable});
         add(Action{{"Clamp to [0,1]", "Clip to LDR range"},
-                   ICON_MY_BLANK,
+                   ICON_MY_CLAMP,
                    ImGuiKey_None,
                    0,
                    [this]()
@@ -1745,7 +1745,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    },
                    if_editable});
         add(Action{{"Zap gremlins", "Replace NaNs and infinities"},
-                   ICON_MY_BLANK,
+                   ICON_MY_ZAP_GREMLINS,
                    ImGuiKey_None,
                    0,
                    [this]()
