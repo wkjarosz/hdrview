@@ -403,33 +403,81 @@ void HDRViewApp::draw_fill_dialog(bool &open)
 {
     static float4 color{0.f, 0.f, 0.f, 1.f};
 
-    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    // What the color's alpha is taken to mean, which is genuinely two different operations.
+    enum Mode : int
+    {
+        Mode_Blend = 0, //!< Coverage: lay the color over what is there
+        Mode_Replace    //!< Write it outright, alpha channel included
+    };
+    static int mode = Mode_Blend;
+
+    ImGui::SetNextWindowSize(ImVec2(24.f * HelloImGui::EmSize(), 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Fill...", open, ImGui::DialogPosition::Center))
     {
         ImGui::ColorEdit4("Color", &color.x,
                           ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar);
+
+        ImGui::RadioButton("Blend over", &mode, Mode_Blend);
+        ImGui::Tooltip("The color's alpha is how much of it to lay over what is already there. At 1 it "
+                       "covers completely; at 0 it changes nothing. Works on any image, with or without an "
+                       "alpha channel of its own.");
+        ImGui::SameLine();
+        ImGui::RadioButton("Replace", &mode, Mode_Replace);
+        ImGui::Tooltip("Write the color as given, including its alpha, so the filled region takes on that "
+                       "transparency. Needs the image to have an alpha channel for the alpha to land "
+                       "anywhere.");
+
+        if (mode == Mode_Replace)
+            if (auto img = current_image(); img && img->is_valid_group(img->active_group_index(Target_Primary)))
+                if (!group_has_alpha(img->groups[size_t(img->active_group_index(Target_Primary))].type))
+                    ImGui::TextUnformatted("This channel group has no alpha, so the color's alpha has\n"
+                                           "nowhere to go. Blend over instead to use it as coverage.");
 
         draw_edit_subject_selector();
 
         const auto result = ImGui::DialogButtons("Fill");
         if (result == ImGui::DialogResult::Confirm)
         {
-            // The one edit whose value depends on which channel it is writing: a group's channels arrive in
-            // order, so the slot indexes the color. Beyond four -- an "all channels" subject on a
-            // multi-layer image -- the components repeat rather than running off the end.
-            float4 c = color;
+            const float4 c = color;
 
-            // finalize() premultiplies a straight-alpha image, so the samples in memory are premultiplied
-            // wherever alpha means transparency. Writing the color as typed would be too bright by a factor
-            // of its own alpha, which reads as the alpha having had no effect at all.
+            // Whether the samples in memory are premultiplied, which finalize() makes them whenever alpha
+            // means transparency. Both modes have to match that or the result is out by a factor of alpha.
+            bool premultiplied = false;
+            int  alpha_slot    = -1;
             if (auto img = current_image(); img && img->is_valid_group(img->active_group_index(Target_Primary)))
             {
                 const auto &group = img->groups[size_t(img->active_group_index(Target_Primary))];
                 if (img->alpha_type != AlphaType_None && group_has_alpha(group.type))
-                    c = float4{c.x * c.w, c.y * c.w, c.z * c.w, c.w};
+                {
+                    premultiplied = true;
+                    alpha_slot    = group.num_channels - 1;
+                }
             }
 
-            modify_pixels(current_image(), "Fill", m_edit_subject, [c](float, int2, int slot) { return c[slot % 4]; });
+            if (mode == Mode_Replace)
+            {
+                // Premultiplied storage wants the color scaled by its own alpha; the alpha channel itself
+                // is stored as given.
+                float4 v = c;
+                if (premultiplied)
+                    v = float4{c.x * c.w, c.y * c.w, c.z * c.w, c.w};
+
+                modify_pixels(current_image(), "Fill", m_edit_subject,
+                              [v](float, int2, int slot) { return v[slot % 4]; });
+            }
+            else
+            {
+                // Source-over. With premultiplied storage the color contributes a*c and what was there
+                // keeps (1-a) of itself, which is the same expression for colour and alpha alike -- the
+                // alpha channel's own "color" being 1.
+                const float a = c.w;
+                modify_pixels(current_image(), "Fill", m_edit_subject,
+                              [c, a, alpha_slot](float old, int2, int slot)
+                              {
+                                  const float src = (slot == alpha_slot) ? 1.f : c[slot % 4];
+                                  return a * src + (1.f - a) * old;
+                              });
+            }
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
@@ -449,71 +497,62 @@ enum SizeUnits : int
     Units_Percent
 };
 
-//! The chain-link toggle that ties width and height together, as an icon rather than a checkbox.
-bool aspect_lock_button(bool *locked)
-{
-    const bool clicked = ImGui::Button(*locked ? ICON_MY_LINK : ICON_MY_UNLINK);
-    if (clicked)
-        *locked = !*locked;
-    ImGui::Tooltip(*locked ? "Width and height are tied to the original aspect ratio. Click to unlink."
-                           : "Width and height are set independently. Click to link.");
-    return clicked;
-}
-
 /*!
-    Width and height in \p units, with a lock that keeps their ratio.
+    Width and height side by side, with the chain link that ties them.
 
-    \p size is always in pixels; the fields convert. Editing one side with the lock on drives the other
-    from \p original's ratio rather than from the current values, so a sequence of edits cannot drift.
-
-    Returns whether anything changed.
+    \p size is always in pixels; the fields convert. Editing one side with the link closed drives the other
+    from \p original's ratio rather than from the current values, so a run of edits cannot drift away from
+    the ratio a rounding at a time.
 */
-bool size_fields(int2 *size, int *units, bool *locked, int2 original)
+void size_fields(int2 *size, int *units, bool *locked, int2 original)
 {
-    bool changed = false;
+    const float field  = 7.f * HelloImGui::EmSize();
+    const int2  before = *size;
 
     ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
-    if (ImGui::Combo("Units", units, "Pixels\0Percent\0"))
-        changed = true;
+    ImGui::Combo("Units", units, "Pixels\0Percent\0");
     ImGui::Tooltip("Drag either field to sweep the size; ctrl-click one to type an exact value.");
-
-    const int2 before = *size;
 
     if (*units == Units_Percent)
     {
         float2 pct{100.f * float(size->x) / float(std::max(1, original.x)),
                    100.f * float(size->y) / float(std::max(1, original.y))};
 
-        ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
-        if (ImGui::DragFloat("Width##pct", &pct.x, 0.5f, 1.f, 1000.f, "%.1f %%"))
-            changed = true;
-        ImGui::SameLine();
-        aspect_lock_button(locked);
-
-        ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
-        if (ImGui::DragFloat("Height##pct", &pct.y, 0.5f, 1.f, 1000.f, "%.1f %%"))
-            changed = true;
+        ImGui::SetNextItemWidth(field);
+        ImGui::DragFloat("##width", &pct.x, 0.5f, 1.f, 1000.f, "%.1f %%");
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TextUnformatted("\xc3\x97"); // multiplication sign, as a size is written
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::SetNextItemWidth(field);
+        ImGui::DragFloat("##height", &pct.y, 0.5f, 1.f, 1000.f, "%.1f %%");
 
         size->x = std::max(1, int(std::lround(double(pct.x) * 0.01 * double(original.x))));
         size->y = std::max(1, int(std::lround(double(pct.y) * 0.01 * double(original.y))));
     }
     else
     {
-        ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
-        if (ImGui::DragInt("Width##px", &size->x, 1.f, 1, 65536, "%d px"))
-            changed = true;
-        ImGui::SameLine();
-        aspect_lock_button(locked);
-
-        ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
-        if (ImGui::DragInt("Height##px", &size->y, 1.f, 1, 65536, "%d px"))
-            changed = true;
+        ImGui::SetNextItemWidth(field);
+        ImGui::DragInt("##width", &size->x, 1.f, 1, 65536, "%d px");
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TextUnformatted("\xc3\x97");
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::SetNextItemWidth(field);
+        ImGui::DragInt("##height", &size->y, 1.f, 1, 65536, "%d px");
 
         *size = la::max(*size, int2{1});
     }
 
-    // Follow whichever side was just edited, from the original ratio rather than the current one so that
-    // repeated edits do not accumulate rounding.
+    // The link sits to the right of the pair it ties together.
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    if (ImGui::Button(*locked ? ICON_MY_LINK : ICON_MY_UNLINK))
+        *locked = !*locked;
+    ImGui::Tooltip(*locked ? "Width and height are tied to the original aspect ratio. Click to unlink."
+                           : "Width and height are set independently. Click to link.");
+
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::TextUnformatted("Width, height");
+
+    // Follow whichever side was just edited, from the original ratio rather than the current one.
     if (*locked && original.x > 0 && original.y > 0)
     {
         if (size->x != before.x)
@@ -521,8 +560,6 @@ bool size_fields(int2 *size, int *units, bool *locked, int2 original)
         else if (size->y != before.y)
             size->x = std::max(1, int(std::lround(double(size->y) * double(original.x) / double(original.y))));
     }
-
-    return changed;
 }
 
 } // namespace
@@ -953,7 +990,7 @@ void HDRViewApp::draw_filter_progress_dialog(bool &open)
         return;
     }
 
-    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(32.f * HelloImGui::EmSize(), 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Applying filter...", open, ImGui::DialogPosition::Center))
     {
         if (!m_running_filter)
@@ -1048,12 +1085,23 @@ void HDRViewApp::draw_remap_dialog(bool &open)
         mapping_combo("Source", &src_mapping);
         mapping_combo("Target", &dst_mapping);
 
-        ImGui::InputInt2("Width, height", &size.x);
+        ImGui::DragInt2("Width, height", &size.x, 1.f, 1, 65536, "%d px");
         size = la::max(size, int2{1});
 
+        static int sampling = EnvMapSampling_EWA;
+        ImGui::RadioButton("EWA", &sampling, EnvMapSampling_EWA);
+        ImGui::Tooltip("Reads a mip pyramid through an ellipse shaped by the area each output pixel covers "
+                       "in the source. That area is far wider than it is tall near a lat-long's poles, "
+                       "which is the case a mip level on its own cannot represent. Costs the same whatever "
+                       "the scale.");
+        ImGui::SameLine();
+        ImGui::RadioButton("Point", &sampling, EnvMapSampling_Point);
+        ImGui::Tooltip("Averages a grid of samples inside each output pixel. Exact when enlarging, but a "
+                       "reduction of more than the sample count still aliases.");
+
+        ImGui::BeginDisabled(sampling != EnvMapSampling_Point);
         ImGui::SliderInt("Samples per axis", &supersample, 1, 8);
-        ImGui::Tooltip("These mappings stretch unevenly -- a lat-long's poles, a disc's rim -- so one "
-                       "sample per pixel aliases wherever the source is being shrunk.");
+        ImGui::EndDisabled();
 
         const auto result = ImGui::DialogButtons("Remap");
         if (result == ImGui::DialogResult::Confirm)
@@ -1061,9 +1109,10 @@ void HDRViewApp::draw_remap_dialog(bool &open)
             const auto s = EnvMapping(src_mapping), d = EnvMapping(dst_mapping);
             const int2 out_size = size;
             const int  ss       = supersample;
+            const auto mode     = EnvMapSampling(sampling);
             modify_image_async(current_image(), "Remap envmap", out_size,
-                               [s, d, out_size, ss](const Array2Df &src, FilterProgress p)
-                               { return remapped_envmap(src, out_size, d, s, ss, p); });
+                               [s, d, out_size, ss, mode](const Array2Df &src, FilterProgress p)
+                               { return remapped_envmap(src, out_size, d, s, mode, ss, p); });
             size = int2{0};
             ImGui::CloseCurrentPopup();
         }
@@ -1093,7 +1142,7 @@ void HDRViewApp::draw_irradiance_dialog(bool &open)
             ImGui::EndCombo();
         }
 
-        ImGui::InputInt2("Width, height", &size.x);
+        ImGui::DragInt2("Width, height", &size.x, 1.f, 1, 8192, "%d px");
         size = la::max(size, int2{1});
         ImGui::Tooltip("Every output direction integrates over every input one, so this costs the two "
                        "resolutions multiplied together. The result is smooth enough that a small output "
@@ -1138,6 +1187,11 @@ void HDRViewApp::draw_zap_gremlins_dialog(bool &open)
     ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Zap gremlins...", open, ImGui::DialogPosition::Center))
     {
+        ImGui::TextWrapped("A NaN or an infinity is not a measurement. One of either makes the minimum, the "
+                           "maximum and the average of the whole channel meaningless, and it survives every "
+                           "filter it passes through, so it is worth removing before anything else is done.");
+        ImGui::Spacing();
+
         if (auto img = current_image())
             if (auto *stats = img->channels[img->groups[img->selected_group].channels[0]].get_stats())
                 if (stats->computed)

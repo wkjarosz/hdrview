@@ -387,48 +387,190 @@ bool envmap_uv_is_valid(EnvMapping mapping, float2 uv)
     }
 }
 
+namespace
+{
+
+/*!
+    A mip pyramid, each level half the size of the one before and averaged from it.
+
+    Built once per remap rather than per sample. Level 0 is the source itself, so the pyramid owns a copy
+    of it and every level can be addressed the same way.
+*/
+std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
+{
+    std::vector<Array2Df> levels;
+    levels.emplace_back(src);
+
+    while (levels.back().width() > 1 || levels.back().height() > 1)
+    {
+        const Array2Df &prev = levels.back();
+        const int2      size{std::max(1, prev.width() / 2), std::max(1, prev.height() / 2)};
+
+        Array2Df next{size};
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x)
+            {
+                // The up-to-four samples this one stands for; the guards matter on an odd dimension, where
+                // the last row or column has no partner.
+                const int x0 = std::min(2 * x, prev.width() - 1), x1 = std::min(2 * x + 1, prev.width() - 1);
+                const int y0 = std::min(2 * y, prev.height() - 1), y1 = std::min(2 * y + 1, prev.height() - 1);
+                next(x, y) = 0.25f * (prev(x0, y0) + prev(x1, y0) + prev(x0, y1) + prev(x1, y1));
+            }
+
+        levels.push_back(std::move(next));
+    }
+
+    return levels;
+}
+
+/*!
+    Sample \p levels at \p uv through an ellipse with the given axes, in image coordinates.
+
+    Elliptical weighted averaging, after Heckbert: the destination pixel's footprint in the source is an
+    ellipse, and every source sample inside it contributes a Gaussian weight in the ellipse's own space.
+    A mip level is chosen from the *minor* axis so the filter never has to gather more than a few samples
+    along the narrow direction, and the ellipse then does the work along the major one -- which is what
+    keeps a lat-long's pole, stretched hundreds of times more across than down, from either aliasing or
+    turning to mush.
+*/
+float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv)
+{
+    // Ellipse axes in samples at level 0, from the two derivatives.
+    const float2 base{float(levels[0].width()), float(levels[0].height())};
+    const float2 a = du * base, b = dv * base;
+
+    const float len_a = la::length(a), len_b = la::length(b);
+    const float major = std::max(len_a, len_b), minor = std::min(len_a, len_b);
+
+    // A level where the minor axis spans about one sample, so the gather stays small. The ellipse is
+    // clamped to a sane eccentricity first: an unbounded one costs unbounded samples along the major axis.
+    constexpr float k_max_aniso = 16.f;
+    const float     wanted      = std::max(minor, major / k_max_aniso);
+    const int       level = std::clamp(int(std::floor(std::log2(std::max(1e-6f, wanted)))), 0, int(levels.size()) - 1);
+
+    const Array2Df &lvl   = levels[size_t(level)];
+    const float     scale = 1.f / float(1 << level);
+
+    // The ellipse in this level's coordinates.
+    const float2 ea = a * scale, eb = b * scale;
+    const float2 center{uv.x * float(lvl.width()) - 0.5f, uv.y * float(lvl.height()) - 0.5f};
+
+    // Implicit form: A x^2 + B x y + C y^2 = F, from the two axis vectors.
+    float A = ea.y * ea.y + eb.y * eb.y;
+    float B = -2.f * (ea.x * ea.y + eb.x * eb.y);
+    float C = ea.x * ea.x + eb.x * eb.x;
+    float F = A * C - 0.25f * B * B;
+    if (!(F > 1e-12f))
+        return sample_bilinear(levels[size_t(level)], uv); // degenerate; nothing to integrate over
+
+    // Normalize so the ellipse's boundary is at 1, then take the box that bounds it.
+    const float inv_f = 1.f / F;
+    A *= inv_f;
+    B *= inv_f;
+    C *= inv_f;
+
+    const float det     = std::max(1e-12f, 4.f * A * C - B * B);
+    const float bound_x = 2.f * std::sqrt(std::max(0.f, C) / det);
+    const float bound_y = 2.f * std::sqrt(std::max(0.f, A) / det);
+
+    const int x0 = int(std::floor(center.x - bound_x)), x1 = int(std::ceil(center.x + bound_x));
+    const int y0 = int(std::floor(center.y - bound_y)), y1 = int(std::ceil(center.y + bound_y));
+
+    float sum = 0.f, total = 0.f;
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x)
+        {
+            const float dx = float(x) - center.x, dy = float(y) - center.y;
+            const float q = A * dx * dx + B * dx * dy + C * dy * dy;
+            if (q >= 1.f)
+                continue; // outside the ellipse
+
+            // Gaussian falling to about 1/e^2 at the boundary, which is the usual EWA choice.
+            const float w = std::exp(-2.f * q);
+            sum += w * lvl(std::clamp(x, 0, lvl.width() - 1), std::clamp(y, 0, lvl.height() - 1));
+            total += w;
+        }
+
+    // A footprint smaller than a sample can enclose none of them.
+    return total > 0.f ? sum / total : sample_bilinear(lvl, uv);
+}
+
+} // namespace
+
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         int supersample, FilterProgress progress)
+                         EnvMapSampling sampling, int supersample, FilterProgress progress)
 {
     Array2Df    out{size};
     const int   ss  = std::max(1, supersample);
     const float inv = 1.f / float(ss * ss);
 
+    // Only EWA needs the pyramid, and building it copies the source, so it is not built otherwise.
+    const std::vector<Array2Df> levels =
+        sampling == EnvMapSampling_EWA ? build_mip_pyramid(src) : std::vector<Array2Df>{};
+
     progress.set_num_steps(size.y);
 
-    stp::parallel_for(stp::blocked_range<int>(0, size.y, 1),
-                      [&](int y0, int y1, int, int)
-                      {
-                          for (int y = y0; y < y1; ++y)
-                          {
-                              if (progress.canceled())
-                                  return;
+    stp::parallel_for(
+        stp::blocked_range<int>(0, size.y, 1),
+        [&](int y0, int y1, int, int)
+        {
+            for (int y = y0; y < y1; ++y)
+            {
+                if (progress.canceled())
+                    return;
 
-                              for (int x = 0; x < size.x; ++x)
-                              {
-                                  // Parts of a disc or a cube cross are not sphere; leave them empty
-                                  // rather than filling them with whatever direction clamping produces.
-                                  if (!envmap_uv_is_valid(dst_mapping, float2{(float(x) + 0.5f) / float(size.x),
-                                                                              (float(y) + 0.5f) / float(size.y)}))
-                                  {
-                                      out(x, y) = 0.f;
-                                      continue;
-                                  }
+                for (int x = 0; x < size.x; ++x)
+                {
+                    const float2 uv{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)};
 
-                                  float sum = 0.f;
-                                  for (int sy = 0; sy < ss; ++sy)
-                                      for (int sx = 0; sx < ss; ++sx)
-                                      {
-                                          const float2 uv{(float(x) + (float(sx) + 0.5f) / float(ss)) / float(size.x),
-                                                          (float(y) + (float(sy) + 0.5f) / float(ss)) / float(size.y)};
-                                          sum += sample_bilinear(src, convert_envmap_uv(src_mapping, dst_mapping, uv));
-                                      }
-                                  out(x, y) = sum * inv;
-                              }
+                    // Parts of a disc or a cube cross are not sphere; leave them empty rather than filling
+                    // them with whatever direction clamping produces.
+                    if (!envmap_uv_is_valid(dst_mapping, uv))
+                    {
+                        out(x, y) = 0.f;
+                        continue;
+                    }
 
-                              ++progress;
-                          }
-                      });
+                    if (sampling == EnvMapSampling_EWA)
+                    {
+                        // The footprint is the difference between *neighbouring destination pixels'* source
+                        // coordinates, which composes both mappings in one step -- no derivative of either
+                        // is needed, and it is the right quantity even across a seam, where an infinitesimal
+                        // one would be meaningless.
+                        const float2 c = convert_envmap_uv(src_mapping, dst_mapping, uv);
+                        const float2 rx =
+                            convert_envmap_uv(src_mapping, dst_mapping, float2{uv.x + 1.f / float(size.x), uv.y});
+                        const float2 ry =
+                            convert_envmap_uv(src_mapping, dst_mapping, float2{uv.x, uv.y + 1.f / float(size.y)});
+
+                        // A mapping that wraps puts a whole turn into one difference; take the short way.
+                        auto shortest = [](float2 d)
+                        {
+                            if (d.x > 0.5f)
+                                d.x -= 1.f;
+                            else if (d.x < -0.5f)
+                                d.x += 1.f;
+                            return d;
+                        };
+
+                        out(x, y) = sample_ewa(levels, c, shortest(rx - c), shortest(ry - c));
+                        continue;
+                    }
+
+                    float sum = 0.f;
+                    for (int sy = 0; sy < ss; ++sy)
+                        for (int sx = 0; sx < ss; ++sx)
+                        {
+                            const float2 s_uv{(float(x) + (float(sx) + 0.5f) / float(ss)) / float(size.x),
+                                              (float(y) + (float(sy) + 0.5f) / float(ss)) / float(size.y)};
+                            sum += sample_bilinear(src, convert_envmap_uv(src_mapping, dst_mapping, s_uv));
+                        }
+                    out(x, y) = sum * inv;
+                }
+
+                ++progress;
+            }
+        });
 
     return out;
 }

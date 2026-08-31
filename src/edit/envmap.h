@@ -83,12 +83,26 @@ float envmap_jacobian(EnvMapping mapping, float2 uv);
     parameterization, and reads there -- so nothing needs to know how the two mappings relate beyond the
     sphere they share.
 
-    \p supersample samples per axis within each destination pixel, averaged. Worth more than it looks:
-    the mappings stretch wildly in places (a lat-long's poles, a disc's rim), and one sample per pixel
-    aliases badly wherever the source is being minified.
+    How the source is read is the choice that matters, since these mappings stretch unevenly and a
+    destination pixel can cover a great many source ones:
+
+    - Point supersampling takes \p supersample samples per axis inside each destination pixel and averages
+      them. Simple and exact for magnification, but a minification of more than the sample count still
+      aliases, and raising the count costs its square.
+    - EWA reads a mip pyramid with an elliptical filter shaped by the footprint the destination pixel
+      actually covers in the source. That footprint is anisotropic -- a lat-long's pole is stretched
+      hundreds of times more across than down -- which is exactly what a mip level alone cannot express,
+      and it costs the same whatever the scale.
 */
+enum EnvMapSampling : int
+{
+    EnvMapSampling_Point = 0, //!< Supersample and average
+    EnvMapSampling_EWA        //!< Elliptical filter over a mip pyramid
+};
+
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         int supersample = 2, FilterProgress progress = {});
+                         EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2,
+                         FilterProgress progress = {});
 
 /*!
     Convolve \p src, a \p mapping of incident radiance, with a clamped cosine.

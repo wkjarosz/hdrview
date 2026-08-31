@@ -806,8 +806,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         auto        img   = hdrview()->current_image();
         const auto &group = img->groups[img->selected_group];
-        if (img->alpha_type == AlphaType_None || !group_has_alpha(group.type))
-            return; // nothing to premultiply against
+        // Loudly, not silently: this test skipping itself is how it passed while fill was still wrong.
+        IM_CHECK_EQ(int(img->alpha_type != AlphaType_None), 1);
+        IM_CHECK_EQ(int(group_has_alpha(group.type)), 1);
 
         // Half-transparent red. finalize() premultiplies a straight-alpha image, so what should land in
         // the channels is the color scaled by its own alpha -- writing it as typed reads as the alpha

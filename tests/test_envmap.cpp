@@ -243,7 +243,8 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
             auto f = [](float3 d) { return 0.5f + 0.25f * d.y + 0.15f * d.x; };
 
             const Array2Df src = make_envmap(int2{128, 128}, EnvMapping(src_m), f);
-            const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m), 2);
+            const Array2Df out =
+                remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m), EnvMapSampling_Point, 2);
 
             // Away from the edges: the disc mappings run out of sphere at their corners and the cube cross
             // has empty ones, where there is no direction to be right about.
@@ -271,7 +272,7 @@ TEST_CASE("Remapping a mapping to itself returns the image it was given")
     {
         CAPTURE(std::string(name_of(m)));
         const Array2Df src = make_envmap(int2{64, 64}, EnvMapping(m), f);
-        const Array2Df out = remapped_envmap(src, int2{64, 64}, EnvMapping(m), EnvMapping(m), 2);
+        const Array2Df out = remapped_envmap(src, int2{64, 64}, EnvMapping(m), EnvMapping(m), EnvMapSampling_Point, 2);
 
         // Inside a single face of the cube cross, which is the tightest constraint of the six: across one
         // of its seams supersampling genuinely averages two faces, so identity is not what should happen
@@ -343,4 +344,60 @@ TEST_CASE("Irradiance is smoother than what it was computed from")
     for (int i = 0; i < out.num_elements(); ++i) peak = std::max(peak, out(i));
     CHECK(peak < 100.f);
     CHECK(peak > 0.f);
+}
+
+TEST_CASE("EWA carries a value to the direction it belongs to, as point sampling does")
+{
+    // Whatever the filter, a smooth function of direction has to come back as that same function of the
+    // destination's directions. This is the property that says the footprint is being taken in the right
+    // place, rather than merely that something was averaged.
+    auto f = [](float3 d) { return 0.5f + 0.25f * d.y + 0.15f * d.x; };
+
+    const Array2Df src = make_envmap(int2{128, 128}, EnvMapping_LatLong, f);
+    const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping_Angular, EnvMapping_LatLong, EnvMapSampling_EWA);
+
+    for (int y = 16; y < 32; ++y)
+        for (int x = 16; x < 32; ++x)
+        {
+            const float2 uv{(x + 0.5f) / 48.f, (y + 0.5f) / 48.f};
+            if (!envmap_uv_is_valid(EnvMapping_Angular, uv))
+                continue;
+            CAPTURE(x);
+            CAPTURE(y);
+            CHECK(out(x, y) == doctest::Approx(f(envmap_uv_to_xyz(EnvMapping_Angular, uv))).epsilon(0.05));
+        }
+}
+
+TEST_CASE("EWA beats point sampling on a heavy reduction")
+{
+    // What the option is for. A high-frequency source shrunk hard aliases under a handful of point
+    // samples, where an elliptical filter over a pyramid averages the whole footprint -- so its result
+    // sits far closer to the true mean of the source.
+    // Narrow stripes: two lit columns in every eight, so a quarter of the source is lit. A tap lands where
+    // it lands and reports what is under it -- here, on the lit edge -- while the footprint it stands for
+    // is three quarters dark. A checkerboard would not do: its local average is its global one, so every
+    // filter gets the right answer for the wrong reason.
+    Array2Df src{int2{256, 256}};
+    for (int y = 0; y < 256; ++y)
+        for (int x = 0; x < 256; ++x) src(x, y) = (x % 8 < 2) ? 1.f : 0.f;
+    const double true_mean = 0.25;
+
+    const Array2Df ewa = remapped_envmap(src, int2{16, 16}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA);
+    // One tap per output pixel, which is what "point sampling" costs when it is chosen for speed. The taps
+    // are bilinear, so at two or more per axis they already average this particular pattern away -- the
+    // gap the option exists to close is the cheap setting, and a heavier reduction than the sample count
+    // can cover.
+    const Array2Df point =
+        remapped_envmap(src, int2{16, 16}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_Point, 1);
+
+    // Each output pixel covers sixteen source columns, which is two whole periods of the pattern, so the
+    // answer everywhere is the pattern's mean.
+    double ewa_err = 0.0, point_err = 0.0;
+    for (int i = 0; i < ewa.num_elements(); ++i)
+    {
+        ewa_err += std::abs(double(ewa(i)) - true_mean);
+        point_err += std::abs(double(point(i)) - true_mean);
+    }
+
+    CHECK(ewa_err < point_err);
 }
