@@ -255,16 +255,15 @@ public:
     /*!
         Apply a neighborhood filter to the subject's channels, as one undoable edit.
 
-        \p filter is handed a whole channel and returns its filtered self. It receives the whole channel
-        rather than only the region being written because a filter reads the samples around each one it
-        writes, including those outside a selection -- filtering only what is selected would otherwise pull
-        the border towards whatever the region was padded with.
-
-        Only the subject's rectangle is then taken from the result, so a filtered selection still costs the
-        selection in history and in bandwidth.
+        \p filter is handed a whole channel and the rectangle of it to produce, in channel-local
+        coordinates, and returns an array of just that rectangle. The two are separate because a filter
+        reads the samples around each one it writes: those outside a selection are real samples and belong
+        in the answer, so it must see the whole channel -- but it only has to *compute* the rectangle, and
+        only has to read as far past it as its kernel reaches. Filtering the whole channel and keeping the
+        middle would make a small selection cost the whole image.
     */
     bool modify_channels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
-                         const std::function<Array2Df(const Array2Df &)> &filter);
+                         const std::function<Array2Df(const Array2Df &, const Box2i &)> &filter);
 
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();

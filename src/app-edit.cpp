@@ -76,7 +76,7 @@ bool HDRViewApp::modify_image_reversibly(const ImagePtr &img, const string &name
 }
 
 bool HDRViewApp::modify_channels(const ImagePtr &img, const string &name, const EditSubject &subject,
-                                 const function<Array2Df(const Array2Df &)> &filter)
+                                 const function<Array2Df(const Array2Df &, const Box2i &)> &filter)
 {
     if (!can_edit(img))
         return false;
@@ -96,16 +96,12 @@ bool HDRViewApp::modify_channels(const ImagePtr &img, const string &name, const 
             {
                 Channel &channel = image.channels[size_t(c)];
 
-                // Filtered over the whole channel, then only the subject's rectangle kept: a filter reads
-                // the samples around each one it writes, and those outside a selection are real samples
-                // that belong in the result.
-                const Array2Df filtered = filter(channel);
+                // The filter sees the whole channel but produces only this rectangle, reading past it
+                // just as far as its kernel reaches -- so a selection costs the selection, not the image.
+                const Box2i    local    = Box2i{offset, offset + extent};
+                const Array2Df filtered = filter(channel, local);
 
-                Array2Df staging{extent};
-                for (int y = 0; y < extent.y; ++y)
-                    for (int x = 0; x < extent.x; ++x) staging(x, y) = filtered(offset.x + x, offset.y + y);
-
-                channel.upload_tile(Box2i{offset, offset + extent}, staging.data());
+                channel.upload_tile(local, filtered.data());
             }
         },
         [&channels, &bounds, &name](const Image &image) -> UndoPtr
@@ -582,13 +578,14 @@ void HDRViewApp::draw_blur_dialog(bool &open)
             {
                 const float sx = sigma, sy = link_axes ? sigma : sigma_y;
                 modify_channels(current_image(), "Gaussian blur", m_edit_subject,
-                                [sx, sy](const Array2Df &src) { return gaussian_blurred(src, sx, sy); });
+                                [sx, sy](const Array2Df &src, const Box2i &r)
+                                { return gaussian_blurred(src, r, sx, sy); });
             }
             else
             {
                 const int hx = half_width, hy = link_axes ? half_width : half_width_y;
                 modify_channels(current_image(), "Box blur", m_edit_subject,
-                                [hx, hy](const Array2Df &src) { return box_blurred(src, hx, hy); });
+                                [hx, hy](const Array2Df &src, const Box2i &r) { return box_blurred(src, r, hx, hy); });
             }
             ImGui::CloseCurrentPopup();
         }
@@ -616,7 +613,7 @@ void HDRViewApp::draw_unsharp_mask_dialog(bool &open)
         {
             const float s = sigma, a = amount;
             modify_channels(current_image(), "Unsharp mask", m_edit_subject,
-                            [s, a](const Array2Df &src) { return unsharp_masked(src, s, a); });
+                            [s, a](const Array2Df &src, const Box2i &r) { return unsharp_masked(src, r, s, a); });
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)

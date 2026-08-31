@@ -44,74 +44,112 @@ std::vector<float> gaussian_taps(float sigma)
     return taps;
 }
 
-//! Convolve along one axis with \p taps, centered.
-Array2Df convolve_axis(const Array2Df &src, const std::vector<float> &taps, bool horizontal)
+//! Uniform taps of the given half-width, for a box of the same separable shape.
+std::vector<float> box_taps(int half_width)
 {
-    Array2Df  out{src.size()};
-    const int radius     = int(taps.size() / 2);
-    const int block_size = std::max(1, 1024 * 1024 / std::max(1, src.width()));
+    return std::vector<float>(size_t(2 * half_width + 1), 1.f / float(2 * half_width + 1));
+}
 
-    stp::parallel_for(stp::blocked_range<int>(0, src.height(), block_size),
-                      [&](int y0, int y1, int, int)
-                      {
-                          for (int y = y0; y < y1; ++y)
-                              for (int x = 0; x < src.width(); ++x)
+/*!
+    Convolve \p region of \p src with the separable kernel \p taps_x by \p taps_y.
+
+    Only \p region is produced, and only what feeds it is read. The horizontal pass covers the region's
+    columns over rows grown by the vertical radius, because that is exactly the set the vertical pass then
+    reads: growing by more would be wasted work, by less would read samples that were never computed. An
+    empty tap list along an axis means that axis is left alone.
+*/
+Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std::vector<float> &taps_x,
+                            const std::vector<float> &taps_y)
+{
+    const int  rx     = taps_x.empty() ? 0 : int(taps_x.size() / 2);
+    const int  ry     = taps_y.empty() ? 0 : int(taps_y.size() / 2);
+    const int2 extent = region.size();
+
+    // Rows the vertical pass will reach for, which is the region's own rows grown by its radius.
+    const int rows = extent.y + 2 * ry;
+
+    Array2Df horizontal{int2{extent.x, rows}};
+    {
+        const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+        stp::parallel_for(stp::blocked_range<int>(0, rows, block_size),
+                          [&](int j0, int j1, int, int)
+                          {
+                              for (int j = j0; j < j1; ++j)
                               {
-                                  float sum = 0.f;
-                                  for (int i = -radius; i <= radius; ++i)
-                                      sum += taps[size_t(i + radius)] *
-                                             (horizontal ? clamped(src, x + i, y) : clamped(src, x, y + i));
-                                  out(x, y) = sum;
+                                  const int y = region.min.y - ry + j;
+                                  for (int i = 0; i < extent.x; ++i)
+                                  {
+                                      const int x = region.min.x + i;
+                                      if (taps_x.empty())
+                                      {
+                                          horizontal(i, j) = clamped(src, x, y);
+                                          continue;
+                                      }
+                                      float sum = 0.f;
+                                      for (int k = -rx; k <= rx; ++k)
+                                          sum += taps_x[size_t(k + rx)] * clamped(src, x + k, y);
+                                      horizontal(i, j) = sum;
+                                  }
                               }
-                      });
+                          });
+    }
+
+    Array2Df out{extent};
+    {
+        const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+        stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                          [&](int y0, int y1, int, int)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < extent.x; ++x)
+                                  {
+                                      if (taps_y.empty())
+                                      {
+                                          out(x, y) = horizontal(x, y + ry);
+                                          continue;
+                                      }
+                                      float sum = 0.f;
+                                      // The region's row y sits at index y + ry in the taller intermediate.
+                                      for (int k = -ry; k <= ry; ++k)
+                                          sum += taps_y[size_t(k + ry)] * horizontal(x, y + ry + k);
+                                      out(x, y) = sum;
+                                  }
+                          });
+    }
 
     return out;
 }
 
 } // namespace
 
-Array2Df gaussian_blurred(const Array2Df &src, float sigma_x, float sigma_y)
+Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y)
 {
-    Array2Df out{src.size()};
-    std::copy(src.data(), src.data() + src.num_elements(), out.data());
-
-    if (sigma_x > 0.f)
-        out = convolve_axis(out, gaussian_taps(sigma_x), true);
-    if (sigma_y > 0.f)
-        out = convolve_axis(out, gaussian_taps(sigma_y), false);
-
-    return out;
+    return convolve_separable(src, region, sigma_x > 0.f ? gaussian_taps(sigma_x) : std::vector<float>{},
+                              sigma_y > 0.f ? gaussian_taps(sigma_y) : std::vector<float>{});
 }
 
-Array2Df box_blurred(const Array2Df &src, int half_width_x, int half_width_y)
+Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y)
 {
-    Array2Df out{src.size()};
-    std::copy(src.data(), src.data() + src.num_elements(), out.data());
-
-    // Uniform taps, so the same separable pass serves; a running sum would be faster still but this is
-    // already O(radius) per sample rather than O(radius^2).
-    if (half_width_x > 0)
-        out = convolve_axis(out, std::vector<float>(size_t(2 * half_width_x + 1), 1.f / float(2 * half_width_x + 1)),
-                            true);
-    if (half_width_y > 0)
-        out = convolve_axis(out, std::vector<float>(size_t(2 * half_width_y + 1), 1.f / float(2 * half_width_y + 1)),
-                            false);
-
-    return out;
+    return convolve_separable(src, region, half_width_x > 0 ? box_taps(half_width_x) : std::vector<float>{},
+                              half_width_y > 0 ? box_taps(half_width_y) : std::vector<float>{});
 }
 
-Array2Df unsharp_masked(const Array2Df &src, float sigma, float amount)
+Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount)
 {
-    const Array2Df blurred = gaussian_blurred(src, sigma, sigma);
+    const Array2Df blurred = gaussian_blurred(src, region, sigma, sigma);
+    const int2     extent  = region.size();
 
-    Array2Df  out{src.size()};
-    const int block_size = std::max(1, 1024 * 1024 / std::max(1, src.width()));
-    stp::parallel_for(stp::blocked_range<int>(0, src.height(), block_size),
+    Array2Df  out{extent};
+    const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+    stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
                       [&](int y0, int y1, int, int)
                       {
                           for (int y = y0; y < y1; ++y)
-                              for (int x = 0; x < src.width(); ++x)
-                                  out(x, y) = src(x, y) + amount * (src(x, y) - blurred(x, y));
+                              for (int x = 0; x < extent.x; ++x)
+                              {
+                                  const float v = clamped(src, region.min.x + x, region.min.y + y);
+                                  out(x, y)     = v + amount * (v - blurred(x, y));
+                              }
                       });
 
     return out;
