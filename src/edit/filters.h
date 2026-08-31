@@ -79,11 +79,16 @@ Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float s
     dragged by an outlier however far out it is, while a median ignores it entirely once it is outnumbered
     -- which is why this, not a blur, is what takes fireflies out of a render.
 
-    Unlike the blurs there is no separable form, so this costs the area of the disc per sample and is the
+    \p disc takes the median over a circle rather than the square that encloses it, which 1.8 offered as an
+    option and is usually what is wanted: a square window reaches a factor of root two farther at its
+    corners than along its axes, which shows up as a faint squareness in what it removes.
+
+    Unlike the blurs there is no separable form, so this costs the area of the window per sample and is the
     first filter slow enough to need \p progress. Pass one to have it report and to be able to stop it; a
     canceled run returns what it had reached, which the caller must discard.
 */
-Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress progress = {});
+Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, bool disc = true,
+                         FilterProgress progress = {});
 
 /*!
     Replace every non-finite sample with the median of its finite neighbours.

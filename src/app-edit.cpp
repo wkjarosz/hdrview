@@ -986,6 +986,11 @@ void HDRViewApp::draw_median_dialog(bool &open)
     if (ImGui::BeginModalDialog("Median filter...", open, ImGui::DialogPosition::Center))
     {
         ImGui::SliderFloat("Radius", &radius, 0.f, 32.f, "%.1f");
+
+        static bool disc = true;
+        ImGui::Checkbox("Circular window", &disc);
+        ImGui::Tooltip("A square window reaches root-two farther at its corners than along its axes, which "
+                       "leaves a faint squareness in what it removes.");
         ImGui::Tooltip("Removes lone outliers -- fireflies in a render -- without the smearing a blur "
                        "would cause. Costs the area of the disc per sample, so a large radius is slow.");
 
@@ -995,9 +1000,10 @@ void HDRViewApp::draw_median_dialog(bool &open)
         if (result == ImGui::DialogResult::Confirm)
         {
             const float r = radius;
+            const bool  d = disc;
             modify_channels_async(current_image(), "Median filter", m_edit_subject,
-                                  [r](const Array2Df &src, const Box2i &region, FilterProgress p)
-                                  { return median_filtered(src, region, r, p); });
+                                  [r, d](const Array2Df &src, const Box2i &region, FilterProgress p)
+                                  { return median_filtered(src, region, r, d, p); });
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)

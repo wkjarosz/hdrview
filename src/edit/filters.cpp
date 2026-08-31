@@ -338,7 +338,7 @@ Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, f
     return out;
 }
 
-Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress progress)
+Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, bool disc, FilterProgress progress)
 {
     const int2  extent = region.size();
     const int   r      = std::max(0, int(std::ceil(radius)));
@@ -371,10 +371,7 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
                                   window.clear();
                                   for (int dy = -r; dy <= r; ++dy)
                                       for (int dx = -r; dx <= r; ++dx)
-                                          // A disc rather than a square: a square median has a visible
-                                          // orientation, and its corners reach farther than the radius asked
-                                          // for.
-                                          if (float(dx * dx + dy * dy) <= r2)
+                                          if (!disc || float(dx * dx + dy * dy) <= r2)
                                               window.push_back(
                                                   clamped(src, region.min.x + x + dx, region.min.y + y + dy));
 

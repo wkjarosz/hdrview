@@ -391,7 +391,7 @@ TEST_CASE("A canceled filter stops early and reports that it did")
     FilterProgress progress{true};
     progress.cancel();
 
-    const Array2Df out = median_filtered(src, whole(src), 4.f, progress);
+    const Array2Df out = median_filtered(src, whole(src), 4.f, true, progress);
 
     CHECK(progress.canceled());
     CHECK(out.size() == src.size()); // still the right shape, just not filled in
@@ -403,7 +403,7 @@ TEST_CASE("An uncancelled filter reports its way to complete")
     for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i % 5);
 
     FilterProgress progress{true};
-    median_filtered(src, whole(src), 2.f, progress);
+    median_filtered(src, whole(src), 2.f, true, progress);
 
     CHECK_FALSE(progress.canceled());
     CHECK(progress.progress() == doctest::Approx(1.f).epsilon(0.001));
@@ -457,4 +457,37 @@ TEST_CASE("Zapping takes the median rather than the mean of the ring")
 
     const Array2Df out = zapped_gremlins(src, whole(src));
     CHECK(out(1, 1) == doctest::Approx(1.f));
+}
+
+TEST_CASE("The median window's shape changes what it sees")
+{
+    // A square window reaches root-two farther at its corners than along its axes, so near a diagonal edge
+    // it takes in samples the circle inscribed in it does not -- which is the whole reason to offer both.
+    // Deliberately not a smooth or symmetric field: both windows are symmetric about the sample they are
+    // centered on, so for anything with that symmetry the extra corners cannot move the majority and the
+    // two agree. It takes arbitrary data to tell them apart.
+    Array2Df src{int2{21, 21}};
+    for (int y = 0; y < 21; ++y)
+        for (int x = 0; x < 21; ++x)
+        {
+            const unsigned h = unsigned(x) * 73856093u ^ unsigned(y) * 19349663u;
+            src(x, y)        = float(h % 1024u) / 1024.f;
+        }
+
+    const Array2Df disc   = median_filtered(src, whole(src), 3.f, true);
+    const Array2Df square = median_filtered(src, whole(src), 3.f, false);
+
+    bool any_different = false;
+    for (int i = 0; i < disc.num_elements() && !any_different; ++i) any_different = disc(i) != square(i);
+    CHECK(any_different);
+}
+
+TEST_CASE("Both median window shapes remove a lone outlier")
+{
+    Array2Df src{int2{21, 21}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = 0.2f;
+    src(10, 10) = 50.f;
+
+    CHECK(median_filtered(src, whole(src), 3.f, true)(10, 10) == doctest::Approx(0.2f));
+    CHECK(median_filtered(src, whole(src), 3.f, false)(10, 10) == doctest::Approx(0.2f));
 }
