@@ -1033,7 +1033,6 @@ float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
     case BlendMode_Difference: return float2(abs(diff), alpha);
     case BlendMode_Relative_Difference: return float2(abs(diff) / (bottom.x + 0.01f), alpha);
     }
-    return float2(0.f);
 }
 
 float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
@@ -1053,7 +1052,6 @@ float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
     case BlendMode_Difference: return float4(abs(diff), alpha);
     case BlendMode_Relative_Difference: return float4(abs(diff) / (bottom.xyz() + float3(0.01f)), alpha);
     }
-    // return float4(0.f);
 }
 
 void xyYToXZ(float *X, float *Z, float x, float y, float Y)

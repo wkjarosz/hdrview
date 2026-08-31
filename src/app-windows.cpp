@@ -123,7 +123,11 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
     }
 
     m_params.useImGuiTestEngine      = true;
-    m_params.callbacks.RegisterTests = [register_tests, this]()
+    m_params.callbacks.RegisterTests = [
+#if defined(HELLOIMGUI_HAS_OPENGL)
+        this, // the screen-capture override below is the only thing that needs the app pointer
+#endif
+        register_tests]()
     {
         ImGuiTestEngine   *engine = GetImGuiTestEngine();
         ImGuiTestEngineIO &io     = ImGuiTestEngine_GetIO(engine);

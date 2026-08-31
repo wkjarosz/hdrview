@@ -14,6 +14,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace ImGui
 {
@@ -187,10 +188,7 @@ inline void TextUnformatted(const std::string &text) { return TextUnformatted(te
 template <typename... T>
 inline void TextFmt(fmt::format_string<T...> fmt, T &&...args)
 {
-    // TODO the below produces an obscure compiler message that we could decipher and resolve properly
-    //      for now, we just bypass the compile-time validation
-    // std::string str = fmt::format(fmt, fmt::make_format_args(args...));
-    std::string str = fmt::format(fmt::runtime(fmt), args...);
+    std::string str = fmt::format(fmt, std::forward<T>(args)...);
     ImGui::TextUnformatted(str.c_str());
 }
 
