@@ -99,9 +99,10 @@ float envmap_jacobian(EnvMapping mapping, float2 uv);
       them. Simple and exact for magnification, but a minification of more than the sample count still
       aliases, and raising the count costs its square.
     - EWA reads a mip pyramid with an elliptical filter shaped by the footprint the destination pixel
-      actually covers in the source. That footprint is anisotropic -- a lat-long's pole is stretched
-      hundreds of times more across than down -- which is exactly what a mip level alone cannot express,
-      and it costs the same whatever the scale.
+      actually covers in the source, and there \p supersample is how eccentric that ellipse may be before
+      it is widened to fit. The footprint is anisotropic -- a lat-long's pole is stretched hundreds of
+      times more across than down -- which is exactly what a mip level alone cannot express, and it costs
+      the same whatever the scale.
 
     \p mip_bias shifts the level EWA computes, in levels: negative is sharper and eventually aliases,
     positive is blurrier. Zero is the level the footprint asks for, and is what anything other than

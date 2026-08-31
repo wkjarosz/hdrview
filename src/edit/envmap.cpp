@@ -427,8 +427,8 @@ std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
         for (int y = 0; y < size.y; ++y)
             for (int x = 0; x < size.x; ++x)
             {
-                // The up-to-four samples this one stands for; the guards matter on an odd dimension, where
-                // the last row or column has no partner.
+                // The four the new sample sits between, so it lands halfway rather than on one of them.
+                // The guards matter on an odd dimension, where the last row or column has no partner.
                 const int x0 = std::min(2 * x, prev.width() - 1), x1 = std::min(2 * x + 1, prev.width() - 1);
                 const int y0 = std::min(2 * y, prev.height() - 1), y1 = std::min(2 * y + 1, prev.height() - 1);
                 next(x, y) = 0.25f * (prev(x0, y0) + prev(x1, y0) + prev(x0, y1) + prev(x1, y1));
@@ -440,81 +440,122 @@ std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
     return levels;
 }
 
+//! Gather one level of \p levels through the ellipse with axes \p d0 and \p d1 (in uv), centered at \p uv.
 /*!
-    Sample \p levels at \p uv through the ellipse \p du by \p dv, using at most \p taps of them.
+    Every texel the ellipse encloses contributes, weighted by a Gaussian in the ellipse's own space, so the
+    filter takes the whole of the footprint's shape. The quadratic \f$A s^2 + B s t + C t^2\f$ is one
+    exactly on the ellipse's boundary, which makes the test for "inside" a comparison against one and the
+    weight a function of that same number.
 
-    Elliptical weighted averaging, in the form a GPU does it: rather than gathering every texel the
-    ellipse encloses, take a row of probes strung along its *major* axis and let the mip level cover the
-    *minor* one. The level is chosen so a texel spans about the minor axis, so each probe already averages
-    across the narrow direction, and the probes then walk the long direction where the footprint actually
-    extends.
+    The `+ 1` on \f$A\f$ and \f$C\f$ is the part that is easy to leave out and expensive to: it convolves
+    the ellipse with a reconstruction filter one texel across, so a footprint smaller than a texel widens
+    into one instead of collapsing onto a point sample. Without it, magnification aliases.
 
-    That split is the whole trick, and both halves are needed. Choosing the level from the minor axis alone
-    without walking the major axis leaves the long direction under-sampled, which aliases; choosing it from
-    the major axis instead blurs the short direction away. \p taps is what the eccentricity can be before
-    the level has to rise to meet it -- more taps means a sharper result along the narrow direction and
-    proportionally more work.
+    Follows PBRT's `MIPMap::EWA`.
 */
-float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv, int taps, float mip_bias)
+float ewa_level(const Array2Df &lvl, float2 uv, float2 d0, float2 d1)
+{
+    const float2 res{float(lvl.width()), float(lvl.height())};
+
+    // Continuous texel coordinates, with the axes in the same units, so the level's own resolution enters
+    // in one place and nowhere else.
+    const float2 st = uv * res - 0.5f;
+    const float2 a = d0 * res, b = d1 * res;
+
+    float A = sqr(a.y) + sqr(b.y) + 1.f;
+    float B = -2.f * (a.x * a.y + b.x * b.y);
+    float C = sqr(a.x) + sqr(b.x) + 1.f;
+
+    const float inv_f = 1.f / std::max(1e-20f, A * C - 0.25f * sqr(B));
+    A *= inv_f;
+    B *= inv_f;
+    C *= inv_f;
+
+    // The axis-aligned box that just contains the ellipse, which is where the scan runs.
+    const float det     = std::max(1e-20f, 4.f * A * C - sqr(B));
+    const float inv_det = 1.f / det;
+    const float ext_s   = 2.f * inv_det * std::sqrt(std::max(0.f, det * C));
+    const float ext_t   = 2.f * inv_det * std::sqrt(std::max(0.f, det * A));
+
+    const int s0 = int(std::ceil(st.x - ext_s)), s1 = int(std::floor(st.x + ext_s));
+    const int t0 = int(std::ceil(st.y - ext_t)), t1 = int(std::floor(st.y + ext_t));
+
+    auto at = [&lvl](int i, int j)
+    { return lvl(std::clamp(i, 0, lvl.width() - 1), std::clamp(j, 0, lvl.height() - 1)); };
+
+    float sum = 0.f, total = 0.f;
+    for (int t = t0; t <= t1; ++t)
+    {
+        const float dt = float(t) - st.y;
+        for (int s = s0; s <= s1; ++s)
+        {
+            const float ds = float(s) - st.x;
+            const float r2 = A * sqr(ds) + B * ds * dt + C * sqr(dt);
+            if (r2 >= 1.f)
+                continue;
+
+            // Subtracting the value at the boundary lands the Gaussian on zero there rather than stepping
+            // off its tail, which would show up as a ring where the ellipse ends.
+            const float w = std::exp(-2.f * r2) - std::exp(-2.f);
+
+            sum += w * at(s, t);
+            total += w;
+        }
+    }
+
+    // An ellipse narrow enough to fall between texels encloses none of them; read the level instead.
+    return total > 0.f ? sum / total : sample_bilinear(lvl, uv);
+}
+
+/*!
+    Sample \p levels at \p uv through the footprint \p du by \p dv, allowing at most \p max_aniso of
+    eccentricity and shifting the chosen level by \p mip_bias.
+
+    The mip level comes from the ellipse's *shorter* axis, so a texel of that level spans the narrow
+    direction and the gather itself covers the long one. That split is what a mip level alone cannot do: a
+    lat-long's pole is stretched hundreds of times more across than down, and a level chosen to cover the
+    wide direction erases the narrow one.
+
+    Walking a long axis costs a texel per step, so \p max_aniso is where that stops. Past it the *shorter*
+    axis is lengthened until the ratio is affordable -- widening the ellipse rather than raising the level,
+    since the level would blur both directions when only one of them cannot be afforded.
+
+    Follows PBRT's `MIPMap::Filter`.
+*/
+float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv, int max_aniso, float mip_bias)
 {
     const float2 base{float(levels[0].width()), float(levels[0].height())};
 
-    // The axes as *full* extents in level-0 texels. du and dv are the step from one destination pixel to
-    // the next, so these are how far across the source one of them reaches, and the level is chosen from
-    // them rather than from their halves: a texel has to span the whole of the short axis to cover it.
-    // Halving here is a level of under-blur, and it aliases in a way no number of probes along the long
-    // axis can undo.
-    const float2 a = du * base, b = dv * base;
+    // Longer axis first, measured in level-0 texels: du and dv are the step from one destination pixel to
+    // the next, so their lengths are how far across the source a destination pixel reaches, and the level
+    // follows directly from that.
+    float2 d0 = du, d1 = dv;
+    if (la::length2(d0 * base) < la::length2(d1 * base))
+        std::swap(d0, d1);
 
-    const float  len_a = la::length(a), len_b = la::length(b);
-    const float2 major_vec = len_a >= len_b ? a : b;
-    const float  major     = std::max(len_a, len_b);
-    const float  minor     = std::max(std::min(len_a, len_b), 1e-6f);
+    const float longer  = la::length(d0 * base);
+    float       shorter = la::length(d1 * base);
 
-    const int max_taps = std::max(1, taps);
+    const float aniso = float(std::max(1, max_aniso));
+    if (shorter > 0.f && shorter * aniso < longer)
+    {
+        const float scale = longer / (shorter * aniso);
+        d1 *= scale;
+        shorter *= scale;
+    }
 
-    // How eccentric the footprint is, limited by what the tap budget can walk. Beyond that the level has
-    // to rise, which widens the minor axis -- blurring, but only once the alternative is aliasing.
-    const float aniso   = std::clamp(major / minor, 1.f, float(max_taps));
-    const float lod_len = std::max(minor, major / aniso);
+    if (shorter <= 0.f)
+        return sample_bilinear(levels[0], uv);
 
-    // Kept continuous and blended across the two levels either side rather than snapped to one. A snapped
-    // level is up to a factor of two too sharp, which aliases in bands wherever the scale crosses a power
-    // of two.
-    // Biased purely so the level's effect can be seen; zero is what the footprint asks for.
-    const float lod   = std::log2(std::max(1e-6f, lod_len)) + mip_bias;
+    // Blended across the two levels either side rather than snapped to one: a snapped level is up to a
+    // factor of two too sharp, which aliases in bands wherever the scale crosses a power of two.
+    const float lod   = std::log2(shorter) + mip_bias;
     const int   lo    = std::clamp(int(std::floor(lod)), 0, int(levels.size()) - 1);
     const int   hi    = std::min(lo + 1, int(levels.size()) - 1);
-    const float blend = std::clamp(lod - float(lo), 0.f, 1.f);
+    const float blend = std::clamp(lod - std::floor(lod), 0.f, 1.f);
 
-    const int n = std::clamp(int(std::ceil(aniso)), 1, max_taps);
-
-    // Probes strung along the major axis, in image coordinates so neither level's resolution enters into
-    // it. Half the axis either side of the center, since these extents are full widths.
-    const float2 half_axis = 0.5f * major_vec / base;
-
-    auto gather = [&](const Array2Df &lvl)
-    {
-        if (n <= 1)
-            return sample_bilinear(lvl, uv);
-
-        float sum = 0.f, total = 0.f;
-        for (int i = 0; i < n; ++i)
-        {
-            // Centered on the pixel: offsets run from just inside one end of the axis to the other.
-            const float t = (float(i) + 0.5f) / float(n) * 2.f - 1.f;
-
-            // Gaussian along the axis, down to about 1/e^2 at its ends, the usual EWA weighting.
-            const float w = std::exp(-2.f * t * t);
-
-            sum += w * sample_bilinear(lvl, uv + t * half_axis);
-            total += w;
-        }
-        return total > 0.f ? sum / total : sample_bilinear(lvl, uv);
-    };
-
-    const float low = gather(levels[size_t(lo)]);
-    return blend > 0.f ? (1.f - blend) * low + blend * gather(levels[size_t(hi)]) : low;
+    const float low = ewa_level(levels[size_t(lo)], uv, d0, d1);
+    return lo == hi || blend <= 0.f ? low : (1.f - blend) * low + blend * ewa_level(levels[size_t(hi)], uv, d0, d1);
 }
 
 } // namespace
@@ -524,8 +565,8 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 {
     Array2Df out{size};
 
-    // The same control means different things to the two samplers: probes along the ellipse's major axis
-    // for EWA, samples per axis within the pixel for point sampling.
+    // The same control means different things to the two samplers: how eccentric the ellipse may be before
+    // it is widened for EWA, samples per axis within the pixel for point sampling.
     const int   ss  = std::max(1, supersample);
     const float inv = 1.f / float(ss * ss);
 
@@ -558,27 +599,24 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 
                     if (sampling == EnvMapSampling_EWA)
                     {
-                        // The footprint is the difference between *neighbouring destination pixels'* source
-                        // coordinates, which composes both mappings in one step -- no derivative of either
-                        // is needed, and it is the right quantity even across a seam, where an infinitesimal
-                        // one would be meaningless.
                         const float2 c = convert_envmap_uv(src_mapping, dst_mapping, uv);
-                        const float2 rx =
-                            convert_envmap_uv(src_mapping, dst_mapping, float2{uv.x + 1.f / float(size.x), uv.y});
-                        const float2 ry =
-                            convert_envmap_uv(src_mapping, dst_mapping, float2{uv.x, uv.y + 1.f / float(size.y)});
 
-                        // A mapping that wraps puts a whole turn into one difference; take the short way.
-                        auto shortest = [](float2 d)
+                        // The footprint is the step to a *neighboring destination pixel*, taken in source
+                        // coordinates, which composes both mappings in one step -- no derivative of either
+                        // is needed. Both neighbors are tried and the nearer kept: these mappings are
+                        // discontinuous -- a cube face's edge, a lat-long's wrap -- and a difference taken
+                        // across one of those jumps is enormous and meaningless, which sends the level to
+                        // the top of the pyramid and returns the average of the whole image. One side of a
+                        // sample is always on the near side of any single seam.
+                        auto step = [&](float2 delta)
                         {
-                            if (d.x > 0.5f)
-                                d.x -= 1.f;
-                            else if (d.x < -0.5f)
-                                d.x += 1.f;
-                            return d;
+                            const float2 fwd = convert_envmap_uv(src_mapping, dst_mapping, uv + delta) - c;
+                            const float2 bwd = c - convert_envmap_uv(src_mapping, dst_mapping, uv - delta);
+                            return la::length2(fwd) <= la::length2(bwd) ? fwd : bwd;
                         };
 
-                        out(x, y) = sample_ewa(levels, c, shortest(rx - c), shortest(ry - c), ss, mip_bias);
+                        out(x, y) = sample_ewa(levels, c, step(float2{1.f / float(size.x), 0.f}),
+                                               step(float2{0.f, 1.f / float(size.y)}), ss, mip_bias);
                         continue;
                     }
 

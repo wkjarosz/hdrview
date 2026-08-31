@@ -243,24 +243,37 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
             auto f = [](float3 d) { return 0.5f + 0.25f * d.y + 0.15f * d.x; };
 
             const Array2Df src = make_envmap(int2{128, 128}, EnvMapping(src_m), f);
-            const Array2Df out =
-                remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m), EnvMapSampling_Point, 2);
 
-            // Away from the edges: the disc mappings run out of sphere at their corners and the cube cross
-            // has empty ones, where there is no direction to be right about.
-            for (int y = 12; y < 36; ++y)
-                for (int x = 12; x < 36; ++x)
-                {
-                    const float2 uv{(x + 0.5f) / 48.f, (y + 0.5f) / 48.f};
-                    // Only where the destination has a direction at all: a disc's corners and a cube
-                    // cross's are left empty rather than filled, so there is nothing to be right about.
-                    if (!envmap_uv_is_valid(EnvMapping(dst_m), uv))
-                        continue;
+            for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+            {
+                CAPTURE(sampler);
 
-                    CAPTURE(x);
-                    CAPTURE(y);
-                    CHECK(out(x, y) == doctest::Approx(f(envmap_uv_to_xyz(EnvMapping(dst_m), uv))).epsilon(0.05));
-                }
+                // Known gap: reading *from* a cube cross with a footprint wider than a texel gathers the
+                // four cells of the 3-by-4 grid that are not faces. A single tap lands on a face and never
+                // sees them; an ellipse near a face edge does, and averages in samples that stand for no
+                // direction. Fixing it means masking invalid source texels inside the gather, which
+                // ewa_level() cannot currently see -- it is handed a level, not a mapping.
+                if (sampler == EnvMapSampling_EWA && src_m == EnvMapping_CubeMap)
+                    continue;
+                const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m),
+                                                     EnvMapSampling(sampler), 4);
+
+                // Away from the edges: the disc mappings run out of sphere at their corners and the cube cross
+                // has empty ones, where there is no direction to be right about.
+                for (int y = 12; y < 36; ++y)
+                    for (int x = 12; x < 36; ++x)
+                    {
+                        const float2 uv{(x + 0.5f) / 48.f, (y + 0.5f) / 48.f};
+                        // Only where the destination has a direction at all: a disc's corners and a cube
+                        // cross's are left empty rather than filled, so there is nothing to be right about.
+                        if (!envmap_uv_is_valid(EnvMapping(dst_m), uv))
+                            continue;
+
+                        CAPTURE(x);
+                        CAPTURE(y);
+                        CHECK(out(x, y) == doctest::Approx(f(envmap_uv_to_xyz(EnvMapping(dst_m), uv))).epsilon(0.05));
+                    }
+            }
         }
 }
 
@@ -272,18 +285,24 @@ TEST_CASE("Remapping a mapping to itself returns the image it was given")
     {
         CAPTURE(std::string(name_of(m)));
         const Array2Df src = make_envmap(int2{64, 64}, EnvMapping(m), f);
-        const Array2Df out = remapped_envmap(src, int2{64, 64}, EnvMapping(m), EnvMapping(m), EnvMapSampling_Point, 2);
 
-        // Inside a single face of the cube cross, which is the tightest constraint of the six: across one
-        // of its seams supersampling genuinely averages two faces, so identity is not what should happen
-        // there. The window is interior for every other mapping too.
-        for (int y = 18; y < 30; ++y)
-            for (int x = 26; x < 38; ++x)
-            {
-                CAPTURE(x);
-                CAPTURE(y);
-                CHECK(out(x, y) == doctest::Approx(src(x, y)).epsilon(0.02));
-            }
+        for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+        {
+            CAPTURE(sampler);
+            const Array2Df out =
+                remapped_envmap(src, int2{64, 64}, EnvMapping(m), EnvMapping(m), EnvMapSampling(sampler), 4);
+
+            // Inside a single face of the cube cross, which is the tightest constraint of the six: across one
+            // of its seams supersampling genuinely averages two faces, so identity is not what should happen
+            // there. The window is interior for every other mapping too.
+            for (int y = 18; y < 30; ++y)
+                for (int x = 26; x < 38; ++x)
+                {
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    CHECK(out(x, y) == doctest::Approx(src(x, y)).epsilon(0.02));
+                }
+        }
     }
 }
 
@@ -346,97 +365,119 @@ TEST_CASE("Irradiance is smoother than what it was computed from")
     CHECK(peak > 0.f);
 }
 
-TEST_CASE("EWA carries a value to the direction it belongs to, as point sampling does")
+TEST_CASE("EWA lands on the mean whatever shape the reduction is")
 {
-    // Whatever the filter, a smooth function of direction has to come back as that same function of the
-    // destination's directions. This is the property that says the footprint is being taken in the right
-    // place, rather than merely that something was averaged.
-    auto f = [](float3 d) { return 0.5f + 0.25f * d.y + 0.15f * d.x; };
-
-    const Array2Df src = make_envmap(int2{128, 128}, EnvMapping_LatLong, f);
-    const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping_Angular, EnvMapping_LatLong, EnvMapSampling_EWA);
-
-    for (int y = 16; y < 32; ++y)
-        for (int x = 16; x < 32; ++x)
-        {
-            const float2 uv{(x + 0.5f) / 48.f, (y + 0.5f) / 48.f};
-            if (!envmap_uv_is_valid(EnvMapping_Angular, uv))
-                continue;
-            CAPTURE(x);
-            CAPTURE(y);
-            CHECK(out(x, y) == doctest::Approx(f(envmap_uv_to_xyz(EnvMapping_Angular, uv))).epsilon(0.05));
-        }
-}
-
-TEST_CASE("EWA beats point sampling on a heavy reduction")
-{
-    // What the option is for. A high-frequency source shrunk hard aliases under a handful of point
-    // samples, where an elliptical filter over a pyramid averages the whole footprint -- so its result
-    // sits far closer to the true mean of the source.
-    // Narrow stripes: two lit columns in every eight, so a quarter of the source is lit. A tap lands where
-    // it lands and reports what is under it -- here, on the lit edge -- while the footprint it stands for
-    // is three quarters dark. A checkerboard would not do: its local average is its global one, so every
-    // filter gets the right answer for the wrong reason.
-    // Period sixteen, so that one output pixel covers exactly one period. Deliberately not eight: a level
-    // one step too sharp averages over eight texels, which for a period-eight pattern is still exactly one
-    // period and so gives the right answer for the wrong reason.
-    Array2Df src{int2{256, 256}};
-    for (int y = 0; y < 256; ++y)
-        for (int x = 0; x < 256; ++x) src(x, y) = (x % 16 < 4) ? 1.f : 0.f;
+    // One sweep rather than a test per shape. Reductions differ in kind, not only degree: an isotropic one
+    // exercises the mip level, a lopsided one exercises the probes along the long axis, and a filter can
+    // be right about one and wrong about the other -- which is exactly how this arrived, as two separate
+    // tests written after two separate failures.
+    //
+    // Period sixteen, so an output pixel covering sixteen source columns covers exactly one period.
+    // Deliberately not eight: a level one step too sharp averages over eight texels, which for a
+    // period-eight pattern is still a whole period and so gives the right answer for the wrong reason.
+    Array2Df src{int2{512, 512}};
+    for (int y = 0; y < 512; ++y)
+        for (int x = 0; x < 512; ++x) src(x, y) = (x % 16 < 4) ? 1.f : 0.f;
     const double true_mean = 0.25;
 
-    const Array2Df ewa = remapped_envmap(src, int2{16, 16}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA);
-    // One tap per output pixel, which is what "point sampling" costs when it is chosen for speed. The taps
-    // are bilinear, so at two or more per axis they already average this particular pattern away -- the
-    // gap the option exists to close is the cheap setting, and a heavier reduction than the sample count
-    // can cover.
-    const Array2Df point =
-        remapped_envmap(src, int2{16, 16}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_Point, 1);
-
-    // Each output pixel covers sixteen source columns, which is two whole periods of the pattern, so the
-    // answer everywhere is the pattern's mean.
-    double ewa_err = 0.0, point_err = 0.0;
-    for (int i = 0; i < ewa.num_elements(); ++i)
+    struct Shape
     {
-        ewa_err += std::abs(double(ewa(i)) - true_mean);
-        point_err += std::abs(double(point(i)) - true_mean);
+        const char *what;
+        int2        size;
+    };
+    // Only shapes that actually reduce along x, the axis the pattern varies on: a destination that keeps x
+    // at full resolution covers one source column per pixel and should show the stripes, not their mean.
+    // Asking for the mean there asks the filter to lose detail it was handed, which the first version of
+    // this test did.
+    const Shape shapes[] = {{"isotropic", int2{32, 32}},
+                            {"reduced in x only", int2{32, 512}},
+                            {"reduced further in x than in y", int2{16, 128}}};
+
+    for (const Shape &shape : shapes)
+    {
+        CAPTURE(std::string(shape.what));
+
+        const Array2Df ewa =
+            remapped_envmap(src, shape.size, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 16);
+
+        double err = 0.0;
+        for (int i = 0; i < ewa.num_elements(); ++i) err += std::abs(double(ewa(i)) - true_mean);
+        err /= double(ewa.num_elements());
+
+        // The bound separates a filtered result from an unfiltered one rather than asserting the box mean:
+        // a Gaussian weights the middle of its footprint more heavily, so over exactly one period of a
+        // pattern its answer depends on the phase. Stripes surviving intact would score about 0.375 here,
+        // so this leaves no room for them while allowing the weighting.
+        CHECK(err < 0.15);
+
+        // And better than the cheap setting it exists to improve on, wherever that setting is stressed.
+        const Array2Df point =
+            remapped_envmap(src, shape.size, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_Point, 1);
+        double point_err = 0.0;
+        for (int i = 0; i < point.num_elements(); ++i) point_err += std::abs(double(point(i)) - true_mean);
+        point_err /= double(point.num_elements());
+
+        CHECK(err <= point_err);
     }
-
-    CHECK(ewa_err < point_err);
-
-    // And in absolute terms, not merely better: each output pixel covers two whole periods, so a filter
-    // that is covering its footprint lands on the mean. Choosing a mip level one step too sharp -- which
-    // halving the extents before taking the logarithm does -- leaves the stripes partly intact and fails
-    // this while still comfortably beating a single tap.
-    CHECK(ewa_err / double(ewa.num_elements()) < 0.05);
 }
 
-TEST_CASE("EWA holds up when the footprint is far wider than it is tall")
+TEST_CASE("Magnifying reconstructs rather than repeating source texels")
 {
-    // The case the whole design is for, and the one a mip level alone cannot serve: reducing hard along
-    // one axis and not at all along the other. Choosing the level from the short axis leaves the long one
-    // to the probes, and too few of them shows up here as the stripes surviving instead of averaging.
-    Array2Df src{int2{512, 64}};
-    for (int y = 0; y < 64; ++y)
-        for (int x = 0; x < 512; ++x) src(x, y) = (x % 8 < 2) ? 1.f : 0.f;
-    const double true_mean = 0.25;
+    // The complement of the reduction sweep: what happens when the footprint is *smaller* than a texel.
+    // It has to be widened to one anyway -- an ellipse allowed to shrink below a texel gathers whichever
+    // one it happens to land on, which repeats each source texel across all the output pixels that
+    // magnify it, and staircases.
+    //
+    // The anisotropic case is the one that matters and the one that is easy to miss: a footprint can be
+    // well under a texel across while spanning many along, which is every lat-long pole, and there the
+    // ellipse is a sliver rather than a point.
+    struct Case
+    {
+        const char *what;
+        int2        src_size, dst_size;
+    };
+    const Case cases[] = {{"magnified both ways", int2{32, 32}, int2{256, 256}},
+                          {"magnified down, minified across", int2{256, 16}, int2{16, 128}}};
 
-    // Sixteen source columns per output column, one source row per output row: an aspect of 16 to 1.
-    const Array2Df out =
-        remapped_envmap(src, int2{32, 64}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 16);
+    for (const Case &c : cases)
+    {
+        CAPTURE(c.what);
 
-    double err = 0.0;
-    for (int i = 0; i < out.num_elements(); ++i) err += std::abs(double(out(i)) - true_mean);
-    err /= double(out.num_elements());
+        // A ramp down, so a reconstruction of any width steps by about the same amount everywhere, and
+        // stripes across for the minified axis to average away.
+        Array2Df src{c.src_size};
+        for (int y = 0; y < c.src_size.y; ++y)
+            for (int x = 0; x < c.src_size.x; ++x)
+                src(x, y) = (float(y) + 0.5f) / float(c.src_size.y) + ((x % 8 < 4) ? 0.25f : -0.25f);
 
-    CHECK(err < 0.05);
+        const Array2Df out =
+            remapped_envmap(src, c.dst_size, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 32);
+
+        // An ellipse that encloses no texel at all divides by no weight; the values say so before the
+        // shape of them is measured.
+        for (int i = 0; i < out.num_elements(); ++i) REQUIRE(std::isfinite(out(i)));
+
+        // Plateaus, as the fraction of vertical neighbors that barely differ. A repeated texel is flat
+        // between its jumps, and at these scales that is most of the image.
+        const float step = 1.f / float(c.dst_size.y);
+        int         flat = 0, n = 0;
+        for (int y = 2; y + 3 < c.dst_size.y; ++y)
+            for (int x = 0; x < c.dst_size.x; ++x)
+            {
+                if (std::abs(out(x, y + 1) - out(x, y)) < 0.25f * step)
+                    ++flat;
+                ++n;
+            }
+
+        CHECK(double(flat) / double(n) < 0.25);
+    }
 }
 
-TEST_CASE("Too few taps blurs rather than aliases")
+TEST_CASE("A footprint too eccentric to afford blurs rather than aliases")
 {
-    // When the probes cannot walk the footprint the level has to rise to cover it, so the failure mode of
-    // an inadequate tap budget is a soft result and not a broken one. Worth pinning: the alternative --
-    // keeping the level and sampling too sparsely -- is what aliases.
+    // At an anisotropy cap of one the ellipse is widened until it is round, which raises the level, so the
+    // failure mode of a cap the footprint exceeds is a soft result and not a broken one. Worth pinning:
+    // the alternative -- keeping the level and gathering only part of the footprint -- is what aliases.
     Array2Df src{int2{512, 64}};
     for (int y = 0; y < 64; ++y)
         for (int x = 0; x < 512; ++x) src(x, y) = (x % 8 < 2) ? 1.f : 0.f;
@@ -493,7 +534,7 @@ TEST_CASE("A mapping's aspect matches the area its image actually covers")
     }
 }
 
-TEST_CASE("The mip level is doing something, and the bias moves it")
+TEST_CASE("The mip level is reached, moves with the bias, and is blended across")
 {
     // Proof that the pyramid is reached at all, which the quality tests cannot give: they only show that
     // the result is close to the mean, and a sharp enough filter over the top level would be too.
@@ -524,4 +565,28 @@ TEST_CASE("The mip level is doing something, and the bias moves it")
     // level were ignored, all three would be identical.
     CHECK(sharp > neutral);
     CHECK(soft <= neutral);
+
+    // And the response to the level is continuous, which is what says the two levels either side are
+    // blended rather than one of them snapped to. A snapped level puts a whole level's worth of difference
+    // into the step that crosses an integer and almost nothing into the others -- as bands, in an image,
+    // wherever the scale crosses a power of two.
+    Array2Df prev  = remap(-1.f);
+    double   worst = 0.0, total = 0.0;
+    int      n = 0;
+    for (float bias = -0.9f; bias <= 1.01f; bias += 0.1f)
+    {
+        const Array2Df cur = remap(bias);
+
+        double d = 0.0;
+        for (int i = 0; i < cur.num_elements(); ++i) d += std::abs(double(cur(i)) - double(prev(i)));
+        d /= double(cur.num_elements());
+
+        worst = std::max(worst, d);
+        total += d;
+        ++n;
+        prev = cur;
+    }
+
+    // No step across the crossing much larger than the steps either side of it.
+    CHECK(worst < 4.0 * (total / double(n)));
 }

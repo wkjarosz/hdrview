@@ -1127,10 +1127,11 @@ void HDRViewApp::draw_remap_dialog(bool &open)
 
         if (sampling == EnvMapSampling_EWA)
         {
-            ImGui::SliderInt("Taps", &supersample, 1, 32);
-            ImGui::Tooltip("Probes strung along the long axis of the footprint. The mip level covers the "
-                           "short axis, so this is what keeps the long one sharp -- too few and it aliases, "
-                           "since the level has to rise to cover what the probes cannot walk.");
+            ImGui::SliderInt("Max anisotropy", &supersample, 1, 32);
+            ImGui::Tooltip("How much longer than it is wide the footprint may be before it is widened to "
+                           "fit. The mip level covers the short axis and the filter walks the long one, so "
+                           "this is what keeps a stretched footprint sharp -- and what it costs, since each "
+                           "step along that axis is another texel read.");
 
             ImGui::SliderFloat("Mip bias", &mip_bias, -4.f, 4.f, "%+.2f");
             ImGui::Tooltip("Shifts the mip level away from the one the footprint asks for, in levels. "
