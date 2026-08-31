@@ -94,42 +94,66 @@ void show_in_file_manager(const char *filename)
 //------------------------------------------------------------------------------
 //  Javascript interface functions
 //
-//! Pinch-to-zoom, read straight from the browser's touch events.
+//! Two-finger pan and pinch-to-zoom, read straight from the browser's touch events.
 /*!
     Neither backend supplies it. GLFW has no gesture API on any platform, and the Emscripten port
     hello_imgui uses tracks a single touch point, synthesizing mouse events from it and discarding the
     rest -- so the second finger never reaches the application otherwise.
 
     Registering alongside the port's own listeners leaves that synthesis intact: one finger still pans
-    through the ordinary mouse path. The gesture is reduced here to a dimensionless change in the
-    fingers' separation; what that does to the viewport is HDRViewApp::touch_gesture()'s business.
+    through the ordinary mouse path. The gesture is reduced here to how the first two fingers' separation
+    and midpoint changed; what that does to the viewport is HDRViewApp::touch_gesture()'s business.
+
+    The deltas are taken per event rather than per frame because several touchmoves can arrive between
+    two frames, and every one of them is part of the same continuous motion.
 */
 static EM_BOOL on_touch(int event_type, const EmscriptenTouchEvent *event, void *)
 {
-    // The separation of the first two fingers is the gesture; a third changes nothing.
-    static float previous_distance = 0.f;
+    // The first two fingers are the gesture; a third changes nothing.
+    static float  previous_distance = 0.f;
+    static float2 previous_midpoint{0.f};
 
-    const bool pinching =
-        event->numTouches >= 2 && event_type != EMSCRIPTEN_EVENT_TOUCHEND && event_type != EMSCRIPTEN_EVENT_TOUCHCANCEL;
+    const bool ending = event_type == EMSCRIPTEN_EVENT_TOUCHEND || event_type == EMSCRIPTEN_EVENT_TOUCHCANCEL;
 
-    float  relative_delta = 0.f;
-    float2 midpoint{0.f};
+    // touches[] carries the fingers that just left alongside those still down, so the ones that ended
+    // have to be skipped to find what is actually on the glass -- including when picking the first two,
+    // which a lifted finger would otherwise be one of.
+    int down[2]      = {0, 0};
+    int touches_down = 0;
+    for (int i = 0; i < event->numTouches; ++i)
+    {
+        if (ending && event->touches[i].isChanged)
+            continue;
+        if (touches_down < 2)
+            down[touches_down] = i;
+        ++touches_down;
+    }
+
+    const bool pinching = touches_down >= 2;
+
+    float  scale = 1.f;
+    float2 from{0.f}, to{0.f};
     if (pinching)
     {
-        const float2 a{(float)event->touches[0].targetX, (float)event->touches[0].targetY};
-        const float2 b{(float)event->touches[1].targetX, (float)event->touches[1].targetY};
+        const float2 a{(float)event->touches[down[0]].targetX, (float)event->touches[down[0]].targetY};
+        const float2 b{(float)event->touches[down[1]].targetX, (float)event->touches[down[1]].targetY};
         const float  distance = length(b - a);
+        const float2 midpoint = 0.5f * (a + b);
 
-        // The first frame of a pinch has nothing to compare against, so it only sets the baseline.
+        // The first event of a pinch has nothing to compare against, so it only sets the baseline.
         if (previous_distance > 0.f && distance > 0.f)
-            relative_delta = (distance - previous_distance) / previous_distance;
+        {
+            scale = distance / previous_distance;
+            from  = previous_midpoint;
+            to    = midpoint;
+        }
         previous_distance = distance;
-        midpoint          = 0.5f * (a + b);
+        previous_midpoint = midpoint;
     }
     else
         previous_distance = 0.f;
 
-    hdrview()->touch_gesture(event->numTouches, relative_delta, midpoint);
+    hdrview()->touch_gesture(touches_down, scale, from, to);
 
     // Claim the event only while pinching, so one finger still reaches the port's mouse synthesis.
     return pinching ? EM_TRUE : EM_FALSE;
