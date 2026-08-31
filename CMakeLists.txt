@@ -31,6 +31,7 @@ option(HDRVIEW_ENABLE_LIBJXL "Enable JPEG-XL support" ON)
 option(HDRVIEW_ENABLE_J2K "Enable JPEG-2000 support" ON)
 option(HDRVIEW_ENABLE_HTJ2K "Enable high-throughput JPEG2000 (HTJ2K) support" ON)
 option(HDRVIEW_ENABLE_AVIF "Enable AVIF support" ON)
+option(HDRVIEW_ENABLE_DAV1D "Decode AVIF with dav1d, which is roughly twice as fast as libaom's decoder" ON)
 option(HDRVIEW_ENABLE_HEIC "Enable HEIC support" ON)
 option(HDRVIEW_ENABLE_AVCI "Enable AVCI support" ON)
 option(HDRVIEW_ENABLE_LIBWEBP "Enable LIBWEBP support" ON)
@@ -1281,6 +1282,34 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_J2K)
   )
 endif()
 
+# dav1d decodes the AV1 in an AVIF about twice as fast as libaom's decoder, to the same pixels, so libheif
+# prefers it (plugin priority 150 vs 100) whenever both are compiled in. libaom stays in the build
+# regardless -- it is still the AVIF *encoder*, and its decoder is the fallback when dav1d is absent.
+#
+# dav1d builds only under meson, so unlike libaom above there is no CPM fallback: this uses a dav1d the
+# system already has, and quietly leaves libheif on libaom when there is none. Emscripten never has one.
+if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(HDRVIEW_DAV1D QUIET dav1d)
+  endif()
+  if(NOT HDRVIEW_DAV1D_FOUND)
+    find_path(HDRVIEW_DAV1D_INCLUDE_DIR NAMES dav1d/dav1d.h)
+    find_library(HDRVIEW_DAV1D_LIBRARY NAMES dav1d libdav1d)
+    if(HDRVIEW_DAV1D_INCLUDE_DIR AND HDRVIEW_DAV1D_LIBRARY)
+      set(HDRVIEW_DAV1D_FOUND TRUE)
+    endif()
+  endif()
+  if(NOT HDRVIEW_DAV1D_FOUND)
+    message(STATUS "dav1d not found; AVIF will be decoded with libaom. Install dav1d's development "
+                   "package for roughly twice the AVIF decoding speed."
+    )
+    set(HDRVIEW_ENABLE_DAV1D OFF)
+  endif()
+else()
+  set(HDRVIEW_ENABLE_DAV1D OFF)
+endif()
+
 if(HDRVIEW_ENABLE_LIBHEIF)
   CPMAddPackage(
     NAME Libheif
@@ -1310,12 +1339,16 @@ if(HDRVIEW_ENABLE_LIBHEIF)
             "WITH_JPEG_DECODER ${HDRVIEW_ENABLE_LIBJPEG}"
             "WITH_AOM_ENCODER ${HDRVIEW_ENABLE_AVIF}"
             "WITH_AOM_DECODER ${HDRVIEW_ENABLE_AVIF}"
+            "WITH_DAV1D ${HDRVIEW_ENABLE_DAV1D}"
             "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
     SYSTEM YES
     EXCLUDE_FROM_ALL YES
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
+    if(HDRVIEW_ENABLE_DAV1D)
+      message(STATUS "Will decode AVIF with dav1d ${HDRVIEW_DAV1D_VERSION}")
+    endif()
     if(EMSCRIPTEN)
       # Otherwise libheif compiles in the embind bindings for its JavaScript API, which HDRView has no use
       # for and which no longer compile: they bind raw pointers, which embind has since made an error. This
@@ -1343,6 +1376,10 @@ if(HDRVIEW_ENABLE_LIBHEIF)
     mark_as_system_library(heif)
     disable_target_warnings(heif)
   elseif(TARGET heif)
+    # A system libheif brings whichever decoders the distribution compiled into it, so WITH_DAV1D above was
+    # never read and this build cannot claim dav1d either way. The image info panel reports which AV1
+    # decoder libheif actually chose.
+    set(HDRVIEW_ENABLE_DAV1D OFF)
     message(STATUS "Using system-installed libheif library")
   else()
     message(
@@ -1606,6 +1643,7 @@ add_enabled_definition(HDRVIEW_ENABLE_LIBHEIF)
 add_enabled_definition(HDRVIEW_ENABLE_J2K)
 add_enabled_definition(HDRVIEW_ENABLE_HTJ2K)
 add_enabled_definition(HDRVIEW_ENABLE_AVIF)
+add_enabled_definition(HDRVIEW_ENABLE_DAV1D)
 add_enabled_definition(HDRVIEW_ENABLE_HEIC)
 add_enabled_definition(HDRVIEW_ENABLE_AVCI)
 add_enabled_definition(HDRVIEW_ENABLE_LIBWEBP)
@@ -1918,6 +1956,17 @@ if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
     target_link_libraries(hdrview_fuzz_load_image PRIVATE "-framework ApplicationServices")
     target_compile_definitions(hdrview_fuzz_load_image PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
   endif()
+endif()
+
+# Times this build's libheif AV1 decoder plugins against each other, which is how the choice between dav1d
+# and libaom's decoder was made and how it can be re-checked on another machine or a newer libheif. It talks
+# to libheif directly and needs none of HDRView's own sources, so it is its own tiny target rather than a
+# doctest case -- and it is a measurement, not a pass/fail, so it stays out of ctest.
+option(HDRVIEW_BUILD_BENCHMARKS "Build the libheif AV1 decoder benchmark" OFF)
+if(HDRVIEW_BUILD_BENCHMARKS AND HDRVIEW_ENABLE_LIBHEIF AND NOT EMSCRIPTEN)
+  add_executable(hdrview_bench_heif tests/bench_heif_decode.cpp)
+  set_target_properties(hdrview_bench_heif PROPERTIES CXX_STANDARD 17)
+  target_link_libraries(hdrview_bench_heif PRIVATE heif)
 endif()
 
 # GUI regression tests, driven by Dear ImGui Test Engine (https://github.com/ocornut/imgui_test_engine),

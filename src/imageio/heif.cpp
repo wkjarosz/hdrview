@@ -224,9 +224,18 @@ json get_heif_info()
 
     auto add_codec = [&](const char *name, heif_compression_format comp)
     {
-        bool dec          = (heif_have_decoder_for_format(comp) != 0);
-        bool enc          = (heif_have_encoder_for_format(comp) != 0);
-        compression[name] = json{{"decoder", dec}, {"encoder", enc}};
+        bool dec = (heif_have_decoder_for_format(comp) != 0);
+        bool enc = (heif_have_encoder_for_format(comp) != 0);
+        json entry{{"decoder", dec}, {"encoder", enc}};
+
+        // libheif returns the descriptors in descending plugin priority, so the first is the one it will
+        // pick. That matters for AV1, where dav1d and libaom can both be present and one is about twice
+        // as fast as the other.
+        const heif_decoder_descriptor *descriptors[8];
+        if (int n = heif_get_decoder_descriptors(comp, descriptors, 8); n > 0)
+            entry["decoder_used"] = heif_decoder_descriptor_get_name(descriptors[0]);
+
+        compression[name] = entry;
     };
 
     add_codec("AVC", heif_compression_AVC);

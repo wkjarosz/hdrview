@@ -1433,6 +1433,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_J2K);
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_HTJ2K);
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_AVIF);
+                    info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_DAV1D);
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_HEIC);
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_AVCI);
                     info += PRINT_FEATURE("{:22} : {}\n", HDRVIEW_ENABLE_LIBWEBP);
@@ -1475,8 +1476,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     if (heif_info.value("enabled", false))
                     {
                         info += "\nlibheif compression support:\n";
-                        info += fmt::format("{:<13} {:<8} {:<8}\n", "Format", "decoding", "encoding");
-                        info += fmt::format("{:=<13} {:=<8} {:=<8}\n", "", "", "");
+                        info += fmt::format("{:<13} {:<8} {:<8} {}\n", "Format", "decoding", "encoding", "decoder");
+                        info += fmt::format("{:=<13} {:=<8} {:=<8} {:=<24}\n", "", "", "", "");
                         if (heif_info.contains("features") && heif_info["features"].contains("compression"))
                         {
                             for (auto &it : heif_info["features"]["compression"].items())
@@ -1485,8 +1486,10 @@ void HDRViewApp::draw_about_dialog(bool &open)
                                 auto val   = it.value();
                                 bool dec   = val.value("decoder", false);
                                 bool enc   = val.value("encoder", false);
-                                info +=
-                                    fmt::format("{:<13} {:<8} {:<8}\n", codec, dec ? "yes" : "no", enc ? "yes" : "no");
+                                // Which plugin decodes matters where more than one can: AVIF is decoded by
+                                // dav1d when it is available and by libaom otherwise, several times slower.
+                                info += fmt::format("{:<13} {:<8} {:<8} {}\n", codec, dec ? "yes" : "no",
+                                                    enc ? "yes" : "no", val.value("decoder_used", ""));
                             }
                         }
                     }
