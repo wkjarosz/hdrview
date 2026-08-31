@@ -39,8 +39,16 @@
 class FilterProgress
 {
 public:
-    //! Stateless by default; \p create_state for the one instance that owns the accumulator.
-    explicit FilterProgress(bool create_state = false, float share_of_total = 1.f) :
+    //! An inert one, which is what a caller that does not want to watch anything passes.
+    /*!
+        Deliberately not the `explicit` constructor below with a defaulted argument. The filters take this
+        by value as `= {}`, which is copy-initialization and so cannot choose an explicit constructor --
+        clang rejects that outright even though gcc allows it.
+    */
+    FilterProgress() { set_num_steps(1); }
+
+    //! \p create_state for the one instance that owns the accumulator everything reports into.
+    explicit FilterProgress(bool create_state, float share_of_total = 1.f) :
         m_share(share_of_total), m_state(create_state ? std::make_shared<State>() : nullptr)
     {
         set_num_steps(1);
