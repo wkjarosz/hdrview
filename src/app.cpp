@@ -772,6 +772,10 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     m_dialogs.push_back(make_unique<PopupDialog>("Convert color space...",
                                                  [this](bool &open) { draw_convert_colorspace_dialog(open); }));
     m_dialogs.push_back(
+        make_unique<PopupDialog>("Channel mixer...", [this](bool &open) { draw_channel_mixer_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Hue/saturation...", [this](bool &open) { draw_hue_saturation_dialog(open); }));
+    m_dialogs.push_back(
         make_unique<PopupDialog>("Zap gremlins...", [this](bool &open) { draw_zap_gremlins_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Remap envmap...", [this](bool &open) { draw_remap_dialog(open); }));
     m_dialogs.push_back(
@@ -1693,6 +1697,18 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Convert color space...").open = true; },
+                   if_editable});
+        add(Action{{"Channel mixer...", "Mix channels", "Monochrome"},
+                   ICON_MY_CHANNEL_MIXER,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Channel mixer...").open = true; },
+                   if_editable});
+        add(Action{{"Hue/saturation...", "Colorize", "Desaturate"},
+                   ICON_MY_HUE_SATURATION,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Hue/saturation...").open = true; },
                    if_editable});
         add(Action{{"Remap envmap...", "Change environment map format", "Spherical remapping"},
                    ICON_MY_ENVMAP,

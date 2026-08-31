@@ -460,6 +460,8 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Median filter..."));
         MenuItem(action("Shift..."));
         MenuItem(action("Convert color space..."));
+        MenuItem(action("Channel mixer..."));
+        MenuItem(action("Hue/saturation..."));
 
         ImGui::Separator();
 

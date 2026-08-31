@@ -805,6 +805,32 @@ inline Real inverse_EOTF_DCI_P3(Real linear)
 
 float3 YC_to_RGB(float3 input, float3 Yw);
 float3 RGB_to_YC(float3 input, float3 Yw);
+
+//! Hue, saturation and lightness, in the double-hexcone form, extended to values outside [0,1].
+/*!
+    Derived from the sample code in Foley et al., *Computer Graphics: Principles and Practice*, second
+    edition in C, 592-596 -- but a high-dynamic-range image is full of values the textbook version has no
+    answer for. Lightness is the midpoint of the smallest and largest component and is left unclamped;
+    saturation is taken from whichever end has left the unit range, so a color brighter than white or
+    darker than black still round-trips instead of collapsing.
+
+    Hue is a turn in [0,1) rather than degrees, which is what makes shifting it a plain addition.
+    @{
+*/
+float3 RGB_to_HSL(float3 rgb);
+float3 HSL_to_RGB(float3 hsl);
+
+//! Rotate the hue by \p hue_turns, scale the saturation by \p saturation, and mix toward black or white.
+/*!
+    \p lightness runs over [-1,1] and is a mix toward black or white rather than a change to L, which is
+    what Photoshop's slider of that name does and what 1.8 followed: changing L directly desaturates on the
+    way, and the mix keeps hue and saturation where they were.
+
+    A pure saturation change takes a shortcut that avoids the round trip through hue entirely, since that
+    is by far the most common use and the trip is where an achromatic color loses its hue.
+*/
+float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness);
+//! @}
 Color3 sRGB_to_linear(const Color3 &c);
 Color4 sRGB_to_linear(const Color4 &c);
 Color3 linear_to_sRGB(const Color3 &c);

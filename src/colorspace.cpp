@@ -841,6 +841,132 @@ Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
     return result;
 }
 
+float3 RGB_to_HSL(float3 rgb)
+{
+    const float mn = std::min({rgb.x, rgb.y, rgb.z});
+    const float mx = std::max({rgb.x, rgb.y, rgb.z});
+
+    const float sum = mn + mx, diff = mx - mn;
+    const float L = 0.5f * sum;
+
+    if (diff < 1e-6f) // achromatic: there is no hue to name, and no saturation to measure it with
+        return float3{0.f, 0.f, L};
+
+    // Which end of the range the saturation is measured against flips at mid lightness, and a component
+    // outside [0,1] is carried by taking that end directly rather than as a fraction -- which is what lets
+    // a color brighter than white or darker than black survive the round trip.
+    float S;
+    if (L <= 0.5f)
+        S = (mn < 0.f) ? 1.f - mn : diff / sum;
+    else
+        S = (mx > 1.f) ? mx : diff / (2.f - sum);
+
+    // The sextant the largest component names, plus how far around it the other two have moved.
+    float H;
+    if (rgb.x == mx)
+        H = (rgb.y - rgb.z) / diff;
+    else if (rgb.y == mx)
+        H = (rgb.z - rgb.x) / diff + 2.f;
+    else
+        H = (rgb.x - rgb.y) / diff + 4.f;
+
+    H *= 1.f / 6.f;
+    if (H < 0.f || H > 1.f)
+        H -= std::floor(H);
+
+    return float3{H, S, L};
+}
+
+namespace
+{
+
+//! One component back out of the hexcone, given the two extremes it runs between.
+float hue_to_RGB(float x, float y, float hue)
+{
+    if (hue < 0.f || hue > 1.f)
+        hue -= std::floor(hue);
+
+    if (6.f * hue < 1.f)
+        return x + 6.f * (y - x) * hue;
+    if (2.f * hue < 1.f)
+        return y;
+    if (3.f * hue < 2.f)
+        return x + 6.f * (y - x) * (2.f / 3.f - hue);
+    return x;
+}
+
+} // namespace
+
+float3 HSL_to_RGB(float3 hsl)
+{
+    const float H = hsl.x, S = hsl.y, L = hsl.z;
+
+    if (S <= 0.f) // achromatic, and the hue means nothing
+        return float3{L};
+
+    // The extremes the three components run between, undoing the choice RGB_to_HSL() made about which end
+    // the saturation was measured against.
+    const float y = L < 0.5f ? (S > 1.f ? 2.f * L + S - 1.f : L + L * S) : (S > 1.f ? S : L + S - L * S);
+    const float x = 2.f * L - y;
+
+    return float3{hue_to_RGB(x, y, H + 1.f / 3.f), hue_to_RGB(x, y, H), hue_to_RGB(x, y, H - 1.f / 3.f)};
+}
+
+namespace
+{
+
+//! Scale the saturation without naming the hue, which the round trip would lose on an achromatic color.
+float3 adjust_saturation(float3 rgb, float s)
+{
+    const float mn = std::min({rgb.x, rgb.y, rgb.z});
+    const float mx = std::max({rgb.x, rgb.y, rgb.z});
+
+    if (mn == mx) // nothing to scale: gray stays gray at any saturation
+        return rgb;
+
+    const float L = 0.5f * (mn + mx);
+
+    // The same two branches as the conversion above, carried far enough to give the new extremes.
+    float S, y2;
+    if (L <= 0.5f)
+    {
+        S = (mn < 0.f) ? 1.f - mn : (mx - mn) / (mx + mn);
+        S *= s;
+        y2 = S > 1.f ? 2.f * L + S - 1.f : L + L * S;
+    }
+    else
+    {
+        S = (mx > 1.f) ? mx : (mx - mn) / (2.f - (mx + mn));
+        S *= s;
+        y2 = S > 1.f ? S : L + S - L * S;
+    }
+    const float x2 = 2.f * L - y2;
+
+    // The map taking the old extremes to the new ones is affine, so it applies to all three components at
+    // once and each keeps its position between them -- which is what leaves the hue untouched.
+    const float t    = 1.f / (mx - mn);
+    const float fac1 = (y2 - x2) * t;
+    const float fac2 = (mx * x2 - mn * y2) * t;
+
+    return rgb * fac1 + fac2;
+}
+
+} // namespace
+
+float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness)
+{
+    if (hue_turns == 0.f && lightness == 0.f)
+        return adjust_saturation(rgb, saturation);
+
+    float3 hsl = RGB_to_HSL(rgb);
+    hsl.x += hue_turns;
+    hsl.y *= saturation;
+    float3 out = HSL_to_RGB(hsl);
+
+    // Mixed toward black or white rather than changing L, which would desaturate on the way.
+    return lightness < 0.f ? la::lerp(out, float3{0.f}, -lightness) : la::lerp(out, float3{1.f}, lightness);
+}
+
 float3 YC_to_RGB(float3 input, float3 Yw)
 {
     if (input[0] == 0.f && input[2] == 0.f)

@@ -899,7 +899,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(img->color_space, ColorGamut_BT2020_2100);
     };
 
-    t           = IM_REGISTER_TEST(engine, "edit", "the shift and color-space dialogs are wired to their edits");
+    t           = IM_REGISTER_TEST(engine, "edit", "every new edit dialog is wired to its edit");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         if (!load_fixture(ctx))
@@ -931,6 +931,49 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Convert color space");
         IM_CHECK_EQ(img->color_space, ColorGamut_ACES_AP0);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+
+        // Both of the group-scoped ones, which reach the pixels through modify_colors() rather than
+        // modify_pixels() and so are wired differently again.
+        menu_click(ctx, "Edit/Channel mixer...");
+        ctx->SetRef("Channel mixer...");
+        ctx->ItemClick("Monochrome");
+        ctx->ItemClick("Mix");
+        ctx->Yield(2);
+
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Channel mixer");
+
+        // Monochrome means the three channels came out equal, which is what says the mix ran rather than
+        // merely something having changed.
+        {
+            const auto &group = img->groups[img->selected_group];
+            if (group.num_channels >= 3)
+            {
+                const auto &r = img->channels[group.channels[0]];
+                const auto &g = img->channels[group.channels[1]];
+                const auto &b = img->channels[group.channels[2]];
+                for (int i = 0; i < r.num_elements(); i += 37)
+                {
+                    IM_CHECK_LT(std::fabs(r(i) - g(i)), 1e-5f);
+                    IM_CHECK_LT(std::fabs(r(i) - b(i)), 1e-5f);
+                }
+            }
+        }
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+
+        menu_click(ctx, "Edit/Hue\\/saturation...");
+        ctx->SetRef("Hue\\/saturation...");
+        ctx->ItemInputValue("Saturation", -100.0f);
+        ctx->ItemClick("Apply");
+        ctx->Yield(2);
+
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Hue/saturation");
 
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(snapshot(img) == original);

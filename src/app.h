@@ -336,6 +336,8 @@ public:
     void draw_blur_dialog(bool &open);
     void draw_shift_dialog(bool &open);
     void draw_convert_colorspace_dialog(bool &open);
+    void draw_channel_mixer_dialog(bool &open);
+    void draw_hue_saturation_dialog(bool &open);
     void draw_unsharp_mask_dialog(bool &open);
     void draw_median_dialog(bool &open);
     void draw_zap_gremlins_dialog(bool &open);

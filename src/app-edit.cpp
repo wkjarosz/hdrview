@@ -876,6 +876,138 @@ void HDRViewApp::draw_blur_dialog(bool &open)
     }
 }
 
+void HDRViewApp::draw_hue_saturation_dialog(bool &open)
+{
+    // The ranges Photoshop uses and 1.8 followed: hue in degrees around the wheel, the other two as a
+    // percentage away from where they are.
+    static float hue = 0.f, saturation = 0.f, lightness = 0.f;
+
+    ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Hue/saturation...", open, ImGui::DialogPosition::Center))
+    {
+        ImGui::SliderFloat("Hue", &hue, -180.f, 180.f, "%+.0f deg");
+        ImGui::SliderFloat("Saturation", &saturation, -100.f, 100.f, "%+.0f%%");
+        ImGui::SliderFloat("Lightness", &lightness, -100.f, 100.f, "%+.0f%%");
+        ImGui::Tooltip("Lightness mixes toward black or white rather than changing the lightness itself, "
+                       "which would wash the color out on the way.");
+
+        // The wheel as it is and as the settings would leave it, which is easier to judge than the numbers.
+        auto strip = [](const char *id, float h, float s, float l)
+        {
+            const float  w    = ImGui::GetContentRegionAvail().x;
+            const float  step = std::max(1.f, w / 64.f);
+            const ImVec2 p    = ImGui::GetCursorScreenPos();
+            auto        *dl   = ImGui::GetWindowDrawList();
+
+            for (float x = 0.f; x < w; x += step)
+            {
+                const float3 rgb =
+                    adjust_HSL(HSL_to_RGB(float3{x / w, 1.f, 0.5f}), h / 360.f, (s + 100.f) / 100.f, l / 100.f);
+                dl->AddRectFilled(ImVec2(p.x + x, p.y), ImVec2(p.x + x + step, p.y + ImGui::GetFrameHeight()),
+                                  ImGui::ColorConvertFloat4ToU32(ImVec4(rgb.x, rgb.y, rgb.z, 1.f)));
+            }
+            ImGui::Dummy(ImVec2(w, ImGui::GetFrameHeight()));
+            ImGui::SetItemTooltip("%s", id);
+        };
+        strip("The hue wheel as it is", 0.f, 0.f, 0.f);
+        strip("The hue wheel as these settings would leave it", hue, saturation, lightness);
+
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Apply");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const float h = hue / 360.f, s = (saturation + 100.f) / 100.f, l = lightness / 100.f;
+            modify_colors(current_image(), "Hue/saturation", m_edit_subject,
+                          [h, s, l](const float4 &c, int2) { return float4{adjust_HSL(c.xyz(), h, s, l), c.w}; });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
+void HDRViewApp::draw_channel_mixer_dialog(bool &open)
+{
+    // A row of source weights per output channel, plus the one that makes a single gray from all three.
+    // Kept as percentages the way 1.8 and Photoshop present them, since that is how the numbers are read:
+    // "40% of the red channel", not "0.4".
+    static float3 rows[4]    = {{100.f, 0.f, 0.f}, {0.f, 100.f, 0.f}, {0.f, 0.f, 100.f}, {33.3f, 33.3f, 33.3f}};
+    static int    output     = 0;
+    static bool   monochrome = false;
+    static bool   normalize  = false;
+
+    ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Channel mixer...", open, ImGui::DialogPosition::Center))
+    {
+        ImGui::Checkbox("Monochrome", &monochrome);
+        ImGui::Tooltip("Writes one gray value to all three channels, mixed by the weights below.");
+
+        ImGui::BeginDisabled(monochrome);
+        const char *names[] = {"Red", "Green", "Blue"};
+        for (int i = 0; i < 3; ++i)
+        {
+            ImGui::SameLine(i == 0 ? 0.f : -1.f);
+            ImGui::RadioButton(names[i], &output, i);
+        }
+        ImGui::EndDisabled();
+
+        // Monochrome edits the gray row wherever the output selector points, since that is the only row it
+        // uses.
+        float3 &w = rows[monochrome ? 3 : output];
+
+        ImGui::DragFloat("Red##weight", &w.x, 0.5f, -200.f, 200.f, "%.1f%%");
+        ImGui::DragFloat("Green##weight", &w.y, 0.5f, -200.f, 200.f, "%.1f%%");
+        ImGui::DragFloat("Blue##weight", &w.z, 0.5f, -200.f, 200.f, "%.1f%%");
+
+        const float total = w.x + w.y + w.z;
+        ImGui::TextDisabled("Total: %.1f%%", total);
+        ImGui::SameLine();
+        ImGui::Checkbox("Normalize", &normalize);
+        ImGui::Tooltip("Divides each row by its own total, so the mix neither brightens nor darkens. Off, a "
+                       "total above 100% lightens the result and one below darkens it.");
+
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Mix");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            auto row = [](const float3 &r, bool norm)
+            {
+                const float3 v   = r / 100.f;
+                const float  sum = v.x + v.y + v.z;
+                // A row summing to zero is a legitimate difference of channels; leaving it alone is the
+                // only thing to do rather than dividing by nothing.
+                return norm && std::abs(sum) > 1e-6f ? v / sum : v;
+            };
+
+            if (monochrome)
+            {
+                const float3 g = row(rows[3], normalize);
+                modify_colors(current_image(), "Channel mixer", m_edit_subject,
+                              [g](const float4 &c, int2)
+                              {
+                                  const float y = la::dot(g, c.xyz());
+                                  return float4{y, y, y, c.w};
+                              });
+            }
+            else
+            {
+                const float3 r = row(rows[0], normalize), g = row(rows[1], normalize), b = row(rows[2], normalize);
+                modify_colors(current_image(), "Channel mixer", m_edit_subject, [r, g, b](const float4 &c, int2)
+                              { return float4{la::dot(r, c.xyz()), la::dot(g, c.xyz()), la::dot(b, c.xyz()), c.w}; });
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
 void HDRViewApp::draw_convert_colorspace_dialog(bool &open)
 {
     // What the image says it already is, which is where the "from" side starts. Re-read whenever the
