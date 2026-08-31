@@ -34,6 +34,15 @@ enum EnvMapping : int
 
 const char *envmapping_name(int mapping);
 
+/*!
+    Width divided by height for an image in \p mapping that wastes no resolution.
+
+    A lat-long covers twice as much longitude as latitude, so it wants 2:1; the discs are round and want a
+    square; the cube cross is three faces across by four down. Remapping to a size that ignores this either
+    stretches the result or throws away samples along one axis.
+*/
+float envmapping_aspect(int mapping);
+
 //! Direction for a point on the image, both in [0,1]^2 and on the unit sphere respectively.
 float3 envmap_uv_to_xyz(EnvMapping mapping, float2 uv);
 //! Point on the image for a direction; the inverse of envmap_uv_to_xyz().

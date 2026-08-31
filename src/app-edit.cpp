@@ -1068,8 +1068,15 @@ void HDRViewApp::draw_remap_dialog(bool &open)
             return;
         }
 
+        static bool auto_aspect = true;
+
+        // Opens at the current image's size, then follows the target's own aspect from there.
         if (size.x <= 0 || size.y <= 0)
+        {
             size = img->size();
+            if (auto_aspect)
+                size.x = std::max(1, int(std::lround(double(size.y) * double(envmapping_aspect(dst_mapping)))));
+        }
 
         auto mapping_combo = [](const char *label, int *value)
         {
@@ -1083,10 +1090,28 @@ void HDRViewApp::draw_remap_dialog(bool &open)
         };
 
         mapping_combo("Source", &src_mapping);
+
+        const int before_dst = dst_mapping;
         mapping_combo("Target", &dst_mapping);
 
+        const int2 before = size;
         ImGui::DragInt2("Width, height", &size.x, 1.f, 1, 65536, "%d px");
         size = la::max(size, int2{1});
+
+        ImGui::Checkbox("Auto aspect ratio", &auto_aspect);
+        ImGui::Tooltip("Keep the width and height in the proportion the target parameterization wants: 2:1 "
+                       "for a lat-long, square for a disc, 3:4 for a cube cross.");
+
+        // Follow whichever was just changed. Picking a new target re-derives the width, since the aspect
+        // it wants has changed; editing one field drives the other.
+        if (auto_aspect)
+        {
+            const float aspect = envmapping_aspect(dst_mapping);
+            if (dst_mapping != before_dst || size.y != before.y)
+                size.x = std::max(1, int(std::lround(double(size.y) * double(aspect))));
+            else if (size.x != before.x)
+                size.y = std::max(1, int(std::lround(double(size.x) / double(aspect))));
+        }
 
         static int sampling = EnvMapSampling_EWA;
         ImGui::RadioButton("EWA", &sampling, EnvMapSampling_EWA);
@@ -1138,11 +1163,14 @@ void HDRViewApp::draw_remap_dialog(bool &open)
 void HDRViewApp::draw_irradiance_dialog(bool &open)
 {
     static int  mapping = EnvMapping_LatLong;
-    static int2 size{64, 32};
+    static int2 size{0, 0};
 
     ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Irradiance envmap...", open, ImGui::DialogPosition::Center))
     {
+        if (auto img = current_image(); img && (size.x <= 0 || size.y <= 0))
+            size = img->size();
+
         if (ImGui::BeginCombo("Mapping", envmapping_name(mapping)))
         {
             for (int i = 0; i < EnvMapping_COUNT; ++i)
@@ -1172,10 +1200,14 @@ void HDRViewApp::draw_irradiance_dialog(bool &open)
             modify_image_async(current_image(), "Irradiance envmap", out_size,
                                [m, out_size](const Array2Df &src, AtomicProgress p)
                                { return irradiance_envmap(src, out_size, m, p); });
+            size = int2{0};
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
+        {
+            size = int2{0};
             ImGui::CloseCurrentPopup();
+        }
 
         ImGui::EndPopup();
     }

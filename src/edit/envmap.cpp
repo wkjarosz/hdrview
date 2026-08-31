@@ -285,6 +285,17 @@ const char *envmapping_name(int mapping)
     }
 }
 
+float envmapping_aspect(int mapping)
+{
+    switch (mapping)
+    {
+    case EnvMapping_LatLong:
+    case EnvMapping_Cylindrical: return 2.f;   // a full turn across, half a turn down
+    case EnvMapping_CubeMap: return 3.f / 4.f; // three faces across by four down
+    default: return 1.f;                       // the discs and the equal-area square
+    }
+}
+
 float3 envmap_uv_to_xyz(EnvMapping mapping, float2 uv)
 {
     switch (mapping)
@@ -448,9 +459,12 @@ float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, floa
 {
     const float2 base{float(levels[0].width()), float(levels[0].height())};
 
-    // The two axes as half-extents in level-0 texels: du and dv span a whole destination pixel, and the
-    // ellipse is centered on it.
-    const float2 a = 0.5f * du * base, b = 0.5f * dv * base;
+    // The axes as *full* extents in level-0 texels. du and dv are the step from one destination pixel to
+    // the next, so these are how far across the source one of them reaches, and the level is chosen from
+    // them rather than from their halves: a texel has to span the whole of the short axis to cover it.
+    // Halving here is a level of under-blur, and it aliases in a way no number of probes along the long
+    // axis can undo.
+    const float2 a = du * base, b = dv * base;
 
     const float  len_a = la::length(a), len_b = la::length(b);
     const float2 major_vec = len_a >= len_b ? a : b;
@@ -464,31 +478,42 @@ float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, floa
     const float aniso   = std::clamp(major / minor, 1.f, float(max_taps));
     const float lod_len = std::max(minor, major / aniso);
 
-    const int       level = std::clamp(int(std::floor(std::log2(std::max(1e-6f, lod_len)))), 0, int(levels.size()) - 1);
-    const Array2Df &lvl   = levels[size_t(level)];
+    // Kept continuous and blended across the two levels either side rather than snapped to one. A snapped
+    // level is up to a factor of two too sharp, which aliases in bands wherever the scale crosses a power
+    // of two.
+    const float lod   = std::log2(std::max(1e-6f, lod_len));
+    const int   lo    = std::clamp(int(std::floor(lod)), 0, int(levels.size()) - 1);
+    const int   hi    = std::min(lo + 1, int(levels.size()) - 1);
+    const float blend = std::clamp(lod - float(lo), 0.f, 1.f);
 
     const int n = std::clamp(int(std::ceil(aniso)), 1, max_taps);
-    if (n <= 1)
-        return sample_bilinear(lvl, uv);
 
-    // The probes are spread along the major axis, in image coordinates so the level's own resolution does
-    // not enter into it.
-    const float2 step = (major_vec / base) / float(n);
+    // Probes strung along the major axis, in image coordinates so neither level's resolution enters into
+    // it. Half the axis either side of the center, since these extents are full widths.
+    const float2 half_axis = 0.5f * major_vec / base;
 
-    float sum = 0.f, total = 0.f;
-    for (int i = 0; i < n; ++i)
+    auto gather = [&](const Array2Df &lvl)
     {
-        // Centered on the pixel: offsets run from just inside one end of the axis to the other.
-        const float t = (float(i) + 0.5f) / float(n) * 2.f - 1.f;
+        if (n <= 1)
+            return sample_bilinear(lvl, uv);
 
-        // Gaussian along the axis, down to about 1/e^2 at its ends, which is the usual EWA weighting.
-        const float w = std::exp(-2.f * t * t);
+        float sum = 0.f, total = 0.f;
+        for (int i = 0; i < n; ++i)
+        {
+            // Centered on the pixel: offsets run from just inside one end of the axis to the other.
+            const float t = (float(i) + 0.5f) / float(n) * 2.f - 1.f;
 
-        sum += w * sample_bilinear(lvl, uv + t * float(n) * step);
-        total += w;
-    }
+            // Gaussian along the axis, down to about 1/e^2 at its ends, the usual EWA weighting.
+            const float w = std::exp(-2.f * t * t);
 
-    return total > 0.f ? sum / total : sample_bilinear(lvl, uv);
+            sum += w * sample_bilinear(lvl, uv + t * half_axis);
+            total += w;
+        }
+        return total > 0.f ? sum / total : sample_bilinear(lvl, uv);
+    };
+
+    const float low = gather(levels[size_t(lo)]);
+    return blend > 0.f ? (1.f - blend) * low + blend * gather(levels[size_t(hi)]) : low;
 }
 
 } // namespace

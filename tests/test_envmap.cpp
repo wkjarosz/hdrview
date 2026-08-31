@@ -377,9 +377,12 @@ TEST_CASE("EWA beats point sampling on a heavy reduction")
     // it lands and reports what is under it -- here, on the lit edge -- while the footprint it stands for
     // is three quarters dark. A checkerboard would not do: its local average is its global one, so every
     // filter gets the right answer for the wrong reason.
+    // Period sixteen, so that one output pixel covers exactly one period. Deliberately not eight: a level
+    // one step too sharp averages over eight texels, which for a period-eight pattern is still exactly one
+    // period and so gives the right answer for the wrong reason.
     Array2Df src{int2{256, 256}};
     for (int y = 0; y < 256; ++y)
-        for (int x = 0; x < 256; ++x) src(x, y) = (x % 8 < 2) ? 1.f : 0.f;
+        for (int x = 0; x < 256; ++x) src(x, y) = (x % 16 < 4) ? 1.f : 0.f;
     const double true_mean = 0.25;
 
     const Array2Df ewa = remapped_envmap(src, int2{16, 16}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA);
@@ -400,6 +403,12 @@ TEST_CASE("EWA beats point sampling on a heavy reduction")
     }
 
     CHECK(ewa_err < point_err);
+
+    // And in absolute terms, not merely better: each output pixel covers two whole periods, so a filter
+    // that is covering its footprint lands on the mean. Choosing a mip level one step too sharp -- which
+    // halving the extents before taking the logarithm does -- leaves the stripes partly intact and fails
+    // this while still comfortably beating a single tap.
+    CHECK(ewa_err / double(ewa.num_elements()) < 0.05);
 }
 
 TEST_CASE("EWA holds up when the footprint is far wider than it is tall")
@@ -440,5 +449,46 @@ TEST_CASE("Too few taps blurs rather than aliases")
     {
         CHECK(few(i) > 0.05f);
         CHECK(few(i) < 0.6f);
+    }
+}
+
+TEST_CASE("Each parameterization asks for the proportions it can fill")
+{
+    // A remap to a size that ignores these either stretches the result or throws away resolution along one
+    // axis, which is why the dialog follows them rather than keeping whatever the source happened to be.
+    CHECK(envmapping_aspect(EnvMapping_LatLong) == doctest::Approx(2.f));
+    CHECK(envmapping_aspect(EnvMapping_Cylindrical) == doctest::Approx(2.f));
+    CHECK(envmapping_aspect(EnvMapping_CubeMap) == doctest::Approx(0.75f));
+    CHECK(envmapping_aspect(EnvMapping_Angular) == doctest::Approx(1.f));
+    CHECK(envmapping_aspect(EnvMapping_MirrorBall) == doctest::Approx(1.f));
+    CHECK(envmapping_aspect(EnvMapping_EqualArea) == doctest::Approx(1.f));
+}
+
+TEST_CASE("A mapping's aspect matches the area its image actually covers")
+{
+    // Not merely the numbers above repeated: the proportion each wants is the one under which its valid
+    // region fills the image, which is measurable from the mapping itself.
+    for (int m = 0; m < EnvMapping_COUNT; ++m)
+    {
+        CAPTURE(std::string(name_of(m)));
+
+        // A tall, thin sampling grid so both axes are resolved; count where the mapping has a direction.
+        const int n       = 240;
+        int       covered = 0;
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+                if (envmap_uv_is_valid(EnvMapping(m), float2{(x + 0.5f) / n, (y + 0.5f) / n}))
+                    ++covered;
+
+        // The discs cover pi/4 of their square; the cross uses six of the twelve cells of its 3-by-4
+        // grid -- the column of four plus the two side faces -- and the rest fill their image.
+        const double fraction = double(covered) / double(n) * (1.0 / double(n));
+        const bool   is_disc  = m == EnvMapping_Angular || m == EnvMapping_MirrorBall;
+        if (is_disc)
+            CHECK(fraction == doctest::Approx(3.14159265358979 / 4.0).epsilon(0.01));
+        else if (m == EnvMapping_CubeMap)
+            CHECK(fraction == doctest::Approx(6.0 / 12.0).epsilon(0.01));
+        else
+            CHECK(fraction == doctest::Approx(1.0));
     }
 }
