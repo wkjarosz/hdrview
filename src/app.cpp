@@ -641,9 +641,9 @@ void HDRViewApp::setup_frame_callbacks()
                     {
                         if (!it->second.empty())
                         {
-                            int idx = it->second.front();
+                            int entry_idx = it->second.front();
                             it->second.pop_front();
-                            m_pending_session->entries[idx].loaded = new_image;
+                            m_pending_session->entries[entry_idx].loaded = new_image;
                         }
                         if (it->second.empty())
                             m_pending_session->unresolved.erase(it);

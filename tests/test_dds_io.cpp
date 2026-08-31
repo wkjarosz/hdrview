@@ -60,7 +60,7 @@ std::string make_one_block_dds(const char fourcc[4])
     // Both endpoints the same mid-gray, so all sixteen texels decode to one color whatever the
     // interpolation does, and every index selects endpoint 0.
     const uint16_t rgb565 = uint16_t((16u << 11) | (32u << 5) | 16u);
-    v.insert(v.end(), {uint8_t(rgb565), uint8_t(rgb565 >> 8), uint8_t(rgb565), uint8_t(rgb565 >> 8)});
+    v.insert(v.end(), {uint8_t(rgb565 & 0xFF), uint8_t(rgb565 >> 8), uint8_t(rgb565 & 0xFF), uint8_t(rgb565 >> 8)});
     for (int i = 0; i < 4; ++i) v.push_back(0); // all indices 0
 
     return std::string(v.begin(), v.end());

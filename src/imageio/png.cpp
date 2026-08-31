@@ -121,17 +121,17 @@ int decode_ascii_hex_to_binary(uint8_t u8[], size_t length)
     for (int i = '0'; i <= '9'; i++)
     {
         valid[i] = true;
-        value[i] = i - '0';
+        value[i] = uint8_t(i - '0');
     }
     for (int i = 'a'; i <= 'f'; i++)
     {
         valid[i] = true;
-        value[i] = 10 + i - 'a';
+        value[i] = uint8_t(10 + i - 'a');
     }
     for (int i = 'A'; i <= 'F'; i++)
     {
         valid[i] = true;
-        value[i] = 10 + i - 'A';
+        value[i] = uint8_t(10 + i - 'A');
     }
 
     for (size_t i = 0; i < length; i++)
@@ -465,15 +465,17 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         {"type", "int"},
         {"description", "PNG sRGB chunk specifies that the image is in sRGB color space"}};
 
-    png_byte color_primaries;
-    png_byte transfer_function;
-    png_byte matrix_coefficients;
-    png_byte video_full_range_flag = 1;
-    string   cicp_desc =
+    string cicp_desc =
         "Coding-independent code points (CICP) is a way to signal the color properties of the image via four "
         "properties: color primaries (CP), transfer function (TF), matrix coefficients (MC), and full-range vs. "
         "narrow-range flag (FR).";
+    // Full range unless the cICP chunk or the ICC profile's cicp tag below says otherwise. Declared outside
+    // the #ifdef because the sample dequantization further down reads it even without cICP support.
+    png_byte video_full_range_flag = 1;
 #ifdef PNG_cICP_SUPPORTED
+    png_byte color_primaries;
+    png_byte transfer_function;
+    png_byte matrix_coefficients;
     if (png_get_cICP(png_ptr, info_ptr.get(), &color_primaries, &transfer_function, &matrix_coefficients,
                      &video_full_range_flag))
     {

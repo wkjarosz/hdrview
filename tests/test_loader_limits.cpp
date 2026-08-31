@@ -44,11 +44,6 @@ void append_be32(std::vector<uint8_t> &v, uint32_t x)
     v.insert(v.end(), {uint8_t(x >> 24), uint8_t(x >> 16), uint8_t(x >> 8), uint8_t(x)});
 }
 
-void append_le32(std::vector<uint8_t> &v, uint32_t x)
-{
-    v.insert(v.end(), {uint8_t(x), uint8_t(x >> 8), uint8_t(x >> 16), uint8_t(x >> 24)});
-}
-
 //! A QOI header declaring \p w by \p h. Big-endian dimensions at bytes 4..12, then channels and colorspace.
 std::string qoi_header(uint32_t w, uint32_t h)
 {

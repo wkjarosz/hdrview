@@ -84,7 +84,7 @@ struct TiffBuilder
 };
 
 constexpr uint16_t k_tag_make = 0x010f, k_tag_compression = 0x0103, k_tag_orientation = 0x0112;
-constexpr uint16_t k_fmt_byte = 1, k_fmt_ascii = 2, k_fmt_short = 3;
+constexpr uint16_t k_fmt_ascii = 2, k_fmt_short = 3;
 
 json parse(const std::vector<uint8_t> &blob) { return exif_to_json(blob.data(), blob.size()); }
 

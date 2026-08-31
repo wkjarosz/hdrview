@@ -801,8 +801,6 @@ std::string CICPProfile::short_name() const
     }
     else
         return fmt::format("Unusual/historical{}", details);
-
-    return fmt::format("CICP ({} {} {} {})", cp_short_name(), tc_short_name(), mc_short_name(), r_short_name());
 }
 
 CICPProfile CICPProfile::from_gamut_and_transfer(ColorGamut_ gamut, TransferFunction tf, int matrix_coeffs,
