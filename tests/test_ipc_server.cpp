@@ -164,6 +164,41 @@ TEST_CASE("The listener receives what a client sends over loopback")
     CHECK_FALSE(server.is_listening());
 }
 
+TEST_CASE("The listener counts what it has received, for the activity readout")
+{
+    Collector collector;
+    IpcServer server;
+    REQUIRE(server.start(0, [&](const IpcPacket &p) { collector.add(p.as_close_image().name); }));
+
+    // Nothing has arrived yet, so there is no "time since the last packet" to report.
+    CHECK(server.activity().packets == 0);
+    CHECK(server.activity().bytes == 0);
+    CHECK(server.activity().seconds_since_last < 0.0);
+
+    const std::vector<std::string> names{"a", "bb", "ccc"};
+    const auto                     stream = stream_of(names);
+
+    {
+        TestClient client{server.port()};
+        client.send_all(stream);
+        REQUIRE(collector.wait_for(names.size()).size() == names.size());
+    }
+
+    const auto activity = server.activity();
+    CHECK(activity.packets == names.size());
+    // Bytes are counted off the wire, so they include each packet's length prefix and type byte.
+    CHECK(activity.bytes == stream.size());
+    CHECK(activity.seconds_since_last >= 0.0);
+
+    // Counting covers one listening session: restarting begins again from nothing.
+    server.stop();
+    REQUIRE(server.start(0, [](const IpcPacket &) {}));
+    CHECK(server.activity().packets == 0);
+    CHECK(server.activity().bytes == 0);
+    CHECK(server.activity().seconds_since_last < 0.0);
+    server.stop();
+}
+
 TEST_CASE("A tile survives the trip over a socket")
 {
     // The codec tests round-trip in memory; this is the same payload through a real connection, which is

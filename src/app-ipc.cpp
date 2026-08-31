@@ -9,6 +9,7 @@
 
 #include "app.h"
 
+#include "common.h"
 #include "image.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
@@ -89,6 +90,31 @@ bool HDRViewApp::start_ipc_listening(uint16_t port)
 
 void HDRViewApp::stop_ipc_listening() { m_ipc_server.stop(); }
 
+void HDRViewApp::IpcRates::update(const IpcActivity &now, double time)
+{
+    // Long enough that the numbers hold still and can be read, short enough that they follow a renderer
+    // starting and stopping.
+    static constexpr double k_window = 0.5;
+
+    if (sampled_at == 0.0)
+    {
+        sampled_at   = time;
+        last_packets = now.packets;
+        last_bytes   = now.bytes;
+        return;
+    }
+
+    const double elapsed = time - sampled_at;
+    if (elapsed < k_window)
+        return;
+
+    packets_per_s = double(now.packets - last_packets) / elapsed;
+    bytes_per_s   = double(now.bytes - last_bytes) / elapsed;
+    sampled_at    = time;
+    last_packets  = now.packets;
+    last_bytes    = now.bytes;
+}
+
 void HDRViewApp::draw_ipc_gui()
 {
     ImGui::SeparatorText("Live updates");
@@ -125,6 +151,42 @@ void HDRViewApp::draw_ipc_gui()
         const size_t clients = m_ipc_server.num_connections();
         ImGui::TextWrapped("Listening on 127.0.0.1:%d \xe2\x80\x93 %s connected.", int(m_ipc_server.port()),
                            clients == 1 ? "1 client" : fmt::format("{} clients", clients).c_str());
+
+        const auto activity = m_ipc_server.activity();
+        m_ipc_rates.update(activity, ImGui::GetTime());
+
+        // "Streaming" is anything still arriving; a renderer that pauses between passes should not make the
+        // readout flicker, so the threshold is well above the quarter-second pbrt leaves between updates.
+        static constexpr double k_idle_after = 1.5;
+        const bool streaming = activity.seconds_since_last >= 0.0 && activity.seconds_since_last < k_idle_after;
+
+        if (clients && streaming)
+        {
+            // Indeterminate on purpose. Nothing in the protocol says how much is left, and the two ways
+            // clients stream -- painting each tile once, or resending the frame at rising sample counts --
+            // are indistinguishable from the packets, so any percentage here would be invented.
+            // No overlay text: the strip is deliberately thinner than a line of it, and the rates below say
+            // what it is doing anyway.
+            ImGui::ProgressBar(-1.f * float(ImGui::GetTime()), ImVec2(-FLT_MIN, ImGui::GetFrameHeight() * 0.35f), "");
+            ImGui::TextWrapped("%s",
+                               fmt::format("Receiving {:.1h}/s over {:.0f} updates/s.",
+                                           human_readible{size_t(m_ipc_rates.bytes_per_s)}, m_ipc_rates.packets_per_s)
+                                   .c_str());
+        }
+        else if (clients)
+            // How long a connected client has been quiet is worth watching -- it separates a renderer
+            // between passes from one that has stalled.
+            ImGui::TextWrapped("Connected, but nothing received for %.0fs.", activity.seconds_since_last);
+        else if (!activity.packets)
+            ImGui::TextUnformatted("Waiting for a renderer to connect.");
+        // With nobody connected there is nothing left to wait for, so the time since the last update stops
+        // being information and just climbs. The totals below say what arrived; that is the whole story.
+
+        if (activity.packets)
+            ImGui::TextWrapped("%s", fmt::format("{:.1h} in {} total.", human_readible{size_t(activity.bytes)},
+                                                 activity.packets == 1 ? std::string{"1 update"}
+                                                                       : fmt::format("{} updates", activity.packets))
+                                         .c_str());
     }
     else if (auto error = m_ipc_server.last_error(); !error.empty())
     {

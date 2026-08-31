@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 
 #if defined(_WIN32)
@@ -164,6 +165,11 @@ bool IpcServer::start(uint16_t port, PacketHandler on_packet)
     m_stopping      = false;
     m_listening     = true;
 
+    // The readout counts one listening session, not the lifetime of the app.
+    m_packets_received = 0;
+    m_bytes_received   = 0;
+    m_last_packet_ns   = 0;
+
     {
         std::lock_guard lock{m_mutex};
         m_last_error.clear();
@@ -207,6 +213,20 @@ size_t IpcServer::num_connections() const
 {
     std::lock_guard lock{m_mutex};
     return m_num_connections;
+}
+
+IpcActivity IpcServer::activity() const
+{
+    IpcActivity a;
+    a.packets = m_packets_received.load();
+    a.bytes   = m_bytes_received.load();
+
+    if (const int64_t last = m_last_packet_ns.load(); last != 0)
+    {
+        const int64_t now    = std::chrono::steady_clock::now().time_since_epoch().count();
+        a.seconds_since_last = double(now - last) * 1e-9;
+    }
+    return a;
 }
 
 std::string IpcServer::last_error() const
@@ -279,12 +299,16 @@ void IpcServer::run()
 
             auto &buffer = connections[i].buffer;
             buffer.insert(buffer.end(), chunk.begin(), chunk.begin() + received);
+            m_bytes_received += uint64_t(received);
 
             try
             {
                 extract_ipc_packets(buffer,
                                     [this](const IpcPacket &packet)
                                     {
+                                        ++m_packets_received;
+                                        m_last_packet_ns = std::chrono::steady_clock::now().time_since_epoch().count();
+
                                         if (m_on_packet)
                                             m_on_packet(packet);
                                     });

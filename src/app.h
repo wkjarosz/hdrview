@@ -486,6 +486,23 @@ private:
     IpcServer m_ipc_server;
     uint16_t  m_ipc_port = k_default_ipc_port;
 
+    //! Turns the listener's running totals into the rates the activity readout shows.
+    /*!
+        Sampled over a window rather than per frame: at 60 fps the per-frame deltas are one or two packets
+        and the number would be unreadable noise.
+    */
+    struct IpcRates
+    {
+        double   sampled_at    = 0.0; //!< ImGui::GetTime() of the last sample
+        uint64_t last_packets  = 0;
+        uint64_t last_bytes    = 0;
+        double   packets_per_s = 0.0;
+        double   bytes_per_s   = 0.0;
+
+        void update(const IpcActivity &now, double time);
+    };
+    IpcRates m_ipc_rates;
+
     // Each applies one already-decoded packet, on the main thread. Decoding happens on the receive thread;
     // see start_ipc_listening().
     void apply_ipc_open(const IpcOpenImage &info);
