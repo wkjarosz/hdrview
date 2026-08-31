@@ -216,6 +216,8 @@ enum AdaptationMethod : AdaptationMethod_
     AdaptationMethod_Count
 };
 
+const char *adaptation_method_name(AdaptationMethod method);
+
 float3x3        RGB_to_XYZ(const Chromaticities &chroma, float Y);
 inline float3x3 XYZ_to_RGB(const Chromaticities &chroma, float Y) { return inverse(RGB_to_XYZ(chroma, Y)); }
 inline float3   computeYw(const Chromaticities &cr)

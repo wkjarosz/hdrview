@@ -11,6 +11,7 @@
 */
 
 #include "app.h"
+#include "colorspace.h"
 #include "edit/filters.h"
 #include "image.h"
 #include "test_gui_registry.h"
@@ -832,6 +833,183 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // Alpha itself is stored as given.
         const auto &alpha = img->channels[group.channels[group.num_channels - 1]];
         IM_CHECK_LT(std::fabs(alpha(0, 0) - color.w), 1e-4f);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "converting the color space rewrites the samples and the tag");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // Stated rather than assumed, so the conversion below is a real one whatever the fixture is
+        // tagged as when it loads.
+        img->chromaticities = gamut_chromaticities(ColorGamut_sRGB_BT709);
+        img->compute_color_transform();
+        img->metadata["color profile"] = color_profile_name(ColorGamut_sRGB_BT709, TransferFunction::Linear);
+        ctx->Yield();
+
+        const auto  original      = snapshot(img);
+        const auto  original_chr  = img->chromaticities;
+        const auto  original_name = img->metadata.value<string>("color profile", "");
+        const float original_wide = img->M_to_sRGB[0][0];
+
+        Chromaticities to = gamut_chromaticities(ColorGamut_BT2020_2100);
+        to.white          = white_point(WhitePoint_D65);
+
+        float3x3   M;
+        const bool needed = color_conversion_matrix(M, *original_chr, to, AdaptationMethod_Bradford);
+        IM_CHECK(needed);
+
+        IM_CHECK(hdrview()->modify_colors(
+            img, "Convert color space", hdrview()->edit_subject(),
+            [M](const float4 &c, int2) { return float4{la::mul(M, c.xyz()), c.w}; },
+            [to](Image &image)
+            {
+                image.chromaticities = to;
+                image.compute_color_transform();
+                image.metadata["color profile"] = color_profile_name(ColorGamut_BT2020_2100, TransferFunction::Linear);
+            }));
+        ctx->Yield();
+
+        // Both halves landed: the samples moved, and so did what the Colorspace panel reads.
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_EQ(img->color_space, ColorGamut_BT2020_2100);
+        IM_CHECK_STR_EQ(img->metadata.value<string>("color profile", "").c_str(),
+                        color_profile_name(ColorGamut_BT2020_2100, TransferFunction::Linear).c_str());
+        // Derived from the chromaticities rather than stored beside them, so this is what says
+        // compute_color_transform() was rerun.
+        IM_CHECK(std::fabs(img->M_to_sRGB[0][0] - original_wide) > 1e-4f);
+
+        // One step takes back both. A tag left behind would describe the image as something it is not,
+        // and nothing downstream would notice.
+        IM_CHECK_EQ(hdrview()->undo(), true);
+        ctx->Yield();
+        IM_CHECK(snapshot(img) == original);
+        IM_CHECK_EQ(img->color_space, ColorGamut_sRGB_BT709);
+        IM_CHECK_STR_EQ(img->metadata.value<string>("color profile", "").c_str(), original_name.c_str());
+        IM_CHECK_LT(std::fabs(img->M_to_sRGB[0][0] - original_wide), 1e-4f);
+
+        // And redo puts both back, which a composite that undoes in the wrong order would not.
+        IM_CHECK_EQ(hdrview()->redo(), true);
+        ctx->Yield();
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_EQ(img->color_space, ColorGamut_BT2020_2100);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "the shift and color-space dialogs are wired to their edits");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const auto original = snapshot(img);
+
+        // The dialogs themselves, from the menu: everything above tests the operation, and an operation
+        // wired to nothing passes all of it.
+        menu_click(ctx, "Edit/Shift...");
+        ctx->SetRef("Shift...");
+        ctx->ItemInputValue("X, Y offset/$$0", 3.0f);
+        ctx->ItemClick("Shift");
+        ctx->Yield(2);
+
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Shift");
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+
+        menu_click(ctx, "Edit/Convert color space...");
+        ctx->SetRef("Convert color space...");
+        ctx->ComboClick("Primaries##to/ACES AP0");
+        ctx->ItemClick("Convert");
+        ctx->Yield(2);
+
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Convert color space");
+        IM_CHECK_EQ(img->color_space, ColorGamut_ACES_AP0);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a color edit sees a group's channels together");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        const int g = img->active_group_index(Target_Primary);
+        IM_CHECK(img->is_valid_group(g));
+        const auto &group = img->groups[g];
+        if (group.num_channels < 3)
+            return;
+
+        // Reading the sample beside it is exactly what modify_pixels() cannot do: it is handed one sample
+        // and told which slot it is, never the others.
+        IM_CHECK(hdrview()->modify_colors(img, "Swap red and blue", hdrview()->edit_subject(),
+                                          [](const float4 &c, int2) { return float4{c.z, c.y, c.x, c.w}; }));
+        ctx->Yield();
+
+        const auto &r = img->channels[group.channels[0]];
+        const auto &b = img->channels[group.channels[2]];
+
+        // Swapped, so the two channels are each other's -- and undoing restores both, not one.
+        vector<float> reds, blues;
+        for (int y = 0; y < r.size().y; ++y)
+            for (int x = 0; x < r.size().x; ++x)
+            {
+                reds.push_back(r(x, y));
+                blues.push_back(b(x, y));
+            }
+        IM_CHECK(reds != blues); // a fixture whose channels were equal would prove nothing
+
+        const auto swapped = snapshot(img);
+        IM_CHECK_EQ(hdrview()->undo(), true);
+        ctx->Yield();
+        IM_CHECK_EQ(hdrview()->redo(), true);
+        ctx->Yield();
+        IM_CHECK(snapshot(img) == swapped);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a color edit leaves channels that are not color alone");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // A depth channel beside the color, which is the ordinary shape of a render: a color matrix has no
+        // meaning for it, so covering "all channels" must still not touch it. Added through the structural
+        // chokepoint, which is what rebuilds the layer tree and the visibility the Images panel walks.
+        hdrview()->modify_structure(img, "Add Z",
+                                    [](Image &i)
+                                    {
+                                        Channel z{"Z", i.channels[0].size()};
+                                        for (int k = 0; k < z.num_elements(); ++k) z(k) = 0.25f * float(k % 7);
+                                        i.channels.push_back(std::move(z));
+                                    });
+        ctx->Yield();
+
+        const int     zi = int(img->channels.size()) - 1;
+        vector<float> before;
+        for (int i = 0; i < img->channels[zi].num_elements(); ++i) before.push_back(img->channels[zi](i));
+
+        auto subject  = hdrview()->edit_subject();
+        subject.scope = EditSubject::Scope_AllChannels;
+
+        IM_CHECK(hdrview()->modify_colors(img, "Halve", subject,
+                                          [](const float4 &c, int2) { return float4{0.5f * c.xyz(), c.w}; }));
+        ctx->Yield();
+
+        for (int i = 0; i < img->channels[zi].num_elements(); ++i) IM_CHECK_EQ(img->channels[zi](i), before[i]);
+
+        reset_images(ctx);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");

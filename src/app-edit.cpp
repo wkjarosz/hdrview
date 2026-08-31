@@ -111,6 +111,106 @@ bool HDRViewApp::modify_channels(const ImagePtr &img, const string &name, const 
         { return std::make_unique<ChannelRectUndo>(image, channels, bounds, name); });
 }
 
+bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const EditSubject &subject,
+                               const function<float4(const float4 &, int2)> &op, const function<void(Image &)> &retag)
+{
+    if (!can_edit(img))
+        return false;
+
+    // The groups the subject covers, keeping only those whose channels are color. Everything else in the
+    // image -- depth, motion vectors, an ID -- is left alone rather than run through a color operation.
+    std::vector<int> groups;
+    if (subject.scope == EditSubject::Scope_AllChannels)
+    {
+        for (int g = 0; g < int(img->groups.size()); ++g) groups.push_back(g);
+    }
+    else if (int g = img->active_group_index(Target_Primary); img->is_valid_group(g))
+        groups.push_back(g);
+
+    groups.erase(std::remove_if(groups.begin(), groups.end(),
+                                [&img](int g)
+                                {
+                                    const auto t = img->groups[size_t(g)].type;
+                                    return t != ChannelGroup::RGB_Channels && t != ChannelGroup::RGBA_Channels;
+                                }),
+                 groups.end());
+
+    if (groups.empty())
+        return false;
+
+    Box2i bounds = img->data_window;
+    if (subject.selection_only && m_roi.has_volume())
+        bounds.intersect(m_roi);
+    if (!bounds.has_volume())
+        return false;
+
+    // Every channel of every covered group, which is the set the undo entry has to hold.
+    std::vector<int> channels;
+    for (int g : groups)
+    {
+        const auto &group = img->groups[size_t(g)];
+        for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
+    }
+
+    return modify_image(
+        img, name,
+        [&groups, &bounds, &op, &retag](Image &image)
+        {
+            const int2 offset = bounds.min - image.data_window.min;
+            const int2 extent = bounds.size();
+
+            for (int g : groups)
+            {
+                const auto &group = image.groups[size_t(g)];
+                const int   n     = group.num_channels;
+
+                // Read, transform, and write as a set: the whole point is that the op sees the components
+                // together, so all of them are staged before any is written back.
+                std::array<Array2Df, 4> staging;
+                for (int c = 0; c < n; ++c) staging[size_t(c)] = Array2Df{extent};
+
+                const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+                stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                                  [&](int y0, int y1, int, int)
+                                  {
+                                      for (int y = y0; y < y1; ++y)
+                                          for (int x = 0; x < extent.x; ++x)
+                                          {
+                                              // Opaque where the group has no alpha, so an op may read the fourth
+                                              // component without asking which kind of group it was handed.
+                                              float4 c{0.f, 0.f, 0.f, 1.f};
+                                              for (int k = 0; k < n; ++k)
+                                                  c[k] = image.channels[size_t(group.channels[k])](offset.x + x,
+                                                                                                   offset.y + y);
+
+                                              const float4 out = op(c, int2{bounds.min.x + x, bounds.min.y + y});
+
+                                              for (int k = 0; k < n; ++k) staging[size_t(k)](x, y) = out[k];
+                                          }
+                                  });
+
+                for (int c = 0; c < n; ++c)
+                    image.channels[size_t(group.channels[c])].upload_tile(Box2i{offset, offset + extent},
+                                                                          staging[size_t(c)].data());
+            }
+
+            if (retag)
+                retag(image);
+        },
+        [&channels, &bounds, &name, &retag](const Image &image) -> UndoPtr
+        {
+            auto pixels = std::make_unique<ChannelRectUndo>(image, channels, bounds, name);
+            if (!retag)
+                return pixels;
+
+            // The samples and what they mean changed together, so they are taken back together.
+            std::vector<UndoPtr> both;
+            both.push_back(std::move(pixels));
+            both.push_back(std::make_unique<ColorMetadataUndo>(image, name));
+            return std::make_unique<CompositeUndo>(name, std::move(both));
+        });
+}
+
 bool HDRViewApp::modify_structure(const ImagePtr &img, const string &name, const function<void(Image &)> &op)
 {
     const bool applied = modify_image(img, name, op, [&name](const Image &image) -> UndoPtr
@@ -771,6 +871,133 @@ void HDRViewApp::draw_blur_dialog(bool &open)
         }
         else if (result == ImGui::DialogResult::Cancel)
             ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
+void HDRViewApp::draw_convert_colorspace_dialog(bool &open)
+{
+    // What the image says it already is, which is where the "from" side starts. Re-read whenever the
+    // dialog is closed, so switching images does not leave the last one's tag behind.
+    static int  src_gamut = ColorGamut_Unspecified, dst_gamut = ColorGamut_sRGB_BT709;
+    static int  src_white = WhitePoint_Unspecified, dst_white = WhitePoint_D65;
+    static int  method   = AdaptationMethod_Bradford;
+    static bool from_set = false;
+
+    auto reset = [&]()
+    {
+        from_set = false;
+        open     = false;
+    };
+
+    ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Convert color space...", open, ImGui::DialogPosition::Center))
+    {
+        auto img = current_image();
+
+        // The file's own tag, so the conversion starts from what the pixels actually are rather than from
+        // an assumption the user then has to correct.
+        if (!from_set && img)
+        {
+            src_gamut = img->color_space;
+            src_white = img->white_point;
+            if (src_gamut == ColorGamut_Unspecified || src_gamut == ColorGamut_Custom)
+                src_gamut = ColorGamut_sRGB_BT709;
+            if (src_white == WhitePoint_Unspecified)
+                src_white = WhitePoint_D65;
+            method   = img->adaptation_method;
+            from_set = true;
+        }
+
+        auto gamut_combo = [](const char *label, int *value)
+        {
+            if (ImGui::BeginCombo(label, color_gamut_name(ColorGamut_(*value)), ImGuiComboFlags_HeightLargest))
+            {
+                for (int n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
+                    if (ImGui::Selectable(color_gamut_name(ColorGamut_(n)), *value == n))
+                        *value = n;
+                ImGui::EndCombo();
+            }
+        };
+        auto white_combo = [](const char *label, int *value)
+        {
+            if (ImGui::BeginCombo(label, white_point_name(WhitePoint_(*value)), ImGuiComboFlags_HeightLargest))
+            {
+                for (int n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                    if (ImGui::Selectable(white_point_name(WhitePoint_(n)), *value == n))
+                        *value = n;
+                ImGui::EndCombo();
+            }
+        };
+
+        ImGui::SeparatorText("From");
+        gamut_combo("Primaries##from", &src_gamut);
+        white_combo("White point##from", &src_white);
+        ImGui::Tooltip("What the samples already are, taken from the image's own tag. Correcting it here "
+                       "changes how they are read, not what they are.");
+
+        ImGui::SeparatorText("To");
+        gamut_combo("Primaries##to", &dst_gamut);
+        white_combo("White point##to", &dst_white);
+
+        if (ImGui::BeginCombo("Adaptation", adaptation_method_name(AdaptationMethod(method))))
+        {
+            for (int n = 0; n < AdaptationMethod_Count; ++n)
+                if (ImGui::Selectable(adaptation_method_name(AdaptationMethod(n)), method == n))
+                    method = n;
+            ImGui::EndCombo();
+        }
+        ImGui::Tooltip("How a change of white point is accounted for. Bradford is the usual choice; the "
+                       "identity transform leaves the primaries to do it alone, which shifts neutrals.");
+
+        Chromaticities from = gamut_chromaticities(ColorGamut_(src_gamut));
+        from.white          = white_point(WhitePoint_(src_white));
+        Chromaticities to   = gamut_chromaticities(ColorGamut_(dst_gamut));
+        to.white            = white_point(WhitePoint_(dst_white));
+
+        float3x3   M;
+        const bool needed = color_conversion_matrix(M, from, to, AdaptationMethod(method));
+        if (!needed)
+            ImGui::TextWrapped("These describe the same color space, so this would leave the samples as they are.");
+
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Convert");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const int  g = dst_gamut, w = dst_white, m = method;
+            const auto tagged = to;
+
+            modify_colors(
+                img, "Convert color space", m_edit_subject,
+                // Premultiplied alpha is not in the way here: the conversion is a matrix, and scaling
+                // every component by alpha commutes with it.
+                [M](const float4 &c, int2) { return float4{la::mul(M, c.xyz()), c.w}; },
+                [g, w, m, tagged](Image &image)
+                {
+                    image.chromaticities    = tagged;
+                    image.adopted_neutral   = std::nullopt;
+                    image.adaptation_method = AdaptationMethod(m);
+                    image.compute_color_transform();
+
+                    // compute_color_transform() names the space from the chromaticities, which is the
+                    // authority; these only matter when the destination is one it cannot recognize.
+                    image.color_space = ColorGamut_(g);
+                    image.white_point = WhitePoint_(w);
+
+                    // The samples are linear light in the new primaries, and the Colorspace panel reads
+                    // this as its "Profile name".
+                    image.metadata["color profile"] = color_profile_name(ColorGamut_(g), TransferFunction::Linear);
+                });
+            reset();
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+        {
+            reset();
+            ImGui::CloseCurrentPopup();
+        }
 
         ImGui::EndPopup();
     }

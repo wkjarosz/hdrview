@@ -459,6 +459,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Unsharp mask..."));
         MenuItem(action("Median filter..."));
         MenuItem(action("Shift..."));
+        MenuItem(action("Convert color space..."));
 
         ImGui::Separator();
 

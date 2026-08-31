@@ -514,6 +514,17 @@ const char *color_gamut_name(const ColorGamut_ primaries)
 
 const char **color_gamut_names() { return s_gamut_names; }
 
+const char *adaptation_method_name(AdaptationMethod method)
+{
+    switch (method)
+    {
+    case AdaptationMethod_XYZScaling: return "XYZ scaling";
+    case AdaptationMethod_Bradford: return "Bradford";
+    case AdaptationMethod_VonKries: return "Von Kries";
+    default: return "None";
+    }
+}
+
 Chromaticities gamut_chromaticities(ColorGamut_ primaries)
 {
     if (primaries < 0 || primaries >= ColorGamut_Custom)

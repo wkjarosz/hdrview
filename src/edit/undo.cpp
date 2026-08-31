@@ -69,6 +69,56 @@ size_t ChannelRectUndo::memory_usage() const
     return total;
 }
 
+//! Everything about an image that says what its samples mean as color.
+struct ColorMetadataUndo::State
+{
+    std::optional<Chromaticities> chromaticities;
+    std::optional<float2>         adopted_neutral;
+    float3x3                      M_RGB_to_XYZ, M_XYZ_to_RGB, M_to_sRGB;
+    float3                        luminance_weights;
+    AdaptationMethod              adaptation_method;
+    ColorGamut_                   color_space;
+    WhitePoint_                   white_point;
+    std::string                   color_profile; //!< metadata["color profile"], the panel's "Profile name"
+};
+
+ColorMetadataUndo::ColorMetadataUndo(const Image &img, std::string name) :
+    m_state(std::make_shared<State>()), m_name(std::move(name))
+{
+    m_state->chromaticities    = img.chromaticities;
+    m_state->adopted_neutral   = img.adopted_neutral;
+    m_state->M_RGB_to_XYZ      = img.M_RGB_to_XYZ;
+    m_state->M_XYZ_to_RGB      = img.M_XYZ_to_RGB;
+    m_state->M_to_sRGB         = img.M_to_sRGB;
+    m_state->luminance_weights = img.luminance_weights;
+    m_state->adaptation_method = img.adaptation_method;
+    m_state->color_space       = img.color_space;
+    m_state->white_point       = img.white_point;
+    m_state->color_profile     = img.metadata.value<std::string>("color profile", "");
+}
+
+void ColorMetadataUndo::swap(Image &img)
+{
+    std::swap(m_state->chromaticities, img.chromaticities);
+    std::swap(m_state->adopted_neutral, img.adopted_neutral);
+    std::swap(m_state->M_RGB_to_XYZ, img.M_RGB_to_XYZ);
+    std::swap(m_state->M_XYZ_to_RGB, img.M_XYZ_to_RGB);
+    std::swap(m_state->M_to_sRGB, img.M_to_sRGB);
+    std::swap(m_state->luminance_weights, img.luminance_weights);
+    std::swap(m_state->adaptation_method, img.adaptation_method);
+    std::swap(m_state->color_space, img.color_space);
+    std::swap(m_state->white_point, img.white_point);
+
+    // An image whose profile was never named has no entry rather than an empty one, so that the panel
+    // falls back to its default the way it did before the edit.
+    std::string current = img.metadata.value<std::string>("color profile", "");
+    if (m_state->color_profile.empty())
+        img.metadata.erase("color profile");
+    else
+        img.metadata["color profile"] = m_state->color_profile;
+    m_state->color_profile = std::move(current);
+}
+
 void CommandHistory::add(UndoPtr entry)
 {
     // Anything that had been undone is unreachable once a new edit lands on top of it.

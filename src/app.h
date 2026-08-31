@@ -244,6 +244,32 @@ public:
                        const std::function<float(float, int2, int)> &op);
 
     /*!
+        Apply \p op to each covered group's channels together, as one undoable edit.
+
+        The difference from modify_pixels(): that one sees a sample at a time and cannot know what the
+        others in its group are, so it can scale a channel but never mix channels into each other. This
+        hands over a group's R, G, B and A as one value, which is what a color-space conversion, a channel
+        mixer, or anything else expressed as a matrix needs.
+
+        Only color groups are covered -- RGB and RGBA. A depth channel or a two-component motion vector is
+        not color, and multiplying it by a color matrix would be meaningless; the subject's other channels
+        are left alone. A group without alpha gets 1 in that slot and whatever \p op returns there is
+        dropped.
+
+        \p op is handed the group's value and its position in image coordinates.
+
+        \p retag, if given, updates the image's color metadata to describe what \p op produced. It is
+        recorded in the same history entry as the pixels, so undoing takes back both: an image whose
+        samples were converted but whose tag still said otherwise would be wrong in a way nothing else
+        would catch.
+
+        \returns Whether anything was edited; false when the subject names no color group.
+    */
+    bool modify_colors(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                       const std::function<float4(const float4 &, int2)> &op,
+                       const std::function<void(Image &)>                &retag = {});
+
+    /*!
         Apply an edit that changes the image's shape, as one undoable step.
 
         For crop, canvas resize, and anything else that changes how many samples there are or how many
@@ -309,6 +335,7 @@ public:
     void draw_image_size_dialog(bool &open);
     void draw_blur_dialog(bool &open);
     void draw_shift_dialog(bool &open);
+    void draw_convert_colorspace_dialog(bool &open);
     void draw_unsharp_mask_dialog(bool &open);
     void draw_median_dialog(bool &open);
     void draw_zap_gremlins_dialog(bool &open);

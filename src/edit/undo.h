@@ -143,6 +143,68 @@ private:
 };
 
 /*!
+    How an image's samples are to be interpreted as color, saved before it was changed.
+
+    Converting between color spaces rewrites the samples *and* what they mean, and undoing one without
+    the other would leave the image tagged as something it is not -- so this rides alongside the pixels
+    in a CompositeUndo rather than being a step of its own.
+
+    Every field compute_color_transform() reads or writes, plus the profile name the Colorspace panel
+    shows, since that is what makes the change visible.
+*/
+class ColorMetadataUndo : public UndoEntry
+{
+public:
+    ColorMetadataUndo(const Image &img, std::string name);
+
+    void        undo(Image &img) override { swap(img); }
+    void        redo(Image &img) override { swap(img); }
+    std::string name() const override { return m_name; }
+
+private:
+    void swap(Image &img);
+
+    struct State;
+    std::shared_ptr<State> m_state; //!< Out of line, since its members need image.h
+    std::string            m_name;
+};
+
+/*!
+    Several entries applied as one, for an edit that changes more than one kind of thing.
+
+    Undone in the opposite order to how they were built, as any composite has to be: the entries may
+    describe overlapping state, and the one applied last is the one that has to be taken back first.
+*/
+class CompositeUndo : public UndoEntry
+{
+public:
+    CompositeUndo(std::string name, std::vector<UndoPtr> entries) :
+        m_name(std::move(name)), m_entries(std::move(entries))
+    {
+    }
+
+    void undo(Image &img) override
+    {
+        for (auto it = m_entries.rbegin(); it != m_entries.rend(); ++it) (*it)->undo(img);
+    }
+    void redo(Image &img) override
+    {
+        for (auto &e : m_entries) e->redo(img);
+    }
+    std::string name() const override { return m_name; }
+    size_t      memory_usage() const override
+    {
+        size_t total = 0;
+        for (const auto &e : m_entries) total += e->memory_usage();
+        return total;
+    }
+
+private:
+    std::string          m_name;
+    std::vector<UndoPtr> m_entries;
+};
+
+/*!
     An image's undo history: the entries applied so far, and a cursor into them.
 
     The cursor points *between* entries and ranges over [0, size()]: 0 means there is nothing left to

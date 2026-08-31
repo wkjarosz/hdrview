@@ -731,8 +731,8 @@ void Image::draw_histogram()
 
         // 0 means the display never told us its ceiling, which is not the same as having none -- in that
         // case fall back to dimming above display 1, the pre-headroom behavior.
-        const float headroom = hdrview()->display_headroom();
-        const bool  has_hdr  = headroom > 1.f;
+        const float headroom  = hdrview()->display_headroom();
+        const bool  has_hdr   = headroom > 1.f;
         double      ceiling_x = has_hdr ? display_to_plot(headroom) : xrange.max.x;
         // Non-const: DragRect takes a mutable pointer, though NoInputs keeps it from ever writing back.
         double dim_from_x = hdr_dimmed ? xrange.max.x : ceiling_x;
@@ -1923,22 +1923,16 @@ void Image::draw_colorspace()
             "Adaptation",
             [&]
             {
-                const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
-
                 bool modified   = false;
-                auto open_combo = ImGui::BeginCombo("##Adaptation",
-                                                    adaptation_method <= AdaptationMethod_Identity ||
-                                                            adaptation_method >= AdaptationMethod_Count
-                                                        ? "None"
-                                                        : wan[adaptation_method],
+                auto open_combo = ImGui::BeginCombo("##Adaptation", adaptation_method_name(adaptation_method),
                                                     ImGuiComboFlags_HeightLargest);
                 if (open_combo)
                 {
-                    for (AdaptationMethod_ n = 0; wan[n]; ++n)
+                    for (AdaptationMethod_ n = 0; n < AdaptationMethod_Count; ++n)
                     {
                         auto       am          = (AdaptationMethod)n;
                         const bool is_selected = (adaptation_method == am);
-                        if (ImGui::Selectable(wan[n], is_selected))
+                        if (ImGui::Selectable(adaptation_method_name(am), is_selected))
                         {
                             adaptation_method = am;
                             spdlog::debug("Switching to adaptation method {}.", n);
