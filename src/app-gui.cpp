@@ -461,6 +461,11 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
+        MenuItem(action("Remap envmap..."));
+        MenuItem(action("Irradiance envmap..."));
+
+        ImGui::Separator();
+
         // What the edits above apply to, stated where they are rather than asked for one at a time. On a
         // single-group image the two scopes name the same channels, so the choice is shown but says so.
         if (ImGui::BeginMenu("Apply to"))

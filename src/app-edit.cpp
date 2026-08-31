@@ -5,6 +5,7 @@
 //
 
 #include "app.h"
+#include "edit/envmap.h"
 #include "edit/filters.h"
 #include "image.h"
 #include "imgui_ext.h"
@@ -733,6 +734,54 @@ void HDRViewApp::modify_channels_async(
 #endif
 }
 
+void HDRViewApp::modify_image_async(const ImagePtr &img, const string &name, int2 size,
+                                    const function<Array2Df(const Array2Df &, FilterProgress)> &op)
+{
+    if (!can_edit(img) || m_running_filter || size.x <= 0 || size.y <= 0)
+        return;
+
+    auto running    = std::make_unique<RunningFilter>();
+    running->image  = img;
+    running->name   = name;
+    running->bounds = img->data_window;
+    running->channels.resize(img->channels.size());
+    for (size_t i = 0; i < img->channels.size(); ++i) running->channels[i] = int(i);
+    running->results.resize(img->channels.size());
+
+    for (auto &c : img->channels) c.cancel_stats();
+
+    RunningFilter *raw       = running.get();
+    m_running_filter         = std::move(running);
+    m_running_filter_resizes = true;
+    m_running_filter_size    = size;
+
+    auto do_the_work = [raw, op]
+    {
+        const float share = 1.f / float(raw->channels.size());
+        for (size_t i = 0; i < raw->channels.size() && !raw->progress.canceled(); ++i)
+            raw->results[i] = op(raw->image->channels[i], FilterProgress{raw->progress, share});
+
+        if (!raw->progress.canceled())
+            raw->progress.set_done();
+
+        raw->done.store(true);
+    };
+
+#if defined(__EMSCRIPTEN__)
+    do_the_work();
+    drain_running_filter();
+#else
+    dialog("Applying filter...").open = true;
+    std::thread(
+        [this, do_the_work]
+        {
+            do_the_work();
+            wake_event_loop();
+        })
+        .detach();
+#endif
+}
+
 void HDRViewApp::drain_running_filter()
 {
     if (!m_running_filter || !m_running_filter->done.load())
@@ -745,6 +794,31 @@ void HDRViewApp::drain_running_filter()
     if (running->progress.canceled())
     {
         spdlog::debug("Filter '{}' was canceled.", running->name);
+        m_running_filter_resizes = false;
+        return;
+    }
+
+    if (m_running_filter_resizes)
+    {
+        // The results are a different size than what they were computed from, so there is no rectangle to
+        // write back: the channels are replaced outright and the windows moved to match.
+        const int2 size          = m_running_filter_size;
+        m_running_filter_resizes = false;
+        auto &results            = running->results;
+
+        modify_structure(running->image, running->name,
+                         [size, &results](Image &image)
+                         {
+                             for (size_t i = 0; i < image.channels.size(); ++i)
+                             {
+                                 image.channels[i].resize(size);
+                                 std::copy(results[i].data(), results[i].data() + results[i].num_elements(),
+                                           image.channels[i].data());
+                                 image.channels[i].texture_is_dirty = true;
+                             }
+                             image.data_window    = Box2i{image.data_window.min, image.data_window.min + size};
+                             image.display_window = image.data_window;
+                         });
         return;
     }
 
@@ -818,6 +892,116 @@ void HDRViewApp::draw_median_dialog(bool &open)
             modify_channels_async(current_image(), "Median filter", m_edit_subject,
                                   [r](const Array2Df &src, const Box2i &region, FilterProgress p)
                                   { return median_filtered(src, region, r, p); });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
+void HDRViewApp::draw_remap_dialog(bool &open)
+{
+    static int  src_mapping = EnvMapping_LatLong;
+    static int  dst_mapping = EnvMapping_Angular;
+    static int2 size{0, 0};
+    static int  supersample = 2;
+
+    ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Remap envmap...", open, ImGui::DialogPosition::Center))
+    {
+        auto img = current_image();
+        if (!img)
+        {
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+
+        if (size.x <= 0 || size.y <= 0)
+            size = img->size();
+
+        auto mapping_combo = [](const char *label, int *value)
+        {
+            if (ImGui::BeginCombo(label, envmapping_name(*value)))
+            {
+                for (int i = 0; i < EnvMapping_COUNT; ++i)
+                    if (ImGui::Selectable(envmapping_name(i), *value == i))
+                        *value = i;
+                ImGui::EndCombo();
+            }
+        };
+
+        mapping_combo("Source", &src_mapping);
+        mapping_combo("Target", &dst_mapping);
+
+        ImGui::InputInt2("Width, height", &size.x);
+        size = la::max(size, int2{1});
+
+        ImGui::SliderInt("Samples per axis", &supersample, 1, 8);
+        ImGui::Tooltip("These mappings stretch unevenly -- a lat-long's poles, a disc's rim -- so one "
+                       "sample per pixel aliases wherever the source is being shrunk.");
+
+        const auto result = ImGui::DialogButtons("Remap");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const auto s = EnvMapping(src_mapping), d = EnvMapping(dst_mapping);
+            const int2 out_size = size;
+            const int  ss       = supersample;
+            modify_image_async(current_image(), "Remap envmap", out_size,
+                               [s, d, out_size, ss](const Array2Df &src, FilterProgress p)
+                               { return remapped_envmap(src, out_size, d, s, ss, p); });
+            size = int2{0};
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+        {
+            size = int2{0};
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void HDRViewApp::draw_irradiance_dialog(bool &open)
+{
+    static int  mapping = EnvMapping_LatLong;
+    static int2 size{64, 32};
+
+    ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Irradiance envmap...", open, ImGui::DialogPosition::Center))
+    {
+        if (ImGui::BeginCombo("Mapping", envmapping_name(mapping)))
+        {
+            for (int i = 0; i < EnvMapping_COUNT; ++i)
+                if (ImGui::Selectable(envmapping_name(i), mapping == i))
+                    mapping = i;
+            ImGui::EndCombo();
+        }
+
+        ImGui::InputInt2("Width, height", &size.x);
+        size = la::max(size, int2{1});
+        ImGui::Tooltip("Every output direction integrates over every input one, so this costs the two "
+                       "resolutions multiplied together. The result is smooth enough that a small output "
+                       "loses nothing.");
+
+        if (auto img = current_image())
+        {
+            const double ops = double(size.x) * double(size.y) * double(img->size().x) * double(img->size().y);
+            if (ops > 2e9)
+                ImGui::TextUnformatted("This will take a while at these sizes.");
+        }
+
+        const auto result = ImGui::DialogButtons("Convolve");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const auto m        = EnvMapping(mapping);
+            const int2 out_size = size;
+            modify_image_async(current_image(), "Irradiance envmap", out_size,
+                               [m, out_size](const Array2Df &src, FilterProgress p)
+                               { return irradiance_envmap(src, out_size, m, p); });
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)

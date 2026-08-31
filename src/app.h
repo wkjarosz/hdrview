@@ -7,6 +7,7 @@
 #include "box.h"
 #include "colormap.h"
 #include "display_colorspace.h"
+#include "edit/envmap.h"
 #include "edit/filters.h"
 #include "edit/subject.h"
 #include "edit/undo.h"
@@ -277,6 +278,19 @@ public:
         result is discarded rather than applied, since a half-filtered image is not a state anyone asked
         for.
     */
+    /*!
+        Replace the image wholesale with something computed from it, off the main thread.
+
+        For the environment-map operations, which resample every channel into a new size rather than
+        writing back into the one they read -- so there is no rectangle to record and the whole channel
+        list is saved instead.
+
+        \p op returns the new samples for one channel at \p size; every channel is put through it and the
+        results swapped in together, back on the main thread, as one undoable step.
+    */
+    void modify_image_async(const ImagePtr &img, const std::string &name, int2 size,
+                            const std::function<Array2Df(const Array2Df &, FilterProgress)> &op);
+
     void modify_channels_async(const ImagePtr &img, const std::string &name, const EditSubject &subject,
                                const std::function<Array2Df(const Array2Df &, const Box2i &, FilterProgress)> &filter);
 
@@ -296,6 +310,8 @@ public:
     void draw_blur_dialog(bool &open);
     void draw_unsharp_mask_dialog(bool &open);
     void draw_median_dialog(bool &open);
+    void draw_remap_dialog(bool &open);
+    void draw_irradiance_dialog(bool &open);
 
     /// The subject the menu's edits use, shown and changed under Edit > Apply to.
     EditSubject &edit_subject() { return m_edit_subject; }
@@ -670,6 +686,11 @@ private:
         FilterProgress        progress{true};
         std::atomic<bool>     done{false};
     };
+    //! Set when the running work replaces the image rather than a rectangle of it; see
+    //! modify_image_async(). drain_running_filter() then swaps the channels instead of uploading tiles.
+    bool m_running_filter_resizes = false;
+    int2 m_running_filter_size{0};
+
     std::unique_ptr<RunningFilter> m_running_filter;
     //! Applies a finished filter's results, or clears an abandoned one. Called once a frame.
     void drain_running_filter();

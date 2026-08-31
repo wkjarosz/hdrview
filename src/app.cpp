@@ -762,6 +762,9 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     m_dialogs.push_back(
         make_unique<PopupDialog>("Unsharp mask...", [this](bool &open) { draw_unsharp_mask_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Median filter...", [this](bool &open) { draw_median_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Remap envmap...", [this](bool &open) { draw_remap_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Irradiance envmap...", [this](bool &open) { draw_irradiance_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Applying filter...", [this](bool &open) { draw_filter_progress_dialog(open); }));
     m_dialogs.push_back(
@@ -1667,6 +1670,18 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Median filter...").open = true; },
+                   if_editable});
+        add(Action{{"Remap envmap...", "Change environment map format", "Spherical remapping"},
+                   ICON_MY_ENVMAP,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Remap envmap...").open = true; },
+                   if_editable});
+        add(Action{{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
+                   ICON_MY_IRRADIANCE,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Irradiance envmap...").open = true; },
                    if_editable});
 
         add(Action{{"Crop to selection"},

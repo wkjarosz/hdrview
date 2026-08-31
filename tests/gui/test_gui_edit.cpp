@@ -702,6 +702,59 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(img->history.has_undo(), false);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "remapping resizes the image and undo puts it back");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const int2 original = img->size();
+        const auto samples  = snapshot(img);
+
+        // Structural *and* computed off the main thread, which nothing else here does at once: the result
+        // is a different size than what it was computed from, so there is no rectangle to write back.
+        menu_click(ctx, "Edit/Remap envmap...");
+        ctx->SetRef("Remap envmap...");
+        ctx->ItemClick("Remap");
+
+        wait_until(ctx, [&] { return img->history.has_undo(); });
+
+        for (const auto &c : img->channels) IM_CHECK(c.size() == img->size());
+        IM_CHECK(img->data_window.size() == img->size());
+        IM_CHECK(img->display_window.size() == img->size());
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(img->size() == original);
+        IM_CHECK(snapshot(img) == samples);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "an irradiance map comes out at the size asked for");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const int2 original = img->size();
+
+        menu_click(ctx, "Edit/Irradiance envmap...");
+        ctx->SetRef("Irradiance envmap...");
+        // Deliberately tiny: the convolution costs the two resolutions multiplied together, and the result
+        // is smooth enough that this loses nothing.
+        ctx->ItemInputValue("Width, height/$$0", 8);
+        ctx->ItemInputValue("Width, height/$$1", 6);
+        ctx->ItemClick("Convolve");
+
+        wait_until(ctx, [&] { return img->history.has_undo(); });
+
+        IM_CHECK((img->size() == int2{8, 6}));
+        for (const auto &c : img->channels) IM_CHECK((c.size() == int2{8, 6}));
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(img->size() == original);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
