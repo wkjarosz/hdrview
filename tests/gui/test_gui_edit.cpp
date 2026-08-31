@@ -563,6 +563,55 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(changed > 0);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "a dialog can be finished from the keyboard");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const auto original = snapshot(img);
+
+        // Escape cancels, whatever else has keyboard focus.
+        menu_click(ctx, "Edit/Blur...");
+        ctx->SetRef("Blur...");
+        ctx->KeyPress(ImGuiKey_Escape);
+        ctx->Yield(2);
+        IM_CHECK(snapshot(img) == original);
+        IM_CHECK_EQ(img->history.has_undo(), false);
+
+        // And Enter applies -- plain Enter, not a chord, so a filter reached from the command palette can
+        // be finished without the mouse.
+        menu_click(ctx, "Edit/Blur...");
+        ctx->SetRef("Blur...");
+        ctx->KeyPress(ImGuiKey_Enter);
+        ctx->Yield(2);
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_EQ(img->history.has_undo(), true);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "select all and deselect set and clear the selection");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+        IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+        // Nothing to clear, so deselect has nothing to offer.
+        IM_CHECK_EQ(hdrview()->action("Deselect").enabled(), false);
+
+        menu_click(ctx, "Edit/Select all");
+        IM_CHECK(hdrview()->roi() == img->data_window);
+        IM_CHECK_EQ(hdrview()->action("Deselect").enabled(), true);
+
+        menu_click(ctx, "Edit/Deselect");
+        IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

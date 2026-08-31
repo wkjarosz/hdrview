@@ -1062,18 +1062,29 @@ DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, 
 {
     DialogResult result = DialogResult::None;
 
+    // Enter confirms and Escape cancels whatever else is going on, so a dialog reached from the command
+    // palette can be finished without touching the mouse. Neither is conditioned on keyboard navigation
+    // being idle: arriving from the palette leaves it active, which used to disable both.
+    //
+    // Two things do have to yield. An item being edited keeps Enter, so it commits the field rather than
+    // the dialog -- the next press then applies. And a button reached by keyboard navigation keeps it too,
+    // so that activating Cancel that way does not also confirm.
+    const bool editing = ImGui::IsAnyItemActive();
+
     // Omitting the size lets Dear ImGui auto-fit each button to its own label (text size + FramePadding*2),
     // so a longer label like "Reset options to defaults" is never clipped.
-    if (ImGui::Button(cancel_label) ||
-        (use_shortcuts && !ImGui::GetIO().NavVisible &&
-         (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
+    const bool cancel_pressed = ImGui::Button(cancel_label);
+    if (cancel_pressed ||
+        (use_shortcuts && (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
         result = DialogResult::Cancel;
 
     ImGui::SameLine();
 
     ImGui::BeginDisabled(!confirm_enabled);
-    if (ImGui::Button(confirm_label) || (confirm_enabled && use_shortcuts && !ImGui::GetIO().NavVisible &&
-                                         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter)))
+    const bool confirm_pressed = ImGui::Button(confirm_label);
+    if (confirm_pressed || (confirm_enabled && use_shortcuts && !editing && !cancel_pressed &&
+                            (ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_KeypadEnter) ||
+                             ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter))))
         result = DialogResult::Confirm;
     ImGui::EndDisabled();
 

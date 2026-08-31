@@ -1708,6 +1708,23 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         add(Action{
             {"Fill..."}, ICON_MY_BLANK, ImGuiKey_None, 0, [this]() { dialog("Fill...").open = true; }, if_editable});
 
+        add(Action{{"Select all", "Select the entire image"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Ctrl | ImGuiKey_A,
+                   0,
+                   [this]()
+                   {
+                       if (auto img = current_image())
+                           m_roi = img->data_window;
+                   },
+                   if_img});
+        add(Action{{"Deselect", "Clear the selection"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Ctrl | ImGuiKey_D,
+                   0,
+                   [this]() { m_roi = Box2i{}; },
+                   [this]() { return m_roi.has_volume(); }});
+
         add(Action{{"Invert", "Negative"},
                    ICON_MY_BLANK,
                    ImGuiMod_Ctrl | ImGuiKey_I,
