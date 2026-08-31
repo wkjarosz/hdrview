@@ -172,3 +172,138 @@ TEST_CASE("A region against the image's edge still clamps rather than reading pa
             CHECK(sub(x, y) == doctest::Approx(all(x, y)));
         }
 }
+
+namespace
+{
+
+//! A direct, obviously-correct box average, for the sliding window to be checked against.
+float box_reference(const Array2Df &a, int x, int y, int rx, int ry)
+{
+    float sum = 0.f;
+    for (int dy = -ry; dy <= ry; ++dy)
+        for (int dx = -rx; dx <= rx; ++dx)
+            sum += a(std::clamp(x + dx, 0, a.width() - 1), std::clamp(y + dy, 0, a.height() - 1));
+    return sum / float((2 * rx + 1) * (2 * ry + 1));
+}
+
+//! Variance of a kernel about its center, which is what the Gaussian approximations are matched on.
+double kernel_variance(const Array2Df &k, int2 center)
+{
+    double total = 0.0, moment = 0.0;
+    for (int y = 0; y < k.height(); ++y)
+        for (int x = 0; x < k.width(); ++x)
+        {
+            const double w = k(x, y);
+            total += w;
+            moment += w * double(x - center.x) * double(x - center.x);
+        }
+    return moment / total;
+}
+
+} // namespace
+
+TEST_CASE("The sliding-window box matches a direct box average")
+{
+    // The running sum is the whole reason box blur is worth having, and also the easiest thing to get
+    // subtly wrong at the ends of each line -- so it is checked against the definition.
+    Array2Df src{int2{24, 18}};
+    for (int y = 0; y < 18; ++y)
+        for (int x = 0; x < 24; ++x) src(x, y) = float((x * 7 + y * 13) % 11) * 0.1f;
+
+    for (int2 r : {int2{1, 1}, int2{3, 2}, int2{0, 4}, int2{5, 0}})
+    {
+        CAPTURE(r.x);
+        CAPTURE(r.y);
+        const Array2Df out = box_blurred(src, whole(src), r.x, r.y, 1);
+        for (int y = 0; y < 18; ++y)
+            for (int x = 0; x < 24; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                CHECK(out(x, y) == doctest::Approx(box_reference(src, x, y, r.x, r.y)));
+            }
+    }
+}
+
+TEST_CASE("Repeating a box blur is the same as blurring the result again")
+{
+    // What "iterations" has to mean for the box mode: n passes, each reading the last one's output.
+    Array2Df src{int2{20, 16}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i % 5);
+
+    const Array2Df once   = box_blurred(src, whole(src), 2, 2, 1);
+    const Array2Df twice  = box_blurred(src, whole(src), 2, 2, 2);
+    const Array2Df manual = box_blurred(once, whole(once), 2, 2, 1);
+
+    for (int i = 0; i < twice.num_elements(); ++i) CHECK(twice(i) == doctest::Approx(manual(i)));
+}
+
+TEST_CASE("Iterating a fast Gaussian changes its shape, not its width")
+{
+    // The property the whole interface rests on: quality is separate from amount, so raising it does not
+    // force the blur to be re-tuned. Measured as the variance of the kernel the filter produces.
+    const int2 size{129, 1};
+    const int2 center{64, 0};
+
+    Array2Df impulse_src{size};
+    impulse_src(center.x, 0) = 1.f;
+
+    const float sigma = 6.f;
+    for (int n : {2, 4, 6, 10})
+    {
+        CAPTURE(n);
+        const Array2Df k = fast_gaussian_blurred(impulse_src, Box2i{int2{0}, size}, sigma, 0.f, n);
+        // Rounding the box width to an odd integer means this cannot be exact, but it stays close.
+        CHECK(std::sqrt(kernel_variance(k, center)) == doctest::Approx(sigma).epsilon(0.06));
+    }
+}
+
+TEST_CASE("A fast Gaussian approaches the real one as it iterates")
+{
+    const int2 size{129, 1};
+    const int2 center{64, 0};
+
+    Array2Df impulse_src{size};
+    impulse_src(center.x, 0) = 1.f;
+
+    const Box2i    all   = Box2i{int2{0}, size};
+    const Array2Df exact = gaussian_blurred(impulse_src, all, 6.f, 0.f);
+
+    auto error_against_exact = [&](int n)
+    {
+        const Array2Df k = fast_gaussian_blurred(impulse_src, all, 6.f, 0.f, n);
+        double         e = 0.0;
+        for (int x = 0; x < size.x; ++x) e += std::abs(double(k(x, 0)) - double(exact(x, 0)));
+        return e;
+    };
+
+    // One box is a long way off; a few converge. Not monotonic at every step -- the box width is rounded
+    // to an odd integer, so a given count can land better than the next one up -- but the trend is clear
+    // across a wide enough gap.
+    CHECK(error_against_exact(6) < error_against_exact(1));
+    CHECK(error_against_exact(12) < error_against_exact(2));
+}
+
+TEST_CASE("An iterated box over a region agrees with the same over the whole image")
+{
+    // Each pass reads beyond what it produces, so a chain of them has to grow the region once per pass --
+    // and clip to the image, or the clamping at the edges stops matching.
+    Array2Df src{int2{48, 36}};
+    for (int y = 0; y < 36; ++y)
+        for (int x = 0; x < 48; ++x) src(x, y) = std::sin(0.4f * x) * std::cos(0.3f * y);
+
+    for (const Box2i &region : {Box2i{{9, 7}, {26, 22}}, Box2i{{0, 0}, {6, 5}}})
+    {
+        const Array2Df all = box_blurred(src, whole(src), 2, 3, 4);
+        const Array2Df sub = box_blurred(src, region, 2, 3, 4);
+
+        REQUIRE(sub.size() == region.size());
+        for (int y = 0; y < region.size().y; ++y)
+            for (int x = 0; x < region.size().x; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                CHECK(sub(x, y) == doctest::Approx(all(region.min.x + x, region.min.y + y)));
+            }
+    }
+}

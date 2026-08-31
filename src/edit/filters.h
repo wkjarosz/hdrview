@@ -29,14 +29,40 @@
 //! Blur separably with a Gaussian of the given standard deviations, in samples.
 /*!
     Two passes, one per axis, which costs O(radius) per sample rather than the O(radius^2) a square kernel
-    would -- the Gaussian is the filter that permits this, being the product of its own 1D form.
+    would -- the Gaussian is the filter that permits this, being the product of its own 1D form. Exact, in
+    the sense that the kernel really is a sampled Gaussian; see fast_gaussian_blurred() for the cheaper
+    approximation.
 
     A sigma of zero along an axis leaves that axis alone.
 */
 Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y);
 
-//! Average over a box of the given half-widths, in samples; also separable.
-Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y);
+/*!
+    Average over a box of the given half-widths, \p iterations times.
+
+    Each pass costs the same per sample whatever the half-width: the sum over the box moves one sample at a
+    time, adding the sample entering it and subtracting the one leaving. That is the whole reason to reach
+    for boxes, and what makes repeating them cheap.
+
+    Repeating widens the blur -- n passes of half-width w carry the variance of n of them -- because this is
+    the box blur as an effect in its own right, where that is what was asked for. To approximate a Gaussian
+    of a *stated* width instead, use fast_gaussian_blurred().
+*/
+Array2Df box_blurred(const Array2Df &src, const Box2i &region, int half_width_x, int half_width_y, int iterations = 1);
+
+/*!
+    Approximate a Gaussian blur by repeated box blurs, in time independent of \p sigma_x and \p sigma_y.
+
+    Repeated box blurs converge on a Gaussian: the kernel of n of them is the Irwin-Hall distribution, whose
+    variance is n times each box's. Solving that for the box width needed to land on a given sigma is what
+    lets \p iterations change only how Gaussian the result looks, never how wide it is -- so raising it
+    refines the approximation without forcing the blur to be re-tuned.
+
+    Three passes are already hard to tell from a Gaussian; the default of six is what HDRView used before,
+    and what Photoshop is generally held to use.
+*/
+Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
+                               int iterations = 6);
 
 /*!
     Add back a multiple of what a blur removed, which sharpens.

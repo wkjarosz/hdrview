@@ -540,11 +540,19 @@ void HDRViewApp::draw_image_size_dialog(bool &open)
 
 void HDRViewApp::draw_blur_dialog(bool &open)
 {
-    static int   kind         = 0; // 0 = Gaussian, 1 = box
+    // What kernel is wanted, which decides what the controls below mean.
+    enum Kind : int
+    {
+        Kind_Gaussian = 0, //!< The real thing, at a cost that grows with sigma
+        Kind_FastGaussian, //!< Repeated boxes converging on it, at a cost independent of sigma
+        Kind_Box           //!< Boxes as an effect in their own right
+    };
+    static int   kind         = Kind_Gaussian;
     static float sigma        = 2.f;
     static float sigma_y      = 2.f;
     static int   half_width   = 2;
     static int   half_width_y = 2;
+    static int   iterations   = 6;
     static bool  link_axes    = true;
 
     ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
@@ -554,19 +562,34 @@ void HDRViewApp::draw_blur_dialog(bool &open)
         ImGui::SameLine();
         ImGui::RadioButton("Box", &kind, 1);
 
-        if (kind == 0)
-        {
-            ImGui::SliderFloat("Sigma", &sigma, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
-            ImGui::Checkbox("Same in both directions", &link_axes);
-            if (!link_axes)
-                ImGui::SliderFloat("Sigma (vertical)", &sigma_y, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
-        }
-        else
+        if (kind == Kind_Box)
         {
             ImGui::SliderInt("Half width", &half_width, 0, 64);
             ImGui::Checkbox("Same in both directions", &link_axes);
             if (!link_axes)
                 ImGui::SliderInt("Half width (vertical)", &half_width_y, 0, 64);
+
+            // Repeating widens the result here, which is the point: this is the box blur as an effect, and
+            // n passes of a stated width is the thing being asked for.
+            ImGui::SliderInt("Passes", &iterations, 1, 16);
+            ImGui::Tooltip("Each pass widens the blur. For a Gaussian of a given width, use Fast Gaussian.");
+        }
+        else
+        {
+            ImGui::SliderFloat("Sigma", &sigma, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::Checkbox("Same in both directions", &link_axes);
+            if (!link_axes)
+                ImGui::SliderFloat("Sigma (vertical)", &sigma_y, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+
+            if (kind == Kind_FastGaussian)
+            {
+                // Accuracy alone: the box width is solved for from sigma and the count, so the result stays
+                // the width asked for however many passes it takes to get there.
+                ImGui::SliderInt("Quality", &iterations, 1, 12);
+                ImGui::Tooltip("Box blur passes. More is closer to a true Gaussian and costs proportionally "
+                               "more; the amount of blur does not change. Three is already hard to tell "
+                               "apart, and one is a plain box.");
+            }
         }
 
         draw_edit_subject_selector();
@@ -574,18 +597,27 @@ void HDRViewApp::draw_blur_dialog(bool &open)
         const auto result = ImGui::DialogButtons("Apply");
         if (result == ImGui::DialogResult::Confirm)
         {
-            if (kind == 0)
+            if (kind == Kind_Box)
+            {
+                const int hx = half_width, hy = link_axes ? half_width : half_width_y, n = iterations;
+                modify_channels(current_image(), "Box blur", m_edit_subject,
+                                [hx, hy, n](const Array2Df &src, const Box2i &r)
+                                { return box_blurred(src, r, hx, hy, n); });
+            }
+            else if (kind == Kind_FastGaussian)
+            {
+                const float sx = sigma, sy = link_axes ? sigma : sigma_y;
+                const int   n = iterations;
+                modify_channels(current_image(), "Gaussian blur", m_edit_subject,
+                                [sx, sy, n](const Array2Df &src, const Box2i &r)
+                                { return fast_gaussian_blurred(src, r, sx, sy, n); });
+            }
+            else
             {
                 const float sx = sigma, sy = link_axes ? sigma : sigma_y;
                 modify_channels(current_image(), "Gaussian blur", m_edit_subject,
                                 [sx, sy](const Array2Df &src, const Box2i &r)
                                 { return gaussian_blurred(src, r, sx, sy); });
-            }
-            else
-            {
-                const int hx = half_width, hy = link_axes ? half_width : half_width_y;
-                modify_channels(current_image(), "Box blur", m_edit_subject,
-                                [hx, hy](const Array2Df &src, const Box2i &r) { return box_blurred(src, r, hx, hy); });
             }
             ImGui::CloseCurrentPopup();
         }
