@@ -471,6 +471,10 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
     return p;
 }
 
+// At namespace scope because GCC's -Wunused-but-set-variable does not see through the lambda below that
+// is this constant's only reader, and reports a function-local one as unused.
+constexpr string_view k_hdrgm_ns = "http://ns.adobe.com/hdr-gain-map/1.0/";
+
 std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
 {
     if (!xml || len == 0)
@@ -499,8 +503,6 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
     // hdrgm properties hang off an rdf:Description, as attributes when they are single-valued and as
     // <hdrgm:Name><rdf:Seq><rdf:li>...</rdf:li></rdf:Seq></hdrgm:Name> when they are per-channel.
     // Rather than walk the RDF model, find the prefix bound to the hdrgm namespace and match on it.
-    static constexpr auto k_hdrgm_ns = "http://ns.adobe.com/hdr-gain-map/1.0/";
-
     string     prefix;
     const auto find_prefix = [&](auto &&self, const tinyxml2::XMLElement *e) -> void
     {
@@ -591,7 +593,7 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
 
         const auto &v = it->second;
         float3      out{to_float(v[0], fallback[0])};
-        for (size_t c = 1; c < v.size() && c < 3; ++c) out[c] = to_float(v[c], out[0]);
+        for (size_t c = 1; c < v.size() && c < 3; ++c) out[int(c)] = to_float(v[c], out[0]);
         // A single value drives all three channels; two is malformed, so treat the rest as the first.
         if (v.size() == 2)
             out[2] = out[0];

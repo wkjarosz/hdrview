@@ -218,6 +218,11 @@ if(MSVC)
   # Disable annoying secure CRT warnings
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_CRT_SECURE_NO_WARNINGS")
 
+  # CMake's default flags carry /W3. Drop it so no warning level is inherited globally: each target picks its own
+  # (HDRVIEW_WARNING_OPTIONS below, or /w from disable_target_warnings()), and cl only reports D9025 when it sees both.
+  string(REGEX REPLACE "/W[0-4]" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  string(REGEX REPLACE "/W[0-4]" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+
   # Parallel build on MSVC (all targets)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
 
@@ -1614,19 +1619,18 @@ add_enabled_definition(HDRVIEW_ENABLE_LIBRAW)
 add_enabled_definition(HDRVIEW_ENABLE_X3F)
 
 # ============================================================================
-# Compile remainder of the codebase with compiler warnings turned on
+# Compiler warnings for HDRView's own code
 # ============================================================================
+# Applied per-target (see the loop after the targets are declared) rather than through CMAKE_CXX_FLAGS, which would
+# also reach the third-party targets declared in this directory and leave them compiling at two warning levels at once.
 if(MSVC)
-  if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
-    string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
-  endif()
+  # /wd4100 is MSVC's spelling of -Wno-unused-parameter below.
+  set(HDRVIEW_WARNING_OPTIONS /W4 /wd4100)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter")
+  set(HDRVIEW_WARNING_OPTIONS -Wall -Wextra -Wno-unused-parameter)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    set(CMAKE_CXX_FLAGS
-        "${CMAKE_CXX_FLAGS} -Wno-gnu-anonymous-struct -Wno-c99-extensions -Wno-nested-anon-types -Wno-deprecated-register"
+    list(APPEND HDRVIEW_WARNING_OPTIONS -Wno-gnu-anonymous-struct -Wno-c99-extensions -Wno-nested-anon-types
+         -Wno-deprecated-register
     )
   endif()
 endif()
@@ -1998,6 +2002,14 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   enable_testing()
   add_test(NAME hdrview_gui_tests COMMAND hdrview_gui_tests)
 endif()
+
+# Turn warnings on for the targets built from HDRVIEW_SOURCES, now that all of them exist. The optional ones are
+# guarded because they only exist when HDRVIEW_BUILD_TESTS/_GUI_TESTS/_FUZZERS asked for them.
+foreach(hdrview_target HDRView hdrview_version hdrview_tests hdrview_gui_tests hdrview_fuzz_load_image)
+  if(TARGET ${hdrview_target})
+    target_compile_options(${hdrview_target} PRIVATE ${HDRVIEW_WARNING_OPTIONS})
+  endif()
+endforeach()
 
 if(EMSCRIPTEN)
   target_link_options(
