@@ -20,11 +20,13 @@ on:
 concurrency:
   # A newer commit on the same branch makes an older run pointless, and it goes on holding a runner for
   # the twenty-odd minutes the matrix takes. Grouped by head branch, so a pull_request run and any push
-  # run for that branch share a group. master is exempt: every commit landing there is worth building.
-  # On master the group is per-commit, so nothing there ever queues behind or cancels anything else:
-  # GitHub keeps only one *pending* run per group even when cancel-in-progress is false, so a second
-  # push would otherwise cancel the first one's queued run before it started.
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}${{ github.ref == 'refs/heads/master' && format('-{0}', github.sha) || '' }}
+  # run for that branch share a group -- ref_name rather than ref, because a push reports the fully
+  # qualified refs/heads/<name>, which never matches the bare name a pull_request puts in head_ref.
+  # master is exempt: every commit landing there is worth building. On master the group is per-commit,
+  # so nothing there ever queues behind or cancels anything else: GitHub keeps only one *pending* run
+  # per group even when cancel-in-progress is false, so a second push would otherwise cancel the first
+  # one's queued run before it started.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}${{ github.ref == 'refs/heads/master' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
