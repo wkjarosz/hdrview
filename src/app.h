@@ -228,8 +228,10 @@ public:
     /*!
         Apply \p op to every sample the subject covers, as one undoable edit.
 
-        \p op is handed a sample and its position in image coordinates, and returns what to replace it
-        with. The samples it writes go to the GPU as the one rectangle they occupy, and the entry that
+        \p op is handed a sample, its position in image coordinates, and which of the subject's channels
+        it belongs to -- 0 for the first, so a group's R, G, B, A arrive as 0, 1, 2, 3 -- and returns what
+        to replace it with. That last one is what lets an edit differ per component, as filling with a
+        color does. The samples it writes go to the GPU as the one rectangle they occupy, and the entry that
         reverses them stores that same rectangle -- so an edit confined to a selection costs the selection,
         not the image.
 
@@ -237,7 +239,16 @@ public:
                  names nothing.
     */
     bool modify_pixels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
-                       const std::function<float(float, int, int)> &op);
+                       const std::function<float(float, int2, int)> &op);
+
+    /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
+    void draw_edit_subject_selector();
+
+    // The parameterized point edits. Each applies on confirm rather than as its controls move; see
+    // draw_exposure_gamma_dialog().
+    void draw_exposure_gamma_dialog(bool &open);
+    void draw_brightness_contrast_dialog(bool &open);
+    void draw_fill_dialog(bool &open);
 
     /// The subject the menu's edits use, shown and changed under Edit > Apply to.
     EditSubject &edit_subject() { return m_edit_subject; }

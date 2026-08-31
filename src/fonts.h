@@ -109,10 +109,10 @@
 #define ICON_MY_TIMES              ICON_FA_XMARK
 #define ICON_MY_FLIP_HORIZ         ""
 #define ICON_MY_FLIP_VERT          ""
-#define ICON_MY_UNDO               ""
-#define ICON_MY_REDO               ""
-#define ICON_MY_ROTATE_CW          ""
-#define ICON_MY_ROTATE_CCW         ""
+#define ICON_MY_UNDO               ICON_FA_ARROW_ROTATE_LEFT
+#define ICON_MY_REDO               ICON_FA_ARROW_ROTATE_RIGHT
+#define ICON_MY_ROTATE_CW          ICON_FA_ROTATE_RIGHT
+#define ICON_MY_ROTATE_CCW         ICON_FA_ROTATE_LEFT
 #define ICON_MY_OPEN_FOLDER        ICON_MY_OPEN_IMAGE
 #define ICON_MY_WATCH_CHANGES      ICON_FA_ARROWS_ROTATE
 #define ICON_MY_ADD_WATCHED_FOLDER ICON_MY_WATCH_CHANGES

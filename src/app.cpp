@@ -749,6 +749,11 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     m_dialogs.push_back(make_unique<PopupDialog>("Discard unsaved changes?",
                                                  [this](bool &open) { draw_confirm_discard_dialog(open); }));
     m_dialogs.push_back(
+        make_unique<PopupDialog>("Exposure/gamma...", [this](bool &open) { draw_exposure_gamma_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Brightness/contrast...",
+                                                 [this](bool &open) { draw_brightness_contrast_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Fill...", [this](bool &open) { draw_fill_dialog(open); }));
+    m_dialogs.push_back(
         make_unique<PopupDialog>("Loading session...", [this](bool &open) { draw_loading_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>(
         "Create dither image...",
@@ -1634,13 +1639,28 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        return can_edit(img) && img->history.has_redo();
                    }});
 
+        add(Action{{"Exposure/gamma..."},
+                   ICON_MY_BLANK,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Exposure/gamma...").open = true; },
+                   if_editable});
+        add(Action{{"Brightness/contrast..."},
+                   ICON_MY_BLANK,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Brightness/contrast...").open = true; },
+                   if_editable});
+        add(Action{
+            {"Fill..."}, ICON_MY_BLANK, ImGuiKey_None, 0, [this]() { dialog("Fill...").open = true; }, if_editable});
+
         add(Action{{"Invert", "Negative"},
                    ICON_MY_BLANK,
                    ImGuiMod_Ctrl | ImGuiKey_I,
                    0,
                    [this]() {
                        modify_pixels(current_image(), "Invert", m_edit_subject,
-                                     [](float v, int, int) { return 1.f - v; });
+                                     [](float v, int2, int) { return 1.f - v; });
                    },
                    if_editable});
         add(Action{{"Clamp to [0,1]", "Clip to LDR range"},
@@ -1650,7 +1670,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    [this]()
                    {
                        modify_pixels(current_image(), "Clamp to [0,1]", m_edit_subject,
-                                     [](float v, int, int) { return std::min(1.f, std::max(0.f, v)); });
+                                     [](float v, int2, int) { return std::min(1.f, std::max(0.f, v)); });
                    },
                    if_editable});
         add(Action{{"Zap gremlins", "Replace NaNs and infinities"},
@@ -1663,7 +1683,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        // statistic computed over the channel it sits in. Zero is what the old HDRView
                        // replaced them with.
                        modify_pixels(current_image(), "Zap gremlins", m_edit_subject,
-                                     [](float v, int, int) { return std::isfinite(v) ? v : 0.f; });
+                                     [](float v, int2, int) { return std::isfinite(v) ? v : 0.f; });
                    },
                    if_editable});
 

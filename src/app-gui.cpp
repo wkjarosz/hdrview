@@ -441,6 +441,12 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
+        MenuItem(action("Exposure/gamma..."));
+        MenuItem(action("Brightness/contrast..."));
+        MenuItem(action("Fill..."));
+
+        ImGui::Separator();
+
         // What the edits above apply to, stated where they are rather than asked for one at a time. On a
         // single-group image the two scopes name the same channels, so the choice is shown but says so.
         if (ImGui::BeginMenu("Apply to"))

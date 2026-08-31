@@ -324,6 +324,18 @@ inline T saturate(T a)
     return std::clamp(a, T(0), T(1));
 }
 
+//! Contrast about \p midpoint, as a straight line of the given slope through it.
+/*!
+    The pair a brightness/contrast control produces: contrast sets how steep the line is, brightness moves
+    the point it pivots about. Values outside [0,1] pass through the same line rather than being clamped to
+    it, so an HDR sample keeps its relationship to the ones around it.
+*/
+template <typename T>
+inline T brightness_contrast_linear(T v, T slope, T midpoint)
+{
+    return (v - midpoint) * slope + T(0.5);
+}
+
 /*!
  * @brief  Linear interpolation.
  *

@@ -270,7 +270,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // Push samples outside [0,1] first, so the clamp has something to do on a fixture that may already
         // be inside it.
         IM_CHECK(hdrview()->modify_pixels(img, "Spread", hdrview()->edit_subject(),
-                                          [](float v, int, int) { return v * 4.f - 1.5f; }));
+                                          [](float v, int2, int) { return v * 4.f - 1.5f; }));
 
         menu_click(ctx, "Edit/Clamp to [0,1]");
 
@@ -317,7 +317,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         subject.selection_only = true;
 
         const auto before = snapshot(img);
-        IM_CHECK(hdrview()->modify_pixels(img, "Invert", subject, [](float v, int, int) { return 1.f - v; }));
+        IM_CHECK(hdrview()->modify_pixels(img, "Invert", subject, [](float v, int2, int) { return 1.f - v; }));
 
         const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
         const int2  o  = img->data_window.min;
@@ -355,6 +355,66 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         if (!HDRViewApp::scope_matters(img))
             IM_CHECK(hdrview()->resolve_subject(img, group_scope).first ==
                      hdrview()->resolve_subject(img, all_scope).first);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a dialog changes nothing until it is confirmed");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const auto original = snapshot(img);
+
+        // Applying on confirm is what keeps a dragged slider from filling the history with states nobody
+        // asked for, so cancelling has to leave both the pixels and the history alone.
+        menu_click(ctx, "Edit/Exposure\\/gamma...");
+        ctx->SetRef("Exposure\\/gamma...");
+        ctx->ItemInputValue("Exposure", 2.0f);
+        ctx->ItemClick("Cancel");
+        ctx->Yield(2);
+
+        IM_CHECK(snapshot(img) == original);
+        IM_CHECK_EQ(img->history.has_undo(), false);
+        IM_CHECK_EQ(img->history.is_modified(), false);
+
+        // And confirming has to actually apply it, as one entry.
+        ctx->SetRef("##MainMenuBar");
+        ctx->MenuClick("Edit/Exposure\\/gamma...");
+        ctx->SetRef("Exposure\\/gamma...");
+        ctx->ItemInputValue("Exposure", 2.0f);
+        ctx->ItemClick("Apply");
+        ctx->Yield(2);
+
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_EQ(img->history.has_undo(), true);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "filling writes a different value per channel");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // Fill is the one edit whose value depends on which channel it is writing, so the channels of a
+        // group must not all come out the same.
+        const float4 color{0.25f, 0.5f, 0.75f, 1.f};
+        EditSubject  subject;
+        IM_CHECK(
+            hdrview()->modify_pixels(img, "Fill", subject, [color](float, int2, int slot) { return color[slot % 4]; }));
+
+        const auto &group = img->groups[img->selected_group];
+        for (int c = 0; c < group.num_channels; ++c)
+        {
+            const auto &ch = img->channels[group.channels[c]];
+            IM_CHECK_EQ(ch(0, 0), color[c % 4]);
+            IM_CHECK_EQ(ch(ch.size().x - 1, ch.size().y - 1), color[c % 4]);
+        }
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
