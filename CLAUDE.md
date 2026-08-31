@@ -245,6 +245,15 @@ preferences into the CMake cache, which is global and read at generate time, so 
 afterwards; see the comments there. `HEIC`/`AVCI` stay off in released builds for patent reasons, and
 `HTJ2K` encoding is off in the web build because libheif's `FindOPENJPH.cmake` insists on an install tree.
 
+AVIF has two AV1 decoders in play. libaom is always there — it is also the AVIF *encoder*, which dav1d
+cannot be — but dav1d decodes several times faster, so `HDRVIEW_ENABLE_DAV1D` asks libheif for its dav1d
+plugin too and libheif then prefers it (plugin priority 150 vs libaom's 100). Output is bit-identical;
+AV1 decoding is specified exactly. dav1d builds only under meson, so unlike libaom there is no CPM
+fallback: the CMake block finds a system dav1d or quietly leaves AVIF on libaom, which is what currently
+happens on Windows and Emscripten. `tests/bench_heif_decode.cpp` (behind `HDRVIEW_BUILD_BENCHMARKS`) is
+what measures the two against each other and checks they agree; it uses
+`heif_decoding_options::decoder_id` to address a specific plugin, so one build can exercise both.
+
 ### Rendering backend abstraction (GL vs Metal)
 `renderpass.h`, `shader.h`, and `texture.h` declare platform-agnostic interfaces (adapted from NanoGUI),
 each with two mutually-exclusive implementations selected at CMake configure time:

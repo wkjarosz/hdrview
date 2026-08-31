@@ -224,9 +224,18 @@ json get_heif_info()
 
     auto add_codec = [&](const char *name, heif_compression_format comp)
     {
-        bool dec          = (heif_have_decoder_for_format(comp) != 0);
-        bool enc          = (heif_have_encoder_for_format(comp) != 0);
-        compression[name] = json{{"decoder", dec}, {"encoder", enc}};
+        bool dec = (heif_have_decoder_for_format(comp) != 0);
+        bool enc = (heif_have_encoder_for_format(comp) != 0);
+        json entry{{"decoder", dec}, {"encoder", enc}};
+
+        // libheif returns the descriptors in descending plugin priority, so the first is the one it will
+        // pick. That matters for AV1, where dav1d and libaom can both be present and one is about twice
+        // as fast as the other.
+        const heif_decoder_descriptor *descriptors[8];
+        if (int n = heif_get_decoder_descriptors(comp, descriptors, 8); n > 0)
+            entry["decoder_used"] = heif_decoder_descriptor_get_name(descriptors[0]);
+
+        compression[name] = entry;
     };
 
     add_codec("AVC", heif_compression_AVC);
@@ -452,18 +461,32 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         }
         float bpc_div = 1.f / ((1 << bpc) - 1);
 
-        // copy pixels into a contiguous float buffer and normalize values to [0,1]
-        vector<float> float_pixels((size_t)size.x * size.y * cpp);
-        bool          is_16bit = (bpp_storage == cpp * 16);
-        for (int y = 0; y < size.y; ++y)
-        {
-            auto row8  = reinterpret_cast<const uint8_t *>(pixels + y * (size_t)bytes_per_line);
-            auto row16 = reinterpret_cast<const uint16_t *>(pixels + y * (size_t)bytes_per_line);
-            for (int x = 0; x < size.x; ++x)
-                for (int c = 0; c < cpp; ++c)
-                    float_pixels[(y * size.x + x) * cpp + c] =
-                        bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
-        }
+        // Copy pixels into a contiguous float buffer, normalized to [0,1] -- tens of millions of samples at
+        // full resolution, so it runs on the thread pool like the linearize and channel-copy stages below.
+        // Branching on the sample width per row rather than per sample lets each loop vectorize, and the
+        // buffer is a unique_ptr because value-initializing a vector this size costs more than the loop
+        // that goes on to overwrite every element of it.
+        auto       float_pixels = std::unique_ptr<float[]>(new float[(size_t)size.x * size.y * cpp]);
+        const bool is_16bit     = (bpp_storage == cpp * 16);
+        const int  block_size   = std::max(1, 1024 * 1024 / (size.x * cpp));
+        parallel_for(blocked_range<int>(0, size.y, block_size),
+                     [&](int begin_y, int end_y, int, int)
+                     {
+                         for (int y = begin_y; y < end_y; ++y)
+                         {
+                             float *out = &float_pixels[(size_t)y * size.x * cpp];
+                             if (is_16bit)
+                             {
+                                 auto row = reinterpret_cast<const uint16_t *>(pixels + y * (size_t)bytes_per_line);
+                                 for (int i = 0; i < size.x * cpp; ++i) out[i] = bpc_div * row[i];
+                             }
+                             else
+                             {
+                                 auto row = reinterpret_cast<const uint8_t *>(pixels + y * (size_t)bytes_per_line);
+                                 for (int i = 0; i < size.x * cpp; ++i) out[i] = bpc_div * row[i];
+                             }
+                         }
+                     });
 
         // Alpha is not a color: it carries neither a transfer function nor primaries, so it is copied
         // through as decoded. Only the monochrome path reaches this with a separate alpha plane -- the
@@ -477,7 +500,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
 
                 string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
                 Chromaticities chr;
-                if (linearize_pixels(float_pixels.data(), int3{size.xy(), cpp},
+                if (linearize_pixels(float_pixels.get(), int3{size.xy(), cpp},
                                      gamut_chromaticities(opts.gamut_override), opts.tf_override, opts.keep_primaries,
                                      &profile_desc, &chr))
                 {
@@ -501,14 +524,14 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                 // for SDR profiles, try to transform the interleaved data using the icc profile.
                 // Then try the nclx profile
                 if ((prefer_icc && ICCProfile(image->icc_data)
-                                       .linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries,
+                                       .linearize_pixels(float_pixels.get(), int3{size.xy(), cpp}, opts.keep_primaries,
                                                          &profile_desc, &chr)) ||
-                    linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries, nclx,
-                                     &profile_desc, &chr))
+                    linearize_colors(float_pixels.get(), int3{size.xy(), cpp}, opts.keep_primaries, nclx, &profile_desc,
+                                     &chr))
                     image->chromaticities = chr;
                 else
                     // icc and nclx profiles failed or not present, so we can only assume we are sRGB/BT709
-                    to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction::Unspecified);
+                    to_linear(float_pixels.get(), int3{size.xy(), cpp}, TransferFunction::Unspecified);
 
                 image->metadata["color profile"] = profile_desc;
             }
@@ -516,7 +539,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
 
         // copy the interleaved float pixels into the channels
         for (int c = 0; c < cpp; ++c)
-            image->channels[p * cpp + c].copy_from_interleaved(float_pixels.data(), size.x, size.y, cpp, c,
+            image->channels[p * cpp + c].copy_from_interleaved(float_pixels.get(), size.x, size.y, cpp, c,
                                                                [](float v) { return v; });
     }
 

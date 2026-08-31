@@ -193,9 +193,14 @@ sudo apt-get install cmake ninja-build xorg-dev libglu1-mesa-dev libxrandr-dev l
   libwayland-dev wayland-protocols libxkbcommon-dev libdbus-1-dev zlib1g-dev libfreetype-dev \
   libjpeg-dev libpng-dev libtiff-dev libwebp-dev libjxl-dev libopenexr-dev libimath-dev \
   liblcms2-dev libraw-dev libexif-dev libspdlog-dev libfmt-dev libcli11-dev libopenjp2-7-dev \
-  libopenh264-dev libheif-dev libaom-dev libde265-dev libx265-dev \
-  libheif-plugin-x265 libheif-plugin-libde265 libheif-plugin-aomenc libheif-plugin-aomdec
+  libopenh264-dev libheif-dev libaom-dev libdav1d-dev libde265-dev libx265-dev \
+  libheif-plugin-x265 libheif-plugin-libde265 libheif-plugin-aomenc libheif-plugin-aomdec \
+  libheif-plugin-dav1d
 ```
+
+`libdav1d-dev` is optional but worth having: it decodes the AV1 in an AVIF several times faster than
+libaom does, and libheif prefers it whenever both are present. Without it AVIF still works, just more
+slowly. See `HDRVIEW_ENABLE_DAV1D`.
 
 See the workflows under [`.github/workflows/`](.github/workflows) for the other platforms.
 

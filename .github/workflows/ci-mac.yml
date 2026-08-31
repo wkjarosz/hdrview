@@ -92,7 +92,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install --quiet ninja create-dmg dylibbundler libjpeg-turbo little-cms2 zlib aom libde265 x265 openjpeg openh264
+        run: brew install --quiet ninja create-dmg dylibbundler libjpeg-turbo little-cms2 zlib aom dav1d libde265 x265 openjpeg openh264
 
       # The packages below are each also built from source by CPM for -cpm/-universal presets (which don't set
       # CPM_USE_LOCAL_PACKAGES, so CPM always fetches regardless of what's installed system-wide). Installing them
