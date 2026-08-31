@@ -450,6 +450,15 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                     string_view(buffer.data(), buffer.length()) // a buffer describing the data to download
                 );
 #endif
+
+                // The file now holds what the image holds, so its edits are no longer unsaved -- the mark
+                // in the Images panel clears and closing stops asking about them.
+                //
+                // Not for a composite, which is a different image: exposure, tonemapping and the blend are
+                // baked into it, so what was written is a rendition of the view rather than the image, and
+                // reopening it would not give the image back.
+                if (!composite)
+                    current_image()->history.mark_saved();
             }
             catch (const exception &e)
             {
