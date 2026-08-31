@@ -60,6 +60,23 @@ inline float2 convert_envmap_uv(EnvMapping dst, EnvMapping src, float2 uv)
 bool envmap_uv_is_valid(EnvMapping mapping, float2 uv);
 
 /*!
+    Solid angle per unit image area at \p uv, in steradians; 0 where \p uv is not sphere.
+
+    How much sky one unit of image covers, which is what anything integrating over the sphere must weight
+    by: a lat-long's polar rows cover far less than its equatorial ones. Analytic per mapping rather than
+    measured from how far the direction moves, because the measured version is wrong at exactly the places
+    that matter -- across a cube seam a finite difference straddles two faces and reports an area many
+    times too large.
+
+    Integrates to the sphere's 4*pi over the unit square, for every mapping.
+
+    This is a ratio of areas, not a derivative. Filtering a remap anisotropically wants a footprint, which
+    has a shape and not only a size, and the way to get that is the difference between *neighbouring
+    destination pixels'* source coordinates -- which composes both mappings at once and needs none of this.
+*/
+float envmap_jacobian(EnvMapping mapping, float2 uv);
+
+/*!
     Resample \p src, read as the \p src_mapping of a sphere, into \p dst_mapping at \p size.
 
     Every destination sample asks which direction it stands for, converts that direction into the source's

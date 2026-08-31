@@ -176,6 +176,58 @@ Array2Df make_envmap(int2 size, EnvMapping mapping, F &&f)
 
 } // namespace
 
+TEST_CASE("Each mapping's Jacobian integrates to the whole sphere")
+{
+    // Every one of these was derived by hand, so each is checked globally here and pointwise below. A
+    // factor or an exponent wrong in any of them shows up as a total that is not 4*pi.
+    for (int m = 0; m < EnvMapping_COUNT; ++m)
+    {
+        CAPTURE(std::string(name_of(m)));
+
+        const int n     = 512;
+        double    total = 0.0;
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+                total += double(
+                    envmap_jacobian(EnvMapping(m), float2{(float(x) + 0.5f) / float(n), (float(y) + 0.5f) / float(n)}));
+        total /= double(n) * double(n);
+
+        CHECK(total == doctest::Approx(4.0 * 3.14159265358979323846).epsilon(0.01));
+    }
+}
+
+TEST_CASE("The Jacobian agrees with how far the direction actually moves")
+{
+    // The global check above would pass for a Jacobian that is wrong in compensating ways, so this pins it
+    // pointwise: the area a step of one sample sweeps out on the sphere, measured, against the analytic
+    // value. Away from seams and rims, where a difference straddles two faces and means nothing.
+    const int n = 256;
+
+    for (int m = 0; m < EnvMapping_COUNT; ++m)
+    {
+        CAPTURE(std::string(name_of(m)));
+
+        for (float v = 0.3f; v < 0.46f; v += 0.05f)
+            for (float u = 0.4f; u < 0.6f; u += 0.05f)
+            {
+                const float2 uv{u, v};
+                if (!envmap_uv_is_valid(EnvMapping(m), uv))
+                    continue;
+
+                const float2 hx{0.5f / float(n), 0.f}, hy{0.f, 0.5f / float(n)};
+                const float3 du = envmap_uv_to_xyz(EnvMapping(m), uv + hx) - envmap_uv_to_xyz(EnvMapping(m), uv - hx);
+                const float3 dv = envmap_uv_to_xyz(EnvMapping(m), uv + hy) - envmap_uv_to_xyz(EnvMapping(m), uv - hy);
+
+                // The measured patch covers one sample of an n-by-n image; the Jacobian is per unit area.
+                const double measured = double(la::length(la::cross(du, dv))) * double(n) * double(n);
+
+                CAPTURE(u);
+                CAPTURE(v);
+                CHECK(measured == doctest::Approx(double(envmap_jacobian(EnvMapping(m), uv))).epsilon(0.02));
+            }
+    }
+}
+
 TEST_CASE("Remapping carries a value with the direction it belongs to")
 {
     // The property that says remap composes the mappings correctly, and the one thing resampling cannot

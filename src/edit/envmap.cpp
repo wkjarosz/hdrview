@@ -74,7 +74,9 @@ float3 cylindrical_to_xyz(float2 uv)
     return float3{sin_phi * std::cos(theta), cos_phi, sin_phi * std::sin(theta)};
 }
 
-float3 cube_map_to_xyz(float2 uv)
+//! The cube face vector for \p uv before normalizing: one component is +-1 and the other two are the
+//! face coordinates. Its length is what the Jacobian needs, so the two share this.
+float3 cube_map_face_vector(float2 uv)
 {
     // The six faces laid out as a vertical cross: the upright column of four down the middle third, and
     // the two side faces either side of it.
@@ -117,8 +119,10 @@ float3 cube_map_to_xyz(float2 uv)
         xyz.z = (5.f / 6.f - std::clamp(uv.x, 2.f / 3.f, 1.f)) * 6.f;
     }
 
-    return la::normalize(xyz);
+    return xyz;
 }
+
+float3 cube_map_to_xyz(float2 uv) { return la::normalize(cube_map_face_vector(uv)); }
 
 //
 // Equal-area, adapted from PBRTv4, itself from Clarberg, "Fast Equal-Area Mapping of the (Hemi)Sphere
@@ -321,6 +325,51 @@ float sample_bilinear(const Array2Df &a, float2 uv)
 
 } // namespace
 
+float envmap_jacobian(EnvMapping mapping, float2 uv)
+{
+    if (!envmap_uv_is_valid(mapping, uv))
+        return 0.f;
+
+    constexpr float k_four_pi = 4.f * k_pi;
+
+    switch (mapping)
+    {
+    case EnvMapping_LatLong:
+        // dw = sin(phi) dtheta dphi, with theta spanning 2*pi across u and phi spanning pi down v.
+        return 2.f * k_pi * k_pi * std::sin(k_pi * uv.y);
+
+    case EnvMapping_Cylindrical:
+        // Archimedes: v is the height rather than the angle, so every row covers the same solid angle.
+        return k_four_pi;
+
+    case EnvMapping_EqualArea:
+        // What the mapping exists for.
+        return k_four_pi;
+
+    case EnvMapping_MirrorBall:
+        // Also equal-area, which is less obvious: the sine of half the polar angle growing linearly with
+        // the radius is exactly the condition for it.
+        return 16.f;
+
+    case EnvMapping_Angular:
+    {
+        // Here the polar angle itself grows linearly with the radius, so the sky compresses towards the rim.
+        const float r = la::length(2.f * uv - float2{1.f});
+        // sin(pi*r)/r tends to pi at the center rather than dividing by zero.
+        return r < 1e-6f ? k_four_pi * k_pi : k_four_pi * std::sin(k_pi * r) / r;
+    }
+
+    default:
+    {
+        // A cube face's solid angle per unit face area is one over the cube of the distance to it; the
+        // cross packs each face into a sixth of the image, which is where the constant comes from.
+        const float3 v = cube_map_face_vector(uv);
+        const float  l = la::length(v);
+        return 48.f / (l * l * l);
+    }
+    }
+}
+
 bool envmap_uv_is_valid(EnvMapping mapping, float2 uv)
 {
     switch (mapping)
@@ -390,44 +439,45 @@ Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, F
     // harmonic coefficients reproduce the irradiance to about a percent. Projecting onto them and then
     // evaluating costs the two resolutions added rather than multiplied.
     //
-    // The projection integrates over *directions* spread evenly on the sphere, looking the environment up
-    // at each, rather than over the image's own samples. Either would do for a mapping that varies
-    // smoothly, but the cube cross has seams and the discs have corners that are not sphere at all --
-    // and a measure derived from how far the direction moves per sample goes wrong at exactly those
-    // places. Sampling directions needs no such measure: every one carries the same solid angle whatever
-    // mapping is being read.
-    constexpr int    k_samples = 32768;
-    constexpr double k_weight  = 4.0 * 3.14159265358979323846 / double(k_samples);
+    // Integrated over the image's own samples, each weighted by the solid angle it covers, so every
+    // sample contributes exactly once and none is missed or read twice. That weight is what
+    // envmap_jacobian() is: measuring it from how far the direction moves per sample instead is what went
+    // wrong at the cube cross's seams.
+    const int2   in_size = src.size();
+    const double dA      = 1.0 / (double(in_size.x) * double(in_size.y));
 
     double sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    progress.set_num_steps(2);
+    progress.set_num_steps(in_size.y + 1);
 
-    for (int i = 0; i < k_samples; ++i)
+    for (int y = 0; y < in_size.y; ++y)
     {
-        // A Fibonacci spiral, which spreads points over the sphere about as evenly as a closed form can.
-        const double t   = (double(i) + 0.5) / double(k_samples);
-        const double z   = 1.0 - 2.0 * t;
-        const double r   = std::sqrt(std::max(0.0, 1.0 - z * z));
-        const double phi = double(i) * 2.39996322972865332; // golden angle
+        if (progress.canceled())
+            return Array2Df{size};
 
-        const float3 d{float(r * std::cos(phi)), float(z), float(r * std::sin(phi))};
-        const double L = double(sample_bilinear(src, envmap_xyz_to_uv(mapping, d))) * k_weight;
+        for (int x = 0; x < in_size.x; ++x)
+        {
+            const float2 uv{(float(x) + 0.5f) / float(in_size.x), (float(y) + 0.5f) / float(in_size.y)};
+            const float  dw = envmap_jacobian(mapping, uv);
+            if (dw <= 0.f)
+                continue; // not sphere here, so there is nothing to gather
 
-        sh[0] += L * 0.282095;
-        sh[1] += L * 0.488603 * double(d.y);
-        sh[2] += L * 0.488603 * double(d.z);
-        sh[3] += L * 0.488603 * double(d.x);
-        sh[4] += L * 1.092548 * double(d.x) * double(d.y);
-        sh[5] += L * 1.092548 * double(d.y) * double(d.z);
-        sh[6] += L * 0.315392 * (3.0 * double(d.z) * double(d.z) - 1.0);
-        sh[7] += L * 1.092548 * double(d.x) * double(d.z);
-        sh[8] += L * 0.546274 * (double(d.x) * double(d.x) - double(d.y) * double(d.y));
+            const float3 d = envmap_uv_to_xyz(mapping, uv);
+            const double L = double(src(x, y)) * double(dw) * dA;
+
+            sh[0] += L * 0.282095;
+            sh[1] += L * 0.488603 * double(d.y);
+            sh[2] += L * 0.488603 * double(d.z);
+            sh[3] += L * 0.488603 * double(d.x);
+            sh[4] += L * 1.092548 * double(d.x) * double(d.y);
+            sh[5] += L * 1.092548 * double(d.y) * double(d.z);
+            sh[6] += L * 0.315392 * (3.0 * double(d.z) * double(d.z) - 1.0);
+            sh[7] += L * 1.092548 * double(d.x) * double(d.z);
+            sh[8] += L * 0.546274 * (double(d.x) * double(d.x) - double(d.y) * double(d.y));
+        }
+
+        ++progress;
     }
-
-    ++progress;
-    if (progress.canceled())
-        return Array2Df{size};
 
     // The constants that turn those coefficients into irradiance, from the same paper.
     constexpr double c1 = 0.429043, c2 = 0.511664, c3 = 0.743125, c4 = 0.886227, c5 = 0.247708;
