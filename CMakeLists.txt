@@ -2009,6 +2009,10 @@ if(EMSCRIPTEN)
     -sNO_DISABLE_EXCEPTION_CATCHING
     -sMAX_WEBGL_VERSION=2
     -sMIN_WEBGL_VERSION=2
+    # Emscripten's 64 kB default stack is too small for libaom's AV1 decoder, which overflows it on HDR
+    # AVIFs and aborts the whole module rather than failing the load. Memory growth is enabled, so
+    # giving the stack a size comparable to a native thread's costs nothing.
+    -sSTACK_SIZE=4MB
   )
   target_compile_options(HDRView PRIVATE -fexceptions -sNO_DISABLE_EXCEPTION_CATCHING)
   if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
