@@ -226,14 +226,19 @@ public:
 
     //! Respond to a touch gesture the browser reported. \see install_touch_handlers() in platform_utils
     /*!
-        \param [] num_touches    Fingers currently on the screen
-        \param [] relative_delta Change in the first two fingers' separation, as a fraction of it
-        \param [] app_pos        Point to zoom about, midway between them
+        Scales the view by \p scale about the fingers while moving whatever was under \p from_app_pos to
+        \p to_app_pos, so the image follows the fingers: two fingers moving together pan, and spreading
+        them apart magnifies by exactly the ratio they spread by.
+
+        \param [] num_touches  Fingers currently on the screen
+        \param [] scale        The first two fingers' separation, as a ratio of what it just was
+        \param [] from_app_pos Midpoint between them before this event
+        \param [] to_app_pos   Midpoint between them after it
 
         Public because Emscripten's event API takes a plain function pointer, so the listener that calls
         this cannot be a member.
     */
-    void touch_gesture(int num_touches, float relative_delta, float2 app_pos);
+    void touch_gesture(int num_touches, float scale, float2 from_app_pos, float2 to_app_pos);
     /// Zoom in to the next power of two
     void zoom_in();
     /// Zoom out to the previous power of two

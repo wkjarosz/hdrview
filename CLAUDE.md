@@ -235,6 +235,16 @@ magic-byte sniff (not file extension) and an `#if HDRVIEW_ENABLE_<FORMAT>` compi
 CMake options above. To add a new format: implement `is_X_image()` + `load_X_image()` in a new
 `imageio/x.{h,cpp}`, add a CMake option/target wiring, and register it in `default_loaders()`.
 
+libheif is the one dependency that finds its own codecs, with `find_package()` calls that only ever turn up
+an installed library — which Emscripten has none of. So the web build builds libaom (AVIF) and OpenJPEG
+(J2K) itself, in `CMakeLists.txt` just above the libheif block, and reaches libheif through the
+`<pkg>-extra.cmake` files it writes into `CMAKE_FIND_PACKAGE_REDIRECTS_DIR` — CPM already leaves a redirect
+config there for every package it adds, and the `-extra.cmake` fills in the `AOM_*`/`OPENJPEG_*` variables
+that libheif's own find modules would otherwise have set. Both of those packages also write their own
+preferences into the CMake cache, which is global and read at generate time, so each block undoes that
+afterwards; see the comments there. `HEIC`/`AVCI` stay off in released builds for patent reasons, and
+`HTJ2K` encoding is off in the web build because libheif's `FindOPENJPH.cmake` insists on an install tree.
+
 ### Rendering backend abstraction (GL vs Metal)
 `renderpass.h`, `shader.h`, and `texture.h` declare platform-agnostic interfaces (adapted from NanoGUI),
 each with two mutually-exclusive implementations selected at CMake configure time:

@@ -5,6 +5,9 @@
     image shader is actually asked to draw. Everything the app says about where a pixel is -- the mouse
     readout, the pixel-value overlay, the window borders, the watched-pixel crosshairs -- is one of these
     functions, so they and the shader have to describe the same place.
+
+    And what moves that transform: every way of zooming promises to hold one point still while it does, and
+    the scroll wheel and a two-finger gesture are the two ways of asking for a zoom by hand.
 */
 
 #include "app.h"
@@ -209,5 +212,175 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
         }
 
         hdrview()->set_reference_image_index(-1, true);
+    };
+
+    /*
+        Every way of zooming does it about some point, and that point is the promise the user is relying on:
+        whatever pixel was under it is still under it afterwards, so the thing being looked at does not slide
+        away as the zoom changes. Checked through each entry point that makes that promise, since each picks
+        its own focus and each could pick the wrong one:
+
+          - zoom_at_vp_pos(), what the scroll wheel calls, about an arbitrary point -- and a step of `amount`
+            has to be exactly `amount` on the zoom_level() scale the zoom readout and the zoom slider share.
+          - zoom_in()/zoom_out(), the menu's power-of-two steps, about the viewport center.
+          - touch_gesture(), a two-finger pinch, whose focus is the one that also *moves*: the pixel under
+            the fingers' midpoint follows that midpoint, and the zoom changes by exactly the ratio their
+            separation did. That is what makes two fingers moved together pan, and what makes the image grow
+            by as much as the fingers spread rather than by some fraction of it.
+
+        Swept over zoom, pan and both flip axes.
+    */
+    ImGuiTest *t3 = IM_REGISTER_TEST(engine, "viewport", "zooming_pins_the_pixel_under_its_focus");
+    t3->TestFunc  = [](ImGuiTestContext *ctx)
+    {
+        reset_images(ctx);
+        IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE}), 1);
+
+        FlipState flip;
+
+        // Puts the viewport in a known state before each case below.
+        auto set_view = [](float zoom, float2 pan)
+        {
+            hdrview()->set_zoom(zoom);
+            hdrview()->center();
+            hdrview()->reposition_pixel_to_vp_pos(pan, float2{0.f, 0.f});
+        };
+
+        for (int f = 0; f < 4; ++f)
+        {
+            flip.set(f);
+            for (float zoom : {0.125f, 1.f, 3.f, 64.f})
+                for (float2 pan : {float2{0.f, 0.f}, float2{37.f, -19.f}})
+                {
+                    // Zooming about a point, by a step measured on the zoom_level() scale.
+                    for (float amount : {-2.5f, 0.7f, 2.5f})
+                        for (float2 focus : {float2{101.f, 83.f}, float2{0.f, 0.f}})
+                        {
+                            set_view(zoom, pan);
+                            const float2 pinned = hdrview()->pixel_at_vp_pos(focus);
+                            const float  level  = hdrview()->zoom_level();
+
+                            hdrview()->zoom_at_vp_pos(amount, focus);
+
+                            IM_CHECK_LT(std::abs(hdrview()->zoom_level() - (level + amount)), 1e-3f);
+                            // A viewport unit is 1/zoom of a pixel, so the tolerance has to be too.
+                            IM_CHECK(approx(hdrview()->pixel_at_vp_pos(focus), pinned, 1e-2f / hdrview()->zoom()));
+                        }
+
+                    // The menu's steps, which hold the viewport center rather than the mouse.
+                    for (bool in : {true, false})
+                    {
+                        set_view(zoom, pan);
+                        const float2 center = 0.5f * hdrview()->viewport_size();
+                        const float2 pinned = hdrview()->pixel_at_vp_pos(center);
+
+                        if (in)
+                            hdrview()->zoom_in();
+                        else
+                            hdrview()->zoom_out();
+
+                        IM_CHECK(approx(hdrview()->pixel_at_vp_pos(center), pinned, 1e-2f / hdrview()->zoom()));
+                    }
+
+                    // A two-finger gesture: pinch only, pan only, and both at once.
+                    for (float scale : {1.f, 1.0f / 1.03f, 1.4f, 0.5f})
+                        for (float2 travel : {float2{0.f, 0.f}, float2{53.f, -27.f}})
+                        {
+                            set_view(zoom, pan);
+                            const float2 from   = float2{101.f, 83.f};
+                            const float2 to     = from + travel;
+                            const float2 pinned = hdrview()->pixel_at_vp_pos(from);
+
+                            hdrview()->touch_gesture(2, scale, hdrview()->app_pos_at_vp_pos(from),
+                                                     hdrview()->app_pos_at_vp_pos(to));
+
+                            const float zoomed = zoom * scale;
+                            IM_CHECK_LT(std::abs(hdrview()->zoom() - zoomed), 1e-3f * zoomed);
+                            IM_CHECK(approx(hdrview()->pixel_at_vp_pos(to), pinned, 1e-2f / zoomed));
+                        }
+                }
+        }
+
+        // Leave no fingers down: while any are, the viewport suppresses drag-panning.
+        hdrview()->touch_gesture(0, 1.f, float2{0.f}, float2{0.f});
+    };
+
+    /*
+        The scroll wheel, driven the way a user drives it, through the input path rather than the transform
+        it ends up calling. Two things are worth stating there and nowhere else:
+
+        Rate. A notch of a discrete wheel arrives as one whole unit, while a trackpad reports the same travel
+        as a stream of small fractions adding up to many units -- so the two are only comparable once the
+        notch has been scaled up, and a notch left on the trackpad's scale moves the viewport by a fraction
+        of what it should, which reads as the wheel doing nothing. Stated as bounds and as a comparison
+        between the devices, since the exact step is a tuning choice and the fractions are what it is tuned
+        against.
+
+        Mode. The wheel zooms about the mouse, and shift makes the same wheel pan instead -- neither of which
+        the functions it calls can be asked about, since they cannot know what was passed to them.
+    */
+    ImGuiTest *t4 = IM_REGISTER_TEST(engine, "viewport", "scrolling_zooms_or_pans_alike_from_either_device");
+    t4->TestFunc  = [](ImGuiTestContext *ctx)
+    {
+        reset_images(ctx);
+        IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE}), 1);
+
+        ctx->MouseMoveToPos(hdrview()->app_pos_at_vp_pos(0.25f * hdrview()->viewport_size()));
+        // Where the pointer actually landed, which is what the viewport anchors a wheel zoom on. Asking for
+        // a position and assuming the pointer is at it leaves a sub-pixel difference, and the drift that
+        // difference causes is larger than the anchoring being checked below.
+        const float2 mouse = float2{ImGui::GetIO().MousePos};
+
+        // Scrolls `events` wheel events of `wheel` units each over the viewport, from a known starting view.
+        // The idle frames make each call a gesture of its own: which kind of device is scrolling is latched
+        // until scrolling stops, so without them a call would inherit the previous call's device.
+        auto scroll = [ctx](float wheel, int events)
+        {
+            ctx->Yield(30);
+            hdrview()->set_zoom(1.f);
+            hdrview()->center();
+            for (int i = 0; i < events; ++i) ctx->MouseWheelY(wheel);
+        };
+
+        // One notch of zoom: enough to see, and not so much that the image leaps past what was being
+        // looked at. And it happens about the mouse, not about the center or the corner.
+        scroll(1.f, 1);
+        const float notch = hdrview()->zoom();
+        IM_CHECK_GT(notch, 1.05f);
+        IM_CHECK_LT(notch, 2.f);
+        {
+            const float2 pinned = hdrview()->pixel_at_app_pos(mouse);
+            ctx->MouseWheelY(1.f);
+            IM_CHECK(approx(hdrview()->pixel_at_app_pos(mouse), pinned, 1e-2f / hdrview()->zoom()));
+        }
+
+        // The same notch the other way is its inverse.
+        scroll(-1.f, 1);
+        IM_CHECK_LT(std::abs(notch * hdrview()->zoom() - 1.f), 1e-3f);
+
+        // The travel a trackpad spreads over many fractional events does what the notch it adds up to does,
+        // rather than a tenth of it.
+        scroll(0.5f, 20);
+        IM_CHECK_LT(std::abs(hdrview()->zoom() - notch), 0.05f * notch);
+
+        // Held shift turns the same wheel into a pan: the zoom stays put and the image translates, by an
+        // amount a user can see, and again at one rate for both devices.
+        auto shift_scroll = [ctx, &scroll](float wheel, int events)
+        {
+            ctx->KeyDown(ImGuiMod_Shift);
+            scroll(wheel, events);
+            const float2 moved = hdrview()->vp_pos_at_pixel(float2{0.f, 0.f});
+            ctx->KeyUp(ImGuiMod_Shift);
+            return moved;
+        };
+
+        // Where the origin sits with the view reset and nothing scrolled, to measure the translation from.
+        scroll(0.f, 0);
+        const float2 unmoved = hdrview()->vp_pos_at_pixel(float2{0.f, 0.f});
+
+        const float2 panned = shift_scroll(1.f, 1);
+        IM_CHECK_LT(std::abs(hdrview()->zoom() - 1.f), 1e-4f);
+        IM_CHECK_GT(la::length(panned - unmoved), 10.f);
+        IM_CHECK(approx(shift_scroll(0.5f, 20), panned, 1.f));
     };
 }

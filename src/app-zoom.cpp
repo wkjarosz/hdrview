@@ -233,6 +233,42 @@ void HDRViewApp::calculate_viewport()
         }
 }
 
+//! One notch of a discrete mouse wheel, in the units a precise scrolling device reports.
+static constexpr float k_units_per_notch = 10.f;
+
+//! Frames without any wheel input after which the next event is taken to start a fresh gesture.
+static constexpr int k_scroll_gesture_gap = 10;
+
+//! Puts a wheel delta on one scale, whichever kind of device produced it.
+/*!
+    Every backend HDRView builds against reports a discrete wheel as one whole unit per notch, and a
+    trackpad -- or any other precise device -- as a stream of small fractions that add up to many units
+    over a single gesture. Nothing but the magnitude tells the two apart, so a whole-numbered delta is
+    taken for notches and brought up to the rate the fractions arrive at. Scaling both the same way
+    leaves either a notch changing the zoom by a fraction of a percent or a trackpad flying.
+
+    The classification is latched for the length of a gesture, so a precise device that happens to land
+    on a whole unit part way through one doesn't produce a single jumped frame.
+*/
+static float2 scroll_units(float2 wheel)
+{
+    static bool discrete         = true;
+    static int  last_input_frame = 0;
+
+    if (wheel == float2{0.f})
+        return wheel;
+
+    const int frame = ImGui::GetFrameCount();
+    if (frame - last_input_frame > k_scroll_gesture_gap)
+        discrete = true;
+    last_input_frame = frame;
+
+    if (wheel != round(wheel))
+        discrete = false;
+
+    return discrete ? wheel * k_units_per_notch : wheel;
+}
+
 void HDRViewApp::handle_mouse_interaction()
 {
     auto &io = ImGui::GetIO();
@@ -242,12 +278,7 @@ void HDRViewApp::handle_mouse_interaction()
     auto vp_mouse_pos   = vp_pos_at_app_pos(io.MousePos);
     bool cancel_autofit = false;
 
-#if defined(__EMSCRIPTEN__)
-    static constexpr float scroll_multiplier = 10.0f;
-#else
-    static constexpr float scroll_multiplier = 1.0f;
-#endif
-    auto scroll = float2{io.MouseWheelH, io.MouseWheel} * scroll_multiplier;
+    auto scroll = scroll_units(float2{io.MouseWheelH, io.MouseWheel});
 
     if (length2(scroll) > 0.f)
     {
@@ -286,13 +317,17 @@ void HDRViewApp::handle_mouse_interaction()
     }
     else
     {
-        float2 drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
-        // A second finger means a pinch, and the first one is still driving a synthesized left-drag; pan
-        // would fight the zoom for the same gesture.
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) && m_active_touches < 2)
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
         {
-            cancel_autofit = true;
-            reposition_pixel_to_vp_pos(vp_mouse_pos + drag_delta, pixel_at_vp_pos(vp_mouse_pos));
+            // A second finger means a pinch, and the first one is still driving a synthesized left-drag;
+            // pan would fight the zoom for the same gesture. The drag is still consumed while it does --
+            // left to accumulate, it would pan by the whole pinch's travel the moment a finger lifts.
+            if (m_active_touches < 2)
+            {
+                cancel_autofit = true;
+                reposition_pixel_to_vp_pos(vp_mouse_pos + float2{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)},
+                                           pixel_at_vp_pos(vp_mouse_pos));
+            }
             ImGui::ResetMouseDragDelta();
         }
     }
@@ -301,13 +336,20 @@ void HDRViewApp::handle_mouse_interaction()
         this->cancel_autofit();
 }
 
-void HDRViewApp::touch_gesture(int num_touches, float relative_delta, float2 app_pos)
+void HDRViewApp::touch_gesture(int num_touches, float scale, float2 from_app_pos, float2 to_app_pos)
 {
     m_active_touches = num_touches;
 
-    // Scaled by the fingers' own separation, so the same travel zooms by the same amount whether they
-    // started close together or far apart.
-    constexpr float k_pinch_scale = 8.f;
-    if (relative_delta != 0.f)
-        zoom_at_vp_pos(k_pinch_scale * relative_delta, vp_pos_at_app_pos(app_pos));
+    if (scale == 1.f && from_app_pos == to_app_pos)
+        return;
+
+    // Pin whatever the fingers' midpoint was over to wherever that midpoint has moved, and magnify by
+    // exactly the ratio their separation grew by. The image then stays under the fingers: spreading them
+    // apart by a factor magnifies by that factor, and moving both together pans without zooming.
+    const float2 to    = vp_pos_at_app_pos(to_app_pos);
+    const float2 pixel = pixel_at_vp_pos(vp_pos_at_app_pos(from_app_pos));
+    set_zoom(scale * m_zoom);
+    reposition_pixel_to_vp_pos(to, pixel);
+
+    cancel_autofit();
 }

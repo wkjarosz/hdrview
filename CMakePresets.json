@@ -19,16 +19,14 @@
     {
       "name": "emscripten",
       "displayName": "Emscripten (WebAssembly)",
-      "description": "Build for web using Emscripten (requires EMSDK environment variable)",
+      "description": "Build for web using Emscripten (requires EMSDK environment variable). HEIC and AVCI are off for the same patent reasons as in released builds; HTJ2K encoding is off because libheif only accepts an already-installed OpenJPH, and Emscripten installs nothing.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "toolchainFile": "$env{EMSDK}/cmake/Modules/Platform/Emscripten.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "MinSizeRel",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/deploy",
-        "HDRVIEW_ENABLE_J2K": "OFF",
         "HDRVIEW_ENABLE_HTJ2K": "OFF",
-        "HDRVIEW_ENABLE_AVIF": "OFF",
         "HDRVIEW_ENABLE_HEIC": "OFF",
         "HDRVIEW_ENABLE_AVCI": "OFF",
         "UHDR_BUILD_DEPS": "ON"
