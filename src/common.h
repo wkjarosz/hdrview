@@ -418,7 +418,6 @@ std::string_view              get_basename(std::string_view path);
 std::vector<std::string_view> split(std::string_view text, std::string_view delim);
 std::string                   to_lower(std::string_view str);
 std::string                   to_upper(std::string_view str);
-std::pair<float, std::string> human_readable_size(size_t bytes);
 // Helper to split "archive.zip/entry.png" into zip and entry
 bool split_zip_entry(std::string_view filename, std::string &zip_path, std::string &entry_path);
 //! Whether `path` names an http(s) URL rather than something on the filesystem.

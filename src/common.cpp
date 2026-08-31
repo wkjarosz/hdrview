@@ -299,21 +299,6 @@ vector<string> shorten_names(const vector<string> &names)
     return short_names;
 }
 
-pair<float, std::string> human_readable_size(size_t bytes)
-{
-    float              size       = static_cast<float>(bytes);
-    static const char *units[]    = {"B", "kB", "MiB", "GiB", "TiB", "PiB"};
-    int                unit_index = 0;
-
-    while (size >= 1024 && unit_index < 5)
-    {
-        size /= 1024;
-        ++unit_index;
-    }
-
-    return {size, units[unit_index]};
-}
-
 bool natural_less(const string_view a, const string_view b)
 {
     // isdigit() is only defined for values representable as unsigned char, and a byte of a multi-byte UTF-8
