@@ -1181,6 +1181,106 @@ else()
   endif()
 endif()
 
+# libheif reaches its codecs through find_package(), which only ever turns up a library the system has
+# installed, and Emscripten has none -- so the AV1 codec AVIF needs is built here instead. CPM already
+# leaves a redirect in CMAKE_FIND_PACKAGE_REDIRECTS_DIR that points libheif's find_package(AOM) at this
+# build of it; the -extra.cmake below adds the rest of what libheif's own FindAOM.cmake would have set.
+if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
+  # aom appends the compiler flags it wants straight to the cache with FORCE. A cache entry is global and
+  # read at generate time, so those flags reach every target in the build -- the -std=c99 among them stops
+  # OpenEXR's C sources compiling. Snapshot what aom rewrites and put it back once it has been added, the
+  # cache entry from the cache and the directory-scope variable from the directory, or a configure would
+  # bake this directory's own flags into the cache for the next one to append to again.
+  set(HDRVIEW_AOM_CLOBBERED_VARS "")
+  foreach(_flags CMAKE_C_FLAGS CMAKE_CXX_FLAGS CMAKE_EXE_LINKER_FLAGS)
+    foreach(_config "" "_DEBUG" "_RELEASE" "_MINSIZEREL" "_RELWITHDEBINFO")
+      list(APPEND HDRVIEW_AOM_CLOBBERED_VARS "${_flags}${_config}")
+    endforeach()
+  endforeach()
+  foreach(_var IN LISTS HDRVIEW_AOM_CLOBBERED_VARS)
+    set("HDRVIEW_SAVED_${_var}" "${${_var}}")
+    set("HDRVIEW_SAVED_CACHE_${_var}" "$CACHE{${_var}}")
+    get_property(_doc CACHE "${_var}" PROPERTY HELPSTRING)
+    set("HDRVIEW_SAVED_DOC_${_var}" "${_doc}")
+  endforeach()
+
+  CPMAddPackage(
+    NAME aom
+    VERSION 3.13.1
+    URL https://storage.googleapis.com/aom-releases/libaom-3.13.1.tar.gz
+    OPTIONS # No SIMD path, no thread pool, and no CPU to probe for features: wasm has none of aom's
+            # assembly, and this build has no pthreads.
+            "AOM_TARGET_CPU generic"
+            "CONFIG_MULTITHREAD 0"
+            "CONFIG_RUNTIME_CPU_DETECT 0"
+            "CONFIG_AV1_DECODER 1"
+            "CONFIG_AV1_ENCODER 1"
+            # Container and scaling code only aom's own command-line tools use
+            "CONFIG_WEBM_IO 0"
+            "CONFIG_LIBYUV 0"
+            "ENABLE_EXAMPLES OFF"
+            "ENABLE_TESTS OFF"
+            "ENABLE_TOOLS OFF"
+            "ENABLE_DOCS OFF"
+            "BUILD_SHARED_LIBS OFF"
+    SYSTEM YES
+    EXCLUDE_FROM_ALL YES
+  )
+  foreach(_var IN LISTS HDRVIEW_AOM_CLOBBERED_VARS)
+    set("${_var}" "${HDRVIEW_SAVED_CACHE_${_var}}" CACHE STRING "${HDRVIEW_SAVED_DOC_${_var}}" FORCE)
+    set("${_var}" "${HDRVIEW_SAVED_${_var}}")
+  endforeach()
+
+  if(NOT aom_ADDED)
+    message(FATAL_ERROR "Failed to fetch libaom, which the Emscripten build needs for AVIF support.")
+  endif()
+  message(STATUS "Will build libaom library")
+  mark_as_system_library(aom)
+  disable_target_warnings(aom)
+  # aom publishes its headers only to an install tree, so the source directory is what libheif's plugins
+  # have to include the aom/*.h they ask for from.
+  file(
+    WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/aom-extra.cmake"
+    "set(AOM_LIBRARIES aom)\n" "set(AOM_INCLUDE_DIRS \"${aom_SOURCE_DIR}\")\n"
+    "set(AOM_DECODER_FOUND TRUE)\n" "set(AOM_ENCODER_FOUND TRUE)\n"
+  )
+endif()
+
+# The same story as libaom above: OpenJPEG is what decodes the J2K- and HTJ2K-compressed HEIF images, and
+# under Emscripten there is no installed copy for libheif's find_package(OpenJPEG) to turn up.
+if(EMSCRIPTEN AND HDRVIEW_ENABLE_J2K)
+  CPMAddPackage(
+    NAME OpenJPEG
+    VERSION 2.5.4
+    GITHUB_REPOSITORY uclouvain/openjpeg
+    GIT_TAG v2.5.4
+    OPTIONS "BUILD_SHARED_LIBS OFF"
+            "BUILD_CODEC OFF"
+            "BUILD_TESTING OFF"
+            "BUILD_PKGCONFIG_FILES OFF"
+    SYSTEM YES
+    EXCLUDE_FROM_ALL YES
+  )
+  if(NOT OpenJPEG_ADDED)
+    message(FATAL_ERROR "Failed to fetch OpenJPEG, which the Emscripten build needs for J2K support.")
+  endif()
+  # OpenJPEG puts the legacy EXECUTABLE_OUTPUT_PATH and LIBRARY_OUTPUT_PATH into the cache, and both are
+  # global: left there, every target in the build -- HDRView's own executable included -- is written into
+  # OpenJPEG's bin directory. Nothing else here sets them, so dropping them restores the default layout.
+  unset(EXECUTABLE_OUTPUT_PATH CACHE)
+  unset(LIBRARY_OUTPUT_PATH CACHE)
+
+  message(STATUS "Will build OpenJPEG library")
+  mark_as_system_library(openjp2)
+  disable_target_warnings(openjp2)
+  # openjpeg.h lives beside the sources, and the opj_config.h it includes is generated into the build tree.
+  file(
+    WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/openjpeg-extra.cmake"
+    "set(OPENJPEG_FOUND TRUE)\n" "set(OPENJPEG_LIBRARIES openjp2)\n"
+    "set(OPENJPEG_INCLUDE_DIRS \"${OpenJPEG_SOURCE_DIR}/src/lib/openjp2;${OpenJPEG_BINARY_DIR}/src/lib/openjp2\")\n"
+  )
+endif()
+
 if(HDRVIEW_ENABLE_LIBHEIF)
   CPMAddPackage(
     NAME Libheif
@@ -1216,6 +1316,12 @@ if(HDRVIEW_ENABLE_LIBHEIF)
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
+    if(EMSCRIPTEN)
+      # Otherwise libheif compiles in the embind bindings for its JavaScript API, which HDRView has no use
+      # for and which no longer compile: they bind raw pointers, which embind has since made an error. This
+      # is the switch libheif's own build-emscripten.sh uses to leave them out.
+      target_compile_definitions(heif PRIVATE __EMSCRIPTEN_STANDALONE_WASM__=1)
+    endif()
     # Remove the doc_doxygen target created with 'ALL'
     if(TARGET doc_doxygen)
       set_target_properties(doc_doxygen PROPERTIES EXCLUDE_FROM_ALL TRUE)
