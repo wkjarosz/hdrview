@@ -19,9 +19,9 @@
     Each takes the whole channel but computes only \p region, returning an array of just that size. The two
     are distinct on purpose: a filter applied to a selection has to *read* beyond it -- those are real
     samples and they belong in the answer -- but only as far as its kernel reaches, so the work stays
-    proportional to the region rather than to the image. Reads past the channel's own edge clamp to the
-    nearest sample inside it; blurring against black would darken the border of an image whose content runs
-    to it, which is most of them.
+    proportional to the region rather than to the image. The blurs clamp reads past the channel's own edge
+    to the nearest sample inside it, since blurring against black would darken the border of an image whose
+    content runs to it; the ones that resample take a border mode instead, and say why below.
 
     Filtering in place is never right for these, so each returns a new array: a filter that overwrote its
     input as it went would read samples it had already changed.
@@ -31,6 +31,60 @@
     whether anyone is listening, since a default-constructed one is inert. A filter asked to stop returns
     whatever it had reached, which the caller must discard rather than apply.
 */
+
+//! What a filter reads when it reaches past the edge of a channel.
+/*!
+    Only the filters that resample need this. The blurs clamp unconditionally, since blurring against
+    black would darken the border of an image whose content runs to it, which is most of them -- but a
+    shift has no such default: a tiling texture wants to wrap, a photograph wants to run off into nothing,
+    and only the person shifting it knows which it is.
+
+    Chosen per axis, because an image can tile along one and not the other -- a lat-long environment map
+    wraps in longitude and does not in latitude.
+*/
+enum BorderMode : int
+{
+    BorderMode_Black = 0, //!< Nothing outside; samples read there are zero
+    BorderMode_Edge,      //!< The nearest sample inside, extended outward
+    BorderMode_Repeat,    //!< The channel tiles
+    BorderMode_Mirror,    //!< The channel tiles, reflected each time, so no seam appears at the join
+
+    BorderMode_COUNT
+};
+
+const char *border_mode_name(int mode);
+
+//! How a filter reads between samples.
+/*!
+    A shift by a whole number of samples never asks, and then all three agree. Anything finer has to
+    reconstruct: nearest keeps the samples exactly but moves the image in jumps, bilinear is the usual
+    compromise, and bicubic keeps small detail sharper at the cost of a slight overshoot at hard edges.
+*/
+enum Sampler : int
+{
+    Sampler_Nearest = 0,
+    Sampler_Bilinear,
+    Sampler_Bicubic,
+
+    Sampler_COUNT
+};
+
+const char *sampler_name(int sampler);
+
+//! Move the samples by \p dx, \p dy, reading past the edges as \p border_x and \p border_y say.
+/*!
+    Positive offsets move the image right and down -- the content goes where the numbers say, which means
+    the sample read for an output position is the one that far back.
+
+    Offsets need not be whole numbers; \p sampler is what reconstructs between samples, and is ignored
+    when both offsets are integral, where every output sample is exactly an input one.
+
+    With BorderMode_Repeat this is the wrapping shift, which is the reason to have this at all: it slides
+    a tiling texture without breaking the tiling, so the seam can be brought into the middle of the image
+    where it can be seen and painted out.
+*/
+Array2Df shifted(const Array2Df &src, const Box2i &region, float dx, float dy, int sampler = Sampler_Bilinear,
+                 int border_x = BorderMode_Repeat, int border_y = BorderMode_Repeat);
 
 //! Blur separably with a Gaussian of the given standard deviations, in samples.
 /*!
@@ -91,11 +145,11 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
                          AtomicProgress progress = {});
 
 /*!
-    Replace every non-finite sample with the median of its finite neighbours.
+    Replace every non-finite sample with the median of its finite neighbors.
 
     A NaN or an infinity is not a measurement, and one of either ruins every statistic computed over the
     channel it sits in. Writing a constant in its place leaves a hole that is just as visible; taking the
-    median of the eight samples around it puts back something the neighbourhood agrees with. Finite samples
+    median of the eight samples around it puts back something the neighborhood agrees with. Finite samples
     are untouched, however extreme -- a genuinely bright highlight is data.
 
     \p replacement is used only where a sample has no finite neighbour at all, which happens in the middle

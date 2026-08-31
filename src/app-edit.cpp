@@ -776,6 +776,75 @@ void HDRViewApp::draw_blur_dialog(bool &open)
     }
 }
 
+void HDRViewApp::draw_shift_dialog(bool &open)
+{
+    static float2 offset{0.f, 0.f};
+    static int    sampler  = Sampler_Bilinear;
+    static int    border_x = BorderMode_Repeat, border_y = BorderMode_Repeat;
+    static bool   link_borders = true;
+
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Shift...", open, ImGui::DialogPosition::Center))
+    {
+        ImGui::DragFloat2("X, Y offset", &offset.x, 0.25f, 0.f, 0.f, "%.2f px");
+        ImGui::Tooltip("Positive moves the image right and down. Fractional offsets are allowed, and are "
+                       "what the sampler below is for.");
+
+        auto border_combo = [](const char *label, int *value)
+        {
+            if (ImGui::BeginCombo(label, border_mode_name(*value)))
+            {
+                for (int i = 0; i < BorderMode_COUNT; ++i)
+                    if (ImGui::Selectable(border_mode_name(i), *value == i))
+                        *value = i;
+                ImGui::EndCombo();
+            }
+        };
+
+        border_combo("Border", &border_x);
+        ImGui::Tooltip("What is read where the shift reaches past the edge. Repeat is the wrapping shift: "
+                       "what leaves one side comes back in on the other, so a tiling texture stays tiling.");
+
+        ImGui::Checkbox("Same in both directions", &link_borders);
+        if (!link_borders)
+            border_combo("Border (vertical)", &border_y);
+        else
+            border_y = border_x;
+
+        // Only asked for when it is consulted: a whole-sample offset reads samples exactly, whichever this
+        // says.
+        ImGui::BeginDisabled(offset.x == std::floor(offset.x) && offset.y == std::floor(offset.y));
+        if (ImGui::BeginCombo("Sampler", sampler_name(sampler)))
+        {
+            for (int i = 0; i < Sampler_COUNT; ++i)
+                if (ImGui::Selectable(sampler_name(i), sampler == i))
+                    sampler = i;
+            ImGui::EndCombo();
+        }
+        ImGui::EndDisabled();
+        ImGui::Tooltip("How the samples between samples are reconstructed, which a whole-number offset never "
+                       "has to ask.");
+
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Shift");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const float2 d  = offset;
+            const int    s  = sampler;
+            const int    bx = border_x, by = link_borders ? border_x : border_y;
+            modify_channels(current_image(), "Shift", m_edit_subject,
+                            [d, s, bx, by](const Array2Df &src, const Box2i &r)
+                            { return shifted(src, r, d.x, d.y, s, bx, by); });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
 void HDRViewApp::draw_unsharp_mask_dialog(bool &open)
 {
     static float sigma = 2.f, amount = 1.f;

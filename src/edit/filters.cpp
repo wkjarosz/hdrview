@@ -6,6 +6,8 @@
 
 #include "edit/filters.h"
 
+#include "common.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -20,6 +22,87 @@ namespace
 inline float clamped(const Array2Df &a, int x, int y)
 {
     return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
+}
+
+//! Where \p p lands once \p mode has been applied to a channel of extent \p extent, or -1 for nothing.
+/*!
+    Mirroring reflects at each repeat, so the coordinate walks up and back down: the position within one
+    period, taken from the far end on every odd one.
+*/
+inline int wrap_coord(int p, int extent, int mode)
+{
+    if (p >= 0 && p < extent)
+        return p;
+
+    switch (mode)
+    {
+    case BorderMode_Edge: return std::clamp(p, 0, extent - 1);
+    case BorderMode_Repeat: return mod(p, extent);
+    case BorderMode_Mirror:
+    {
+        // The reflection has period twice the extent and folds in the middle of it, so -1 lands on 0 and
+        // extent lands on extent-1. Reflecting the magnitude instead would be right for positive
+        // coordinates and a whole sample off for negative ones.
+        const int period = 2 * extent;
+        const int q      = mod(p, period);
+        return q < extent ? q : period - 1 - q;
+    }
+    case BorderMode_Black:
+    default: return -1;
+    }
+}
+
+//! One sample of \p a read through the border modes; zero where they say there is nothing.
+inline float bordered(const Array2Df &a, int x, int y, int mx, int my)
+{
+    x = wrap_coord(x, a.width(), mx);
+    y = wrap_coord(y, a.height(), my);
+    return (x < 0 || y < 0) ? 0.f : a(x, y);
+}
+
+//! Value of \p a at the continuous position \p sx, \p sy, with samples at the centers of their cells.
+float sample_at(const Array2Df &a, float sx, float sy, int sampler, int mx, int my)
+{
+    if (sampler == Sampler_Nearest)
+        return bordered(a, int(std::floor(sx)), int(std::floor(sy)), mx, my);
+
+    // Shifted so that a sample sits at the center of its cell rather than at its corner, without which an
+    // offset of a whole number of samples would land halfway between two of them.
+    sx -= 0.5f;
+    sy -= 0.5f;
+
+    const int   x0 = int(std::floor(sx)), y0 = int(std::floor(sy));
+    const float tx = sx - float(x0), ty = sy - float(y0);
+
+    if (sampler == Sampler_Bilinear)
+    {
+        const float top = lerp(bordered(a, x0, y0, mx, my), bordered(a, x0 + 1, y0, mx, my), tx);
+        const float bot = lerp(bordered(a, x0, y0 + 1, mx, my), bordered(a, x0 + 1, y0 + 1, mx, my), tx);
+        return lerp(top, bot, ty);
+    }
+
+    // The cubic with a = -0.75, which is what Photoshop's "bicubic" is. Interpolating rather than
+    // approximating, so a sample landed on exactly is returned exactly.
+    constexpr float A      = -0.75f;
+    auto            weight = [](float d)
+    {
+        d = std::abs(d);
+        return d <= 1.f ? ((A + 2.f) * d - (A + 3.f)) * d * d + 1.f : ((A * d - 5.f * A) * d + 8.f * A) * d - 4.f * A;
+    };
+
+    float value = 0.f, total = 0.f;
+    for (int j = -1; j <= 2; ++j)
+    {
+        const float wy = weight(ty - float(j));
+        for (int i = -1; i <= 2; ++i)
+        {
+            const float w = weight(tx - float(i)) * wy;
+            value += w * bordered(a, x0 + i, y0 + j, mx, my);
+            total += w;
+        }
+    }
+    // The taps sum to one analytically; dividing keeps that true against rounding.
+    return total != 0.f ? value / total : value;
 }
 
 //! Normalized 1D Gaussian taps out to where they stop mattering.
@@ -260,6 +343,59 @@ std::vector<int> box_widths_for_sigma(float sigma, int n)
 }
 
 } // namespace
+
+const char *border_mode_name(int mode)
+{
+    switch (mode)
+    {
+    case BorderMode_Black: return "Black";
+    case BorderMode_Edge: return "Edge";
+    case BorderMode_Repeat: return "Repeat";
+    case BorderMode_Mirror: return "Mirror";
+    default: return "";
+    }
+}
+
+const char *sampler_name(int sampler)
+{
+    switch (sampler)
+    {
+    case Sampler_Nearest: return "Nearest neighbor";
+    case Sampler_Bilinear: return "Bilinear";
+    case Sampler_Bicubic: return "Bicubic";
+    default: return "";
+    }
+}
+
+Array2Df shifted(const Array2Df &src, const Box2i &region, float dx, float dy, int sampler, int border_x, int border_y)
+{
+    const int2 size = region.size();
+    Array2Df   out{size};
+
+    // A whole-sample offset needs no reconstruction, and taking it as such matters: it keeps a shift of
+    // exactly one sample from quietly filtering the image, so shifting one way and back returns what was
+    // there.
+    const bool integral = dx == std::floor(dx) && dy == std::floor(dy);
+
+    const int block_size = std::max(1, 1024 * 1024 / std::max(1, size.x));
+    stp::parallel_for(
+        stp::blocked_range<int>(0, size.y, block_size),
+        [&](int y0, int y1, int, int)
+        {
+            for (int y = y0; y < y1; ++y)
+                for (int x = 0; x < size.x; ++x)
+                {
+                    // The sample that has to travel to here is the one that far back.
+                    const float sx = float(region.min.x + x) - dx;
+                    const float sy = float(region.min.y + y) - dy;
+
+                    out(x, y) = integral ? bordered(src, int(std::lround(sx)), int(std::lround(sy)), border_x, border_y)
+                                         : sample_at(src, sx + 0.5f, sy + 0.5f, sampler, border_x, border_y);
+                }
+        });
+
+    return out;
+}
 
 Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
                           AtomicProgress progress)

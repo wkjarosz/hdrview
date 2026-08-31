@@ -762,6 +762,7 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     m_dialogs.push_back(
         make_unique<PopupDialog>("Unsharp mask...", [this](bool &open) { draw_unsharp_mask_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Median filter...", [this](bool &open) { draw_median_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Shift...", [this](bool &open) { draw_shift_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Zap gremlins...", [this](bool &open) { draw_zap_gremlins_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Remap envmap...", [this](bool &open) { draw_remap_dialog(open); }));
@@ -1672,6 +1673,12 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Median filter...").open = true; },
+                   if_editable});
+        add(Action{{"Shift...", "Offset", "Translate", "Wrap around"},
+                   ICON_MY_SHIFT,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Shift...").open = true; },
                    if_editable});
         add(Action{{"Remap envmap...", "Change environment map format", "Spherical remapping"},
                    ICON_MY_ENVMAP,

@@ -8,6 +8,7 @@
 
 #include "edit/filters.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -138,9 +139,15 @@ TEST_CASE("Filtering a region gives exactly what filtering everything would have
     const Array2Df all_u = unsharp_masked(src, whole(src), 2.f, 1.5f);
     const Array2Df sub_u = unsharp_masked(src, region, 2.f, 1.5f);
 
+    // Fractional, so the shift reads between samples and a region that got its own coordinates wrong
+    // would land on a different phase rather than merely in the wrong place.
+    const Array2Df all_s = shifted(src, whole(src), 3.5f, -2.25f, Sampler_Bicubic, BorderMode_Repeat);
+    const Array2Df sub_s = shifted(src, region, 3.5f, -2.25f, Sampler_Bicubic, BorderMode_Repeat);
+
     REQUIRE(sub_g.size() == extent);
     REQUIRE(sub_b.size() == extent);
     REQUIRE(sub_u.size() == extent);
+    REQUIRE(sub_s.size() == extent);
 
     for (int y = 0; y < extent.y; ++y)
         for (int x = 0; x < extent.x; ++x)
@@ -151,6 +158,7 @@ TEST_CASE("Filtering a region gives exactly what filtering everything would have
             CHECK(sub_g(x, y) == doctest::Approx(all_g(sx, sy)));
             CHECK(sub_b(x, y) == doctest::Approx(all_b(sx, sy)));
             CHECK(sub_u(x, y) == doctest::Approx(all_u(sx, sy)));
+            CHECK(sub_s(x, y) == doctest::Approx(all_s(sx, sy)));
         }
 }
 
@@ -309,6 +317,221 @@ TEST_CASE("An iterated box over a region agrees with the same over the whole ima
     }
 }
 
+namespace
+{
+
+//! Where a coordinate lands under one border mode, written out independently of the filter's own version.
+int expected_wrap(int p, int extent, int mode)
+{
+    if (p >= 0 && p < extent)
+        return p;
+
+    switch (mode)
+    {
+    case BorderMode_Edge: return std::clamp(p, 0, extent - 1);
+    case BorderMode_Repeat: return ((p % extent) + extent) % extent;
+    case BorderMode_Mirror:
+    {
+        // Reflected at each repeat: the period is twice the extent and folds in the middle.
+        const int period = 2 * extent;
+        int       q      = ((p % period) + period) % period;
+        return q < extent ? q : period - 1 - q;
+    }
+    default: return -1; // BorderMode_Black: nothing there
+    }
+}
+
+Array2Df ramp(int2 size)
+{
+    Array2Df a{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) a(x, y) = 0.5f + 0.25f * float(x) - 0.125f * float(y);
+    return a;
+}
+
+Array2Df noise(int2 size)
+{
+    Array2Df a{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) a(x, y) = std::sin(1.7f * x + 0.3f) * std::cos(2.1f * y - 0.4f);
+    return a;
+}
+
+} // namespace
+
+TEST_CASE("A whole-sample shift moves samples without touching their values")
+{
+    // The property that makes an integral shift safe to repeat: it is a permutation of the samples, not a
+    // filter over them, so no sampler may leave a fingerprint. Swept over all three because that is
+    // exactly the promise -- the sampler is not consulted at all when the offset is whole.
+    const Array2Df src = noise(int2{17, 13});
+
+    for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
+        for (int border = 0; border < BorderMode_COUNT; ++border)
+            // Beyond the image as well as within it, and negative, since wrapping a large offset is where
+            // a modulus with the wrong sign shows up.
+            for (int2 d : {int2{0, 0}, int2{3, 0}, int2{0, -2}, int2{5, 7}, int2{-9, -11}, int2{40, -31}})
+            {
+                CAPTURE(sampler);
+                CAPTURE(border);
+                CAPTURE(d.x);
+                CAPTURE(d.y);
+
+                const Array2Df out = shifted(src, whole(src), float(d.x), float(d.y), sampler, border, border);
+
+                for (int y = 0; y < src.height(); ++y)
+                    for (int x = 0; x < src.width(); ++x)
+                    {
+                        const int   sx   = expected_wrap(x - d.x, src.width(), border);
+                        const int   sy   = expected_wrap(y - d.y, src.height(), border);
+                        const float want = (sx < 0 || sy < 0) ? 0.f : src(sx, sy);
+                        REQUIRE(out(x, y) == doctest::Approx(want));
+                    }
+            }
+}
+
+TEST_CASE("Wrapping makes a shift reversible, and a shift by the whole image nothing at all")
+{
+    // What the wrapping shift is for: sliding a tiling texture to bring its seam into view has to be an
+    // operation that can be undone by sliding back, and no sample may be lost off the edge in between.
+    const Array2Df src = noise(int2{16, 12});
+
+    for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
+    {
+        CAPTURE(sampler);
+
+        const Array2Df there = shifted(src, whole(src), 5.f, -3.f, sampler, BorderMode_Repeat, BorderMode_Repeat);
+        const Array2Df back  = shifted(there, whole(there), -5.f, 3.f, sampler, BorderMode_Repeat, BorderMode_Repeat);
+
+        // A whole turn around the image, which wrapping has to make indistinguishable from standing still.
+        const Array2Df turn = shifted(src, whole(src), float(src.width()), float(-2 * src.height()), sampler,
+                                      BorderMode_Repeat, BorderMode_Repeat);
+
+        for (int i = 0; i < src.num_elements(); ++i)
+        {
+            REQUIRE(back(i) == doctest::Approx(src(i)));
+            REQUIRE(turn(i) == doctest::Approx(src(i)));
+        }
+    }
+}
+
+TEST_CASE("A fractional shift reconstructs, rather than snapping to a sample")
+{
+    // Where the samplers stop agreeing. Two things every one of them owes: a constant image survives (the
+    // taps sum to one, or the result drifts brighter or darker as it moves), and half a sample really is
+    // half -- an offset that lands between two samples must not quietly round to one of them.
+    const Array2Df flat = constant(int2{12, 10}, 0.375f);
+    const Array2Df src  = noise(int2{24, 18});
+
+    for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
+        for (int border : {BorderMode_Edge, BorderMode_Repeat, BorderMode_Mirror})
+        {
+            CAPTURE(sampler);
+            CAPTURE(border);
+
+            const Array2Df c = shifted(flat, whole(flat), 0.5f, -0.25f, sampler, border, border);
+            for (int i = 0; i < c.num_elements(); ++i) REQUIRE(c(i) == doctest::Approx(0.375f));
+
+            // Bracketing is bilinear's promise alone: bicubic's negative lobes are there to overshoot,
+            // which is what keeps an edge looking sharp, and how far it may is not a property worth
+            // pinning. Its accuracy is measured on a ramp below instead.
+            if (sampler != Sampler_Bilinear)
+                continue;
+
+            // Half a sample across, away from the edges so the border mode does not enter into it.
+            const Array2Df half = shifted(src, whole(src), 0.5f, 0.f, sampler, border, border);
+            for (int y = 2; y < src.height() - 2; ++y)
+                for (int x = 2; x < src.width() - 2; ++x)
+                {
+                    CAPTURE(x);
+                    CAPTURE(y);
+
+                    // Exactly halfway between the two samples it sits between, which is the whole of what
+                    // bilinear does and is not what rounding to either of them would give.
+                    REQUIRE(half(x, y) == doctest::Approx(0.5f * (src(x - 1, y) + src(x, y))));
+                }
+        }
+}
+
+TEST_CASE("A ramp lands where the shift says, rather than half a sample off")
+{
+    // The case that catches a misaligned kernel, which every constant survives: on a ramp the shifted
+    // image is the ramp itself, evaluated where the shift moved it. Half a sample of misalignment shows
+    // up here as an offset of half the ramp's slope and nowhere else.
+    //
+    // Bilinear reproduces a linear function exactly. Cubic convolution does so only at a = -1/2, and this
+    // is Photoshop's a = -3/4, which trades that for a sharper kernel -- so it is held to being close
+    // rather than exact, at a bound well under the half-sample error being looked for.
+    const Array2Df src = ramp(int2{32, 24});
+
+    for (int sampler : {Sampler_Bilinear, Sampler_Bicubic})
+        for (float2 d : {float2{2.5f, 0.f}, float2{0.f, -1.75f}, float2{3.25f, 4.5f}})
+        {
+            CAPTURE(sampler);
+            CAPTURE(d.x);
+            CAPTURE(d.y);
+
+            const Array2Df out = shifted(src, whole(src), d.x, d.y, sampler, BorderMode_Edge, BorderMode_Edge);
+
+            // Half a sample of misalignment moves a ramp of this slope by at least 0.0625.
+            const float tolerance = sampler == Sampler_Bilinear ? 1e-4f : 0.02f;
+
+            // Inside by the widest kernel's reach, past which the edge clamping flattens the ramp.
+            for (int y = 6; y < src.height() - 6; ++y)
+                for (int x = 6; x < src.width() - 6; ++x)
+                {
+                    const float want = 0.5f + 0.25f * (float(x) - d.x) - 0.125f * (float(y) - d.y);
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    REQUIRE(std::abs(out(x, y) - want) < tolerance);
+                }
+        }
+}
+
+TEST_CASE("Each border mode fills the exposed strip with what it says it does")
+{
+    // The four differ only where the shift reaches past the edge, so the strip it exposes is the whole of
+    // what distinguishes them. A column each, on an image whose columns are all distinct.
+    Array2Df src{int2{6, 4}};
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 6; ++x) src(x, y) = float(x + 1);
+
+    // Two to the right: the first two columns are outside, and what appears there is the mode's answer.
+    auto column = [&](int mode, int x)
+    { return shifted(src, whole(src), 2.f, 0.f, Sampler_Nearest, mode, mode)(x, 1); };
+
+    CHECK(column(BorderMode_Black, 0) == doctest::Approx(0.f));
+    CHECK(column(BorderMode_Black, 1) == doctest::Approx(0.f));
+
+    // The leftmost sample, extended outward.
+    CHECK(column(BorderMode_Edge, 0) == doctest::Approx(1.f));
+    CHECK(column(BorderMode_Edge, 1) == doctest::Approx(1.f));
+
+    // What went off the right side comes back.
+    CHECK(column(BorderMode_Repeat, 0) == doctest::Approx(5.f));
+    CHECK(column(BorderMode_Repeat, 1) == doctest::Approx(6.f));
+
+    // Reflected at the edge, so the sample next to it repeats rather than jumping to the far side.
+    CHECK(column(BorderMode_Mirror, 0) == doctest::Approx(2.f));
+    CHECK(column(BorderMode_Mirror, 1) == doctest::Approx(1.f));
+}
+
+TEST_CASE("The two axes take their border modes independently")
+{
+    // A lat-long environment map wraps in longitude and not in latitude, which is the reason these are two
+    // arguments rather than one.
+    Array2Df src{int2{4, 4}};
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x) src(x, y) = float(x) + 10.f * float(y);
+
+    const Array2Df out = shifted(src, whole(src), 1.f, 1.f, Sampler_Nearest, BorderMode_Repeat, BorderMode_Black);
+
+    // Across: the last column has come round to the first. Down: nothing came from above.
+    CHECK(out(0, 1) == doctest::Approx(3.f));
+    CHECK(out(0, 0) == doctest::Approx(0.f));
+    CHECK(out(2, 0) == doctest::Approx(0.f));
+}
+
 TEST_CASE("A median removes a lone outlier where a mean only spreads it")
 {
     // The reason to have a median at all: one wild sample -- a firefly -- should vanish rather than be
@@ -409,7 +632,7 @@ TEST_CASE("An uncancelled filter reports its way to complete")
     CHECK(progress.progress() == doctest::Approx(1.f).epsilon(0.001));
 }
 
-TEST_CASE("Zapping a gremlin fills it from its neighbours")
+TEST_CASE("Zapping a gremlin fills it from its neighbors")
 {
     // The difference from writing a constant: what goes back has to agree with the surroundings, so a
     // firefly in a smooth region leaves no trace.
@@ -437,7 +660,7 @@ TEST_CASE("Zapping leaves every finite sample exactly as it was")
     for (int i = 0; i < src.num_elements(); ++i) CHECK(out(i) == src(i));
 }
 
-TEST_CASE("A gremlin with no finite neighbour falls back to the replacement")
+TEST_CASE("A gremlin with no finite neighbor falls back to the replacement")
 {
     // In the middle of a run of them there is nothing to take a median of.
     Array2Df src{int2{5, 5}};
@@ -449,10 +672,10 @@ TEST_CASE("A gremlin with no finite neighbour falls back to the replacement")
 
 TEST_CASE("Zapping takes the median rather than the mean of the ring")
 {
-    // A mean would be dragged by an outlier among the neighbours; the median is not.
+    // A mean would be dragged by an outlier among the neighbors; the median is not.
     Array2Df src{int2{3, 3}};
     for (int i = 0; i < src.num_elements(); ++i) src(i) = 1.f;
-    src(0, 0) = 1000.f;                                  // one wild but finite neighbour
+    src(0, 0) = 1000.f;                                  // one wild but finite neighbor
     src(1, 1) = std::numeric_limits<float>::quiet_NaN(); // the gremlin, ringed by the other eight
 
     const Array2Df out = zapped_gremlins(src, whole(src));

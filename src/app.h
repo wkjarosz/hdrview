@@ -308,6 +308,7 @@ public:
     void draw_canvas_size_dialog(bool &open);
     void draw_image_size_dialog(bool &open);
     void draw_blur_dialog(bool &open);
+    void draw_shift_dialog(bool &open);
     void draw_unsharp_mask_dialog(bool &open);
     void draw_median_dialog(bool &open);
     void draw_zap_gremlins_dialog(bool &open);
