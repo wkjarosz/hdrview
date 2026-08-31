@@ -338,92 +338,95 @@ void HDRViewApp::draw_exposure_gamma_dialog(bool &open)
     // history with states nobody asked for, and each one would write every sample it covers.
     static float exposure = 0.f, offset = 0.f, gamma = 1.f;
 
-    if (!ImGui::BeginModalDialog("Exposure/gamma...", open))
-        return;
-
-    ImGui::SliderFloat("Exposure", &exposure, -10.f, 10.f, "%.2f");
-    ImGui::SliderFloat("Offset", &offset, -1.f, 1.f, "%.3f");
-    ImGui::SliderFloat("Gamma", &gamma, MIN_GAMMA, 10.f, "%.3f");
-
-    draw_edit_subject_selector();
-
-    const auto result = ImGui::DialogButtons("Apply");
-    if (result == ImGui::DialogResult::Confirm)
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Exposure/gamma...", open, ImGui::DialogPosition::Center))
     {
-        const float scale = std::pow(2.f, exposure);
-        const float inv_g = 1.f / std::max(MIN_GAMMA, gamma);
-        modify_pixels(current_image(), "Exposure/gamma", m_edit_subject,
-                      [scale, offset_ = offset, inv_g](float v, int2, int)
-                      {
-                          const float x = scale * v + offset_;
-                          // A negative sample is meaningful in an HDR image, and pow() of one is not, so
-                          // the curve is mirrored through the origin instead of producing a NaN.
-                          return x < 0.f ? -std::pow(-x, inv_g) : std::pow(x, inv_g);
-                      });
-        ImGui::CloseCurrentPopup();
-    }
-    else if (result == ImGui::DialogResult::Cancel)
-        ImGui::CloseCurrentPopup();
+        ImGui::SliderFloat("Exposure", &exposure, -10.f, 10.f, "%.2f");
+        ImGui::SliderFloat("Offset", &offset, -1.f, 1.f, "%.3f");
+        ImGui::SliderFloat("Gamma", &gamma, MIN_GAMMA, 10.f, "%.3f");
 
-    ImGui::EndPopup();
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Apply");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const float scale = std::pow(2.f, exposure);
+            const float inv_g = 1.f / std::max(MIN_GAMMA, gamma);
+            modify_pixels(current_image(), "Exposure/gamma", m_edit_subject,
+                          [scale, offset_ = offset, inv_g](float v, int2, int)
+                          {
+                              const float x = scale * v + offset_;
+                              // A negative sample is meaningful in an HDR image, and pow() of one is not, so
+                              // the curve is mirrored through the origin instead of producing a NaN.
+                              return x < 0.f ? -std::pow(-x, inv_g) : std::pow(x, inv_g);
+                          });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
 }
 
 void HDRViewApp::draw_brightness_contrast_dialog(bool &open)
 {
     static float brightness = 0.f, contrast = 0.f;
 
-    if (!ImGui::BeginModalDialog("Brightness/contrast...", open))
-        return;
-
-    ImGui::SliderFloat("Brightness", &brightness, -1.f, 1.f, "%.3f");
-    ImGui::SliderFloat("Contrast", &contrast, -1.f, 1.f, "%.3f");
-
-    draw_edit_subject_selector();
-
-    const auto result = ImGui::DialogButtons("Apply");
-    if (result == ImGui::DialogResult::Confirm)
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Brightness/contrast...", open, ImGui::DialogPosition::Center))
     {
-        // Contrast sets how steep the line through the midpoint is; brightness moves the midpoint. Taken
-        // from the pre-2.0 control so that the two behave the way they used to.
-        const float slope    = float(std::tan(lerp(0.0, M_PI_2, contrast / 2.0 + 0.5)));
-        const float midpoint = (1.f - brightness) / 2.f;
+        ImGui::SliderFloat("Brightness", &brightness, -1.f, 1.f, "%.3f");
+        ImGui::SliderFloat("Contrast", &contrast, -1.f, 1.f, "%.3f");
 
-        modify_pixels(current_image(), "Brightness/contrast", m_edit_subject,
-                      [slope, midpoint](float v, int2, int) { return brightness_contrast_linear(v, slope, midpoint); });
-        ImGui::CloseCurrentPopup();
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Apply");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            // Contrast sets how steep the line through the midpoint is; brightness moves the midpoint. Taken
+            // from the pre-2.0 control so that the two behave the way they used to.
+            const float slope    = float(std::tan(lerp(0.0, M_PI_2, contrast / 2.0 + 0.5)));
+            const float midpoint = (1.f - brightness) / 2.f;
+
+            modify_pixels(current_image(), "Brightness/contrast", m_edit_subject, [slope, midpoint](float v, int2, int)
+                          { return brightness_contrast_linear(v, slope, midpoint); });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
     }
-    else if (result == ImGui::DialogResult::Cancel)
-        ImGui::CloseCurrentPopup();
-
-    ImGui::EndPopup();
 }
 
 void HDRViewApp::draw_fill_dialog(bool &open)
 {
     static float4 color{0.f, 0.f, 0.f, 1.f};
 
-    if (!ImGui::BeginModalDialog("Fill...", open))
-        return;
-
-    ImGui::ColorEdit4("Color", &color.x,
-                      ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar);
-
-    draw_edit_subject_selector();
-
-    const auto result = ImGui::DialogButtons("Fill");
-    if (result == ImGui::DialogResult::Confirm)
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Fill...", open, ImGui::DialogPosition::Center))
     {
-        // The one edit so far whose value depends on which channel it is writing: a group's channels
-        // arrive in order, so the slot indexes the color. Beyond four -- an "all channels" subject on a
-        // multi-layer image -- the components repeat rather than running off the end.
-        const float4 c = color;
-        modify_pixels(current_image(), "Fill", m_edit_subject, [c](float, int2, int slot) { return c[slot % 4]; });
-        ImGui::CloseCurrentPopup();
-    }
-    else if (result == ImGui::DialogResult::Cancel)
-        ImGui::CloseCurrentPopup();
+        ImGui::ColorEdit4("Color", &color.x,
+                          ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar);
 
-    ImGui::EndPopup();
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Fill");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            // The one edit so far whose value depends on which channel it is writing: a group's channels
+            // arrive in order, so the slot indexes the color. Beyond four -- an "all channels" subject on a
+            // multi-layer image -- the components repeat rather than running off the end.
+            const float4 c = color;
+            modify_pixels(current_image(), "Fill", m_edit_subject, [c](float, int2, int slot) { return c[slot % 4]; });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
 }
 
 void HDRViewApp::draw_canvas_size_dialog(bool &open)
@@ -431,51 +434,57 @@ void HDRViewApp::draw_canvas_size_dialog(bool &open)
     static int2                width_height{0, 0};
     static Image::CanvasAnchor anchor = Image::Anchor_MiddleCenter;
 
-    auto img = current_image();
-    if (!img)
-        return;
-
-    if (!ImGui::BeginModalDialog("Canvas size...", open))
-        return;
-
-    // Opens showing what the image currently is, so the dialog starts as a no-op rather than with whatever
-    // was typed into it last time against a different image.
-    if (width_height.x <= 0 || width_height.y <= 0)
-        width_height = img->size();
-
-    ImGui::InputInt2("Width, height", &width_height.x);
-    width_height = la::max(width_height, int2{1});
-
-    ImGui::SeparatorText("Anchor");
-    // Which edges absorb the difference. Laid out as the 3x3 it means.
-    for (int row = 0; row < 3; ++row)
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Canvas size...", open, ImGui::DialogPosition::Center))
     {
-        for (int col = 0; col < 3; ++col)
+        auto img = current_image();
+        if (!img)
         {
-            const int i = row * 3 + col;
-            if (col)
-                ImGui::SameLine();
-            if (ImGui::RadioButton(fmt::format("##anchor{}", i).c_str(), int(anchor) == i))
-                anchor = Image::CanvasAnchor(i);
+            // Whatever it was about is gone; close rather than draw against nothing.
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
         }
-    }
 
-    const auto result = ImGui::DialogButtons("Resize");
-    if (result == ImGui::DialogResult::Confirm)
-    {
-        const int2 size = width_height;
-        const auto a    = anchor;
-        modify_structure(current_image(), "Canvas size", [size, a](Image &i) { i.resize_canvas(size, a); });
-        width_height = int2{0}; // so the next open reads the new size
-        ImGui::CloseCurrentPopup();
-    }
-    else if (result == ImGui::DialogResult::Cancel)
-    {
-        width_height = int2{0};
-        ImGui::CloseCurrentPopup();
-    }
+        // Opens showing what the image currently is, so the dialog starts as a no-op rather than with whatever
+        // was typed into it last time against a different image.
+        if (width_height.x <= 0 || width_height.y <= 0)
+            width_height = img->size();
 
-    ImGui::EndPopup();
+        ImGui::InputInt2("Width, height", &width_height.x);
+        width_height = la::max(width_height, int2{1});
+
+        ImGui::SeparatorText("Anchor");
+        // Which edges absorb the difference. Laid out as the 3x3 it means.
+        for (int row = 0; row < 3; ++row)
+        {
+            for (int col = 0; col < 3; ++col)
+            {
+                const int i = row * 3 + col;
+                if (col)
+                    ImGui::SameLine();
+                if (ImGui::RadioButton(fmt::format("##anchor{}", i).c_str(), int(anchor) == i))
+                    anchor = Image::CanvasAnchor(i);
+            }
+        }
+
+        const auto result = ImGui::DialogButtons("Resize");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const int2 size = width_height;
+            const auto a    = anchor;
+            modify_structure(current_image(), "Canvas size", [size, a](Image &i) { i.resize_canvas(size, a); });
+            width_height = int2{0}; // so the next open reads the new size
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+        {
+            width_height = int2{0};
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 void HDRViewApp::draw_image_size_dialog(bool &open)
@@ -483,48 +492,54 @@ void HDRViewApp::draw_image_size_dialog(bool &open)
     static int2 width_height{0, 0};
     static bool keep_aspect = true;
 
-    auto img = current_image();
-    if (!img)
-        return;
-
-    if (!ImGui::BeginModalDialog("Image size...", open))
-        return;
-
-    const int2 current = img->size();
-    if (width_height.x <= 0 || width_height.y <= 0)
-        width_height = current;
-
-    const int2 before = width_height;
-    ImGui::InputInt2("Width, height", &width_height.x);
-    width_height = la::max(width_height, int2{1});
-
-    ImGui::Checkbox("Keep aspect ratio", &keep_aspect);
-    if (keep_aspect && current.x > 0 && current.y > 0)
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Image size...", open, ImGui::DialogPosition::Center))
     {
-        // Follow whichever the user just changed, so typing into either field drives the other.
-        if (width_height.x != before.x)
-            width_height.y = std::max(1, int(std::lround(double(width_height.x) * current.y / current.x)));
-        else if (width_height.y != before.y)
-            width_height.x = std::max(1, int(std::lround(double(width_height.y) * current.x / current.y)));
-    }
+        auto img = current_image();
+        if (!img)
+        {
+            // Whatever it was about is gone; close rather than draw against nothing.
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
 
-    ImGui::TextFmt("From {}x{}", current.x, current.y);
+        const int2 current = img->size();
+        if (width_height.x <= 0 || width_height.y <= 0)
+            width_height = current;
 
-    const auto result = ImGui::DialogButtons("Resize");
-    if (result == ImGui::DialogResult::Confirm)
-    {
-        const int2 size = width_height;
-        modify_structure(current_image(), "Image size", [size](Image &i) { i.resample(size); });
-        width_height = int2{0};
-        ImGui::CloseCurrentPopup();
-    }
-    else if (result == ImGui::DialogResult::Cancel)
-    {
-        width_height = int2{0};
-        ImGui::CloseCurrentPopup();
-    }
+        const int2 before = width_height;
+        ImGui::InputInt2("Width, height", &width_height.x);
+        width_height = la::max(width_height, int2{1});
 
-    ImGui::EndPopup();
+        ImGui::Checkbox("Keep aspect ratio", &keep_aspect);
+        if (keep_aspect && current.x > 0 && current.y > 0)
+        {
+            // Follow whichever the user just changed, so typing into either field drives the other.
+            if (width_height.x != before.x)
+                width_height.y = std::max(1, int(std::lround(double(width_height.x) * current.y / current.x)));
+            else if (width_height.y != before.y)
+                width_height.x = std::max(1, int(std::lround(double(width_height.y) * current.x / current.y)));
+        }
+
+        ImGui::TextFmt("From {}x{}", current.x, current.y);
+
+        const auto result = ImGui::DialogButtons("Resize");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const int2 size = width_height;
+            modify_structure(current_image(), "Image size", [size](Image &i) { i.resample(size); });
+            width_height = int2{0};
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+        {
+            width_height = int2{0};
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 void HDRViewApp::draw_blur_dialog(bool &open)
@@ -536,75 +551,77 @@ void HDRViewApp::draw_blur_dialog(bool &open)
     static int   half_width_y = 2;
     static bool  link_axes    = true;
 
-    if (!ImGui::BeginModalDialog("Blur...", open))
-        return;
-
-    ImGui::RadioButton("Gaussian", &kind, 0);
-    ImGui::SameLine();
-    ImGui::RadioButton("Box", &kind, 1);
-
-    if (kind == 0)
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Blur...", open, ImGui::DialogPosition::Center))
     {
-        ImGui::SliderFloat("Sigma", &sigma, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
-        ImGui::Checkbox("Same in both directions", &link_axes);
-        if (!link_axes)
-            ImGui::SliderFloat("Sigma (vertical)", &sigma_y, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
-    }
-    else
-    {
-        ImGui::SliderInt("Half width", &half_width, 0, 64);
-        ImGui::Checkbox("Same in both directions", &link_axes);
-        if (!link_axes)
-            ImGui::SliderInt("Half width (vertical)", &half_width_y, 0, 64);
-    }
+        ImGui::RadioButton("Gaussian", &kind, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Box", &kind, 1);
 
-    draw_edit_subject_selector();
-
-    const auto result = ImGui::DialogButtons("Apply");
-    if (result == ImGui::DialogResult::Confirm)
-    {
         if (kind == 0)
         {
-            const float sx = sigma, sy = link_axes ? sigma : sigma_y;
-            modify_channels(current_image(), "Gaussian blur", m_edit_subject,
-                            [sx, sy](const Array2Df &src) { return gaussian_blurred(src, sx, sy); });
+            ImGui::SliderFloat("Sigma", &sigma, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::Checkbox("Same in both directions", &link_axes);
+            if (!link_axes)
+                ImGui::SliderFloat("Sigma (vertical)", &sigma_y, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
         }
         else
         {
-            const int hx = half_width, hy = link_axes ? half_width : half_width_y;
-            modify_channels(current_image(), "Box blur", m_edit_subject,
-                            [hx, hy](const Array2Df &src) { return box_blurred(src, hx, hy); });
+            ImGui::SliderInt("Half width", &half_width, 0, 64);
+            ImGui::Checkbox("Same in both directions", &link_axes);
+            if (!link_axes)
+                ImGui::SliderInt("Half width (vertical)", &half_width_y, 0, 64);
         }
-        ImGui::CloseCurrentPopup();
-    }
-    else if (result == ImGui::DialogResult::Cancel)
-        ImGui::CloseCurrentPopup();
 
-    ImGui::EndPopup();
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Apply");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            if (kind == 0)
+            {
+                const float sx = sigma, sy = link_axes ? sigma : sigma_y;
+                modify_channels(current_image(), "Gaussian blur", m_edit_subject,
+                                [sx, sy](const Array2Df &src) { return gaussian_blurred(src, sx, sy); });
+            }
+            else
+            {
+                const int hx = half_width, hy = link_axes ? half_width : half_width_y;
+                modify_channels(current_image(), "Box blur", m_edit_subject,
+                                [hx, hy](const Array2Df &src) { return box_blurred(src, hx, hy); });
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
 }
 
 void HDRViewApp::draw_unsharp_mask_dialog(bool &open)
 {
     static float sigma = 2.f, amount = 1.f;
 
-    if (!ImGui::BeginModalDialog("Unsharp mask...", open))
-        return;
-
-    ImGui::SliderFloat("Radius", &sigma, 0.1f, 32.f, "%.2f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderFloat("Amount", &amount, 0.f, 5.f, "%.2f");
-
-    draw_edit_subject_selector();
-
-    const auto result = ImGui::DialogButtons("Apply");
-    if (result == ImGui::DialogResult::Confirm)
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Unsharp mask...", open, ImGui::DialogPosition::Center))
     {
-        const float s = sigma, a = amount;
-        modify_channels(current_image(), "Unsharp mask", m_edit_subject,
-                        [s, a](const Array2Df &src) { return unsharp_masked(src, s, a); });
-        ImGui::CloseCurrentPopup();
-    }
-    else if (result == ImGui::DialogResult::Cancel)
-        ImGui::CloseCurrentPopup();
+        ImGui::SliderFloat("Radius", &sigma, 0.1f, 32.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Amount", &amount, 0.f, 5.f, "%.2f");
 
-    ImGui::EndPopup();
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Apply");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const float s = sigma, a = amount;
+            modify_channels(current_image(), "Unsharp mask", m_edit_subject,
+                            [s, a](const Array2Df &src) { return unsharp_masked(src, s, a); });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
 }
