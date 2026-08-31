@@ -922,7 +922,15 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         constexpr bool k_browser_reserved = false;
 #endif
         using ImGui::Action;
-        auto add = [this](const Action &a) { m_actions[a.names[0]] = a; };
+        auto add = [this](const Action &a)
+        {
+            // Actions are keyed by their primary name, so registering one twice replaces the first and
+            // leaves whatever referred to it pointing at the replacement instead -- with nothing to show
+            // for it but the wrong thing happening from a menu.
+            if (m_actions.count(a.names[0]))
+                spdlog::error("Action '{}' is registered more than once; the earlier one is unreachable.", a.names[0]);
+            m_actions[a.names[0]] = a;
+        };
         add(Action{{"Open image..."}, ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
         add(Action{{"Create gradient image..."}, ICON_MY_DITHER, ImGuiKey_None, 0, [this]() {
@@ -1626,7 +1634,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        return can_edit(img) && img->history.has_redo();
                    }});
 
-        add(Action{{"Flip horizontally"},
+        add(Action{{"Flip image horizontally", "Mirror the pixels horizontally"},
                    ICON_MY_FLIP_HORIZ,
                    ImGuiKey_None,
                    0,
@@ -1634,18 +1642,18 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    {
                        // Its own inverse, so one function serves both directions.
                        modify_image_reversibly(
-                           current_image(), "Flip horizontally", [](Image &img) { img.flip_horizontal(); },
+                           current_image(), "Flip image horizontally", [](Image &img) { img.flip_horizontal(); },
                            [](Image &img) { img.flip_horizontal(); });
                    },
                    if_editable});
-        add(Action{{"Flip vertically"},
+        add(Action{{"Flip image vertically", "Mirror the pixels vertically"},
                    ICON_MY_FLIP_VERT,
                    ImGuiKey_None,
                    0,
                    [this]()
                    {
                        modify_image_reversibly(
-                           current_image(), "Flip vertically", [](Image &img) { img.flip_vertical(); },
+                           current_image(), "Flip image vertically", [](Image &img) { img.flip_vertical(); },
                            [](Image &img) { img.flip_vertical(); });
                    },
                    if_editable});

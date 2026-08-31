@@ -415,8 +415,8 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        MenuItem(action("Flip horizontally"));
-        MenuItem(action("Flip vertically"));
+        MenuItem(action("Flip image horizontally"));
+        MenuItem(action("Flip image vertically"));
         MenuItem(action("Rotate 90 degrees clockwise"));
         MenuItem(action("Rotate 90 degrees counter-clockwise"));
 
