@@ -11,6 +11,7 @@
 */
 
 #include "app.h"
+#include "edit/filters.h"
 #include "image.h"
 #include "test_gui_registry.h"
 #include "test_gui_support.h"
@@ -610,6 +611,68 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         menu_click(ctx, "Edit/Deselect");
         IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "each blur mode is reachable and brings its own controls");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        // The modes are told apart by what they ask for, which is also what catches a radio button wired to
+        // the wrong one: "Box" once selected the fast Gaussian between them, and offered sigma accordingly.
+        menu_click(ctx, "Edit/Blur...");
+        ctx->SetRef("Blur...");
+
+        ctx->ItemClick("Gaussian");
+        IM_CHECK(ctx->ItemExists("Sigma"));
+        IM_CHECK(!ctx->ItemExists("Half width"));
+        // Quality belongs to the approximation alone; the exact kernel has nothing to trade.
+        IM_CHECK(!ctx->ItemExists("Quality"));
+
+        ctx->ItemClick("Fast Gaussian");
+        IM_CHECK(ctx->ItemExists("Sigma"));
+        IM_CHECK(ctx->ItemExists("Quality"));
+        IM_CHECK(!ctx->ItemExists("Half width"));
+
+        ctx->ItemClick("Box");
+        IM_CHECK(ctx->ItemExists("Half width"));
+        IM_CHECK(ctx->ItemExists("Passes"));
+        IM_CHECK(!ctx->ItemExists("Sigma"));
+
+        ctx->ItemClick("Cancel");
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "the blur modes give different results");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // Applied straight through modify_channels so the comparison is of the filters themselves; a mode
+        // that silently ran another one would come back identical.
+        auto blurred_by = [&](int which)
+        {
+            const Box2i all{int2{0}, img->channels[0].size()};
+            Array2Df    out = which == 0   ? gaussian_blurred(img->channels[0], all, 3.f, 3.f)
+                              : which == 1 ? fast_gaussian_blurred(img->channels[0], all, 3.f, 3.f, 6)
+                                           : box_blurred(img->channels[0], all, 3, 3, 1);
+            return out;
+        };
+
+        const Array2Df exact = blurred_by(0), fast = blurred_by(1), box = blurred_by(2);
+
+        // The approximation is close to the exact one but not equal to it, and a single box is neither.
+        double d_fast = 0.0, d_box = 0.0;
+        for (int i = 0; i < exact.num_elements(); ++i)
+        {
+            d_fast += std::abs(double(exact(i)) - double(fast(i)));
+            d_box += std::abs(double(exact(i)) - double(box(i)));
+        }
+        IM_CHECK(d_fast > 0.0);
+        IM_CHECK(d_box > d_fast);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");

@@ -558,9 +558,13 @@ void HDRViewApp::draw_blur_dialog(bool &open)
     ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Blur...", open, ImGui::DialogPosition::Center))
     {
-        ImGui::RadioButton("Gaussian", &kind, 0);
+        // Addressed by the enum rather than by literal, which is how "Box" came to select the fast
+        // Gaussian sitting between them.
+        ImGui::RadioButton("Gaussian", &kind, Kind_Gaussian);
         ImGui::SameLine();
-        ImGui::RadioButton("Box", &kind, 1);
+        ImGui::RadioButton("Fast Gaussian", &kind, Kind_FastGaussian);
+        ImGui::SameLine();
+        ImGui::RadioButton("Box", &kind, Kind_Box);
 
         if (kind == Kind_Box)
         {
