@@ -325,7 +325,7 @@ void HDRViewApp::draw_edit_subject_selector()
     ImGui::Checkbox("Selection only", &m_edit_subject.selection_only);
     ImGui::EndDisabled();
     if (!m_roi.has_volume())
-        ImGui::Tooltip("Make a rectangular selection first.");
+        ImGui::Tooltip("There is no selection, so edits cover the whole image.");
 }
 
 void HDRViewApp::draw_exposure_gamma_dialog(bool &open)

@@ -34,6 +34,10 @@ namespace
 bool load_fixture(ImGuiTestContext *ctx)
 {
     reset_images(ctx);
+    // Edits are selection-only by default, so a selection left behind by an earlier test would silently
+    // narrow what the next one edits.
+    hdrview()->roi()          = Box2i{};
+    hdrview()->edit_subject() = EditSubject{};
     IM_CHECK_SILENT_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE}) == 1, false);
     IM_CHECK_SILENT_RETV(hdrview()->current_image() != nullptr, false);
     return true;
@@ -494,6 +498,69 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK_EQ(img->layers.size(), layers);
         IM_CHECK_EQ(img->groups.size(), groups);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "with a selection, an edit covers only the selection");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+        // Straight from the menu, with nothing configured: having drawn a selection, this is what the
+        // next edit is expected to do.
+        const Box2i roi{img->data_window.min + int2{2, 2}, img->data_window.min + int2{6, 5}};
+        hdrview()->roi() = roi;
+        ctx->Yield();
+
+        const auto before = snapshot(img);
+        menu_click(ctx, "Edit/Invert");
+
+        const auto &group       = img->groups[img->selected_group];
+        const int2  o           = img->data_window.min;
+        bool        any_changed = false;
+        for (int c = 0; c < group.num_channels; ++c)
+        {
+            const auto  &ch   = img->channels[group.channels[c]];
+            const size_t base = size_t(group.channels[c]) * size_t(ch.size().x * ch.size().y);
+            for (int y = 0; y < ch.size().y; ++y)
+                for (int x = 0; x < ch.size().x; ++x)
+                {
+                    const float was = before[base + size_t(y * ch.size().x + x)];
+                    if (roi.contains(int2{x, y} + o))
+                        any_changed |= ch(x, y) != was;
+                    else
+                        IM_CHECK_EQ(ch(x, y), was);
+                }
+        }
+        IM_CHECK(any_changed);
+
+        hdrview()->roi() = Box2i{};
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "with no selection, an edit covers the whole image");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        // Selection-only is on by default, but an empty selection means "no selection" rather than "edit
+        // nothing" -- otherwise every edit would appear to do nothing until one was drawn.
+        IM_CHECK_EQ(hdrview()->edit_subject().selection_only, true);
+        IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+
+        auto       img    = hdrview()->current_image();
+        const auto before = snapshot(img);
+
+        menu_click(ctx, "Edit/Invert");
+
+        const auto after = snapshot(img);
+        IM_CHECK_EQ(after.size(), before.size());
+        size_t changed = 0;
+        for (size_t i = 0; i < after.size(); ++i)
+            if (after[i] != before[i])
+                ++changed;
+        IM_CHECK(changed > 0);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");

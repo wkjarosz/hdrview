@@ -31,10 +31,14 @@ struct EditSubject
 
     //! Restrict the edit to the rectangular selection, when there is one.
     /*!
-        Ignored while the selection is empty, so leaving it on does not make edits stop working once the
-        selection is cleared.
+        On by default: having just drawn a selection, an edit that ignored it would be a surprise, and the
+        way back is one undo either way.
+
+        Ignored while the selection is empty rather than meaning "edit nothing", so this staying on does
+        not make edits appear to stop working once the selection is cleared -- with no selection every edit
+        covers the whole image.
     */
-    bool selection_only = false;
+    bool selection_only = true;
 };
 
 inline const char *edit_scope_name(int scope)

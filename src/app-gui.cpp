@@ -478,7 +478,7 @@ void HDRViewApp::draw_menus()
             ImGui::MenuItem("Selection only", nullptr, &m_edit_subject.selection_only);
             ImGui::EndDisabled();
             if (!m_roi.has_volume())
-                ImGui::Tooltip("Make a rectangular selection first.");
+                ImGui::Tooltip("There is no selection, so edits cover the whole image.");
 
             ImGui::EndMenu();
         }
