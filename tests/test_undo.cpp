@@ -495,10 +495,11 @@ TEST_CASE("Resampling to the same size changes nothing")
     CHECK(matches_original(img));
 }
 
-TEST_CASE("Reducing averages rather than dropping samples")
+TEST_CASE("Reducing mixes the samples rather than dropping them")
 {
-    // A row that alternates 0 and 1: point-sampling a halving would return all of one or all of the other,
-    // where averaging returns the mean. This is the difference the box filter exists for.
+    // A row that alternates 0 and 1. Point-sampling a halving returns all of one or all of the other; any
+    // filter worth the name returns something in between. Exactly what depends on the filter's width, so
+    // this asks only that both outputs are genuinely mixed and that they average out.
     auto  img = std::make_shared<Image>(int2{4, 1}, 1);
     auto &ch  = img->channels[0];
     for (int x = 0; x < 4; ++x) ch(x, 0) = float(x % 2);
@@ -507,8 +508,30 @@ TEST_CASE("Reducing averages rather than dropping samples")
     img->resample(int2{2, 1});
 
     REQUIRE(img->size() == int2{2, 1});
-    CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
-    CHECK(img->channels[0](1, 0) == doctest::Approx(0.5f));
+    const float a0 = img->channels[0](0, 0), a1 = img->channels[0](1, 0);
+    CHECK(a0 > 0.f);
+    CHECK(a0 < 1.f);
+    CHECK(a1 > 0.f);
+    CHECK(a1 < 1.f);
+    CHECK(0.5f * (a0 + a1) == doctest::Approx(0.5f).epsilon(0.02));
+}
+
+TEST_CASE("Reducing keeps the light rather than losing it")
+{
+    // The failure a point-sampled reduction actually produces: a lone bright sample lands between the
+    // output samples and vanishes entirely. Filtering spreads it, so the total survives.
+    auto  img = std::make_shared<Image>(int2{16, 16}, 1);
+    auto &ch  = img->channels[0];
+    ch(7, 7)  = 64.f;
+    img->finalize();
+
+    img->resample(int2{4, 4});
+
+    double total = 0.0;
+    for (int i = 0; i < img->channels[0].num_elements(); ++i) total += double(img->channels[0](i));
+
+    // Each output sample now stands for sixteen input ones.
+    CHECK(total * 16.0 == doctest::Approx(64.0).epsilon(0.05));
 }
 
 TEST_CASE("Enlarging interpolates between the samples it has")
@@ -519,19 +542,21 @@ TEST_CASE("Enlarging interpolates between the samples it has")
     ch(1, 0)  = 1.f;
     img->finalize();
 
-    img->resample(int2{4, 1});
+    img->resample(int2{8, 1});
 
-    REQUIRE(img->size() == int2{4, 1});
+    REQUIRE(img->size() == int2{8, 1});
     const auto &out = img->channels[0];
-    // Monotonic between the two originals, and never outside them -- an interpolation, not an
-    // extrapolation.
-    for (int x = 0; x < 4; ++x)
+
+    // Rising from one original to the other. Deliberately not bounded by them: a filter good enough to
+    // enlarge without blurring overshoots slightly either side of a step, and forbidding that would be
+    // asking for a worse filter rather than a correct one.
+    for (int x = 1; x < 8; ++x)
     {
         CAPTURE(x);
-        CHECK(out(x, 0) >= 0.f);
-        CHECK(out(x, 0) <= 1.f);
+        CHECK(out(x, 0) >= out(x - 1, 0));
     }
-    CHECK(out(0, 0) < out(3, 0));
+    CHECK(out(0, 0) < 0.2f);
+    CHECK(out(7, 0) > 0.8f);
 }
 
 TEST_CASE("Resampling resizes every channel and both windows together")

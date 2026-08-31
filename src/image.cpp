@@ -11,8 +11,10 @@
 #include "common.h"
 #include "dithermatrix256.h"
 #include "image.h"
+
 #include "imageio/xmp.h"
 #include "shader.h"
+#include "stb_image_resize2.h"
 #include "timer.h"
 
 #include <numeric>
@@ -1198,57 +1200,19 @@ void Image::resample(int2 size)
     if (size.x <= 0 || size.y <= 0 || size == data_window.size())
         return;
 
-    const int2   old_size = data_window.size();
-    const float2 scale{float(old_size.x) / float(size.x), float(old_size.y) / float(size.y)};
+    const int2 old_size = data_window.size();
 
     for (auto &channel : channels)
     {
         Array2Df out{size};
 
-        const int block_size = std::max(1, 1024 * 1024 / std::max(1, size.x));
-        stp::parallel_for(stp::blocked_range<int>(0, size.y, block_size),
-                          [&](int y0, int y1, int, int)
-                          {
-                              for (int y = y0; y < y1; ++y)
-                                  for (int x = 0; x < size.x; ++x)
-                                  {
-                                      // The source rectangle this destination sample stands for.
-                                      const float2 lo{float(x) * scale.x, float(y) * scale.y};
-                                      const float2 hi{lo.x + scale.x, lo.y + scale.y};
-
-                                      if (scale.x > 1.f || scale.y > 1.f)
-                                      {
-                                          // Reducing: average the source samples the rectangle covers, so that detail
-                                          // between them is combined rather than skipped over.
-                                          const int x0  = std::max(0, int(std::floor(lo.x)));
-                                          const int y0_ = std::max(0, int(std::floor(lo.y)));
-                                          const int x1  = std::min(old_size.x, std::max(x0 + 1, int(std::ceil(hi.x))));
-                                          const int y1_ = std::min(old_size.y, std::max(y0_ + 1, int(std::ceil(hi.y))));
-
-                                          float sum = 0.f;
-                                          for (int sy = y0_; sy < y1_; ++sy)
-                                              for (int sx = x0; sx < x1; ++sx) sum += channel(sx, sy);
-
-                                          out(x, y) = sum / float((x1 - x0) * (y1_ - y0_));
-                                      }
-                                      else
-                                      {
-                                          // Enlarging: bilinear between the four samples around the rectangle's center,
-                                          // clamped at the edges so the border repeats rather than reading past it.
-                                          const float sx  = std::max(0.f, (lo.x + hi.x) * 0.5f - 0.5f);
-                                          const float sy  = std::max(0.f, (lo.y + hi.y) * 0.5f - 0.5f);
-                                          const int   x0  = std::min(old_size.x - 1, int(sx));
-                                          const int   y0_ = std::min(old_size.y - 1, int(sy));
-                                          const int   x1  = std::min(old_size.x - 1, x0 + 1);
-                                          const int   y1_ = std::min(old_size.y - 1, y0_ + 1);
-                                          const float tx = sx - float(x0), ty = sy - float(y0_);
-
-                                          out(x, y) =
-                                              (1.f - ty) * ((1.f - tx) * channel(x0, y0_) + tx * channel(x1, y0_)) +
-                                              ty * ((1.f - tx) * channel(x0, y1_) + tx * channel(x1, y1_));
-                                      }
-                                  }
-                          });
+        // stb's resampler rather than one written here, which is what 1.8 used too: it chooses a filter
+        // from the scale -- averaging on the way down, interpolating on the way up -- and deals with the
+        // edges, where a hand-rolled box-and-bilinear pair is cruder. One channel at a time, since these
+        // are stored planar rather than interleaved.
+        if (!stbir_resize_float_linear(channel.data(), old_size.x, old_size.y, 0, out.data(), size.x, size.y, 0,
+                                       STBIR_1CHANNEL))
+            throw std::runtime_error{"Failed to resample image."};
 
         channel.resize(size);
         std::copy(out.data(), out.data() + out.num_elements(), channel.data());
