@@ -695,7 +695,7 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     m_image_loader.background_load(image->filename, std::nullopt, should_select, image, opts);
 }
 
-void HDRViewApp::close_image(int index)
+void HDRViewApp::close_image_immediately(int index)
 {
     if (!is_valid(index))
         index = current_image_index();
@@ -796,7 +796,7 @@ void HDRViewApp::close_image(int index)
     update_visibility(); // this also calls set_image_textures();
 }
 
-void HDRViewApp::close_all_images()
+void HDRViewApp::close_all_images_immediately()
 {
     m_images.clear();
     m_current   = -1;

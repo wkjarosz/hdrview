@@ -746,6 +746,8 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         make_unique<PopupDialog>("Image loading options...", [](bool &open) { draw_load_image_options_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Replace session?", [this](bool &open) { draw_confirm_load_session_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Discard unsaved changes?",
+                                                 [this](bool &open) { draw_confirm_discard_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Loading session...", [this](bool &open) { draw_loading_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>(
@@ -983,10 +985,21 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    always_enabled,
                    false,
                    &dialog("About").open});
-        add(Action{
-            {"Quit"}, ICON_MY_QUIT, k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiKey_Q), 0, [this]() {
-                m_params.appShallExit = true;
-            }});
+        add(Action{{"Quit"},
+                   ICON_MY_QUIT,
+                   k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiKey_Q),
+                   0,
+                   [this]()
+                   {
+                       if (!any_image_modified())
+                       {
+                           m_params.appShallExit = true;
+                           return;
+                       }
+
+                       m_pending_discard                       = PendingDiscard::Quit;
+                       dialog("Discard unsaved changes?").open = true;
+                   }});
 
         add(Action{{"Command palette..."},
                    ICON_MY_COMMAND_PALETTE,

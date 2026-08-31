@@ -6,6 +6,7 @@
 
 #include "app.h"
 #include "image.h"
+#include "imgui_ext.h"
 
 #include <spdlog/spdlog.h>
 
@@ -97,4 +98,75 @@ bool HDRViewApp::redo()
 
     after_modify(img);
     return true;
+}
+
+void HDRViewApp::close_image(int index)
+{
+    if (!is_valid(index))
+        index = current_image_index();
+
+    auto img = image(index);
+    if (!img || !img->history.is_modified())
+    {
+        close_image_immediately(index);
+        return;
+    }
+
+    m_pending_discard                       = PendingDiscard::CloseImage;
+    m_pending_close_index                   = index;
+    dialog("Discard unsaved changes?").open = true;
+}
+
+void HDRViewApp::close_all_images()
+{
+    if (!any_image_modified())
+    {
+        close_all_images_immediately();
+        return;
+    }
+
+    m_pending_discard                       = PendingDiscard::CloseAll;
+    dialog("Discard unsaved changes?").open = true;
+}
+
+bool HDRViewApp::any_image_modified() const
+{
+    for (const auto &img : m_images)
+        if (img && img->history.is_modified())
+            return true;
+    return false;
+}
+
+void HDRViewApp::apply_pending_discard()
+{
+    const auto what   = m_pending_discard;
+    m_pending_discard = PendingDiscard::None;
+
+    switch (what)
+    {
+    case PendingDiscard::CloseImage: close_image_immediately(m_pending_close_index); break;
+    case PendingDiscard::CloseAll: close_all_images_immediately(); break;
+    case PendingDiscard::Quit: m_params.appShallExit = true; break;
+    case PendingDiscard::None: break;
+    }
+
+    m_pending_close_index = -1;
+}
+
+void HDRViewApp::draw_confirm_discard_dialog(bool &open)
+{
+    // One prompt for all three, since what is at stake is the same in each case: edits that exist only in
+    // memory. Which of them is being asked about is in m_pending_discard.
+    const char *message = m_pending_discard == PendingDiscard::CloseImage
+                              ? "This image has edits that have not been saved. Closing it will discard them."
+                              : "Some open images have edits that have not been saved. Continuing will discard them.";
+
+    auto result = ImGui::ConfirmDialog("Discard unsaved changes?", open, message, "Discard");
+    if (result == ImGui::DialogResult::Confirm)
+        apply_pending_discard();
+    else if (result == ImGui::DialogResult::Cancel)
+    {
+        m_pending_discard     = PendingDiscard::None;
+        m_pending_close_index = -1;
+    }
 }

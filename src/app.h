@@ -88,8 +88,16 @@ public:
     //! Download `url` and load it as an image (Emscripten only). `to_replace` reloads in place, as reload_image() does.
     void load_url(string_view url, bool should_select = true, ImagePtr to_replace = nullptr,
                   const ImageLoadOptions &opts = load_image_options());
+    //! Close an image, first asking about edits that are not in any file.
+    /*!
+        The prompt is answered a frame or more later, so these return having only opened it; the
+        *_immediately() variants below are what actually closes, and are also the path for an image with
+        nothing to lose.
+    */
     void close_image(int index = -1);
     void close_all_images();
+    void close_image_immediately(int index = -1);
+    void close_all_images_immediately();
     void reload_image(ImagePtr image, bool shall_select = false);
     //! Whether `image` came from somewhere reload_image() could read it again.
     /*!
@@ -207,6 +215,9 @@ public:
         since been replaced.
     */
     static bool can_edit(const ConstImagePtr &img);
+
+    /// Whether any open image has edits that are not in its file.
+    bool any_image_modified() const;
 
     /// Reverse the current image's most recent edit. False if there was nothing to undo.
     bool undo();
@@ -536,6 +547,25 @@ private:
     vector<ImagePtr> m_images;
     set<fs::path>    m_active_directories; ///< Set of directories containing the currently loaded images
     int              m_current = -1, m_reference = -1;
+
+    //! What a "Discard unsaved changes?" prompt should do once the user says yes.
+    /*!
+        Closing an image or quitting throws away edits that are not in any file, so both ask first. The
+        answer arrives a frame or more later, from the modal, which is why what was being asked about has
+        to be remembered rather than acted on in place.
+    */
+    enum class PendingDiscard
+    {
+        None,
+        CloseImage,
+        CloseAll,
+        Quit
+    };
+    PendingDiscard m_pending_discard     = PendingDiscard::None;
+    int            m_pending_close_index = -1;
+    void           draw_confirm_discard_dialog(bool &open);
+    //! Do the thing the prompt was asking about, now that it has been confirmed.
+    void apply_pending_discard();
 
     BackgroundImageLoader m_image_loader;
 
