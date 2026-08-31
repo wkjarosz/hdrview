@@ -445,7 +445,7 @@ void HDRViewApp::draw_menus()
 
         MenuItem(action("Invert"));
         MenuItem(action("Clamp to [0,1]"));
-        MenuItem(action("Zap gremlins"));
+        MenuItem(action("Zap gremlins..."));
 
         ImGui::Separator();
 

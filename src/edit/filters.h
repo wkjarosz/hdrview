@@ -86,6 +86,19 @@ Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float s
 Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius, FilterProgress progress = {});
 
 /*!
+    Replace every non-finite sample with the median of its finite neighbours.
+
+    A NaN or an infinity is not a measurement, and one of either ruins every statistic computed over the
+    channel it sits in. Writing a constant in its place leaves a hole that is just as visible; taking the
+    median of the eight samples around it puts back something the neighbourhood agrees with. Finite samples
+    are untouched, however extreme -- a genuinely bright highlight is data.
+
+    \p replacement is used only where a sample has no finite neighbour at all, which happens in the middle
+    of a run of them.
+*/
+Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replacement = 0.f);
+
+/*!
     Add back a multiple of what a blur removed, which sharpens.
 
     \p amount scales the difference between the samples and their blurred selves: 0 leaves the image alone,

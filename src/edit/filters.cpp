@@ -7,6 +7,7 @@
 #include "edit/filters.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <smallthreadpool.h>
@@ -386,6 +387,55 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
 
                               ++progress;
                           }
+                      });
+
+    return out;
+}
+
+Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replacement)
+{
+    const int2 extent = region.size();
+    Array2Df   out{extent};
+
+    const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+    stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                      [&](int y0, int y1, int, int)
+                      {
+                          for (int y = y0; y < y1; ++y)
+                              for (int x = 0; x < extent.x; ++x)
+                              {
+                                  const int   sx = region.min.x + x, sy = region.min.y + y;
+                                  const float v = clamped(src, sx, sy);
+                                  if (std::isfinite(v))
+                                  {
+                                      out(x, y) = v;
+                                      continue;
+                                  }
+
+                                  // The eight around it, skipping any that are gremlins themselves.
+                                  std::array<float, 8> ring;
+                                  int                  n = 0;
+                                  for (int dy = -1; dy <= 1; ++dy)
+                                      for (int dx = -1; dx <= 1; ++dx)
+                                      {
+                                          if (dx == 0 && dy == 0)
+                                              continue;
+                                          const float nv = clamped(src, sx + dx, sy + dy);
+                                          if (std::isfinite(nv))
+                                              ring[size_t(n++)] = nv;
+                                      }
+
+                                  if (n == 0)
+                                  {
+                                      // In the middle of a run of them there is nothing to agree with.
+                                      out(x, y) = replacement;
+                                      continue;
+                                  }
+
+                                  const size_t mid = size_t(n) / 2;
+                                  std::nth_element(ring.begin(), ring.begin() + long(mid), ring.begin() + n);
+                                  out(x, y) = ring[mid];
+                              }
                       });
 
     return out;

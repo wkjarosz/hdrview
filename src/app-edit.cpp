@@ -606,24 +606,24 @@ void HDRViewApp::draw_blur_dialog(bool &open)
             if (kind == Kind_Box)
             {
                 const int hx = half_width, hy = link_axes ? half_width : half_width_y, n = iterations;
-                modify_channels(current_image(), "Box blur", m_edit_subject,
-                                [hx, hy, n](const Array2Df &src, const Box2i &r)
-                                { return box_blurred(src, r, hx, hy, n); });
+                modify_channels_async(current_image(), "Box blur", m_edit_subject,
+                                      [hx, hy, n](const Array2Df &src, const Box2i &r, FilterProgress p)
+                                      { return box_blurred(src, r, hx, hy, n, p); });
             }
             else if (kind == Kind_FastGaussian)
             {
                 const float sx = sigma, sy = link_axes ? sigma : sigma_y;
                 const int   n = iterations;
-                modify_channels(current_image(), "Gaussian blur", m_edit_subject,
-                                [sx, sy, n](const Array2Df &src, const Box2i &r)
-                                { return fast_gaussian_blurred(src, r, sx, sy, n); });
+                modify_channels_async(current_image(), "Gaussian blur", m_edit_subject,
+                                      [sx, sy, n](const Array2Df &src, const Box2i &r, FilterProgress p)
+                                      { return fast_gaussian_blurred(src, r, sx, sy, n, p); });
             }
             else
             {
                 const float sx = sigma, sy = link_axes ? sigma : sigma_y;
-                modify_channels(current_image(), "Gaussian blur", m_edit_subject,
-                                [sx, sy](const Array2Df &src, const Box2i &r)
-                                { return gaussian_blurred(src, r, sx, sy); });
+                modify_channels_async(current_image(), "Gaussian blur", m_edit_subject,
+                                      [sx, sy](const Array2Df &src, const Box2i &r, FilterProgress p)
+                                      { return gaussian_blurred(src, r, sx, sy, p); });
             }
             ImGui::CloseCurrentPopup();
         }
@@ -650,8 +650,9 @@ void HDRViewApp::draw_unsharp_mask_dialog(bool &open)
         if (result == ImGui::DialogResult::Confirm)
         {
             const float s = sigma, a = amount;
-            modify_channels(current_image(), "Unsharp mask", m_edit_subject,
-                            [s, a](const Array2Df &src, const Box2i &r) { return unsharp_masked(src, r, s, a); });
+            modify_channels_async(current_image(), "Unsharp mask", m_edit_subject,
+                                  [s, a](const Array2Df &src, const Box2i &r, FilterProgress p)
+                                  { return unsharp_masked(src, r, s, a, p); });
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
@@ -1002,6 +1003,62 @@ void HDRViewApp::draw_irradiance_dialog(bool &open)
             modify_image_async(current_image(), "Irradiance envmap", out_size,
                                [m, out_size](const Array2Df &src, FilterProgress p)
                                { return irradiance_envmap(src, out_size, m, p); });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
+void HDRViewApp::draw_zap_gremlins_dialog(bool &open)
+{
+    // The two 1.8 offered: take what the neighbours say, or write something chosen. The first is almost
+    // always what is wanted; the second is there for when a run of them has no good neighbour to ask.
+    enum Mode : int
+    {
+        Mode_Median = 0,
+        Mode_Value
+    };
+    static int    mode = Mode_Median;
+    static float4 value{0.f, 0.f, 0.f, 1.f};
+
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Zap gremlins...", open, ImGui::DialogPosition::Center))
+    {
+        if (auto img = current_image())
+            if (auto *stats = img->channels[img->groups[img->selected_group].channels[0]].get_stats())
+                if (stats->computed)
+                    ImGui::TextFmt("{} NaN and {} infinite samples in this channel.", stats->summary.nan_pixels,
+                                   stats->summary.inf_pixels);
+
+        ImGui::RadioButton("Median of neighbors", &mode, Mode_Median);
+        ImGui::Tooltip("Puts back something the surrounding samples agree with, so a firefly in a smooth "
+                       "region leaves no trace.");
+        ImGui::SameLine();
+        ImGui::RadioButton("Fill with", &mode, Mode_Value);
+
+        ImGui::BeginDisabled(mode != Mode_Value);
+        ImGui::ColorEdit4("Value", &value.x,
+                          ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar);
+        ImGui::EndDisabled();
+
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Zap");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            if (mode == Mode_Median)
+                modify_channels(current_image(), "Zap gremlins", m_edit_subject,
+                                [](const Array2Df &src, const Box2i &r) { return zapped_gremlins(src, r); });
+            else
+            {
+                // Per channel, so the chosen color reaches the component it belongs to.
+                const float4 v = value;
+                modify_pixels(current_image(), "Zap gremlins", m_edit_subject,
+                              [v](float s, int2, int slot) { return std::isfinite(s) ? s : v[slot % 4]; });
+            }
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)

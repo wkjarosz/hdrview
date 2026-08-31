@@ -762,6 +762,8 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     m_dialogs.push_back(
         make_unique<PopupDialog>("Unsharp mask...", [this](bool &open) { draw_unsharp_mask_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Median filter...", [this](bool &open) { draw_median_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Zap gremlins...", [this](bool &open) { draw_zap_gremlins_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Remap envmap...", [this](bool &open) { draw_remap_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Irradiance envmap...", [this](bool &open) { draw_irradiance_dialog(open); }));
@@ -1769,18 +1771,11 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                                      [](float v, int2, int) { return std::min(1.f, std::max(0.f, v)); });
                    },
                    if_editable});
-        add(Action{{"Zap gremlins", "Replace NaNs and infinities"},
+        add(Action{{"Zap gremlins...", "Replace NaNs and infinities"},
                    ICON_MY_ZAP_GREMLINS,
                    ImGuiKey_None,
                    0,
-                   [this]()
-                   {
-                       // A NaN or an infinity is not a measurement, and one of either ruins every
-                       // statistic computed over the channel it sits in. Zero is what the old HDRView
-                       // replaced them with.
-                       modify_pixels(current_image(), "Zap gremlins", m_edit_subject,
-                                     [](float v, int2, int) { return std::isfinite(v) ? v : 0.f; });
-                   },
+                   [this]() { dialog("Zap gremlins...").open = true; },
                    if_editable});
 
         add(Action{{"Flip image horizontally", "Mirror the pixels horizontally"},
@@ -2031,7 +2026,11 @@ void HDRViewApp::process_shortcuts()
 
     for (auto &a : m_actions)
         if (a.second.chord)
-            if (a.second.enabled() && !ImGui::GetIO().NavVisible &&
+            // Held off only while something is taking typed characters, so that a letter meant for a text
+            // field is not also read as a shortcut. Deliberately not conditioned on keyboard navigation
+            // being idle, as it once was: arriving from the command palette or a dialog leaves navigation
+            // showing, and every shortcut in the application stopped working from there on.
+            if (a.second.enabled() && !ImGui::GetIO().WantTextInput &&
                 ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {
                 spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.names[0],

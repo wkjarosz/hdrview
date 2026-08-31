@@ -299,10 +299,16 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ch(1, 0)         = std::numeric_limits<float>::infinity();
         ++img->content_version;
 
-        menu_click(ctx, "Edit/Zap gremlins");
+        menu_click(ctx, "Edit/Zap gremlins...");
+        ctx->SetRef("Zap gremlins...");
+        ctx->ItemClick("Median of neighbors");
+        ctx->ItemClick("Zap");
+        ctx->Yield(2);
 
-        IM_CHECK_EQ(ch(0, 0), 0.f);
-        IM_CHECK_EQ(ch(1, 0), 0.f);
+        // Filled from the surrounding samples rather than blanked, so what goes back matches the
+        // neighbourhood; the fixture is smooth around these, so both land on what was already there.
+        IM_CHECK(std::isfinite(ch(0, 0)));
+        IM_CHECK(std::isfinite(ch(1, 0)));
         IM_CHECK_EQ(ch(2, 2), kept);
     };
 
@@ -587,9 +593,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Blur...");
         ctx->SetRef("Blur...");
         ctx->KeyPress(ImGuiKey_Enter);
-        ctx->Yield(2);
+        // The blur runs off the main thread now, so this waits for the result rather than a frame count.
+        wait_until(ctx, [&] { return img->history.has_undo(); });
         IM_CHECK(snapshot(img) != original);
-        IM_CHECK_EQ(img->history.has_undo(), true);
 
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(snapshot(img) == original);

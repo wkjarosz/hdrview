@@ -9,6 +9,7 @@
 #include "edit/filters.h"
 
 #include <cmath>
+#include <limits>
 
 //! The whole of \p a, for the cases that are about the filter rather than about the region.
 static Box2i whole(const Array2Df &a) { return Box2i{int2{0}, a.size()}; }
@@ -406,4 +407,54 @@ TEST_CASE("An uncancelled filter reports its way to complete")
 
     CHECK_FALSE(progress.canceled());
     CHECK(progress.progress() == doctest::Approx(1.f).epsilon(0.001));
+}
+
+TEST_CASE("Zapping a gremlin fills it from its neighbours")
+{
+    // The difference from writing a constant: what goes back has to agree with the surroundings, so a
+    // firefly in a smooth region leaves no trace.
+    Array2Df src{int2{9, 9}};
+    for (int y = 0; y < 9; ++y)
+        for (int x = 0; x < 9; ++x) src(x, y) = 0.4f;
+    src(4, 4) = std::numeric_limits<float>::quiet_NaN();
+    src(2, 6) = std::numeric_limits<float>::infinity();
+
+    const Array2Df out = zapped_gremlins(src, whole(src));
+
+    CHECK(out(4, 4) == doctest::Approx(0.4f));
+    CHECK(out(2, 6) == doctest::Approx(0.4f));
+}
+
+TEST_CASE("Zapping leaves every finite sample exactly as it was")
+{
+    // Including extreme ones: a very bright highlight is data, not a gremlin.
+    Array2Df src{int2{8, 8}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i) * 0.5f;
+    src(3, 3) = 1e30f;
+    src(5, 5) = -1e30f;
+
+    const Array2Df out = zapped_gremlins(src, whole(src));
+    for (int i = 0; i < src.num_elements(); ++i) CHECK(out(i) == src(i));
+}
+
+TEST_CASE("A gremlin with no finite neighbour falls back to the replacement")
+{
+    // In the middle of a run of them there is nothing to take a median of.
+    Array2Df src{int2{5, 5}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = std::numeric_limits<float>::quiet_NaN();
+
+    const Array2Df out = zapped_gremlins(src, whole(src), -1.f);
+    for (int i = 0; i < out.num_elements(); ++i) CHECK(out(i) == -1.f);
+}
+
+TEST_CASE("Zapping takes the median rather than the mean of the ring")
+{
+    // A mean would be dragged by an outlier among the neighbours; the median is not.
+    Array2Df src{int2{3, 3}};
+    for (int i = 0; i < src.num_elements(); ++i) src(i) = 1.f;
+    src(0, 0) = 1000.f;                                  // one wild but finite neighbour
+    src(1, 1) = std::numeric_limits<float>::quiet_NaN(); // the gremlin, ringed by the other eight
+
+    const Array2Df out = zapped_gremlins(src, whole(src));
+    CHECK(out(1, 1) == doctest::Approx(1.f));
 }

@@ -310,6 +310,7 @@ public:
     void draw_blur_dialog(bool &open);
     void draw_unsharp_mask_dialog(bool &open);
     void draw_median_dialog(bool &open);
+    void draw_zap_gremlins_dialog(bool &open);
     void draw_remap_dialog(bool &open);
     void draw_irradiance_dialog(bool &open);
 
