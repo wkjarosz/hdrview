@@ -1634,6 +1634,39 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        return can_edit(img) && img->history.has_redo();
                    }});
 
+        add(Action{{"Invert", "Negative"},
+                   ICON_MY_BLANK,
+                   ImGuiMod_Ctrl | ImGuiKey_I,
+                   0,
+                   [this]() {
+                       modify_pixels(current_image(), "Invert", m_edit_subject,
+                                     [](float v, int, int) { return 1.f - v; });
+                   },
+                   if_editable});
+        add(Action{{"Clamp to [0,1]", "Clip to LDR range"},
+                   ICON_MY_BLANK,
+                   ImGuiKey_None,
+                   0,
+                   [this]()
+                   {
+                       modify_pixels(current_image(), "Clamp to [0,1]", m_edit_subject,
+                                     [](float v, int, int) { return std::min(1.f, std::max(0.f, v)); });
+                   },
+                   if_editable});
+        add(Action{{"Zap gremlins", "Replace NaNs and infinities"},
+                   ICON_MY_BLANK,
+                   ImGuiKey_None,
+                   0,
+                   [this]()
+                   {
+                       // A NaN or an infinity is not a measurement, and one of either ruins every
+                       // statistic computed over the channel it sits in. Zero is what the old HDRView
+                       // replaced them with.
+                       modify_pixels(current_image(), "Zap gremlins", m_edit_subject,
+                                     [](float v, int, int) { return std::isfinite(v) ? v : 0.f; });
+                   },
+                   if_editable});
+
         add(Action{{"Flip image horizontally", "Mirror the pixels horizontally"},
                    ICON_MY_FLIP_HORIZ,
                    ImGuiKey_None,

@@ -8,6 +8,8 @@
 #include "image.h"
 #include "imgui_ext.h"
 
+#include <numeric>
+#include <smallthreadpool.h>
 #include <spdlog/spdlog.h>
 
 using std::function;
@@ -127,6 +129,82 @@ void HDRViewApp::close_all_images()
 
     m_pending_discard                       = PendingDiscard::CloseAll;
     dialog("Discard unsaved changes?").open = true;
+}
+
+bool HDRViewApp::scope_matters(const ConstImagePtr &img)
+{
+    // With one group, "the group the viewport is showing" and "every channel" are the same set, so there
+    // is nothing for the user to decide.
+    return img && img->groups.size() > 1;
+}
+
+std::pair<std::vector<int>, Box2i> HDRViewApp::resolve_subject(const ConstImagePtr &img,
+                                                               const EditSubject   &subject) const
+{
+    std::vector<int> channels;
+    if (!img)
+        return {channels, Box2i{}};
+
+    if (subject.scope == EditSubject::Scope_AllChannels)
+    {
+        channels.resize(img->channels.size());
+        std::iota(channels.begin(), channels.end(), 0);
+    }
+    else if (int g = img->active_group_index(Target_Primary); img->is_valid_group(g))
+    {
+        const auto &group = img->groups[size_t(g)];
+        for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
+    }
+
+    Box2i bounds = img->data_window;
+    // An empty selection means "no selection", not "select nothing" -- leaving the box on should not make
+    // edits silently stop working once it is cleared.
+    if (subject.selection_only && m_roi.has_volume())
+        bounds.intersect(m_roi);
+
+    return {channels, bounds};
+}
+
+bool HDRViewApp::modify_pixels(const ImagePtr &img, const string &name, const EditSubject &subject,
+                               const function<float(float, int, int)> &op)
+{
+    if (!can_edit(img))
+        return false;
+
+    auto [channels, bounds] = resolve_subject(img, subject);
+    if (channels.empty() || !bounds.has_volume())
+        return false;
+
+    return modify_image(
+        img, name,
+        [&channels, &bounds, &op](Image &image)
+        {
+            const int2 offset = bounds.min - image.data_window.min;
+            const int2 extent = bounds.size();
+
+            for (int c : channels)
+            {
+                Channel &channel = image.channels[size_t(c)];
+
+                // Computed into its own buffer and then handed to upload_tile(), which both writes the
+                // samples and pushes just this rectangle to the GPU -- the same path a renderer streams
+                // through, rather than a full re-upload for an edit that may cover a few pixels.
+                Array2Df  staging{extent};
+                const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+                stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                                  [&](int y0, int y1, int, int)
+                                  {
+                                      for (int y = y0; y < y1; ++y)
+                                          for (int x = 0; x < extent.x; ++x)
+                                              staging(x, y) = op(channel(offset.x + x, offset.y + y), bounds.min.x + x,
+                                                                 bounds.min.y + y);
+                                  });
+
+                channel.upload_tile(Box2i{offset, offset + extent}, staging.data());
+            }
+        },
+        [&channels, &bounds, &name](const Image &image) -> UndoPtr
+        { return std::make_unique<ChannelRectUndo>(image, channels, bounds, name); });
 }
 
 bool HDRViewApp::any_image_modified() const

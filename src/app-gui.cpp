@@ -433,6 +433,42 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Rotate 90 degrees clockwise"));
         MenuItem(action("Rotate 90 degrees counter-clockwise"));
 
+        ImGui::Separator();
+
+        MenuItem(action("Invert"));
+        MenuItem(action("Clamp to [0,1]"));
+        MenuItem(action("Zap gremlins"));
+
+        ImGui::Separator();
+
+        // What the edits above apply to, stated where they are rather than asked for one at a time. On a
+        // single-group image the two scopes name the same channels, so the choice is shown but says so.
+        if (ImGui::BeginMenu("Apply to"))
+        {
+            const bool matters = can_edit(img) && scope_matters(img);
+
+            ImGui::BeginDisabled(!matters);
+            for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
+                if (ImGui::MenuItem(edit_scope_name(i), nullptr, m_edit_subject.scope == i))
+                    m_edit_subject.scope = EditSubject::Scope(i);
+            ImGui::EndDisabled();
+
+            if (!matters && img)
+                ImGui::Tooltip("This image has a single channel group, so both choices cover the same "
+                               "channels.");
+
+            ImGui::Separator();
+
+            // Reads as unavailable rather than simply off when there is no selection to restrict to.
+            ImGui::BeginDisabled(!m_roi.has_volume());
+            ImGui::MenuItem("Selection only", nullptr, &m_edit_subject.selection_only);
+            ImGui::EndDisabled();
+            if (!m_roi.has_volume())
+                ImGui::Tooltip("Make a rectangular selection first.");
+
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMenu();
     }
 

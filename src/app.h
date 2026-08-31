@@ -7,6 +7,7 @@
 #include "box.h"
 #include "colormap.h"
 #include "display_colorspace.h"
+#include "edit/subject.h"
 #include "edit/undo.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
@@ -215,6 +216,34 @@ public:
         since been replaced.
     */
     static bool can_edit(const ConstImagePtr &img);
+
+    /*!
+        The channels \p subject names, and the rectangle of them it covers, in image coordinates.
+
+        The rectangle is the data window, narrowed to the selection when the subject asks for that and
+        there is one. An empty channel list or a rectangle with no volume means there is nothing to edit.
+    */
+    std::pair<std::vector<int>, Box2i> resolve_subject(const ConstImagePtr &img, const EditSubject &subject) const;
+
+    /*!
+        Apply \p op to every sample the subject covers, as one undoable edit.
+
+        \p op is handed a sample and its position in image coordinates, and returns what to replace it
+        with. The samples it writes go to the GPU as the one rectangle they occupy, and the entry that
+        reverses them stores that same rectangle -- so an edit confined to a selection costs the selection,
+        not the image.
+
+        \returns Whether anything was edited; false for an image that refuses edits or a subject that
+                 names nothing.
+    */
+    bool modify_pixels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                       const std::function<float(float, int, int)> &op);
+
+    /// The subject the menu's edits use, shown and changed under Edit > Apply to.
+    EditSubject &edit_subject() { return m_edit_subject; }
+
+    /// Whether the two scopes would name different channels for \p img; false for a single-group image.
+    static bool scope_matters(const ConstImagePtr &img);
 
     /// Whether any open image has edits that are not in its file.
     bool any_image_modified() const;
@@ -566,6 +595,9 @@ private:
     void           draw_confirm_discard_dialog(bool &open);
     //! Do the thing the prompt was asking about, now that it has been confirmed.
     void apply_pending_discard();
+
+    //! What the menu's edits apply to; see Edit > Apply to.
+    EditSubject m_edit_subject;
 
     BackgroundImageLoader m_image_loader;
 

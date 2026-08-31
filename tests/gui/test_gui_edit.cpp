@@ -18,6 +18,8 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -225,6 +227,134 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         menu_click(ctx, "Edit/Undo");
         IM_CHECK_EQ(img->history.is_modified(), false);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a point op changes the samples and undo puts them back");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const auto original = snapshot(img);
+
+        menu_click(ctx, "Edit/Invert");
+        const auto inverted = snapshot(img);
+        IM_CHECK(original != inverted);
+        IM_CHECK_EQ(inverted.size(), original.size());
+
+        // Inverting twice returns the samples to within rounding, but not bit-for-bit: 1-(1-v) is not v
+        // in floating point once 1-v has to round, which it does for every v below a half. That gap is
+        // exactly why undo stores the pixels rather than recomputing them -- see below.
+        menu_click(ctx, "Edit/Invert");
+        const auto twice = snapshot(img);
+        IM_CHECK_EQ(twice.size(), original.size());
+        for (size_t i = 0; i < twice.size(); ++i) IM_CHECK_LT(std::fabs(twice[i] - original[i]), 1e-6f);
+
+        // Undo, by contrast, is exact, because it puts back the samples it saved rather than recomputing
+        // them -- two undos land on the original bit-for-bit, which the arithmetic above does not.
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == inverted);
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "clamping leaves every sample inside the unit range");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // Push samples outside [0,1] first, so the clamp has something to do on a fixture that may already
+        // be inside it.
+        IM_CHECK(hdrview()->modify_pixels(img, "Spread", hdrview()->edit_subject(),
+                                          [](float v, int, int) { return v * 4.f - 1.5f; }));
+
+        menu_click(ctx, "Edit/Clamp to [0,1]");
+
+        for (const auto &c : img->channels)
+            for (int y = 0; y < c.size().y; ++y)
+                for (int x = 0; x < c.size().x; ++x) IM_CHECK(c(x, y) >= 0.f && c(x, y) <= 1.f);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "zapping gremlins replaces only the non-finite samples");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // Scatter a NaN and an infinity into the first channel, leaving its other samples alone.
+        auto       &ch   = img->channels[0];
+        const float kept = ch(2, 2);
+        ch(0, 0)         = std::numeric_limits<float>::quiet_NaN();
+        ch(1, 0)         = std::numeric_limits<float>::infinity();
+        ++img->content_version;
+
+        menu_click(ctx, "Edit/Zap gremlins");
+
+        IM_CHECK_EQ(ch(0, 0), 0.f);
+        IM_CHECK_EQ(ch(1, 0), 0.f);
+        IM_CHECK_EQ(ch(2, 2), kept);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "an edit restricted to the selection leaves the rest alone");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // A box well inside the image, in image coordinates -- the same space the data window uses.
+        const Box2i roi{img->data_window.min + int2{2, 2}, img->data_window.min + int2{6, 5}};
+        hdrview()->roi() = roi;
+
+        EditSubject subject;
+        subject.selection_only = true;
+
+        const auto before = snapshot(img);
+        IM_CHECK(hdrview()->modify_pixels(img, "Invert", subject, [](float v, int, int) { return 1.f - v; }));
+
+        const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
+        const int2  o  = img->data_window.min;
+        for (int y = 0; y < ch.size().y; ++y)
+            for (int x = 0; x < ch.size().x; ++x)
+            {
+                const bool inside = roi.contains(int2{x, y} + o);
+                // Outside the selection nothing may have moved; inside, the samples came from 1-v.
+                if (!inside)
+                    IM_CHECK_EQ(ch(x, y), before[size_t(img->groups[img->selected_group].channels[0]) *
+                                                     size_t(ch.size().x * ch.size().y) +
+                                                 size_t(y * ch.size().x + x)]);
+            }
+
+        // And the entry that reverses it covers the selection, not the image.
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == before);
+
+        hdrview()->roi() = Box2i{};
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "the scope choice is only offered when it would change anything");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        // The single-layer fixture has one group, so both scopes name the same channels.
+        auto img = hdrview()->current_image();
+        IM_CHECK_EQ(HDRViewApp::scope_matters(img), img->groups.size() > 1);
+
+        // Whatever the scope says, a single-group image resolves to the same channels either way.
+        EditSubject group_scope, all_scope;
+        all_scope.scope = EditSubject::Scope_AllChannels;
+        if (!HDRViewApp::scope_matters(img))
+            IM_CHECK(hdrview()->resolve_subject(img, group_scope).first ==
+                     hdrview()->resolve_subject(img, all_scope).first);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
