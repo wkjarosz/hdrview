@@ -20,10 +20,10 @@ void HDRViewApp::after_modify(const ImagePtr &img)
     // Statistics and histograms are cached against this; see Image::content_version.
     ++img->content_version;
 
-    // An edit may have changed how many channels there are or what they are called, and the layers,
-    // groups, and tree are all built from those names. Rebuilding is cheap next to the edit itself, and
-    // getting it wrong leaves the Images panel describing channels that no longer exist.
-    img->finalize();
+    // Deliberately not finalize(): it does far more than rebuild the layer tree. It would premultiply a
+    // straight-alpha image a second time, silently darkening it, and re-derive metadata that has not
+    // changed. An edit that adds or removes channels needs the tree rebuilt and will have to ask for that
+    // specifically; none of the edits so far touches the channel set.
 
     // The group the viewport is sampling may now be a different set of channels, or the same channels at
     // a different size.

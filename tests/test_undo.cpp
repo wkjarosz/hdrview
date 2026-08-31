@@ -329,3 +329,42 @@ TEST_CASE("An image starts unmodified and stays that way until something edits i
     CHECK_FALSE(img->history.has_undo());
     CHECK_FALSE(img->history.has_redo());
 }
+
+TEST_CASE("Rebuilding an image's layers replaces them rather than adding to them")
+{
+    // finalize() appends as it walks the channels, so anything left over from an earlier build would be
+    // duplicated -- the layer tree gaining a second leaf per node, and the channel counts no longer
+    // agreeing with the channels themselves, which finalize() then rejects.
+    auto img = make_test_image();
+    img->finalize();
+
+    const size_t layers = img->layers.size();
+    const size_t groups = img->groups.size();
+    REQUIRE(layers > 0);
+    REQUIRE(groups > 0);
+
+    // Whatever an edit does, asking for the tree again must describe the same channels.
+    img->finalize();
+
+    CHECK(img->layers.size() == layers);
+    CHECK(img->groups.size() == groups);
+}
+
+TEST_CASE("A geometric edit leaves the layer and group structure alone")
+{
+    // Flips and quarter turns move samples without touching the channel set, so nothing about the layers
+    // should change -- and nothing should need rebuilding for them.
+    auto img = make_test_image();
+    img->finalize();
+
+    const size_t layers   = img->layers.size();
+    const size_t groups   = img->groups.size();
+    const size_t channels = img->channels.size();
+
+    img->rotate_90_cw();
+    img->flip_vertical();
+
+    CHECK(img->layers.size() == layers);
+    CHECK(img->groups.size() == groups);
+    CHECK(img->channels.size() == channels);
+}

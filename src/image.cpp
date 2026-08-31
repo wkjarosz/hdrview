@@ -954,6 +954,13 @@ void Image::build_layers_and_groups()
         return found;
     };
 
+    // Everything below appends, so anything left from a previous build would be duplicated rather than
+    // replaced -- the layer tree would gain a second leaf at every node and the channel counts would stop
+    // agreeing with the channels.
+    layers.clear();
+    groups.clear();
+    root = LayerTreeNode{};
+
     spdlog::debug("Processing {} channels", channels.size());
     for (size_t i = 0; i < channels.size(); ++i) spdlog::debug("\t{:>2d}: {}", (int)i, channels[i].name);
 
