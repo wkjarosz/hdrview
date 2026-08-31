@@ -1843,6 +1843,7 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_session_bundle.cpp tests/gui/test_gui_lifetime.cpp
     tests/gui/test_gui_loader.cpp
     tests/gui/test_gui_info.cpp
+    tests/gui/test_gui_screenshots.cpp
   )
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)
@@ -1865,6 +1866,11 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     PRIVATE HDRVIEW_GUI_TEST_IMAGE="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon.png"
             HDRVIEW_GUI_TEST_IMAGE_2="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon-256.png"
   )
+  # Where tests/gui/test_gui_screenshots.cpp looks for the sample images it shoots when the environment
+  # names none of its own.
+  target_compile_definitions(
+    hdrview_gui_tests PRIVATE HDRVIEW_SCREENSHOT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
+  )
   # Same idea as the OpenEXR guard above, but for hdrview_gui_tests: on -cpm/-universal presets this makes a
   # real multi-part EXR fixture available to tests/gui/test_gui_multipart.cpp; that file registers no
   # tests at all when the define is absent (e.g. on -local presets).
@@ -1884,7 +1890,7 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   # Its own ctest entry, kept separate from doctest_discover_tests(hdrview_tests) above so GUI-test
   # failures/logs are never mixed in with the logic-level doctest suite's output.
   enable_testing()
-  add_test(NAME hdrview_gui_tests COMMAND hdrview_gui_tests -nogui -nopause)
+  add_test(NAME hdrview_gui_tests COMMAND hdrview_gui_tests)
 endif()
 
 if(EMSCRIPTEN)

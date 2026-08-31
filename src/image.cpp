@@ -261,16 +261,6 @@ const std::set<std::string> &Image::loadable_formats()
     return formats;
 }
 
-const std::set<std::string> &Image::savable_formats()
-{
-    static const std::set<std::string> formats = {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "jpeg", "tga", "qoi",
-#if HDRVIEW_ENABLE_LIBTIFF
-                                                  "tif", "tiff"
-#endif
-    };
-    return formats;
-}
-
 bool Image::loadable(const std::string &ext)
 {
     try

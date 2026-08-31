@@ -112,6 +112,11 @@ public:
     /// The offscreen color target, or nullptr when rendering to the window's framebuffer
     Texture *color_target() const { return m_color_target; }
 
+#if defined(HELLOIMGUI_HAS_OPENGL)
+    /// The FBO this pass renders into; 0 when that is the window's own framebuffer.
+    uint32_t framebuffer_handle() const { return m_framebuffer_handle; }
+#endif
+
 #if defined(HELLOIMGUI_HAS_METAL)
     void *command_encoder() const { return m_command_encoder; }
     void *command_buffer() const { return m_command_buffer; }
