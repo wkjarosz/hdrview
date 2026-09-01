@@ -940,7 +940,7 @@ void Image::build_layers_and_groups()
     };
 
     // try to find all channels from group g in layer l
-    auto find_group_channels = [](map<string, int> &channels, const string &prefix, const vector<string> &g)
+    auto find_group_channels = [this](map<string, int> &channels, const string &prefix, const vector<string> &g)
     {
         spdlog::trace("Trying to find channels '{}' in {} layer channels", fmt::join(g, ","), channels.size());
         for (auto c : channels) spdlog::trace("\t{}: {}", c.second, c.first);
@@ -950,7 +950,12 @@ void Image::build_layers_and_groups()
         {
             string name = prefix + c;
             auto   it   = channels.find(name);
-            if (it != channels.end())
+
+            // A channel asked to stand alone is simply not available to match, so the pattern comes up
+            // short and every channel it would have taken falls through to a group of its own. Marking
+            // one channel of an RGBA set therefore still leaves the other three as RGB, since that
+            // pattern is tried next and does not want the marked one.
+            if (it != channels.end() && !this->channels[size_t(it->second)].ungrouped)
                 found.push_back(it);
         }
         return found;

@@ -480,6 +480,14 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
+        // What the image is made of, rather than what its samples say: which channels there are, and
+        // which of them are read together as one color.
+        MenuItem(action("Explode channel group"));
+        MenuItem(action("Regroup channels"));
+        MenuItem(action("Delete channel group"));
+
+        ImGui::Separator();
+
         MenuItem(action("Blur..."));
         MenuItem(action("Unsharp mask..."));
         MenuItem(action("Median filter..."));

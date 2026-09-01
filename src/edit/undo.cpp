@@ -195,6 +195,7 @@ StructureUndo::StructureUndo(const Image &img, std::string name) :
     {
         Channel copy{c.name, c.size()};
         copy.bits_per_sample = c.bits_per_sample;
+        copy.ungrouped       = c.ungrouped;
         std::copy(c.data(), c.data() + c.num_elements(), copy.data());
         m_channels.push_back(std::move(copy));
     }

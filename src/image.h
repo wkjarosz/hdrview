@@ -247,6 +247,19 @@ struct Channel : public Array2Df
     //! point or their depth is unknown. Sets the histogram's bin count, via bins_for_bit_depth().
     int bits_per_sample = 0;
 
+    //! Keep this channel out of the multi-channel groups its name would otherwise put it in.
+    /*!
+        Channel groups are derived from channel names, so there is no group object to take a channel out
+        of -- the way to say "show me this one on its own" is to say it here and let the next rebuild
+        honor it. build_layers_and_groups() then refuses to match this channel into a group, and it falls
+        through to a group of its own.
+
+        Per channel rather than per group, so marking the alpha of an RGBA image still leaves R, G and B
+        grouped. Deliberately not saved and not carried into a duplicate: it says how to look at the
+        image, not what the image is.
+    */
+    bool ungrouped = false;
+
 private:
     PixelStats::Ptr                    cached_stats;
     ThreadPool::TaskTracker            async_tracker;

@@ -570,3 +570,125 @@ TEST_CASE("Zapping gremlins replaces the non-finite samples and leaves the rest"
     // ...and the samples that were already fine untouched, which is what "only the non-finite" means.
     CHECK(ch(2, 2) == kept);
 }
+
+TEST_CASE("Exploding a group takes its channels out of it, and regrouping puts them back")
+{
+    auto            img = make_image();
+    TestEditContext ctx{img};
+
+    // What the names alone give: one group over all four channels, or over three with alpha beside them.
+    const size_t grouped = img->groups.size();
+    REQUIRE(grouped < img->channels.size());
+
+    auto explode = find_command("Explode channel group");
+    REQUIRE(explode);
+    REQUIRE(explode->enabled(ctx));
+
+    explode->apply(ctx);
+
+    // Every channel of the group it was showing now stands on its own.
+    CHECK(img->groups.size() > grouped);
+    for (const auto &group : img->groups) CHECK(group.num_channels == 1);
+
+    // And nothing else about the image moved: this says how to look at it, not what it is.
+    CHECK(img->channels.size() == 4);
+    CHECK(img->size() == k_size);
+
+    auto regroup = find_command("Regroup channels");
+    REQUIRE(regroup);
+    REQUIRE(regroup->enabled(ctx));
+
+    regroup->apply(ctx);
+    CHECK(img->groups.size() == grouped);
+
+    // Undoing the regroup explodes it again, and undoing that puts it back -- the flags ride the history
+    // like anything else, without storing a sample.
+    REQUIRE(img->history.undo(*img));
+    CHECK(img->groups.size() > grouped);
+    REQUIRE(img->history.undo(*img));
+    CHECK(img->groups.size() == grouped);
+}
+
+TEST_CASE("Marking one channel leaves the others grouped")
+{
+    // The reason the flag is per channel rather than per group: taking the alpha out of an RGBA image
+    // should leave a color behind, not four separate channels.
+    auto img = make_image();
+
+    const size_t grouped = img->groups.size();
+
+    img->channels[3].ungrouped = true;
+    img->rebuild_layers();
+
+    // Alpha on its own, and R, G, B still one group between them.
+    CHECK(img->groups.size() == grouped + 1);
+
+    int multi = 0, single = 0;
+    for (const auto &group : img->groups) (group.num_channels > 1 ? multi : single) += 1;
+    CHECK(multi == 1);
+    CHECK(single >= 1);
+
+    for (const auto &group : img->groups)
+        if (group.num_channels > 1)
+            CHECK(group.num_channels == 3); // R, G and B, without the alpha
+
+    img->channels[3].ungrouped = false;
+    img->rebuild_layers();
+    CHECK(img->groups.size() == grouped);
+}
+
+TEST_CASE("Deleting a channel group removes its channels, and undo brings them back")
+{
+    auto            img = make_image();
+    TestEditContext ctx{img};
+
+    // Explode first, so there is more than one group and deleting one leaves an image behind.
+    find_command("Explode channel group")->apply(ctx);
+
+    const size_t channels_before = img->channels.size();
+    const size_t groups_before   = img->groups.size();
+    REQUIRE(groups_before > 1);
+
+    auto del = find_command("Delete channel group");
+    REQUIRE(del);
+    REQUIRE(del->enabled(ctx));
+
+    const std::string gone = img->channels[size_t(img->groups[size_t(img->selected_group)].channels[0])].name;
+
+    del->apply(ctx);
+
+    // Really gone, unlike exploding: this is what would be written on save.
+    CHECK(img->channels.size() == channels_before - 1);
+    CHECK(img->groups.size() == groups_before - 1);
+    for (const auto &c : img->channels) CHECK(c.name != gone);
+
+    REQUIRE(img->history.undo(*img));
+    CHECK(img->channels.size() == channels_before);
+    CHECK(img->groups.size() == groups_before);
+
+    bool found = false;
+    for (const auto &c : img->channels) found = found || c.name == gone;
+    CHECK(found);
+}
+
+TEST_CASE("Deleting is refused when it would leave nothing behind")
+{
+    // An image with no channels is not an image, so the last group has to stay.
+    auto            img = make_image();
+    TestEditContext ctx{img};
+
+    auto del = find_command("Delete channel group");
+    REQUIRE(del);
+
+    // One group over every channel, so deleting it would empty the image.
+    if (img->groups.size() == 1)
+        CHECK_FALSE(del->enabled(ctx));
+
+    // And applying it anyway changes nothing, since a command may be reached from the palette.
+    const size_t before = img->channels.size();
+    if (!del->enabled(ctx))
+    {
+        del->apply(ctx);
+        CHECK(img->channels.size() == before);
+    }
+}
