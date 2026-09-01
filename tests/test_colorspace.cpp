@@ -572,3 +572,131 @@ TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and ste
     CHECK(brightness_contrast_linear(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
     CHECK(brightness_contrast_nonlinear(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
 }
+
+TEST_CASE("L*a*b* agrees with the values the standard defines it by")
+{
+    // Checked against the definition rather than against itself: a round trip would pass just as well
+    // with both halves wrong in the same way.
+    const float3 white = Lab_reference_white();
+
+    // The reference white is the point L* is scaled to, and it is achromatic.
+    const float3 w = XYZ_to_Lab(white, white);
+    CHECK(w.x == doctest::Approx(100.f).epsilon(1e-4));
+    CHECK(w.y == doctest::Approx(0.f).epsilon(1e-4));
+    CHECK(w.z == doctest::Approx(0.f).epsilon(1e-4));
+
+    // Black is the other end, and also achromatic.
+    const float3 k = XYZ_to_Lab(float3{0.f, 0.f, 0.f}, white);
+    CHECK(k.x == doctest::Approx(0.f).epsilon(1e-4));
+    CHECK(k.y == doctest::Approx(0.f).epsilon(1e-4));
+    CHECK(k.z == doctest::Approx(0.f).epsilon(1e-4));
+
+    // Any neutral is achromatic whatever its level, since the three ratios to the white are equal.
+    for (float y : {0.02f, 0.18f, 0.5f, 0.9f})
+    {
+        CAPTURE(y);
+        const float3 gray = XYZ_to_Lab(white * y, white);
+        CHECK(gray.y == doctest::Approx(0.f).epsilon(1e-3));
+        CHECK(gray.z == doctest::Approx(0.f).epsilon(1e-3));
+    }
+
+    // The two published anchors of the lightness curve: mid gray at Y = 0.18 sits near L* = 49.5, and the
+    // linear segment below Y = 216/24389 has slope kappa = 24389/27 in Y.
+    CHECK(XYZ_to_Lab(white * 0.184187f, white).x == doctest::Approx(50.f).epsilon(1e-3));
+
+    const float y_knee = 216.f / 24389.f;
+    CHECK(XYZ_to_Lab(white * y_knee, white).x == doctest::Approx(8.f).epsilon(1e-3));
+    const float y_small = 0.5f * y_knee;
+    CHECK(XYZ_to_Lab(white * y_small, white).x == doctest::Approx((24389.f / 27.f) * y_small).epsilon(1e-3));
+
+    // L* rises with luminance and nothing else does.
+    float previous = -1.f;
+    for (int i = 0; i <= 20; ++i)
+    {
+        const float3 lab = XYZ_to_Lab(white * (float(i) / 20.f), white);
+        CHECK(lab.x > previous);
+        previous = lab.x;
+    }
+
+    // a* is the green-red axis and b* the blue-yellow one: more X than the white asks for reads red, more
+    // Z reads blue.
+    CHECK(XYZ_to_Lab(float3{white.x * 1.2f, white.y, white.z}, white).y > 0.f);
+    CHECK(XYZ_to_Lab(float3{white.x * 0.8f, white.y, white.z}, white).y < 0.f);
+    CHECK(XYZ_to_Lab(float3{white.x, white.y, white.z * 1.2f}, white).z < 0.f);
+    CHECK(XYZ_to_Lab(float3{white.x, white.y, white.z * 0.8f}, white).z > 0.f);
+}
+
+TEST_CASE("A color survives the trip through L*a*b* and back")
+{
+    const float3 white = Lab_reference_white();
+
+    // Across the linear segment near black and the cube root above it, and out past the white, since an
+    // HDR sample is not bounded by it.
+    for (float x : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
+        for (float y : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
+            for (float z : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                CAPTURE(z);
+
+                const float3 xyz{x, y, z};
+                const float3 back = Lab_to_XYZ(XYZ_to_Lab(xyz, white), white);
+
+                CHECK(back.x == doctest::Approx(x).epsilon(1e-3));
+                CHECK(back.y == doctest::Approx(y).epsilon(1e-3));
+                CHECK(back.z == doctest::Approx(z).epsilon(1e-3));
+            }
+
+    // And through the normalized form the editing controls use.
+    for (float L : {0.f, 12.f, 50.f, 88.f, 100.f})
+        for (float a : {-100.f, -20.f, 0.f, 35.f, 120.f})
+        {
+            const float3 lab{L, a, -a};
+            const float3 back = unnormalize_Lab(normalize_Lab(lab));
+
+            CAPTURE(L);
+            CAPTURE(a);
+            CHECK(back.x == doctest::Approx(L).epsilon(1e-4));
+            CHECK(back.y == doctest::Approx(a).epsilon(1e-4));
+            CHECK(back.z == doctest::Approx(-a).epsilon(1e-4));
+        }
+
+    // The normalized form puts black at zero, the white's lightness at one, and neutral chroma in the
+    // middle -- which is what lets a tone curve be applied to it unchanged.
+    const float3 n = normalize_Lab(float3{100.f, 0.f, 0.f});
+    CHECK(n.x == doctest::Approx(1.f).epsilon(1e-4));
+    CHECK(n.y == doctest::Approx(0.5f).epsilon(1e-4));
+    CHECK(n.z == doctest::Approx(0.5f).epsilon(1e-4));
+    CHECK(normalize_Lab(float3{0.f, 0.f, 0.f}).x == doctest::Approx(0.f).epsilon(1e-4));
+}
+
+TEST_CASE("sRGB primaries land where L*a*b* is documented to put them")
+{
+    // The whole path an edit takes -- linear sRGB through XYZ into L*a*b* -- against values published for
+    // the sRGB primaries under D65. These catch a transposed matrix or a swapped axis, which the
+    // achromatic checks above cannot see.
+    const float3 white  = Lab_reference_white();
+    auto         lab_of = [&](float3 rgb) { return XYZ_to_Lab(mul(sRGB_to_XYZ(), rgb), white); };
+
+    const float3 red = lab_of(float3{1.f, 0.f, 0.f});
+    CHECK(red.x == doctest::Approx(53.24f).epsilon(2e-3));
+    CHECK(red.y == doctest::Approx(80.09f).epsilon(2e-3));
+    CHECK(red.z == doctest::Approx(67.20f).epsilon(2e-3));
+
+    const float3 green = lab_of(float3{0.f, 1.f, 0.f});
+    CHECK(green.x == doctest::Approx(87.73f).epsilon(2e-3));
+    CHECK(green.y == doctest::Approx(-86.18f).epsilon(2e-3));
+    CHECK(green.z == doctest::Approx(83.18f).epsilon(2e-3));
+
+    const float3 blue = lab_of(float3{0.f, 0.f, 1.f});
+    CHECK(blue.x == doctest::Approx(32.30f).epsilon(2e-3));
+    CHECK(blue.y == doctest::Approx(79.19f).epsilon(2e-3));
+    CHECK(blue.z == doctest::Approx(-107.86f).epsilon(2e-3));
+
+    // White through the same path, which ties the matrix and the reference white together.
+    const float3 w = lab_of(float3{1.f, 1.f, 1.f});
+    CHECK(w.x == doctest::Approx(100.f).epsilon(1e-3));
+    CHECK(w.y == doctest::Approx(0.f).epsilon(2e-2));
+    CHECK(w.z == doctest::Approx(0.f).epsilon(2e-2));
+}

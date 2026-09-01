@@ -483,6 +483,57 @@ const char *alpha_type_name(AlphaType_ at) { return s_alpha_type_names[at]; }
 
 const char **alpha_type_names() { return s_alpha_type_names; }
 
+namespace
+{
+
+// The CIE's own values for the linear segment near black, exact rather than the rounded 0.008856 and
+// 903.3 that often stand in for them.
+constexpr float k_Lab_eps   = 216.f / 24389.f;
+constexpr float k_Lab_kappa = 24389.f / 27.f;
+
+// The range normalize_Lab() maps onto [0,1]. The opponent axes are given the widest an eight-bit
+// encoding can reach rather than the tighter bounds of the sRGB gamut, so nothing real is ever clipped.
+constexpr float3 k_Lab_min{0.f, -128.f, -128.f};
+constexpr float3 k_Lab_max{100.f, 128.f, 128.f};
+
+//! The cube root with the CIE's linear segment near zero, which keeps the slope finite at black.
+float Lab_f(float t) { return t > k_Lab_eps ? std::cbrt(t) : (k_Lab_kappa * t + 16.f) / 116.f; }
+
+//! Inverse of Lab_f().
+float Lab_f_inv(float t)
+{
+    const float t3 = t * t * t;
+    return t3 > k_Lab_eps ? t3 : (116.f * t - 16.f) / k_Lab_kappa;
+}
+
+} // namespace
+
+float3 XYZ_to_Lab(float3 XYZ, float3 white)
+{
+    const float fx = Lab_f(XYZ.x / white.x);
+    const float fy = Lab_f(XYZ.y / white.y);
+    const float fz = Lab_f(XYZ.z / white.z);
+
+    return float3{116.f * fy - 16.f, 500.f * (fx - fy), 200.f * (fy - fz)};
+}
+
+float3 Lab_to_XYZ(float3 Lab, float3 white)
+{
+    const float fy = (Lab.x + 16.f) / 116.f;
+    const float fx = Lab.y / 500.f + fy;
+    const float fz = fy - Lab.z / 200.f;
+
+    // Y has a closed form of its own rather than going through Lab_f_inv(): the test there is on the
+    // cube, and for Y the threshold is expressed in L directly.
+    const float yr = Lab.x > k_Lab_kappa * k_Lab_eps ? fy * fy * fy : Lab.x / k_Lab_kappa;
+
+    return float3{Lab_f_inv(fx) * white.x, yr * white.y, Lab_f_inv(fz) * white.z};
+}
+
+float3 normalize_Lab(float3 Lab) { return (Lab - k_Lab_min) / (k_Lab_max - k_Lab_min); }
+
+float3 unnormalize_Lab(float3 Lab) { return Lab * (k_Lab_max - k_Lab_min) + k_Lab_min; }
+
 float2 white_point(WhitePoint_ wp)
 {
     if (wp >= WhitePoint_Custom)

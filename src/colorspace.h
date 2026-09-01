@@ -838,6 +838,42 @@ float3 HSL_to_RGB(float3 hsl);
 */
 float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness);
 //! @}
+
+//! CIE 1976 L*a*b*, the space in which equal steps are meant to look equally different.
+/*!
+    L* is lightness on a scale where 100 is the reference white and 0 is black; a* and b* are the two
+    opponent axes, green-red and blue-yellow, and carry no lightness. That split is why an edit meant to
+    change how light something is, without changing its color, is done here.
+
+    Relative to a reference white, since "as light as white" is the only meaning L* has. D65 unless the
+    image says otherwise.
+    @{
+*/
+
+//! XYZ for a chromaticity, scaled so Y is one: the form the conversions below want a white in.
+inline float3 XYZ_from_xy(float2 xy)
+{
+    return xy.y > 0.f ? float3{xy.x / xy.y, 1.f, (1.f - xy.x - xy.y) / xy.y} : float3{1.f, 1.f, 1.f};
+}
+
+//! The white used when none is given.
+inline float3 Lab_reference_white() { return XYZ_from_xy(white_point(WhitePoint_D65)); }
+
+float3 XYZ_to_Lab(float3 XYZ, float3 white = Lab_reference_white());
+float3 Lab_to_XYZ(float3 Lab, float3 white = Lab_reference_white());
+
+/*!
+    Slide and scale L*a*b* into [0,1]^3, and back.
+
+    L* runs to 100 and the two opponent axes are signed, so a control that expects its input somewhere
+    around [0,1] -- a tone curve, a slider -- reads them wrongly as they stand. The bounds are the widest
+    a* and b* an eight-bit encoding can reach, so real colors stay well inside and an extreme one still
+    survives the trip rather than being clipped.
+*/
+float3 normalize_Lab(float3 Lab);
+//! Inverse of normalize_Lab().
+float3 unnormalize_Lab(float3 Lab);
+//! @}
 Color3 sRGB_to_linear(const Color3 &c);
 Color4 sRGB_to_linear(const Color4 &c);
 Color3 linear_to_sRGB(const Color3 &c);
