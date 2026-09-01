@@ -747,6 +747,142 @@ void HDRViewApp::draw_statistics_window()
     }
 }
 
+std::vector<std::pair<int, int>> HDRViewApp::selected_targets() const
+{
+    std::vector<std::pair<int, int>> out;
+    for (size_t i : m_visible_images)
+    {
+        const auto &img = m_images[i];
+        for (int g : img->selected_groups())
+            if (img->groups[size_t(g)].visible)
+                out.emplace_back(int(i), g);
+    }
+    return out;
+}
+
+void HDRViewApp::set_current_image_index(int index, bool force)
+{
+    if (!(force || is_valid(index)))
+        return;
+
+    if (!is_valid(index))
+    {
+        m_current = index;
+        return;
+    }
+
+    set_current_group(index, m_images[size_t(index)]->selected_group);
+}
+
+void HDRViewApp::set_current_group(int index, int group)
+{
+    m_current = index;
+
+    auto img = image(index);
+    if (!img)
+        return;
+
+    if (img->is_valid_group(group))
+        img->selected_group = group;
+
+    // Nothing to reconcile against while a channel filter leaves the image with no group to show.
+    if (!img->is_valid_group(img->selected_group))
+        return;
+
+    // A target already in the selection keeps it and merely becomes its current member; one outside it
+    // starts the selection over.
+    if (!img->is_group_selected(img->selected_group))
+    {
+        for (auto &i : m_images) i->deselect_all();
+        img->select_group(img->selected_group);
+    }
+}
+
+void HDRViewApp::toggle_group_selected(int index, int group)
+{
+    auto img = image(index);
+    if (!img || !img->is_valid_group(group))
+        return;
+
+    if (!img->is_group_selected(group))
+    {
+        img->select_group(group);
+        return;
+    }
+
+    // Never down to nothing: an empty selection would leave every edit with nothing to act on and no way
+    // back except clicking something.
+    auto selected = selected_targets();
+    if (selected.size() < 2)
+        return;
+
+    img->select_group(group, false);
+
+    // Current has to stay selected, so hand it to whichever target still is.
+    if (index == m_current && group == img->selected_group)
+        for (const auto &[i, g] : selected)
+            if (i != index || g != group)
+            {
+                set_current_group(i, g);
+                break;
+            }
+}
+
+void HDRViewApp::select_image_range_to(int index)
+{
+    auto pos = [this](int i)
+    {
+        auto it = std::find(m_visible_images.begin(), m_visible_images.end(), size_t(i));
+        return it == m_visible_images.end() ? -1 : int(it - m_visible_images.begin());
+    };
+
+    const int to = pos(index);
+    if (to < 0)
+        return;
+
+    const int current = pos(m_current);
+    const int from    = current < 0 ? to : current;
+    for (int v = std::min(from, to); v <= std::max(from, to); ++v)
+    {
+        auto &img = m_images[m_visible_images[size_t(v)]];
+        img->select_group(img->selected_group);
+    }
+
+    // The far end is selected by the loop above, so set_current_image_index() moves current into the
+    // range rather than collapsing the selection onto it.
+    set_current_image_index(index);
+}
+
+void HDRViewApp::select_group_range_to(int index, int group)
+{
+    // Every visible target, in the order the panel lists them: images in list order, and within each, its
+    // groups in the order build_layers_and_groups() created them, which is layer order.
+    std::vector<std::pair<int, int>> targets;
+    for (size_t i : m_visible_images)
+        for (int g = 0; g < (int)m_images[i]->groups.size(); ++g)
+            if (m_images[i]->groups[size_t(g)].visible)
+                targets.emplace_back(int(i), g);
+
+    auto pos = [&targets](int i, int g)
+    {
+        auto it = std::find(targets.begin(), targets.end(), std::pair{i, g});
+        return it == targets.end() ? -1 : int(it - targets.begin());
+    };
+
+    const int to = pos(index, group);
+    if (to < 0)
+        return;
+
+    auto      cur     = current_image();
+    const int current = cur ? pos(m_current, cur->selected_group) : -1;
+    const int from    = current < 0 ? to : current;
+
+    for (int t = std::min(from, to); t <= std::max(from, to); ++t)
+        m_images[size_t(targets[size_t(t)].first)]->select_group(targets[size_t(t)].second);
+
+    set_current_group(index, group);
+}
+
 void HDRViewApp::update_visibility()
 {
     // compute image:channel visibility and update selection indices
@@ -814,6 +950,11 @@ void HDRViewApp::update_visibility()
     // one shortened name per visible image, in the same order.
     auto short_names = shorten_names(visible_image_names);
     for (size_t n = 0; n < m_visible_images.size(); ++n) m_images[m_visible_images[n]]->short_name = short_names[n];
+
+    // Filtering moves current and the group it shows by assignment above rather than through
+    // set_current_group(), so the rule that the current target is selected is restored once, here.
+    if (auto img = current_image())
+        set_current_group(m_current, img->selected_group);
 
     set_image_textures();
 }
@@ -1033,10 +1174,11 @@ void HDRViewApp::draw_file_window()
                 auto &img          = m_images[i];
                 bool  is_current   = m_current == i;
                 bool  is_reference = m_reference == i;
+                bool  is_selected  = img->is_selected();
 
                 ImGuiTreeNodeFlags node_flags = base_node_flags;
 
-                if (is_current || is_reference)
+                if (is_current || is_reference || is_selected)
                     node_flags |= ImGuiTreeNodeFlags_Selected;
                 if (m_file_list_mode == 0)
                     node_flags |= ImGuiTreeNodeFlags_Leaf;
@@ -1063,7 +1205,8 @@ void HDRViewApp::draw_file_window()
                                            {
                                                if (m_file_list_mode == 0)
                                                    ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
-                                               ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
+                                               ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift,
+                                                                    is_selected);
                                            });
                 auto icon = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
                 ImGui::SameLine(0.f, 0.f);
@@ -1089,7 +1232,7 @@ void HDRViewApp::draw_file_window()
                     ImGui::BeginDisabled(is_current);
                     if (ImGui::MenuItem("Select as current image"))
                     {
-                        m_current = i;
+                        set_current_image_index(i);
                         set_image_textures();
                     }
                     ImGui::EndDisabled();
@@ -1110,12 +1253,20 @@ void HDRViewApp::draw_file_window()
 
                 if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
                 {
-                    if (ImGui::GetIO().KeyShift)
+                    // Shift is the reference modifier, as it has always been, so the selection chords are
+                    // ctrl/cmd and ctrl/cmd+shift. An image row stands for the group the image is
+                    // showing, which is the target the selection is actually made of.
+                    auto &io = ImGui::GetIO();
+                    if (io.KeyCtrl && io.KeyShift)
+                        select_image_range_to(i);
+                    else if (io.KeyCtrl)
+                        toggle_group_selected(i, img->selected_group);
+                    else if (io.KeyShift)
                         m_reference = is_reference ? -1 : i;
                     else
-                        m_current = i;
+                        set_current_image_index(i);
                     set_image_textures();
-                    spdlog::trace("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
+                    spdlog::trace("Clicked image {}; current is {}, reference is {}", i, m_current, m_reference);
                 }
 
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))

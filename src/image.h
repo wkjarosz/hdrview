@@ -260,6 +260,17 @@ struct Channel : public Array2Df
     */
     bool ungrouped = false;
 
+    //! Whether this channel is part of the multi-selection that the Images panel shows and edits act on.
+    /*!
+        Per channel rather than per group, for the same reason as `ungrouped`: build_layers_and_groups()
+        clears and rebuilds the whole group vector, so a flag kept on a group would not survive a rebuild
+        -- including one caused by an edit that never touched the channels.
+
+        Read and written through Image::is_group_selected() and the helpers beside it, which treat a group
+        as selected when all of its channels are.
+    */
+    bool selected = false;
+
 private:
     PixelStats::Ptr                    cached_stats;
     ThreadPool::TaskTracker            async_tracker;
@@ -572,6 +583,56 @@ public:
     int2 size() const { return data_window.size(); }
 
     bool is_valid_group(int index) const { return index >= 0 && index < (int)groups.size(); }
+
+    /*!
+        \name Multi-selection
+
+        Which of this image's channel groups the user has selected. Stored on the channels (see
+        Channel::selected) and only ever derived for a group, so that a rebuild of the group vector cannot
+        lose it. HDRViewApp owns the rules that relate the selection to the current and reference images.
+    */
+    ///@{
+    //! Whether every channel of group \p index is selected.
+    bool is_group_selected(int index) const
+    {
+        if (!is_valid_group(index))
+            return false;
+
+        const auto &g = groups[size_t(index)];
+        for (int c = 0; c < g.num_channels; ++c)
+            if (!channels[size_t(g.channels[c])].selected)
+                return false;
+        return true;
+    }
+
+    //! Whether any of this image's channels is selected.
+    bool is_selected() const
+    {
+        for (const auto &c : channels)
+            if (c.selected)
+                return true;
+        return false;
+    }
+
+    //! Mark or unmark every channel of group \p index.
+    void select_group(int index, bool select = true)
+    {
+        if (!is_valid_group(index))
+            return;
+
+        const auto &g = groups[size_t(index)];
+        for (int c = 0; c < g.num_channels; ++c) channels[size_t(g.channels[c])].selected = select;
+    }
+
+    //! Unmark every channel.
+    void deselect_all()
+    {
+        for (auto &c : channels) c.selected = false;
+    }
+
+    //! The selected groups, in group order.
+    std::vector<int> selected_groups() const;
+    ///@}
 
     //! The group index to use for `target`: `selected_group` for Target_Primary, `reference_group` for
     //! Target_Secondary -- except reference_group can be left at -1 by update_visibility() (a channel

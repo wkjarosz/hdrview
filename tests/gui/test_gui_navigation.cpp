@@ -43,6 +43,34 @@ static void load_both_fixtures(ImGuiTestContext *ctx)
     IM_CHECK_EQ(hdrview()->num_visible_images(), 2);
 }
 
+//! The Images window's image rows, in list order.
+/*!
+    The rows are rendered inside a BeginTable("ImageList", ...) (app-windows.cpp), which ImGui hosts in its
+    own child window named "Images/ImageList_<hex ID>" -- the hex suffix is a per-build ID hash, not
+    something to hardcode. Each image row is an unlabeled TreeNodeEx at depth 2 within that window (depth 3
+    is the row's own nested content, e.g. its channel-group rows), so gather broadly and filter.
+*/
+static std::vector<ImGuiID> gather_image_rows(ImGuiTestContext *ctx)
+{
+    // GatherItems()'s parent ref resolves relative to whatever SetRef() is still active (the same quirk
+    // WindowInfo() has), so a bare "Images" here could resolve to "Images/Images". Use the absolute form.
+    ImGuiTestItemList all_items;
+    ctx->GatherItems(&all_items, "//Images", -1);
+
+    std::vector<ImGuiID> row_ids;
+    for (const ImGuiTestItemInfo &item : all_items)
+        if (item.Depth == 2 && item.Window && strstr(item.Window->Name, "ImageList") != nullptr)
+            row_ids.push_back(item.ID);
+    return row_ids;
+}
+
+//! Whether image \p i has any channel group in the multi-selection.
+static bool image_is_selected(int i)
+{
+    ConstImagePtr img = hdrview()->image(i);
+    return img && img->is_selected();
+}
+
 void RegisterTests_Navigation(ImGuiTestEngine *engine)
 {
     ImGuiTest *t = IM_REGISTER_TEST(engine, "navigation", "keyboard_next_previous");
@@ -76,22 +104,7 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
     {
         load_both_fixtures(ctx);
 
-        // load_both_fixtures() leaves SetRef("Images") active; GatherItems()'s parent ref resolves
-        // relative to that (the same quirk WindowInfo() has - see test_gui_dialogs.cpp), so a bare
-        // "Images" here would actually resolve to "Images/Images". Use the explicit absolute form instead.
-        //
-        // The row list is rendered inside a BeginTable("ImageList", ...) (app-windows.cpp), which ImGui
-        // hosts in its own child window named "Images/ImageList_<hex ID>" - the hex suffix is a per-build
-        // ID hash, not something to hardcode. Each row is an unlabeled TreeNodeEx at depth 2 within that
-        // window (depth 3 is the row's own nested content, e.g. its channel-group selector) - filter the
-        // full gathered list down to exactly those rather than guessing a fixed path.
-        ImGuiTestItemList all_items;
-        ctx->GatherItems(&all_items, "//Images", -1);
-
-        std::vector<ImGuiID> row_ids;
-        for (const ImGuiTestItemInfo &item : all_items)
-            if (item.Depth == 2 && item.Window && strstr(item.Window->Name, "ImageList") != nullptr)
-                row_ids.push_back(item.ID);
+        std::vector<ImGuiID> row_ids = gather_image_rows(ctx);
         IM_CHECK_EQ((int)row_ids.size(), 2);
 
         ctx->ItemClick(row_ids[1]);
@@ -152,5 +165,87 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         ctx->KeyUp(ImGuiMod_Shift);
         IM_CHECK_EQ(hdrview()->reference_image_index(), -1);
         IM_CHECK_EQ(img->reference_group, -1);
+    };
+
+    // The whole click state machine in one walk: a plain click either collapses the selection or merely
+    // moves current through it, ctrl/cmd toggles, and neither is allowed to leave nothing selected or to
+    // leave current outside the selection.
+    t           = IM_REGISTER_TEST(engine, "navigation", "ctrl_click_multi_selection");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        load_both_fixtures(ctx);
+
+        std::vector<ImGuiID> row_ids = gather_image_rows(ctx);
+        IM_CHECK_EQ((int)row_ids.size(), 2);
+
+        // A plain click on a row outside the selection collapses the selection onto it.
+        ctx->ItemClick(row_ids[1]);
+        ctx->ItemClick(row_ids[0]);
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+        IM_CHECK(image_is_selected(0));
+        IM_CHECK(!image_is_selected(1));
+
+        // Ctrl/cmd adds to the selection without moving current.
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->ItemClick(row_ids[1]);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+        IM_CHECK(image_is_selected(0));
+        IM_CHECK(image_is_selected(1));
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+
+        // A plain click inside the selection keeps it, and only moves current.
+        ctx->ItemClick(row_ids[1]);
+        IM_CHECK_EQ(hdrview()->current_image_index(), 1);
+        IM_CHECK(image_is_selected(0));
+        IM_CHECK(image_is_selected(1));
+
+        // Taking the current row out of the selection hands current to what is left of it.
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->ItemClick(row_ids[1]);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+        IM_CHECK(!image_is_selected(1));
+        IM_CHECK(image_is_selected(0));
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+
+        // And the last selected row refuses to leave: an empty selection would leave every edit with
+        // nothing to act on and no way back except clicking something.
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->ItemClick(row_ids[0]);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+        IM_CHECK(image_is_selected(0));
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "navigation", "ctrl_shift_click_selects_a_range");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        ctx->SetRef("Images");
+        ctx->ItemInputValue("##file filter", "");
+        hdrview()->close_all_images();
+
+        // Three rows rather than two, so a range has a middle for a chord that only selected its ends to
+        // fall through.
+        hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2, HDRVIEW_GUI_TEST_IMAGE});
+        wait_for_loads(ctx);
+        IM_CHECK_EQ(hdrview()->num_visible_images(), 3);
+
+        std::vector<ImGuiID> row_ids = gather_image_rows(ctx);
+        IM_CHECK_EQ((int)row_ids.size(), 3);
+
+        ctx->ItemClick(row_ids[0]);
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+        IM_CHECK(!image_is_selected(1));
+
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->KeyDown(ImGuiMod_Shift);
+        ctx->ItemClick(row_ids[2]);
+        ctx->KeyUp(ImGuiMod_Shift);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+
+        for (int i = 0; i < 3; ++i) IM_CHECK(image_is_selected(i));
+        IM_CHECK_EQ(hdrview()->current_image_index(), 2);
+
+        // Shift alone still means the reference, which is why the range chord needs ctrl as well.
+        IM_CHECK_EQ(hdrview()->reference_image_index(), -1);
     };
 }

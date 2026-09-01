@@ -855,12 +855,15 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
         if (!group.visible)
             continue;
 
-        bool is_selected_channel  = is_current && selected_group == layer.groups[g];
+        // The group on screen, and the group's membership of the multi-selection: two different things,
+        // and a row can be either without being the other.
+        bool is_current_channel   = is_current && selected_group == layer.groups[g];
         bool is_reference_channel = is_reference && reference_group == layer.groups[g];
+        bool is_selected_channel  = is_group_selected(layer.groups[g]);
 
-        ImGuiTreeNodeFlags flags =
-            tree_node_flags |
-            (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_None);
+        ImGuiTreeNodeFlags flags = tree_node_flags | (is_current_channel || is_reference_channel || is_selected_channel
+                                                          ? ImGuiTreeNodeFlags_Selected
+                                                          : ImGuiTreeNodeFlags_None);
         ImGui::TreeRow((void *)(intptr_t)id_++, flags, name.c_str(),
                        [&]
                        {
@@ -869,8 +872,10 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                                                  : "";
                            ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
                        },
-                       [&]
-                       { ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift); });
+                       [&] {
+                           ImGui::PushRowColors(is_current_channel, is_reference_channel, ImGui::GetIO().KeyShift,
+                                                is_selected_channel);
+                       });
 
         // Right-clicking a group points at it without selecting it: the viewport goes on showing whatever
         // it was showing, and only the operation is told which group was meant -- so a lone depth channel
@@ -906,7 +911,10 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
-            if (ImGui::GetIO().KeyShift)
+            // Shift on its own is the reference modifier, as it has always been; everything else is the
+            // selection, with ctrl/cmd to toggle one group and ctrl/cmd+shift to take a range.
+            auto &io = ImGui::GetIO();
+            if (io.KeyShift && !io.KeyCtrl)
             {
                 spdlog::trace("Shift-clicked on {}", name);
                 // check if we are already the reference channel group
@@ -920,18 +928,26 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                 {
                     spdlog::trace("Setting reference image to {}", img_idx);
                     hdrview()->set_reference_image_index(img_idx);
-                    reference_group = layer.groups[g];
+                    reference_group = this_group;
                 }
                 set_as_texture(Target_Secondary);
             }
             else
             {
-                hdrview()->set_current_image_index(img_idx);
-                selected_group = layer.groups[g];
-                set_as_texture(Target_Primary);
+                if (io.KeyShift)
+                    hdrview()->select_group_range_to(img_idx, this_group);
+                else if (io.KeyCtrl)
+                    hdrview()->toggle_group_selected(img_idx, this_group);
+                else
+                    hdrview()->set_current_group(img_idx, this_group);
+
+                // Not necessarily this image: taking the current target out of the selection hands current
+                // to whatever is still in it, which can be another image entirely.
+                if (auto cur = hdrview()->current_image())
+                    cur->set_as_texture(Target_Primary);
             }
         }
-        else if (is_selected_channel && scroll_to >= -0.5f)
+        else if (is_current_channel && scroll_to >= -0.5f)
         {
             if (!ImGui::IsItemVisible())
                 ImGui::SetScrollHereY(scroll_to);

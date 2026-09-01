@@ -408,7 +408,7 @@ void ScrollWhenDraggingOnVoid(const ImVec2 &delta, ImGuiMouseButton mouse_button
         ImGui::SetScrollY(window, window->Scroll.y + delta.y);
 }
 
-void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
+void PushRowColors(bool is_current, bool is_reference, bool reference_mod, bool is_selected)
 {
     float4 active  = GetStyleColorVec4(ImGuiCol_HeaderActive);
     float4 header  = GetStyleColorVec4(ImGuiCol_Header);
@@ -418,7 +418,7 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
     // visible row per frame, so they're cached and rederived only when the theme actually changes --
     // comparing three colors is much cheaper than six HSV<->RGB conversions.
     static float4 cached_hovered{-1.f}, cached_header{-1.f}, cached_active{-1.f};
-    static float4 hovered_c, header_c, active_c, hovered_avg, header_avg, active_avg;
+    static float4 hovered_c, header_c, active_c, hovered_avg, header_avg, active_avg, header_dim;
     if (hovered != cached_hovered || header != cached_header || active != cached_active)
     {
         cached_hovered = hovered;
@@ -435,11 +435,17 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
         hovered_avg = 0.5f * (hovered_c + hovered);
         header_avg  = 0.5f * (header_c + header);
         active_avg  = 0.5f * (active_c + active);
+
+        // A selected row that isn't the current one is the same color at three quarters strength, which
+        // is done with the alpha rather than by scaling the color: against the light theme's background,
+        // a darker blue would read as more emphasis than the current row rather than less.
+        header_dim = float4{header.xyz(), 0.75f * header.w};
     }
 
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, reference_mod ? (is_current ? hovered_avg : hovered_c)
                                                                 : (is_reference ? hovered_avg : hovered));
-    ImGui::PushStyleColor(ImGuiCol_Header, is_reference ? (is_current ? header_avg : header_c) : header);
+    ImGui::PushStyleColor(ImGuiCol_Header, is_reference ? (is_current ? header_avg : header_c)
+                                                        : (is_current || !is_selected ? header : header_dim));
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, reference_mod ? (is_current ? active_avg : active_c) : active);
 }
 

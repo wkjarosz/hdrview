@@ -122,6 +122,9 @@ public:
     void invoke_action_on_group(const std::string &action_name, int group);
     //! The group an edit acts on: the one being pointed at, or the one on screen.
     int target_group() const;
+    //! The plural counterpart: the pointed-at group, or every group selected in the current image.
+    //! Falls back to target_group() for an image with nothing selected.
+    std::vector<int> target_groups() const;
     //! Put \p img into the list just after the current image, named \p partname, and select it.
     /*!
         Where duplicate_image() and the commands that derive an image from another one both land. Beside
@@ -424,16 +427,44 @@ public:
     int           image_index(ConstImagePtr img) const;
     ConstImagePtr image(int index) const { return is_valid(index) ? m_images[index] : nullptr; }
     ImagePtr      image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
-    void          set_current_image_index(int index, bool force = false)
-    {
-        m_current = force || is_valid(index) ? index : m_current;
-    }
-    void set_reference_image_index(int index, bool force = false)
+    void          set_current_image_index(int index, bool force = false);
+    void          set_reference_image_index(int index, bool force = false)
     {
         m_reference = force || is_valid(index) ? index : m_reference;
     }
     int next_visible_image_index(int index, Direction_ direction) const;
     int nth_visible_image_index(int n) const;
+    //-----------------------------------------------------------------------------
+
+    //-----------------------------------------------------------------------------
+    // the multi-selection
+    //-----------------------------------------------------------------------------
+    /*!
+        Selection runs over (image, channel group) targets, not over images: an image counts as selected
+        when any of its groups is. Two rules hold at all times -- something is selected whenever there is
+        an image to select, and the current target is one of the selected ones -- and every entry point
+        below maintains them. The reference is a separate axis and is not touched by any of this.
+
+        The flags themselves live on Channel; see Image::is_group_selected() and the helpers beside it.
+    */
+    //! Every selected target, as (image index, group index) pairs, in the order the panel lists them.
+    std::vector<std::pair<int, int>> selected_targets() const;
+    //! Make group \p group of image \p index the current target, and reconcile the selection with it.
+    /*!
+        A target that was already selected simply becomes the selection's current member; one that was not
+        replaces the whole selection, which is how a plain click starts a new one.
+    */
+    void set_current_group(int index, int group);
+    //! Add group \p group of image \p index to the selection, or take it out.
+    /*!
+        Refuses to empty the selection, and hands current to another selected target when it is current
+        that leaves.
+    */
+    void toggle_group_selected(int index, int group);
+    //! Select every image between the current one and \p index, each by the group it is showing.
+    void select_image_range_to(int index);
+    //! Select every target between the current one and (\p index, \p group), inclusive.
+    void select_group_range_to(int index, int group);
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------

@@ -1691,6 +1691,15 @@ string Image::to_string() const
     return out;
 }
 
+std::vector<int> Image::selected_groups() const
+{
+    std::vector<int> out;
+    for (int g = 0; g < (int)groups.size(); ++g)
+        if (is_group_selected(g))
+            out.push_back(g);
+    return out;
+}
+
 int Image::next_visible_group_index(int index, Direction_ direction) const
 {
     return next_matching_index(groups, index, [](size_t, const ChannelGroup &g) { return g.visible; }, direction);
