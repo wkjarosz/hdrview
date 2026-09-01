@@ -470,8 +470,9 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        // Color, then the filters, then the sphere -- the same three groups the commands are written in,
-        // under edit/commands/.
+        // Color, then the filters, then the sphere. Grouped for the menu rather than by which file the
+        // commands live in: brightness/contrast belongs beside exposure above, though it is written with
+        // the color edits because it can work on lightness alone.
         MenuItem(action("Convert color space..."));
         MenuItem(action("Channel mixer..."));
         MenuItem(action("Hue/saturation..."));

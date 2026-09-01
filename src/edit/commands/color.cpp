@@ -17,6 +17,9 @@
 #include "image.h"
 #include "imgui_ext.h"
 
+#include <hello_imgui/hello_imgui.h>
+#include <implot.h>
+
 #include <cmath>
 
 namespace
@@ -311,6 +314,217 @@ private:
     float m_hue = 0.f, m_saturation = 0.f, m_lightness = 0.f;
 };
 
+class BrightnessContrast final : public EditCommand
+{
+public:
+    Info info() const override
+    {
+        return {{"Brightness/contrast...", "Levels", "Tone curve"},
+                ICON_MY_BRIGHTNESS_CONTRAST,
+                ImGuiKey_None,
+                ImGuiInputFlags_None,
+                "Apply",
+                27.f};
+    }
+
+    void draw(EditContext &) override
+    {
+        // The curve first, since it is what the two sliders are for and reading it is quicker than
+        // reading the numbers. Both are drawn whichever is in force, the inactive one dimmed, so the
+        // difference between them is visible before it is chosen.
+        draw_curve();
+
+        ImGui::SliderFloat("Brightness", &m_brightness, -1.f, 1.f, "%+.3f");
+        ImGui::Tooltip("Shift the 50% gray midpoint.\n\nAbove zero this lifts a previously darker value to "
+                       "50%; below zero it dims a previously brighter one to 50%.");
+
+        ImGui::SliderFloat("Contrast", &m_contrast, -1.f, 1.f, "%+.3f");
+        ImGui::Tooltip("Change the slope at the new 50% midpoint. At -1 everything collapses to one level; "
+                       "at +1 the curve is vertical and only black and white are left.");
+
+        ImGui::Checkbox("Linear", &m_linear);
+        ImGui::Tooltip("A straight line through the midpoint, which runs past black and white rather than "
+                       "stopping at them -- so an HDR sample keeps its relation to its neighbors. Unticked, "
+                       "an s-curve that approaches them without ever arriving.");
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Apply to");
+        const char *names[] = {"RGB", "Lightness", "Chromaticity"};
+        for (int i = 0; i < Channel_COUNT; ++i)
+        {
+            ImGui::SameLine();
+            ImGui::RadioButton(names[i], &m_channel, i);
+        }
+        ImGui::Tooltip("RGB moves the three channels alike, which shifts saturation along with everything "
+                       "else. The other two work in L*a*b*, where lightness and color are separate: one "
+                       "changes how light the image is and leaves its colors, the other does the reverse.");
+    }
+
+    void apply(EditContext &ctx) override
+    {
+        auto img = ctx.image();
+        if (!img)
+            return;
+
+        const float slope    = slope_of(m_contrast);
+        const float midpoint = (1.f - m_brightness) / 2.f;
+        const float bias     = (m_brightness + 1.f) / 2.f;
+        const bool  linear   = m_linear;
+
+        auto curve = [slope, midpoint, bias, linear](float v) {
+            return linear ? brightness_contrast_linear(v, slope, midpoint)
+                          : brightness_contrast_nonlinear(v, slope, bias);
+        };
+
+        if (m_channel == Channel_RGB)
+        {
+            ctx.modify_colors("Brightness/contrast", [curve](const float4 &c, int2)
+                              { return float4{curve(c.x), curve(c.y), curve(c.z), c.w}; });
+            return;
+        }
+
+        // Through the image's own primaries rather than sRGB's: L*a*b* is defined from XYZ, and what the
+        // samples mean in XYZ is what the image says they do.
+        const float3x3 to_XYZ   = img->M_RGB_to_XYZ;
+        const float3x3 from_XYZ = img->M_XYZ_to_RGB;
+        const float3   white    = img->chromaticities ? XYZ_from_xy(img->chromaticities->white) : Lab_reference_white();
+        const bool     lightness = m_channel == Channel_Lightness;
+
+        ctx.modify_colors("Brightness/contrast",
+                          [curve, to_XYZ, from_XYZ, white, lightness](const float4 &c, int2)
+                          {
+                              float3 lab = normalize_Lab(XYZ_to_Lab(mul(to_XYZ, c.xyz()), white));
+
+                              if (lightness)
+                                  lab.x = curve(lab.x);
+                              else
+                              {
+                                  lab.y = curve(lab.y);
+                                  lab.z = curve(lab.z);
+                              }
+
+                              return float4{mul(from_XYZ, Lab_to_XYZ(unnormalize_Lab(lab), white)), c.w};
+                          });
+    }
+
+private:
+    //! The slope the contrast slider asks for, as the tangent of an angle.
+    /*!
+        An angle rather than a multiplier, so that the two ends of the slider are the two extremes there
+        are: -1 is a horizontal line and no contrast at all, 0 is the 45-degree diagonal that changes
+        nothing, and +1 is vertical, which leaves only black and white.
+    */
+    static float slope_of(float contrast) { return float(std::tan(lerp(0.0, M_PI_2, contrast / 2.0 + 0.5))); }
+
+    //! Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
+    void draw_curve()
+    {
+        const float slope    = slope_of(m_contrast);
+        const float midpoint = (1.f - m_brightness) / 2.f;
+        const float bias     = (m_brightness + 1.f) / 2.f;
+
+        constexpr int N = 129;
+        float         xs[N], linear[N], curved[N];
+        for (int i = 0; i < N; ++i)
+        {
+            xs[i]     = float(i) / float(N - 1);
+            linear[i] = brightness_contrast_linear(xs[i], slope, midpoint);
+            curved[i] = brightness_contrast_nonlinear(xs[i], slope, bias);
+        }
+
+        // As wide as the sliders beneath it. The widget also holds the tick labels, which are wider down
+        // the left side than they are tall along the bottom, so a square widget leaves a plot area that is
+        // not square -- the height carries a correction measured from the last frame, which settles after
+        // one and then stays put.
+        const float width = ImGui::CalcItemWidth();
+
+        if (ImPlot::BeginPlot("##Curve", ImVec2(width, width + m_plot_extra_height),
+                              ImPlotFlags_NoTitle | ImPlotFlags_NoLegend | ImPlotFlags_NoMenus |
+                                  ImPlotFlags_NoBoxSelect))
+        {
+            const ImPlotAxisFlags axes = ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_Lock;
+            ImPlot::SetupAxes(nullptr, nullptr, axes, axes);
+
+            // The same ticks both ways, since the two axes carry the same quantity: a level in and the
+            // level it maps to.
+            ImPlot::SetupAxisTicks(ImAxis_X1, 0.0, 1.0, 5);
+            ImPlot::SetupAxisTicks(ImAxis_Y1, 0.0, 1.0, 5);
+
+            // Fixed, so that the curve moves against the frame instead of the frame following the curve.
+            // The straight line leaves the top and bottom at any real contrast, and seeing it leave is the
+            // point of drawing it.
+            ImPlot::SetupAxesLimits(0.0, 1.0, 0.0, 1.0, ImPlotCond_Always);
+
+            const ImVec4 active{1.f, 1.f, 1.f, 0.85f};
+            const ImVec4 faint{1.f, 1.f, 1.f, 0.18f};
+
+            ImPlotSpec spec;
+            spec.LineWeight = 2.f;
+
+            spec.LineColor = m_linear ? faint : active;
+            ImPlot::PlotLine("s-curve", xs, curved, N, spec);
+
+            spec.LineColor = m_linear ? active : faint;
+            ImPlot::PlotLine("line", xs, linear, N, spec);
+
+            // Where the midpoint sits, which is what brightness moves.
+            const float mid_x[2] = {midpoint, midpoint};
+            const float mid_y[2] = {0.f, 1.f};
+            spec.LineColor       = ImVec4(1.f, 1.f, 1.f, 0.25f);
+            spec.LineWeight      = 1.f;
+            ImPlot::PlotLine("midpoint", mid_x, mid_y, 2, spec);
+
+            // Dragging sets both at once, which finds a look faster than two sliders do: across is the
+            // midpoint the curve pivots about, and up is how steep it is there.
+            //
+            // In the plot's own coordinates rather than the widget's. The widget rectangle includes the
+            // frame and the tick labels around the plot, so a fraction taken across it is not the
+            // fraction across the axes -- the midpoint line lands beside the cursor and drifts further
+            // the nearer the edge it gets.
+            if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                m_dragging = true;
+
+            if (m_dragging)
+            {
+                if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                    m_dragging = false;
+                else
+                {
+                    // Kept live once the drag has started, even past the edge of the plot, so a slide to
+                    // an extreme does not stop short of it.
+                    const ImPlotPoint m = ImPlot::GetPlotMousePos();
+                    m_brightness        = std::clamp(float(lerp(1.0, -1.0, m.x)), -1.f, 1.f);
+                    m_contrast          = std::clamp(float(lerp(-1.0, 1.0, m.y)), -1.f, 1.f);
+                }
+            }
+
+            const ImVec2 area = ImPlot::GetPlotSize();
+            if (area.x > 0.f && area.y > 0.f)
+                m_plot_extra_height = std::clamp(m_plot_extra_height + (area.x - area.y), 0.f, width);
+
+            ImPlot::EndPlot();
+        }
+    }
+
+    //! Which of the image's qualities the curve is applied to.
+    enum Channel : int
+    {
+        Channel_RGB = 0,      //!< The three channels alike, saturation moving with everything else
+        Channel_Lightness,    //!< L* alone, so the colors stay where they are
+        Channel_Chromaticity, //!< a* and b*, so how light the image is does not change
+
+        Channel_COUNT
+    };
+
+    float m_brightness = 0.f, m_contrast = 0.f;
+    bool  m_linear  = false;
+    int   m_channel = Channel_RGB;
+    //! A drag that began inside the plot, and goes on following the mouse after it leaves.
+    bool m_dragging = false;
+    //! What the widget needs above its width for the plot *area* to come out square; see draw_curve().
+    float m_plot_extra_height = 0.f;
+};
+
 class Flatten final : public EditCommand
 {
 public:
@@ -359,6 +573,7 @@ private:
 
 void add_color_commands(std::vector<EditCommandPtr> &out)
 {
+    out.push_back(std::make_unique<BrightnessContrast>());
     out.push_back(std::make_unique<ConvertColorSpace>());
     out.push_back(std::make_unique<ChannelMixer>());
     out.push_back(std::make_unique<HueSaturation>());

@@ -1001,6 +1001,105 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(snapshot(img) == original);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "brightness/contrast can move lightness and color separately");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // A color with all three channels different, so an edit that touches only one quality of it can
+        // be told from one that touches everything.
+        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
+                                          [](float, int2, int slot)
+                                          {
+                                              const float v[4] = {0.6f, 0.3f, 0.15f, 1.f};
+                                              return v[slot < 4 ? slot : 0];
+                                          }));
+        ctx->Yield();
+
+        const int4   ch    = img->groups[img->selected_group].channels;
+        const float3 white = img->chromaticities ? XYZ_from_xy(img->chromaticities->white) : Lab_reference_white();
+
+        // Measured in L*a*b*, because that is what the modes are stated in: one moves L* and leaves a* and
+        // b*, the other does the reverse. Saying it in RGB would be saying something else -- changing L*
+        // alone does move the RGB ratios, since L*a*b* holds a color's appearance fixed rather than its
+        // proportions.
+        auto sample_lab = [&]
+        {
+            const float3 rgb{img->channels[ch[0]](int2{4, 4}), img->channels[ch[1]](int2{4, 4}),
+                             img->channels[ch[2]](int2{4, 4})};
+            return XYZ_to_Lab(mul(img->M_RGB_to_XYZ, rgb), white);
+        };
+
+        const float3 before = sample_lab();
+
+        struct Mode
+        {
+            const char *button;
+            bool        moves_lightness;
+            bool        moves_color;
+        };
+        const Mode modes[] = {
+            {"RGB", true, true},          // the three channels alike, which shifts both
+            {"Lightness", true, false},   // L* only
+            {"Chromaticity", false, true} // a* and b* only
+        };
+
+        for (const Mode &mode : modes)
+            for (bool linear : {true, false})
+            {
+                ctx->LogInfo("--- %s, %s curve ---", mode.button, linear ? "straight" : "s");
+
+                menu_click(ctx, "Edit/Brightness\\/contrast...");
+
+                // Escaped, as the menu path is: the slash in the name is a path separator to the engine,
+                // so an unescaped ref looks for "contrast..." inside a window called "Brightness".
+                ctx->SetRef("Brightness\\/contrast...");
+
+                // The plot is drawn above these and must not swallow them.
+                ctx->ItemInputValue("Brightness", 0.4f);
+                ctx->ItemInputValue("Contrast", 0.2f);
+                ctx->ItemClick(mode.button);
+
+                if (linear)
+                    ctx->ItemCheck("Linear");
+                else
+                    ctx->ItemUncheck("Linear");
+
+                ctx->ItemClick("Apply");
+                ctx->Yield(2);
+
+                IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Brightness/contrast");
+
+                const float3 after = sample_lab();
+
+                const float d_lightness = std::fabs(after.x - before.x);
+                const float d_color     = std::max(std::fabs(after.y - before.y), std::fabs(after.z - before.z));
+                ctx->LogInfo("dL* %f  d(a*,b*) %f", d_lightness, d_color);
+
+                // Well above what the trip out to RGB and back costs, and well below what an edit does.
+                const float noise = 0.05f;
+
+                if (mode.moves_lightness)
+                    IM_CHECK_GT(d_lightness, noise);
+                else
+                    IM_CHECK_LT(d_lightness, noise);
+
+                if (mode.moves_color)
+                    IM_CHECK_GT(d_color, noise);
+                else
+                    IM_CHECK_LT(d_color, noise);
+
+                menu_click(ctx, "Edit/Undo");
+                ctx->Yield();
+                IM_CHECK_LT(std::fabs(sample_lab().x - before.x), 1e-3f);
+            }
+
+        reset_images(ctx);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "a color edit sees a group's channels together");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

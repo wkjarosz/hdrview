@@ -78,31 +78,6 @@ private:
     float m_exposure = 0.f, m_offset = 0.f, m_gamma = 1.f;
 };
 
-class BrightnessContrast final : public EditCommand
-{
-public:
-    Info info() const override { return {{"Brightness/contrast..."}, ICON_MY_BRIGHTNESS_CONTRAST}; }
-
-    void draw(EditContext &) override
-    {
-        ImGui::SliderFloat("Brightness", &m_brightness, -1.f, 1.f, "%.3f");
-        ImGui::SliderFloat("Contrast", &m_contrast, -1.f, 1.f, "%.3f");
-    }
-
-    void apply(EditContext &ctx) override
-    {
-        // Contrast sets how steep the line through the midpoint is; brightness moves the midpoint.
-        const float slope    = float(std::tan(lerp(0.0, M_PI_2, m_contrast / 2.0 + 0.5)));
-        const float midpoint = (1.f - m_brightness) / 2.f;
-
-        ctx.modify_pixels("Brightness/contrast", [slope, midpoint](float v, int2, int)
-                          { return brightness_contrast_linear(v, slope, midpoint); });
-    }
-
-private:
-    float m_brightness = 0.f, m_contrast = 0.f;
-};
-
 class Fill final : public EditCommand
 {
 public:
@@ -193,6 +168,5 @@ void add_tonal_commands(std::vector<EditCommandPtr> &out)
     out.push_back(std::make_unique<Invert>());
     out.push_back(std::make_unique<Clamp>());
     out.push_back(std::make_unique<ExposureGamma>());
-    out.push_back(std::make_unique<BrightnessContrast>());
     out.push_back(std::make_unique<Fill>());
 }
