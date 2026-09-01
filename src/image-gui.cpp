@@ -872,6 +872,37 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                        [&]
                        { ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift); });
 
+        // Right-clicking a group is how one is named for the menu that follows, so it becomes the current
+        // group before the menu is drawn: these commands take their subject from the selection, not from
+        // whatever happened to be under the cursor.
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+        {
+            hdrview()->set_current_image_index(img_idx);
+            selected_group = layer.groups[g];
+            set_as_texture(Target_Primary);
+        }
+
+        if (ImGui::BeginPopupContextItem())
+        {
+            ImGui::TextDisabled("%s", name.c_str());
+            ImGui::Separator();
+            for (const char *command : {"Explode channel group", "Regroup channels", "Delete channel group"})
+            {
+                const auto &a = hdrview()->action(command);
+
+                // Spelled out as strings: imgui_ext declares a MenuItemEx taking std::string, and a
+                // null here binds to that rather than to Dear ImGui's char* one, which constructs a
+                // string from nullptr.
+                if (ImGui::MenuItemEx(a.names[0], a.icon, ImGui::GetKeyChordNameTranslated(a.chord), nullptr,
+                                      a.enabled()))
+                    // Next frame rather than now: deleting a group rebuilds the very layers and groups
+                    // this loop is walking, and the rest of the tree would be drawn from vectors that had
+                    // moved out from under it.
+                    hdrview()->post_to_main_thread([command] { hdrview()->action(command).callback(); });
+            }
+            ImGui::EndPopup();
+        }
+
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
             if (ImGui::GetIO().KeyShift)
