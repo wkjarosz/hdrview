@@ -8,7 +8,7 @@
     \author Wojciech Jarosz
 
     The edits that read the samples around the one they are writing; see edit/filters.h for the filters
-    themselves, which know nothing about how they are asked for.
+    themselves.
 */
 
 #include "edit/commands.h"

@@ -91,8 +91,7 @@ public:
 
     void apply(EditContext &ctx) override
     {
-        // Contrast sets how steep the line through the midpoint is; brightness moves the midpoint. Taken
-        // from the pre-2.0 control so that the two behave the way they used to.
+        // Contrast sets how steep the line through the midpoint is; brightness moves the midpoint.
         const float slope    = float(std::tan(lerp(0.0, M_PI_2, m_contrast / 2.0 + 0.5)));
         const float midpoint = (1.f - m_brightness) / 2.f;
 

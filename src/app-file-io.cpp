@@ -710,8 +710,8 @@ void HDRViewApp::duplicate_image()
     if (!img)
         return;
 
-    // With a selection, what is duplicated is the selection: that is how one lifts a piece of an image out
-    // into its own, and the menu says which of the two it is about to do.
+    // With a selection, what is duplicated is the selection. The menu says which of the two it is about
+    // to do.
     auto copy = img->duplicate(m_roi);
     if (!copy)
         return;

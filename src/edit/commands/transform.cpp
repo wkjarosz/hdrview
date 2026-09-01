@@ -7,8 +7,8 @@
 /** \file transform.cpp
     \author Wojciech Jarosz
 
-    The edits that move samples rather than change them: the flips and quarter turns, which every sample
-    survives, and the ones that change how many samples there are.
+    The edits that move samples instead of changing them: the flips and quarter turns, and the ones that
+    change how many samples there are.
 */
 
 #include "edit/commands.h"

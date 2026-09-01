@@ -7,9 +7,8 @@
 /** \file clipboard.cpp
     \author Wojciech Jarosz
 
-    Cut, copy and paste, over a clipboard that holds an image rather than anything the system knows about.
-    A pasted region carries its full precision and its channels, which is the point of having it here: the
-    system clipboard would flatten an HDR selection to eight-bit RGBA on the way through.
+    Cut, copy and paste, over a clipboard that holds an image. A pasted region keeps its full precision
+    and its channels; the system clipboard would flatten an HDR selection to eight-bit RGBA.
 */
 
 #include "edit/commands.h"

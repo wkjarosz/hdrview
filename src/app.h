@@ -107,11 +107,9 @@ public:
     /*!
         Put a copy of the current image into the list beside it, and select it.
 
-        Not an undoable edit: the history belongs to an image, and this makes one rather than changing one
-        -- there is nothing whose history could hold it. Closing the copy is what takes it back.
+        Not an undoable edit: the history belongs to an image. Closing the copy is what takes it back.
 
-        With a selection in force it is the selection that is copied, as it was pre-2.0, which is how a
-        piece of an image is lifted out into its own.
+        With a selection in force it is the selection that is copied.
     */
     void duplicate_image();
     //! Whether `image` came from somewhere reload_image() could read it again.

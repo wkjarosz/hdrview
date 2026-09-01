@@ -7,8 +7,7 @@
 /** \file color.cpp
     \author Wojciech Jarosz
 
-    The edits that need a group's channels together rather than one sample at a time -- a color is three
-    numbers, and none of these can be expressed by looking at one of them.
+    The edits that need to operate on a group's channels together, instead of independently.
 */
 
 #include "edit/commands.h"
