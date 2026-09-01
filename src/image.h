@@ -643,6 +643,19 @@ public:
     */
     void rebuild_layers();
 
+    /*!
+        A separate image holding a copy of \p region of this one, or of all of it when \p region is empty.
+
+        Deep: the samples are copied rather than shared, so the two can be edited independently -- which is
+        the whole point of having a second one. Everything describing how to read those samples comes with
+        them, since a copy that lost its color space would be a different picture.
+
+        The copy has no history and no texture. It is not live however this image arrived: pixels pushed in
+        by a renderer belong to that process, but a copy of them is an ordinary image and is exactly how
+        one keeps a frame the renderer is about to overwrite.
+    */
+    ImagePtr duplicate(const Box2i &region = Box2i{}) const;
+
 private:
     //! Move the windows the way the samples just moved, so the two stay in the same frame.
     void reflect_windows(bool horizontal);

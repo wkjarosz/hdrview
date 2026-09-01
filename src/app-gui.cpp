@@ -377,6 +377,12 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Reload image"));
         MenuItem(action("Reload all images"));
 
+        // Named for what it will actually do, since with a selection in force it copies just that. The
+        // "###" fixes the item's id the way Undo's does below, so the label can change without the item
+        // becoming unaddressable.
+        MenuItem(action("Duplicate image"), m_roi.has_volume() ? string{"Duplicate selection###Duplicate image"}
+                                                               : string{"Duplicate image###Duplicate image"});
+
 #if !defined(__EMSCRIPTEN__)
         MenuItem(action("Watch for changes"));
 

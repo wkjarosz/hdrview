@@ -1234,6 +1234,84 @@ void Image::rebuild_layers()
         reference_group = -1;
 }
 
+ImagePtr Image::duplicate(const Box2i &region) const
+{
+    Box2i clipped = region.has_volume() ? region : data_window;
+    clipped.intersect(data_window);
+    if (!clipped.has_volume())
+        return nullptr;
+
+    auto copy = std::make_shared<Image>();
+
+    // Everything that says what the samples mean. A copy that lost its primaries or its alpha convention
+    // would be read differently from the image it was made of, which is not what "duplicate" means.
+    copy->filename              = filename;
+    copy->partname              = partname;
+    copy->channel_selector      = channel_selector;
+    copy->chromaticities        = chromaticities;
+    copy->adopted_neutral       = adopted_neutral;
+    copy->M_RGB_to_XYZ          = M_RGB_to_XYZ;
+    copy->M_XYZ_to_RGB          = M_XYZ_to_RGB;
+    copy->M_to_sRGB             = M_to_sRGB;
+    copy->luminance_weights     = luminance_weights;
+    copy->adaptation_method     = adaptation_method;
+    copy->color_space           = color_space;
+    copy->white_point           = white_point;
+    copy->alpha_type            = alpha_type;
+    copy->alpha_is_transparency = alpha_is_transparency;
+    copy->metadata              = metadata;
+    copy->exif                  = exif;
+    copy->xmp_data              = xmp_data;
+    copy->icc_data              = icc_data;
+    copy->orientation_applied   = orientation_applied;
+    copy->path                  = path;
+    copy->last_modified         = last_modified;
+    copy->size_bytes            = size_bytes;
+
+    // Deliberately not copied: `id`, which is this image's own and is handed out by the constructor;
+    // `history`, since the copy has had nothing done to it; `is_live`, because these samples are a
+    // snapshot and no process is going to write over them again; and `vector_overlay`, which annotates
+    // what a renderer is producing rather than the picture.
+
+    const int2 extent = clipped.size();
+    const int2 offset = clipped.min - data_window.min;
+
+    copy->channels.reserve(channels.size());
+    for (const auto &channel : channels)
+    {
+        // Channel cannot be copied -- the deleted copy is what stops a texture or a statistics task being
+        // duplicated by accident -- so a fresh one is filled from this one's samples.
+        Channel out{channel.name, extent};
+        out.bits_per_sample = channel.bits_per_sample;
+
+        const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+        stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                          [&](int y0, int y1, int, int)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < extent.x; ++x) out(x, y) = channel(offset.x + x, offset.y + y);
+                          });
+
+        copy->channels.push_back(std::move(out));
+    }
+
+    // A duplicated region is a whole image, not a crop sitting inside the old canvas -- but one of the
+    // whole image keeps the frame it had, display window and all.
+    if (clipped == data_window)
+    {
+        copy->data_window    = data_window;
+        copy->display_window = display_window;
+    }
+    else
+        copy->data_window = copy->display_window = clipped;
+
+    // The layers and groups follow from the channel names, and finalize() would premultiply a
+    // straight-alpha image a second time -- these samples are already whatever this image's are.
+    copy->rebuild_layers();
+
+    return copy;
+}
+
 void Image::crop(const Box2i &box)
 {
     Box2i clipped = box;

@@ -1238,6 +1238,92 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "duplicating an image copies its samples, not a reference");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       original = hdrview()->current_image();
+        const auto before   = snapshot(original);
+        const int  count    = hdrview()->num_images();
+        const int  index    = hdrview()->current_image_index();
+
+        ctx->SetRef("##MainMenuBar");
+        ctx->MenuClick("File/Duplicate image");
+        ctx->Yield(2);
+
+        IM_CHECK_EQ(hdrview()->num_images(), count + 1);
+
+        // Beside the one it was made from, and selected, which is where the eye is.
+        IM_CHECK_EQ(hdrview()->current_image_index(), index + 1);
+        auto copy = hdrview()->current_image();
+        IM_CHECK(copy != nullptr);
+        IM_CHECK(copy != original);
+
+        // The same picture...
+        IM_CHECK(copy->size() == original->size());
+        IM_CHECK(snapshot(copy) == before);
+
+        // ...and its own copy of it. A shallow copy would pass everything above and fail here, which is the
+        // whole reason to have a test: editing one must leave the other alone.
+        IM_CHECK(hdrview()->modify_pixels(copy, "Invert", hdrview()->edit_subject(),
+                                          [](float v, int2, int) { return 1.f - v; }));
+        ctx->Yield();
+        IM_CHECK(snapshot(copy) != before);
+        IM_CHECK(snapshot(original) == before);
+
+        // Histories are its own too: the copy has one edit to undo and the original has none.
+        IM_CHECK_EQ(copy->history.has_undo(), true);
+        IM_CHECK_EQ(original->history.has_undo(), false);
+
+        // Nothing on disk holds the copy, so closing it has something to warn about.
+        IM_CHECK_EQ(original->history.is_modified(), false);
+
+        // What the samples mean travels with them; a copy read in different primaries is a different
+        // picture.
+        IM_CHECK_EQ(copy->color_space, original->color_space);
+        IM_CHECK_EQ(copy->alpha_type, original->alpha_type);
+        IM_CHECK_EQ(copy->groups.size(), original->groups.size());
+
+        reset_images(ctx);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "duplicating with a selection lifts out just the selection");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       original = hdrview()->current_image();
+        const int2 size     = original->size();
+
+        const Box2i box{int2{size.x / 4, size.y / 4}, int2{size.x / 2, size.y / 2}};
+        hdrview()->set_selection(box);
+        ctx->Yield();
+
+        ctx->SetRef("##MainMenuBar");
+        ctx->MenuClick("File/Duplicate image");
+        ctx->Yield(2);
+
+        auto copy = hdrview()->current_image();
+        IM_CHECK(copy != original);
+
+        // The size of what was selected, not of what it was selected from.
+        IM_CHECK(copy->size() == box.size());
+
+        // And holding those samples: the corner of the copy is the corner of the selection.
+        const auto &co = copy->channels[0];
+        const auto &og = original->channels[0];
+        for (int i = 0; i < 5; ++i)
+            IM_CHECK_EQ(co(i, i),
+                        og(box.min.x + i - original->data_window.min.x, box.min.y + i - original->data_window.min.y));
+
+        // The selection belonged to the image it was taken from, and the copy is all of itself.
+        hdrview()->set_selection(Box2i{});
+        reset_images(ctx);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

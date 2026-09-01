@@ -1356,6 +1356,12 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]() { reload_image(current_image()); },
                    [this]() { return can_reload(current_image()); }});
+        add(Action{{"Duplicate image", "Make a copy"},
+                   ICON_MY_DUPLICATE,
+                   ImGuiMod_Alt | ImGuiMod_Shift | ImGuiKey_D,
+                   0,
+                   [this]() { duplicate_image(); },
+                   if_img});
         add(Action{{"Reload all images"},
                    ICON_MY_RELOAD,
                    ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R,

@@ -704,6 +704,37 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     m_image_loader.background_load(image->filename, std::nullopt, should_select, image, opts);
 }
 
+void HDRViewApp::duplicate_image()
+{
+    auto img = current_image();
+    if (!img)
+        return;
+
+    // 1.8's behavior: with a selection, what is duplicated is the selection. That is how one lifts a piece
+    // of an image out into its own, and the menu says which of the two it is about to do.
+    auto copy = img->duplicate(m_roi);
+    if (!copy)
+        return;
+
+    // A duplicate is not the file it came from, and neither is a piece of one. Saying so in the part name
+    // keeps the Images panel able to tell them apart while the file name still says where it came from.
+    copy->partname = m_roi.has_volume() ? "selection" : "copy";
+
+    // Nothing on disk holds this, so it counts as unsaved from the start and closing it will say so.
+    copy->history = CommandHistory{true};
+
+    // Deliberately not finalize(): duplicate() has already built the layers, and these samples came from an
+    // image that was finalized once already -- premultiplying a straight-alpha image a second time would
+    // quietly darken the copy.
+
+    // Beside the image it was made from rather than at the end of the list, which is where the eye is.
+    const int index = current_image_index();
+    m_images.insert(m_images.begin() + index + 1, copy);
+    set_current_image_index(index + 1);
+
+    update_visibility();
+}
+
 void HDRViewApp::close_image_immediately(int index)
 {
     if (!is_valid(index))
