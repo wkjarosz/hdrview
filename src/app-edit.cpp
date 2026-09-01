@@ -42,6 +42,7 @@ struct AppEditContext final : EditContext
 
     ImagePtr           image() const override { return app->current_image(); }
     const EditSubject &subject() const override { return app->edit_subject(); }
+    int                target_group() const override { return app->target_group(); }
     Box2i              selection() const override { return app->roi(); }
     void               set_selection(const Box2i &box) override { app->set_selection(box); }
     float4             background_color() const override { return app->background_color(); }
@@ -92,6 +93,25 @@ struct AppEditContext final : EditContext
 };
 
 } // namespace
+
+int HDRViewApp::target_group() const
+{
+    if (m_target_group_override >= 0)
+        return m_target_group_override;
+
+    auto img = current_image();
+    return img ? img->active_group_index(Target_Primary) : -1;
+}
+
+void HDRViewApp::invoke_action_on_group(const string &action_name, int group)
+{
+    // Restored however the action leaves, since pointing at a group must not move the selection -- and an
+    // action that removes the group would otherwise leave the override naming one that is gone.
+    const int previous      = m_target_group_override;
+    m_target_group_override = group;
+    action(action_name).callback();
+    m_target_group_override = previous;
+}
 
 void HDRViewApp::invoke_edit_command(EditCommand &cmd)
 {

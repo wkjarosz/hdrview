@@ -482,9 +482,9 @@ void HDRViewApp::draw_menus()
 
         // What the image is made of, rather than what its samples say: which channels there are, and
         // which of them are read together as one color.
-        MenuItem(action("Explode channel group"));
+        MenuItem(action("Ungroup channels"));
         MenuItem(action("Regroup channels"));
-        MenuItem(action("Delete channel group"));
+        MenuItem(action("Delete channel group"), delete_channels_label(current_image(), target_group()));
         MenuItem(action("Generate mipmaps..."));
 
         ImGui::Separator();

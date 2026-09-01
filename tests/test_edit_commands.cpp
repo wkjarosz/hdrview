@@ -49,12 +49,23 @@ public:
 
     ImagePtr           image() const override { return m_image; }
     const EditSubject &subject() const override { return m_subject; }
-    Box2i              selection() const override { return m_selection; }
-    void               set_selection(const Box2i &box) override { m_selection = box; }
-    float4             background_color() const override { return m_background; }
-    ConstImagePtr      clipboard() const override { return m_clipboard; }
-    void               set_clipboard(ImagePtr img) override { m_clipboard = std::move(img); }
-    void               draw_subject_selector() override {}
+
+    //! The group being pointed at when one has been set, and otherwise the one the image is showing.
+    int target_group() const override
+    {
+        if (m_target_group >= 0)
+            return m_target_group;
+        return m_image ? m_image->active_group_index(Target_Primary) : -1;
+    }
+
+    //! Point at a group without selecting it, the way the Images panel's context menu does.
+    void          set_target_group(int group) { m_target_group = group; }
+    Box2i         selection() const override { return m_selection; }
+    void          set_selection(const Box2i &box) override { m_selection = box; }
+    float4        background_color() const override { return m_background; }
+    ConstImagePtr clipboard() const override { return m_clipboard; }
+    void          set_clipboard(ImagePtr img) override { m_clipboard = std::move(img); }
+    void          draw_subject_selector() override {}
 
     //! Collected rather than shown, so a command that produces images can be checked for what it made.
     void add_image(ImagePtr img, const std::string &partname) override
@@ -303,6 +314,7 @@ private:
     }
 
     bool                  m_used_subject = false;
+    int                   m_target_group = -1;
     std::vector<ImagePtr> m_added;
     ImagePtr              m_image;
     ImagePtr              m_clipboard;
@@ -592,7 +604,7 @@ TEST_CASE("Exploding a group takes its channels out of it, and regrouping puts t
     const size_t grouped = img->groups.size();
     REQUIRE(grouped < img->channels.size());
 
-    auto explode = find_command("Explode channel group");
+    auto explode = find_command("Ungroup channels");
     REQUIRE(explode);
     REQUIRE(explode->enabled(ctx));
 
@@ -661,7 +673,7 @@ TEST_CASE("Deleting a channel group removes its channels, and undo brings them b
     TestEditContext ctx{img};
 
     // Explode first, so there is more than one group and deleting one leaves an image behind.
-    find_command("Explode channel group")->apply(ctx);
+    find_command("Ungroup channels")->apply(ctx);
 
     const size_t channels_before = img->channels.size();
     const size_t groups_before   = img->groups.size();
@@ -785,7 +797,7 @@ TEST_CASE("Regrouping reaches the whole layer from any one of its exploded chann
     REQUIRE(img->groups.size() == 2); // one per layer
 
     TestEditContext ctx{img};
-    auto            explode = find_command("Explode channel group");
+    auto            explode = find_command("Ungroup channels");
     auto            regroup = find_command("Regroup channels");
     REQUIRE(explode);
     REQUIRE(regroup);
@@ -867,7 +879,7 @@ TEST_CASE("Regrouping touches only the channels an explosion marked, not every l
             img->selected_group = int(g);
             break;
         }
-    find_command("Explode channel group")->apply(ctx);
+    find_command("Ungroup channels")->apply(ctx);
 
     // Three marked, and the depth channel still unmarked though it too stands alone.
     CHECK(img->channels[0].ungrouped);
@@ -884,4 +896,93 @@ TEST_CASE("Regrouping touches only the channels an explosion marked, not every l
     REQUIRE(img->history.undo(*img));
     CHECK(img->channels[0].ungrouped);
     CHECK_FALSE(img->channels[3].ungrouped);
+}
+
+TEST_CASE("The delete command says whether it is about to take one channel or a group")
+{
+    // The label follows the group on screen while the action's name stays put, since the name is what the
+    // registry, the palette and these tests address it by.
+    auto img = make_image();
+    REQUIRE(delete_channels_label(img, img->selected_group) == "Delete channel group");
+
+    TestEditContext ctx{img};
+    find_command("Ungroup channels")->apply(ctx);
+
+    // Now every group is a lone channel, and deleting one is not deleting a group.
+    REQUIRE(img->groups[size_t(img->selected_group)].num_channels == 1);
+    CHECK(delete_channels_label(img, img->selected_group) == "Delete channel");
+
+    // The command is still registered under the one name throughout.
+    CHECK(find_command("Delete channel group") != nullptr);
+    CHECK(find_command("Delete channel") == nullptr);
+}
+
+TEST_CASE("A group can be acted on without becoming the one on screen")
+{
+    // Pointing at a group is not selecting it. Right-clicking a lone depth channel to delete it must
+    // leave the color that was being shown both selected and intact.
+    auto img = std::make_shared<Image>(k_size, 4);
+
+    static const char *names[] = {"R", "G", "B", "Z"};
+    for (int c = 0; c < 4; ++c) img->channels[size_t(c)].name = names[c];
+    img->rebuild_layers();
+
+    REQUIRE(img->groups.size() == 2); // the color, and the depth on its own
+
+    // Show the color.
+    int color = -1, depth = -1;
+    for (size_t g = 0; g < img->groups.size(); ++g) (img->groups[g].num_channels > 1 ? color : depth) = int(g);
+    REQUIRE(color >= 0);
+    REQUIRE(depth >= 0);
+
+    img->selected_group = color;
+
+    TestEditContext ctx{img};
+
+    // What the label says it is about to do differs between the two, which is the point of it varying.
+    CHECK(delete_channels_label(img, color) == "Delete channel group");
+    CHECK(delete_channels_label(img, depth) == "Delete channel");
+
+    // Point at the depth channel without selecting it.
+    ctx.set_target_group(depth);
+
+    auto del = find_command("Delete channel group");
+    REQUIRE(del);
+    REQUIRE(del->enabled(ctx));
+    del->apply(ctx);
+
+    // The depth channel is gone and the color is untouched -- and still what the viewport shows.
+    CHECK(img->channels.size() == 3);
+    for (const auto &c : img->channels) CHECK(c.name != "Z");
+
+    REQUIRE(img->is_valid_group(img->selected_group));
+    CHECK(img->groups[size_t(img->selected_group)].num_channels == 3);
+}
+
+TEST_CASE("Ungrouping a group that is not on screen leaves the viewport where it was")
+{
+    auto img = std::make_shared<Image>(k_size, 6);
+
+    static const char *names[] = {"diffuse.R", "diffuse.G", "diffuse.B", "specular.R", "specular.G", "specular.B"};
+    for (int c = 0; c < 6; ++c) img->channels[size_t(c)].name = names[c];
+    img->rebuild_layers();
+    REQUIRE(img->groups.size() == 2);
+
+    int shown = -1, other = -1;
+    for (size_t g = 0; g < img->groups.size(); ++g)
+        (Channel::head(img->channels[size_t(img->groups[g].channels[0])].name) == "diffuse." ? shown : other) = int(g);
+
+    img->selected_group         = shown;
+    const std::string on_screen = img->channels[size_t(img->groups[size_t(shown)].channels[0])].name;
+
+    TestEditContext ctx{img};
+    ctx.set_target_group(other);
+
+    find_command("Ungroup channels")->apply(ctx);
+
+    // specular came apart, diffuse did not, and diffuse is still what is being shown.
+    CHECK(img->groups.size() == 4);
+    REQUIRE(img->is_valid_group(img->selected_group));
+    CHECK(img->groups[size_t(img->selected_group)].num_channels == 3);
+    CHECK(img->channels[size_t(img->groups[size_t(img->selected_group)].channels[0])].name == on_screen);
 }

@@ -39,6 +39,16 @@ struct EditContext
     //! Which of that image's samples the edit covers.
     virtual const EditSubject &subject() const = 0;
 
+    //! The channel group an operation acts on: normally the one being shown.
+    /*!
+        Named separately from the selection because a group can be pointed at without being selected --
+        right-clicking one in the Images panel says which group is meant without disturbing what the
+        viewport is showing, so a lone depth channel can be deleted while a color stays on screen.
+
+        -1 when the image has no group to speak of.
+    */
+    virtual int target_group() const = 0;
+
     virtual Box2i selection() const               = 0;
     virtual void  set_selection(const Box2i &box) = 0;
     //! The color the viewport draws behind the image, for the edits that composite against it.

@@ -112,6 +112,16 @@ public:
         With a selection in force it is the selection that is copied.
     */
     void duplicate_image();
+
+    //! Run \p action with \p group standing in for the selected one, then put the selection back.
+    /*!
+        What the Images panel's context menu invokes through. Pointing at a group is not selecting it: the
+        viewport goes on showing whatever it was showing, and only the operation is told which group was
+        meant.
+    */
+    void invoke_action_on_group(const std::string &action_name, int group);
+    //! The group an edit acts on: the one being pointed at, or the one on screen.
+    int target_group() const;
     //! Put \p img into the list just after the current image, named \p partname, and select it.
     /*!
         Where duplicate_image() and the commands that derive an image from another one both land. Beside
@@ -803,7 +813,10 @@ private:
     //! Work posted from other threads by post_to_main_thread(), drained once per frame.
     std::mutex                         m_main_thread_mutex;
     std::vector<std::function<void()>> m_main_thread_queue;
-    void                               drain_main_thread_queue();
+
+    //! The group a command acts on while one is being pointed at rather than selected; -1 otherwise.
+    int  m_target_group_override = -1;
+    void drain_main_thread_queue();
 
 #if HDRVIEW_ENABLE_IPC
     IpcServer m_ipc_server;
