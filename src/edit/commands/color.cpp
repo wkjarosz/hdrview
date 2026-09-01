@@ -285,12 +285,17 @@ public:
 
         // The wheel as it is and as the settings would leave it, which is easier to judge than the numbers.
         /*!
-            Drawn as six shaded quads rather than sampled: the hue hexcone is piecewise linear in hue, and
-            everything these sliders do to it -- rotating the hue, scaling the saturation, mixing toward
-            black or white -- either moves the corners or is affine in each component, so the composition
-            is piecewise linear too. Interpolating between the corners is therefore not an approximation
-            of the sweep, it is the sweep. The rotation slides the corners along the strip and one of them
-            wraps, which is what makes it seven quads rather than six.
+            Drawn as shaded quads between the points where the sweep bends, rather than sampled: the hue
+            hexcone is piecewise linear in hue, and rotating the hue, scaling the saturation and mixing
+            toward black or white each either move those bends or are affine in every component. So
+            interpolating between them is not an approximation of the sweep, it is the sweep.
+
+            Two kinds of bend. Six come from the hexcone's own corners, slid along by the hue rotation and
+            one of them wrapped. The rest come from the strip having to show a color the display can
+            reach: raising the saturation of an already-saturated hue sends components past 0 and 1, and
+            clamping them back bends the ramp where they cross. Those crossings are what a saturation
+            boost looks like -- flat, then a steeper ramp, then flat -- and interpolating straight through
+            them is what made raising saturation appear to do nothing at all.
         */
         auto strip = [](const char *id, float h, float s, float l)
         {
@@ -298,14 +303,18 @@ public:
             const ImVec2 p  = ImGui::GetCursorScreenPos();
             auto        *dl = ImGui::GetWindowDrawList();
 
-            auto color_at = [&](float t)
+            // Before the display's range is imposed, which is where the bends are still straight lines.
+            auto raw = [&](float t)
+            { return adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), h / 360.f, (s + 100.f) / 100.f, l / 100.f); };
+
+            auto shown = [&](float t)
             {
-                const float3 rgb =
-                    adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), h / 360.f, (s + 100.f) / 100.f, l / 100.f);
-                return ImGui::ColorConvertFloat4ToU32(ImVec4(rgb.x, rgb.y, rgb.z, 1.f));
+                const float3 c = raw(t);
+                return ImGui::ColorConvertFloat4ToU32(
+                    ImVec4(std::clamp(c.x, 0.f, 1.f), std::clamp(c.y, 0.f, 1.f), std::clamp(c.z, 0.f, 1.f), 1.f));
             };
 
-            // Where the hexcone's corners land once the hue rotation has moved them, plus the two ends.
+            // The hexcone's corners, moved by the hue rotation and wrapped back into the strip.
             std::vector<float> knots{0.f, 1.f};
             for (int k = 0; k < 6; ++k)
             {
@@ -314,14 +323,33 @@ public:
             }
             std::sort(knots.begin(), knots.end());
 
-            const float height = ImGui::GetFrameHeight();
+            // Then wherever a component crosses 0 or 1 between two corners. It is linear in there, so each
+            // crossing is one division.
+            std::vector<float> bends = knots;
             for (size_t i = 0; i + 1 < knots.size(); ++i)
             {
-                const float t0 = knots[i], t1 = knots[i + 1];
-                if (t1 <= t0)
-                    continue; // a corner landing exactly on an end leaves nothing between them
+                const float  t0 = knots[i], t1 = knots[i + 1];
+                const float3 a = raw(t0), b = raw(t1);
 
-                const ImU32 left = color_at(t0), right = color_at(t1);
+                for (int c = 0; c < 3; ++c)
+                    for (float level : {0.f, 1.f})
+                    {
+                        const float v0 = a[c], v1 = b[c];
+                        if ((v0 < level) == (v1 < level) || v1 == v0)
+                            continue;
+                        bends.push_back(t0 + (level - v0) / (v1 - v0) * (t1 - t0));
+                    }
+            }
+            std::sort(bends.begin(), bends.end());
+
+            const float height = ImGui::GetFrameHeight();
+            for (size_t i = 0; i + 1 < bends.size(); ++i)
+            {
+                const float t0 = bends[i], t1 = bends[i + 1];
+                if (t1 <= t0)
+                    continue; // two bends landing together leave nothing between them
+
+                const ImU32 left = shown(t0), right = shown(t1);
                 dl->AddRectFilledMultiColor(ImVec2(p.x + t0 * w, p.y), ImVec2(p.x + t1 * w, p.y + height), left, right,
                                             right, left);
             }

@@ -701,18 +701,23 @@ TEST_CASE("sRGB primaries land where L*a*b* is documented to put them")
     CHECK(w.z == doctest::Approx(0.f).epsilon(2e-2));
 }
 
-TEST_CASE("The hue sweep is piecewise linear, so six corners describe it exactly")
+TEST_CASE("The hue strip is piecewise linear, counting where the display's range bends it")
 {
-    // What the hue/saturation dialog's strip is drawn from. The hexcone is piecewise linear in hue, and
-    // everything the sliders do to it is either a move of the corners (rotating the hue) or affine in each
-    // component (scaling saturation, mixing toward black or white) -- so interpolating between the corners
-    // is not an approximation of the sweep, it is the sweep, and the strip is seven quads rather than a
-    // sample per pixel.
+    // What the hue/saturation dialog draws its strip from, and the reason it can draw it as a handful of
+    // shaded quads instead of a sample per pixel.
     //
-    // Should this ever fail, the strip has to go back to sampling: something in adjust_HSL will have
-    // stopped being affine in between the corners.
-    auto strip = [](float t, float h_deg, float s_pct, float l_pct)
+    // Two kinds of bend. The hexcone's six corners, slid along by the hue rotation. And, because the strip
+    // has to show a color the display can reach, wherever clamping catches a component: raising the
+    // saturation of an already-saturated hue sends components past 0 and 1, and clamping is not affine.
+    // Testing the unclamped sweep alone says the corners are enough, which is how a boost in saturation
+    // came to look like no change at all.
+    auto raw = [](float t, float h_deg, float s_pct, float l_pct)
     { return adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), h_deg / 360.f, (s_pct + 100.f) / 100.f, l_pct / 100.f); };
+    auto shown = [&](float t, float h, float sp, float lp)
+    {
+        const float3 c = raw(t, h, sp, lp);
+        return float3{std::clamp(c.x, 0.f, 1.f), std::clamp(c.y, 0.f, 1.f), std::clamp(c.z, 0.f, 1.f)};
+    };
 
     struct Setting
     {
@@ -726,42 +731,92 @@ TEST_CASE("The hue sweep is piecewise linear, so six corners describe it exactly
                                 {"oversaturated", 0.f, 80.f, 0.f},
                                 {"lifted toward white", 0.f, 0.f, 40.f},
                                 {"pushed toward black", 0.f, 0.f, -70.f},
-                                {"all three at once", 37.f, -60.f, 40.f}};
+                                {"all three at once", 37.f, -60.f, 40.f},
+                                {"everything at once, out of gamut", 37.f, 90.f, 40.f}};
 
     for (const Setting &cfg : settings)
     {
         CAPTURE(std::string(cfg.what));
 
-        // The corners, moved by the rotation and wrapped back into the strip.
-        std::vector<float> knots{0.f, 1.f};
+        std::vector<float> corners{0.f, 1.f};
         for (int k = 0; k < 6; ++k)
         {
             const float t = float(k) / 6.f - cfg.h / 360.f;
-            knots.push_back(t - std::floor(t));
+            corners.push_back(t - std::floor(t));
         }
-        std::sort(knots.begin(), knots.end());
+        std::sort(corners.begin(), corners.end());
 
-        // Never more than seven pieces: six corners, one of which a rotation wraps into the middle.
-        CHECK(knots.size() <= 8);
+        // The corners, plus wherever a component crosses 0 or 1 between two of them.
+        std::vector<float> bends = corners;
+        for (size_t i = 0; i + 1 < corners.size(); ++i)
+        {
+            const float  t0 = corners[i], t1 = corners[i + 1];
+            const float3 a = raw(t0, cfg.h, cfg.s, cfg.l), b = raw(t1, cfg.h, cfg.s, cfg.l);
+
+            for (int c = 0; c < 3; ++c)
+                for (float level : {0.f, 1.f})
+                {
+                    const float v0 = a[c], v1 = b[c];
+                    if ((v0 < level) == (v1 < level) || v1 == v0)
+                        continue;
+                    bends.push_back(t0 + (level - v0) / (v1 - v0) * (t1 - t0));
+                }
+        }
+        std::sort(bends.begin(), bends.end());
+
+        // Few enough to be worth drawing this way rather than sampling.
+        CAPTURE(bends.size());
+        CHECK(bends.size() <= 32);
 
         for (int i = 0; i <= 600; ++i)
         {
             const float t = float(i) / 600.f;
 
             size_t seg = 0;
-            while (seg + 2 < knots.size() && knots[seg + 1] < t) ++seg;
+            while (seg + 2 < bends.size() && bends[seg + 1] < t) ++seg;
 
-            const float t0 = knots[seg], t1 = knots[seg + 1];
+            const float t0 = bends[seg], t1 = bends[seg + 1];
             const float u = t1 > t0 ? (t - t0) / (t1 - t0) : 0.f;
 
-            const float3 a     = strip(t0, cfg.h, cfg.s, cfg.l);
-            const float3 b     = strip(t1, cfg.h, cfg.s, cfg.l);
-            const float3 exact = strip(t, cfg.h, cfg.s, cfg.l);
+            const float3 a     = shown(t0, cfg.h, cfg.s, cfg.l);
+            const float3 b     = shown(t1, cfg.h, cfg.s, cfg.l);
+            const float3 exact = shown(t, cfg.h, cfg.s, cfg.l);
 
             CAPTURE(t);
-            CHECK(a.x + u * (b.x - a.x) == doctest::Approx(exact.x).epsilon(1e-4));
-            CHECK(a.y + u * (b.y - a.y) == doctest::Approx(exact.y).epsilon(1e-4));
-            CHECK(a.z + u * (b.z - a.z) == doctest::Approx(exact.z).epsilon(1e-4));
+            CHECK(a.x + u * (b.x - a.x) == doctest::Approx(exact.x).epsilon(1e-3));
+            CHECK(a.y + u * (b.y - a.y) == doctest::Approx(exact.y).epsilon(1e-3));
+            CHECK(a.z + u * (b.z - a.z) == doctest::Approx(exact.z).epsilon(1e-3));
         }
     }
+}
+
+TEST_CASE("Raising the saturation changes the hue strip rather than leaving it alone")
+{
+    // The strip is drawn from fully saturated hues, so a boost pushes them out of the display's range and
+    // clamping brings the ends straight back -- the corners come out identical either way. What does
+    // change is in between: the ramp between two corners steepens and flattens off at both ends, which is
+    // what more saturation looks like. Drawing only from the corners misses exactly that.
+    auto shown = [](float t, float s_pct)
+    {
+        const float3 c = adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), 0.f, (s_pct + 100.f) / 100.f, 0.f);
+        return float3{std::clamp(c.x, 0.f, 1.f), std::clamp(c.y, 0.f, 1.f), std::clamp(c.z, 0.f, 1.f)};
+    };
+
+    // The corners agree, which is why this needs looking at in between them at all.
+    for (int k = 0; k <= 6; ++k)
+    {
+        const float t = float(k) / 6.f;
+        CAPTURE(t);
+        CHECK(shown(t, 0.f).y == doctest::Approx(shown(t, 80.f).y).epsilon(1e-4));
+    }
+
+    // In between, the boosted strip has reached its extreme where the neutral one is still climbing.
+    float largest = 0.f;
+    for (int i = 0; i <= 600; ++i)
+    {
+        const float t = float(i) / 600.f;
+        largest       = std::max(largest, std::fabs(shown(t, 80.f).y - shown(t, 0.f).y));
+    }
+    CAPTURE(largest);
+    CHECK(largest > 0.2f);
 }
