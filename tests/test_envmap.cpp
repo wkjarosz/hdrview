@@ -249,13 +249,6 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
             {
                 CAPTURE(sampler);
 
-                // Known gap: reading *from* a cube cross with a footprint wider than a texel gathers the
-                // four cells of the 3-by-4 grid that are not faces. A single tap lands on a face and never
-                // sees them; an ellipse near a face edge does, and averages in samples that stand for no
-                // direction. Fixing it means masking invalid source texels inside the gather, which
-                // ewa_level() cannot currently see -- it is handed a level, not a mapping.
-                if (sampler == EnvMapSampling_EWA && src_m == EnvMapping_CubeMap)
-                    continue;
                 const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m),
                                                      EnvMapSampling(sampler), 4);
 
@@ -276,6 +269,282 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
                     }
             }
         }
+}
+
+TEST_CASE("A cube map is read as six faces, so what is not a face never reaches the result")
+{
+    // A vertical cross is three quarters faces and one quarter nothing: the four cells outside its two
+    // arms stand for no direction. Read as one image they are texels like any other -- a filter wide
+    // enough to reach them averages them in, and a mip pyramid built over the whole cross has folded them
+    // deep into every face by its third level. Read as six faces they are never addressed at all.
+    //
+    // So the empty cells are given a value nothing else could be confused with. Anything that touches
+    // them lands far outside the range the faces span, however little of one it picked up.
+    const int2 src_size{96, 128};
+    Array2Df   src = make_envmap(src_size, EnvMapping_CubeMap, [](float3 d) { return 0.5f + 0.25f * d.y; });
+
+    for (int y = 0; y < src_size.y; ++y)
+        for (int x = 0; x < src_size.x; ++x)
+        {
+            const float2 uv{(float(x) + 0.5f) / float(src_size.x), (float(y) + 0.5f) / float(src_size.y)};
+            if (!envmap_uv_is_valid(EnvMapping_CubeMap, uv))
+                src(x, y) = 1000.f;
+        }
+
+    for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+    {
+        CAPTURE(sampler);
+
+        // Minified hard, which is what puts the coarse levels of the pyramid in play: at 16 across, one
+        // destination pixel covers dozens of source texels, and every level from the middle of the
+        // pyramid up would be contaminated if the levels were built over the cross.
+        for (int dst_size : {16, 64})
+        {
+            CAPTURE(dst_size);
+            const Array2Df out = remapped_envmap(src, int2{2 * dst_size, dst_size}, EnvMapping_LatLong,
+                                                 EnvMapping_CubeMap, EnvMapSampling(sampler), 4);
+
+            for (int y = 0; y < dst_size; ++y)
+                for (int x = 0; x < 2 * dst_size; ++x)
+                {
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    // The faces span [0.25, 0.75], so anything at all from an empty cell shows here.
+                    CHECK(out(x, y) > 0.2f);
+                    CHECK(out(x, y) < 0.8f);
+                }
+        }
+    }
+}
+
+TEST_CASE("A cube map's faces join up, so a read at a face edge continues onto the next face")
+{
+    // Two texels either side of a face join are neighboring directions but are nowhere near each other in
+    // the cross -- and for eight of the twelve joins, what actually lies beside the edge in the image is
+    // one of the empty cells. A read that reaches half a texel past an edge has to find the next face.
+    //
+    // Checked against a function of direction alone: right across a join means agreeing with it there, and
+    // a filter that clamped at the edge or reached into an empty cell would not.
+    auto f = [](float3 d) { return 0.5f + 0.2f * d.x + 0.15f * d.y - 0.1f * d.z; };
+
+    const int2 src_size{96, 128};
+    Array2Df   src = make_envmap(src_size, EnvMapping_CubeMap, f);
+
+    for (int y = 0; y < src_size.y; ++y)
+        for (int x = 0; x < src_size.x; ++x)
+        {
+            const float2 uv{(float(x) + 0.5f) / float(src_size.x), (float(y) + 0.5f) / float(src_size.y)};
+            if (!envmap_uv_is_valid(EnvMapping_CubeMap, uv))
+                src(x, y) = 1000.f;
+        }
+
+    for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+    {
+        CAPTURE(sampler);
+
+        // Magnified, so each destination sample reads a texel or two rather than averaging a face's worth
+        // and hiding the edges in the average.
+        const int2     size{192, 96};
+        const Array2Df out =
+            remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_CubeMap, EnvMapSampling(sampler), 2);
+
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                const float2 uv{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)};
+                CHECK(out(x, y) == doctest::Approx(f(envmap_uv_to_xyz(EnvMapping_LatLong, uv))).epsilon(0.03));
+            }
+    }
+}
+
+TEST_CASE("Crossing a cube map's face join is as smooth as staying on one face")
+{
+    // The visible failure is not an error against the truth but a discontinuity: a bright or dark line
+    // along a face's edge, which is what makes a badly filtered cube map recognizable at a glance. Since
+    // the source is a smooth function of direction, a step between neighboring destination samples should
+    // not care whether a face edge happens to lie between them.
+    //
+    // So the two are measured separately -- the largest step between samples on the same face, and the
+    // largest between samples on different ones -- and compared to each other. Nothing here depends on
+    // the resolution or on how steep the function is, only on the joins being no worse than the interior.
+    auto f = [](float3 d) { return 0.5f + 0.2f * d.x + 0.15f * d.y - 0.1f * d.z; };
+
+    const Array2Df src = make_envmap(int2{96, 128}, EnvMapping_CubeMap, f);
+
+    // Which face a direction is on: the axis it points most steeply along, which is all the test needs to
+    // know about the layout.
+    auto face_of = [](float3 d)
+    {
+        const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
+        const int   axis = ax >= ay && ax >= az ? 0 : (ay >= az ? 1 : 2);
+        return 2 * axis + ((axis == 0 ? d.x : axis == 1 ? d.y : d.z) >= 0.f ? 0 : 1);
+    };
+
+    for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+    {
+        CAPTURE(sampler);
+
+        const int2     size{256, 128};
+        const Array2Df out =
+            remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_CubeMap, EnvMapSampling(sampler), 2);
+
+        // Every row, so this covers all twelve joins rather than only the four a ring around the equator
+        // meets -- including the ones at the poles, where the cross's arms end.
+        float within = 0.f, across = 0.f;
+        int   crossings = 0;
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 1; x < size.x; ++x)
+            {
+                auto dir = [&](int i)
+                {
+                    return envmap_uv_to_xyz(EnvMapping_LatLong, float2{(float(i) + 0.5f) / float(size.x),
+                                                                       (float(y) + 0.5f) / float(size.y)});
+                };
+
+                const float step = std::abs(out(x, y) - out(x - 1, y));
+                if (face_of(dir(x)) == face_of(dir(x - 1)))
+                    within = std::max(within, step);
+                else
+                {
+                    across = std::max(across, step);
+                    ++crossings;
+                }
+            }
+
+        // The comparison is only worth anything if the sweep actually met some joins.
+        CHECK(crossings > 100);
+
+        CAPTURE(within);
+        CAPTURE(across);
+        CHECK(across < 2.f * within);
+    }
+}
+
+TEST_CASE("A face's ring carries its neighbors, so a read at an edge blends across the join")
+{
+    // Each face is stored with a one-texel ring of what lies just past its edges, taken from whichever
+    // face that turns out to be. Without it a read at an edge has only its own face to interpolate
+    // against, and two faces meet as a hard step however smooth the sphere is across that join.
+    //
+    // Giving every face a value of its own makes the difference impossible to miss. Reconstructed with
+    // the ring, the step at a join is spread over about a texel and the samples in between hold values
+    // that are on neither face; clamped at the edge instead, every sample holds exactly one face's value.
+    auto face_of = [](float3 d)
+    {
+        const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
+        const int   axis = ax >= ay && ax >= az ? 0 : (ay >= az ? 1 : 2);
+        return 2 * axis + ((axis == 0 ? d.x : axis == 1 ? d.y : d.z) >= 0.f ? 0 : 1);
+    };
+    auto face_value = [](int face) { return 0.1f + 0.16f * float(face); };
+
+    const Array2Df src =
+        make_envmap(int2{96, 128}, EnvMapping_CubeMap, [&](float3 d) { return face_value(face_of(d)); });
+
+    for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+    {
+        CAPTURE(sampler);
+
+        // Four destination samples per source texel around the equator, so a step spread over one texel is
+        // several samples wide and cannot be confused with one that is not spread at all. One sample per
+        // pixel, since averaging several within the pixel would soften the step by itself and prove
+        // nothing about the reconstruction.
+        const int2     size{512, 256};
+        const Array2Df out =
+            remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_CubeMap, EnvMapSampling(sampler), 1);
+
+        const int y = size.y / 2; // the equator, which crosses four faces and so four joins
+
+        auto face_at = [&](int x)
+        {
+            return face_of(envmap_uv_to_xyz(
+                EnvMapping_LatLong, float2{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)}));
+        };
+
+        int   joins = 0, blended = 0;
+        float largest = 0.f;
+        for (int x = 1; x < size.x; ++x)
+        {
+            largest = std::max(largest, std::abs(out(x, y) - out(x - 1, y)));
+
+            if (face_at(x) == face_at(x - 1))
+                continue;
+
+            ++joins;
+
+            // Somewhere within a texel of the join, the reconstruction should be partway between the two
+            // faces rather than committed to either.
+            const float a = face_value(face_at(x - 1)), b = face_value(face_at(x));
+            const float lo = std::min(a, b) + 0.15f * std::abs(a - b);
+            const float hi = std::max(a, b) - 0.15f * std::abs(a - b);
+
+            for (int i = std::max(0, x - 3); i < std::min(size.x, x + 3); ++i)
+                if (out(i, y) > lo && out(i, y) < hi)
+                {
+                    ++blended;
+                    break;
+                }
+        }
+
+        CHECK(joins == 4);
+        CHECK(blended == joins);
+
+        // And no step anywhere is the whole contrast at once, which is what an unblended join would be:
+        // the largest difference between two faces here is 0.8.
+        CAPTURE(largest);
+        CHECK(largest < 0.5f);
+    }
+}
+
+TEST_CASE("Filtering a cube map elliptically agrees with averaging it by brute force")
+{
+    // The two samplers reach a cube map's faces by different routes -- one takes a single bilinear tap per
+    // sub-sample, the other an ellipse over a level of the pyramid -- so agreeing is evidence about the
+    // parts they share: the faces themselves, their rings, and the pyramid over them. Enough sub-samples
+    // and point sampling is simply the average over the destination pixel, which is the answer EWA is
+    // approximating, so one stands as a reference for the other without either being ground truth.
+    //
+    // The source is constant on each face and jumps between them, which is the least forgiving thing to
+    // filter here: every disagreement about where a face ends shows up at full contrast.
+    auto face_of = [](float3 d)
+    {
+        const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
+        const int   axis = ax >= ay && ax >= az ? 0 : (ay >= az ? 1 : 2);
+        return 2 * axis + ((axis == 0 ? d.x : axis == 1 ? d.y : d.z) >= 0.f ? 0 : 1);
+    };
+    const Array2Df src =
+        make_envmap(int2{96, 128}, EnvMapping_CubeMap, [&](float3 d) { return 0.1f + 0.16f * float(face_of(d)); });
+
+    // Reductions of different kinds: nearly isotropic, and lopsided each way, since the anisotropic ones
+    // are what send the ellipse along a face and off the end of it.
+    for (int2 size : {int2{16, 8}, int2{64, 32}, int2{128, 8}, int2{8, 64}})
+    {
+        CAPTURE(size.x);
+        CAPTURE(size.y);
+
+        const Array2Df brute =
+            remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_CubeMap, EnvMapSampling_Point, 24);
+        const Array2Df ewa = remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_CubeMap, EnvMapSampling_EWA, 16);
+
+        double mean = 0.0, worst = 0.0;
+        for (int i = 0; i < ewa.num_elements(); ++i)
+        {
+            const double e = std::abs(double(ewa(i)) - double(brute(i)));
+            mean += e;
+            worst = std::max(worst, e);
+        }
+        mean /= double(ewa.num_elements());
+
+        CAPTURE(mean);
+        CAPTURE(worst);
+
+        // Room for the two filters genuinely differing in shape -- a Gaussian over the footprint against a
+        // box over the pixel -- but not for either of them reading the wrong face. The values here span
+        // 0.8, and a tap landing on the wrong side of a join is worth a good part of that.
+        CHECK(mean < 0.05);
+        CHECK(worst < 0.15);
+    }
 }
 
 TEST_CASE("Remapping a mapping to itself returns the image it was given")

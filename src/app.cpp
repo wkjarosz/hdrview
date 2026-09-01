@@ -1638,8 +1638,6 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         // Editing. Every one of these goes through modify_image(), which is what pairs the change with
         // the entry that reverses it; see src/app-edit.cpp.
         //
-        const auto if_editable = [this]() { return can_edit(current_image()); };
-
         add(Action{{"Undo"},
                    ICON_MY_UNDO,
                    ImGuiMod_Ctrl | ImGuiKey_Z,
