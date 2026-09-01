@@ -14,9 +14,13 @@
 
 #include "edit/commands.h"
 
+#include "edit/poisson.h"
+
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+
+#include <cmath>
 
 namespace
 {
@@ -119,6 +123,132 @@ public:
     }
 };
 
+class SeamlessPaste final : public EditCommand
+{
+public:
+    Info info() const override
+    {
+        return {{"Seamless paste...", "Poisson paste", "Gradient-domain paste"},
+                ICON_MY_SEAMLESS_PASTE,
+                ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_V,
+                ImGuiInputFlags_None,
+                "Paste",
+                27.f};
+    }
+
+    bool enabled(const EditContext &ctx) const override { return ctx.clipboard() != nullptr; }
+
+    void draw(EditContext &ctx) override
+    {
+        ImGui::TextWrapped("Pastes what the clipboard varies like rather than what it is: the border keeps the "
+                           "values already there, so no seam can appear, and the interior drifts to meet them "
+                           "-- the patch takes on the surrounding illumination.");
+        ImGui::Spacing();
+
+        ImGui::SliderInt("Iterations", &m_iterations, 10, 2000);
+        ImGui::Tooltip("How long the solver may run. It stops sooner once the answer stops changing, so this "
+                       "is a bound rather than a cost.");
+
+        ImGui::Checkbox("Blend log values", &m_log_domain);
+        ImGui::Tooltip("Solve on the logarithm of the samples, so that what is matched across the border is a "
+                       "ratio rather than a difference. Usually what an HDR image wants, where the two sides "
+                       "can be many stops apart.");
+
+        if (auto clip = ctx.clipboard())
+            ImGui::TextDisabled("Clipboard: %d x %d", clip->size().x, clip->size().y);
+    }
+
+    void apply(EditContext &ctx) override
+    {
+        auto clip = ctx.clipboard();
+        auto img  = ctx.image();
+        if (!clip || !img || clip->groups.empty())
+            return;
+
+        const auto &group  = clip->groups[size_t(clip->selected_group)];
+        const int4  ch     = group.channels;
+        const int   n      = group.num_channels;
+        const int2  extent = clip->data_window.size();
+
+        const int  iters      = m_iterations;
+        const bool log_domain = m_log_domain;
+
+        ctx.modify_channels_async(
+            "Seamless paste",
+            [clip, ch, n, extent, iters, log_domain](const Array2Df &dst, const Box2i &region, int slot,
+                                                     AtomicProgress p) -> Array2Df
+            {
+                const int2 size = region.size();
+
+                Array2Df out{size};
+                for (int y = 0; y < size.y; ++y)
+                    for (int x = 0; x < size.x; ++x) out(x, y) = dst(region.min.x + x, region.min.y + y);
+
+                // Only the group's color channels have a counterpart to take gradients from. Alpha is the
+                // mask rather than something to solve for, and anything else the subject covers is not
+                // this clipboard's business.
+                if (slot >= n || (n >= 4 && slot == 3))
+                    return out;
+
+                // The clipboard lands at the top-left of the rectangle being pasted into, which is the
+                // rectangle this filter was handed -- so the two share an origin and the solve is over
+                // whichever of them is smaller.
+                const int2 solve{std::min(extent.x, size.x), std::min(extent.y, size.y)};
+                if (solve.x < 3 || solve.y < 3)
+                    return out; // no interior to solve for
+
+                Array2Df background{solve}, source{solve}, mask{solve};
+                for (int y = 0; y < solve.y; ++y)
+                    for (int x = 0; x < solve.x; ++x)
+                    {
+                        background(x, y) = out(x, y);
+                        source(x, y)     = clip->channels[size_t(ch[slot])](int2{x, y});
+
+                        // The clipboard's own alpha is the mask, which is what gives a copied selection
+                        // its shape -- and it is zeroed along the border, since that is what pins the
+                        // solve to the background. Without a boundary condition nothing holds it in place.
+                        const bool border = x == 0 || y == 0 || x == solve.x - 1 || y == solve.y - 1;
+                        mask(x, y)        = border ? 0.f : (n >= 4 ? clip->channels[size_t(ch[3])](int2{x, y}) : 1.f);
+                    }
+
+                // Solving on the logarithm matches ratios rather than differences, which is what an HDR
+                // image wants. Shifted first so that nothing sits at or below zero, where there is no log.
+                float shift = 0.f;
+                if (log_domain)
+                {
+                    float lowest = 0.f;
+                    for (int i = 0; i < background.num_elements(); ++i)
+                        lowest = std::min(lowest, std::min(background(i), source(i)));
+                    shift = 1e-4f - lowest;
+
+                    for (int i = 0; i < background.num_elements(); ++i)
+                    {
+                        background(i) = std::log(background(i) + shift);
+                        source(i)     = std::log(source(i) + shift);
+                    }
+                }
+
+                Array2Df solved = poisson_blended(background, source, mask, iters, 1e-4f, p);
+                if (p.canceled())
+                    return out;
+
+                if (log_domain)
+                    for (int i = 0; i < solved.num_elements(); ++i) solved(i) = std::exp(solved(i)) - shift;
+
+                // Everywhere the solve covered: outside the mask it returns the background it was given,
+                // so there is nothing to write around.
+                for (int y = 0; y < solve.y; ++y)
+                    for (int x = 0; x < solve.x; ++x) out(x, y) = solved(x, y);
+
+                return out;
+            });
+    }
+
+private:
+    int  m_iterations = 300;
+    bool m_log_domain = false;
+};
+
 } // namespace
 
 void add_clipboard_commands(std::vector<EditCommandPtr> &out)
@@ -126,4 +256,5 @@ void add_clipboard_commands(std::vector<EditCommandPtr> &out)
     out.push_back(std::make_unique<Cut>());
     out.push_back(std::make_unique<Copy>());
     out.push_back(std::make_unique<Paste>());
+    out.push_back(std::make_unique<SeamlessPaste>());
 }

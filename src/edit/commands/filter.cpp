@@ -98,7 +98,8 @@ public:
         if (m_kind == Kind_Box)
         {
             const int hx = m_half_width, hy = m_link_axes ? m_half_width : m_half_width_y, n = m_iterations;
-            ctx.modify_channels_async("Box blur", [hx, hy, n](const Array2Df &src, const Box2i &r, AtomicProgress p)
+            ctx.modify_channels_async("Box blur",
+                                      [hx, hy, n](const Array2Df &src, const Box2i &r, int, AtomicProgress p)
                                       { return box_blurred(src, r, hx, hy, n, p); });
         }
         else if (m_kind == Kind_FastGaussian)
@@ -106,13 +107,14 @@ public:
             const float sx = m_sigma, sy = m_link_axes ? m_sigma : m_sigma_y;
             const int   n = m_iterations;
             ctx.modify_channels_async("Gaussian blur",
-                                      [sx, sy, n](const Array2Df &src, const Box2i &r, AtomicProgress p)
+                                      [sx, sy, n](const Array2Df &src, const Box2i &r, int, AtomicProgress p)
                                       { return fast_gaussian_blurred(src, r, sx, sy, n, p); });
         }
         else
         {
             const float sx = m_sigma, sy = m_link_axes ? m_sigma : m_sigma_y;
-            ctx.modify_channels_async("Gaussian blur", [sx, sy](const Array2Df &src, const Box2i &r, AtomicProgress p)
+            ctx.modify_channels_async("Gaussian blur",
+                                      [sx, sy](const Array2Df &src, const Box2i &r, int, AtomicProgress p)
                                       { return gaussian_blurred(src, r, sx, sy, p); });
         }
     }
@@ -152,7 +154,7 @@ public:
     void apply(EditContext &ctx) override
     {
         const float s = m_sigma, a = m_amount;
-        ctx.modify_channels_async("Unsharp mask", [s, a](const Array2Df &src, const Box2i &r, AtomicProgress p)
+        ctx.modify_channels_async("Unsharp mask", [s, a](const Array2Df &src, const Box2i &r, int, AtomicProgress p)
                                   { return unsharp_masked(src, r, s, a, p); });
     }
 
@@ -180,7 +182,8 @@ public:
     {
         const float r = m_radius;
         const bool  d = m_disc;
-        ctx.modify_channels_async("Median filter", [r, d](const Array2Df &src, const Box2i &region, AtomicProgress p)
+        ctx.modify_channels_async("Median filter",
+                                  [r, d](const Array2Df &src, const Box2i &region, int, AtomicProgress p)
                                   { return median_filtered(src, region, r, d, p); });
     }
 

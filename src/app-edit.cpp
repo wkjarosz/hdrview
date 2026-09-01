@@ -66,8 +66,8 @@ struct AppEditContext final : EditContext
     {
         return app->modify_channels(app->current_image(), name, app->edit_subject(), filter);
     }
-    void modify_channels_async(const string                                                              &name,
-                               const function<Array2Df(const Array2Df &, const Box2i &, AtomicProgress)> &f) override
+    void modify_channels_async(
+        const string &name, const function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &f) override
     {
         app->modify_channels_async(app->current_image(), name, app->edit_subject(), f);
     }
@@ -650,7 +650,7 @@ void HDRViewApp::draw_edit_subject_selector()
 
 void HDRViewApp::modify_channels_async(
     const ImagePtr &img, const string &name, const EditSubject &subject,
-    const function<Array2Df(const Array2Df &, const Box2i &, AtomicProgress)> &filter)
+    const function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &filter)
 {
     if (!can_edit(img) || m_running_filter)
         return;
@@ -685,8 +685,8 @@ void HDRViewApp::modify_channels_async(
             // A share of the same total rather than a copy: the filter's own reporting reaches the bar, and
             // -- what a copy got wrong -- Cancel reaches the filter partway through a channel instead of
             // only between channels.
-            raw->results[i] =
-                filter(raw->image->channels[size_t(raw->channels[i])], local, AtomicProgress{raw->progress, share});
+            raw->results[i] = filter(raw->image->channels[size_t(raw->channels[i])], local, int(i),
+                                     AtomicProgress{raw->progress, share});
         }
 
         if (!raw->progress.canceled())
@@ -709,15 +709,15 @@ void HDRViewApp::modify_channels_async(
 
     // Reading the channels is safe for as long as this runs: the chokepoint refuses a second edit while a
     // filter is in flight, and the image cannot be closed without cancelling it first.
-    std::thread(
+    // Kept rather than detached, so that closing the window can stop it and wait; see ~RunningFilter().
+    raw->worker = std::thread(
         [this, do_the_work]
         {
             do_the_work();
             // Nothing on screen changes until the frame loop notices, and it may be idle waiting on window
             // events rather than spinning.
             wake_event_loop();
-        })
-        .detach();
+        });
 #endif
 }
 
@@ -759,13 +759,12 @@ void HDRViewApp::modify_image_async(const ImagePtr &img, const string &name, int
     drain_running_filter();
 #else
     dialog("Applying filter...").open = true;
-    std::thread(
+    raw->worker                       = std::thread(
         [this, do_the_work]
         {
             do_the_work();
             wake_event_loop();
-        })
-        .detach();
+        });
 #endif
 }
 

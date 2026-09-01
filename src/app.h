@@ -31,6 +31,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -326,6 +327,10 @@ public:
         filtering happens on a worker; the image is only touched once every channel is done, back on the
         main thread and through the same chokepoint, so the edit still lands as one undoable step.
 
+        \p filter is handed the channel, the rectangle of it to produce, and which of the subject's
+        channels it is -- 0 for the first, so a group's R, G, B, A arrive as 0, 1, 2, 3. That last is what
+        lets a filter reach for something else per channel, as pasting one image into another does.
+
         Returns having only started the work. A canceled filter changes nothing at all -- its partial
         result is discarded rather than applied, since a half-filtered image is not a state anyone asked
         for.
@@ -343,8 +348,9 @@ public:
     void modify_image_async(const ImagePtr &img, const std::string &name, int2 size,
                             const std::function<Array2Df(const Array2Df &, AtomicProgress)> &op);
 
-    void modify_channels_async(const ImagePtr &img, const std::string &name, const EditSubject &subject,
-                               const std::function<Array2Df(const Array2Df &, const Box2i &, AtomicProgress)> &filter);
+    void modify_channels_async(
+        const ImagePtr &img, const std::string &name, const EditSubject &subject,
+        const std::function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &filter);
 
     //! Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
     void draw_filter_progress_dialog(bool &open);
@@ -750,6 +756,22 @@ private:
         std::vector<Array2Df> results;
         AtomicProgress        progress{true};
         std::atomic<bool>     done{false};
+        std::thread           worker;
+
+        /*!
+            Stop the work and wait for it, rather than leaving it running.
+
+            The worker reads this object and the thread pool for as long as it runs, and both go away with
+            the application -- so a filter still in flight when the window closes would be writing into
+            freed memory. Detaching it and hoping is not enough for a filter that takes seconds, which a
+            Poisson solve does.
+        */
+        ~RunningFilter()
+        {
+            progress.cancel();
+            if (worker.joinable())
+                worker.join();
+        }
     };
     //! Set when the running work replaces the image rather than a rectangle of it; see
     //! modify_image_async(). drain_running_filter() then swaps the channels instead of uploading tiles.

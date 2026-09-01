@@ -127,6 +127,7 @@
 #define ICON_MY_SWAP                ICON_FA_UP_DOWN
 #define ICON_MY_CUT                 ICON_FA_SCISSORS
 #define ICON_MY_COPY                ICON_FA_COPY
+#define ICON_MY_SEAMLESS_PASTE      ICON_FA_WAND_MAGIC_SPARKLES
 #define ICON_MY_PASTE               ICON_FA_PASTE
 #define ICON_MY_DUPLICATE           ICON_FA_CLONE
 #define ICON_MY_FLATTEN             ICON_FA_LAYER_GROUP
@@ -279,6 +280,7 @@
 #define ICON_MY_SWAP                ICON_LC_ARROW_UP_DOWN
 #define ICON_MY_CUT                 ICON_LC_SCISSORS
 #define ICON_MY_COPY                ICON_LC_COPY
+#define ICON_MY_SEAMLESS_PASTE      ICON_LC_WAND_SPARKLES
 #define ICON_MY_PASTE               ICON_LC_CLIPBOARD_PASTE
 #define ICON_MY_DUPLICATE           ICON_LC_COPY
 #define ICON_MY_FLATTEN             ICON_LC_LAYERS
@@ -434,6 +436,7 @@
 #define ICON_MY_SWAP                ICON_MS_SWAP_VERT
 #define ICON_MY_CUT                 ICON_MS_CONTENT_CUT
 #define ICON_MY_COPY                ICON_MS_CONTENT_COPY
+#define ICON_MY_SEAMLESS_PASTE      ICON_MS_AUTO_FIX_HIGH
 #define ICON_MY_PASTE               ICON_MS_CONTENT_PASTE
 #define ICON_MY_DUPLICATE           ICON_MS_CONTENT_COPY
 #define ICON_MY_FLATTEN             ICON_MS_LAYERS
@@ -583,6 +586,7 @@
 #define ICON_MY_SWAP                ICON_MD_SWAP_VERT
 #define ICON_MY_CUT                 ICON_MD_CONTENT_CUT
 #define ICON_MY_COPY                ICON_MD_CONTENT_COPY
+#define ICON_MY_SEAMLESS_PASTE      ICON_MD_AUTO_FIX_HIGH
 #define ICON_MY_PASTE               ICON_MD_CONTENT_PASTE
 #define ICON_MY_DUPLICATE           ICON_MD_CONTENT_COPY
 #define ICON_MY_FLATTEN             ICON_MD_LAYERS
@@ -750,6 +754,7 @@
 #define ICON_MY_SWAP                ICON_MDI_SWAP_VERTICAL
 #define ICON_MY_CUT                 ICON_MDI_CONTENT_CUT
 #define ICON_MY_COPY                ICON_MDI_CONTENT_COPY
+#define ICON_MY_SEAMLESS_PASTE      ICON_MDI_AUTO_FIX
 #define ICON_MY_PASTE               ICON_MDI_CONTENT_PASTE
 #define ICON_MY_DUPLICATE           ICON_MDI_CONTENT_DUPLICATE
 #define ICON_MY_FLATTEN             ICON_MDI_LAYERS

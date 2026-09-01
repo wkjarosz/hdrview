@@ -1513,6 +1513,75 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "a seamless paste leaves no step at the border");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        const int2 size = img->size();
+
+        // Small rectangles rather than a smaller image: the solve is iterative, and in a debug build a
+        // quarter of a megapixel is a long wait for something a few thousand samples show just as well.
+        const int2 patch{32, 32};
+
+        // A flat background, so any step at the border is the paste's doing and not the picture's.
+        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
+                                          [](float, int2, int slot) { return slot == 3 ? 1.f : 0.25f; }));
+        ctx->Yield();
+
+        // Copy a corner, which is 0.25 throughout...
+        const Box2i src_box{int2{0, 0}, patch};
+        hdrview()->set_selection(src_box);
+        ctx->Yield();
+        menu_click(ctx, "Edit/Copy");
+        IM_CHECK(hdrview()->clipboard() != nullptr);
+
+        // ...then make the background around the destination a different level entirely. An ordinary paste
+        // would leave a visible step where 0.25 meets 0.8; a seamless one cannot.
+        hdrview()->set_selection(Box2i{});
+        ctx->Yield();
+        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
+                                          [](float, int2, int slot) { return slot == 3 ? 1.f : 0.8f; }));
+        ctx->Yield();
+
+        const Box2i dst_box{int2{size.x / 2, size.y / 2}, int2{size.x / 2, size.y / 2} + patch};
+        hdrview()->set_selection(dst_box);
+        ctx->Yield();
+
+        const int steps_before = img->history.size();
+
+        menu_click(ctx, "Edit/Seamless paste...");
+        ctx->SetRef("Seamless paste...");
+        ctx->ItemInputValue("Iterations", 200);
+        ctx->ItemClick("Paste");
+
+        // It runs off the main thread behind a progress dialog, and only lands once the main thread has
+        // drained it -- so this waits for the history to grow, rather than for it to be non-empty, which
+        // the fills above already made it.
+        for (int i = 0; i < 2000 && img->history.size() == steps_before; ++i) ctx->Yield();
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Seamless paste");
+
+        const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
+
+        // The border of the pasted region still holds the background it was pinned to...
+        IM_CHECK_LT(std::fabs(ch(dst_box.min.x, dst_box.min.y) - 0.8f), 1e-3f);
+
+        // ...and the interior was carried to that level rather than arriving at its own 0.25. This is the
+        // whole difference from an ordinary paste, which would have written 0.25 here.
+        const int2 middle = dst_box.min + patch / 2;
+        IM_CHECK_LT(std::fabs(ch(middle.x, middle.y) - 0.8f), 0.05f);
+
+        // Nothing outside the selection moved.
+        IM_CHECK_LT(std::fabs(ch(2, 2) - 0.8f), 1e-4f);
+
+        hdrview()->set_selection(Box2i{});
+        hdrview()->set_clipboard(nullptr);
+        reset_images(ctx);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

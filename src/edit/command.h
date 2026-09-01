@@ -60,12 +60,13 @@ struct EditContext
     virtual bool modify_channels(const std::string                                              &name,
                                  const std::function<Array2Df(const Array2Df &, const Box2i &)> &filter)  = 0;
     virtual void modify_channels_async(
-        const std::string &name, const std::function<Array2Df(const Array2Df &, const Box2i &, AtomicProgress)> &f) = 0;
+        const std::string                                                                   &name,
+        const std::function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &f)          = 0;
     virtual void modify_image_async(const std::string &name, int2 size,
-                                    const std::function<Array2Df(const Array2Df &, AtomicProgress)> &op)            = 0;
-    virtual bool modify_structure(const std::string &name, const std::function<void(Image &)> &op)                  = 0;
+                                    const std::function<Array2Df(const Array2Df &, AtomicProgress)> &op) = 0;
+    virtual bool modify_structure(const std::string &name, const std::function<void(Image &)> &op)       = 0;
     virtual bool modify_reversibly(const std::string &name, const std::function<void(Image &)> &forward,
-                                   const std::function<void(Image &)> &backward)                                    = 0;
+                                   const std::function<void(Image &)> &backward)                         = 0;
 
     //! Draw the shared "Apply to" controls, which every dialog that edits samples carries.
     virtual void draw_subject_selector() = 0;

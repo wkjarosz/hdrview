@@ -439,6 +439,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Cut"));
         MenuItem(action("Copy"));
         MenuItem(action("Paste"));
+        MenuItem(action("Seamless paste..."));
 
         ImGui::Separator();
 
