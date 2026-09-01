@@ -26,6 +26,8 @@
 #include "image.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -328,6 +330,15 @@ std::vector<float> samples(const ImagePtr &img)
 
 std::string first_name(const EditCommandPtr &cmd) { return cmd->info().names.front(); }
 
+//! The registered command whose first name is \p name.
+EditCommandPtr find_command(const std::string &name)
+{
+    for (auto &cmd : all_edit_commands())
+        if (first_name(cmd) == name)
+            return std::move(cmd);
+    return nullptr;
+}
+
 } // namespace
 
 TEST_CASE("Every edit command is addressable and describes itself")
@@ -479,4 +490,83 @@ TEST_CASE("A command with no image to work on does nothing rather than crashing"
         CHECK_NOTHROW(cmd->on_open(ctx));
         CHECK_NOTHROW(cmd->on_close(ctx));
     }
+}
+
+TEST_CASE("An edit covers the whole image when there is no selection")
+{
+    // The other half of the subject: with the box cleared, every sample the scope names must move, not
+    // just the ones a stale rectangle used to cover. Swept, since an edit that quietly kept an old bound
+    // would look correct on any single command that happened to cover everything anyway.
+    for (auto &cmd : all_edit_commands())
+    {
+        const std::string name = first_name(cmd);
+        CAPTURE(name);
+
+        auto            img = make_image();
+        TestEditContext ctx{img};
+        ctx.set_clipboard(make_image());
+        ctx.mutable_subject().scope = EditSubject::Scope_AllChannels;
+
+        if (!cmd->enabled(ctx))
+            continue;
+
+        const std::vector<float> before = samples(img);
+        const int                steps  = img->history.size();
+
+        cmd->apply(ctx);
+
+        if (img->history.size() == steps || !ctx.last_edit_used_subject() || img->size() != k_size)
+            continue;
+
+        // Whatever it did, it was allowed to do it anywhere; the undo entry has to cover the whole image
+        // rather than a rectangle, which is what putting it back proves.
+        REQUIRE(img->history.undo(*img));
+        CHECK(samples(img) == before);
+    }
+}
+
+TEST_CASE("Clamping leaves every sample inside the unit range")
+{
+    auto            img = make_image();
+    TestEditContext ctx{img};
+    ctx.mutable_subject().scope = EditSubject::Scope_AllChannels;
+
+    // Pushed well outside [0,1] first, so the clamp has something to do at both ends.
+    for (auto &ch : img->channels)
+        for (int i = 0; i < ch.num_elements(); ++i) ch(i) = ch(i) * 4.f - 1.5f;
+
+    auto cmd = find_command("Clamp to [0,1]");
+    REQUIRE(cmd);
+    cmd->apply(ctx);
+
+    for (const auto &ch : img->channels)
+        for (int i = 0; i < ch.num_elements(); ++i)
+        {
+            CHECK(ch(i) >= 0.f);
+            CHECK(ch(i) <= 1.f);
+        }
+}
+
+TEST_CASE("Zapping gremlins replaces the non-finite samples and leaves the rest")
+{
+    auto            img = make_image();
+    TestEditContext ctx{img};
+    ctx.mutable_subject().scope = EditSubject::Scope_AllChannels;
+
+    auto       &ch   = img->channels[0];
+    const float kept = ch(2, 2);
+    ch(0, 0)         = std::numeric_limits<float>::quiet_NaN();
+    ch(1, 0)         = std::numeric_limits<float>::infinity();
+    ch(3, 1)         = -std::numeric_limits<float>::infinity();
+
+    auto cmd = find_command("Zap gremlins...");
+    REQUIRE(cmd);
+    cmd->apply(ctx);
+
+    // Every gremlin gone...
+    for (const auto &c : img->channels)
+        for (int i = 0; i < c.num_elements(); ++i) CHECK(std::isfinite(c(i)));
+
+    // ...and the samples that were already fine untouched, which is what "only the non-finite" means.
+    CHECK(ch(2, 2) == kept);
 }

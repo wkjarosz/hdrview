@@ -266,54 +266,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(snapshot(img) == original);
     };
 
-    t           = IM_REGISTER_TEST(engine, "edit", "clamping leaves every sample inside the unit range");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        // Push samples outside [0,1] first, so the clamp has something to do on a fixture that may already
-        // be inside it.
-        IM_CHECK(hdrview()->modify_pixels(img, "Spread", hdrview()->edit_subject(),
-                                          [](float v, int2, int) { return v * 4.f - 1.5f; }));
-
-        menu_click(ctx, "Edit/Clamp to [0,1]");
-
-        for (const auto &c : img->channels)
-            for (int y = 0; y < c.size().y; ++y)
-                for (int x = 0; x < c.size().x; ++x) IM_CHECK(c(x, y) >= 0.f && c(x, y) <= 1.f);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "zapping gremlins replaces only the non-finite samples");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        // Scatter a NaN and an infinity into the first channel, leaving its other samples alone.
-        auto       &ch   = img->channels[0];
-        const float kept = ch(2, 2);
-        ch(0, 0)         = std::numeric_limits<float>::quiet_NaN();
-        ch(1, 0)         = std::numeric_limits<float>::infinity();
-        ++img->content_version;
-
-        menu_click(ctx, "Edit/Zap gremlins...");
-        ctx->SetRef("Zap gremlins...");
-        ctx->ItemClick("Median of neighbors");
-        ctx->ItemClick("Zap");
-        ctx->Yield(2);
-
-        // Filled from the surrounding samples rather than blanked, so what goes back matches the
-        // neighbourhood; the fixture is smooth around these, so both land on what was already there.
-        IM_CHECK(std::isfinite(ch(0, 0)));
-        IM_CHECK(std::isfinite(ch(1, 0)));
-        IM_CHECK_EQ(ch(2, 2), kept);
-    };
-
     t           = IM_REGISTER_TEST(engine, "edit", "an edit restricted to the selection leaves the rest alone");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
