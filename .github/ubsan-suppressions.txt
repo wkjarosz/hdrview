@@ -15,3 +15,10 @@ shift-base:stb_image_write.h
 # address on an empty buffer yields a null pointer that memcpy is declared never to accept -- even when
 # size is zero and nothing is copied. Reported inside libheif on files HDRView only hands it bytes for.
 nonnull-attribute:bitstream.cc
+
+# stb_image_resize2's scratch buffer is carved into pieces whose 64-bit header stores land wherever the
+# preceding piece ended (stbir__perform_build), so a reduction to certain sizes writes a stbir_uint64 at a
+# four-byte boundary. Undefined by the language, permitted by every target HDRView builds for, and the
+# whole reported stack is stb's -- HDRView hands it a float buffer and a size. Reached from
+# Image::resample(), so from resizing an image and from every level of a generated mip pyramid.
+alignment:stb_image_resize2.h
