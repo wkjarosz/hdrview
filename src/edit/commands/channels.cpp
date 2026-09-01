@@ -22,6 +22,28 @@
 namespace
 {
 
+//! The layer the group on screen belongs to, which is the prefix its channel names share.
+/*!
+    What scopes regrouping. A group can be selected but a set of them cannot, so an operation that puts
+    channels back together has to work out for itself which ones are meant -- and after a group has been
+    exploded, the only thing its channels still have in common is the layer they came from.
+*/
+std::string current_layer(const ImagePtr &img);
+
+//! Every channel of \p img in the layer \p layer that is currently standing on its own.
+std::vector<int> ungrouped_in_layer(const ImagePtr &img, const std::string &layer)
+{
+    std::vector<int> out;
+    if (!img)
+        return out;
+
+    for (size_t c = 0; c < img->channels.size(); ++c)
+        if (img->channels[c].ungrouped && Channel::head(img->channels[c].name) == layer)
+            out.push_back(int(c));
+
+    return out;
+}
+
 //! The channels of the group the viewport is showing, or empty when there is no group to speak of.
 std::vector<int> current_group_channels(const ImagePtr &img)
 {
@@ -36,6 +58,29 @@ std::vector<int> current_group_channels(const ImagePtr &img)
     const auto &group = img->groups[size_t(g)];
     for (int i = 0; i < group.num_channels; ++i) out.push_back(group.channels[i]);
     return out;
+}
+
+//! Leave the viewport on whichever group now holds \p channel.
+/*!
+    A rebuild renumbers the groups, so the index that was selected can afterwards mean something else
+    entirely -- and it is the selection that says what the next command will act on. Following the channel
+    across the rebuild is what lets exploding and regrouping be used one after the other.
+*/
+void select_channels_group(Image &img, int channel)
+{
+    for (size_t g = 0; g < img.groups.size(); ++g)
+        for (int i = 0; i < img.groups[g].num_channels; ++i)
+            if (img.groups[g].channels[i] == channel)
+            {
+                img.selected_group = int(g);
+                return;
+            }
+}
+
+std::string current_layer(const ImagePtr &img)
+{
+    const std::vector<int> channels = current_group_channels(img);
+    return channels.empty() ? std::string{} : Channel::head(img->channels[size_t(channels.front())].name);
 }
 
 /*!
@@ -73,22 +118,33 @@ public:
             {
                 for (int c : channels) img.channels[size_t(c)].ungrouped = true;
                 img.rebuild_layers();
+                select_channels_group(img, channels.front());
             },
             [channels](Image &img)
             {
                 for (int c : channels) img.channels[size_t(c)].ungrouped = false;
                 img.rebuild_layers();
+                select_channels_group(img, channels.front());
             });
     }
 };
 
-//! Put every channel back in the group its name asks for, undoing any number of explosions at once.
+/*!
+    Put the channels of a layer back into the groups their names ask for.
+
+    The counterpart to exploding, and scoped to a layer because that is all there is to go on. Exploding
+    leaves a group's channels standing on their own, and only one group can be selected at a time -- so
+    selecting any one of them and asking for its layer back is the way to say which explosion is meant.
+
+    A layer holding two exploded groups is restored in one go, since nothing distinguishes them once they
+    are apart.
+*/
 class RegroupChannels final : public EditCommand
 {
 public:
     Info info() const override
     {
-        return {{"Regroup channels", "Undo exploded channel groups"},
+        return {{"Regroup channels", "Rejoin exploded channels"},
                 ICON_MY_CHANNEL_GROUP,
                 ImGuiKey_None,
                 ImGuiInputFlags_None,
@@ -100,10 +156,7 @@ public:
     bool enabled(const EditContext &ctx) const override
     {
         auto img = ctx.image();
-        if (!img)
-            return false;
-
-        return std::any_of(img->channels.begin(), img->channels.end(), [](const Channel &c) { return c.ungrouped; });
+        return img && !ungrouped_in_layer(img, current_layer(img)).empty();
     }
 
     void apply(EditContext &ctx) override
@@ -112,12 +165,7 @@ public:
         if (!img)
             return;
 
-        // Only the ones actually marked, so undoing this puts back exactly what it cleared.
-        std::vector<int> marked;
-        for (size_t c = 0; c < img->channels.size(); ++c)
-            if (img->channels[c].ungrouped)
-                marked.push_back(int(c));
-
+        const std::vector<int> marked = ungrouped_in_layer(img, current_layer(img));
         if (marked.empty())
             return;
 
@@ -127,11 +175,13 @@ public:
             {
                 for (int c : marked) img2.channels[size_t(c)].ungrouped = false;
                 img2.rebuild_layers();
+                select_channels_group(img2, marked.front());
             },
             [marked](Image &img2)
             {
                 for (int c : marked) img2.channels[size_t(c)].ungrouped = true;
                 img2.rebuild_layers();
+                select_channels_group(img2, marked.front());
             });
     }
 };

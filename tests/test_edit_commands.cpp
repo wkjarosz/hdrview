@@ -606,6 +606,12 @@ TEST_CASE("Exploding a group takes its channels out of it, and regrouping puts t
     CHECK(img->channels.size() == 4);
     CHECK(img->size() == k_size);
 
+    // Only one group can be selected at a time, so regrouping has to work from whichever single exploded
+    // channel is showing -- which is the whole reason it is scoped to the layer rather than to a group.
+    // The explosion leaves the selection on one of the channels it made, so this is reachable at all.
+    REQUIRE(img->is_valid_group(img->selected_group));
+    REQUIRE(img->groups[size_t(img->selected_group)].num_channels == 1);
+
     auto regroup = find_command("Regroup channels");
     REQUIRE(regroup);
     REQUIRE(regroup->enabled(ctx));
@@ -765,4 +771,74 @@ TEST_CASE("A mip level is averaged from its samples rather than dropping three o
         CAPTURE(i);
         CHECK(half->channels[0](i) == doctest::Approx(0.5f).epsilon(0.2));
     }
+}
+
+TEST_CASE("Regrouping reaches the whole layer from any one of its exploded channels")
+{
+    // Two layers, each with a color of its own, so scoping can be told from clearing everything.
+    auto img = std::make_shared<Image>(k_size, 6);
+
+    static const char *names[] = {"diffuse.R", "diffuse.G", "diffuse.B", "specular.R", "specular.G", "specular.B"};
+    for (int c = 0; c < 6; ++c) img->channels[size_t(c)].name = names[c];
+    img->rebuild_layers();
+
+    REQUIRE(img->groups.size() == 2); // one per layer
+
+    TestEditContext ctx{img};
+    auto            explode = find_command("Explode channel group");
+    auto            regroup = find_command("Regroup channels");
+    REQUIRE(explode);
+    REQUIRE(regroup);
+
+    // Explode both layers, one at a time, since one group is all that can be selected.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (size_t g = 0; g < img->groups.size(); ++g)
+            if (img->groups[g].num_channels > 1)
+            {
+                img->selected_group = int(g);
+                break;
+            }
+        explode->apply(ctx);
+    }
+
+    CHECK(img->groups.size() == 6); // every channel on its own
+
+    // Now regroup from a single channel of one layer, and only that layer comes back.
+    for (size_t g = 0; g < img->groups.size(); ++g)
+        if (Channel::head(img->channels[size_t(img->groups[g].channels[0])].name) == "diffuse.")
+        {
+            img->selected_group = int(g);
+            break;
+        }
+
+    REQUIRE(regroup->enabled(ctx));
+    regroup->apply(ctx);
+
+    // diffuse is a color again; specular is still three channels.
+    CHECK(img->groups.size() == 4);
+
+    int diffuse_grouped = 0, specular_single = 0;
+    for (const auto &group : img->groups)
+    {
+        const std::string layer = Channel::head(img->channels[size_t(group.channels[0])].name);
+        if (layer == "diffuse." && group.num_channels == 3)
+            ++diffuse_grouped;
+        if (layer == "specular." && group.num_channels == 1)
+            ++specular_single;
+    }
+    CHECK(diffuse_grouped == 1);
+    CHECK(specular_single == 3);
+
+    // And the other layer is reachable in its turn, which is what makes this usable at all.
+    for (size_t g = 0; g < img->groups.size(); ++g)
+        if (Channel::head(img->channels[size_t(img->groups[g].channels[0])].name) == "specular.")
+        {
+            img->selected_group = int(g);
+            break;
+        }
+
+    REQUIRE(regroup->enabled(ctx));
+    regroup->apply(ctx);
+    CHECK(img->groups.size() == 2);
 }
