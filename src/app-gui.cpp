@@ -446,8 +446,8 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Select all"));
         MenuItem(action("Deselect"));
 
-        // Where the samples are, rather than what they say: the ones that move or discard samples without
-        // changing any of the values.
+        // How big the image is and which way round, rather than what its samples say. Some of these only
+        // move samples; resizing and halving resample them, but what they are for is still the shape.
         ImGui::SeparatorText("Size and orientation");
 
         MenuItem(action("Flip image horizontally"));
@@ -457,6 +457,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Crop to selection"));
         MenuItem(action("Image size..."));
         MenuItem(action("Canvas size..."));
+        MenuItem(action("Generate mipmaps..."));
 
         // A sample at a time, wherever it sits and whatever is beside it.
         ImGui::SeparatorText("Tone");
@@ -495,7 +496,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Median filter..."));
         MenuItem(action("Shift..."));
         MenuItem(action("Bump to normal map..."));
-        MenuItem(action("Generate mipmaps..."));
 
         // The edits that read the image as a parameterization of the sphere.
         ImGui::SeparatorText("Environment maps");
