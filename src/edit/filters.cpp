@@ -62,6 +62,21 @@ inline float bordered(const Array2Df &a, int x, int y, int mx, int my)
     return (x < 0 || y < 0) ? 0.f : a(x, y);
 }
 
+//! One tap of the cubic with a = -0.75, which is what Photoshop's "bicubic" is.
+/*!
+    Interpolating rather than approximating, so a sample landed on exactly is returned exactly.
+
+    A function rather than a lambda over a local constant: MSVC will not read a constexpr local from inside
+    a lambda that captures nothing, where GCC and clang are happy to.
+*/
+inline float cubic_weight(float d)
+{
+    constexpr float A = -0.75f;
+
+    d = std::abs(d);
+    return d <= 1.f ? ((A + 2.f) * d - (A + 3.f)) * d * d + 1.f : ((A * d - 5.f * A) * d + 8.f * A) * d - 4.f * A;
+}
+
 //! Value of \p a at the continuous position \p sx, \p sy, with samples at the centers of their cells.
 float sample_at(const Array2Df &a, float sx, float sy, int sampler, int mx, int my)
 {
@@ -83,22 +98,13 @@ float sample_at(const Array2Df &a, float sx, float sy, int sampler, int mx, int 
         return lerp(top, bot, ty);
     }
 
-    // The cubic with a = -0.75, which is what Photoshop's "bicubic" is. Interpolating rather than
-    // approximating, so a sample landed on exactly is returned exactly.
-    constexpr float A      = -0.75f;
-    auto            weight = [](float d)
-    {
-        d = std::abs(d);
-        return d <= 1.f ? ((A + 2.f) * d - (A + 3.f)) * d * d + 1.f : ((A * d - 5.f * A) * d + 8.f * A) * d - 4.f * A;
-    };
-
     float value = 0.f, total = 0.f;
     for (int j = -1; j <= 2; ++j)
     {
-        const float wy = weight(ty - float(j));
+        const float wy = cubic_weight(ty - float(j));
         for (int i = -1; i <= 2; ++i)
         {
-            const float w = weight(tx - float(i)) * wy;
+            const float w = cubic_weight(tx - float(i)) * wy;
             value += w * bordered(a, x0 + i, y0 + j, mx, my);
             total += w;
         }

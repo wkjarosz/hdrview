@@ -469,14 +469,19 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        MenuItem(action("Blur..."));
-        MenuItem(action("Unsharp mask..."));
-        MenuItem(action("Median filter..."));
-        MenuItem(action("Shift..."));
+        // Color, then the filters, then the sphere -- the same three groups the commands are written in,
+        // under edit/commands/.
         MenuItem(action("Convert color space..."));
         MenuItem(action("Channel mixer..."));
         MenuItem(action("Hue/saturation..."));
         MenuItem(action("Flatten..."));
+
+        ImGui::Separator();
+
+        MenuItem(action("Blur..."));
+        MenuItem(action("Unsharp mask..."));
+        MenuItem(action("Median filter..."));
+        MenuItem(action("Shift..."));
         MenuItem(action("Bump to normal map..."));
 
         ImGui::Separator();

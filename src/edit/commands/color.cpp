@@ -165,33 +165,42 @@ public:
 
     void draw(EditContext &) override
     {
-        ImGui::Checkbox("Monochrome", &m_monochrome);
-        ImGui::Tooltip("Writes one gray value to all three channels, mixed by the weights below.");
-
-        ImGui::BeginDisabled(m_monochrome);
+        // Radio-height text, so the label sits on the same line as the buttons beside it rather than
+        // riding above them.
+        ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Output channel");
-        const char *names[] = {"Red", "Green", "Blue"};
-        for (int i = 0; i < 3; ++i)
+
+        // Each named in its own color, and gray last, which is 1.8's set exactly: the output is one of
+        // four rather than three plus a mode, so nothing has to say what happens when both are set.
+        const char  *names[]  = {"Red", "Green", "Blue", "Monochrome"};
+        const ImVec4 colors[] = {ImVec4(0.90f, 0.35f, 0.35f, 1.f), ImVec4(0.35f, 0.85f, 0.35f, 1.f),
+                                 ImVec4(0.45f, 0.55f, 1.00f, 1.f), ImVec4(0.80f, 0.80f, 0.80f, 1.f)};
+
+        for (int i = 0; i < Out_COUNT; ++i)
         {
             // Only between them: SameLine() before the first would put it back on the line above.
             ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text, colors[i]);
+            ImGui::PushStyleColor(ImGuiCol_CheckMark, colors[i]);
             ImGui::RadioButton(names[i], &m_output, i);
+            ImGui::PopStyleColor(2);
         }
-        ImGui::EndDisabled();
+        ImGui::Tooltip("Which channel the weights below are written to. Monochrome writes one gray value "
+                       "to all three.");
 
-        // Monochrome edits the gray row wherever the output selector points, since that is the only row it
-        // uses.
-        float3 &w = m_rows[m_monochrome ? 3 : m_output];
+        float3 &w = m_rows[m_output];
 
         ImGui::DragFloat("Red##weight", &w.x, 0.5f, -200.f, 200.f, "%.1f%%");
         ImGui::DragFloat("Green##weight", &w.y, 0.5f, -200.f, 200.f, "%.1f%%");
         ImGui::DragFloat("Blue##weight", &w.z, 0.5f, -200.f, 200.f, "%.1f%%");
 
-        ImGui::TextDisabled("Total: %.1f%%", w.x + w.y + w.z);
-        ImGui::SameLine();
+        // The checkbox first, so that the total -- which changes width as it changes -- has nothing after
+        // it to push around.
         ImGui::Checkbox("Normalize", &m_normalize);
         ImGui::Tooltip("Divides each row by its own total, so the mix neither brightens nor darkens. Off, a "
                        "total above 100% lightens the result and one below darkens it.");
+        ImGui::SameLine();
+        ImGui::TextDisabled("Total: %.1f%%", w.x + w.y + w.z);
     }
 
     void apply(EditContext &ctx) override
@@ -205,9 +214,9 @@ public:
             return norm && std::abs(sum) > 1e-6f ? v / sum : v;
         };
 
-        if (m_monochrome)
+        if (m_output == Out_Monochrome)
         {
-            const float3 g = row(m_rows[3]);
+            const float3 g = row(m_rows[Out_Monochrome]);
             ctx.modify_colors("Channel mixer",
                               [g](const float4 &c, int2)
                               {
@@ -217,20 +226,34 @@ public:
         }
         else
         {
-            const float3 r = row(m_rows[0]), g = row(m_rows[1]), b = row(m_rows[2]);
+            const float3 r = row(m_rows[Out_Red]), g = row(m_rows[Out_Green]), b = row(m_rows[Out_Blue]);
             ctx.modify_colors("Channel mixer", [r, g, b](const float4 &c, int2)
                               { return float4{la::dot(r, c.xyz()), la::dot(g, c.xyz()), la::dot(b, c.xyz()), c.w}; });
         }
     }
 
 private:
+    //! Which channel the weights are written to; 1.8's own set, gray among them rather than beside them.
+    enum Output : int
+    {
+        Out_Red = 0,
+        Out_Green,
+        Out_Blue,
+        Out_Monochrome,
+
+        Out_COUNT
+    };
+
     // A row of source weights per output channel, plus the one that makes a single gray from all three.
     // Kept as percentages the way 1.8 and Photoshop present them, since that is how the numbers are read:
     // "40% of the red channel", not "0.4".
-    float3 m_rows[4]    = {{100.f, 0.f, 0.f}, {0.f, 100.f, 0.f}, {0.f, 0.f, 100.f}, {33.3f, 33.3f, 33.3f}};
-    int    m_output     = 0;
-    bool   m_monochrome = false;
-    bool   m_normalize  = false;
+    //
+    // Thirds rather than 33.3 each: a monochrome default that announces a total of 99.9% reads as an error
+    // in the dialog rather than as the rounding it is.
+    float3 m_rows[Out_COUNT] = {
+        {100.f, 0.f, 0.f}, {0.f, 100.f, 0.f}, {0.f, 0.f, 100.f}, {100.f / 3.f, 100.f / 3.f, 100.f / 3.f}};
+    int  m_output    = Out_Red;
+    bool m_normalize = false;
 };
 
 class HueSaturation final : public EditCommand
