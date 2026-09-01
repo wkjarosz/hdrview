@@ -24,12 +24,11 @@ inline float clamped(const Array2Df &a, int x, int y)
     return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
 }
 
-//! Where \p p lands once \p mode has been applied to a channel of extent \p extent, or -1 for nothing.
-/*!
-    Mirroring reflects at each repeat, so the coordinate walks up and back down: the position within one
-    period, taken from the far end on every odd one.
-*/
-inline int wrap_coord(int p, int extent, int mode)
+} // namespace
+
+//! Mirroring reflects at each repeat, so the coordinate walks up and back down: the position within one
+//! period, taken from the far end on every odd one.
+int wrap_coord(int p, int extent, int mode)
 {
     if (p >= 0 && p < extent)
         return p;
@@ -51,6 +50,9 @@ inline int wrap_coord(int p, int extent, int mode)
     default: return -1;
     }
 }
+
+namespace
+{
 
 //! One sample of \p a read through the border modes; zero where they say there is nothing.
 inline float bordered(const Array2Df &a, int x, int y, int mx, int my)

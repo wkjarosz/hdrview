@@ -775,6 +775,9 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         make_unique<PopupDialog>("Channel mixer...", [this](bool &open) { draw_channel_mixer_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Hue/saturation...", [this](bool &open) { draw_hue_saturation_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Flatten...", [this](bool &open) { draw_flatten_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Bump to normal map...", [this](bool &open) { draw_bump_to_normal_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Zap gremlins...", [this](bool &open) { draw_zap_gremlins_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Remap envmap...", [this](bool &open) { draw_remap_dialog(open); }));
@@ -1709,6 +1712,18 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ImGuiKey_None,
                    0,
                    [this]() { dialog("Hue/saturation...").open = true; },
+                   if_editable});
+        add(Action{{"Flatten...", "Composite over a background", "Remove transparency"},
+                   ICON_MY_FLATTEN,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Flatten...").open = true; },
+                   if_editable});
+        add(Action{{"Bump to normal map...", "Height to normal", "Normal map"},
+                   ICON_MY_NORMAL_MAP,
+                   ImGuiKey_None,
+                   0,
+                   [this]() { dialog("Bump to normal map...").open = true; },
                    if_editable});
         add(Action{{"Remap envmap...", "Change environment map format", "Spherical remapping"},
                    ICON_MY_ENVMAP,

@@ -111,14 +111,16 @@ bool HDRViewApp::modify_channels(const ImagePtr &img, const string &name, const 
         { return std::make_unique<ChannelRectUndo>(image, channels, bounds, name); });
 }
 
-bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const EditSubject &subject,
-                               const function<float4(const float4 &, int2)> &op, const function<void(Image &)> &retag)
+namespace
 {
-    if (!can_edit(img))
-        return false;
 
-    // The groups the subject covers, keeping only those whose channels are color. Everything else in the
-    // image -- depth, motion vectors, an ID -- is left alone rather than run through a color operation.
+//! The color groups \p subject covers, and every channel of them.
+/*!
+    Only RGB and RGBA: everything else in an image -- depth, motion vectors, an ID -- is not color, and a
+    color operation has no meaning for it, so it is left alone rather than run through one.
+*/
+std::pair<std::vector<int>, std::vector<int>> resolve_color_groups(const ConstImagePtr &img, const EditSubject &subject)
+{
     std::vector<int> groups;
     if (subject.scope == EditSubject::Scope_AllChannels)
     {
@@ -135,6 +137,26 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
                                 }),
                  groups.end());
 
+    // Every channel of every covered group, which is the set an undo entry has to hold.
+    std::vector<int> channels;
+    for (int g : groups)
+    {
+        const auto &group = img->groups[size_t(g)];
+        for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
+    }
+
+    return {groups, channels};
+}
+
+} // namespace
+
+bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const EditSubject &subject,
+                               const function<float4(const float4 &, int2)> &op, const function<void(Image &)> &retag)
+{
+    if (!can_edit(img))
+        return false;
+
+    auto [groups, channels] = resolve_color_groups(img, subject);
     if (groups.empty())
         return false;
 
@@ -143,14 +165,6 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
         bounds.intersect(m_roi);
     if (!bounds.has_volume())
         return false;
-
-    // Every channel of every covered group, which is the set the undo entry has to hold.
-    std::vector<int> channels;
-    for (int g : groups)
-    {
-        const auto &group = img->groups[size_t(g)];
-        for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
-    }
 
     return modify_image(
         img, name,
@@ -209,6 +223,80 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
             both.push_back(std::make_unique<ColorMetadataUndo>(image, name));
             return std::make_unique<CompositeUndo>(name, std::move(both));
         });
+}
+
+bool HDRViewApp::modify_neighborhood(const ImagePtr &img, const string &name, const EditSubject &subject,
+                                     const function<float4(const function<float4(int2)> &, int2)> &op, int border_x,
+                                     int border_y)
+{
+    if (!can_edit(img))
+        return false;
+
+    auto [groups, channels] = resolve_color_groups(img, subject);
+    if (groups.empty())
+        return false;
+
+    Box2i bounds = img->data_window;
+    if (subject.selection_only && m_roi.has_volume())
+        bounds.intersect(m_roi);
+    if (!bounds.has_volume())
+        return false;
+
+    return modify_image(
+        img, name,
+        [&groups, &bounds, &op, border_x, border_y](Image &image)
+        {
+            const int2 offset = bounds.min - image.data_window.min;
+            const int2 extent = bounds.size();
+
+            for (int g : groups)
+            {
+                const auto &group = image.groups[size_t(g)];
+                const int   n     = group.num_channels;
+
+                // The whole group is staged before any of it is written, so the reader below always sees
+                // the image as it was: an op reading its neighbors must not find one it has replaced.
+                std::array<Array2Df, 4> staging;
+                for (int c = 0; c < n; ++c) staging[size_t(c)] = Array2Df{extent};
+
+                // Reads anywhere in the *channel*, not merely the selection: the samples just outside a
+                // selection are real ones and belong in the answer, and only past the image itself does
+                // the border mode decide what is there.
+                auto read = [&image, &group, n, border_x, border_y](int2 p)
+                {
+                    const Channel &first = image.channels[size_t(group.channels[0])];
+                    const int      x     = wrap_coord(p.x - image.data_window.min.x, first.size().x, border_x);
+                    const int      y     = wrap_coord(p.y - image.data_window.min.y, first.size().y, border_y);
+
+                    // Opaque where the group has no alpha, and where the border mode says there is nothing
+                    // the color is black -- but transparent black, since that is what "nothing" is.
+                    if (x < 0 || y < 0)
+                        return float4{0.f, 0.f, 0.f, n >= 4 ? 0.f : 1.f};
+
+                    float4 c{0.f, 0.f, 0.f, 1.f};
+                    for (int k = 0; k < n; ++k) c[k] = image.channels[size_t(group.channels[k])](x, y);
+                    return c;
+                };
+
+                const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+                stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                                  [&](int y0, int y1, int, int)
+                                  {
+                                      for (int y = y0; y < y1; ++y)
+                                          for (int x = 0; x < extent.x; ++x)
+                                          {
+                                              const float4 out = op(read, int2{bounds.min.x + x, bounds.min.y + y});
+                                              for (int k = 0; k < n; ++k) staging[size_t(k)](x, y) = out[k];
+                                          }
+                                  });
+
+                for (int c = 0; c < n; ++c)
+                    image.channels[size_t(group.channels[c])].upload_tile(Box2i{offset, offset + extent},
+                                                                          staging[size_t(c)].data());
+            }
+        },
+        [&channels, &bounds, &name](const Image &image) -> UndoPtr
+        { return std::make_unique<ChannelRectUndo>(image, channels, bounds, name); });
 }
 
 bool HDRViewApp::modify_structure(const ImagePtr &img, const string &name, const function<void(Image &)> &op)
@@ -866,6 +954,141 @@ void HDRViewApp::draw_blur_dialog(bool &open)
                 modify_channels_async(current_image(), "Gaussian blur", m_edit_subject,
                                       [sx, sy](const Array2Df &src, const Box2i &r, AtomicProgress p)
                                       { return gaussian_blurred(src, r, sx, sy, p); });
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
+void HDRViewApp::draw_flatten_dialog(bool &open)
+{
+    static float4 bg{0.f, 0.f, 0.f, 1.f};
+
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Flatten...", open, ImGui::DialogPosition::Center))
+    {
+        ImGui::TextWrapped("Composites the image over a background color, so what was transparent becomes "
+                           "that color and the result is opaque.");
+        ImGui::Spacing();
+
+        ImGui::ColorEdit4("Background", &bg.x,
+                          ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar);
+
+        // The color the viewport is already showing behind the image, which is usually the one being
+        // matched -- 1.8 had this as a second menu entry rather than a button.
+        if (ImGui::Button("Use viewport background"))
+            bg = m_bg_color;
+        ImGui::Tooltip("Takes the custom background color from the View menu.");
+
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Flatten");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            const float4 b = bg;
+            modify_colors(current_image(), "Flatten", m_edit_subject,
+                          [b](const float4 &c, int2)
+                          {
+                              // Samples are held premultiplied, so "over" is an addition rather than the
+                              // textbook's lerp; the background is given straight and is premultiplied here.
+                              return float4{c.xyz() + b.xyz() * b.w * (1.f - c.w), c.w + b.w * (1.f - c.w)};
+                          });
+            ImGui::CloseCurrentPopup();
+        }
+        else if (result == ImGui::DialogResult::Cancel)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
+void HDRViewApp::draw_bump_to_normal_dialog(bool &open)
+{
+    static float scale    = 1.f;
+    static int   border_x = BorderMode_Edge, border_y = BorderMode_Edge;
+    static bool  link_borders = true;
+    static bool  flip_y       = false;
+
+    ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginModalDialog("Bump to normal map...", open, ImGui::DialogPosition::Center))
+    {
+        ImGui::TextWrapped("Reads the image as a height field -- the average of its channels -- and writes "
+                           "the surface normal that height field would have, encoded so that a component of "
+                           "zero is 0.5.");
+        ImGui::Spacing();
+
+        ImGui::DragFloat("Scale", &scale, 0.01f, 0.f, 100.f, "%.2f");
+        ImGui::Tooltip("How steep the slopes are taken to be. The height is measured across the whole image "
+                       "rather than per sample, so a normal map keeps its look when the image is resized.");
+
+        auto border_combo = [](const char *label, int *value)
+        {
+            if (ImGui::BeginCombo(label, border_mode_name(*value)))
+            {
+                for (int i = 0; i < BorderMode_COUNT; ++i)
+                    if (ImGui::Selectable(border_mode_name(i), *value == i))
+                        *value = i;
+                ImGui::EndCombo();
+            }
+        };
+
+        border_combo("Border", &border_x);
+        ImGui::Tooltip("What lies past the edge when the slope at the last row or column is measured. "
+                       "Repeat is what a tiling texture wants, so its normals tile too.");
+
+        ImGui::Checkbox("Same in both directions", &link_borders);
+        if (!link_borders)
+            border_combo("Border (vertical)", &border_y);
+        else
+            border_y = border_x;
+
+        ImGui::Checkbox("Flip green", &flip_y);
+        ImGui::Tooltip("Whether the green channel points up or down the image. Which one a renderer wants "
+                       "is a convention it chooses, and the two are commonly called OpenGL and DirectX.");
+
+        draw_edit_subject_selector();
+
+        const auto result = ImGui::DialogButtons("Convert");
+        if (result == ImGui::DialogResult::Confirm)
+        {
+            if (auto img = current_image())
+            {
+                // Slopes in the image's own coordinates, which is why the size enters: 1.8 measured height
+                // per unit of the whole image rather than per sample, so the same bump map gives the same
+                // normals whatever resolution it is stored at.
+                const float2 size{float(img->size().x), float(img->size().y)};
+                const float  s      = scale;
+                const float  y_sign = flip_y ? -1.f : 1.f;
+
+                modify_neighborhood(
+                    img, "Bump to normal map", m_edit_subject,
+                    [s, size, y_sign](const function<float4(int2)> &read, int2 p)
+                    {
+                        auto height = [&read](int2 q)
+                        {
+                            const float4 c = read(q);
+                            return (c.x + c.y + c.z) / 3.f;
+                        };
+
+                        // Forward differences, as 1.8 took them: one sample along each axis is the finest
+                        // slope the samples can express.
+                        const float h00 = height(p);
+                        const float dx  = height(p + int2{1, 0}) - h00;
+                        const float dy  = height(p + int2{0, 1}) - h00;
+
+                        // The surface z = h(x,y) has normal (-dh/dx, -dh/dy, 1); the sign is folded into
+                        // the scale so that a slope rising to the right leans the normal to the right.
+                        float3 n = la::normalize(float3{s * dx * size.x, y_sign * s * dy * size.y, 1.f});
+
+                        // Into the [0,1] range a normal map is stored in, where flat is (0.5, 0.5, 1).
+                        n = n * 0.5f + 0.5f;
+                        return float4{n, 1.f};
+                    },
+                    border_x, link_borders ? border_x : border_y);
             }
             ImGui::CloseCurrentPopup();
         }

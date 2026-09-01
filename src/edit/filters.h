@@ -54,6 +54,13 @@ enum BorderMode : int
 
 const char *border_mode_name(int mode);
 
+//! Where \p p lands once \p mode has been applied to a channel of extent \p extent, or -1 for nothing.
+/*!
+    The whole of what a border mode is, so anything reading outside a channel can share one definition of
+    it rather than each keeping its own idea of where a coordinate of -1 belongs.
+*/
+int wrap_coord(int p, int extent, int mode);
+
 //! How a filter reads between samples.
 /*!
     A shift by a whole number of samples never asks, and then all three agree. Anything finer has to

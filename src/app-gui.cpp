@@ -462,6 +462,8 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Convert color space..."));
         MenuItem(action("Channel mixer..."));
         MenuItem(action("Hue/saturation..."));
+        MenuItem(action("Flatten..."));
+        MenuItem(action("Bump to normal map..."));
 
         ImGui::Separator();
 

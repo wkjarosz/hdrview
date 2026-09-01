@@ -270,6 +270,21 @@ public:
                        const std::function<void(Image &)>                &retag = {});
 
     /*!
+        As modify_colors(), but \p op may also read the samples around the one it is writing.
+
+        It is handed a reader rather than a value: `read(p)` gives the group's components at any position,
+        with \p border_x and \p border_y deciding what lies outside the image. That is what a normal map
+        needs -- a slope is a difference between neighbors -- and it is how 1.8 expressed the same
+        operation, over its own bordered pixel accessor.
+
+        The reader sees the image as it was before the edit, so an op cannot read a sample it has already
+        written.
+    */
+    bool modify_neighborhood(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                             const std::function<float4(const std::function<float4(int2)> &, int2)> &op,
+                             int border_x = BorderMode_Edge, int border_y = BorderMode_Edge);
+
+    /*!
         Apply an edit that changes the image's shape, as one undoable step.
 
         For crop, canvas resize, and anything else that changes how many samples there are or how many
@@ -338,6 +353,8 @@ public:
     void draw_convert_colorspace_dialog(bool &open);
     void draw_channel_mixer_dialog(bool &open);
     void draw_hue_saturation_dialog(bool &open);
+    void draw_flatten_dialog(bool &open);
+    void draw_bump_to_normal_dialog(bool &open);
     void draw_unsharp_mask_dialog(bool &open);
     void draw_median_dialog(bool &open);
     void draw_zap_gremlins_dialog(bool &open);

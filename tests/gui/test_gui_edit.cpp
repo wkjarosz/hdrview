@@ -977,6 +977,28 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(snapshot(img) == original);
+
+        menu_click(ctx, "Edit/Flatten...");
+        ctx->SetRef("Flatten...");
+        ctx->ItemClick("Flatten");
+        ctx->Yield(2);
+
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Flatten");
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+
+        menu_click(ctx, "Edit/Bump to normal map...");
+        ctx->SetRef("Bump to normal map...");
+        ctx->ItemClick("Convert");
+        ctx->Yield(2);
+
+        IM_CHECK(snapshot(img) != original);
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Bump to normal map");
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "a color edit sees a group's channels together");
@@ -1103,6 +1125,117 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->ItemClick("**/" ICON_MY_HISTORY " Rotate 90 degrees clockwise");
         ctx->Yield(2);
         IM_CHECK(snapshot(img) == rotated);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "flattening composites over a background and leaves it opaque");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        const int g = img->active_group_index(Target_Primary);
+        IM_CHECK(img->is_valid_group(g));
+        if (img->groups[g].num_channels < 4)
+            return; // nothing to flatten in a group with no alpha
+
+        // A known state to composite: half-transparent mid gray, held premultiplied the way the image
+        // model holds every RGBA group.
+        const float4 fg{0.25f, 0.25f, 0.25f, 0.5f};
+        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
+                                          [fg](float, int2, int slot) { return fg[slot % 4]; }));
+        ctx->Yield();
+
+        const float4 bg{0.5f, 0.f, 0.f, 1.f};
+        IM_CHECK(hdrview()->modify_colors(
+            img, "Flatten", hdrview()->edit_subject(), [bg](const float4 &c, int2)
+            { return float4{c.xyz() + bg.xyz() * bg.w * (1.f - c.w), c.w + bg.w * (1.f - c.w)}; }));
+        ctx->Yield();
+
+        const auto &group = img->groups[img->active_group_index(Target_Primary)];
+        const auto &r     = img->channels[group.channels[0]];
+        const auto &gch   = img->channels[group.channels[1]];
+        const auto &a     = img->channels[group.channels[group.num_channels - 1]];
+
+        // Opaque afterwards, which is the point, and the background has shown through by exactly the
+        // fraction that was missing.
+        IM_CHECK_LT(std::fabs(a(0, 0) - 1.f), 1e-5f);
+        IM_CHECK_LT(std::fabs(r(0, 0) - (0.25f + 0.5f * 0.5f)), 1e-5f);
+        IM_CHECK_LT(std::fabs(gch(0, 0) - 0.25f), 1e-5f);
+
+        // An opaque background makes it idempotent: there is nothing left for a second pass to show
+        // through, which a lerp written against straight alpha would get wrong.
+        const auto once = snapshot(img);
+        IM_CHECK(hdrview()->modify_colors(
+            img, "Flatten", hdrview()->edit_subject(), [bg](const float4 &c, int2)
+            { return float4{c.xyz() + bg.xyz() * bg.w * (1.f - c.w), c.w + bg.w * (1.f - c.w)}; }));
+        ctx->Yield();
+        IM_CHECK(snapshot(img) == once);
+
+        reset_images(ctx);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a normal map leans away from the slope it was given");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        const auto &group = img->groups[img->active_group_index(Target_Primary)];
+        if (group.num_channels < 3)
+            return;
+
+        const int2 size = img->size();
+
+        // A ramp rising to the right, so the answer is known: flat down the image, sloped across it.
+        IM_CHECK(hdrview()->modify_pixels(img, "Ramp", hdrview()->edit_subject(), [size](float, int2 p, int slot)
+                                          { return slot >= 3 ? 1.f : float(p.x) / float(size.x); }));
+        ctx->Yield();
+
+        const float2 fsize{float(size.x), float(size.y)};
+        IM_CHECK(hdrview()->modify_neighborhood(
+            img, "Bump to normal map", hdrview()->edit_subject(),
+            [fsize](const std::function<float4(int2)> &read, int2 p)
+            {
+                auto height = [&read](int2 q)
+                {
+                    const float4 c = read(q);
+                    return (c.x + c.y + c.z) / 3.f;
+                };
+                const float h00 = height(p);
+                const float dx = height(p + int2{1, 0}) - h00, dy = height(p + int2{0, 1}) - h00;
+                float3      n = la::normalize(float3{dx * fsize.x, dy * fsize.y, 1.f});
+                return float4{n * 0.5f + 0.5f, 1.f};
+            },
+            BorderMode_Edge, BorderMode_Edge));
+        ctx->Yield();
+
+        const auto &r = img->channels[group.channels[0]];
+        const auto &g = img->channels[group.channels[1]];
+        const auto &b = img->channels[group.channels[2]];
+
+        // Away from the edges, where the border mode flattens the last column's forward difference.
+        const int2 mid{size.x / 2, size.y / 2};
+
+        // Rising to the right leans the normal that way, so red is above the 0.5 that means flat...
+        IM_CHECK_GT(r(mid.x, mid.y), 0.55f);
+        // ...green stays at flat, since nothing changes down the image...
+        IM_CHECK_LT(std::fabs(g(mid.x, mid.y) - 0.5f), 1e-3f);
+        // ...and z still points out of the surface, so blue stays in the upper half.
+        IM_CHECK_GT(b(mid.x, mid.y), 0.5f);
+
+        // Encoded, so every component is inside the range a normal map is stored in.
+        for (int i = 0; i < r.num_elements(); i += 53)
+        {
+            IM_CHECK(r(i) >= 0.f && r(i) <= 1.f);
+            IM_CHECK(g(i) >= 0.f && g(i) <= 1.f);
+            IM_CHECK(b(i) >= 0.f && b(i) <= 1.f);
+        }
+
+        reset_images(ctx);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
