@@ -278,5 +278,9 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // Let a few frames run so anything reading these (the pixel inspector, the statistics window)
         // actually touches them.
         ctx->Yield(5);
+
+        // The hostile values are what this test is about, but they must not outlive it: the zoom of zero
+        // is clamped to the smallest there is, which leaves every later test looking at a speck.
+        reset_view_controls(ctx);
     };
 }

@@ -126,6 +126,7 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
                     }
             }
         }
+        reset_view_controls(ctx);
     };
 
     /*
@@ -212,6 +213,7 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
         }
 
         hdrview()->set_reference_image_index(-1, true);
+        reset_view_controls(ctx);
     };
 
     /*
@@ -303,6 +305,7 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
 
         // Leave no fingers down: while any are, the viewport suppresses drag-panning.
         hdrview()->touch_gesture(0, 1.f, float2{0.f}, float2{0.f});
+        reset_view_controls(ctx);
     };
 
     /*
@@ -382,5 +385,7 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
         IM_CHECK_LT(std::abs(hdrview()->zoom() - 1.f), 1e-4f);
         IM_CHECK_GT(la::length(panned - unmoved), 10.f);
         IM_CHECK(approx(shift_scroll(0.5f, 20), panned, 1.f));
+
+        reset_view_controls(ctx);
     };
 }

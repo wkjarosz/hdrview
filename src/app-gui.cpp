@@ -458,16 +458,12 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Image size..."));
         MenuItem(action("Canvas size..."));
 
-        // A sample at a time, with nothing to set first.
-        ImGui::SeparatorText("Tone, applied at once");
+        // A sample at a time, wherever it sits and whatever is beside it.
+        ImGui::SeparatorText("Tone");
 
         MenuItem(action("Invert"));
         MenuItem(action("Clamp to [0,1]"));
         MenuItem(action("Zap gremlins..."));
-
-        // Still a sample at a time, but with a curve or a value to choose first.
-        ImGui::SeparatorText("Tone, with settings");
-
         MenuItem(action("Exposure/gamma..."));
         MenuItem(action("Brightness/contrast..."));
         MenuItem(action("Fill..."));
@@ -490,7 +486,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Ungroup channels"));
         MenuItem(action("Regroup channels"));
         MenuItem(action("Delete channel group"), delete_channels_label(current_image(), target_group()));
-        MenuItem(action("Generate mipmaps..."));
 
         // The edits that read the samples around the one they are writing.
         ImGui::SeparatorText("Neighborhood filters");
@@ -500,6 +495,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Median filter..."));
         MenuItem(action("Shift..."));
         MenuItem(action("Bump to normal map..."));
+        MenuItem(action("Generate mipmaps..."));
 
         // The edits that read the image as a parameterization of the sphere.
         ImGui::SeparatorText("Environment maps");
