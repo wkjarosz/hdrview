@@ -22,12 +22,13 @@
 */
 enum EnvMapping : int
 {
-    EnvMapping_Angular = 0, //!< Polar angle grows linearly with distance from the center
-    EnvMapping_MirrorBall,  //!< What a photograph of a mirrored sphere records
-    EnvMapping_LatLong,     //!< Longitude across, latitude down; the usual exchange format
-    EnvMapping_Cylindrical, //!< Longitude across, height down, so each row covers equal solid angle
-    EnvMapping_CubeMap,     //!< Six faces laid out as a vertical cross
-    EnvMapping_EqualArea,   //!< Clarberg's square-to-sphere map, which distributes samples evenly
+    EnvMapping_Angular = 0,   //!< Polar angle grows linearly with distance from the center
+    EnvMapping_MirrorBall,    //!< What a photograph of a mirrored sphere records
+    EnvMapping_LatLong,       //!< Longitude across, latitude down; the usual exchange format
+    EnvMapping_Cylindrical,   //!< Longitude across, height down, so each row covers equal solid angle
+    EnvMapping_CubeMap,       //!< Six faces laid out as a vertical cross
+    EnvMapping_CubeMapColumn, //!< Six faces stacked in one column, as OpenEXR stores them
+    EnvMapping_EqualArea,     //!< Clarberg's square-to-sphere map, which distributes samples evenly
 
     EnvMapping_COUNT
 };

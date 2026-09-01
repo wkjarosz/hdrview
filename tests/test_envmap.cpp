@@ -163,6 +163,16 @@ TEST_CASE("The angular map and the mirror ball put the forward direction at the 
 namespace
 {
 
+//! A size in \p mapping's own proportions, so that whatever it packs divides the image evenly.
+/*!
+    A cube layout carves the image into faces, and a square image gives it faces of a fractional number of
+    texels, which no amount of resampling recovers. Every mapping already says the shape it wants.
+*/
+inline int2 size_for(int mapping, int height = 96)
+{
+    return int2{std::max(1, int(std::lround(float(height) * envmapping_aspect(mapping)))), height};
+}
+
 //! An environment whose sample at each point is \p f of the direction that point stands for.
 template <typename F>
 Array2Df make_envmap(int2 size, EnvMapping mapping, F &&f)
@@ -243,7 +253,7 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
             // Smooth and low-frequency, so that resampling blur cannot account for a mismatch.
             auto f = [](float3 d) { return 0.5f + 0.25f * d.y + 0.15f * d.x; };
 
-            const Array2Df src = make_envmap(int2{128, 128}, EnvMapping(src_m), f);
+            const Array2Df src = make_envmap(size_for(src_m), EnvMapping(src_m), f);
 
             for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
             {
@@ -554,13 +564,13 @@ TEST_CASE("Remapping a mapping to itself returns the image it was given")
     for (int m = 0; m < EnvMapping_COUNT; ++m)
     {
         CAPTURE(std::string(name_of(m)));
-        const Array2Df src = make_envmap(int2{64, 64}, EnvMapping(m), f);
+        const int2     size = size_for(m, 72);
+        const Array2Df src  = make_envmap(size, EnvMapping(m), f);
 
         for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
         {
             CAPTURE(sampler);
-            const Array2Df out =
-                remapped_envmap(src, int2{64, 64}, EnvMapping(m), EnvMapping(m), EnvMapSampling(sampler), 4);
+            const Array2Df out = remapped_envmap(src, size, EnvMapping(m), EnvMapping(m), EnvMapSampling(sampler), 4);
 
             // Inside a single face of the cube cross, which is the tightest constraint of the six: across one
             // of its seams supersampling genuinely averages two faces, so identity is not what should happen

@@ -128,6 +128,66 @@ float3 cube_map_face_vector(float2 uv)
 
 float3 cube_map_to_xyz(float2 uv) { return la::normalize(cube_map_face_vector(uv)); }
 
+/*!
+    The cube face vector for \p uv in the single-column layout, before normalizing.
+
+    Six faces stacked top to bottom in the order +X, -X, +Y, -Y, +Z, -Z, each turned the way OpenEXR
+    turns it -- so a file written as an OpenEXR cube map is read the right way up and the right way round.
+
+    OpenEXR also puts its outermost samples exactly on the face edges, where this puts them half a texel
+    inside as a GPU does; see CubeLevel. The layout is the same, the sample grid is offset by half a texel.
+*/
+float3 cube_column_face_vector(float2 uv)
+{
+    const int   face = std::clamp(int(uv.y * 6.f), 0, 5);
+    const float a    = 2.f * uv.x - 1.f;
+    const float b    = 2.f * (uv.y * 6.f - float(face)) - 1.f;
+
+    switch (face)
+    {
+    case 0: return float3{1.f, -b, a};   // +X
+    case 1: return float3{-1.f, -b, -a}; // -X
+    case 2: return float3{a, 1.f, -b};   // +Y
+    case 3: return float3{a, -1.f, b};   // -Y
+    case 4: return float3{-a, -b, 1.f};  // +Z
+    default: return float3{a, -b, -1.f}; // -Z
+    }
+}
+
+float3 cube_column_to_xyz(float2 uv) { return la::normalize(cube_column_face_vector(uv)); }
+
+//! Where \p xyz falls in the single-column layout; the inverse of cube_column_face_vector().
+float2 xyz_to_cube_column(float3 xyz)
+{
+    const float ax = std::abs(xyz.x), ay = std::abs(xyz.y), az = std::abs(xyz.z);
+
+    int   face;
+    float l, a, b;
+    if (ax >= ay && ax >= az)
+    {
+        l    = ax;
+        face = xyz.x >= 0.f ? 0 : 1;
+        a    = (xyz.z / l) * (face == 0 ? 1.f : -1.f);
+        b    = -xyz.y / l;
+    }
+    else if (ay >= az)
+    {
+        l    = ay;
+        face = xyz.y >= 0.f ? 2 : 3;
+        a    = xyz.x / l;
+        b    = (xyz.z / l) * (face == 2 ? -1.f : 1.f);
+    }
+    else
+    {
+        l    = az;
+        face = xyz.z >= 0.f ? 4 : 5;
+        a    = (xyz.x / l) * (face == 4 ? -1.f : 1.f);
+        b    = -xyz.y / l;
+    }
+
+    return float2{0.5f * (a + 1.f), (float(face) + 0.5f * (b + 1.f)) / 6.f};
+}
+
 //
 // Equal-area, adapted from PBRTv4, itself from Clarberg, "Fast Equal-Area Mapping of the (Hemi)Sphere
 // using SIMD".
@@ -279,6 +339,7 @@ const char *envmapping_name(int mapping)
     case EnvMapping_LatLong: return "Longitude-latitude";
     case EnvMapping_Cylindrical: return "Cylindrical";
     case EnvMapping_CubeMap: return "Cube map (vertical cross)";
+    case EnvMapping_CubeMapColumn: return "Cube map (vertical column)";
     case EnvMapping_EqualArea: return "Equal area";
     default: return "";
     }
@@ -289,9 +350,10 @@ float envmapping_aspect(int mapping)
     switch (mapping)
     {
     case EnvMapping_LatLong:
-    case EnvMapping_Cylindrical: return 2.f;   // a full turn across, half a turn down
-    case EnvMapping_CubeMap: return 3.f / 4.f; // three faces across by four down
-    default: return 1.f;                       // the discs and the equal-area square
+    case EnvMapping_Cylindrical: return 2.f;         // a full turn across, half a turn down
+    case EnvMapping_CubeMap: return 3.f / 4.f;       // three faces across by four down
+    case EnvMapping_CubeMapColumn: return 1.f / 6.f; // one across by six down
+    default: return 1.f;                             // the discs and the equal-area square
     }
 }
 
@@ -304,6 +366,7 @@ float3 envmap_uv_to_xyz(EnvMapping mapping, float2 uv)
     case EnvMapping_LatLong: return lat_long_to_xyz(uv);
     case EnvMapping_Cylindrical: return cylindrical_to_xyz(uv);
     case EnvMapping_CubeMap: return cube_map_to_xyz(uv);
+    case EnvMapping_CubeMapColumn: return cube_column_to_xyz(uv);
     default: return equal_area_to_xyz(uv);
     }
 }
@@ -317,6 +380,7 @@ float2 envmap_xyz_to_uv(EnvMapping mapping, float3 xyz)
     case EnvMapping_LatLong: return xyz_to_lat_long(xyz);
     case EnvMapping_Cylindrical: return xyz_to_cylindrical(xyz);
     case EnvMapping_CubeMap: return xyz_to_cube_map(xyz);
+    case EnvMapping_CubeMapColumn: return xyz_to_cube_column(xyz);
     default: return xyz_to_equal_area(xyz);
     }
 }
@@ -411,6 +475,14 @@ float envmap_jacobian(EnvMapping mapping, float2 uv)
         const float r = la::length(2.f * uv - float2{1.f});
         // sin(pi*r)/r tends to pi at the center rather than dividing by zero.
         return r < 1e-6f ? k_four_pi * k_pi : k_four_pi * std::sin(k_pi * r) / r;
+    }
+
+    case EnvMapping_CubeMapColumn:
+    {
+        // As below, but the column gives each face a sixth of the image rather than a twelfth of it.
+        const float3 v = cube_column_face_vector(uv);
+        const float  l = la::length(v);
+        return 24.f / (l * l * l);
     }
 
     default:
@@ -638,6 +710,16 @@ using CubeLevel = std::array<Array2Df, Face_COUNT>;
 //! Texels along one side of a face, not counting its ring.
 int face_size(const CubeLevel &level) { return level[0].width() - 2; }
 
+//! Whether \p mapping lays the sphere out as six flat faces, whichever arrangement it uses for them.
+bool is_cube(EnvMapping mapping) { return mapping == EnvMapping_CubeMap || mapping == EnvMapping_CubeMapColumn; }
+
+//! Side of the finest face \p mapping can carve out of an image of \p size.
+int face_size_for(EnvMapping mapping, int2 size)
+{
+    return mapping == EnvMapping_CubeMapColumn ? std::max(1, std::min(size.x, size.y / 6))
+                                               : std::max(1, std::min(size.x / 3, size.y / 4));
+}
+
 //! Bilinear read of \p face at \p st in face coordinates, over its interior alone.
 /*! What the ring is filled from, and so unable to look at it. */
 float sample_face_interior(const Array2Df &face, float2 st)
@@ -706,8 +788,12 @@ void fill_face_padding(CubeLevel &level)
     }
 }
 
-//! The six faces of the vertical cross in \p src, \p n texels a side.
-CubeLevel faces_from_cross(const Array2Df &src, int n)
+//! The six faces of the cube map in \p src, \p n texels a side.
+/*!
+    Addressed by direction rather than by where each face sits in the picture, so the arrangement enters
+    only through \p mapping's own projection -- a cross and a column are read by the same code.
+*/
+CubeLevel faces_from_source(const Array2Df &src, int n, EnvMapping mapping)
 {
     CubeLevel level;
     for (int f = 0; f < Face_COUNT; ++f)
@@ -719,10 +805,10 @@ CubeLevel faces_from_cross(const Array2Df &src, int n)
             {
                 const float2 st{(float(i) + 0.5f) / float(n), (float(j) + 0.5f) / float(n)};
 
-                // Exactly one source texel whenever the cross is 3n by 4n, since the two grids then have
-                // the same centers; a cross of some other shape is resampled onto this one instead.
+                // Exactly one source texel whenever the faces divide the image evenly, since the two
+                // grids then have the same centers; any other shape is resampled onto this one instead.
                 level[size_t(f)](i + 1, j + 1) =
-                    sample_bilinear(src, xyz_to_cube_map(cube_face_vector(f, st)), EnvMapping_CubeMap);
+                    sample_bilinear(src, envmap_xyz_to_uv(mapping, cube_face_vector(f, st)), mapping);
             }
     }
 
@@ -918,9 +1004,9 @@ public:
     /// \p with_mips builds the levels EWA needs; point sampling reads only the finest.
     EnvSource(const Array2Df &src, EnvMapping mapping, bool with_mips) : m_src(src), m_mapping(mapping)
     {
-        if (mapping == EnvMapping_CubeMap)
+        if (is_cube(mapping))
         {
-            m_faces.push_back(faces_from_cross(src, std::max(1, std::min(src.width() / 3, src.height() / 4))));
+            m_faces.push_back(faces_from_source(src, face_size_for(mapping, src.size()), mapping));
             while (with_mips && face_size(m_faces.back()) > 1) m_faces.push_back(decimated(m_faces.back()));
         }
         else if (with_mips)
