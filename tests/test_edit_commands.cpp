@@ -58,6 +58,22 @@ public:
         return m_image ? m_image->active_group_index(Target_Primary) : -1;
     }
 
+    //! The pointed-at group when one has been set, and otherwise the image's selection; mirrors
+    //! HDRViewApp::target_groups(), including its fallback to the group on screen when nothing is
+    //! selected.
+    std::vector<int> target_groups() const override
+    {
+        if (m_target_group >= 0)
+            return {m_target_group};
+        if (!m_image)
+            return {};
+
+        std::vector<int> groups = m_image->selected_groups();
+        if (groups.empty() && m_image->is_valid_group(target_group()))
+            groups.push_back(target_group());
+        return groups;
+    }
+
     //! Point at a group without selecting it, the way the Images panel's context menu does.
     void          set_target_group(int group) { m_target_group = group; }
     Box2i         selection() const override { return m_selection; }
@@ -343,6 +359,44 @@ ImagePtr make_image(int num_channels = 4)
     return img;
 }
 
+//! An image with three channel groups, for the tests that need the scopes to name different channels.
+/*!
+    Two color groups and a depth channel: enough for "the group on screen", "the selected groups" and
+    "every channel" to be three different sets, and for the color-only filter to have something to drop.
+*/
+ImagePtr make_layered_image()
+{
+    auto img = std::make_shared<Image>(
+        k_size, std::vector<std::string>{"R", "G", "B", "A", "Z", "normal.R", "normal.G", "normal.B"});
+
+    for (size_t c = 0; c < img->channels.size(); ++c)
+        for (int y = 0; y < k_size.y; ++y)
+            for (int x = 0; x < k_size.x; ++x)
+                img->channels[c](x, y) = 0.15f + 0.05f * float(c) + 0.01f * float(y * k_size.x + x);
+
+    img->rebuild_layers();
+    return img;
+}
+
+//! The index of the group holding the channel named \p name, or -1.
+int group_of_channel(const ImagePtr &img, const std::string &name)
+{
+    for (size_t g = 0; g < img->groups.size(); ++g)
+        for (int i = 0; i < img->groups[g].num_channels; ++i)
+            if (img->channels[size_t(img->groups[g].channels[i])].name == name)
+                return int(g);
+    return -1;
+}
+
+//! The index of the channel named \p name, or -1.
+int channel_index(const ImagePtr &img, const std::string &name)
+{
+    for (size_t c = 0; c < img->channels.size(); ++c)
+        if (img->channels[c].name == name)
+            return int(c);
+    return -1;
+}
+
 //! Every sample of every channel, as one comparable value.
 std::vector<float> samples(const ImagePtr &img)
 {
@@ -453,51 +507,162 @@ TEST_CASE("Every edit that applies leaves exactly one undo entry, and undoing re
 
 TEST_CASE("An edit covers the subject it was given and nothing else")
 {
-    // Two scopes and a selection, swept over every command rather than checked for one: an edit that
-    // ignores the subject writes outside the rectangle, and an edit that misreads it writes to the wrong
-    // channels. Both show up as a sample changing where none should have.
-    for (auto &cmd : all_edit_commands())
+    // Every scope and a selection, swept over every command rather than checked for one: an edit that
+    // ignores the subject writes outside the rectangle, and an edit that misreads it writes to a channel
+    // the scope never named. Both show up as a sample changing where none should have.
+    //
+    // Run on a three-group image so the scopes are three different channel sets; on the single-group one
+    // they would all name the same channels and only the rectangle would be under test.
+    for (int scope = 0; scope < EditSubject::Scope_COUNT; ++scope)
+        for (auto &cmd : all_edit_commands())
+        {
+            const std::string name = first_name(cmd);
+
+            CAPTURE(name);
+            CAPTURE(scope);
+
+            auto            img = make_layered_image();
+            TestEditContext ctx{img};
+            ctx.set_clipboard(make_image());
+
+            // The color group on screen, and the two color groups selected -- so "selected" is neither
+            // the current group nor every channel, and a resolver that fell through to either is caught.
+            img->selected_group = group_of_channel(img, "R");
+            img->select_group(img->selected_group);
+            img->select_group(group_of_channel(img, "normal.R"));
+
+            // A selection well inside the image, so there is untouched ground on every side of it.
+            const Box2i roi{int2{2, 1}, int2{5, 4}};
+            ctx.set_selection(roi);
+            ctx.mutable_subject().selection_only = true;
+            ctx.mutable_subject().scope          = EditSubject::Scope(scope);
+
+            if (!cmd->enabled(ctx))
+                continue;
+
+            // Worked out here from the scope rather than asked of subject_channels(), so that this
+            // checks the resolver against an independent reading of it instead of against itself.
+            std::vector<int> covered;
+            if (scope == EditSubject::Scope_AllChannels)
+            {
+                covered.resize(img->channels.size());
+                std::iota(covered.begin(), covered.end(), 0);
+            }
+            else
+            {
+                const std::vector<int> groups = scope == EditSubject::Scope_SelectedGroups
+                                                    ? img->selected_groups()
+                                                    : std::vector<int>{img->selected_group};
+                for (int g : groups)
+                    for (int i = 0; i < img->groups[size_t(g)].num_channels; ++i)
+                        covered.push_back(img->groups[size_t(g)].channels[i]);
+            }
+
+            const std::vector<float> before = samples(img);
+            const int                steps  = img->history.size();
+
+            cmd->apply(ctx);
+
+            // Nothing to check unless the edit both happened and went through a chokepoint that takes the
+            // subject: a flip moves every sample by definition, and a resize has no rectangle to stay in.
+            if (img->history.size() == steps || img->size() != k_size || !ctx.last_edit_used_subject())
+                continue;
+
+            for (size_t c = 0; c < img->channels.size(); ++c)
+            {
+                const bool named = std::find(covered.begin(), covered.end(), int(c)) != covered.end();
+                for (int y = 0; y < k_size.y; ++y)
+                    for (int x = 0; x < k_size.x; ++x)
+                    {
+                        if (named && roi.contains(int2{x, y}))
+                            continue;
+
+                        CAPTURE(c);
+                        CAPTURE(x);
+                        CAPTURE(y);
+                        CHECK(img->channels[c](x, y) ==
+                              before[c * size_t(k_size.x * k_size.y) + size_t(y * k_size.x + x)]);
+                    }
+            }
+        }
+}
+
+TEST_CASE("Each scope names the channels it says it does")
+{
+    auto img = make_layered_image();
+
+    const int color = group_of_channel(img, "R");
+    const int depth = group_of_channel(img, "Z");
+    const int other = group_of_channel(img, "normal.R");
+    REQUIRE(img->groups.size() == 3);
+    REQUIRE(color >= 0);
+    REQUIRE(depth >= 0);
+    REQUIRE(other >= 0);
+
+    // The group on screen is the color one, and the selection is that plus the second color group --
+    // deliberately not the depth channel, so the three scopes cover 4, 7 and 8 of the 8 channels.
+    img->selected_group = color;
+    img->select_group(color);
+    img->select_group(other);
+
+    EditSubject subject;
+    subject.selection_only = false;
+
+    auto channels_under = [&](EditSubject::Scope s)
     {
-        const std::string name = first_name(cmd);
+        subject.scope = s;
+        return subject_channels(*img, subject);
+    };
+    auto color_groups_under = [&](EditSubject::Scope s)
+    {
+        subject.scope = s;
+        return subject_color_groups(*img, subject);
+    };
 
-        CAPTURE(name);
+    const auto current  = channels_under(EditSubject::Scope_CurrentGroup);
+    const auto selected = channels_under(EditSubject::Scope_SelectedGroups);
+    const auto all      = channels_under(EditSubject::Scope_AllChannels);
 
-        auto            img = make_image();
-        TestEditContext ctx{img};
-        ctx.set_clipboard(make_image());
+    CHECK(current.size() == 4);  // R,G,B,A
+    CHECK(selected.size() == 7); // and normal.R,G,B, but not Z
+    CHECK(all.size() == img->channels.size());
 
-        // A selection well inside the image, so there is untouched ground on every side of it.
-        const Box2i roi{int2{2, 1}, int2{5, 4}};
-        ctx.set_selection(roi);
-        ctx.mutable_subject().selection_only = true;
-        ctx.mutable_subject().scope          = EditSubject::Scope_CurrentGroup;
+    // Narrower to wider: each scope names everything the one before it did.
+    for (int c : current) CHECK(std::find(selected.begin(), selected.end(), c) != selected.end());
+    for (int c : selected) CHECK(std::find(all.begin(), all.end(), c) != all.end());
 
-        if (!cmd->enabled(ctx))
-            continue;
+    // The one channel the selection leaves out is exactly the one whose group was not selected.
+    CHECK(std::find(selected.begin(), selected.end(), channel_index(img, "Z")) == selected.end());
 
-        const std::vector<float> before = samples(img);
-        const int                steps  = img->history.size();
+    // Selecting every group makes "selected" and "all channels" the same set, since every channel of this
+    // image belongs to a group.
+    img->select_group(depth);
+    CHECK(channels_under(EditSubject::Scope_SelectedGroups).size() == img->channels.size());
+    img->select_group(depth, false);
 
-        cmd->apply(ctx);
+    // The color resolver keeps only the RGB/RGBA groups, whatever the scope, and its channel list is
+    // exactly the union of the groups it kept.
+    for (int s = 0; s < EditSubject::Scope_COUNT; ++s)
+    {
+        CAPTURE(s);
+        auto [groups, channels] = color_groups_under(EditSubject::Scope(s));
 
-        // Nothing to check unless the edit both happened and went through a chokepoint that takes the
-        // subject: a flip moves every sample by definition, and a resize has no rectangle to stay inside.
-        if (img->history.size() == steps || img->size() != k_size || !ctx.last_edit_used_subject())
-            continue;
-
-        for (size_t c = 0; c < img->channels.size(); ++c)
-            for (int y = 0; y < k_size.y; ++y)
-                for (int x = 0; x < k_size.x; ++x)
-                {
-                    if (roi.contains(int2{x, y}))
-                        continue;
-
-                    CAPTURE(c);
-                    CAPTURE(x);
-                    CAPTURE(y);
-                    CHECK(img->channels[c](x, y) == before[c * size_t(k_size.x * k_size.y) + size_t(y * k_size.x + x)]);
-                }
+        size_t expected = 0;
+        for (int g : groups)
+        {
+            const auto t = img->groups[size_t(g)].type;
+            CHECK((t == ChannelGroup::RGB_Channels || t == ChannelGroup::RGBA_Channels));
+            expected += size_t(img->groups[size_t(g)].num_channels);
+        }
+        CHECK(channels.size() == expected);
+        CHECK(std::find(channels.begin(), channels.end(), channel_index(img, "Z")) == channels.end());
     }
+
+    // Which is 1, 2 and 2 groups respectively -- the depth channel is the only thing "all channels" adds
+    // over the selection here, and it is not a color.
+    CHECK(color_groups_under(EditSubject::Scope_CurrentGroup).first.size() == 1);
+    CHECK(color_groups_under(EditSubject::Scope_SelectedGroups).first.size() == 2);
+    CHECK(color_groups_under(EditSubject::Scope_AllChannels).first.size() == 2);
 }
 
 TEST_CASE("A command with no image to work on does nothing rather than crashing")
@@ -896,6 +1061,54 @@ TEST_CASE("Regrouping touches only the channels an explosion marked, not every l
     REQUIRE(img->history.undo(*img));
     CHECK(img->channels[0].ungrouped);
     CHECK_FALSE(img->channels[3].ungrouped);
+}
+
+TEST_CASE("Regrouping from a selection puts back exactly the channels it names")
+{
+    // The case the selection exists for: explode an RGBA group, leave the alpha out of the selection, and
+    // ask for the rest back. Grouping is still derived from the names -- holding the alpha out is what
+    // makes the R,G,B,A pattern come up short so that R,G,B matches instead.
+    auto img = std::make_shared<Image>(k_size, std::vector<std::string>{"R", "G", "B", "A", "Z"});
+    img->rebuild_layers();
+    REQUIRE(img->groups.size() == 2); // the color, and the depth on its own
+
+    TestEditContext ctx{img};
+    auto            regroup = find_command("Regroup channels");
+    REQUIRE(regroup);
+
+    img->selected_group = group_of_channel(img, "R");
+    find_command("Ungroup channels")->apply(ctx);
+    REQUIRE(img->groups.size() == 5); // four singletons, plus the depth
+
+    // Select R, G and B -- and the depth channel, which was never exploded and so carries no mark. A
+    // regroup that cleared a flag it never set would record setting one on the way back.
+    img->deselect_all();
+    for (const char *name : {"R", "G", "B", "Z"}) img->select_group(group_of_channel(img, name));
+    img->selected_group = group_of_channel(img, "R");
+
+    REQUIRE(regroup->enabled(ctx));
+    regroup->apply(ctx);
+
+    // R,G,B are a color again; the alpha stands alone, still marked; the depth is as it always was.
+    CHECK(img->groups.size() == 3);
+    const int rgb = group_of_channel(img, "R");
+    CHECK(img->groups[size_t(rgb)].num_channels == 3);
+    CHECK(img->groups[size_t(group_of_channel(img, "A"))].num_channels == 1);
+    CHECK(img->channels[size_t(channel_index(img, "A"))].ungrouped);
+    CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
+
+    // The viewport follows the group it was showing into whatever swallowed it.
+    CHECK(img->selected_group == rgb);
+
+    // The regrouped channels are still selected, since the flags ride on the channels rather than on the
+    // group indices the rebuild renumbered.
+    CHECK(img->is_group_selected(rgb));
+
+    // Undo marks back exactly what was cleared, and nothing else.
+    REQUIRE(img->history.undo(*img));
+    CHECK(img->groups.size() == 5);
+    for (const char *name : {"R", "G", "B", "A"}) CHECK(img->channels[size_t(channel_index(img, name))].ungrouped);
+    CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
 }
 
 TEST_CASE("The delete command says whether it is about to take one channel or a group")

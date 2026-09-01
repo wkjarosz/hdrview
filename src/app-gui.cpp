@@ -516,7 +516,7 @@ void HDRViewApp::draw_menus()
                     m_edit_subject.scope = EditSubject::Scope(i);
 
             if (!matters && img)
-                ImGui::Tooltip("This image has a single channel group, so both choices cover the same "
+                ImGui::Tooltip("This image has a single channel group, so all three choices cover the same "
                                "channels.");
 
             ImGui::Separator();

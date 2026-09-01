@@ -49,6 +49,14 @@ struct EditContext
     */
     virtual int target_group() const = 0;
 
+    //! The channel groups an operation acts on: every selected one, or just the one being pointed at.
+    /*!
+        The plural counterpart to target_group(), with the same distinction behind it -- reached from the
+        Images panel's context menu this is the one group that was named, and reached from the menu it is
+        the whole multi-selection.
+    */
+    virtual std::vector<int> target_groups() const = 0;
+
     virtual Box2i selection() const               = 0;
     virtual void  set_selection(const Box2i &box) = 0;
     //! The color the viewport draws behind the image, for the edits that composite against it.

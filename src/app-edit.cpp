@@ -43,6 +43,7 @@ struct AppEditContext final : EditContext
     ImagePtr           image() const override { return app->current_image(); }
     const EditSubject &subject() const override { return app->edit_subject(); }
     int                target_group() const override { return app->target_group(); }
+    std::vector<int>   target_groups() const override { return app->target_groups(); }
     Box2i              selection() const override { return app->roi(); }
     void               set_selection(const Box2i &box) override { app->set_selection(box); }
     float4             background_color() const override { return app->background_color(); }
@@ -101,6 +102,24 @@ int HDRViewApp::target_group() const
 
     auto img = current_image();
     return img ? img->active_group_index(Target_Primary) : -1;
+}
+
+std::vector<int> HDRViewApp::target_groups() const
+{
+    if (m_target_group_override >= 0)
+        return {m_target_group_override};
+
+    auto img = current_image();
+    if (!img)
+        return {};
+
+    // The current group is always among the selected ones, so the fallback is for an image that has not
+    // been through the panel at all -- a freshly built one, or a test driving a command directly.
+    std::vector<int> groups = img->selected_groups();
+    if (groups.empty() && img->is_valid_group(target_group()))
+        groups.push_back(target_group());
+
+    return groups;
 }
 
 void HDRViewApp::invoke_action_on_group(const string &action_name, int group)
@@ -264,28 +283,50 @@ bool HDRViewApp::modify_channels(const ImagePtr &img, const string &name, const 
         { return std::make_unique<ChannelRectUndo>(image, channels, bounds, name); });
 }
 
-namespace
-{
-
-//! The color groups \p subject covers, and every channel of them.
-/*!
-    Only RGB and RGBA: everything else in an image -- depth, motion vectors, an ID -- is not color, and a
-    color operation has no meaning for it, so it is left alone rather than run through one.
-*/
-std::pair<std::vector<int>, std::vector<int>> resolve_color_groups(const ConstImagePtr &img, const EditSubject &subject)
+//! The groups \p subject's scope names, before any filtering by what they contain.
+static std::vector<int> subject_groups(const Image &img, const EditSubject &subject)
 {
     std::vector<int> groups;
     if (subject.scope == EditSubject::Scope_AllChannels)
     {
-        for (int g = 0; g < int(img->groups.size()); ++g) groups.push_back(g);
+        for (int g = 0; g < int(img.groups.size()); ++g) groups.push_back(g);
     }
-    else if (int g = img->active_group_index(Target_Primary); img->is_valid_group(g))
+    else if (subject.scope == EditSubject::Scope_SelectedGroups)
+        groups = img.selected_groups();
+    else if (int g = img.active_group_index(Target_Primary); img.is_valid_group(g))
         groups.push_back(g);
+
+    return groups;
+}
+
+std::vector<int> subject_channels(const Image &img, const EditSubject &subject)
+{
+    // Every channel, rather than the union of every group's, so that a channel belonging to no group is
+    // still covered by "all channels".
+    if (subject.scope == EditSubject::Scope_AllChannels)
+    {
+        std::vector<int> channels(img.channels.size());
+        std::iota(channels.begin(), channels.end(), 0);
+        return channels;
+    }
+
+    std::vector<int> channels;
+    for (int g : subject_groups(img, subject))
+    {
+        const auto &group = img.groups[size_t(g)];
+        for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
+    }
+    return channels;
+}
+
+std::pair<std::vector<int>, std::vector<int>> subject_color_groups(const Image &img, const EditSubject &subject)
+{
+    std::vector<int> groups = subject_groups(img, subject);
 
     groups.erase(std::remove_if(groups.begin(), groups.end(),
                                 [&img](int g)
                                 {
-                                    const auto t = img->groups[size_t(g)].type;
+                                    const auto t = img.groups[size_t(g)].type;
                                     return t != ChannelGroup::RGB_Channels && t != ChannelGroup::RGBA_Channels;
                                 }),
                  groups.end());
@@ -294,14 +335,12 @@ std::pair<std::vector<int>, std::vector<int>> resolve_color_groups(const ConstIm
     std::vector<int> channels;
     for (int g : groups)
     {
-        const auto &group = img->groups[size_t(g)];
+        const auto &group = img.groups[size_t(g)];
         for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
     }
 
     return {groups, channels};
 }
-
-} // namespace
 
 bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const EditSubject &subject,
                                const function<float4(const float4 &, int2)> &op, const function<void(Image &)> &retag)
@@ -309,7 +348,7 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
     if (!can_edit(img))
         return false;
 
-    auto [groups, channels] = resolve_color_groups(img, subject);
+    auto [groups, channels] = subject_color_groups(*img, subject);
     if (groups.empty())
         return false;
 
@@ -385,7 +424,7 @@ bool HDRViewApp::modify_neighborhood(const ImagePtr &img, const string &name, co
     if (!can_edit(img))
         return false;
 
-    auto [groups, channels] = resolve_color_groups(img, subject);
+    auto [groups, channels] = subject_color_groups(*img, subject);
     if (groups.empty())
         return false;
 
@@ -532,28 +571,18 @@ void HDRViewApp::close_all_images()
 
 bool HDRViewApp::scope_matters(const ConstImagePtr &img)
 {
-    // With one group, "the group the viewport is showing" and "every channel" are the same set, so there
-    // is nothing for the user to decide.
+    // With one group, every scope names the same channels -- the group on screen is the selection is the
+    // whole image -- so there is nothing for the user to decide.
     return img && img->groups.size() > 1;
 }
 
 std::pair<std::vector<int>, Box2i> HDRViewApp::resolve_subject(const ConstImagePtr &img,
                                                                const EditSubject   &subject) const
 {
-    std::vector<int> channels;
     if (!img)
-        return {channels, Box2i{}};
+        return {std::vector<int>{}, Box2i{}};
 
-    if (subject.scope == EditSubject::Scope_AllChannels)
-    {
-        channels.resize(img->channels.size());
-        std::iota(channels.begin(), channels.end(), 0);
-    }
-    else if (int g = img->active_group_index(Target_Primary); img->is_valid_group(g))
-    {
-        const auto &group = img->groups[size_t(g)];
-        for (int c = 0; c < group.num_channels; ++c) channels.push_back(group.channels[c]);
-    }
+    std::vector<int> channels = subject_channels(*img, subject);
 
     Box2i bounds = img->data_window;
     // An empty selection means "no selection", not "select nothing" -- leaving the box on should not make
@@ -663,7 +692,7 @@ void HDRViewApp::draw_edit_subject_selector()
         if (ImGui::RadioButton(edit_scope_name(i), m_edit_subject.scope == i))
             m_edit_subject.scope = EditSubject::Scope(i);
     if (!matters && img)
-        ImGui::Tooltip("This image has a single channel group, so both choices cover the same channels.");
+        ImGui::Tooltip("This image has a single channel group, so all three choices cover the same channels.");
 
     ImGui::Checkbox("Selection only", &m_edit_subject.selection_only);
     if (!m_roi.has_volume())

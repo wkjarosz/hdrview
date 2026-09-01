@@ -22,14 +22,6 @@
 namespace
 {
 
-//! The layer the group on screen belongs to, which is the prefix its channel names share.
-/*!
-    What scopes regrouping. A group can be selected but a set of them cannot, so an operation that puts
-    channels back together has to work out for itself which ones are meant -- and once a group has been
-    ungrouped, the only thing its channels still have in common is the layer they came from.
-*/
-std::string target_layer(const EditContext &ctx);
-
 //! Every channel of \p img in the layer \p layer that ungrouping marked.
 /*!
     Marked, rather than merely standing alone: a layer can hold channels whose names never grouped -- a
@@ -64,6 +56,39 @@ std::vector<int> group_channels(const ImagePtr &img, int group)
 //! The channels of the group an edit is about to act on, which is not always the one on screen.
 std::vector<int> target_channels(const EditContext &ctx) { return group_channels(ctx.image(), ctx.target_group()); }
 
+//! The layer \p group belongs to, which is the prefix its channel names share.
+std::string layer_of(const ImagePtr &img, int group)
+{
+    const std::vector<int> channels = group_channels(img, group);
+    return channels.empty() ? std::string{} : Channel::head(img->channels[size_t(channels.front())].name);
+}
+
+//! The channels regrouping would put back together.
+/*!
+    Every marked channel of every group the command was invoked on -- except that a single group cannot
+    say which channels it should rejoin, since ungrouping left each of them standing alone. One group
+    therefore restores its whole layer, which is all its channels still have in common, and that is also
+    what the Images panel's context menu asks for when it names one group. Two or more say exactly which.
+*/
+std::vector<int> regroup_channels(const EditContext &ctx)
+{
+    auto img = ctx.image();
+    if (!img)
+        return {};
+
+    const std::vector<int> groups = ctx.target_groups();
+    if (groups.size() == 1)
+        return ungrouped_in_layer(img, layer_of(img, groups.front()));
+
+    std::vector<int> out;
+    for (int g : groups)
+        for (int c : group_channels(img, g))
+            if (img->channels[size_t(c)].ungrouped)
+                out.push_back(c);
+
+    return out;
+}
+
 //! Leave the viewport on whichever group now holds \p channel.
 /*!
     A rebuild renumbers the groups, so the index that was selected can afterwards mean something else
@@ -79,12 +104,6 @@ void select_channels_group(Image &img, int channel)
                 img.selected_group = int(g);
                 return;
             }
-}
-
-std::string target_layer(const EditContext &ctx)
-{
-    const std::vector<int> channels = target_channels(ctx);
-    return channels.empty() ? std::string{} : Channel::head(ctx.image()->channels[size_t(channels.front())].name);
 }
 
 /*!
@@ -140,15 +159,14 @@ public:
 };
 
 /*!
-    Put the channels of a layer back into the groups their names ask for.
+    Put ungrouped channels back into the groups their names ask for.
 
-    The counterpart to ungrouping, and scoped to a layer because that is all there is to go on.
-    Ungrouping leaves a group's channels standing on their own, and only one group can be selected at a
-    time -- so selecting any one of them and asking for its layer back is the way to say which of them is
-    meant.
+    The counterpart to ungrouping, and scoped by the selection: selecting the channels that should end up
+    together and asking for them back is how an RGBA group becomes an RGB group beside a lone alpha. The
+    groups are still derived from the names, so this only decides which channels are available to match --
+    with A held out, the R,G,B,A pattern comes up short and R,G,B matches instead.
 
-    A layer holding two ungrouped groups is restored in one go, since nothing distinguishes them once they
-    are apart.
+    A single selected group falls back to its whole layer; see regroup_channels().
 */
 class RegroupChannels final : public EditCommand
 {
@@ -164,11 +182,7 @@ public:
                 /* has_subject */ false};
     }
 
-    bool enabled(const EditContext &ctx) const override
-    {
-        auto img = ctx.image();
-        return img && !ungrouped_in_layer(img, target_layer(ctx)).empty();
-    }
+    bool enabled(const EditContext &ctx) const override { return !regroup_channels(ctx).empty(); }
 
     void apply(EditContext &ctx) override
     {
@@ -176,11 +190,20 @@ public:
         if (!img)
             return;
 
-        const std::vector<int> marked = ungrouped_in_layer(img, target_layer(ctx));
+        const std::vector<int> marked = regroup_channels(ctx);
         if (marked.empty())
             return;
 
-        const bool follow = ctx.target_group() == img->selected_group;
+        // Follow the group on screen across the rebuild when it is one of the ones being put back
+        // together; one merely pointed at from the panel must leave the viewport where it was.
+        const std::vector<int> showing = group_channels(img, img->selected_group);
+        int                    follow  = -1;
+        for (int c : marked)
+            if (std::find(showing.begin(), showing.end(), c) != showing.end())
+            {
+                follow = c;
+                break;
+            }
 
         ctx.modify_reversibly(
             "Regroup channels",
@@ -188,15 +211,15 @@ public:
             {
                 for (int c : marked) img2.channels[size_t(c)].ungrouped = false;
                 img2.rebuild_layers();
-                if (follow)
-                    select_channels_group(img2, marked.front());
+                if (follow >= 0)
+                    select_channels_group(img2, follow);
             },
             [marked, follow](Image &img2)
             {
                 for (int c : marked) img2.channels[size_t(c)].ungrouped = true;
                 img2.rebuild_layers();
-                if (follow)
-                    select_channels_group(img2, marked.front());
+                if (follow >= 0)
+                    select_channels_group(img2, follow);
             });
     }
 };
