@@ -97,8 +97,13 @@ public:
 
         //! What the confirming button says. Ignored by a command with no dialog.
         std::string confirm = "Apply";
-        //! Width of the dialog, in em -- multiples of the font size, as the rest of the interface is
-        //! measured. Not in pixels: an Info is built before there is an ImGui context to ask for a size.
+        //! Least width of the dialog, in em -- multiples of the font size, as the rest of the interface
+        //! is measured. Content wider than this widens it further.
+        /*!
+            In em rather than pixels because an Info is built before there is an ImGui context to ask for a
+            size, and a minimum rather than a size because these dialogs size themselves from their
+            contents; see HDRViewApp::draw_edit_command_dialog().
+        */
         float width_em = 24.f;
         //! Whether the dialog carries the "Apply to" controls. False for the edits that cover the whole
         //! image whatever the subject says -- a crop, a resize.

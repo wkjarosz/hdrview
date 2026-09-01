@@ -117,9 +117,13 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
     if (open)
         cmd.on_open(ctx);
 
-    ImGui::SetNextWindowSize(ImVec2(info.width_em * HelloImGui::EmSize(), 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog(info.names.front().c_str(), open, ImGui::DialogPosition::Center))
     {
+        // A minimum width, established by an item of that width rather than by SetNextWindowSize(): these
+        // dialogs are AlwaysAutoResize, which sizes the window from its contents every frame and ignores a
+        // size set from outside. Content wider than this still widens the dialog.
+        ImGui::Dummy(ImVec2(info.width_em * HelloImGui::EmSize(), 0.f));
+
         cmd.draw(ctx);
 
         if (info.has_subject)
@@ -828,7 +832,6 @@ void HDRViewApp::draw_filter_progress_dialog(bool &open)
         return;
     }
 
-    ImGui::SetNextWindowSize(ImVec2(32.f * HelloImGui::EmSize(), 0), ImGuiCond_FirstUseEver);
     if (ImGui::BeginModalDialog("Applying filter...", open, ImGui::DialogPosition::Center))
     {
         if (!m_running_filter)
@@ -837,6 +840,10 @@ void HDRViewApp::draw_filter_progress_dialog(bool &open)
             ImGui::EndPopup();
             return;
         }
+
+        // As above: the window is sized from its contents, so a bar told to fill the available width has
+        // none to fill and the dialog shrinks to the Cancel button beneath it.
+        ImGui::Dummy(ImVec2(24.f * HelloImGui::EmSize(), 0.f));
 
         ImGui::TextUnformatted(m_running_filter->name.c_str());
         ImGui::ProgressBar(m_running_filter->progress.progress(), ImVec2(-FLT_MIN, 0.f));
