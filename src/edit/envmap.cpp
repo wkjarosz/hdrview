@@ -626,6 +626,13 @@ float2 cube_face_st(int face, float3 d)
 }
 
 //! One mip level of a cube map: six faces, each ringed by a texel of whatever lies past its edges.
+/*!
+    A ring is needed because these faces are cell-centered, as a GPU's are: the outermost sample sits half
+    a texel *inside* the cube's edge, so two faces meeting there share an edge but no sample along it, and
+    interpolating out to it needs something from the other side. OpenEXR's cube maps take the opposite
+    convention, putting samples exactly on the edges so that neighbors hold a row in common -- which needs
+    no ring, at the cost of a grid that no longer halves cleanly into a pyramid.
+*/
 using CubeLevel = std::array<Array2Df, Face_COUNT>;
 
 //! Texels along one side of a face, not counting its ring.
