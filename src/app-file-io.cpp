@@ -727,10 +727,26 @@ void HDRViewApp::duplicate_image()
     // image that was finalized once already -- premultiplying a straight-alpha image a second time would
     // quietly darken the copy.
 
-    // Beside the image it was made from rather than at the end of the list, which is where the eye is.
+    add_image_beside_current(copy, copy->partname);
+}
+
+void HDRViewApp::add_image_beside_current(ImagePtr img, const string &partname)
+{
+    if (!img)
+        return;
+
+    img->partname = partname;
+
+    // Nothing on disk holds this, so it counts as unsaved from the start and closing it will say so.
+    img->history = CommandHistory{true};
+
     const int index = current_image_index();
-    m_images.insert(m_images.begin() + index + 1, copy);
-    set_current_image_index(index + 1);
+    if (is_valid(index))
+        m_images.insert(m_images.begin() + index + 1, img);
+    else
+        m_images.push_back(img);
+
+    set_current_image_index(is_valid(index) ? index + 1 : int(m_images.size()) - 1);
 
     update_visibility();
 }

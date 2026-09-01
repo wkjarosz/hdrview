@@ -86,6 +86,8 @@ struct AppEditContext final : EditContext
         return app->modify_image_reversibly(app->current_image(), name, forward, backward);
     }
 
+    void add_image(ImagePtr img, const std::string &partname) override { app->add_image_beside_current(img, partname); }
+
     void draw_subject_selector() override { app->draw_edit_subject_selector(); }
 };
 

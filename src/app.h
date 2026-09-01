@@ -112,6 +112,12 @@ public:
         With a selection in force it is the selection that is copied.
     */
     void duplicate_image();
+    //! Put \p img into the list just after the current image, named \p partname, and select it.
+    /*!
+        Where duplicate_image() and the commands that derive an image from another one both land. Beside
+        the image it came from rather than at the end of the list, which is where the eye already is.
+    */
+    void add_image_beside_current(ImagePtr img, const std::string &partname);
     //! Whether `image` came from somewhere reload_image() could read it again.
     /*!
         Answers from how the image was loaded, never from the filesystem: this gates a keyboard shortcut, so

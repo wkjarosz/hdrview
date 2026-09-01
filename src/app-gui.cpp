@@ -485,6 +485,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Explode channel group"));
         MenuItem(action("Regroup channels"));
         MenuItem(action("Delete channel group"));
+        MenuItem(action("Generate mipmaps..."));
 
         ImGui::Separator();
 

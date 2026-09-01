@@ -15,6 +15,7 @@ std::vector<EditCommandPtr> all_edit_commands()
     add_transform_commands(commands);
     add_color_commands(commands);
     add_channel_commands(commands);
+    add_mipmap_commands(commands);
     add_filter_commands(commands);
     add_envmap_commands(commands);
 

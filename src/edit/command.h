@@ -68,6 +68,13 @@ struct EditContext
     virtual bool modify_reversibly(const std::string &name, const std::function<void(Image &)> &forward,
                                    const std::function<void(Image &)> &backward)                         = 0;
 
+    //! Put \p img into the image list beside the one being edited, and select it.
+    /*!
+        For the commands that produce a new image rather than changing this one. \p partname is what the
+        Images panel shows beside the file name, so several images made from one file can be told apart.
+    */
+    virtual void add_image(ImagePtr img, const std::string &partname) = 0;
+
     //! Draw the shared "Apply to" controls, which every dialog that edits samples carries.
     virtual void draw_subject_selector() = 0;
 };

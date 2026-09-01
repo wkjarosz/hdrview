@@ -28,5 +28,6 @@ void add_tonal_commands(std::vector<EditCommandPtr> &out);
 void add_transform_commands(std::vector<EditCommandPtr> &out);
 void add_color_commands(std::vector<EditCommandPtr> &out);
 void add_channel_commands(std::vector<EditCommandPtr> &out);
+void add_mipmap_commands(std::vector<EditCommandPtr> &out);
 void add_filter_commands(std::vector<EditCommandPtr> &out);
 void add_envmap_commands(std::vector<EditCommandPtr> &out);

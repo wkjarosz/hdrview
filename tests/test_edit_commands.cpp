@@ -56,6 +56,17 @@ public:
     void               set_clipboard(ImagePtr img) override { m_clipboard = std::move(img); }
     void               draw_subject_selector() override {}
 
+    //! Collected rather than shown, so a command that produces images can be checked for what it made.
+    void add_image(ImagePtr img, const std::string &partname) override
+    {
+        if (!img)
+            return;
+        img->partname = partname;
+        m_added.push_back(std::move(img));
+    }
+
+    const std::vector<ImagePtr> &added_images() const { return m_added; }
+
     EditSubject &mutable_subject() { return m_subject; }
     void         set_background(float4 c) { m_background = c; }
 
@@ -291,12 +302,13 @@ private:
         return copy;
     }
 
-    bool        m_used_subject = false;
-    ImagePtr    m_image;
-    ImagePtr    m_clipboard;
-    EditSubject m_subject;
-    Box2i       m_selection;
-    float4      m_background{0.f, 0.f, 0.f, 1.f};
+    bool                  m_used_subject = false;
+    std::vector<ImagePtr> m_added;
+    ImagePtr              m_image;
+    ImagePtr              m_clipboard;
+    EditSubject           m_subject;
+    Box2i                 m_selection;
+    float4                m_background{0.f, 0.f, 0.f, 1.f};
 };
 
 constexpr int2 k_size{7, 5};
@@ -690,5 +702,67 @@ TEST_CASE("Deleting is refused when it would leave nothing behind")
     {
         del->apply(ctx);
         CHECK(img->channels.size() == before);
+    }
+}
+
+TEST_CASE("Generating mipmaps halves the image down to the number of levels asked for")
+{
+    // Separate images rather than levels inside one, because an Image's channels share a single data
+    // window and a chain of different sizes has nowhere to live in one.
+    auto            img = make_image();
+    TestEditContext ctx{img};
+
+    auto cmd = find_command("Generate mipmaps...");
+    REQUIRE(cmd);
+    REQUIRE(cmd->enabled(ctx));
+
+    cmd->on_open(ctx);
+    cmd->apply(ctx);
+
+    const auto &made = ctx.added_images();
+    REQUIRE_FALSE(made.empty());
+
+    // Each one half the size of the one before, never below a single sample.
+    int2 expected = k_size;
+    for (size_t i = 0; i < made.size(); ++i)
+    {
+        expected = int2{std::max(1, expected.x / 2), std::max(1, expected.y / 2)};
+
+        CAPTURE(i);
+        CHECK(made[i]->size() == expected);
+        CHECK(made[i]->channels.size() == img->channels.size());
+        CHECK(made[i]->partname == fmt::format("mip {}", i + 1));
+    }
+
+    // Down to one sample, which is where a pyramid stops.
+    CHECK(made.back()->size() == int2{1, 1});
+
+    // And the image it came from is untouched: this makes images, it does not edit one.
+    CHECK(img->size() == k_size);
+    CHECK(img->history.size() == 0);
+}
+
+TEST_CASE("A mip level is averaged from its samples rather than dropping three of every four")
+{
+    // The point of building a pyramid at all. A checkerboard that alternates every sample averages to its
+    // mean; picking one sample of each four would keep it at one extreme or the other.
+    auto img = std::make_shared<Image>(int2{16, 16}, 1);
+    for (int y = 0; y < 16; ++y)
+        for (int x = 0; x < 16; ++x) img->channels[0](x, y) = ((x + y) % 2) ? 1.f : 0.f;
+    img->rebuild_layers();
+
+    TestEditContext ctx{img};
+    auto            cmd = find_command("Generate mipmaps...");
+    REQUIRE(cmd);
+    cmd->on_open(ctx);
+    cmd->apply(ctx);
+
+    REQUIRE_FALSE(ctx.added_images().empty());
+    const auto &half = ctx.added_images().front();
+
+    for (int i = 0; i < half->channels[0].num_elements(); ++i)
+    {
+        CAPTURE(i);
+        CHECK(half->channels[0](i) == doctest::Approx(0.5f).epsilon(0.2));
     }
 }

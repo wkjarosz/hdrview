@@ -1752,6 +1752,7 @@ set(HDRVIEW_SOURCES
     src/edit/commands.cpp
     src/edit/commands/clipboard.cpp
     src/edit/commands/channels.cpp
+    src/edit/commands/mipmap.cpp
     src/edit/commands/color.cpp
     src/edit/commands/envmap_commands.cpp
     src/edit/commands/filter.cpp
