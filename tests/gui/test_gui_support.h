@@ -110,6 +110,10 @@ inline void reset_view_controls(ImGuiTestContext *ctx)
 
     hdrview()->set_zoom(1.f);
     hdrview()->center();
+    // Deliberately the default-constructed box, which is the inverted one with INT_MAX and INT_MIN
+    // corners -- the same thing Deselect passes. Anything that reads a cleared selection has to cope with
+    // it, and clearing to the degenerate box at the origin instead would leave the suite unable to notice
+    // that something did not.
     hdrview()->set_selection(Box2i{});
     ctx->Yield();
 }

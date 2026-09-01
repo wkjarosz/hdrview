@@ -566,7 +566,11 @@ void HDRViewApp::draw_statistics_window()
                                  if (ImGui::IsItemDeactivatedAfterEdit())
                                      committed = true;
                              }
-                             ImGui::SetItemTooltip("W x H: (%d x %d)", m_roi_live.size().x, m_roi_live.size().y);
+                             // A cleared selection is the inverted box, whose corners are INT_MAX and
+                             // INT_MIN -- and size() is max minus min, which overflows on it. Nothing to
+                             // report there anyway: an empty selection is no pixels wide.
+                             const int2 extent = m_roi_live.has_volume() ? m_roi_live.size() : int2{0};
+                             ImGui::SetItemTooltip("W x H: (%d x %d)", extent.x, extent.y);
                              if (committed)
                                  m_roi = m_roi_live;
 
