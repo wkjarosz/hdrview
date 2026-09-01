@@ -1582,6 +1582,32 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "painting straight after a resize reaches the new texture");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto img = hdrview()->current_image();
+
+        // A structural edit replaces every channel and its texture with it, and the next edit writes a
+        // tile into whatever came back. Driven through the menu rather than by calling the chokepoints:
+        // an edit invoked from the test's own thread builds its textures there, where there is no GL
+        // context, and what it gets back is a texture handle of zero -- see the note in CLAUDE.md.
+        menu_click(ctx, "Edit/Image size...");
+        ctx->SetRef("Image size...");
+        ctx->ComboClick("Units/Pixels");
+        ctx->ItemInputValue("##width", 48);
+        ctx->ItemClick("Resize");
+        ctx->Yield(3);
+        IM_CHECK_EQ(img->size().x, 48);
+
+        menu_click(ctx, "Edit/Invert");
+        ctx->Yield(2);
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Invert");
+        reset_images(ctx);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
