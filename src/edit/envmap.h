@@ -138,8 +138,9 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
     Gives the irradiance arriving at a surface facing each direction -- what a diffuse surface reflects --
     which is why this is the one preprocessing step a lambertian environment lookup needs.
 
-    Every output direction integrates over every input one, so this costs the product of the two
-    resolutions and is by far the slowest thing here. The output is usually tiny for that reason: the
-    result is so smooth that a few dozen samples across describe it.
+    Costs the two resolutions added rather than multiplied: the cosine kernel falls off fast enough in
+    frequency that nine spherical harmonic coefficients hold the answer, so the source is summed into them
+    once and the output evaluated from them once. The result is so smooth that a few dozen samples across
+    describe it, whatever size it is written out at.
 */
 Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, AtomicProgress progress = {});

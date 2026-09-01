@@ -187,16 +187,8 @@ public:
 
         ImGui::DragInt2("Width, height", &m_size.x, 1.f, 1, 8192, "%d px");
         m_size = la::max(m_size, int2{1});
-        ImGui::Tooltip("Every output direction integrates over every input one, so this costs the two "
-                       "resolutions multiplied together. The result is smooth enough that a small output "
-                       "loses nothing.");
-
-        if (img)
-        {
-            const double ops = double(m_size.x) * double(m_size.y) * double(img->size().x) * double(img->size().y);
-            if (ops > 2e9)
-                ImGui::TextUnformatted("This will take a while at these sizes.");
-        }
+        ImGui::Tooltip("The result is smooth enough that a small output loses nothing: it is described by "
+                       "nine numbers however large it is written out.");
     }
 
     void apply(EditContext &ctx) override

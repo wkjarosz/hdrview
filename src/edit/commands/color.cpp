@@ -279,9 +279,6 @@ public:
         ImGui::SliderFloat("Hue", &m_hue, -180.f, 180.f, "%+.0f deg");
         ImGui::SliderFloat("Saturation", &m_saturation, -100.f, 100.f, "%+.0f%%");
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
-        ImGui::Tooltip("Blends toward black below zero and toward white above it, leaving hue and "
-                       "saturation alone.\n\nRaising HSL's own lightness instead would drain the color on "
-                       "the way, since every hue meets white at the top of the scale.");
 
         // The wheel as it is and as the settings would leave it, which is easier to judge than the numbers.
         /*!

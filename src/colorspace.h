@@ -829,9 +829,13 @@ float3 HSL_to_RGB(float3 hsl);
 
 //! Rotate the hue by \p hue_turns, scale the saturation by \p saturation, and mix toward black or white.
 /*!
-    \p lightness runs over [-1,1] and is a mix toward black or white rather than a change to L, which is
-    what Photoshop's slider of that name does: changing L directly desaturates on the way, and the mix keeps hue and
-   saturation where they were.
+    \p lightness runs over [-1,1] and mixes toward black below zero and toward white above it, which is
+    what Photoshop's slider of that name does.
+
+    That is the same thing as moving L with the saturation held, for as long as the color is already on
+    the side it is being pushed toward -- the two agree exactly above mid lightness going up, and below it
+    going down. They part on the way across: a color lightened from below the middle, or darkened from
+    above it, comes out less saturated than moving L would leave it.
 
     A pure saturation change takes a shortcut that avoids the round trip through hue entirely, since that
     is by far the most common use and the trip is where an achromatic color loses its hue.

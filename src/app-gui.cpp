@@ -434,19 +434,21 @@ void HDRViewApp::draw_menus()
                                      ? fmt::format("Redo {}###Redo", img->history.redo_name())
                                      : string{"Redo###Redo"});
 
-        ImGui::Separator();
+        ImGui::SeparatorText("Clipboard");
 
         MenuItem(action("Cut"));
         MenuItem(action("Copy"));
         MenuItem(action("Paste"));
         MenuItem(action("Seamless paste..."));
 
-        ImGui::Separator();
+        ImGui::SeparatorText("Selection");
 
         MenuItem(action("Select all"));
         MenuItem(action("Deselect"));
 
-        ImGui::Separator();
+        // Where the samples are, rather than what they say: the ones that move or discard samples without
+        // changing any of the values.
+        ImGui::SeparatorText("Size and orientation");
 
         MenuItem(action("Flip image horizontally"));
         MenuItem(action("Flip image vertically"));
@@ -456,38 +458,42 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Image size..."));
         MenuItem(action("Canvas size..."));
 
-        ImGui::Separator();
+        // A sample at a time, with nothing to set first.
+        ImGui::SeparatorText("Tone, applied at once");
 
         MenuItem(action("Invert"));
         MenuItem(action("Clamp to [0,1]"));
         MenuItem(action("Zap gremlins..."));
 
-        ImGui::Separator();
+        // Still a sample at a time, but with a curve or a value to choose first.
+        ImGui::SeparatorText("Tone, with settings");
 
         MenuItem(action("Exposure/gamma..."));
         MenuItem(action("Brightness/contrast..."));
         MenuItem(action("Fill..."));
 
-        ImGui::Separator();
+        // The edits that need a group's channels together: a color is three numbers and these read all of
+        // them. Grouped for the menu rather than by which file the commands live in -- brightness/contrast
+        // belongs beside exposure above, though it is written with these because it can work on lightness
+        // alone.
+        ImGui::SeparatorText("Color");
 
-        // Color, then the filters, then the sphere. Grouped for the menu rather than by which file the
-        // commands live in: brightness/contrast belongs beside exposure above, though it is written with
-        // the color edits because it can work on lightness alone.
         MenuItem(action("Convert color space..."));
         MenuItem(action("Channel mixer..."));
         MenuItem(action("Hue/saturation..."));
         MenuItem(action("Flatten..."));
 
-        ImGui::Separator();
+        // What the image is made of rather than what its samples say: which channels there are, and which
+        // of them are read together as one color.
+        ImGui::SeparatorText("Channels");
 
-        // What the image is made of, rather than what its samples say: which channels there are, and
-        // which of them are read together as one color.
         MenuItem(action("Ungroup channels"));
         MenuItem(action("Regroup channels"));
         MenuItem(action("Delete channel group"), delete_channels_label(current_image(), target_group()));
         MenuItem(action("Generate mipmaps..."));
 
-        ImGui::Separator();
+        // The edits that read the samples around the one they are writing.
+        ImGui::SeparatorText("Neighborhood filters");
 
         MenuItem(action("Blur..."));
         MenuItem(action("Unsharp mask..."));
@@ -495,7 +501,8 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Shift..."));
         MenuItem(action("Bump to normal map..."));
 
-        ImGui::Separator();
+        // The edits that read the image as a parameterization of the sphere.
+        ImGui::SeparatorText("Environment maps");
 
         MenuItem(action("Remap envmap..."));
         MenuItem(action("Irradiance envmap..."));
