@@ -30,7 +30,12 @@ namespace
 */
 std::string current_layer(const ImagePtr &img);
 
-//! Every channel of \p img in the layer \p layer that is currently standing on its own.
+//! Every channel of \p img in the layer \p layer that an explosion marked.
+/*!
+    Marked, rather than merely standing alone: a layer can hold channels whose names never grouped -- a
+    depth channel beside a color -- and those are not what regrouping is about. Clearing a flag they never
+    had would do nothing, but the entry that reverses it would then set one they never had either.
+*/
 std::vector<int> ungrouped_in_layer(const ImagePtr &img, const std::string &layer)
 {
     std::vector<int> out;

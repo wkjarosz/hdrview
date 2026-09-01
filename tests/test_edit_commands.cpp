@@ -842,3 +842,46 @@ TEST_CASE("Regrouping reaches the whole layer from any one of its exploded chann
     regroup->apply(ctx);
     CHECK(img->groups.size() == 2);
 }
+
+TEST_CASE("Regrouping touches only the channels an explosion marked, not every lone channel")
+{
+    // A layer can hold channels that stand alone because their names never grouped -- a depth channel
+    // beside a color, say. Those are not what regrouping is about, and marking them on the way back would
+    // be a change nobody asked for.
+    auto img = std::make_shared<Image>(k_size, 4);
+
+    static const char *names[] = {"beauty.R", "beauty.G", "beauty.B", "beauty.Z"};
+    for (int c = 0; c < 4; ++c) img->channels[size_t(c)].name = names[c];
+    img->rebuild_layers();
+
+    // The color as one group, the depth on its own without anyone having said so.
+    REQUIRE(img->groups.size() == 2);
+    for (const auto &c : img->channels) REQUIRE_FALSE(c.ungrouped);
+
+    TestEditContext ctx{img};
+
+    // Select the color and explode it.
+    for (size_t g = 0; g < img->groups.size(); ++g)
+        if (img->groups[g].num_channels > 1)
+        {
+            img->selected_group = int(g);
+            break;
+        }
+    find_command("Explode channel group")->apply(ctx);
+
+    // Three marked, and the depth channel still unmarked though it too stands alone.
+    CHECK(img->channels[0].ungrouped);
+    CHECK(img->channels[1].ungrouped);
+    CHECK(img->channels[2].ungrouped);
+    CHECK_FALSE(img->channels[3].ungrouped);
+
+    find_command("Regroup channels")->apply(ctx);
+    CHECK(img->groups.size() == 2);
+    for (const auto &c : img->channels) CHECK_FALSE(c.ungrouped);
+
+    // The distinction that matters: undoing the regroup marks back exactly what it cleared. A regroup
+    // that had swept up every lone channel would mark the depth channel here, which was never exploded.
+    REQUIRE(img->history.undo(*img));
+    CHECK(img->channels[0].ungrouped);
+    CHECK_FALSE(img->channels[3].ungrouped);
+}
