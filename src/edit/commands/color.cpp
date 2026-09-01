@@ -19,7 +19,9 @@
 
 #include "edit/tone_plot.h"
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace
 {
@@ -277,25 +279,54 @@ public:
         ImGui::SliderFloat("Hue", &m_hue, -180.f, 180.f, "%+.0f deg");
         ImGui::SliderFloat("Saturation", &m_saturation, -100.f, 100.f, "%+.0f%%");
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
-        ImGui::Tooltip("Lightness mixes toward black or white rather than changing the lightness itself, "
-                       "which would wash the color out on the way.");
+        ImGui::Tooltip("Blends toward black below zero and toward white above it, leaving hue and "
+                       "saturation alone.\n\nRaising HSL's own lightness instead would drain the color on "
+                       "the way, since every hue meets white at the top of the scale.");
 
         // The wheel as it is and as the settings would leave it, which is easier to judge than the numbers.
+        /*!
+            Drawn as six shaded quads rather than sampled: the hue hexcone is piecewise linear in hue, and
+            everything these sliders do to it -- rotating the hue, scaling the saturation, mixing toward
+            black or white -- either moves the corners or is affine in each component, so the composition
+            is piecewise linear too. Interpolating between the corners is therefore not an approximation
+            of the sweep, it is the sweep. The rotation slides the corners along the strip and one of them
+            wraps, which is what makes it seven quads rather than six.
+        */
         auto strip = [](const char *id, float h, float s, float l)
         {
-            const float  w    = ImGui::GetContentRegionAvail().x;
-            const float  step = std::max(1.f, w / 64.f);
-            const ImVec2 p    = ImGui::GetCursorScreenPos();
-            auto        *dl   = ImGui::GetWindowDrawList();
+            const float  w  = ImGui::GetContentRegionAvail().x;
+            const ImVec2 p  = ImGui::GetCursorScreenPos();
+            auto        *dl = ImGui::GetWindowDrawList();
 
-            for (float x = 0.f; x < w; x += step)
+            auto color_at = [&](float t)
             {
                 const float3 rgb =
-                    adjust_HSL(HSL_to_RGB(float3{x / w, 1.f, 0.5f}), h / 360.f, (s + 100.f) / 100.f, l / 100.f);
-                dl->AddRectFilled(ImVec2(p.x + x, p.y), ImVec2(p.x + x + step, p.y + ImGui::GetFrameHeight()),
-                                  ImGui::ColorConvertFloat4ToU32(ImVec4(rgb.x, rgb.y, rgb.z, 1.f)));
+                    adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), h / 360.f, (s + 100.f) / 100.f, l / 100.f);
+                return ImGui::ColorConvertFloat4ToU32(ImVec4(rgb.x, rgb.y, rgb.z, 1.f));
+            };
+
+            // Where the hexcone's corners land once the hue rotation has moved them, plus the two ends.
+            std::vector<float> knots{0.f, 1.f};
+            for (int k = 0; k < 6; ++k)
+            {
+                const float t = float(k) / 6.f - h / 360.f;
+                knots.push_back(t - std::floor(t));
             }
-            ImGui::Dummy(ImVec2(w, ImGui::GetFrameHeight()));
+            std::sort(knots.begin(), knots.end());
+
+            const float height = ImGui::GetFrameHeight();
+            for (size_t i = 0; i + 1 < knots.size(); ++i)
+            {
+                const float t0 = knots[i], t1 = knots[i + 1];
+                if (t1 <= t0)
+                    continue; // a corner landing exactly on an end leaves nothing between them
+
+                const ImU32 left = color_at(t0), right = color_at(t1);
+                dl->AddRectFilledMultiColor(ImVec2(p.x + t0 * w, p.y), ImVec2(p.x + t1 * w, p.y + height), left, right,
+                                            right, left);
+            }
+
+            ImGui::Dummy(ImVec2(w, height));
             ImGui::SetItemTooltip("%s", id);
         };
         strip("The hue wheel as it is", 0.f, 0.f, 0.f);

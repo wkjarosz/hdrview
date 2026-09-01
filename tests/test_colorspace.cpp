@@ -700,3 +700,68 @@ TEST_CASE("sRGB primaries land where L*a*b* is documented to put them")
     CHECK(w.y == doctest::Approx(0.f).epsilon(2e-2));
     CHECK(w.z == doctest::Approx(0.f).epsilon(2e-2));
 }
+
+TEST_CASE("The hue sweep is piecewise linear, so six corners describe it exactly")
+{
+    // What the hue/saturation dialog's strip is drawn from. The hexcone is piecewise linear in hue, and
+    // everything the sliders do to it is either a move of the corners (rotating the hue) or affine in each
+    // component (scaling saturation, mixing toward black or white) -- so interpolating between the corners
+    // is not an approximation of the sweep, it is the sweep, and the strip is seven quads rather than a
+    // sample per pixel.
+    //
+    // Should this ever fail, the strip has to go back to sampling: something in adjust_HSL will have
+    // stopped being affine in between the corners.
+    auto strip = [](float t, float h_deg, float s_pct, float l_pct)
+    { return adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), h_deg / 360.f, (s_pct + 100.f) / 100.f, l_pct / 100.f); };
+
+    struct Setting
+    {
+        const char *what;
+        float       h, s, l;
+    };
+    const Setting settings[] = {{"neutral", 0.f, 0.f, 0.f},
+                                {"hue rotated within a sixth", 20.f, 0.f, 0.f},
+                                {"hue rotated backwards", -120.f, 0.f, 0.f},
+                                {"desaturated", 0.f, -60.f, 0.f},
+                                {"oversaturated", 0.f, 80.f, 0.f},
+                                {"lifted toward white", 0.f, 0.f, 40.f},
+                                {"pushed toward black", 0.f, 0.f, -70.f},
+                                {"all three at once", 37.f, -60.f, 40.f}};
+
+    for (const Setting &cfg : settings)
+    {
+        CAPTURE(std::string(cfg.what));
+
+        // The corners, moved by the rotation and wrapped back into the strip.
+        std::vector<float> knots{0.f, 1.f};
+        for (int k = 0; k < 6; ++k)
+        {
+            const float t = float(k) / 6.f - cfg.h / 360.f;
+            knots.push_back(t - std::floor(t));
+        }
+        std::sort(knots.begin(), knots.end());
+
+        // Never more than seven pieces: six corners, one of which a rotation wraps into the middle.
+        CHECK(knots.size() <= 8);
+
+        for (int i = 0; i <= 600; ++i)
+        {
+            const float t = float(i) / 600.f;
+
+            size_t seg = 0;
+            while (seg + 2 < knots.size() && knots[seg + 1] < t) ++seg;
+
+            const float t0 = knots[seg], t1 = knots[seg + 1];
+            const float u = t1 > t0 ? (t - t0) / (t1 - t0) : 0.f;
+
+            const float3 a     = strip(t0, cfg.h, cfg.s, cfg.l);
+            const float3 b     = strip(t1, cfg.h, cfg.s, cfg.l);
+            const float3 exact = strip(t, cfg.h, cfg.s, cfg.l);
+
+            CAPTURE(t);
+            CHECK(a.x + u * (b.x - a.x) == doctest::Approx(exact.x).epsilon(1e-4));
+            CHECK(a.y + u * (b.y - a.y) == doctest::Approx(exact.y).epsilon(1e-4));
+            CHECK(a.z + u * (b.z - a.z) == doctest::Approx(exact.z).epsilon(1e-4));
+        }
+    }
+}
