@@ -8,6 +8,7 @@
 
 #include "edit/poisson.h"
 
+#include <chrono>
 #include <cmath>
 
 namespace
@@ -278,15 +279,103 @@ TEST_CASE("A canceled solve stops early and reports that it did")
 TEST_CASE("Converging early costs fewer iterations than the bound allows")
 {
     // The residual check is what makes a large paste finish in a reasonable time rather than running out
-    // the iteration bound every time, so it is worth pinning that it fires.
+    // the iteration bound every time, so it is worth pinning that it fires. The bound here is one no
+    // machine would reach: if the check did not fire, this would still be running minutes from now, so
+    // finishing at all is the evidence. The clock is only there to say so out loud, and is set far above
+    // any plausible slow build rather than near the fraction of a second this takes.
     const int2     size{32, 32};
     const Array2Df background = filled(size, 0.5f);
     const Array2Df mask       = interior_mask(size, 2);
 
-    // Already the answer, so the residual starts at zero and nothing should be done at all.
-    AtomicProgress progress{true};
-    const Array2Df out = poisson_blended(background, background, mask, 500, 1e-4f, progress);
+    const auto     started = std::chrono::steady_clock::now();
+    const Array2Df out     = poisson_blended(background, background, mask, 100000000, 1e-4f);
+    const double   seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
 
     CHECK(max_difference(out, background) < 1e-4f);
-    CHECK(progress.progress() < 0.5f); // nowhere near the five hundred it was allowed
+    CAPTURE(seconds);
+    CHECK(seconds < 30.0);
+}
+
+TEST_CASE("Several shares of one job add up to it, whether or not they run to their bound")
+{
+    // What a progress bar driven by more than one reporter needs, and what is easy to get wrong: a share
+    // that stops early still owes the rest of its share, and a share that finishes must not report the
+    // whole job as finished. Getting the second wrong sends the bar to full while the other channels are
+    // still going, which is what it looked like.
+    AtomicProgress whole{true};
+
+    SUBCASE("a share that stops short of its bound still fills its share")
+    {
+        AtomicProgress third{whole, 1.f / 3.f};
+        third.set_num_steps(1000);
+        for (int i = 0; i < 300; ++i) ++third;
+
+        // Three tenths of a third of the job.
+        CHECK(whole.progress() == doctest::Approx(0.1f).epsilon(0.01));
+
+        third.finish_share();
+        CHECK(whole.progress() == doctest::Approx(1.f / 3.f).epsilon(0.01));
+    }
+
+    SUBCASE("finishing one share leaves the others still to do")
+    {
+        AtomicProgress a{whole, 1.f / 3.f}, b{whole, 1.f / 3.f}, c{whole, 1.f / 3.f};
+
+        a.finish_share();
+        CHECK(whole.progress() == doctest::Approx(1.f / 3.f).epsilon(0.01));
+
+        b.finish_share();
+        CHECK(whole.progress() == doctest::Approx(2.f / 3.f).epsilon(0.01));
+
+        c.finish_share();
+        CHECK(whole.progress() == doctest::Approx(1.f).epsilon(0.01));
+    }
+
+    SUBCASE("finishing a share twice hands in nothing the second time")
+    {
+        AtomicProgress half{whole, 0.5f};
+        half.finish_share();
+        half.finish_share();
+        CHECK(whole.progress() == doctest::Approx(0.5f).epsilon(0.01));
+    }
+
+    SUBCASE("a share of a share reports into the same total")
+    {
+        AtomicProgress half{whole, 0.5f};
+        AtomicProgress quarter{half, 0.5f};
+        quarter.finish_share();
+        CHECK(whole.progress() == doctest::Approx(0.25f).epsilon(0.01));
+    }
+}
+
+TEST_CASE("A solve reports its whole share and no more, however it ends")
+{
+    // The solver stops as soon as the residual is small enough, so the iteration bound is almost never
+    // reached: a bar counting only the iterations taken would stall wherever the answer arrived. It must
+    // not overshoot either -- one solve among several reporting the *job* as done is what sent the bar
+    // straight to full while the other channels were still running.
+    const int2     size{32, 32};
+    const Array2Df background = filled(size, 0.5f);
+    const Array2Df mask       = interior_mask(size, 1);
+
+    SUBCASE("having run and converged inside the bound")
+    {
+        AtomicProgress whole{true};
+        AtomicProgress share{whole, 0.5f};
+
+        poisson_blended(background, bumpy(size, 0.2f), mask, 100000, 1e-4f, share);
+
+        CHECK(whole.progress() == doctest::Approx(0.5f).epsilon(0.01));
+    }
+
+    SUBCASE("having found there was nothing to solve at all")
+    {
+        AtomicProgress whole{true};
+        AtomicProgress share{whole, 0.5f};
+
+        // Already the answer, so it returns before iterating.
+        poisson_blended(background, background, mask, 100000, 1e-4f, share);
+
+        CHECK(whole.progress() == doctest::Approx(0.5f).epsilon(0.01));
+    }
 }

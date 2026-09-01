@@ -466,3 +466,109 @@ TEST_CASE("the lightness control mixes toward black and white rather than washin
         CHECK(half[i] == doctest::Approx(0.5f * (rgb[i] + 1.f)).epsilon(1e-3));
     }
 }
+
+TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen for")
+{
+    // These are shape functions, and what makes them usable is a handful of exact identities rather than
+    // their formulas -- so those are what is checked.
+    for (float P : {0.25f, 0.5f, 1.f, 2.f, 4.f})
+    {
+        CAPTURE(P);
+
+        // Pinned at both ends and at the middle, whatever the shape.
+        CHECK(gain_Perlin(0.f, P) == doctest::Approx(0.f));
+        CHECK(gain_Perlin(0.5f, P) == doctest::Approx(0.5f));
+        CHECK(gain_Perlin(1.f, P) == doctest::Approx(1.f));
+
+        for (int i = 0; i <= 20; ++i)
+        {
+            const float t = float(i) / 20.f;
+            CAPTURE(t);
+
+            // An exponent of one is the identity, and the inverse exponent undoes it.
+            CHECK(gain_Perlin(t, 1.f) == doctest::Approx(t));
+            CHECK(gain_Perlin(gain_Perlin(t, P), 1.f / P) == doctest::Approx(t).epsilon(1e-4));
+
+            // It never leaves [0,1], which is the whole reason for having it beside the straight line.
+            CHECK(gain_Perlin(t, P) >= -1e-6f);
+            CHECK(gain_Perlin(t, P) <= 1.f + 1e-6f);
+        }
+    }
+
+    for (float a : {0.1f, 0.3f, 0.5f, 0.7f, 0.9f})
+    {
+        CAPTURE(a);
+
+        // Bias is defined by where it sends the midpoint, which is the parameter itself.
+        CHECK(bias_Schlick(0.f, a) == doctest::Approx(0.f));
+        CHECK(bias_Schlick(0.5f, a) == doctest::Approx(a));
+        CHECK(bias_Schlick(1.f, a) == doctest::Approx(1.f));
+
+        // Monotone, so it reorders nothing.
+        float previous = -1.f;
+        for (int i = 0; i <= 20; ++i)
+        {
+            const float t = float(i) / 20.f;
+            CHECK(bias_Schlick(t, a) > previous);
+            previous = bias_Schlick(t, a);
+        }
+    }
+}
+
+TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and steepen together")
+{
+    // What the two controls mean, taken from the sliders rather than from the functions: contrast is an
+    // angle, so that its ends are a flat line and a vertical one, and brightness slides the point the
+    // curve pivots about.
+    auto slope_of    = [](float c) { return float(std::tan(lerp(0.0, M_PI_2, c / 2.0 + 0.5))); };
+    auto midpoint_of = [](float b) { return (1.f - b) / 2.f; };
+    auto bias_of     = [](float b) { return (b + 1.f) / 2.f; };
+
+    CHECK(slope_of(0.f) == doctest::Approx(1.f));  // 45 degrees: no change
+    CHECK(slope_of(-1.f) == doctest::Approx(0.f)); // flat: everything to one level
+    CHECK(slope_of(1.f) > 1e6f);                   // vertical: a hard threshold
+    CHECK(midpoint_of(0.f) == doctest::Approx(0.5f));
+    CHECK(bias_of(0.f) == doctest::Approx(0.5f));
+
+    // Neither curve moves anything when both controls are centered.
+    for (int i = 0; i <= 20; ++i)
+    {
+        const float v = float(i) / 20.f;
+        CAPTURE(v);
+        CHECK(brightness_contrast_linear(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
+        CHECK(brightness_contrast_nonlinear(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
+    }
+
+    // Raising contrast pushes the ends apart about the midpoint, and both curves still meet at it.
+    for (float c : {0.3f, 0.6f})
+    {
+        CAPTURE(c);
+        const float slope = slope_of(c);
+
+        CHECK(brightness_contrast_linear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
+        CHECK(brightness_contrast_nonlinear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
+
+        CHECK(brightness_contrast_linear(0.75f, slope, 0.5f) > 0.75f);
+        CHECK(brightness_contrast_linear(0.25f, slope, 0.5f) < 0.25f);
+        CHECK(brightness_contrast_nonlinear(0.75f, slope, 0.5f) > 0.75f);
+        CHECK(brightness_contrast_nonlinear(0.25f, slope, 0.5f) < 0.25f);
+    }
+
+    // The difference between them: the straight line runs out of [0,1] and is meant to, so that an HDR
+    // sample keeps its relation to its neighbors; the s-curve approaches the ends without reaching them.
+    const float steep = slope_of(0.8f);
+    CHECK(brightness_contrast_linear(1.f, steep, 0.5f) > 1.f);
+    CHECK(brightness_contrast_linear(0.f, steep, 0.5f) < 0.f);
+    for (int i = 0; i <= 20; ++i)
+    {
+        const float v = float(i) / 20.f;
+        CAPTURE(v);
+        CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) >= -1e-6f);
+        CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) <= 1.f + 1e-6f);
+    }
+
+    // Brightness moves which input lands on the middle, in opposite directions for the two curves'
+    // parameters but to the same effect: a positive setting lifts the picture.
+    CHECK(brightness_contrast_linear(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
+    CHECK(brightness_contrast_nonlinear(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
+}

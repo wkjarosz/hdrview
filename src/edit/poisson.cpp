@@ -59,7 +59,10 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
 {
     Array2Df x = background;
     if (background.size() != source.size() || background.size() != mask.size())
+    {
+        progress.finish_share();
         return x;
+    }
 
     const int n = x.num_elements();
 
@@ -88,7 +91,12 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
 
     double rTr = dot(r, r);
     if (rTr <= 0.0)
-        return x; // nothing to solve: the background already has the gradients asked for
+    {
+        // Nothing to solve: the background already has the gradients asked for. Still owes its share, or
+        // a bar with a channel like this among several would never reach the end.
+        progress.finish_share();
+        return x;
+    }
 
     // Relative to where it started, so the bound means the same thing whatever the region's scale.
     const double target = tolerance * tolerance * rTr;
@@ -132,6 +140,8 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
         rTr = rTr_next;
     }
 
-    progress.set_done();
+    // Only this solve's share: it is one of several channels reporting into the same bar, and it has
+    // very likely converged well inside the iteration bound.
+    progress.finish_share();
     return x;
 }

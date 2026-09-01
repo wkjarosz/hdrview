@@ -187,7 +187,11 @@ public:
                 // mask rather than something to solve for, and anything else the subject covers is not
                 // this clipboard's business.
                 if (slot >= n || (n >= 4 && slot == 3))
+                {
+                    // Nothing to do, but the bar was promised this channel's share of the work.
+                    p.finish_share();
                     return out;
+                }
 
                 // The clipboard lands at the top-left of the rectangle being pasted into, which is the
                 // rectangle this filter was handed -- so the two share an origin and the solve is over

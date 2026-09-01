@@ -61,6 +61,21 @@ public:
         set_num_steps(1);
     }
 
+    //! Written out because m_taken is atomic, and these are passed and returned by value throughout.
+    AtomicProgress(const AtomicProgress &o) :
+        m_share(o.m_share), m_step_ticks(o.m_step_ticks), m_taken(o.m_taken.load(std::memory_order_relaxed)),
+        m_state(o.m_state)
+    {
+    }
+    AtomicProgress &operator=(const AtomicProgress &o)
+    {
+        m_share      = o.m_share;
+        m_step_ticks = o.m_step_ticks;
+        m_taken.store(o.m_taken.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        m_state = o.m_state;
+        return *this;
+    }
+
     /// Fraction of the whole job done, in [0, 1]; 0 when there is no state to report into.
     float progress() const
     {
@@ -74,11 +89,33 @@ public:
             m_state->canceled.store(true, std::memory_order_relaxed);
     }
 
-    /// Force the whole job to read as finished.
+    //! Force the whole job to read as finished. Only for the instance that owns the total.
+    /*!
+        A share must use finish_share() instead. This one writes the grand total, so calling it from a
+        share sends the bar to full while every other share is still running.
+    */
     void set_done()
     {
         if (m_state)
             m_state->ticks.store(k_ticks, std::memory_order_relaxed);
+    }
+
+    //! Hand in whatever is left of *this instance's* share, leaving the rest of the total alone.
+    /*!
+        What a reporter that can stop early owes at the end. A loop bounded at a thousand iterations that
+        converges after three hundred has added less than a third of its share, and the steps it never
+        took would otherwise be missing from the total for good -- so a bar driven by several such loops
+        would climb to some fraction and stop.
+    */
+    void finish_share()
+    {
+        if (!m_state)
+            return;
+
+        const int64_t total = std::llround(double(m_share) * double(k_ticks));
+        const int64_t taken = m_taken.exchange(total, std::memory_order_relaxed);
+        if (taken < total)
+            m_state->ticks.fetch_add(total - taken, std::memory_order_relaxed);
     }
 
     //! How many increments make up this instance's share. Set before the loop that reports.
@@ -90,7 +127,11 @@ public:
     AtomicProgress &operator+=(int steps)
     {
         if (m_state && m_step_ticks)
-            m_state->ticks.fetch_add(int64_t(steps) * m_step_ticks, std::memory_order_relaxed);
+        {
+            const int64_t ticks = int64_t(steps) * m_step_ticks;
+            m_state->ticks.fetch_add(ticks, std::memory_order_relaxed);
+            m_taken.fetch_add(ticks, std::memory_order_relaxed);
+        }
         return *this;
     }
     AtomicProgress &operator++() { return *this += 1; }
@@ -112,7 +153,10 @@ private:
         std::atomic<bool> canceled{false};
     };
 
-    float                  m_share      = 1.f;
-    int64_t                m_step_ticks = 0;
+    float   m_share      = 1.f;
+    int64_t m_step_ticks = 0;
+    //! Ticks this instance has reported, so finish_share() knows what remains. Atomic because one
+    //! instance is shared across the threads of a parallel loop.
+    std::atomic<int64_t>   m_taken{0};
     std::shared_ptr<State> m_state;
 };
