@@ -74,8 +74,8 @@ public:
         // two cannot describe different regions.
         ctx.set_clipboard(img->duplicate(target_region(ctx)));
 
-        // Zero throughout, rather than 1.8's "keep the color and clear the alpha": these samples are held
-        // premultiplied, where a color with no alpha is not invisible but additive, and what is left
+        // Zero throughout, rather than keeping the color and clearing only the alpha: these samples are
+        // held premultiplied, where a color with no alpha is not invisible but additive, and what is left
         // behind would glow.
         ctx.modify_pixels("Cut", [](float, int2, int) { return 0.f; });
     }
@@ -95,8 +95,8 @@ public:
         if (!clip || !img || clip->groups.empty())
             return;
 
-        // Landed at the top-left of what is being pasted into, as 1.8 landed it -- and clipped to that
-        // rectangle, so pasting into a selection stays inside it.
+        // Landed at the top-left of what is being pasted into, and clipped to that rectangle, so pasting
+        // into a selection stays inside it.
         const int2 origin = target_region(ctx).min;
 
         const auto &group    = clip->groups[size_t(clip->selected_group)];

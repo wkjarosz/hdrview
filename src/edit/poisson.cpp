@@ -120,8 +120,8 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
         const double rTr_next = dot(r, r);
         ++progress;
 
-        // Stop once the residual has fallen far enough; 1.8 left this out and always ran its full three
-        // hundred iterations, long after the picture had stopped changing.
+        // Stop once the residual has fallen far enough, rather than running out the iteration count long
+        // after the picture has stopped changing.
         if (rTr_next <= target)
             break;
 

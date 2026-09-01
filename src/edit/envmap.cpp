@@ -13,8 +13,6 @@
 #include <algorithm>
 #include <cmath>
 
-// Ported from HDRView 1.8's envmap.cpp, with linalg vectors in place of nanogui's.
-
 namespace
 {
 

@@ -31,8 +31,8 @@
 
     \p iterations bounds the work. Conjugate gradient converges in far fewer than the number of unknowns
     for a system this well-conditioned, and it stops early once the residual has fallen by \p tolerance
-    relative to where it started -- 1.8 ran a fixed three hundred iterations with its own convergence test
-    commented out, which is a great deal of work after the answer stops changing.
+    relative to where it started, a fixed iteration count being a great deal of work after the answer stops
+    changing.
 
     \p progress is reported per iteration and honored: a canceled solve returns the estimate it had
     reached, which the caller must discard rather than apply.
@@ -42,7 +42,7 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
 
 //! The discrete Laplacian of \p src, reading past its edges by clamping.
 /*!
-    The eight-neighbor form, as 1.8 used: the four along the axes and the four diagonals, less eight times
+    The eight-neighbor form: the four along the axes and the four diagonals, less eight times
     the center. It is the operator the solve inverts, so the same one has to produce the guidance field --
     a Laplacian that does not match the one being solved against leaves an error the iteration cannot
     remove.

@@ -1206,7 +1206,7 @@ void Image::resample(int2 size)
     {
         Array2Df out{size};
 
-        // stb's resampler rather than one written here, which is what 1.8 used too: it chooses a filter
+        // stb's resampler rather than one written here: it chooses a filter
         // from the scale -- averaging on the way down, interpolating on the way up -- and deals with the
         // edges, where a hand-rolled box-and-bilinear pair is cruder. One channel at a time, since these
         // are stored planar rather than interleaved.

@@ -286,8 +286,7 @@ public:
 
         It is handed a reader rather than a value: `read(p)` gives the group's components at any position,
         with \p border_x and \p border_y deciding what lies outside the image. That is what a normal map
-        needs -- a slope is a difference between neighbors -- and it is how 1.8 expressed the same
-        operation, over its own bordered pixel accessor.
+        needs, since a slope is a difference between neighbors.
 
         The reader sees the image as it was before the edit, so an op cannot read a sample it has already
         written.

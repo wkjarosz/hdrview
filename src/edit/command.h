@@ -76,8 +76,8 @@ struct EditContext
     One undoable edit: what it is called, what it draws, and what it does.
 
     A command owns all three, so adding an edit is writing one of these and naming it in the table in
-    commands.cpp -- rather than a declaration, a dialog registration, an action registration, and a menu
-    entry in four different files, which is what it used to take.
+    commands.cpp, rather than spreading a declaration, a dialog registration, an action registration and a
+    menu entry across four files.
 
     The dialog chrome is not a command's business: the shell, the "Apply to" selector, and the
     Cancel/Confirm footer are drawn around draw() by whoever is dispatching, so fifteen dialogs cannot

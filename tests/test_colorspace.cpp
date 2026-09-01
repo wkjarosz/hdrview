@@ -450,8 +450,8 @@ TEST_CASE("saturation spreads the components apart, and zero of it leaves gray")
 
 TEST_CASE("the lightness control mixes toward black and white rather than washing the color out")
 {
-    // Photoshop's slider of that name, which 1.8 followed: changing L directly desaturates on the way, so
-    // at the ends this has to land exactly on black and white, and halfway exactly halfway.
+    // Photoshop's slider of that name: changing L directly desaturates on the way, so at the ends this has
+    // to land exactly on black and white, and halfway exactly halfway.
     const float3 rgb{0.5f, 0.25f, 0.125f};
 
     const float3 black = adjust_HSL(rgb, 0.f, 1.f, -1.f);

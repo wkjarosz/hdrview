@@ -270,8 +270,8 @@ public:
                     ImGui::TextFmt("{} NaN and {} infinite samples in this channel.", stats->summary.nan_pixels,
                                    stats->summary.inf_pixels);
 
-        // The two 1.8 offered: take what the neighbors say, or write something chosen. The first is almost
-        // always what is wanted; the second is there for when a run of them has no good neighbor to ask.
+        // Two ways to fill a sample: take what the neighbors say, or write something chosen. The first is
+        // almost always what is wanted; the second is there for when a run of them has no good neighbor to ask.
         ImGui::RadioButton("Median of neighbors", &m_mode, Mode_Median);
         ImGui::Tooltip("Puts back something the surrounding samples agree with, so a firefly in a smooth "
                        "region leaves no trace.");
@@ -348,7 +348,7 @@ public:
         if (!img)
             return;
 
-        // Slopes in the image's own coordinates, which is why the size enters: 1.8 measured height per unit
+        // Slopes in the image's own coordinates, which is why the size enters: height is measured per unit
         // of the whole image rather than per sample, so the same bump map gives the same normals whatever
         // resolution it is stored at.
         const float2 size{float(img->size().x), float(img->size().y)};
@@ -365,8 +365,8 @@ public:
                     return (c.x + c.y + c.z) / 3.f;
                 };
 
-                // Forward differences, as 1.8 took them: one sample along each axis is the finest slope the
-                // samples can express.
+                // Forward differences: one sample along each axis is the finest slope the samples can
+                // express.
                 const float h00 = height(p);
                 const float dx  = height(p + int2{1, 0}) - h00;
                 const float dy  = height(p + int2{0, 1}) - h00;

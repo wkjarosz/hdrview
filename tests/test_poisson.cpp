@@ -189,8 +189,8 @@ TEST_CASE("A canceled solve stops early and reports that it did")
 
 TEST_CASE("Converging early costs fewer iterations than the bound allows")
 {
-    // 1.8 ran its full iteration count every time, its own convergence test commented out. The residual
-    // check is what makes a large paste finish in a reasonable time, so it is worth pinning that it fires.
+    // The residual check is what makes a large paste finish in a reasonable time rather than running out
+    // the iteration bound every time, so it is worth pinning that it fires.
     const int2     size{32, 32};
     const Array2Df background = filled(size, 0.5f);
     const Array2Df mask       = interior_mask(size, 2);

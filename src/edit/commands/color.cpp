@@ -170,7 +170,7 @@ public:
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Output channel");
 
-        // Each named in its own color, and gray last, which is 1.8's set exactly: the output is one of
+        // Each named in its own color, and gray last: the output is one of
         // four rather than three plus a mode, so nothing has to say what happens when both are set.
         const char  *names[]  = {"Red", "Green", "Blue", "Monochrome"};
         const ImVec4 colors[] = {ImVec4(0.90f, 0.35f, 0.35f, 1.f), ImVec4(0.35f, 0.85f, 0.35f, 1.f),
@@ -233,7 +233,7 @@ public:
     }
 
 private:
-    //! Which channel the weights are written to; 1.8's own set, gray among them rather than beside them.
+    //! Which channel the weights are written to, gray among them rather than beside them.
     enum Output : int
     {
         Out_Red = 0,
@@ -245,7 +245,7 @@ private:
     };
 
     // A row of source weights per output channel, plus the one that makes a single gray from all three.
-    // Kept as percentages the way 1.8 and Photoshop present them, since that is how the numbers are read:
+    // Kept as percentages the way Photoshop presents them, since that is how the numbers are read:
     // "40% of the red channel", not "0.4".
     //
     // Thirds rather than 33.3 each: a monochrome default that announces a total of 99.9% reads as an error
@@ -271,8 +271,8 @@ public:
 
     void draw(EditContext &) override
     {
-        // The ranges Photoshop uses and 1.8 followed: hue in degrees around the wheel, the other two as a
-        // percentage away from where they are.
+        // The ranges Photoshop uses: hue in degrees around the wheel, the other two as a percentage away
+        // from where they are.
         ImGui::SliderFloat("Hue", &m_hue, -180.f, 180.f, "%+.0f deg");
         ImGui::SliderFloat("Saturation", &m_saturation, -100.f, 100.f, "%+.0f%%");
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
@@ -334,7 +334,7 @@ public:
                           ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar);
 
         // The color the viewport is already showing behind the image, which is usually the one being
-        // matched -- 1.8 had this as a second menu entry rather than a button.
+        // matched.
         if (ImGui::Button("Use viewport background"))
             m_bg = ctx.background_color();
         ImGui::Tooltip("Takes the custom background color from the View menu.");
