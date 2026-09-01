@@ -576,7 +576,18 @@ public:
     static void set_null_texture(Target_ target = Target_Primary);
     void        set_as_texture(Target_ target = Target_Primary);
 
-    //! @{ \name Geometric operations
+    /*!
+        \name Geometric operations
+
+        The edits that change an image's shape, and the reason these are methods here while the rest of
+        them are commands under edit/. Each rewrites the channel list or the two windows, which only this
+        class can do; everything in edit/ writes samples into channels that already exist, reaching them
+        through EditContext, which has no way to restructure anything. So the commands for these are thin:
+        `ctx.modify_structure("Crop to selection", [box](Image &i) { i.crop(box); })`.
+
+        duplicate() is the odd one out below -- it is not an edit at all, but builds a second image.
+    */
+    //! @{
     /*!
         Move this image's samples, carrying the data and display windows along with them.
 
@@ -646,9 +657,9 @@ public:
     /*!
         A separate image holding a copy of \p region of this one, or of all of it when \p region is empty.
 
-        Deep: the samples are copied rather than shared, so the two can be edited independently -- which is
-        the whole point of having a second one. Everything describing how to read those samples comes with
-        them, since a copy that lost its color space would be a different picture.
+        Deep: the samples are copied rather than shared, so the two can be edited independently. Everything
+        describing how to read those samples comes with them, since a copy that lost its color space would
+        be a different picture.
 
         The copy has no history and no texture. It is not live however this image arrived: pixels pushed in
         by a renderer belong to that process, but a copy of them is an ordinary image and is exactly how
