@@ -422,6 +422,91 @@ TEST_CASE("EWA lands on the mean whatever shape the reduction is")
     }
 }
 
+TEST_CASE("Snapping to the sphere lands on it, and leaves alone what is already on it")
+{
+    for (int m = 0; m < EnvMapping_COUNT; ++m)
+    {
+        CAPTURE(std::string(name_of(m)));
+
+        const int n = 64;
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+            {
+                const float2 uv{(x + 0.5f) / n, (y + 0.5f) / n};
+                CAPTURE(uv.x);
+                CAPTURE(uv.y);
+
+                const float2 snapped = nearest_valid_envmap_uv(EnvMapping(m), uv);
+
+                // Wherever there is already a direction, nothing moves -- this must not perturb the
+                // sphere itself, only fill in around it.
+                if (envmap_uv_is_valid(EnvMapping(m), uv))
+                {
+                    CHECK(snapped.x == doctest::Approx(uv.x));
+                    CHECK(snapped.y == doctest::Approx(uv.y));
+                }
+                else
+                {
+                    // And wherever there is not, what comes back is somewhere there is.
+                    CHECK(envmap_uv_is_valid(EnvMapping(m), snapped));
+
+                    // It is also the *nearest* such place, checked against a search over the whole
+                    // square -- but only every eighth point, since that search is quadratic in the grid
+                    // and the property does not vary quickly enough to need every one.
+                    if ((x % 8) == 0 && (y % 8) == 0)
+                    {
+                        const float taken = la::length(snapped - uv);
+                        for (int j = 0; j < n; ++j)
+                            for (int i = 0; i < n; ++i)
+                            {
+                                const float2 q{(i + 0.5f) / n, (j + 0.5f) / n};
+                                if (envmap_uv_is_valid(EnvMapping(m), q) && la::length(q - uv) <= taken - 1.5f / n)
+                                    FAIL_CHECK("a nearer valid point exists");
+                            }
+                    }
+                }
+            }
+    }
+}
+
+TEST_CASE("What is not sphere is filled from the sphere's edge rather than left empty")
+{
+    // An image's empty corners sit right against the edge of the sphere, so a later bilinear read near
+    // that edge -- displaying it, filtering it, remapping it again -- reaches into them. Left at zero
+    // they darken the rim; carrying the nearest direction outward means they agree with their neighbors.
+    auto f = [](float3 d) { return 0.5f + 0.4f * d.y; }; // always well away from zero
+
+    const Array2Df src = make_envmap(int2{128, 128}, EnvMapping_LatLong, f);
+
+    for (int dst_m : {EnvMapping_Angular, EnvMapping_MirrorBall, EnvMapping_CubeMap})
+    {
+        CAPTURE(std::string(name_of(dst_m)));
+
+        const Array2Df out =
+            remapped_envmap(src, int2{64, 64}, EnvMapping(dst_m), EnvMapping_LatLong, EnvMapSampling_Point, 2);
+
+        for (int y = 0; y < 64; ++y)
+            for (int x = 0; x < 64; ++x)
+            {
+                const float2 uv{(x + 0.5f) / 64.f, (y + 0.5f) / 64.f};
+                if (envmap_uv_is_valid(EnvMapping(dst_m), uv))
+                    continue;
+
+                CAPTURE(x);
+                CAPTURE(y);
+
+                // What the nearest real direction holds, which is what was written there.
+                const float2 snapped  = nearest_valid_envmap_uv(EnvMapping(dst_m), uv);
+                const float  expected = f(envmap_uv_to_xyz(EnvMapping(dst_m), snapped));
+
+                CHECK(out(x, y) == doctest::Approx(expected).epsilon(0.05));
+
+                // Which is emphatically not the zero it used to be.
+                CHECK(out(x, y) > 0.05f);
+            }
+    }
+}
+
 TEST_CASE("A lat-long source is read as a sphere, not as a rectangle")
 {
     // Reading past the left edge of a lat-long image is reading the right edge: the two are the same

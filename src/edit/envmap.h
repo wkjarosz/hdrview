@@ -68,6 +68,19 @@ inline float2 convert_envmap_uv(EnvMapping dst, EnvMapping src, float2 uv)
 */
 bool envmap_uv_is_valid(EnvMapping mapping, float2 uv);
 
+//! The point of \p mapping's sphere nearest \p uv, which is \p uv itself wherever that is already sphere.
+/*!
+    What to write into the parts of an image that stand for no direction. Leaving them empty is honest but
+    unhelpful: they sit right against the edge of the sphere, so a later bilinear read near that edge --
+    displaying the image, filtering it, remapping it again -- pulls the emptiness inward and darkens the
+    rim. Filling them by carrying the nearest real direction outward means the values just outside agree
+    with those just inside, and that read finds what it expects.
+
+    The discs are projected onto their own circle, and the cube cross is snapped into whichever of its two
+    arms is nearer.
+*/
+float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv);
+
 /*!
     Solid angle per unit image area at \p uv, in steradians; 0 where \p uv is not sphere.
 

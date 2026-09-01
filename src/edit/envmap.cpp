@@ -442,6 +442,40 @@ bool envmap_uv_is_valid(EnvMapping mapping, float2 uv)
     }
 }
 
+float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv)
+{
+    if (envmap_uv_is_valid(mapping, uv))
+        return uv;
+
+    switch (mapping)
+    {
+    case EnvMapping_Angular:
+    case EnvMapping_MirrorBall:
+    {
+        // Straight out from the middle onto the circle, which is the nearest point of a disc to anything
+        // outside it. Landing a hair inside keeps it on the sphere rather than exactly on the rim, where
+        // the mapping is at its most singular.
+        const float2 d = 2.f * uv - float2{1.f};
+        const float  r = la::length(d);
+        if (r <= 0.f)
+            return uv;
+        return 0.5f * (d * ((1.f - 1e-4f) / r) + float2{1.f});
+    }
+
+    case EnvMapping_CubeMap:
+    {
+        // The cross is two arms: the upright column of four, and the row of three across its second cell.
+        // An empty corner is nearer one or the other, and snapping to it lands on that arm's edge.
+        const float2 to_column{std::clamp(uv.x, 1.f / 3.f, 2.f / 3.f), uv.y};
+        const float2 to_row{uv.x, std::clamp(uv.y, 0.25f, 0.5f)};
+
+        return la::length2(to_column - uv) <= la::length2(to_row - uv) ? to_column : to_row;
+    }
+
+    default: return uv;
+    }
+}
+
 namespace
 {
 
@@ -631,15 +665,12 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 
                 for (int x = 0; x < size.x; ++x)
                 {
-                    const float2 uv{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)};
-
-                    // Parts of a disc or a cube cross are not sphere; leave them empty rather than filling
-                    // them with whatever direction clamping produces.
-                    if (!envmap_uv_is_valid(dst_mapping, uv))
-                    {
-                        out(x, y) = 0.f;
-                        continue;
-                    }
+                    // Parts of a disc or a cube cross are not sphere. Rather than leaving them empty, each
+                    // is given the nearest direction that is -- so the values just outside the sphere
+                    // agree with those just inside, and a later bilinear read near that edge finds what it
+                    // expects instead of pulling the emptiness inward.
+                    const float2 uv = nearest_valid_envmap_uv(
+                        dst_mapping, float2{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)});
 
                     if (sampling == EnvMapSampling_EWA)
                     {
@@ -668,8 +699,13 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                     for (int sy = 0; sy < ss; ++sy)
                         for (int sx = 0; sx < ss; ++sx)
                         {
-                            const float2 s_uv{(float(x) + (float(sx) + 0.5f) / float(ss)) / float(size.x),
-                                              (float(y) + (float(sy) + 0.5f) / float(ss)) / float(size.y)};
+                            // Snapped like the pixel's own center: a sub-sample may land outside the
+                            // sphere even where the center did not, and one that did would be reading
+                            // from whatever direction a coordinate with no direction produces.
+                            const float2 s_uv = nearest_valid_envmap_uv(
+                                dst_mapping, float2{(float(x) + (float(sx) + 0.5f) / float(ss)) / float(size.x),
+                                                    (float(y) + (float(sy) + 0.5f) / float(ss)) / float(size.y)});
+
                             sum += sample_bilinear(src, convert_envmap_uv(src_mapping, dst_mapping, s_uv), src_mapping);
                         }
                     out(x, y) = sum * inv;
