@@ -91,6 +91,20 @@ public:
         ImPlot::PlotLine(name, xs, ys, 2, spec);
     }
 
+    //! A small marker at \p at, for a point of the curve that can be taken hold of.
+    void handle(float2 at, ImVec4 color)
+    {
+        const float xs[1] = {at.x};
+        const float ys[1] = {at.y};
+
+        ImPlotSpec spec;
+        spec.Marker          = ImPlotMarker_Circle;
+        spec.MarkerSize      = 4.f;
+        spec.MarkerFillColor = color;
+        spec.MarkerLineColor = color;
+        ImPlot::PlotScatter("handle", xs, ys, 1, spec);
+    }
+
     //! While the left button is dragging inside the plot, where it is, in plot coordinates.
     /*!
         In the plot's coordinates rather than the widget's: the widget rectangle includes the frame and the
@@ -99,11 +113,23 @@ public:
 
         A drag that began inside goes on being followed after it leaves, so a slide to an extreme does not
         stop short of one.
+
+        \p pressed_at receives where it began, which is what tells a caller which part of its picture is
+        being dragged rather than only where the cursor is now.
     */
-    bool drag(float2 &position)
+    bool drag(float2 &position, float2 *pressed_at = nullptr)
     {
+        auto here = []
+        {
+            const ImPlotPoint p = ImPlot::GetPlotMousePos();
+            return float2{std::clamp(float(p.x), 0.f, 1.f), std::clamp(float(p.y), 0.f, 1.f)};
+        };
+
         if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
             m_dragging = true;
+            m_press    = here();
+        }
 
         if (!m_dragging)
             return false;
@@ -114,8 +140,9 @@ public:
             return false;
         }
 
-        const ImPlotPoint p = ImPlot::GetPlotMousePos();
-        position            = float2{std::clamp(float(p.x), 0.f, 1.f), std::clamp(float(p.y), 0.f, 1.f)};
+        position = here();
+        if (pressed_at)
+            *pressed_at = m_press;
         return true;
     }
 
@@ -130,7 +157,8 @@ public:
     }
 
 private:
-    float m_width        = 0.f;
-    float m_extra_height = 0.f; //!< What the widget needs above its width for the plot area to be square
-    bool  m_dragging     = false;
+    float  m_width        = 0.f;
+    float  m_extra_height = 0.f; //!< What the widget needs above its width for the plot area to be square
+    bool   m_dragging     = false;
+    float2 m_press{0.f, 0.f}; //!< Where the drag began, which is what says what it is a drag *of*
 };

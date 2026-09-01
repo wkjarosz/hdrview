@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <vector>
 
 namespace
@@ -471,6 +472,44 @@ private:
     */
     static float slope_of(float contrast) { return float(std::tan(lerp(0.0, M_PI_2, contrast / 2.0 + 0.5))); }
 
+    //! The inverse of slope_of(): what the slider must read for the curve to have this slope.
+    static float contrast_of(float slope)
+    {
+        return std::clamp(float(4.0 * std::atan(std::max(0.f, slope)) / M_PI) - 1.f, -1.f, 1.f);
+    }
+
+    //! The slope that puts the straight line through (\p x, \p y); negative when nothing can.
+    /*!
+        The line is fixed through its pivot, so one more point determines it outright -- unless the point
+        asked for is the pivot itself, which every slope already passes through, or is on the wrong side of
+        it, which would need the line to run downhill.
+    */
+    static float line_slope_through(float x, float y, float midpoint)
+    {
+        if (std::fabs(x - midpoint) < 1e-4f)
+            return -1.f;
+        return (y - 0.5f) / (x - midpoint);
+    }
+
+    //! The gain exponent that puts the s-curve through (\p x, \p y); negative when nothing can.
+    /*!
+        gain_Perlin is a power on each half of its range, so asking it to reach a value is one logarithm.
+        The bias is left where it is, which is what makes this a bend rather than a shift.
+    */
+    static float curve_gain_through(float x, float y, float bias)
+    {
+        const float u = bias_Schlick(std::clamp(x, 0.f, 1.f), bias);
+        if (u <= 1e-4f || u >= 1.f - 1e-4f || y <= 1e-4f || y >= 1.f - 1e-4f)
+            return -1.f;
+
+        // Each half is pinned at its own end and at the middle, so a target on the far side of the middle
+        // from the input is unreachable at any exponent.
+        if ((u > 0.5f) != (y > 0.5f))
+            return -1.f;
+
+        return u > 0.5f ? std::log(2.f * (1.f - y)) / std::log(2.f - 2.f * u) : std::log(2.f * y) / std::log(2.f * u);
+    }
+
     //! Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
     void draw_curve()
     {
@@ -497,16 +536,46 @@ private:
         m_plot.curve("s-curve", curved, m_linear ? faint : active);
         m_plot.curve("line", linear, m_linear ? active : faint);
 
-        // Where the midpoint sits, which is what brightness moves.
-        m_plot.marker_x("midpoint", midpoint, ImVec4(1.f, 1.f, 1.f, 0.25f));
+        // The pivot: the one input both curves send to the middle, whatever the contrast. Drawn as a
+        // handle because it is also what the drag below grabs.
+        m_plot.marker_x("pivot", midpoint, ImVec4(1.f, 1.f, 1.f, 0.35f));
+        m_plot.handle(float2{midpoint, 0.5f}, ImVec4(1.f, 1.f, 1.f, 0.55f));
 
-        // Dragging sets both at once, which finds a look faster than two sliders do: across is the
-        // midpoint the curve pivots about, and up is how steep it is there.
-        if (float2 p; m_plot.drag(p))
+        /*
+            Dragging does one of two things, decided by what was under the cursor when it went down --
+            which is how a curve editor behaves, and the only way to give both directions a meaning here.
+
+            Near the pivot, it drags the pivot: brightness alone, and the curve slides sideways under the
+            cursor. Anywhere else, it bends the curve: the input grabbed keeps its place on the horizontal
+            axis and its output follows the cursor, which is contrast alone.
+
+            The two cannot be combined. The pivot's output is one half at every contrast, so a curve that
+            passes under the cursor and a pivot that sits under the cursor are the same request only when
+            the cursor is at one half -- and were both live at once, a straight-up drag would be asking the
+            pivot to move to where it already is.
+        */
+        if (float2 p, from; m_plot.drag(p, &from))
         {
-            m_brightness = lerp(1.f, -1.f, p.x);
-            m_contrast   = lerp(-1.f, 1.f, p.y);
+            if (m_dragging_pivot.value_or(std::fabs(from.x - midpoint) < 0.06f))
+            {
+                m_dragging_pivot = true;
+                m_brightness     = std::clamp(lerp(1.f, -1.f, p.x), -1.f, 1.f);
+            }
+            else
+            {
+                m_dragging_pivot = false;
+
+                const float wanted =
+                    m_linear ? line_slope_through(from.x, p.y, midpoint) : curve_gain_through(from.x, p.y, bias);
+
+                // Left as it is where the cursor asks for something no setting produces, so the curve
+                // stops following rather than jumping to an end of the slider.
+                if (wanted >= 0.f)
+                    m_contrast = contrast_of(wanted);
+            }
         }
+        else
+            m_dragging_pivot.reset();
 
         m_plot.end();
     }
@@ -525,6 +594,8 @@ private:
     bool          m_linear  = false;
     int           m_channel = Channel_RGB;
     ToneCurvePlot m_plot;
+    //! Which of the two things the drag in progress is doing; unset between drags.
+    std::optional<bool> m_dragging_pivot;
 };
 
 class Flatten final : public EditCommand
