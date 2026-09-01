@@ -83,7 +83,7 @@ struct ColorMetadataUndo::State
 };
 
 ColorMetadataUndo::ColorMetadataUndo(const Image &img, std::string name) :
-    m_state(std::make_shared<State>()), m_name(std::move(name))
+    m_state(std::make_unique<State>()), m_name(std::move(name))
 {
     m_state->chromaticities    = img.chromaticities;
     m_state->adopted_neutral   = img.adopted_neutral;
@@ -96,6 +96,8 @@ ColorMetadataUndo::ColorMetadataUndo(const Image &img, std::string name) :
     m_state->white_point       = img.white_point;
     m_state->color_profile     = img.metadata.value<std::string>("color profile", "");
 }
+
+ColorMetadataUndo::~ColorMetadataUndo() = default;
 
 void ColorMetadataUndo::swap(Image &img)
 {

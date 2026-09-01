@@ -156,6 +156,8 @@ class ColorMetadataUndo : public UndoEntry
 {
 public:
     ColorMetadataUndo(const Image &img, std::string name);
+    //! Out of line because State is incomplete here and the pointer has to destroy it.
+    ~ColorMetadataUndo() override;
 
     void        undo(Image &img) override { swap(img); }
     void        redo(Image &img) override { swap(img); }
@@ -165,7 +167,7 @@ private:
     void swap(Image &img);
 
     struct State;
-    std::shared_ptr<State> m_state; //!< Out of line, since its members need image.h
+    std::unique_ptr<State> m_state; //!< Out of line, since its members need image.h
     std::string            m_name;
 };
 
@@ -206,11 +208,6 @@ private:
 
 /*!
     An image's undo history: the entries applied so far, and a cursor into them.
-
-    The cursor points *between* entries and ranges over [0, size()]: 0 means there is nothing left to
-    undo, size() nothing to redo. A second cursor records where the image last agreed with what is on
-    disk, which is what lets is_modified() answer correctly after undoing back past a save as well as
-    after editing forward past one.
 
     Bounded by total bytes rather than entry count, since what threatens memory is one large structural
     edit rather than many small ones.

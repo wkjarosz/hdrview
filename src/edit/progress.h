@@ -35,8 +35,6 @@
     A default-constructed one carries no state: every operation is a no-op and canceled() is false. That is
     what a caller who does not care passes, and it is why the filters take this by value with a default
     argument and never test it for null.
-
-    Adapted from HDRView 1.8's class of the same name, whose shape this keeps.
 */
 class AtomicProgress
 {
@@ -76,7 +74,7 @@ public:
             m_state->canceled.store(true, std::memory_order_relaxed);
     }
 
-    /// Force the whole job to read as finished, whatever the increments have added up to.
+    /// Force the whole job to read as finished.
     void set_done()
     {
         if (m_state)
