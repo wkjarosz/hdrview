@@ -149,10 +149,10 @@ public:
         ImGui::Tooltip("How long the solver may run. It stops sooner once the answer stops changing, so this "
                        "is a bound rather than a cost.");
 
-        ImGui::Checkbox("Blend log values", &m_log_domain);
-        ImGui::Tooltip("Solve on the logarithm of the samples, so that what is matched across the border is a "
-                       "ratio rather than a difference. Usually what an HDR image wants, where the two sides "
-                       "can be many stops apart.");
+        ImGui::Checkbox("Match ratios", &m_match_ratios);
+        ImGui::Tooltip("Solve on a compressed scale, so that what is matched across the border is a ratio "
+                       "rather than a difference. Usually what an HDR image wants, where the two sides can be "
+                       "many stops apart.");
 
         if (auto clip = ctx.clipboard())
             ImGui::TextDisabled("Clipboard: %d x %d", clip->size().x, clip->size().y);
@@ -170,13 +170,13 @@ public:
         const int   n      = group.num_channels;
         const int2  extent = clip->data_window.size();
 
-        const int  iters      = m_iterations;
-        const bool log_domain = m_log_domain;
+        const int  iters        = m_iterations;
+        const bool match_ratios = m_match_ratios;
 
         ctx.modify_channels_async(
             "Seamless paste",
-            [clip, ch, n, extent, iters, log_domain](const Array2Df &dst, const Box2i &region, int slot,
-                                                     AtomicProgress p) -> Array2Df
+            [clip, ch, n, extent, iters, match_ratios](const Array2Df &dst, const Box2i &region, int slot,
+                                                       AtomicProgress p) -> Array2Df
             {
                 const int2 size = region.size();
 
@@ -211,29 +211,26 @@ public:
                         mask(x, y)        = border ? 0.f : (n >= 4 ? clip->channels[size_t(ch[3])](int2{x, y}) : 1.f);
                     }
 
-                // Solving on the logarithm matches ratios rather than differences, which is what an HDR
-                // image wants. Shifted first so that nothing sits at or below zero, where there is no log.
-                float shift = 0.f;
-                if (log_domain)
-                {
-                    float lowest = 0.f;
-                    for (int i = 0; i < background.num_elements(); ++i)
-                        lowest = std::min(lowest, std::min(background(i), source(i)));
-                    shift = 1e-4f - lowest;
-
+                // Matching ratios rather than differences, which is what an HDR image wants where the two
+                // sides can be many stops apart. Through asinh rather than a logarithm: it is defined for
+                // every sample the image can hold, negative ones included, and is logarithmic only above
+                // its knee. A logarithm would have to be shifted up past the darkest sample first, which
+                // makes the transform depend on the content -- so the same patch blended into two
+                // backgrounds would come out differently.
+                if (match_ratios)
                     for (int i = 0; i < background.num_elements(); ++i)
                     {
-                        background(i) = std::log(background(i) + shift);
-                        source(i)     = std::log(source(i) + shift);
+                        background(i) = float(axis_scale_fwd(background(i), AxisScale_Asinh));
+                        source(i)     = float(axis_scale_fwd(source(i), AxisScale_Asinh));
                     }
-                }
 
                 Array2Df solved = poisson_blended(background, source, mask, iters, 1e-4f, p);
                 if (p.canceled())
                     return out;
 
-                if (log_domain)
-                    for (int i = 0; i < solved.num_elements(); ++i) solved(i) = std::exp(solved(i)) - shift;
+                if (match_ratios)
+                    for (int i = 0; i < solved.num_elements(); ++i)
+                        solved(i) = float(axis_scale_inv(solved(i), AxisScale_Asinh));
 
                 // Everywhere the solve covered: outside the mask it returns the background it was given,
                 // so there is nothing to write around.
@@ -245,8 +242,8 @@ public:
     }
 
 private:
-    int  m_iterations = 300;
-    bool m_log_domain = false;
+    int  m_iterations   = 300;
+    bool m_match_ratios = false;
 };
 
 } // namespace

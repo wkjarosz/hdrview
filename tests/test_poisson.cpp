@@ -48,6 +48,94 @@ float max_difference(const Array2Df &a, const Array2Df &b)
 
 } // namespace
 
+TEST_CASE("A source with no gradients leaves a smooth patch, symmetric where the setup is")
+{
+    // The clearest statement of what the solve is for. Over a background that varies, with a source that
+    // does not, the answer is the harmonic function agreeing with the background around the mask: smooth
+    // everywhere inside, and carrying the surroundings inward without copying them.
+    //
+    // A checkerboard is the background to ask this of, because it is the one that catches a patch landing
+    // anywhere but where it was asked to. Over a flat background such a patch looks exactly like a
+    // correct one.
+    const int2 size{64, 64};
+    const int  square = 8;
+
+    Array2Df background{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) background(x, y) = ((x / square + y / square) % 2) ? 1.f : 0.f;
+
+    const Array2Df source = filled(size, 0.5f);
+
+    // Centered, so the mask shares the background's symmetries.
+    Array2Df mask{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) mask(x, y) = (x >= 24 && x < 40 && y >= 24 && y < 40) ? 1.f : 0.f;
+
+    const Array2Df out = poisson_blended(background, source, mask, 300, 1e-6f);
+
+    // Turning the picture half way round and reflecting it through the diagonal both leave this
+    // checkerboard alone, and the mask and the source with it -- so they must leave the answer alone too.
+    // Confirmed of the background first, since a symmetry it does not have would make this vacuous.
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            REQUIRE(background(x, y) == background(size.x - 1 - x, size.y - 1 - y));
+            REQUIRE(background(x, y) == background(y, x));
+
+            CHECK(out(x, y) == doctest::Approx(out(size.x - 1 - x, size.y - 1 - y)).epsilon(1e-5));
+            CHECK(out(x, y) == doctest::Approx(out(y, x)).epsilon(1e-5));
+        }
+
+    // Smooth throughout the interior: with no gradients asked for, every sample is the average of its
+    // neighbors. This is what "no seam" means here -- a step anywhere inside would show up as curvature.
+    const Array2Df lap = laplacian(out);
+    for (int y = 25; y < 39; ++y)
+        for (int x = 25; x < 39; ++x)
+        {
+            CAPTURE(x);
+            CAPTURE(y);
+            CHECK(std::abs(lap(x, y)) < 1e-4f);
+        }
+
+    // Far enough in, the border's alternation has averaged out to its mean.
+    CHECK(out(32, 32) == doctest::Approx(0.5f).epsilon(0.02));
+}
+
+TEST_CASE("The default iteration count is enough for the regions a paste actually covers")
+{
+    // The bound exists to stop a runaway, not to cut the answer short, so it is worth knowing that the
+    // sizes a paste comes in reach the answer well inside it. Measured by how far from harmonic the
+    // result is, since a constant source asks for exactly that and needs no reference solve to compare
+    // against.
+    for (int n : {64, 128, 256})
+    {
+        CAPTURE(n);
+        const int2 size{n, n};
+
+        Array2Df background{size};
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x) background(x, y) = ((x / 8 + y / 8) % 2) ? 1.f : 0.f;
+
+        const Array2Df source = filled(size, 0.5f);
+        const Array2Df mask   = interior_mask(size, 1);
+
+        const Array2Df got = poisson_blended(background, source, mask, 300, 1e-6f);
+        const Array2Df lap = laplacian(got);
+
+        float worst = 0.f;
+        for (int y = 2; y < size.y - 2; ++y)
+            for (int x = 2; x < size.x - 2; ++x) worst = std::max(worst, std::abs(lap(x, y)));
+
+        CAPTURE(worst);
+        CHECK(worst < 1e-3f);
+
+        // And running it far longer changes nothing, which is what says the bound was not the thing that
+        // stopped it.
+        const Array2Df longer = poisson_blended(background, source, mask, 3000, 1e-6f);
+        CHECK(max_difference(got, longer) < 1e-5f);
+    }
+}
+
 TEST_CASE("The Laplacian of a plane is zero, and of a known quadratic is its known value")
 {
     // The operator the solve inverts, checked against what it is: a linear function has no curvature, and

@@ -1566,16 +1566,150 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
 
-        // The border of the pasted region still holds the background it was pinned to...
-        IM_CHECK_LT(std::fabs(ch(dst_box.min.x, dst_box.min.y) - 0.8f), 1e-3f);
+        // The whole border of the pasted region still holds the background it was pinned to -- every edge
+        // of it, not one corner: a paste that lands anywhere but where it was asked to is seamless along
+        // whichever side it happens to touch and steps along the other three.
+        float worst_border = 0.f;
+        int2  worst_at{-1, -1};
+        for (int x = dst_box.min.x; x < dst_box.max.x; ++x)
+            for (int y : {dst_box.min.y, dst_box.max.y - 1})
+                if (const float e = std::fabs(ch(x, y) - 0.8f); e > worst_border)
+                {
+                    worst_border = e;
+                    worst_at     = int2{x, y};
+                }
+        for (int y = dst_box.min.y; y < dst_box.max.y; ++y)
+            for (int x : {dst_box.min.x, dst_box.max.x - 1})
+                if (const float e = std::fabs(ch(x, y) - 0.8f); e > worst_border)
+                {
+                    worst_border = e;
+                    worst_at     = int2{x, y};
+                }
+        ctx->LogInfo("worst border error %f at %d,%d (box %d,%d..%d,%d)", worst_border, worst_at.x, worst_at.y,
+                     dst_box.min.x, dst_box.min.y, dst_box.max.x, dst_box.max.y);
+        IM_CHECK_LT(worst_border, 1e-3f);
 
         // ...and the interior was carried to that level rather than arriving at its own 0.25. This is the
         // whole difference from an ordinary paste, which would have written 0.25 here.
-        const int2 middle = dst_box.min + patch / 2;
-        IM_CHECK_LT(std::fabs(ch(middle.x, middle.y) - 0.8f), 0.05f);
+        float worst_interior = 0.f;
+        for (int y = dst_box.min.y + 1; y < dst_box.max.y - 1; ++y)
+            for (int x = dst_box.min.x + 1; x < dst_box.max.x - 1; ++x)
+                worst_interior = std::max(worst_interior, std::fabs(ch(x, y) - 0.8f));
+        ctx->LogInfo("worst interior error %f", worst_interior);
+        IM_CHECK_LT(worst_interior, 0.05f);
 
         // Nothing outside the selection moved.
         IM_CHECK_LT(std::fabs(ch(2, 2) - 0.8f), 1e-4f);
+
+        hdrview()->set_selection(Box2i{});
+        hdrview()->set_clipboard(nullptr);
+        reset_images(ctx);
+    };
+
+    t = IM_REGISTER_TEST(engine, "edit", "a seamless paste lands where it was aimed, over a background that varies");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img  = hdrview()->current_image();
+        const int2 size = img->size();
+        const int2 patch{32, 32};
+
+        auto checker = [](int x, int y) { return ((x / 4 + y / 4) % 2) ? 1.f : 0.f; };
+
+        // Where the clipboard lands is the one thing this command has to get right, and a flat background
+        // cannot tell a patch that landed correctly from one that did not -- so the background varies, and
+        // the source does not. That makes the answer inside the patch a smooth function of its border
+        // alone, which is checkable everywhere rather than only at a corner.
+        struct Config
+        {
+            const char *what;
+            Box2i       selection;
+            int2        expected; //!< Where the top-left of the patch should end up
+        };
+        const int2   at{size.x / 2, size.y / 2};
+        const Config configs[] = {
+            {"a selection the size of the clipboard", Box2i{at, at + patch}, at},
+            // Larger: the clipboard is placed at the selection's top-left rather than centered or scaled.
+            {"a selection larger than the clipboard", Box2i{at, at + patch * 3}, at},
+            // None at all: the whole image is the target, so the patch lands at its top-left.
+            {"no selection at all", Box2i{}, int2{0, 0}},
+        };
+
+        for (const Config &cfg : configs)
+        {
+            ctx->LogInfo("--- %s ---", cfg.what);
+
+            // Deselect first: these fills go through the current subject, and one left over from the
+            // previous pass would fill only that rectangle.
+            hdrview()->set_selection(Box2i{});
+            ctx->Yield();
+
+            // A constant, so the copy taken from it has no gradients of its own to impose.
+            IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
+                                              [](float, int2, int slot) { return slot == 3 ? 1.f : 0.5f; }));
+            ctx->Yield();
+
+            hdrview()->set_selection(Box2i{int2{0, 0}, patch});
+            ctx->Yield();
+            menu_click(ctx, "Edit/Copy");
+            IM_CHECK(hdrview()->clipboard() != nullptr);
+
+            hdrview()->set_selection(Box2i{});
+            ctx->Yield();
+            IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(), [](float, int2 p, int slot)
+                                              { return slot == 3 ? 1.f : (((p.x / 4 + p.y / 4) % 2) ? 1.f : 0.f); }));
+            ctx->Yield();
+
+            hdrview()->set_selection(cfg.selection);
+            ctx->Yield();
+
+            const int steps_before = img->history.size();
+            menu_click(ctx, "Edit/Seamless paste...");
+            ctx->SetRef("Seamless paste...");
+            ctx->ItemInputValue("Iterations", 300);
+            ctx->ItemClick("Paste");
+
+            // It runs off the main thread behind a progress dialog and only lands once the main thread has
+            // drained it, so this waits for the history to grow rather than for it to be non-empty.
+            for (int i = 0; i < 4000 && img->history.size() == steps_before; ++i) ctx->Yield();
+            IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Seamless paste");
+
+            const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
+
+            // Whatever stopped being the checkerboard is what the paste touched, which says where it went
+            // without having to trust the command's own account of it.
+            Box2i touched{int2{size.x, size.y}, int2{0, 0}};
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                    if (std::fabs(ch(x, y) - checker(x, y)) > 1e-4f)
+                    {
+                        touched.min = la::min(touched.min, int2{x, y});
+                        touched.max = la::max(touched.max, int2{x + 1, y + 1});
+                    }
+
+            // The border ring keeps the background, so what moved is the interior: one sample in from the
+            // patch on every side.
+            const int2 want_min = cfg.expected + int2{1, 1};
+            const int2 want_max = cfg.expected + patch - int2{1, 1};
+            IM_CHECK_EQ(touched.min, want_min);
+            IM_CHECK_EQ(touched.max, want_max);
+
+            // And with no gradients asked for, every sample inside is the average of its neighbors --
+            // smooth right across the patch, not only near the corner it started from.
+            float worst_lap = 0.f;
+            for (int y = touched.min.y + 1; y < touched.max.y - 1; ++y)
+                for (int x = touched.min.x + 1; x < touched.max.x - 1; ++x)
+                    worst_lap = std::max(worst_lap, std::fabs(ch(x - 1, y) + ch(x + 1, y) + ch(x, y - 1) +
+                                                              ch(x, y + 1) + ch(x - 1, y - 1) + ch(x + 1, y + 1) +
+                                                              ch(x + 1, y - 1) + ch(x - 1, y + 1) - 8.f * ch(x, y)));
+            ctx->LogInfo("worst interior laplacian %f", worst_lap);
+            IM_CHECK_LT(worst_lap, 1e-2f);
+
+            menu_click(ctx, "Edit/Undo");
+            ctx->Yield();
+        }
 
         hdrview()->set_selection(Box2i{});
         hdrview()->set_clipboard(nullptr);

@@ -68,10 +68,9 @@ public:
         ctx.modify_pixels("Exposure/gamma",
                           [scale, off, inv_g](float v, int2, int)
                           {
-                              const float x = scale * v + off;
-                              // A negative sample is meaningful in an HDR image, and pow() of one is not, so
-                              // the curve is mirrored through the origin instead of producing a NaN.
-                              return x < 0.f ? -std::pow(-x, inv_g) : std::pow(x, inv_g);
+                              // Signed, since a negative sample is meaningful in an HDR image and pow() of
+                              // one is not: the curve is mirrored through the origin rather than NaN.
+                              return spow(scale * v + off, inv_g);
                           });
     }
 
