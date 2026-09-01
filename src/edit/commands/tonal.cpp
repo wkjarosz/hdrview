@@ -18,6 +18,8 @@
 #include "image.h"
 #include "imgui_ext.h"
 
+#include "edit/tone_plot.h"
+
 #include <hello_imgui/hello_imgui.h>
 
 #include <cmath>
@@ -54,9 +56,41 @@ public:
 
     void draw(EditContext &) override
     {
+        draw_curve();
+
         ImGui::SliderFloat("Exposure", &m_exposure, -10.f, 10.f, "%.2f");
+        ImGui::Tooltip("Scale every sample by two to this power, which is what a stop of exposure is.");
+
         ImGui::SliderFloat("Offset", &m_offset, -1.f, 1.f, "%.3f");
+        ImGui::Tooltip("Added after the exposure and before the gamma, so it lifts the black point.");
+
         ImGui::SliderFloat("Gamma", &m_gamma, MIN_GAMMA, 10.f, "%.3f");
+        ImGui::Tooltip("The power the result is raised to, mirrored through the origin so that a negative "
+                       "sample keeps its sign.");
+    }
+
+    //! The curve the three sliders make, over [0,1].
+    /*!
+        Only the part of it that lands in the unit square is drawn, which is where a display-referred
+        sample lives; the operation itself is unbounded and applies just as well outside.
+    */
+    void draw_curve()
+    {
+        const float scale = std::pow(2.f, m_exposure);
+        const float inv_g = 1.f / std::max(MIN_GAMMA, m_gamma);
+
+        float ys[ToneCurvePlot::N];
+        for (int i = 0; i < ToneCurvePlot::N; ++i) ys[i] = spow(scale * ToneCurvePlot::x(i) + m_offset, inv_g);
+
+        if (!m_plot.begin("##Curve"))
+            return;
+
+        m_plot.curve("exposure/gamma", ys, ImVec4(1.f, 1.f, 1.f, 0.85f));
+
+        // Where a mid-gray input lands, which is the quickest read on what the three together are doing.
+        m_plot.marker_x("mid", 0.5f, ImVec4(1.f, 1.f, 1.f, 0.25f));
+
+        m_plot.end();
     }
 
     void apply(EditContext &ctx) override
@@ -75,7 +109,8 @@ public:
     }
 
 private:
-    float m_exposure = 0.f, m_offset = 0.f, m_gamma = 1.f;
+    float         m_exposure = 0.f, m_offset = 0.f, m_gamma = 1.f;
+    ToneCurvePlot m_plot;
 };
 
 class Fill final : public EditCommand

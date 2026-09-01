@@ -17,8 +17,7 @@
 #include "image.h"
 #include "imgui_ext.h"
 
-#include <hello_imgui/hello_imgui.h>
-#include <implot.h>
+#include "edit/tone_plot.h"
 
 #include <cmath>
 
@@ -423,87 +422,37 @@ private:
         const float midpoint = (1.f - m_brightness) / 2.f;
         const float bias     = (m_brightness + 1.f) / 2.f;
 
-        constexpr int N = 129;
-        float         xs[N], linear[N], curved[N];
-        for (int i = 0; i < N; ++i)
+        float linear[ToneCurvePlot::N], curved[ToneCurvePlot::N];
+        for (int i = 0; i < ToneCurvePlot::N; ++i)
         {
-            xs[i]     = float(i) / float(N - 1);
-            linear[i] = brightness_contrast_linear(xs[i], slope, midpoint);
-            curved[i] = brightness_contrast_nonlinear(xs[i], slope, bias);
+            const float x = ToneCurvePlot::x(i);
+            linear[i]     = brightness_contrast_linear(x, slope, midpoint);
+            curved[i]     = brightness_contrast_nonlinear(x, slope, bias);
         }
 
-        // As wide as the sliders beneath it. The widget also holds the tick labels, which are wider down
-        // the left side than they are tall along the bottom, so a square widget leaves a plot area that is
-        // not square -- the height carries a correction measured from the last frame, which settles after
-        // one and then stays put.
-        const float width = ImGui::CalcItemWidth();
+        if (!m_plot.begin("##Curve"))
+            return;
 
-        if (ImPlot::BeginPlot("##Curve", ImVec2(width, width + m_plot_extra_height),
-                              ImPlotFlags_NoTitle | ImPlotFlags_NoLegend | ImPlotFlags_NoMenus |
-                                  ImPlotFlags_NoBoxSelect))
+        const ImVec4 active{1.f, 1.f, 1.f, 0.85f};
+        const ImVec4 faint{1.f, 1.f, 1.f, 0.18f};
+
+        // Both are drawn whichever is in force, so the difference between them can be seen before it is
+        // chosen.
+        m_plot.curve("s-curve", curved, m_linear ? faint : active);
+        m_plot.curve("line", linear, m_linear ? active : faint);
+
+        // Where the midpoint sits, which is what brightness moves.
+        m_plot.marker_x("midpoint", midpoint, ImVec4(1.f, 1.f, 1.f, 0.25f));
+
+        // Dragging sets both at once, which finds a look faster than two sliders do: across is the
+        // midpoint the curve pivots about, and up is how steep it is there.
+        if (float2 p; m_plot.drag(p))
         {
-            const ImPlotAxisFlags axes = ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_Lock;
-            ImPlot::SetupAxes(nullptr, nullptr, axes, axes);
-
-            // The same ticks both ways, since the two axes carry the same quantity: a level in and the
-            // level it maps to.
-            ImPlot::SetupAxisTicks(ImAxis_X1, 0.0, 1.0, 5);
-            ImPlot::SetupAxisTicks(ImAxis_Y1, 0.0, 1.0, 5);
-
-            // Fixed, so that the curve moves against the frame instead of the frame following the curve.
-            // The straight line leaves the top and bottom at any real contrast, and seeing it leave is the
-            // point of drawing it.
-            ImPlot::SetupAxesLimits(0.0, 1.0, 0.0, 1.0, ImPlotCond_Always);
-
-            const ImVec4 active{1.f, 1.f, 1.f, 0.85f};
-            const ImVec4 faint{1.f, 1.f, 1.f, 0.18f};
-
-            ImPlotSpec spec;
-            spec.LineWeight = 2.f;
-
-            spec.LineColor = m_linear ? faint : active;
-            ImPlot::PlotLine("s-curve", xs, curved, N, spec);
-
-            spec.LineColor = m_linear ? active : faint;
-            ImPlot::PlotLine("line", xs, linear, N, spec);
-
-            // Where the midpoint sits, which is what brightness moves.
-            const float mid_x[2] = {midpoint, midpoint};
-            const float mid_y[2] = {0.f, 1.f};
-            spec.LineColor       = ImVec4(1.f, 1.f, 1.f, 0.25f);
-            spec.LineWeight      = 1.f;
-            ImPlot::PlotLine("midpoint", mid_x, mid_y, 2, spec);
-
-            // Dragging sets both at once, which finds a look faster than two sliders do: across is the
-            // midpoint the curve pivots about, and up is how steep it is there.
-            //
-            // In the plot's own coordinates rather than the widget's. The widget rectangle includes the
-            // frame and the tick labels around the plot, so a fraction taken across it is not the
-            // fraction across the axes -- the midpoint line lands beside the cursor and drifts further
-            // the nearer the edge it gets.
-            if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-                m_dragging = true;
-
-            if (m_dragging)
-            {
-                if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
-                    m_dragging = false;
-                else
-                {
-                    // Kept live once the drag has started, even past the edge of the plot, so a slide to
-                    // an extreme does not stop short of it.
-                    const ImPlotPoint m = ImPlot::GetPlotMousePos();
-                    m_brightness        = std::clamp(float(lerp(1.0, -1.0, m.x)), -1.f, 1.f);
-                    m_contrast          = std::clamp(float(lerp(-1.0, 1.0, m.y)), -1.f, 1.f);
-                }
-            }
-
-            const ImVec2 area = ImPlot::GetPlotSize();
-            if (area.x > 0.f && area.y > 0.f)
-                m_plot_extra_height = std::clamp(m_plot_extra_height + (area.x - area.y), 0.f, width);
-
-            ImPlot::EndPlot();
+            m_brightness = lerp(1.f, -1.f, p.x);
+            m_contrast   = lerp(-1.f, 1.f, p.y);
         }
+
+        m_plot.end();
     }
 
     //! Which of the image's qualities the curve is applied to.
@@ -516,13 +465,10 @@ private:
         Channel_COUNT
     };
 
-    float m_brightness = 0.f, m_contrast = 0.f;
-    bool  m_linear  = false;
-    int   m_channel = Channel_RGB;
-    //! A drag that began inside the plot, and goes on following the mouse after it leaves.
-    bool m_dragging = false;
-    //! What the widget needs above its width for the plot *area* to come out square; see draw_curve().
-    float m_plot_extra_height = 0.f;
+    float         m_brightness = 0.f, m_contrast = 0.f;
+    bool          m_linear  = false;
+    int           m_channel = Channel_RGB;
+    ToneCurvePlot m_plot;
 };
 
 class Flatten final : public EditCommand
