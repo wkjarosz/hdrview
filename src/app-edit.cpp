@@ -45,6 +45,8 @@ struct AppEditContext final : EditContext
     Box2i              selection() const override { return app->roi(); }
     void               set_selection(const Box2i &box) override { app->set_selection(box); }
     float4             background_color() const override { return app->background_color(); }
+    ConstImagePtr      clipboard() const override { return app->clipboard(); }
+    void               set_clipboard(ImagePtr img) override { app->set_clipboard(std::move(img)); }
 
     bool modify_pixels(const string &name, const function<float(float, int2, int)> &op) override
     {
@@ -104,7 +106,9 @@ void HDRViewApp::invoke_edit_command(EditCommand &cmd)
 bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
 {
     AppEditContext ctx{this};
-    return can_edit(current_image()) && cmd.enabled(ctx);
+    if (cmd.info().needs_editable && !can_edit(current_image()))
+        return false;
+    return cmd.enabled(ctx);
 }
 
 void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)

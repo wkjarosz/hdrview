@@ -1324,6 +1324,123 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "copy and paste carry samples from one place to another");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img  = hdrview()->current_image();
+        const int2 size = img->size();
+
+        // Two known, different halves, so what lands where is unambiguous.
+        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(), [size](float, int2 p, int slot)
+                                          { return slot == 3 ? 1.f : (p.x < size.x / 2 ? 1.f : 0.f); }));
+        ctx->Yield();
+
+        const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
+        IM_CHECK_EQ(ch(1, 1), 1.f);          // left half
+        IM_CHECK_EQ(ch(size.x - 2, 1), 0.f); // right half
+
+        // Copy a piece of the left half...
+        const Box2i src_box{int2{0, 0}, int2{size.x / 4, size.y / 4}};
+        hdrview()->set_selection(src_box);
+        ctx->Yield();
+        menu_click(ctx, "Edit/Copy");
+
+        IM_CHECK(hdrview()->clipboard() != nullptr);
+        IM_CHECK(hdrview()->clipboard()->size() == src_box.size());
+
+        // ...and paste it into the right half, which was zero.
+        const Box2i dst_box{int2{size.x / 2, size.y / 2}, int2{size.x / 2 + size.x / 4, size.y / 2 + size.y / 4}};
+        hdrview()->set_selection(dst_box);
+        ctx->Yield();
+
+        const auto before = snapshot(img);
+        menu_click(ctx, "Edit/Paste");
+
+        IM_CHECK(snapshot(img) != before);
+        IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Paste");
+
+        // What was pasted is what was copied, at its new place.
+        IM_CHECK_EQ(ch(dst_box.min.x + 1, dst_box.min.y + 1), 1.f);
+        // And nothing outside the selection moved.
+        IM_CHECK_EQ(ch(size.x - 2, 1), 0.f);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == before);
+
+        hdrview()->set_selection(Box2i{});
+        reset_images(ctx);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "cutting takes the samples away and undo brings them back");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img  = hdrview()->current_image();
+        const int2 size = img->size();
+
+        const Box2i box{int2{0, 0}, int2{size.x / 4, size.y / 4}};
+        hdrview()->set_selection(box);
+        ctx->Yield();
+
+        const auto  before = snapshot(img);
+        const auto &ch     = img->channels[img->groups[img->selected_group].channels[0]];
+        const float kept   = ch(size.x - 2, size.y - 2); // outside the selection
+
+        menu_click(ctx, "Edit/Cut");
+
+        // On the clipboard...
+        IM_CHECK(hdrview()->clipboard() != nullptr);
+        IM_CHECK(hdrview()->clipboard()->size() == box.size());
+
+        // ...gone from the image, everywhere inside the selection and nowhere outside it.
+        for (int y = 0; y < box.size().y; ++y)
+            for (int x = 0; x < box.size().x; x += 7) IM_CHECK_EQ(ch(x, y), 0.f);
+        IM_CHECK_EQ(ch(size.x - 2, size.y - 2), kept);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == before);
+
+        hdrview()->set_selection(Box2i{});
+        reset_images(ctx);
+    };
+
+    t = IM_REGISTER_TEST(engine, "edit", "paste waits for a clipboard, and copy does not need an editable image");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        // Nothing has been copied in this session yet, so there is nothing to paste.
+        hdrview()->set_clipboard(nullptr);
+        ctx->Yield();
+        IM_CHECK_EQ(hdrview()->action("Paste").enabled(), false);
+
+        auto img = hdrview()->current_image();
+
+        // An image a renderer owns refuses every edit -- but reading one is not editing it, and taking a
+        // copy is how a frame of it is kept.
+        img->is_live = true;
+        ctx->Yield();
+
+        IM_CHECK_EQ(hdrview()->action("Cut").enabled(), false);
+        IM_CHECK_EQ(hdrview()->action("Copy").enabled(), true);
+
+        menu_click(ctx, "Edit/Copy");
+        IM_CHECK(hdrview()->clipboard() != nullptr);
+
+        // Pasting into it is still refused, since that would be editing it.
+        IM_CHECK_EQ(hdrview()->action("Paste").enabled(), false);
+
+        img->is_live = false;
+        hdrview()->set_clipboard(nullptr);
+        reset_images(ctx);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

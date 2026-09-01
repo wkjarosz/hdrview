@@ -582,6 +582,10 @@ public:
     //! The color the viewport draws behind the image, for the edits that composite against it.
     float4 background_color() const { return m_bg_color; }
 
+    //! What cut or copy last took; null until one of them has run. Paste writes it back.
+    ConstImagePtr clipboard() const { return m_clipboard; }
+    void          set_clipboard(ImagePtr img) { m_clipboard = std::move(img); }
+
     //! Set the selection, both the committed rectangle and the one drawn over the viewport.
     /*!
         The two exist apart only so that a drag can update what is drawn on every frame and commit once on
@@ -758,6 +762,9 @@ private:
 
     //! What the menu's edits apply to; see Edit > Apply to.
     EditSubject m_edit_subject;
+
+    //! What cut or copy last took, and paste writes back. One for the application, as a clipboard is.
+    ImagePtr m_clipboard;
 
     //! Every edit command, built once at startup; see edit/commands.h.
     /*!

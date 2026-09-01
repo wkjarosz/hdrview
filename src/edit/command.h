@@ -44,6 +44,10 @@ struct EditContext
     //! The color the viewport draws behind the image, for the edits that composite against it.
     virtual float4 background_color() const = 0;
 
+    //! The image last cut or copied, or null when nothing has been. Shared by every open image.
+    virtual ConstImagePtr clipboard() const       = 0;
+    virtual void          set_clipboard(ImagePtr) = 0;
+
     //
     // The ways an image can be changed. All but the async pair return whether anything was edited.
     //
@@ -108,6 +112,10 @@ public:
         //! Whether the dialog carries the "Apply to" controls. False for the edits that cover the whole
         //! image whatever the subject says -- a crop, a resize.
         bool has_subject = true;
+
+        //! Whether the image has to accept edits for this to be offered. False for the one command that
+        //! only reads: copying is not editing, and is worth having on an image a renderer owns.
+        bool needs_editable = true;
     };
 
     virtual ~EditCommand() = default;

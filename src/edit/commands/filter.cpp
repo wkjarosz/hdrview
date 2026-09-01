@@ -257,9 +257,8 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        ImGui::TextWrapped("A NaN or an infinity is not a measurement. One of either makes the minimum, the "
-                           "maximum and the average of the whole channel meaningless, and it survives every "
-                           "filter it passes through, so it is worth removing before anything else is done.");
+        ImGui::TextWrapped("Gremlins are NaNs or infinities that can corrupt various image operations. Here you can "
+                           "replace them with a specified color, or with the median of their neighborhood.");
         ImGui::Spacing();
 
         if (auto img = ctx.image())

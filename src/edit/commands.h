@@ -23,6 +23,7 @@ std::vector<EditCommandPtr> all_edit_commands();
 // One appender per file under edit/commands/, called by all_edit_commands(). A new command is added to
 // whichever of these it belongs beside, or to a new file with its own appender named here.
 //
+void add_clipboard_commands(std::vector<EditCommandPtr> &out);
 void add_tonal_commands(std::vector<EditCommandPtr> &out);
 void add_transform_commands(std::vector<EditCommandPtr> &out);
 void add_color_commands(std::vector<EditCommandPtr> &out);

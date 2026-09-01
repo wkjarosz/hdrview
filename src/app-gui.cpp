@@ -451,6 +451,12 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
+        MenuItem(action("Cut"));
+        MenuItem(action("Copy"));
+        MenuItem(action("Paste"));
+
+        ImGui::Separator();
+
         MenuItem(action("Invert"));
         MenuItem(action("Clamp to [0,1]"));
         MenuItem(action("Zap gremlins..."));
