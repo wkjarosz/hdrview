@@ -1154,7 +1154,7 @@ void HDRViewApp::draw_file_window()
         ImGui::SameLine();
 
         ImGui::SetNextItemWidth(std::max(EmSize(1.f), ImGui::GetContentRegionAvail().x));
-        if (ImGui::SliderFloat("##Playback speed", &m_playback_speed, 0.1f, 60.f, "%.1f fps",
+        if (ImGui::SliderFloat("##Playback speed", &m_playback_speed, 0.1f, 60.f, "%.3f fps",
                                ImGuiInputTextFlags_EnterReturnsTrue))
             m_playback_speed = clamp(m_playback_speed, 1.f / 20.f, 60.f);
     }

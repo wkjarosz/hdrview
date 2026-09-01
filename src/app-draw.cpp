@@ -379,13 +379,44 @@ void HDRViewApp::draw_background()
     static auto last_file_changes_check_time = chrono::steady_clock::now();
     auto        this_frame                   = chrono::steady_clock::now();
 
-    if ((m_play_forward || m_play_backward) &&
-        this_frame - prev_frame >= chrono::milliseconds(int(1000 / m_playback_speed)))
+    if (m_play_forward || m_play_backward)
     {
-        set_current_image_index(
-            next_visible_image_index(m_current, m_play_forward ? Direction_Forward : Direction_Backward));
-        set_image_textures();
-        prev_frame = this_frame;
+        // Keep the period in floating-point seconds. Rounding it to whole milliseconds would quantize the
+        // achievable rates to 1000/n and collapse each broadcast rate onto its nominal neighbor: 23.976 and
+        // 24 fps would both land on 41ms. The clamp matches the slider's range and bounds the catch-up
+        // loop below, since the settings file this is restored from can carry any value at all.
+        const auto period = chrono::duration_cast<chrono::steady_clock::duration>(
+            chrono::duration<float>{1.f / std::clamp(m_playback_speed, 1.f / 20.f, 60.f)});
+        const auto direction = m_play_forward ? Direction_Forward : Direction_Backward;
+
+        // Past this, either playback has just started -- prev_frame still dates from the first frame drawn
+        // -- or the app stalled. Stepping through the whole backlog an image at a time would be a burst of
+        // work whose result is discarded, so drop it and resync instead.
+        const auto resync_after = std::max(period, chrono::steady_clock::duration{1s});
+
+        bool advanced = false;
+        if (this_frame - prev_frame > resync_after)
+        {
+            prev_frame = this_frame;
+            set_current_image_index(next_visible_image_index(m_current, direction));
+            advanced = true;
+        }
+        else
+        {
+            // Accumulating whole periods rather than resetting to now keeps the average rate exact, and
+            // lets a render slower than the playback rate step several images per frame instead of
+            // silently capping playback at the render rate.
+            while (this_frame - prev_frame >= period)
+            {
+                prev_frame += period;
+                set_current_image_index(next_visible_image_index(m_current, direction));
+                advanced = true;
+            }
+        }
+
+        // Only the image left current is ever displayed, so upload textures once no matter how many steps.
+        if (advanced)
+            set_image_textures();
     }
 
     // process_shortcuts();
