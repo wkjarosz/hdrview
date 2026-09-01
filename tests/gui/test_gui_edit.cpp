@@ -1441,6 +1441,78 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "the canvas size dialog means the same size either way round");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        const int2 original = img->size();
+
+        // Percent first, while the dialog is still in the state it was constructed in -- absolute, in
+        // pixels -- so that nothing has to be read back to find out which way it is set.
+        menu_click(ctx, "Edit/Canvas size...");
+        ctx->SetRef("Canvas size...");
+        ctx->ComboClick("Units/Pixels");
+        ctx->Yield();
+        IM_CHECK_EQ(ctx->ItemReadAsInt("##width"), original.x); // absolute, as a fresh dialog is
+
+        // A negative change trims, and percent has its own path back to pixels: it clamped to one sample
+        // rather than to what a relative size is allowed to go down to, so every trim became a canvas one
+        // sample across.
+        ctx->ItemClick("Relative");
+        ctx->ComboClick("Units/Percent");
+        ctx->Yield();
+        ctx->ItemInputValue("##width", -25.0f);
+        ctx->ItemInputValue("##height", -25.0f);
+        ctx->ItemClick("Resize");
+        ctx->Yield(2);
+
+        IM_CHECK_EQ(img->size().x, original.x - original.x / 4);
+        IM_CHECK_EQ(img->size().y, original.y - original.y / 4);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(img->size() == original);
+
+        menu_click(ctx, "Edit/Canvas size...");
+        ctx->SetRef("Canvas size...");
+        ctx->ComboClick("Units/Pixels");
+        ctx->Yield();
+        ctx->ItemClick("Relative"); // back to absolute, which the rest of this is about
+
+        // An absolute size, wider and shorter than the image.
+        const int2 wanted{original.x + 100, original.y - 40};
+        ctx->ItemInputValue("##width", wanted.x);
+        ctx->ItemInputValue("##height", wanted.y);
+        ctx->Yield();
+
+        // Switching to relative has to leave the same canvas described, as a change rather than a size.
+        ctx->ItemClick("Relative");
+        ctx->Yield(2);
+        IM_CHECK_EQ(ctx->ItemReadAsInt("##width"), 100);
+        IM_CHECK_EQ(ctx->ItemReadAsInt("##height"), -40);
+
+        // ...including that it may be negative, which an absolute size may not.
+        ctx->ItemClick("Relative");
+        ctx->Yield(2);
+        IM_CHECK_EQ(ctx->ItemReadAsInt("##width"), wanted.x);
+        IM_CHECK_EQ(ctx->ItemReadAsInt("##height"), wanted.y);
+
+        // And what it produces is that size, whichever way it was expressed.
+        ctx->ItemClick("Relative");
+        ctx->Yield();
+        ctx->ItemClick("Resize");
+        ctx->Yield(2);
+
+        IM_CHECK(img->size() == wanted);
+
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(img->size() == original);
+
+        reset_images(ctx);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "an image a renderer owns refuses edits");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

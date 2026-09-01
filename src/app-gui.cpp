@@ -436,13 +436,9 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        MenuItem(action("Flip image horizontally"));
-        MenuItem(action("Flip image vertically"));
-        MenuItem(action("Rotate 90 degrees clockwise"));
-        MenuItem(action("Rotate 90 degrees counter-clockwise"));
-        MenuItem(action("Crop to selection"));
-        MenuItem(action("Image size..."));
-        MenuItem(action("Canvas size..."));
+        MenuItem(action("Cut"));
+        MenuItem(action("Copy"));
+        MenuItem(action("Paste"));
 
         ImGui::Separator();
 
@@ -451,9 +447,13 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        MenuItem(action("Cut"));
-        MenuItem(action("Copy"));
-        MenuItem(action("Paste"));
+        MenuItem(action("Flip image horizontally"));
+        MenuItem(action("Flip image vertically"));
+        MenuItem(action("Rotate 90 degrees clockwise"));
+        MenuItem(action("Rotate 90 degrees counter-clockwise"));
+        MenuItem(action("Crop to selection"));
+        MenuItem(action("Image size..."));
+        MenuItem(action("Canvas size..."));
 
         ImGui::Separator();
 
@@ -492,11 +492,9 @@ void HDRViewApp::draw_menus()
         {
             const bool matters = can_edit(img) && scope_matters(img);
 
-            ImGui::BeginDisabled(!matters);
             for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
                 if (ImGui::MenuItem(edit_scope_name(i), nullptr, m_edit_subject.scope == i))
                     m_edit_subject.scope = EditSubject::Scope(i);
-            ImGui::EndDisabled();
 
             if (!matters && img)
                 ImGui::Tooltip("This image has a single channel group, so both choices cover the same "
@@ -504,10 +502,7 @@ void HDRViewApp::draw_menus()
 
             ImGui::Separator();
 
-            // Reads as unavailable rather than simply off when there is no selection to restrict to.
-            ImGui::BeginDisabled(!m_roi.has_volume());
             ImGui::MenuItem("Selection only", nullptr, &m_edit_subject.selection_only);
-            ImGui::EndDisabled();
             if (!m_roi.has_volume())
                 ImGui::Tooltip("There is no selection, so edits cover the whole image.");
 

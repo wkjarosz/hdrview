@@ -1057,6 +1057,51 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     return ImGui::BeginPopupModal(title, nullptr, flags);
 }
 
+void RowSpan::take()
+{
+    const ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+
+    right = ImMax(right, mx.x);
+
+    const float y = 0.5f * (mn.y + mx.y);
+    if (count++ == 0)
+        first = y;
+    last = y;
+}
+
+bool RowBracketButton(const char *icon, const RowSpan &rows, bool bracketed, const char *tooltip)
+{
+    if (rows.count < 2)
+        return false;
+
+    const float gap   = ImGui::GetStyle().ItemInnerSpacing.x;
+    const float reach = 0.5f * HelloImGui::EmSize();
+    const float x0 = rows.right + gap, x1 = x0 + reach;
+
+    // Placed and then put back: the rows have already been laid out, and whatever follows them should not
+    // find the cursor somewhere off to the side.
+    const ImVec2 restore = ImGui::GetCursorScreenPos();
+    ImGui::SetCursorScreenPos(ImVec2(x1 + gap, 0.5f * (rows.first + rows.last) - 0.5f * ImGui::GetFrameHeight()));
+
+    const bool pressed = ImGui::Button(icon);
+    if (tooltip && tooltip[0])
+        Tooltip(tooltip);
+
+    ImGui::SetCursorScreenPos(restore);
+
+    if (bracketed)
+    {
+        auto       *dl  = ImGui::GetWindowDrawList();
+        const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+
+        dl->AddLine(ImVec2(x0, rows.first), ImVec2(x1, rows.first), col);
+        dl->AddLine(ImVec2(x1, rows.first), ImVec2(x1, rows.last), col);
+        dl->AddLine(ImVec2(x1, rows.last), ImVec2(x0, rows.last), col);
+    }
+
+    return pressed;
+}
+
 DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, bool use_shortcuts,
                            bool confirm_enabled)
 {
@@ -1072,7 +1117,17 @@ DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, 
     const bool editing = ImGui::IsAnyItemActive();
 
     // Omitting the size lets Dear ImGui auto-fit each button to its own label (text size + FramePadding*2),
-    // so a longer label like "Reset options to defaults" is never clipped.
+    // so a longer label like "Reset options to defaults" is never clipped -- which is also why the pair is
+    // right-aligned by measuring them rather than by a fixed offset.
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float       width = ImGui::CalcTextSize(cancel_label).x + ImGui::CalcTextSize(confirm_label).x +
+                        4.f * style.FramePadding.x + style.ItemSpacing.x;
+
+    // Trailing edge of the content, which under an auto-resizing dialog is as wide as its widest row --
+    // so the buttons end where the controls above them do.
+    if (const float indent = ImGui::GetContentRegionAvail().x - width; indent > 0.f)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+
     const bool cancel_pressed = ImGui::Button(cancel_label);
     if (cancel_pressed ||
         (use_shortcuts && (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))

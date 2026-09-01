@@ -9,6 +9,7 @@
 #include "edit/envmap.h"
 
 #include <cmath>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -570,23 +571,60 @@ TEST_CASE("The mip level is reached, moves with the bias, and is blended across"
     // blended rather than one of them snapped to. A snapped level puts a whole level's worth of difference
     // into the step that crosses an integer and almost nothing into the others -- as bands, in an image,
     // wherever the scale crosses a power of two.
-    Array2Df prev  = remap(-1.f);
-    double   worst = 0.0, total = 0.0;
-    int      n = 0;
-    for (float bias = -0.9f; bias <= 1.01f; bias += 0.1f)
+    //
+    // Swept at two scales, because the two ends of the pyramid are reached differently. The reduction
+    // above lands in the middle of it; a remap at its own size sits at level zero, where the lod goes
+    // negative as soon as the bias does, and clamping the level while taking the blend from the unclamped
+    // lod put the two sides of that boundary at opposite ends of the pyramid. In an image that boundary is
+    // the curve along which the remap stops shrinking and starts enlarging, and the seam lay along it.
+    auto sweep = [](const std::function<Array2Df(float)> &at_bias)
     {
-        const Array2Df cur = remap(bias);
+        Array2Df prev  = at_bias(-1.f);
+        double   worst = 0.0, total = 0.0;
+        int      n = 0;
+        for (float bias = -0.9f; bias <= 1.01f; bias += 0.1f)
+        {
+            const Array2Df cur = at_bias(bias);
 
+            double d = 0.0;
+            for (int i = 0; i < cur.num_elements(); ++i) d += std::abs(double(cur(i)) - double(prev(i)));
+            d /= double(cur.num_elements());
+
+            worst = std::max(worst, d);
+            total += d;
+            ++n;
+            prev = cur;
+        }
+
+        // No step much larger than the steps either side of it.
+        CHECK(worst < 4.0 * (total / double(n)));
+    };
+
+    sweep(remap);
+
+    // The boundary between magnifying and minifying, which the sweep above is too coarse to see: a step
+    // either side of it is a fortieth of a level, and must change the result by far less than moving a
+    // whole level does. Clamping the level while taking the blend from the unclamped lod put those two
+    // steps at opposite ends of the pyramid instead, and in an image that boundary is a curve across it,
+    // so the mismatch lay along the curve as a seam.
+    //
+    // A remap at the source's own size sits exactly on it: one destination pixel covers one source pixel,
+    // so the lod is the bias.
+    auto at_own_size = [&](float bias) {
+        return remapped_envmap(src, int2{256, 256}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 8,
+                               bias);
+    };
+
+    auto mean_difference = [](const Array2Df &a, const Array2Df &b)
+    {
         double d = 0.0;
-        for (int i = 0; i < cur.num_elements(); ++i) d += std::abs(double(cur(i)) - double(prev(i)));
-        d /= double(cur.num_elements());
+        for (int i = 0; i < a.num_elements(); ++i) d += std::abs(double(a(i)) - double(b(i)));
+        return d / double(a.num_elements());
+    };
 
-        worst = std::max(worst, d);
-        total += d;
-        ++n;
-        prev = cur;
-    }
+    const double across = mean_difference(at_own_size(-0.02f), at_own_size(0.02f));
+    const double level  = mean_difference(at_own_size(0.f), at_own_size(1.f));
 
-    // No step across the crossing much larger than the steps either side of it.
-    CHECK(worst < 4.0 * (total / double(n)));
+    REQUIRE(level > 0.0); // the two levels differ at all, or the comparison says nothing
+    CHECK(across < 0.25 * level);
 }

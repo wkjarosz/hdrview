@@ -307,6 +307,34 @@ void TextAligned2(float align_x, float size_x, const char *fmt, ...);
 
 void Tooltip(const char *description, bool questionMark = false, float wrap_width = -1.f);
 
+/*!
+    The right-hand extent of a run of rows, so that something can be hung off all of them at once.
+
+    Fed by calling take() after each item that belongs to a row; it remembers the widest right edge and
+    where the first and last rows sit vertically. See RowBracketButton(), which is what consumes it.
+*/
+struct RowSpan
+{
+    float right = 0.f;             //!< Right edge of the widest row so far
+    float first = 0.f, last = 0.f; //!< Vertical centers of the first and most recent rows
+    int   count = 0;
+
+    //! Take in the item just drawn.
+    void take();
+};
+
+/*!
+    A button at the open end of a bracket joining \p rows, as Photoshop joins a width to a height.
+
+    The bracket says what the button means better than the button can -- these rows are tied, and here is
+    where -- and is drawn only when \p bracketed, since an open chain has nothing to join. Positioned
+    entirely from \p rows, leaving the cursor where it found it, so it can be called after the rows are
+    laid out without disturbing what follows them.
+
+    \returns Whether the button was pressed this frame.
+*/
+bool RowBracketButton(const char *icon, const RowSpan &rows, bool bracketed, const char *tooltip);
+
 // draw a horizontal line under the last item, raised by a factor of the current font size
 // (e.g. raise=0.5 would strikethrough the previous text)
 void UnderLine(ImColor c, float raise = 0.05f);

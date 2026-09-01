@@ -169,10 +169,12 @@ public:
         ImGui::Tooltip("Writes one gray value to all three channels, mixed by the weights below.");
 
         ImGui::BeginDisabled(m_monochrome);
+        ImGui::TextUnformatted("Output channel");
         const char *names[] = {"Red", "Green", "Blue"};
         for (int i = 0; i < 3; ++i)
         {
-            ImGui::SameLine(i == 0 ? 0.f : -1.f);
+            // Only between them: SameLine() before the first would put it back on the line above.
+            ImGui::SameLine();
             ImGui::RadioButton(names[i], &m_output, i);
         }
         ImGui::EndDisabled();

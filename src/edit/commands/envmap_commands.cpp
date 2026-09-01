@@ -19,6 +19,8 @@
 #include "image.h"
 #include "imgui_ext.h"
 
+#include <utility>
+
 namespace
 {
 
@@ -68,10 +70,20 @@ public:
         if (m_size.x <= 0 || m_size.y <= 0)
             m_size = img->size();
 
+        ImGui::RowSpan mappings;
+
         mapping_combo("Source", &m_src_mapping);
+        mappings.take();
 
         const int before_dst = m_dst_mapping;
         mapping_combo("Target", &m_dst_mapping);
+        mappings.take();
+
+        // Between the two it exchanges, bracketed like the chain that ties a width to a height. Turning a
+        // remap around is the common second step -- having converted one way to look at it, the way back
+        // should not mean setting both again.
+        if (ImGui::RowBracketButton(ICON_MY_SWAP, mappings, true, "Exchange source and target."))
+            std::swap(m_src_mapping, m_dst_mapping);
 
         const int2 before = m_size;
         ImGui::DragInt2("Width, height", &m_size.x, 1.f, 1, 65536, "%d px");
@@ -109,12 +121,6 @@ public:
                            "fit. The mip level covers the short axis and the filter walks the long one, so "
                            "this is what keeps a stretched footprint sharp -- and what it costs, since each "
                            "step along that axis is another texel read.");
-
-            ImGui::SliderFloat("Mip bias", &m_mip_bias, -4.f, 4.f, "%+.2f");
-            ImGui::Tooltip("Shifts the mip level away from the one the footprint asks for, in levels. "
-                           "Negative sharpens until it aliases, positive blurs. Mostly a way to see "
-                           "whether the level is doing anything at all: at -4 the result should be "
-                           "visibly aliased and at +4 visibly soft.");
         }
         else
         {
@@ -125,28 +131,28 @@ public:
 
     void apply(EditContext &ctx) override
     {
-        const auto  s = EnvMapping(m_src_mapping), d = EnvMapping(m_dst_mapping);
-        const int2  out_size = m_size;
-        const int   ss       = m_supersample;
-        const auto  mode     = EnvMapSampling(m_sampling);
-        const float bias     = m_mip_bias;
+        const auto s = EnvMapping(m_src_mapping), d = EnvMapping(m_dst_mapping);
+        const int2 out_size = m_size;
+        const int  ss       = m_supersample;
+        const auto mode     = EnvMapSampling(m_sampling);
 
         if (out_size.x <= 0 || out_size.y <= 0)
             return;
 
+        // No bias: the level the footprint asks for is the right one, and the control that shifted it was
+        // there to show that the level was being chosen at all.
         ctx.modify_image_async("Remap envmap", out_size,
-                               [s, d, out_size, ss, mode, bias](const Array2Df &src, AtomicProgress p)
-                               { return remapped_envmap(src, out_size, d, s, mode, ss, bias, p); });
+                               [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
+                               { return remapped_envmap(src, out_size, d, s, mode, ss, 0.f, p); });
     }
 
 private:
-    int   m_src_mapping = EnvMapping_LatLong;
-    int   m_dst_mapping = EnvMapping_Angular;
-    int2  m_size{0, 0};
-    int   m_supersample = 8;
-    float m_mip_bias    = 0.f;
-    int   m_sampling    = EnvMapSampling_EWA;
-    bool  m_auto_aspect = true;
+    int  m_src_mapping = EnvMapping_LatLong;
+    int  m_dst_mapping = EnvMapping_Angular;
+    int2 m_size{0, 0};
+    int  m_supersample = 8;
+    int  m_sampling    = EnvMapSampling_EWA;
+    bool m_auto_aspect = true;
 };
 
 class Irradiance final : public EditCommand

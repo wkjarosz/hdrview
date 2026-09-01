@@ -635,17 +635,15 @@ void HDRViewApp::draw_edit_subject_selector()
 
     ImGui::SeparatorText("Apply to");
 
-    ImGui::BeginDisabled(!matters);
+    // Always settable, even where it changes nothing today: the setting is remembered across images, and
+    // one that greys out on whichever image happens to be open cannot be set for the next one.
     for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
         if (ImGui::RadioButton(edit_scope_name(i), m_edit_subject.scope == i))
             m_edit_subject.scope = EditSubject::Scope(i);
-    ImGui::EndDisabled();
     if (!matters && img)
         ImGui::Tooltip("This image has a single channel group, so both choices cover the same channels.");
 
-    ImGui::BeginDisabled(!m_roi.has_volume());
     ImGui::Checkbox("Selection only", &m_edit_subject.selection_only);
-    ImGui::EndDisabled();
     if (!m_roi.has_volume())
         ImGui::Tooltip("There is no selection, so edits cover the whole image.");
 }

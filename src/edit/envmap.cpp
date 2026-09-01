@@ -549,10 +549,15 @@ float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, floa
 
     // Blended across the two levels either side rather than snapped to one: a snapped level is up to a
     // factor of two too sharp, which aliases in bands wherever the scale crosses a power of two.
-    const float lod   = std::log2(shorter) + mip_bias;
-    const int   lo    = std::clamp(int(std::floor(lod)), 0, int(levels.size()) - 1);
+    // Clamped before the level is taken from it, not after. Clamping the level while taking the fraction
+    // from the unclamped one puts a whole level's worth of blend on a sample that is being magnified: at a
+    // lod of -0.01 the fraction is 0.99, and at +0.01 it is 0.01, so the two sides of the boundary between
+    // magnifying and minifying come out from opposite ends of the pyramid. In a remap that boundary is a
+    // curve across the image, and it showed up as a seam along it.
+    const float lod   = std::clamp(std::log2(shorter) + mip_bias, 0.f, float(levels.size() - 1));
+    const int   lo    = int(std::floor(lod));
     const int   hi    = std::min(lo + 1, int(levels.size()) - 1);
-    const float blend = std::clamp(lod - std::floor(lod), 0.f, 1.f);
+    const float blend = lod - float(lo);
 
     const float low = ewa_level(levels[size_t(lo)], uv, d0, d1);
     return lo == hi || blend <= 0.f ? low : (1.f - blend) * low + blend * ewa_level(levels[size_t(hi)], uv, d0, d1);

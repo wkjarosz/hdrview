@@ -80,61 +80,72 @@ enum SizeUnits : int
 };
 
 /*!
-    Width and height side by side, with the chain link that ties them.
+    Width and height, one to a row, with the chain that ties them drawn between the two.
 
-    \p size is always in pixels; the fields convert. Editing one side with the link closed drives the other
+    \p size is always in pixels; the fields convert. Editing one row with the chain closed drives the other
     from \p original's ratio rather than from the current values, so a run of edits cannot drift away from
     the ratio a rounding at a time.
+
+    The bracket reaching from row to row is Photoshop's, and says what the button means better than the
+    button can: these two are joined, and this is where.
+
+    \p lower is the smallest value a field may take. One, ordinarily -- an image cannot be zero samples
+    across -- but a size given as a change to the current one may be negative, which is how a canvas is
+    trimmed rather than padded.
 */
-void size_fields(int2 *size, int *units, bool *locked, int2 original)
+void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
 {
-    const float field  = 7.f * HelloImGui::EmSize();
+    // One width for every control in the column, so that the label beside each sits at the same place.
+    const float field  = 9.f * HelloImGui::EmSize();
     const int2  before = *size;
 
-    ImGui::SetNextItemWidth(9.f * HelloImGui::EmSize());
+    ImGui::SetNextItemWidth(field);
     ImGui::Combo("Units", units, "Pixels\0Percent\0");
     ImGui::Tooltip("Drag either field to sweep the size; ctrl-click one to type an exact value.");
+
+    // Where the two rows reach, so the bracket can be hung off the wider of them.
+    ImGui::RowSpan rows;
+
+    auto row = [&](const char *label, auto &&draw_field)
+    {
+        ImGui::SetNextItemWidth(field);
+        draw_field();
+        rows.take();
+
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TextUnformatted(label);
+        rows.take();
+    };
 
     if (*units == Units_Percent)
     {
         float2 pct{100.f * float(size->x) / float(std::max(1, original.x)),
                    100.f * float(size->y) / float(std::max(1, original.y))};
 
-        ImGui::SetNextItemWidth(field);
-        ImGui::DragFloat("##width", &pct.x, 0.5f, 1.f, 1000.f, "%.1f %%");
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::TextUnformatted("\xc3\x97"); // multiplication sign, as a size is written
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::SetNextItemWidth(field);
-        ImGui::DragFloat("##height", &pct.y, 0.5f, 1.f, 1000.f, "%.1f %%");
+        const float pct_lower = 100.f * float(lower) / float(std::max(1, std::max(original.x, original.y)));
+        row("Width", [&] { ImGui::DragFloat("##width", &pct.x, 0.5f, pct_lower, 1000.f, "%.1f %%"); });
+        row("Height", [&] { ImGui::DragFloat("##height", &pct.y, 0.5f, pct_lower, 1000.f, "%.1f %%"); });
 
-        size->x = std::max(1, int(std::lround(double(pct.x) * 0.01 * double(original.x))));
-        size->y = std::max(1, int(std::lround(double(pct.y) * 0.01 * double(original.y))));
+        // Bounded by the same floor as the fields themselves, which for a relative size is below zero: a
+        // percentage given as a change trims when it is negative, and clamping it to one instead turned
+        // every trim into a canvas a single sample across.
+        size->x = std::max(lower, int(std::lround(double(pct.x) * 0.01 * double(original.x))));
+        size->y = std::max(lower, int(std::lround(double(pct.y) * 0.01 * double(original.y))));
     }
     else
     {
-        ImGui::SetNextItemWidth(field);
-        ImGui::DragInt("##width", &size->x, 1.f, 1, 65536, "%d px");
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::TextUnformatted("\xc3\x97");
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::SetNextItemWidth(field);
-        ImGui::DragInt("##height", &size->y, 1.f, 1, 65536, "%d px");
+        row("Width", [&] { ImGui::DragInt("##width", &size->x, 1.f, lower, 65536, "%d px"); });
+        row("Height", [&] { ImGui::DragInt("##height", &size->y, 1.f, lower, 65536, "%d px"); });
 
-        *size = la::max(*size, int2{1});
+        *size = la::max(*size, int2{lower});
     }
 
-    // The link sits to the right of the pair it ties together.
-    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    if (ImGui::Button(*locked ? ICON_MY_LINK : ICON_MY_UNLINK))
+    if (ImGui::RowBracketButton(*locked ? ICON_MY_LINK : ICON_MY_UNLINK, rows, *locked,
+                                *locked ? "Width and height are tied to the original aspect ratio. Click to unlink."
+                                        : "Width and height are set independently. Click to link."))
         *locked = !*locked;
-    ImGui::Tooltip(*locked ? "Width and height are tied to the original aspect ratio. Click to unlink."
-                           : "Width and height are set independently. Click to link.");
 
-    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::TextUnformatted("Width, height");
-
-    // Follow whichever side was just edited, from the original ratio rather than the current one.
+    // Follow whichever row was just edited, from the original ratio rather than the current one.
     if (*locked && original.x > 0 && original.y > 0)
     {
         if (size->x != before.x)
@@ -163,8 +174,9 @@ public:
     {
         if (auto img = ctx.image())
             m_size = img->size();
+        m_have_size = true;
     }
-    void on_close(EditContext &) override { m_size = int2{0}; }
+    void on_close(EditContext &) override { m_have_size = false; }
 
     void draw(EditContext &ctx) override
     {
@@ -173,13 +185,16 @@ public:
             return;
 
         const int2 original = img->size();
-        if (m_size.x <= 0 || m_size.y <= 0)
-            m_size = original;
+        if (!m_have_size)
+        {
+            m_size      = original;
+            m_have_size = true;
+        }
 
         ImGui::TextFmt("Current: {} x {} pixels", original.x, original.y);
         ImGui::Separator();
 
-        size_fields(&m_size, &m_units, &m_locked, original);
+        size_fields(&m_size, &m_units, &m_locked, original, 1);
 
         // Which way the resampling will go, since the two directions do different things: shrinking
         // averages over the samples each output covers, growing interpolates between them.
@@ -192,14 +207,15 @@ public:
     void apply(EditContext &ctx) override
     {
         const int2 out = m_size;
-        if (out.x > 0 && out.y > 0)
+        if (m_have_size && out.x > 0 && out.y > 0)
             ctx.modify_structure("Image size", [out](Image &i) { i.resample(out); });
     }
 
 private:
     int2 m_size{0, 0};
-    int  m_units  = Units_Pixels;
-    bool m_locked = true;
+    bool m_have_size = false;
+    int  m_units     = Units_Pixels;
+    bool m_locked    = true;
 };
 
 class CanvasSize final : public EditCommand
@@ -216,12 +232,18 @@ public:
                 false};
     }
 
+    //! Opens describing the canvas as it is: its own size, or -- given relatively -- no change at all.
+    /*!
+        A flag rather than reading zero as "not set yet", which a relative size cannot spare: nothing is
+        exactly what zero means there.
+    */
     void on_open(EditContext &ctx) override
     {
         if (auto img = ctx.image())
-            m_size = img->size();
+            m_size = m_relative ? int2{0} : img->size();
+        m_have_size = true;
     }
-    void on_close(EditContext &) override { m_size = int2{0}; }
+    void on_close(EditContext &) override { m_have_size = false; }
 
     void draw(EditContext &ctx) override
     {
@@ -230,18 +252,28 @@ public:
             return;
 
         const int2 original = img->size();
-        if (m_size.x <= 0 || m_size.y <= 0)
-            m_size = original;
+        if (!m_have_size)
+        {
+            m_size      = m_relative ? int2{0} : original;
+            m_have_size = true;
+        }
 
         ImGui::TextFmt("Current: {} x {} pixels", original.x, original.y);
         ImGui::Separator();
 
-        size_fields(&m_size, &m_units, &m_locked, original);
+        // A relative size counts down as well as up, so it is not bounded below by one the way an
+        // absolute one is.
+        size_fields(&m_size, &m_units, &m_locked, original, m_relative ? -65536 : 1);
 
-        ImGui::Checkbox("Relative", &m_relative);
+        if (ImGui::Checkbox("Relative", &m_relative))
+            // Read the other way rather than reset: the fields described a canvas, and after the switch
+            // they describe the same one. Turning it on subtracts what is already there; turning it off
+            // adds it back.
+            m_size = m_relative ? m_size - original : original + m_size;
         ImGui::Tooltip("Add the amounts above to the current size instead of replacing it. Negative "
                        "values trim.");
 
+        // What it will produce, which a size given as a change does not say by itself.
         if (m_relative)
         {
             const int2 target = la::max(original + m_size, int2{1});
@@ -264,20 +296,21 @@ public:
     void apply(EditContext &ctx) override
     {
         auto img = ctx.image();
-        if (!img || m_size.x <= 0 || m_size.y <= 0)
+        if (!img || !m_have_size)
             return;
 
-        const int2 out = m_relative ? la::max(img->size() + m_size, int2{1}) : m_size;
+        const int2 out = m_relative ? la::max(img->size() + m_size, int2{1}) : la::max(m_size, int2{1});
         const auto a   = m_anchor;
         ctx.modify_structure("Canvas size", [out, a](Image &i) { i.resize_canvas(out, a); });
     }
 
 private:
     int2                m_size{0, 0};
-    int                 m_units    = Units_Pixels;
-    bool                m_locked   = false;
-    bool                m_relative = false;
-    Image::CanvasAnchor m_anchor   = Image::Anchor_MiddleCenter;
+    bool                m_have_size = false;
+    int                 m_units     = Units_Pixels;
+    bool                m_locked    = false;
+    bool                m_relative  = false;
+    Image::CanvasAnchor m_anchor    = Image::Anchor_MiddleCenter;
 };
 
 } // namespace
