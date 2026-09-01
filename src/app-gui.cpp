@@ -377,6 +377,14 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Reload image"));
         MenuItem(action("Reload all images"));
 
+        ImGui::Separator();
+
+        // Named for what it will actually do, since with a selection in force it copies just that. The
+        // "###" fixes the item's id the way Undo's does below, so the label can change without the item
+        // becoming unaddressable.
+        MenuItem(action("Duplicate image"), m_roi.has_volume() ? string{"Duplicate selection###Duplicate image"}
+                                                               : string{"Duplicate image###Duplicate image"});
+
 #if !defined(__EMSCRIPTEN__)
         MenuItem(action("Watch for changes"));
 
@@ -404,6 +412,121 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Quit"));
+
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Edit"))
+    {
+        // Naming the edit each would reverse or reapply saves the user remembering what they last did.
+        // The Action keeps its own name, which is what the registry and the command palette key on.
+        auto       img      = current_image();
+        const bool editable = can_edit(img);
+
+        // "###Undo" fixes the item's ImGui id to the part after it, so the visible half can name the edit
+        // without the id moving with it. An id derived from the whole label would change on every edit,
+        // which loses the item's hover and keyboard-navigation state -- and leaves nothing able to address
+        // it by a stable path.
+        MenuItem(action("Undo"), editable && img->history.has_undo()
+                                     ? fmt::format("Undo {}###Undo", img->history.undo_name())
+                                     : string{"Undo###Undo"});
+        MenuItem(action("Redo"), editable && img->history.has_redo()
+                                     ? fmt::format("Redo {}###Redo", img->history.redo_name())
+                                     : string{"Redo###Redo"});
+
+        ImGui::SeparatorText("Clipboard");
+
+        MenuItem(action("Cut"));
+        MenuItem(action("Copy"));
+        MenuItem(action("Paste"));
+        MenuItem(action("Seamless paste..."));
+
+        ImGui::SeparatorText("Selection");
+
+        MenuItem(action("Select all"));
+        MenuItem(action("Deselect"));
+
+        // How big the image is and which way round, rather than what its samples say. Some of these only
+        // move samples; resizing and halving resample them, but what they are for is still the shape.
+        ImGui::SeparatorText("Size and orientation");
+
+        MenuItem(action("Flip image horizontally"));
+        MenuItem(action("Flip image vertically"));
+        MenuItem(action("Rotate 90 degrees clockwise"));
+        MenuItem(action("Rotate 90 degrees counter-clockwise"));
+        MenuItem(action("Crop to selection"));
+        MenuItem(action("Image size..."));
+        MenuItem(action("Canvas size..."));
+        MenuItem(action("Generate mipmaps..."));
+
+        // A sample at a time, wherever it sits and whatever is beside it.
+        ImGui::SeparatorText("Tone");
+
+        MenuItem(action("Invert"));
+        MenuItem(action("Clamp to [0,1]"));
+        MenuItem(action("Zap gremlins..."));
+        MenuItem(action("Exposure/gamma..."));
+        MenuItem(action("Brightness/contrast..."));
+        MenuItem(action("Fill..."));
+
+        // The edits that need a group's channels together: a color is three numbers and these read all of
+        // them. Grouped for the menu rather than by which file the commands live in -- brightness/contrast
+        // belongs beside exposure above, though it is written with these because it can work on lightness
+        // alone.
+        ImGui::SeparatorText("Color");
+
+        MenuItem(action("Convert color space..."));
+        MenuItem(action("Channel mixer..."));
+        MenuItem(action("Hue/saturation..."));
+        MenuItem(action("Flatten..."));
+
+        // What the image is made of rather than what its samples say: which channels there are, and which
+        // of them are read together as one color.
+        ImGui::SeparatorText("Channels");
+
+        MenuItem(action("Ungroup channels"));
+        MenuItem(action("Regroup channels"));
+        MenuItem(action("Delete channel group"), delete_channels_label(current_image(), target_group()));
+
+        // The edits that read the samples around the one they are writing.
+        ImGui::SeparatorText("Neighborhood filters");
+
+        MenuItem(action("Blur..."));
+        MenuItem(action("Unsharp mask..."));
+        MenuItem(action("Median filter..."));
+        MenuItem(action("Shift..."));
+        MenuItem(action("Bump to normal map..."));
+
+        // The edits that read the image as a parameterization of the sphere.
+        ImGui::SeparatorText("Environment maps");
+
+        MenuItem(action("Remap envmap..."));
+        MenuItem(action("Irradiance envmap..."));
+
+        ImGui::Separator();
+
+        // What the edits above apply to, stated where they are rather than asked for one at a time. On a
+        // single-group image the two scopes name the same channels, so the choice is shown but says so.
+        if (ImGui::BeginMenu("Apply to"))
+        {
+            const bool matters = can_edit(img) && scope_matters(img);
+
+            for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
+                if (ImGui::MenuItem(edit_scope_name(i), nullptr, m_edit_subject.scope == i))
+                    m_edit_subject.scope = EditSubject::Scope(i);
+
+            if (!matters && img)
+                ImGui::Tooltip("This image has a single channel group, so both choices cover the same "
+                               "channels.");
+
+            ImGui::Separator();
+
+            ImGui::MenuItem("Selection only", nullptr, &m_edit_subject.selection_only);
+            if (!m_roi.has_volume())
+                ImGui::Tooltip("There is no selection, so edits cover the whole image.");
+
+            ImGui::EndMenu();
+        }
 
         ImGui::EndMenu();
     }

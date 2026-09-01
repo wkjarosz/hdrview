@@ -81,6 +81,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 {
     setup_window_and_backend(force_sdr);
     setup_hello_imgui_params();
+    m_edit_commands = all_edit_commands();
+
     auto window_setup = setup_dockable_windows();
     setup_platform_backend_callbacks(in_files);
     setup_persistence_callbacks(force_exposure, force_gamma, force_dither, force_apple_keys);
@@ -234,6 +236,10 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
     colorspace_window.imGuiWindowFlags =
         ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar;
 
+    // Hidden by default, like the log: an image with no history has nothing to show, and the Edit menu
+    // already names what undo and redo would do.
+    DockableWindow history_window{"History", "RightSpace", [this] { draw_history_window(); }, false};
+
     DockableWindow log_window{
         "Log", "LogSpace",
         [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
@@ -262,6 +268,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                               file_window,
                                               info_window,
                                               colorspace_window,
+                                              history_window,
                                               log_window
 #if !defined(__EMSCRIPTEN__)
                                               ,
@@ -278,6 +285,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                                    {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
                                                    {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                                    {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
+                                                   {ImGuiKey_F9, ICON_MY_HISTORY},
                                                    {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
 #if !defined(__EMSCRIPTEN__)
                                                    ,
@@ -638,6 +646,7 @@ void HDRViewApp::setup_frame_callbacks()
     m_params.callbacks.ShowGui = [this]()
     {
         drain_main_thread_queue();
+        drain_running_filter();
 
 #if HDRVIEW_ENABLE_IPC
         // See m_ipc_listen_requested: the toggle's Action needs a bool, but the socket is the truth.
@@ -746,6 +755,20 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         make_unique<PopupDialog>("Image loading options...", [](bool &open) { draw_load_image_options_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Replace session?", [this](bool &open) { draw_confirm_load_session_dialog(open); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Discard unsaved changes?",
+                                                 [this](bool &open) { draw_confirm_discard_dialog(open); }));
+    // Every command that has one, so a dialog cannot be forgotten when a command is added, and all of
+    // them wear the same shell, subject selector and footer; see draw_edit_command_dialog().
+    for (auto &cmd : m_edit_commands)
+        if (cmd->has_dialog())
+        {
+            EditCommand *c = cmd.get();
+            m_dialogs.push_back(make_unique<PopupDialog>(c->info().names.front(), [this, c](bool &open)
+                                                         { draw_edit_command_dialog(*c, open); }));
+        }
+
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Applying filter...", [this](bool &open) { draw_filter_progress_dialog(open); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Loading session...", [this](bool &open) { draw_loading_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>(
@@ -920,7 +943,15 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         constexpr bool k_browser_reserved = false;
 #endif
         using ImGui::Action;
-        auto add = [this](const Action &a) { m_actions[a.names[0]] = a; };
+        auto add = [this](const Action &a)
+        {
+            // Actions are keyed by their primary name, so registering one twice replaces the first and
+            // leaves whatever referred to it pointing at the replacement instead -- with nothing to show
+            // for it but the wrong thing happening from a menu.
+            if (m_actions.count(a.names[0]))
+                spdlog::error("Action '{}' is registered more than once; the earlier one is unreachable.", a.names[0]);
+            m_actions[a.names[0]] = a;
+        };
         add(Action{{"Open image..."}, ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
         add(Action{{"Create gradient image..."}, ICON_MY_DITHER, ImGuiKey_None, 0, [this]() {
@@ -983,10 +1014,21 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    always_enabled,
                    false,
                    &dialog("About").open});
-        add(Action{
-            {"Quit"}, ICON_MY_QUIT, k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiKey_Q), 0, [this]() {
-                m_params.appShallExit = true;
-            }});
+        add(Action{{"Quit"},
+                   ICON_MY_QUIT,
+                   k_browser_reserved ? ImGuiKey_None : (ImGuiMod_Ctrl | ImGuiKey_Q),
+                   0,
+                   [this]()
+                   {
+                       if (!any_image_modified())
+                       {
+                           m_params.appShallExit = true;
+                           return;
+                       }
+
+                       m_pending_discard                       = PendingDiscard::Quit;
+                       dialog("Discard unsaved changes?").open = true;
+                   }});
 
         add(Action{{"Command palette..."},
                    ICON_MY_COMMAND_PALETTE,
@@ -1314,6 +1356,12 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]() { reload_image(current_image()); },
                    [this]() { return can_reload(current_image()); }});
+        add(Action{{"Duplicate image", "Make a copy"},
+                   ICON_MY_DUPLICATE,
+                   ImGuiMod_Alt | ImGuiMod_Shift | ImGuiKey_D,
+                   0,
+                   [this]() { duplicate_image(); },
+                   if_img});
         add(Action{{"Reload all images"},
                    ICON_MY_RELOAD,
                    ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R,
@@ -1586,6 +1634,58 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    [this]() { close_all_images(); },
                    if_img});
 
+        //
+        // Editing. Every one of these goes through modify_image(), which is what pairs the change with
+        // the entry that reverses it; see src/app-edit.cpp.
+        //
+        add(Action{{"Undo"},
+                   ICON_MY_UNDO,
+                   ImGuiMod_Ctrl | ImGuiKey_Z,
+                   ImGuiInputFlags_Repeat,
+                   [this]() { undo(); },
+                   [this]()
+                   {
+                       auto img = current_image();
+                       return can_edit(img) && img->history.has_undo();
+                   }});
+        add(Action{{"Redo"},
+                   ICON_MY_REDO,
+                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z,
+                   ImGuiInputFlags_Repeat,
+                   [this]() { redo(); },
+                   [this]()
+                   {
+                       auto img = current_image();
+                       return can_edit(img) && img->history.has_redo();
+                   }});
+
+        // Every edit, from the one list that owns them. What each is called, what it looks like and what
+        // it does are the command's own business; all that is registered here is the way in.
+        for (auto &cmd : m_edit_commands)
+        {
+            EditCommand *c    = cmd.get();
+            const auto   info = c->info();
+            add(Action{info.names, info.icon, info.chord, info.flags, [this, c]() { invoke_edit_command(*c); },
+                       [this, c]() { return edit_command_enabled(*c); }});
+        }
+
+        add(Action{{"Select all", "Select the entire image"},
+                   ICON_MY_SELECT_ALL,
+                   ImGuiMod_Ctrl | ImGuiKey_A,
+                   0,
+                   [this]()
+                   {
+                       if (auto img = current_image())
+                           set_selection(img->data_window);
+                   },
+                   if_img});
+        add(Action{{"Deselect", "Clear the selection"},
+                   ICON_MY_DESELECT,
+                   ImGuiMod_Ctrl | ImGuiKey_D,
+                   0,
+                   [this]() { set_selection(Box2i{}); },
+                   [this]() { return m_roi.has_volume(); }});
+
         add(Action{{"Go to next image"},
                    ICON_MY_BLANK,
                    ImGuiKey_DownArrow,
@@ -1788,7 +1888,11 @@ void HDRViewApp::process_shortcuts()
 
     for (auto &a : m_actions)
         if (a.second.chord)
-            if (a.second.enabled() && !ImGui::GetIO().NavVisible &&
+            // Held off only while something is taking typed characters, so that a letter meant for a text
+            // field is not also read as a shortcut. Deliberately not conditioned on keyboard navigation
+            // being idle, as it once was: arriving from the command palette or a dialog leaves navigation
+            // showing, and every shortcut in the application stopped working from there on.
+            if (a.second.enabled() && !ImGui::GetIO().WantTextInput &&
                 ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {
                 spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.names[0],

@@ -11,6 +11,7 @@
 #include "array2d.h"
 #include "box.h"
 #include "colorspace.h"
+#include "edit/undo.h"
 #include "imageio/exif.h"
 #include "json.h"
 #include "texture.h"
@@ -245,6 +246,19 @@ struct Channel : public Array2Df
     //! Bits per sample of this channel's samples in the file, or 0 when the file stores them as floating
     //! point or their depth is unknown. Sets the histogram's bin count, via bins_for_bit_depth().
     int bits_per_sample = 0;
+
+    //! Keep this channel out of the multi-channel groups its name would otherwise put it in.
+    /*!
+        Channel groups are derived from channel names, so there is no group object to take a channel out
+        of -- the way to say "show me this one on its own" is to say it here and let the next rebuild
+        honor it. build_layers_and_groups() then refuses to match this channel into a group, and it falls
+        through to a group of its own.
+
+        Per channel rather than per group, so marking the alpha of an RGBA image still leaves R, G and B
+        grouped. Deliberately not saved and not carried into a duplicate: it says how to look at the
+        image, not what the image is.
+    */
+    bool ungrouped = false;
 
 private:
     PixelStats::Ptr                    cached_stats;
@@ -482,6 +496,16 @@ public:
     */
     std::vector<VgCommand> vector_overlay;
 
+    //! This image's undo history. Empty for one that has never been edited.
+    /*!
+        Per image rather than per application: each image is its own document, so undoing is always
+        undoing something done to the image being looked at, and closing one takes its history with it.
+
+        Not written to directly -- HDRViewApp::modify_image() is the only thing that adds to it, which is
+        also what keeps every edit paired with an entry that can reverse it.
+    */
+    CommandHistory history;
+
     //! Bumped whenever any of this image's pixels change after loading.
     /*!
         Statistics and histograms are cached against it (see PixelStats::Settings), so anything that writes
@@ -564,6 +588,106 @@ public:
 
     static void set_null_texture(Target_ target = Target_Primary);
     void        set_as_texture(Target_ target = Target_Primary);
+
+    /*!
+        \name Geometric operations
+
+        The edits that change an image's shape, and the reason these are methods here while the rest of
+        them are commands under edit/. Each rewrites the channel list or the two windows, which only this
+        class can do; everything in edit/ writes samples into channels that already exist, reaching them
+        through EditContext, which has no way to restructure anything. So the commands for these are thin:
+        `ctx.modify_structure("Crop to selection", [box](Image &i) { i.crop(box); })`.
+
+        duplicate() is the odd one out below -- it is not an edit at all, but builds a second image.
+    */
+    //! @{
+    /*!
+        Move this image's samples, carrying the data and display windows along with them.
+
+        Each is exact -- every sample survives, none is resampled -- so the pair of them is its own
+        inverse, which is what lets the undo history record one without storing any pixels.
+
+        None of them touches content_version or the statistics cache; the caller that invoked the edit
+        owns that, since it also owns the undo entry. They do mark every channel's texture dirty, because
+        transpose() changes each channel's shape and the texture has to be rebuilt rather than updated in
+        place.
+    */
+    void flip_horizontal();
+    void flip_vertical();
+    void transpose();
+    void rotate_90_cw();
+    void rotate_90_ccw();
+
+    /*!
+        Reduce the image to \p box, in image coordinates, discarding everything outside it.
+
+        Both windows become the box: what is left is the whole image afterwards, not a crop sitting inside
+        the old canvas. Samples are moved, never resampled.
+    */
+    void crop(const Box2i &box);
+
+    /*!
+        Change the canvas to \p size, keeping the samples and placing them per \p anchor.
+
+        Nothing is resampled -- the image keeps its scale and either gains empty margins or loses what
+        falls outside. New samples are zero, which for an image with alpha reads as transparent.
+    */
+    enum CanvasAnchor : int
+    {
+        Anchor_TopLeft = 0,
+        Anchor_TopCenter,
+        Anchor_TopRight,
+        Anchor_MiddleLeft,
+        Anchor_MiddleCenter,
+        Anchor_MiddleRight,
+        Anchor_BottomLeft,
+        Anchor_BottomCenter,
+        Anchor_BottomRight,
+
+        Anchor_COUNT
+    };
+    void resize_canvas(int2 size, CanvasAnchor anchor);
+
+    /*!
+        Rescale the image to \p size, resampling its samples.
+
+        Unlike resize_canvas(), this changes the scale rather than the frame: the same picture, at a
+        different number of samples. Reducing averages over the source samples each destination one covers,
+        so detail is combined rather than dropped -- point-sampling a reduction aliases badly. Enlarging
+        interpolates bilinearly between them.
+    */
+    void resample(int2 size);
+
+    /*!
+        Rebuild the layers, groups, and tree from the channels, and nothing else.
+
+        What a structural edit needs after changing the channel list. Deliberately not finalize(), which
+        would also premultiply a straight-alpha image a second time and re-derive metadata that has not
+        changed.
+    */
+    void rebuild_layers();
+
+    /*!
+        A separate image holding a copy of \p region of this one, or of all of it when \p region is empty.
+
+        Deep: the samples are copied rather than shared, so the two can be edited independently. Everything
+        describing how to read those samples comes with them, since a copy that lost its color space would
+        be a different picture.
+
+        The copy has no history and no texture. It is not live however this image arrived: pixels pushed in
+        by a renderer belong to that process, but a copy of them is an ordinary image and is exactly how
+        one keeps a frame the renderer is about to overwrite.
+    */
+    ImagePtr duplicate(const Box2i &region = Box2i{}) const;
+
+private:
+    //! Move the windows the way the samples just moved, so the two stay in the same frame.
+    void reflect_windows(bool horizontal);
+    void transpose_windows();
+
+public:
+    //! @}
+
     float4      raw_pixel(int2 p, Target_ target = Target_Primary) const;
     float4      rgba_pixel(int2 p, Target_ target = Target_Primary) const;
     void        finalize();

@@ -14,6 +14,7 @@
 
 #include "fwd.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -322,6 +323,87 @@ template <typename T>
 inline T saturate(T a)
 {
     return std::clamp(a, T(0), T(1));
+}
+
+//! Contrast about \p midpoint, as a straight line of the given slope through it.
+/*!
+    The pair a brightness/contrast control produces. Brightness moves the midpoint the line pivots about,
+    by b/2; contrast sets the slope of the mapping at that midpoint, where
+
+         -1 -> all gray/no contrast; horizontal line;
+          0 -> no change; 45 degree diagonal line;
+          1 -> no gray/black & white; vertical line.
+
+    This is the linear remapping, which may produce negative values and values > 1 -- deliberately, so that
+    an HDR sample keeps its relationship to the ones around it rather than being clamped into [0,1].
+*/
+template <typename T>
+inline T brightness_contrast_linear(T v, T slope, T midpoint)
+{
+    return (v - midpoint) * slope + T(0.5);
+}
+
+/*!
+    Evaluates Perlin's gain function.
+
+    As described in:
+    "Hypertexture"
+    Ken Perlin and Eric M. Hoffert: Computer Graphics, v23, n3, p287-296, 1989.
+
+    Properties:
+       gain(0.0, P) = 0.0,
+       gain(0.5, P) = 0.5,
+       gain(1.0, P) = 1.0,
+       gain(t  , 1) = t,
+       gain(gain(t, P), 1/P) = t.
+
+    \tparam T The template parameter (typically float or double)
+    \param  t The percentage value in [0,1]
+    \param  P The shape exponent. In Perlin's original version the exponent P = -log2(a). In this version
+              we pass the exponent directly to avoid the logarithm. P > 1 creates an s-curve, and P < 1 an
+              inverse s-curve. If the input is a linear ramp, the slope of the output at the midpoint 0.5
+              becomes P.
+    \returns  The remapped result in [0,1]
+*/
+template <typename T>
+inline T gain_Perlin(T t, T P)
+{
+    if (t > T(0.5))
+        return T(1) - T(0.5) * std::pow(T(2) - T(2) * t, P);
+    else
+        return T(0.5) * std::pow(T(2) * t, P);
+}
+
+/*!
+    Evaluates Schlick's rational version of Perlin's bias function.
+
+    As described in:
+    "Fast Alternatives to Perlin's Bias and Gain Functions"
+    Christophe Schlick: Graphics Gems IV, p379-382, April 1994.
+
+    \tparam T The template parameter (typically float or double)
+    \param  t The percentage value in [0,1]
+    \param  a The shape parameter in (0,1)
+    \returns  The remapped result
+*/
+template <typename T>
+inline T bias_Schlick(T t, T a)
+{
+    return t / ((((T(1) / a) - T(2)) * (T(1) - t)) + T(1));
+}
+
+//! Contrast about a biased midpoint, as an s-curve that stays within [0,1].
+/*!
+    The other half of a brightness/contrast control. The bias slides the midpoint, and the gain steepens
+    the curve about it, so the result approaches black and white without ever passing them: an alternative
+    to the straight line for a picture that is meant to stay inside the display range.
+
+    Clamped on the way in, since both halves are only defined over [0,1].
+*/
+template <typename T>
+inline T brightness_contrast_nonlinear(T v, T slope, T bias)
+{
+    return gain_Perlin(bias_Schlick(std::clamp(v, T(0), T(1)), bias), slope);
 }
 
 /*!

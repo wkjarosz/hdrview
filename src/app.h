@@ -7,6 +7,11 @@
 #include "box.h"
 #include "colormap.h"
 #include "display_colorspace.h"
+#include "edit/commands.h"
+#include "edit/envmap.h"
+#include "edit/filters.h"
+#include "edit/subject.h"
+#include "edit/undo.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
 #if HDRVIEW_ENABLE_IPC
@@ -26,6 +31,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -87,9 +93,41 @@ public:
     //! Download `url` and load it as an image (Emscripten only). `to_replace` reloads in place, as reload_image() does.
     void load_url(string_view url, bool should_select = true, ImagePtr to_replace = nullptr,
                   const ImageLoadOptions &opts = load_image_options());
+    //! Close an image, first asking about edits that are not in any file.
+    /*!
+        The prompt is answered a frame or more later, so these return having only opened it; the
+        *_immediately() variants below are what actually closes, and are also the path for an image with
+        nothing to lose.
+    */
     void close_image(int index = -1);
     void close_all_images();
+    void close_image_immediately(int index = -1);
+    void close_all_images_immediately();
     void reload_image(ImagePtr image, bool shall_select = false);
+    /*!
+        Put a copy of the current image into the list beside it, and select it.
+
+        Not an undoable edit: the history belongs to an image. Closing the copy is what takes it back.
+
+        With a selection in force it is the selection that is copied.
+    */
+    void duplicate_image();
+
+    //! Run \p action with \p group standing in for the selected one, then put the selection back.
+    /*!
+        What the Images panel's context menu invokes through. Pointing at a group is not selecting it: the
+        viewport goes on showing whatever it was showing, and only the operation is told which group was
+        meant.
+    */
+    void invoke_action_on_group(const std::string &action_name, int group);
+    //! The group an edit acts on: the one being pointed at, or the one on screen.
+    int target_group() const;
+    //! Put \p img into the list just after the current image, named \p partname, and select it.
+    /*!
+        Where duplicate_image() and the commands that derive an image from another one both land. Beside
+        the image it came from rather than at the end of the list, which is where the eye already is.
+    */
+    void add_image_beside_current(ImagePtr img, const std::string &partname);
     //! Whether `image` came from somewhere reload_image() could read it again.
     /*!
         Answers from how the image was loaded, never from the filesystem: this gates a keyboard shortcut, so
@@ -165,6 +203,211 @@ public:
     void draw_ipc_gui();
     //-----------------------------------------------------------------------------
 #endif
+
+    //-----------------------------------------------------------------------------
+    // editing images (see src/app-edit.cpp)
+    //-----------------------------------------------------------------------------
+    /*!
+        Apply one edit to \p img and record how to reverse it. The only thing that writes image pixels.
+
+        Everything an edit has to get right besides the pixels themselves lives here: refusing images
+        that cannot be edited, stopping the statistics tasks that are reading the samples, invalidating
+        the caches keyed on them, and pushing the undo entry. An operation that went around this would
+        leave a histogram describing pixels that are gone and no way back to them, so nothing else may
+        write pixels.
+
+        \param [] img       Image to change
+        \param [] name      Shown beside "Undo"/"Redo", e.g. "Rotate 90 CW"
+        \param [] op        Makes the change
+        \param [] make_undo Builds the entry that reverses it, called *before* `op` so it can capture
+                            whatever `op` is about to overwrite
+        \returns Whether the edit was applied; false when the image refuses edits (see can_edit()).
+    */
+    bool modify_image(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op,
+                      const std::function<UndoPtr(const Image &)> &make_undo);
+
+    /*!
+        A geometric edit, which is reversed by performing its opposite rather than by storing pixels.
+
+        \p forward and \p backward must be exact inverses of each other -- flips and quarter turns are,
+        since every sample survives them.
+    */
+    bool modify_image_reversibly(const ImagePtr &img, const std::string &name,
+                                 const std::function<void(Image &)> &forward,
+                                 const std::function<void(Image &)> &backward);
+
+    /*!
+        Whether \p img accepts edits at all.
+
+        False for an image a renderer is still streaming into: its pixels are owned by the other process,
+        so an edit would be overwritten by the next tile and undoing one would restore samples that have
+        since been replaced.
+    */
+    static bool can_edit(const ConstImagePtr &img);
+
+    /*!
+        The channels \p subject names, and the rectangle of them it covers, in image coordinates.
+
+        The rectangle is the data window, narrowed to the selection when the subject asks for that and
+        there is one. An empty channel list or a rectangle with no volume means there is nothing to edit.
+    */
+    std::pair<std::vector<int>, Box2i> resolve_subject(const ConstImagePtr &img, const EditSubject &subject) const;
+
+    /*!
+        Apply \p op to every sample the subject covers, as one undoable edit.
+
+        \p op is handed a sample, its position in image coordinates, and which of the subject's channels
+        it belongs to -- 0 for the first, so a group's R, G, B, A arrive as 0, 1, 2, 3 -- and returns what
+        to replace it with. That last one is what lets an edit differ per component, as filling with a
+        color does. The samples it writes go to the GPU as the one rectangle they occupy, and the entry that
+        reverses them stores that same rectangle -- so an edit confined to a selection costs the selection,
+        not the image.
+
+        \returns Whether anything was edited; false for an image that refuses edits or a subject that
+                 names nothing.
+    */
+    bool modify_pixels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                       const std::function<float(float, int2, int)> &op);
+
+    /*!
+        Apply \p op to each covered group's channels together, as one undoable edit.
+
+        The difference from modify_pixels(): that one sees a sample at a time and cannot know what the
+        others in its group are, so it can scale a channel but never mix channels into each other. This
+        hands over a group's R, G, B and A as one value, which is what a color-space conversion, a channel
+        mixer, or anything else expressed as a matrix needs.
+
+        Only color groups are covered -- RGB and RGBA. A depth channel or a two-component motion vector is
+        not color, and multiplying it by a color matrix would be meaningless; the subject's other channels
+        are left alone. A group without alpha gets 1 in that slot and whatever \p op returns there is
+        dropped.
+
+        \p op is handed the group's value and its position in image coordinates.
+
+        \p retag, if given, updates the image's color metadata to describe what \p op produced. It is
+        recorded in the same history entry as the pixels, so undoing takes back both: an image whose
+        samples were converted but whose tag still said otherwise would be wrong in a way nothing else
+        would catch.
+
+        \returns Whether anything was edited; false when the subject names no color group.
+    */
+    bool modify_colors(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                       const std::function<float4(const float4 &, int2)> &op,
+                       const std::function<void(Image &)>                &retag = {});
+
+    /*!
+        As modify_colors(), but \p op may also read the samples around the one it is writing.
+
+        It is handed a reader rather than a value: `read(p)` gives the group's components at any position,
+        with \p border_x and \p border_y deciding what lies outside the image. That is what a normal map
+        needs, since a slope is a difference between neighbors.
+
+        The reader sees the image as it was before the edit, so an op cannot read a sample it has already
+        written.
+    */
+    bool modify_neighborhood(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                             const std::function<float4(const std::function<float4(int2)> &, int2)> &op,
+                             int border_x = BorderMode_Edge, int border_y = BorderMode_Edge);
+
+    /*!
+        Apply an edit that changes the image's shape, as one undoable step.
+
+        For crop, canvas resize, and anything else that changes how many samples there are or how many
+        channels hold them. The whole channel list is saved rather than a rectangle of it, since there is
+        no rectangle of the old samples that describes the new ones.
+
+        Rebuilds the layer tree afterwards and refits the view, which a shape change invalidates.
+    */
+    bool modify_structure(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op);
+
+    /*!
+        Apply a neighborhood filter to the subject's channels, as one undoable edit.
+
+        \p filter is handed a whole channel and the rectangle of it to produce, in channel-local
+        coordinates, and returns an array of just that rectangle. The two are separate because a filter
+        reads the samples around each one it writes: those outside a selection are real samples and belong
+        in the answer, so it must see the whole channel -- but it only has to *compute* the rectangle, and
+        only has to read as far past it as its kernel reaches. Filtering the whole channel and keeping the
+        middle would make a small selection cost the whole image.
+    */
+    bool modify_channels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                         const std::function<Array2Df(const Array2Df &, const Box2i &)> &filter);
+
+    /*!
+        As modify_channels(), but computed off the main thread with a progress bar that can cancel it.
+
+        For filters slow enough that running them inline would freeze the window with no way out. The
+        filtering happens on a worker; the image is only touched once every channel is done, back on the
+        main thread and through the same chokepoint, so the edit still lands as one undoable step.
+
+        \p filter is handed the channel, the rectangle of it to produce, and which of the subject's
+        channels it is -- 0 for the first, so a group's R, G, B, A arrive as 0, 1, 2, 3. That last is what
+        lets a filter reach for something else per channel, as pasting one image into another does.
+
+        Returns having only started the work. A canceled filter changes nothing at all -- its partial
+        result is discarded rather than applied, since a half-filtered image is not a state anyone asked
+        for.
+    */
+    /*!
+        Replace the image wholesale with something computed from it, off the main thread.
+
+        For the environment-map operations, which resample every channel into a new size rather than
+        writing back into the one they read -- so there is no rectangle to record and the whole channel
+        list is saved instead.
+
+        \p op returns the new samples for one channel at \p size; every channel is put through it and the
+        results swapped in together, back on the main thread, as one undoable step.
+    */
+    void modify_image_async(const ImagePtr &img, const std::string &name, int2 size,
+                            const std::function<Array2Df(const Array2Df &, AtomicProgress)> &op);
+
+    void modify_channels_async(
+        const ImagePtr &img, const std::string &name, const EditSubject &subject,
+        const std::function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &filter);
+
+    //! Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
+    void draw_filter_progress_dialog(bool &open);
+
+    /*!
+        Run \p cmd, or open its dialog when it has one.
+
+        The single path by which an edit command is invoked, so the menu, the command palette and a
+        keyboard chord cannot reach it by different routes.
+    */
+    void invoke_edit_command(EditCommand &cmd);
+    //! Whether \p cmd could run now: the image accepts edits, and the command itself is satisfied.
+    bool edit_command_enabled(const EditCommand &cmd);
+    //! The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
+    void draw_edit_command_dialog(EditCommand &cmd, bool &open);
+
+    /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
+    void draw_edit_subject_selector();
+
+    // The parameterized point edits. Each applies on confirm rather than as its controls move; see
+    // draw_exposure_gamma_dialog().
+
+    /// The subject the menu's edits use, shown and changed under Edit > Apply to.
+    EditSubject &edit_subject() { return m_edit_subject; }
+
+    /// Whether the two scopes would name different channels for \p img; false for a single-group image.
+    static bool scope_matters(const ConstImagePtr &img);
+
+    /// Whether any open image has edits that are not in its file.
+    bool any_image_modified() const;
+
+    /// Reverse the current image's most recent edit. False if there was nothing to undo.
+    bool undo();
+    /// Reapply the edit undo() last reversed. False if there was nothing to redo.
+    bool redo();
+
+    //! Everything a completed edit invalidates, applied to \p img.
+    /*!
+        The derived data an edit makes stale -- the statistics cache, the GPU textures, and, when the
+        channels themselves changed, the layer and group tree built from them. Kept in one place so an
+        edit and an undo of that same edit cannot invalidate different things.
+    */
+    void after_modify(const ImagePtr &img);
+    //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
     // access to images
@@ -314,10 +557,6 @@ public:
     /// exposure/gamma keyboard shortcuts step past them, so values outside these are reachable and are
     /// kept as given.
     static constexpr float2 EXPOSURE_RANGE{-9.f, 9.f}, OFFSET_RANGE{-1.f, 1.f}, GAMMA_RANGE{0.02f, 9.f};
-
-    /// Smallest gamma that still describes a power curve. It is inverted before use, so zero divides by
-    /// zero and a negative value sends a black pixel to infinity; nothing above this needs a bound.
-    static constexpr float MIN_GAMMA = 1e-4f;
     //-----------------------------------------------------------------------------
 
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;
@@ -359,8 +598,22 @@ public:
     float     &histogram_height() { return m_histogram_height; }
     Box2i     &roi_live() { return m_roi_live; }
     Box2i     &roi() { return m_roi; }
-    bool2     &clip_warnings() { return m_clip_warnings; }
-    float2    &clip_range() { return m_clip_range; }
+    //! The color the viewport draws behind the image, for the edits that composite against it.
+    float4 background_color() const { return m_bg_color; }
+
+    //! What cut or copy last took; null until one of them has run. Paste writes it back.
+    ConstImagePtr clipboard() const { return m_clipboard; }
+    void          set_clipboard(ImagePtr img) { m_clipboard = std::move(img); }
+
+    //! Set the selection, both the committed rectangle and the one drawn over the viewport.
+    /*!
+        The two exist apart only so that a drag can update what is drawn on every frame and commit once on
+        release. Everywhere else they move together: a selection that has been cleared but is still drawn,
+        or drawn but not acted on, is a bug rather than a state worth having.
+    */
+    void    set_selection(const Box2i &box) { m_roi = m_roi_live = box; }
+    bool2  &clip_warnings() { return m_clip_warnings; }
+    float2 &clip_range() { return m_clip_range; }
 
     /// Height of the Pixel statistics histogram plot, in em, when it has never been resized
     static constexpr float default_histogram_height = 9.f;
@@ -408,6 +661,7 @@ private:
 
     void draw_background();
     void draw_statistics_window();
+    void draw_history_window();
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
@@ -481,12 +735,88 @@ private:
     set<fs::path>    m_active_directories; ///< Set of directories containing the currently loaded images
     int              m_current = -1, m_reference = -1;
 
+    //! What a "Discard unsaved changes?" prompt should do once the user says yes.
+    /*!
+        Closing an image or quitting throws away edits that are not in any file, so both ask first. The
+        answer arrives a frame or more later, from the modal, which is why what was being asked about has
+        to be remembered rather than acted on in place.
+    */
+    enum class PendingDiscard
+    {
+        None,
+        CloseImage,
+        CloseAll,
+        Quit
+    };
+    PendingDiscard m_pending_discard     = PendingDiscard::None;
+    int            m_pending_close_index = -1;
+    void           draw_confirm_discard_dialog(bool &open);
+    //! Do the thing the prompt was asking about, now that it has been confirmed.
+    void apply_pending_discard();
+
+    //! A filter running off the main thread, with what is needed to finish or abandon it.
+    /*!
+        Held for as long as the work runs. The worker writes only into `results` and `progress`; the main
+        thread reads `done` once a frame and applies the results, so nothing is shared mutably in both
+        directions.
+    */
+    struct RunningFilter
+    {
+        ImagePtr              image;
+        std::string           name;
+        std::vector<int>      channels;
+        Box2i                 bounds;
+        std::vector<Array2Df> results;
+        AtomicProgress        progress{true};
+        std::atomic<bool>     done{false};
+        std::thread           worker;
+
+        /*!
+            Stop the work and wait for it, rather than leaving it running.
+
+            The worker reads this object and the thread pool for as long as it runs, and both go away with
+            the application -- so a filter still in flight when the window closes would be writing into
+            freed memory. Detaching it and hoping is not enough for a filter that takes seconds, which a
+            Poisson solve does.
+        */
+        ~RunningFilter()
+        {
+            progress.cancel();
+            if (worker.joinable())
+                worker.join();
+        }
+    };
+    //! Set when the running work replaces the image rather than a rectangle of it; see
+    //! modify_image_async(). drain_running_filter() then swaps the channels instead of uploading tiles.
+    bool m_running_filter_resizes = false;
+    int2 m_running_filter_size{0};
+
+    std::unique_ptr<RunningFilter> m_running_filter;
+    //! Applies a finished filter's results, or clears an abandoned one. Called once a frame.
+    void drain_running_filter();
+
+    //! What the menu's edits apply to; see Edit > Apply to.
+    EditSubject m_edit_subject;
+
+    //! What cut or copy last took, and paste writes back. One for the application, as a clipboard is.
+    ImagePtr m_clipboard;
+
+    //! Every edit command, built once at startup; see edit/commands.h.
+    /*!
+        Owns each command's parameters, which is what makes a dialog reopen with the settings it was left
+        with. The actions, the dialogs and the Edit menu all address them through this one list.
+    */
+    vector<EditCommandPtr> m_edit_commands;
+
     BackgroundImageLoader m_image_loader;
 
     //! Work posted from other threads by post_to_main_thread(), drained once per frame.
     std::mutex                         m_main_thread_mutex;
     std::vector<std::function<void()>> m_main_thread_queue;
-    void                               drain_main_thread_queue();
+
+    //! The group a command acts on while one is being pointed at rather than selected; -1 otherwise.
+    int  m_target_group_override = -1;
+    void drain_main_thread_queue();
 
 #if HDRVIEW_ENABLE_IPC
     IpcServer m_ipc_server;

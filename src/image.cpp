@@ -11,8 +11,10 @@
 #include "common.h"
 #include "dithermatrix256.h"
 #include "image.h"
+
 #include "imageio/xmp.h"
 #include "shader.h"
+#include "stb_image_resize2.h"
 #include "timer.h"
 
 #include <numeric>
@@ -938,7 +940,7 @@ void Image::build_layers_and_groups()
     };
 
     // try to find all channels from group g in layer l
-    auto find_group_channels = [](map<string, int> &channels, const string &prefix, const vector<string> &g)
+    auto find_group_channels = [this](map<string, int> &channels, const string &prefix, const vector<string> &g)
     {
         spdlog::trace("Trying to find channels '{}' in {} layer channels", fmt::join(g, ","), channels.size());
         for (auto c : channels) spdlog::trace("\t{}: {}", c.second, c.first);
@@ -948,11 +950,23 @@ void Image::build_layers_and_groups()
         {
             string name = prefix + c;
             auto   it   = channels.find(name);
-            if (it != channels.end())
+
+            // A channel asked to stand alone is simply not available to match, so the pattern comes up
+            // short and every channel it would have taken falls through to a group of its own. Marking
+            // one channel of an RGBA set therefore still leaves the other three as RGB, since that
+            // pattern is tried next and does not want the marked one.
+            if (it != channels.end() && !this->channels[size_t(it->second)].ungrouped)
                 found.push_back(it);
         }
         return found;
     };
+
+    // Everything below appends, so anything left from a previous build would be duplicated rather than
+    // replaced -- the layer tree would gain a second leaf at every node and the channel counts would stop
+    // agreeing with the channels.
+    layers.clear();
+    groups.clear();
+    root = LayerTreeNode{};
 
     spdlog::debug("Processing {} channels", channels.size());
     for (size_t i = 0; i < channels.size(); ++i) spdlog::debug("\t{:>2d}: {}", (int)i, channels[i].name);
@@ -1082,6 +1096,300 @@ void Image::compute_color_transform()
     }
 }
 
+// These move the samples, so the windows have to move with them. Only matters when the display window is
+// something other than the whole frame -- a raw CFA part marks the sensor's active area with it -- but then
+// a flip lands it on the opposite edge from where it belongs.
+void Image::reflect_windows(bool horizontal)
+{
+    const int extent  = horizontal ? data_window.min.x + data_window.max.x : data_window.min.y + data_window.max.y;
+    auto      reflect = [extent, horizontal](Box2i &b)
+    {
+        int      &lo     = horizontal ? b.min.x : b.min.y;
+        int      &hi     = horizontal ? b.max.x : b.max.y;
+        const int new_lo = extent - hi, new_hi = extent - lo;
+        lo = new_lo;
+        hi = new_hi;
+    };
+    reflect(display_window);
+    reflect(data_window);
+}
+
+void Image::transpose_windows()
+{
+    auto swap_axes = [](Box2i &b)
+    {
+        std::swap(b.min.x, b.min.y);
+        std::swap(b.max.x, b.max.y);
+    };
+    swap_axes(display_window);
+    swap_axes(data_window);
+}
+
+void Image::flip_horizontal()
+{
+    for (auto &channel : channels)
+    {
+        int w          = channel.width();
+        int h          = channel.height();
+        int block_size = std::max(1, 1024 * 1024 / w);
+        stp::parallel_for(stp::blocked_range<int>(0, h, block_size),
+                          [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < w / 2; ++x) std::swap(channel(x, y), channel(w - 1 - x, y));
+                          });
+        channel.texture_is_dirty = true;
+    }
+    reflect_windows(true);
+}
+
+void Image::flip_vertical()
+{
+    for (auto &channel : channels)
+    {
+        int w          = channel.width();
+        int h          = channel.height();
+        int block_size = std::max(1, 1024 * 1024 / h);
+        stp::parallel_for(stp::blocked_range<int>(0, w, block_size),
+                          [&](int x0, int x1, int /*unit*/, int /*thread*/)
+                          {
+                              for (int x = x0; x < x1; ++x)
+                                  for (int y = 0; y < h / 2; ++y) std::swap(channel(x, y), channel(x, h - 1 - y));
+                          });
+        channel.texture_is_dirty = true;
+    }
+    reflect_windows(false);
+}
+
+void Image::transpose()
+{
+    for (auto &channel : channels)
+    {
+        Array2Df tmp(channel.height(), channel.width());
+        int      block_size = std::max(1, 1024 * 1024 / channel.width());
+        stp::parallel_for(stp::blocked_range<int>(0, channel.height(), block_size),
+                          [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < channel.width(); ++x) tmp(y, x) = channel(x, y);
+                          });
+        channel.resize(tmp.size());
+        stp::parallel_for(stp::blocked_range<int>(0, tmp.height(), block_size),
+                          [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < tmp.width(); ++x) channel(x, y) = tmp(x, y);
+                          });
+        // The channel changed shape, so its texture has to be rebuilt rather than sub-updated.
+        channel.texture_is_dirty = true;
+    }
+    transpose_windows();
+}
+
+// Composed from a transpose and a flip, matching how the EXIF orientations below are built. Which flip
+// follows the transpose is what distinguishes the two directions.
+void Image::rotate_90_cw()
+{
+    transpose();
+    flip_horizontal();
+}
+
+void Image::rotate_90_ccw()
+{
+    transpose();
+    flip_vertical();
+}
+
+void Image::resample(int2 size)
+{
+    if (size.x <= 0 || size.y <= 0 || size == data_window.size())
+        return;
+
+    const int2 old_size = data_window.size();
+
+    for (auto &channel : channels)
+    {
+        Array2Df out{size};
+
+        // stb's resampler rather than one written here: it chooses a filter
+        // from the scale -- averaging on the way down, interpolating on the way up -- and deals with the
+        // edges, where a hand-rolled box-and-bilinear pair is cruder. One channel at a time, since these
+        // are stored planar rather than interleaved.
+        if (!stbir_resize_float_linear(channel.data(), old_size.x, old_size.y, 0, out.data(), size.x, size.y, 0,
+                                       STBIR_1CHANNEL))
+            throw std::runtime_error{"Failed to resample image."};
+
+        channel.resize(size);
+        std::copy(out.data(), out.data() + out.num_elements(), channel.data());
+        channel.texture_is_dirty = true;
+    }
+
+    data_window    = Box2i{data_window.min, data_window.min + size};
+    display_window = data_window;
+}
+
+void Image::rebuild_layers()
+{
+    build_layers_and_groups();
+
+    // The channel list may have shrunk, so an index that was valid before need not be now.
+    if (!is_valid_group(selected_group))
+        selected_group = groups.empty() ? -1 : 0;
+    if (!is_valid_group(reference_group))
+        reference_group = -1;
+}
+
+ImagePtr Image::duplicate(const Box2i &region) const
+{
+    Box2i clipped = region.has_volume() ? region : data_window;
+    clipped.intersect(data_window);
+    if (!clipped.has_volume())
+        return nullptr;
+
+    auto copy = std::make_shared<Image>();
+
+    // Everything that says what the samples mean. A copy that lost its primaries or its alpha convention
+    // would be read differently from the image it was made of, which is not what "duplicate" means.
+    copy->filename              = filename;
+    copy->partname              = partname;
+    copy->channel_selector      = channel_selector;
+    copy->chromaticities        = chromaticities;
+    copy->adopted_neutral       = adopted_neutral;
+    copy->M_RGB_to_XYZ          = M_RGB_to_XYZ;
+    copy->M_XYZ_to_RGB          = M_XYZ_to_RGB;
+    copy->M_to_sRGB             = M_to_sRGB;
+    copy->luminance_weights     = luminance_weights;
+    copy->adaptation_method     = adaptation_method;
+    copy->color_space           = color_space;
+    copy->white_point           = white_point;
+    copy->alpha_type            = alpha_type;
+    copy->alpha_is_transparency = alpha_is_transparency;
+    copy->metadata              = metadata;
+    copy->exif                  = exif;
+    copy->xmp_data              = xmp_data;
+    copy->icc_data              = icc_data;
+    copy->orientation_applied   = orientation_applied;
+    copy->path                  = path;
+    copy->last_modified         = last_modified;
+    copy->size_bytes            = size_bytes;
+
+    // Deliberately not copied: `id`, which is this image's own and is handed out by the constructor;
+    // `history`, since the copy has had nothing done to it; `is_live`, because these samples are a
+    // snapshot and no process is going to write over them again; and `vector_overlay`, which annotates
+    // what a renderer is producing rather than the picture.
+
+    const int2 extent = clipped.size();
+    const int2 offset = clipped.min - data_window.min;
+
+    copy->channels.reserve(channels.size());
+    for (const auto &channel : channels)
+    {
+        // Channel cannot be copied -- the deleted copy is what stops a texture or a statistics task being
+        // duplicated by accident -- so a fresh one is filled from this one's samples.
+        Channel out{channel.name, extent};
+        out.bits_per_sample = channel.bits_per_sample;
+
+        const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+        stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                          [&](int y0, int y1, int, int)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < extent.x; ++x) out(x, y) = channel(offset.x + x, offset.y + y);
+                          });
+
+        copy->channels.push_back(std::move(out));
+    }
+
+    // A duplicated region is a whole image, not a crop sitting inside the old canvas -- but one of the
+    // whole image keeps the frame it had, display window and all.
+    if (clipped == data_window)
+    {
+        copy->data_window    = data_window;
+        copy->display_window = display_window;
+    }
+    else
+        copy->data_window = copy->display_window = clipped;
+
+    // The layers and groups follow from the channel names, and finalize() would premultiply a
+    // straight-alpha image a second time -- these samples are already whatever this image's are.
+    copy->rebuild_layers();
+
+    return copy;
+}
+
+void Image::crop(const Box2i &box)
+{
+    Box2i clipped = box;
+    clipped.intersect(data_window);
+    const int2 extent = clipped.size();
+    if (extent.x <= 0 || extent.y <= 0)
+        return;
+
+    const int2 offset = clipped.min - data_window.min;
+
+    for (auto &channel : channels)
+    {
+        Array2Df  cropped{extent};
+        const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
+        stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
+                          [&](int y0, int y1, int, int)
+                          {
+                              for (int y = y0; y < y1; ++y)
+                                  for (int x = 0; x < extent.x; ++x)
+                                      cropped(x, y) = channel(offset.x + x, offset.y + y);
+                          });
+
+        channel.resize(extent);
+        std::copy(cropped.data(), cropped.data() + cropped.num_elements(), channel.data());
+        // A different shape, so the texture is rebuilt rather than updated in place.
+        channel.texture_is_dirty = true;
+    }
+
+    // What is left is the whole image now, not a crop sitting inside the old canvas.
+    data_window    = clipped;
+    display_window = clipped;
+}
+
+void Image::resize_canvas(int2 size, CanvasAnchor anchor)
+{
+    if (size.x <= 0 || size.y <= 0 || size == data_window.size())
+        return;
+
+    const int2 old_size = data_window.size();
+
+    // Where the old samples land in the new canvas: the anchor picks which edges absorb the difference,
+    // and a negative offset simply means that edge is being cut rather than padded.
+    const int  col = int(anchor) % 3, row = int(anchor) / 3;
+    const int2 offset{(size.x - old_size.x) * col / 2, (size.y - old_size.y) * row / 2};
+
+    for (auto &channel : channels)
+    {
+        Array2Df resized{size}; // zero-filled: transparent wherever the image has alpha
+
+        // Only the overlap is copied; everything else keeps the fill.
+        const int2 lo{std::max(0, offset.x), std::max(0, offset.y)};
+        const int2 hi{std::min(size.x, offset.x + old_size.x), std::min(size.y, offset.y + old_size.y)};
+        if (hi.x > lo.x && hi.y > lo.y)
+        {
+            const int block_size = std::max(1, 1024 * 1024 / std::max(1, hi.x - lo.x));
+            stp::parallel_for(stp::blocked_range<int>(lo.y, hi.y, block_size),
+                              [&](int y0, int y1, int, int)
+                              {
+                                  for (int y = y0; y < y1; ++y)
+                                      for (int x = lo.x; x < hi.x; ++x)
+                                          resized(x, y) = channel(x - offset.x, y - offset.y);
+                              });
+        }
+
+        channel.resize(size);
+        std::copy(resized.data(), resized.data() + resized.num_elements(), channel.data());
+        channel.texture_is_dirty = true;
+    }
+
+    data_window    = Box2i{data_window.min, data_window.min + size};
+    display_window = data_window;
+}
+
 void Image::apply_exif_orientation()
 {
     // --- EXIF orientation handling ---
@@ -1115,93 +1423,6 @@ void Image::apply_exif_orientation()
     if (orientation != 1)
     {
         spdlog::debug("Applying EXIF orientation: {}", orientation);
-
-        // These move the samples, so the windows have to move with them. Only matters when the display
-        // window is something other than the whole frame -- a raw CFA part marks the sensor's active area
-        // with it -- but then a flip lands it on the opposite edge from where it belongs.
-        auto reflect_windows = [this](bool horizontal)
-        {
-            const int extent =
-                horizontal ? data_window.min.x + data_window.max.x : data_window.min.y + data_window.max.y;
-            auto reflect = [extent, horizontal](Box2i &b)
-            {
-                int      &lo     = horizontal ? b.min.x : b.min.y;
-                int      &hi     = horizontal ? b.max.x : b.max.y;
-                const int new_lo = extent - hi, new_hi = extent - lo;
-                lo = new_lo;
-                hi = new_hi;
-            };
-            reflect(display_window);
-            reflect(data_window);
-        };
-        auto transpose_windows = [this]()
-        {
-            auto swap_axes = [](Box2i &b)
-            {
-                std::swap(b.min.x, b.min.y);
-                std::swap(b.max.x, b.max.y);
-            };
-            swap_axes(display_window);
-            swap_axes(data_window);
-        };
-
-        // Helper lambdas for flipping/rotating
-        auto flip_horizontal = [this, &reflect_windows]()
-        {
-            for (auto &channel : channels)
-            {
-                int w          = channel.width();
-                int h          = channel.height();
-                int block_size = std::max(1, 1024 * 1024 / w);
-                stp::parallel_for(stp::blocked_range<int>(0, h, block_size),
-                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
-                                  {
-                                      for (int y = y0; y < y1; ++y)
-                                          for (int x = 0; x < w / 2; ++x)
-                                              std::swap(channel(x, y), channel(w - 1 - x, y));
-                                  });
-            }
-            reflect_windows(true);
-        };
-        auto flip_vertical = [this, &reflect_windows]()
-        {
-            for (auto &channel : channels)
-            {
-                int w          = channel.width();
-                int h          = channel.height();
-                int block_size = std::max(1, 1024 * 1024 / h);
-                stp::parallel_for(stp::blocked_range<int>(0, w, block_size),
-                                  [&](int x0, int x1, int /*unit*/, int /*thread*/)
-                                  {
-                                      for (int x = x0; x < x1; ++x)
-                                          for (int y = 0; y < h / 2; ++y)
-                                              std::swap(channel(x, y), channel(x, h - 1 - y));
-                                  });
-            }
-            reflect_windows(false);
-        };
-        auto transpose = [this, &transpose_windows]()
-        {
-            for (auto &channel : channels)
-            {
-                Array2Df tmp(channel.height(), channel.width());
-                int      block_size = std::max(1, 1024 * 1024 / channel.width());
-                stp::parallel_for(stp::blocked_range<int>(0, channel.height(), block_size),
-                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
-                                  {
-                                      for (int y = y0; y < y1; ++y)
-                                          for (int x = 0; x < channel.width(); ++x) tmp(y, x) = channel(x, y);
-                                  });
-                channel.resize(tmp.size());
-                stp::parallel_for(stp::blocked_range<int>(0, tmp.height(), block_size),
-                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
-                                  {
-                                      for (int y = y0; y < y1; ++y)
-                                          for (int x = 0; x < tmp.width(); ++x) channel(x, y) = tmp(x, y);
-                                  });
-            }
-            transpose_windows();
-        };
 
         // Apply orientation according to EXIF spec
         // 1 = Horizontal (normal)

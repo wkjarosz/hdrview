@@ -483,6 +483,57 @@ const char *alpha_type_name(AlphaType_ at) { return s_alpha_type_names[at]; }
 
 const char **alpha_type_names() { return s_alpha_type_names; }
 
+namespace
+{
+
+// The CIE's own values for the linear segment near black, exact rather than the rounded 0.008856 and
+// 903.3 that often stand in for them.
+constexpr float k_Lab_eps   = 216.f / 24389.f;
+constexpr float k_Lab_kappa = 24389.f / 27.f;
+
+// The range normalize_Lab() maps onto [0,1]. The opponent axes are given the widest an eight-bit
+// encoding can reach rather than the tighter bounds of the sRGB gamut, so nothing real is ever clipped.
+constexpr float3 k_Lab_min{0.f, -128.f, -128.f};
+constexpr float3 k_Lab_max{100.f, 128.f, 128.f};
+
+//! The cube root with the CIE's linear segment near zero, which keeps the slope finite at black.
+float Lab_f(float t) { return t > k_Lab_eps ? std::cbrt(t) : (k_Lab_kappa * t + 16.f) / 116.f; }
+
+//! Inverse of Lab_f().
+float Lab_f_inv(float t)
+{
+    const float t3 = t * t * t;
+    return t3 > k_Lab_eps ? t3 : (116.f * t - 16.f) / k_Lab_kappa;
+}
+
+} // namespace
+
+float3 XYZ_to_Lab(float3 XYZ, float3 white)
+{
+    const float fx = Lab_f(XYZ.x / white.x);
+    const float fy = Lab_f(XYZ.y / white.y);
+    const float fz = Lab_f(XYZ.z / white.z);
+
+    return float3{116.f * fy - 16.f, 500.f * (fx - fy), 200.f * (fy - fz)};
+}
+
+float3 Lab_to_XYZ(float3 Lab, float3 white)
+{
+    const float fy = (Lab.x + 16.f) / 116.f;
+    const float fx = Lab.y / 500.f + fy;
+    const float fz = fy - Lab.z / 200.f;
+
+    // Y has a closed form of its own rather than going through Lab_f_inv(): the test there is on the
+    // cube, and for Y the threshold is expressed in L directly.
+    const float yr = Lab.x > k_Lab_kappa * k_Lab_eps ? fy * fy * fy : Lab.x / k_Lab_kappa;
+
+    return float3{Lab_f_inv(fx) * white.x, yr * white.y, Lab_f_inv(fz) * white.z};
+}
+
+float3 normalize_Lab(float3 Lab) { return (Lab - k_Lab_min) / (k_Lab_max - k_Lab_min); }
+
+float3 unnormalize_Lab(float3 Lab) { return Lab * (k_Lab_max - k_Lab_min) + k_Lab_min; }
+
 float2 white_point(WhitePoint_ wp)
 {
     if (wp >= WhitePoint_Custom)
@@ -513,6 +564,17 @@ const char *color_gamut_name(const ColorGamut_ primaries)
 }
 
 const char **color_gamut_names() { return s_gamut_names; }
+
+const char *adaptation_method_name(AdaptationMethod method)
+{
+    switch (method)
+    {
+    case AdaptationMethod_XYZScaling: return "XYZ scaling";
+    case AdaptationMethod_Bradford: return "Bradford";
+    case AdaptationMethod_VonKries: return "Von Kries";
+    default: return "None";
+    }
+}
 
 Chromaticities gamut_chromaticities(ColorGamut_ primaries)
 {
@@ -828,6 +890,132 @@ Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
     float3 wpXYZ = rgb_to_XYZ.x + rgb_to_XYZ.y + rgb_to_XYZ.z;
     result.white = wpXYZ.xy() / sum(wpXYZ);
     return result;
+}
+
+float3 RGB_to_HSL(float3 rgb)
+{
+    const float mn = std::min({rgb.x, rgb.y, rgb.z});
+    const float mx = std::max({rgb.x, rgb.y, rgb.z});
+
+    const float sum = mn + mx, diff = mx - mn;
+    const float L = 0.5f * sum;
+
+    if (diff < 1e-6f) // achromatic: there is no hue to name, and no saturation to measure it with
+        return float3{0.f, 0.f, L};
+
+    // Which end of the range the saturation is measured against flips at mid lightness, and a component
+    // outside [0,1] is carried by taking that end directly rather than as a fraction -- which is what lets
+    // a color brighter than white or darker than black survive the round trip.
+    float S;
+    if (L <= 0.5f)
+        S = (mn < 0.f) ? 1.f - mn : diff / sum;
+    else
+        S = (mx > 1.f) ? mx : diff / (2.f - sum);
+
+    // The sextant the largest component names, plus how far around it the other two have moved.
+    float H;
+    if (rgb.x == mx)
+        H = (rgb.y - rgb.z) / diff;
+    else if (rgb.y == mx)
+        H = (rgb.z - rgb.x) / diff + 2.f;
+    else
+        H = (rgb.x - rgb.y) / diff + 4.f;
+
+    H *= 1.f / 6.f;
+    if (H < 0.f || H > 1.f)
+        H -= std::floor(H);
+
+    return float3{H, S, L};
+}
+
+namespace
+{
+
+//! One component back out of the hexcone, given the two extremes it runs between.
+float hue_to_RGB(float x, float y, float hue)
+{
+    if (hue < 0.f || hue > 1.f)
+        hue -= std::floor(hue);
+
+    if (6.f * hue < 1.f)
+        return x + 6.f * (y - x) * hue;
+    if (2.f * hue < 1.f)
+        return y;
+    if (3.f * hue < 2.f)
+        return x + 6.f * (y - x) * (2.f / 3.f - hue);
+    return x;
+}
+
+} // namespace
+
+float3 HSL_to_RGB(float3 hsl)
+{
+    const float H = hsl.x, S = hsl.y, L = hsl.z;
+
+    if (S <= 0.f) // achromatic, and the hue means nothing
+        return float3{L};
+
+    // The extremes the three components run between, undoing the choice RGB_to_HSL() made about which end
+    // the saturation was measured against.
+    const float y = L < 0.5f ? (S > 1.f ? 2.f * L + S - 1.f : L + L * S) : (S > 1.f ? S : L + S - L * S);
+    const float x = 2.f * L - y;
+
+    return float3{hue_to_RGB(x, y, H + 1.f / 3.f), hue_to_RGB(x, y, H), hue_to_RGB(x, y, H - 1.f / 3.f)};
+}
+
+namespace
+{
+
+//! Scale the saturation without naming the hue, which the round trip would lose on an achromatic color.
+float3 adjust_saturation(float3 rgb, float s)
+{
+    const float mn = std::min({rgb.x, rgb.y, rgb.z});
+    const float mx = std::max({rgb.x, rgb.y, rgb.z});
+
+    if (mn == mx) // nothing to scale: gray stays gray at any saturation
+        return rgb;
+
+    const float L = 0.5f * (mn + mx);
+
+    // The same two branches as the conversion above, carried far enough to give the new extremes.
+    float S, y2;
+    if (L <= 0.5f)
+    {
+        S = (mn < 0.f) ? 1.f - mn : (mx - mn) / (mx + mn);
+        S *= s;
+        y2 = S > 1.f ? 2.f * L + S - 1.f : L + L * S;
+    }
+    else
+    {
+        S = (mx > 1.f) ? mx : (mx - mn) / (2.f - (mx + mn));
+        S *= s;
+        y2 = S > 1.f ? S : L + S - L * S;
+    }
+    const float x2 = 2.f * L - y2;
+
+    // The map taking the old extremes to the new ones is affine, so it applies to all three components at
+    // once and each keeps its position between them -- which is what leaves the hue untouched.
+    const float t    = 1.f / (mx - mn);
+    const float fac1 = (y2 - x2) * t;
+    const float fac2 = (mx * x2 - mn * y2) * t;
+
+    return rgb * fac1 + fac2;
+}
+
+} // namespace
+
+float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness)
+{
+    if (hue_turns == 0.f && lightness == 0.f)
+        return adjust_saturation(rgb, saturation);
+
+    float3 hsl = RGB_to_HSL(rgb);
+    hsl.x += hue_turns;
+    hsl.y *= saturation;
+    float3 out = HSL_to_RGB(hsl);
+
+    // Mixed toward black or white rather than changing L, which would desaturate on the way.
+    return lightness < 0.f ? la::lerp(out, float3{0.f}, -lightness) : la::lerp(out, float3{1.f}, lightness);
 }
 
 float3 YC_to_RGB(float3 input, float3 Yw)

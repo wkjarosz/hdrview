@@ -82,10 +82,40 @@ inline int load_and_wait(ImGuiTestContext *ctx, const std::vector<std::string> &
 }
 
 //! Closes everything and waits for the list to empty, so a test starts from a known state.
+/*!
+    Deliberately the unguarded close: close_all_images() asks before discarding edits, and a test that just
+    edited something would sit waiting on a modal that nothing is going to answer. Getting back to an empty
+    list is scaffolding, not a user action.
+*/
 inline void reset_images(ImGuiTestContext *ctx)
 {
-    hdrview()->close_all_images();
+    hdrview()->close_all_images_immediately();
     wait_until(ctx, [] { return hdrview()->num_images() == 0; });
+}
+
+//! Put the view controls back where a person would leave them.
+/*!
+    Several tests set these to values nobody would choose -- an exposure of 1e30 to check that a session
+    file carrying one does not take the app with it, a zoom of a hundredth to check the transform stays
+    invertible. Nothing resets them between tests, so whatever the last one left is what every test after
+    it is drawn through, and a suite that is passing ends up looking like a suite that has broken.
+
+    Only the view: the images are reset_images()'s business, and an edit's own undo is the test's.
+*/
+inline void reset_view_controls(ImGuiTestContext *ctx)
+{
+    hdrview()->exposure() = hdrview()->exposure_live() = 0.f;
+    hdrview()->offset() = hdrview()->offset_live() = 0.f;
+    hdrview()->gamma() = hdrview()->gamma_live() = 1.f;
+
+    hdrview()->set_zoom(1.f);
+    hdrview()->center();
+    // Deliberately the default-constructed box, which is the inverted one with INT_MAX and INT_MIN
+    // corners -- the same thing Deselect passes. Anything that reads a cleared selection has to cope with
+    // it, and clearing to the degenerate box at the origin instead would leave the suite unable to notice
+    // that something did not.
+    hdrview()->set_selection(Box2i{});
+    ctx->Yield();
 }
 
 //! Keeps the frame loop running for `duration`, whatever happens.

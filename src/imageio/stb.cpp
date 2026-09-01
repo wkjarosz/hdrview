@@ -52,6 +52,12 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
+
+// Compiled here beside the other stb implementations, though it is Image::resample() that uses it
+// rather than any loader; it has to land in exactly one translation unit.
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image_resize2.h"
+#undef STB_IMAGE_RESIZE_IMPLEMENTATION
 // #undef STB_IMAGE_WRITE_STATIC
 
 #if defined(__clang__)

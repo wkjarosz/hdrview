@@ -450,6 +450,15 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                     string_view(buffer.data(), buffer.length()) // a buffer describing the data to download
                 );
 #endif
+
+                // The file now holds what the image holds, so its edits are no longer unsaved -- the mark
+                // in the Images panel clears and closing stops asking about them.
+                //
+                // Not for a composite, which is a different image: exposure, tonemapping and the blend are
+                // baked into it, so what was written is a rendition of the view rather than the image, and
+                // reopening it would not give the image back.
+                if (!composite)
+                    current_image()->history.mark_saved();
             }
             catch (const exception &e)
             {
@@ -695,7 +704,54 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     m_image_loader.background_load(image->filename, std::nullopt, should_select, image, opts);
 }
 
-void HDRViewApp::close_image(int index)
+void HDRViewApp::duplicate_image()
+{
+    auto img = current_image();
+    if (!img)
+        return;
+
+    // With a selection, what is duplicated is the selection. The menu says which of the two it is about
+    // to do.
+    auto copy = img->duplicate(m_roi);
+    if (!copy)
+        return;
+
+    // A duplicate is not the file it came from, and neither is a piece of one. Saying so in the part name
+    // keeps the Images panel able to tell them apart while the file name still says where it came from.
+    copy->partname = m_roi.has_volume() ? "selection" : "copy";
+
+    // Nothing on disk holds this, so it counts as unsaved from the start and closing it will say so.
+    copy->history = CommandHistory{true};
+
+    // Deliberately not finalize(): duplicate() has already built the layers, and these samples came from an
+    // image that was finalized once already -- premultiplying a straight-alpha image a second time would
+    // quietly darken the copy.
+
+    add_image_beside_current(copy, copy->partname);
+}
+
+void HDRViewApp::add_image_beside_current(ImagePtr img, const string &partname)
+{
+    if (!img)
+        return;
+
+    img->partname = partname;
+
+    // Nothing on disk holds this, so it counts as unsaved from the start and closing it will say so.
+    img->history = CommandHistory{true};
+
+    const int index = current_image_index();
+    if (is_valid(index))
+        m_images.insert(m_images.begin() + index + 1, img);
+    else
+        m_images.push_back(img);
+
+    set_current_image_index(is_valid(index) ? index + 1 : int(m_images.size()) - 1);
+
+    update_visibility();
+}
+
+void HDRViewApp::close_image_immediately(int index)
 {
     if (!is_valid(index))
         index = current_image_index();
@@ -796,7 +852,7 @@ void HDRViewApp::close_image(int index)
     update_visibility(); // this also calls set_image_textures();
 }
 
-void HDRViewApp::close_all_images()
+void HDRViewApp::close_all_images_immediately()
 {
     m_images.clear();
     m_current   = -1;
@@ -1096,7 +1152,9 @@ bool HDRViewApp::try_load_zip_as_session(string_view zip_bytes, const string &zi
 
 void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
 {
-    close_all_images();
+    // Loading a session was already confirmed, by the prompt that warned it would replace what is
+    // open; asking a second time here would stall a load that is already underway.
+    close_all_images_immediately();
 
     auto resolve = [&dir](const string &rel) -> fs::path
     {
@@ -1144,7 +1202,9 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
 
 void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &zip_name, const json &j)
 {
-    close_all_images();
+    // Loading a session was already confirmed, by the prompt that warned it would replace what is
+    // open; asking a second time here would stall a load that is already underway.
+    close_all_images_immediately();
 
     PendingSession pending;
     pending.blend_mode = id_to_enum(j, "blend_mode", g_blend_mode_ids, BlendMode_Normal);

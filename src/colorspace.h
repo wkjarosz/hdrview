@@ -171,6 +171,13 @@ Chromaticities chromaticities_from_CICP(int cp);
 int         chromaticities_to_CICP(const Chromaticities &chr);
 ColorGamut_ named_color_gamut(const Chromaticities &chr);
 
+//! Smallest gamma that still describes a power curve.
+/*!
+    It is inverted before use, so zero divides by zero and a negative value sends a black pixel to
+    infinity; nothing above this needs a bound.
+*/
+constexpr float MIN_GAMMA = 1e-4f;
+
 struct TransferFunction
 {
     using Type = int;
@@ -215,6 +222,8 @@ enum AdaptationMethod : AdaptationMethod_
     AdaptationMethod_VonKries,     //!< Von Kries CAT
     AdaptationMethod_Count
 };
+
+const char *adaptation_method_name(AdaptationMethod method);
 
 float3x3        RGB_to_XYZ(const Chromaticities &chroma, float Y);
 inline float3x3 XYZ_to_RGB(const Chromaticities &chroma, float Y) { return inverse(RGB_to_XYZ(chroma, Y)); }
@@ -803,6 +812,72 @@ inline Real inverse_EOTF_DCI_P3(Real linear)
 
 float3 YC_to_RGB(float3 input, float3 Yw);
 float3 RGB_to_YC(float3 input, float3 Yw);
+
+//! Hue, saturation and lightness, in the double-hexcone form, extended to values outside [0,1].
+/*!
+    Derived from the sample code in Foley et al., *Computer Graphics: Principles and Practice*, second
+    edition in C, 592-596 -- but a high-dynamic-range image is full of values the textbook version has no
+    answer for. Lightness is the midpoint of the smallest and largest component and is left unclamped;
+    saturation is taken from whichever end has left the unit range, so a color brighter than white or
+    darker than black still round-trips instead of collapsing.
+
+    Hue is a turn in [0,1) rather than degrees, which is what makes shifting it a plain addition.
+    @{
+*/
+float3 RGB_to_HSL(float3 rgb);
+float3 HSL_to_RGB(float3 hsl);
+
+//! Rotate the hue by \p hue_turns, scale the saturation by \p saturation, and mix toward black or white.
+/*!
+    \p lightness runs over [-1,1] and mixes toward black below zero and toward white above it, which is
+    what Photoshop's slider of that name does.
+
+    That is the same thing as moving L with the saturation held, for as long as the color is already on
+    the side it is being pushed toward -- the two agree exactly above mid lightness going up, and below it
+    going down. They part on the way across: a color lightened from below the middle, or darkened from
+    above it, comes out less saturated than moving L would leave it.
+
+    A pure saturation change takes a shortcut that avoids the round trip through hue entirely, since that
+    is by far the most common use and the trip is where an achromatic color loses its hue.
+*/
+float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness);
+//! @}
+
+//! CIE 1976 L*a*b*, the space in which equal steps are meant to look equally different.
+/*!
+    L* is lightness on a scale where 100 is the reference white and 0 is black; a* and b* are the two
+    opponent axes, green-red and blue-yellow, and carry no lightness. That split is why an edit meant to
+    change how light something is, without changing its color, is done here.
+
+    Relative to a reference white, since "as light as white" is the only meaning L* has. D65 unless the
+    image says otherwise.
+    @{
+*/
+
+//! XYZ for a chromaticity, scaled so Y is one: the form the conversions below want a white in.
+inline float3 XYZ_from_xy(float2 xy)
+{
+    return xy.y > 0.f ? float3{xy.x / xy.y, 1.f, (1.f - xy.x - xy.y) / xy.y} : float3{1.f, 1.f, 1.f};
+}
+
+//! The white used when none is given.
+inline float3 Lab_reference_white() { return XYZ_from_xy(white_point(WhitePoint_D65)); }
+
+float3 XYZ_to_Lab(float3 XYZ, float3 white = Lab_reference_white());
+float3 Lab_to_XYZ(float3 Lab, float3 white = Lab_reference_white());
+
+/*!
+    Slide and scale L*a*b* into [0,1]^3, and back.
+
+    L* runs to 100 and the two opponent axes are signed, so a control that expects its input somewhere
+    around [0,1] -- a tone curve, a slider -- reads them wrongly as they stand. The bounds are the widest
+    a* and b* an eight-bit encoding can reach, so real colors stay well inside and an extreme one still
+    survives the trip rather than being clipped.
+*/
+float3 normalize_Lab(float3 Lab);
+//! Inverse of normalize_Lab().
+float3 unnormalize_Lab(float3 Lab);
+//! @}
 Color3 sRGB_to_linear(const Color3 &c);
 Color4 sRGB_to_linear(const Color4 &c);
 Color3 linear_to_sRGB(const Color3 &c);

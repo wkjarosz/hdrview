@@ -271,12 +271,16 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // Gamma keeps only its floor -- it is inverted before use. Exposure and offset are carried back
         // as written, since Ctrl+click entry and the keyboard shortcuts can set values outside the
         // sliders' travel and a session has to round-trip those.
-        IM_CHECK(hdrview()->gamma() >= HDRViewApp::MIN_GAMMA);
+        IM_CHECK(hdrview()->gamma() >= MIN_GAMMA);
         IM_CHECK_EQ(hdrview()->exposure(), 1e30f);
         IM_CHECK_EQ(hdrview()->offset(), -1e30f);
 
         // Let a few frames run so anything reading these (the pixel inspector, the statistics window)
         // actually touches them.
         ctx->Yield(5);
+
+        // The hostile values are what this test is about, but they must not outlive it: the zoom of zero
+        // is clamped to the smallest there is, which leaves every later test looking at a speck.
+        reset_view_controls(ctx);
     };
 }

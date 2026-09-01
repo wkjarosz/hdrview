@@ -89,6 +89,32 @@ and those test files. CI builds+runs the full suite on exactly one `-cpm`/`-univ
 for anything covered by these tests; for everything else (most GUI/interaction code), fall back to a
 manual/CLI smoke check — or, increasingly, the GUI regression tests below.
 
+#### What to test, and where
+
+The goal is the best coverage per second of runtime, not the largest number of tests. Both halves matter:
+the suite is run constantly, and a slow one stops being run.
+
+- **Broaden an existing test before adding a new one.** When a bug turns up, the first question is which
+  existing test *should* have caught it and why it didn't — usually because it was too narrow, or built on
+  an input that agreed with the bug. Fold the case in there. A new `TEST_CASE` per fixed bug produces a
+  suite that is long, slow, and still full of holes.
+- **Test the category, not the instance.** A sweep over every registered command, every mapping, every
+  loader — asserting one property of all of them — is worth more than one test of the case that happened
+  to break, and it covers the ones nobody has broken yet.
+- **State the property, not the observed output.** Pinning what the code currently prints makes a test that
+  fails when the code improves. Prefer invariants: a round trip, a symmetry the input has, agreement with
+  an independent path, a bound that separates right from wrong with room to spare.
+- **Mutation-check every test.** Break the thing it covers and confirm it fails, and look at *how many*
+  assertions fail — one out of forty thousand means the test barely detects it and wants broadening. This
+  has repeatedly caught tests that could never have failed: a symmetric input that agreed with an
+  asymmetric bug, a flat background that made a misplaced paste indistinguishable from a correct one, a
+  progress-bar check that asserted the bug it was written for.
+- **Prefer the cheapest level that can see the failure.** Logic in `hdrview_tests` runs in milliseconds;
+  a GUI test spins a real window and frame loop. Edit commands are written against `EditContext`
+  (`src/edit/command.h`) precisely so their logic can be driven from a test implementation of that
+  interface without a GUI — see `tests/test_edit_commands.cpp`. Reserve `hdrview_gui_tests` for what only
+  the GUI can show: menus and shortcuts, dialog wiring, progress and cancellation, undo through the app.
+
 #### GUI regression tests (Dear ImGui Test Engine)
 `HDRVIEW_BUILD_GUI_TESTS=ON` builds `hdrview_gui_tests`, which drives a real `HDRViewApp` instance (menus,
 dialogs, dockable windows, viewport widgets) via [Dear ImGui Test
@@ -137,6 +163,16 @@ Addressing quirks worth knowing before writing new tests here:
   request order — background loads can complete in either order. Tests that care which loaded image is
   which should look it up by filename after loading, not assume index 0/1 (see
   `find_image_index_containing()` in `tests/gui/test_gui_filtering.cpp`).
+- A test's body runs on the Test Engine's own coroutine thread, and the GL context is current on the main
+  thread only, so **any GL call made directly from a test is a no-op**. Calling `modify_structure()` (or
+  anything else that rebuilds textures) straight from a test therefore builds them with no context:
+  `glGenTextures` quietly yields a handle of 0, the channel is marked clean anyway, and the *next* edit
+  throws `Texture::upload_sub_region(): not implemented for render targets!` — or, more often, nothing
+  visibly fails and the shader merely logs `unbound argument "primary_0_texture..."` for a few frames.
+  Driving the same edit through `MenuClick()` is safe, because the action then runs inside the main
+  thread's frame, which is also how the application reaches it. Prefer the menu for anything that changes
+  an image's shape; calling the chokepoints directly is fine for edits that only write samples into
+  textures that already exist.
 
 Like `hdrview_tests`' EXR/PNG doctests, `tests/gui/test_gui_multipart.cpp` conditionally builds real
 assertions against a vendored multi-part OpenEXR fixture (`HDRVIEW_TEST_OPENEXR_DIR`, only set on

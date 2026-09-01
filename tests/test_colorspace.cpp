@@ -9,6 +9,9 @@
 #include "colorspace.h"
 #include "common.h" // for blend_mode_names()
 
+#include <algorithm>
+#include <cmath>
+
 TEST_CASE("sRGB encode/decode are inverses, including negative (out-of-gamut) values")
 {
     for (float x : {0.0f, 0.001f, 0.0031308f, 0.02f, 0.18f, 0.5f, 0.8f, 1.0f, -0.18f, -0.8f})
@@ -308,4 +311,392 @@ TEST_CASE("blend() keeps fractional results in the difference modes")
     // Also below 1 with the operands the other way round.
     CHECK(blend(0.2f, 0.1f, BlendMode_Difference) == doctest::Approx(0.1f));
     CHECK(blend(0.1f, 0.2f, BlendMode_Difference) == doctest::Approx(0.1f));
+}
+
+namespace
+{
+
+//! Colors spanning what an HSL adjustment has to handle, including the ones outside [0,1] that a textbook
+//! HSL has no answer for.
+const float3 k_hsl_colors[] = {
+    {0.5f, 0.25f, 0.125f}, {1.f, 0.f, 0.f},    {0.f, 1.f, 0.f},       {0.f, 0.f, 1.f}, {0.2f, 0.7f, 0.9f},
+    {0.f, 0.f, 0.f},       {1.f, 1.f, 1.f},    {0.35f, 0.35f, 0.35f}, // achromatic, where hue is undefined
+    {4.f, 1.5f, 0.25f},    {-0.2f, 0.4f, 1.f},                        // beyond white and below black
+};
+
+float hsl_spread(float3 c) { return std::max({c.x, c.y, c.z}) - std::min({c.x, c.y, c.z}); }
+
+} // namespace
+
+TEST_CASE("a color survives the trip through HSL and back")
+{
+    // What makes these usable on an HDR image at all: the textbook version measures saturation as a
+    // fraction of the unit range, which has no meaning for a value brighter than white, and loses it.
+    for (const float3 &rgb : k_hsl_colors)
+    {
+        CAPTURE(rgb.x);
+        CAPTURE(rgb.y);
+        CAPTURE(rgb.z);
+
+        const float3 out = HSL_to_RGB(RGB_to_HSL(rgb));
+
+        CHECK(out.x == doctest::Approx(rgb.x).epsilon(1e-4));
+        CHECK(out.y == doctest::Approx(rgb.y).epsilon(1e-4));
+        CHECK(out.z == doctest::Approx(rgb.z).epsilon(1e-4));
+    }
+}
+
+TEST_CASE("HSL's lightness is the midpoint of the extremes, and gray has no hue")
+{
+    for (const float3 &rgb : k_hsl_colors)
+    {
+        CAPTURE(rgb.x);
+        CAPTURE(rgb.y);
+        CAPTURE(rgb.z);
+
+        const float3 hsl = RGB_to_HSL(rgb);
+        const float  mn = std::min({rgb.x, rgb.y, rgb.z}), mx = std::max({rgb.x, rgb.y, rgb.z});
+
+        CHECK(hsl.z == doctest::Approx(0.5f * (mn + mx)));
+        CHECK(hsl.x >= 0.f);
+        CHECK(hsl.x <= 1.f);
+
+        // The case a hue rotation has to leave alone: there is no hue to rotate.
+        if (mx - mn < 1e-6f)
+            CHECK(hsl.y == doctest::Approx(0.f));
+        else
+            CHECK(hsl.y > 0.f);
+    }
+}
+
+TEST_CASE("an HSL adjustment that asks for nothing changes nothing")
+{
+    // Exact rather than approximate: this is what an opened dialog applies before any slider is touched,
+    // and a whole turn of the hue has to land back where it started for the same reason.
+    for (const float3 &rgb : k_hsl_colors)
+    {
+        CAPTURE(rgb.x);
+        CAPTURE(rgb.y);
+        CAPTURE(rgb.z);
+
+        for (float turns : {0.f, 1.f, -1.f})
+        {
+            CAPTURE(turns);
+            const float3 out = adjust_HSL(rgb, turns, 1.f, 0.f);
+            CHECK(out.x == doctest::Approx(rgb.x).epsilon(1e-3));
+            CHECK(out.y == doctest::Approx(rgb.y).epsilon(1e-3));
+            CHECK(out.z == doctest::Approx(rgb.z).epsilon(1e-3));
+        }
+    }
+}
+
+TEST_CASE("rotating the hue moves it around the wheel and leaves the lightness alone")
+{
+    for (const float3 &rgb : k_hsl_colors)
+    {
+        const float3 hsl = RGB_to_HSL(rgb);
+        if (hsl.y <= 1e-6f)
+            continue; // gray has no hue to rotate
+
+        CAPTURE(rgb.x);
+        CAPTURE(rgb.y);
+        CAPTURE(rgb.z);
+
+        for (float turn : {1.f / 3.f, -0.25f, 0.5f})
+        {
+            CAPTURE(turn);
+            const float3 out = RGB_to_HSL(adjust_HSL(rgb, turn, 1.f, 0.f));
+
+            float moved = out.x - hsl.x - turn;
+            moved -= std::floor(moved + 0.5f); // the shortest way round, so the wrap does not count
+            CHECK(std::abs(moved) < 0.01f);
+
+            // A rotation is a move around the wheel and nothing else.
+            CHECK(out.z == doctest::Approx(hsl.z).epsilon(1e-3));
+        }
+    }
+}
+
+TEST_CASE("saturation spreads the components apart, and zero of it leaves gray")
+{
+    for (const float3 &rgb : k_hsl_colors)
+    {
+        CAPTURE(rgb.x);
+        CAPTURE(rgb.y);
+        CAPTURE(rgb.z);
+
+        const float3 gray = adjust_HSL(rgb, 0.f, 0.f, 0.f);
+        CHECK(gray.y == doctest::Approx(gray.x).epsilon(1e-3));
+        CHECK(gray.z == doctest::Approx(gray.x).epsilon(1e-3));
+
+        // At the lightness it had, which says desaturating did not also darken it.
+        CHECK(gray.x == doctest::Approx(RGB_to_HSL(rgb).z).epsilon(1e-3));
+
+        // A turn of something with no hue is a no-op, whichever path the adjustment takes through it.
+        const float3 turned = adjust_HSL(gray, 0.25f, 1.f, 0.f);
+        CHECK(turned.x == doctest::Approx(gray.x).epsilon(1e-3));
+        CHECK(turned.y == doctest::Approx(gray.y).epsilon(1e-3));
+        CHECK(turned.z == doctest::Approx(gray.z).epsilon(1e-3));
+
+        // Monotonic either side of where it started, which is what a slider needs and what an
+        // implementation that clamps somewhere in the middle would lose.
+        if (RGB_to_HSL(rgb).y > 1e-6f)
+        {
+            CHECK(hsl_spread(adjust_HSL(rgb, 0.f, 0.5f, 0.f)) < hsl_spread(rgb));
+            CHECK(hsl_spread(adjust_HSL(rgb, 0.f, 1.5f, 0.f)) > hsl_spread(rgb));
+        }
+    }
+}
+
+TEST_CASE("the lightness control mixes toward black and white rather than washing the color out")
+{
+    // Photoshop's slider of that name: changing L directly desaturates on the way, so at the ends this has
+    // to land exactly on black and white, and halfway exactly halfway.
+    const float3 rgb{0.5f, 0.25f, 0.125f};
+
+    const float3 black = adjust_HSL(rgb, 0.f, 1.f, -1.f);
+    const float3 white = adjust_HSL(rgb, 0.f, 1.f, 1.f);
+    const float3 half  = adjust_HSL(rgb, 0.f, 1.f, 0.5f);
+
+    for (int i = 0; i < 3; ++i)
+    {
+        CAPTURE(i);
+        CHECK(black[i] == doctest::Approx(0.f).epsilon(1e-4));
+        CHECK(white[i] == doctest::Approx(1.f).epsilon(1e-4));
+        CHECK(half[i] == doctest::Approx(0.5f * (rgb[i] + 1.f)).epsilon(1e-3));
+    }
+}
+
+TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen for")
+{
+    // These are shape functions, and what makes them usable is a handful of exact identities rather than
+    // their formulas -- so those are what is checked.
+    for (float P : {0.25f, 0.5f, 1.f, 2.f, 4.f})
+    {
+        CAPTURE(P);
+
+        // Pinned at both ends and at the middle, whatever the shape.
+        CHECK(gain_Perlin(0.f, P) == doctest::Approx(0.f));
+        CHECK(gain_Perlin(0.5f, P) == doctest::Approx(0.5f));
+        CHECK(gain_Perlin(1.f, P) == doctest::Approx(1.f));
+
+        for (int i = 0; i <= 20; ++i)
+        {
+            const float t = float(i) / 20.f;
+            CAPTURE(t);
+
+            // An exponent of one is the identity, and the inverse exponent undoes it.
+            CHECK(gain_Perlin(t, 1.f) == doctest::Approx(t));
+            CHECK(gain_Perlin(gain_Perlin(t, P), 1.f / P) == doctest::Approx(t).epsilon(1e-4));
+
+            // It never leaves [0,1], which is the whole reason for having it beside the straight line.
+            CHECK(gain_Perlin(t, P) >= -1e-6f);
+            CHECK(gain_Perlin(t, P) <= 1.f + 1e-6f);
+        }
+    }
+
+    for (float a : {0.1f, 0.3f, 0.5f, 0.7f, 0.9f})
+    {
+        CAPTURE(a);
+
+        // Bias is defined by where it sends the midpoint, which is the parameter itself.
+        CHECK(bias_Schlick(0.f, a) == doctest::Approx(0.f));
+        CHECK(bias_Schlick(0.5f, a) == doctest::Approx(a));
+        CHECK(bias_Schlick(1.f, a) == doctest::Approx(1.f));
+
+        // Monotone, so it reorders nothing.
+        float previous = -1.f;
+        for (int i = 0; i <= 20; ++i)
+        {
+            const float t = float(i) / 20.f;
+            CHECK(bias_Schlick(t, a) > previous);
+            previous = bias_Schlick(t, a);
+        }
+    }
+}
+
+TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and steepen together")
+{
+    // What the two controls mean, taken from the sliders rather than from the functions: contrast is an
+    // angle, so that its ends are a flat line and a vertical one, and brightness slides the point the
+    // curve pivots about.
+    auto slope_of    = [](float c) { return float(std::tan(lerp(0.0, M_PI_2, c / 2.0 + 0.5))); };
+    auto midpoint_of = [](float b) { return (1.f - b) / 2.f; };
+    auto bias_of     = [](float b) { return (b + 1.f) / 2.f; };
+
+    CHECK(slope_of(0.f) == doctest::Approx(1.f));  // 45 degrees: no change
+    CHECK(slope_of(-1.f) == doctest::Approx(0.f)); // flat: everything to one level
+    CHECK(slope_of(1.f) > 1e6f);                   // vertical: a hard threshold
+    CHECK(midpoint_of(0.f) == doctest::Approx(0.5f));
+    CHECK(bias_of(0.f) == doctest::Approx(0.5f));
+
+    // Neither curve moves anything when both controls are centered.
+    for (int i = 0; i <= 20; ++i)
+    {
+        const float v = float(i) / 20.f;
+        CAPTURE(v);
+        CHECK(brightness_contrast_linear(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
+        CHECK(brightness_contrast_nonlinear(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
+    }
+
+    // Raising contrast pushes the ends apart about the midpoint, and both curves still meet at it.
+    for (float c : {0.3f, 0.6f})
+    {
+        CAPTURE(c);
+        const float slope = slope_of(c);
+
+        CHECK(brightness_contrast_linear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
+        CHECK(brightness_contrast_nonlinear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
+
+        CHECK(brightness_contrast_linear(0.75f, slope, 0.5f) > 0.75f);
+        CHECK(brightness_contrast_linear(0.25f, slope, 0.5f) < 0.25f);
+        CHECK(brightness_contrast_nonlinear(0.75f, slope, 0.5f) > 0.75f);
+        CHECK(brightness_contrast_nonlinear(0.25f, slope, 0.5f) < 0.25f);
+    }
+
+    // The difference between them: the straight line runs out of [0,1] and is meant to, so that an HDR
+    // sample keeps its relation to its neighbors; the s-curve approaches the ends without reaching them.
+    const float steep = slope_of(0.8f);
+    CHECK(brightness_contrast_linear(1.f, steep, 0.5f) > 1.f);
+    CHECK(brightness_contrast_linear(0.f, steep, 0.5f) < 0.f);
+    for (int i = 0; i <= 20; ++i)
+    {
+        const float v = float(i) / 20.f;
+        CAPTURE(v);
+        CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) >= -1e-6f);
+        CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) <= 1.f + 1e-6f);
+    }
+
+    // Brightness moves which input lands on the middle, in opposite directions for the two curves'
+    // parameters but to the same effect: a positive setting lifts the picture.
+    CHECK(brightness_contrast_linear(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
+    CHECK(brightness_contrast_nonlinear(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
+}
+
+TEST_CASE("L*a*b* agrees with the values the standard defines it by")
+{
+    // Checked against the definition rather than against itself: a round trip would pass just as well
+    // with both halves wrong in the same way.
+    const float3 white = Lab_reference_white();
+
+    // The reference white is the point L* is scaled to, and it is achromatic.
+    const float3 w = XYZ_to_Lab(white, white);
+    CHECK(w.x == doctest::Approx(100.f).epsilon(1e-4));
+    CHECK(w.y == doctest::Approx(0.f).epsilon(1e-4));
+    CHECK(w.z == doctest::Approx(0.f).epsilon(1e-4));
+
+    // Black is the other end, and also achromatic.
+    const float3 k = XYZ_to_Lab(float3{0.f, 0.f, 0.f}, white);
+    CHECK(k.x == doctest::Approx(0.f).epsilon(1e-4));
+    CHECK(k.y == doctest::Approx(0.f).epsilon(1e-4));
+    CHECK(k.z == doctest::Approx(0.f).epsilon(1e-4));
+
+    // Any neutral is achromatic whatever its level, since the three ratios to the white are equal.
+    for (float y : {0.02f, 0.18f, 0.5f, 0.9f})
+    {
+        CAPTURE(y);
+        const float3 gray = XYZ_to_Lab(white * y, white);
+        CHECK(gray.y == doctest::Approx(0.f).epsilon(1e-3));
+        CHECK(gray.z == doctest::Approx(0.f).epsilon(1e-3));
+    }
+
+    // The two published anchors of the lightness curve: mid gray at Y = 0.18 sits near L* = 49.5, and the
+    // linear segment below Y = 216/24389 has slope kappa = 24389/27 in Y.
+    CHECK(XYZ_to_Lab(white * 0.184187f, white).x == doctest::Approx(50.f).epsilon(1e-3));
+
+    const float y_knee = 216.f / 24389.f;
+    CHECK(XYZ_to_Lab(white * y_knee, white).x == doctest::Approx(8.f).epsilon(1e-3));
+    const float y_small = 0.5f * y_knee;
+    CHECK(XYZ_to_Lab(white * y_small, white).x == doctest::Approx((24389.f / 27.f) * y_small).epsilon(1e-3));
+
+    // L* rises with luminance and nothing else does.
+    float previous = -1.f;
+    for (int i = 0; i <= 20; ++i)
+    {
+        const float3 lab = XYZ_to_Lab(white * (float(i) / 20.f), white);
+        CHECK(lab.x > previous);
+        previous = lab.x;
+    }
+
+    // a* is the green-red axis and b* the blue-yellow one: more X than the white asks for reads red, more
+    // Z reads blue.
+    CHECK(XYZ_to_Lab(float3{white.x * 1.2f, white.y, white.z}, white).y > 0.f);
+    CHECK(XYZ_to_Lab(float3{white.x * 0.8f, white.y, white.z}, white).y < 0.f);
+    CHECK(XYZ_to_Lab(float3{white.x, white.y, white.z * 1.2f}, white).z < 0.f);
+    CHECK(XYZ_to_Lab(float3{white.x, white.y, white.z * 0.8f}, white).z > 0.f);
+}
+
+TEST_CASE("A color survives the trip through L*a*b* and back")
+{
+    const float3 white = Lab_reference_white();
+
+    // Across the linear segment near black and the cube root above it, and out past the white, since an
+    // HDR sample is not bounded by it.
+    for (float x : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
+        for (float y : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
+            for (float z : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                CAPTURE(z);
+
+                const float3 xyz{x, y, z};
+                const float3 back = Lab_to_XYZ(XYZ_to_Lab(xyz, white), white);
+
+                CHECK(back.x == doctest::Approx(x).epsilon(1e-3));
+                CHECK(back.y == doctest::Approx(y).epsilon(1e-3));
+                CHECK(back.z == doctest::Approx(z).epsilon(1e-3));
+            }
+
+    // And through the normalized form the editing controls use.
+    for (float L : {0.f, 12.f, 50.f, 88.f, 100.f})
+        for (float a : {-100.f, -20.f, 0.f, 35.f, 120.f})
+        {
+            const float3 lab{L, a, -a};
+            const float3 back = unnormalize_Lab(normalize_Lab(lab));
+
+            CAPTURE(L);
+            CAPTURE(a);
+            CHECK(back.x == doctest::Approx(L).epsilon(1e-4));
+            CHECK(back.y == doctest::Approx(a).epsilon(1e-4));
+            CHECK(back.z == doctest::Approx(-a).epsilon(1e-4));
+        }
+
+    // The normalized form puts black at zero, the white's lightness at one, and neutral chroma in the
+    // middle -- which is what lets a tone curve be applied to it unchanged.
+    const float3 n = normalize_Lab(float3{100.f, 0.f, 0.f});
+    CHECK(n.x == doctest::Approx(1.f).epsilon(1e-4));
+    CHECK(n.y == doctest::Approx(0.5f).epsilon(1e-4));
+    CHECK(n.z == doctest::Approx(0.5f).epsilon(1e-4));
+    CHECK(normalize_Lab(float3{0.f, 0.f, 0.f}).x == doctest::Approx(0.f).epsilon(1e-4));
+}
+
+TEST_CASE("sRGB primaries land where L*a*b* is documented to put them")
+{
+    // The whole path an edit takes -- linear sRGB through XYZ into L*a*b* -- against values published for
+    // the sRGB primaries under D65. These catch a transposed matrix or a swapped axis, which the
+    // achromatic checks above cannot see.
+    const float3 white  = Lab_reference_white();
+    auto         lab_of = [&](float3 rgb) { return XYZ_to_Lab(mul(sRGB_to_XYZ(), rgb), white); };
+
+    const float3 red = lab_of(float3{1.f, 0.f, 0.f});
+    CHECK(red.x == doctest::Approx(53.24f).epsilon(2e-3));
+    CHECK(red.y == doctest::Approx(80.09f).epsilon(2e-3));
+    CHECK(red.z == doctest::Approx(67.20f).epsilon(2e-3));
+
+    const float3 green = lab_of(float3{0.f, 1.f, 0.f});
+    CHECK(green.x == doctest::Approx(87.73f).epsilon(2e-3));
+    CHECK(green.y == doctest::Approx(-86.18f).epsilon(2e-3));
+    CHECK(green.z == doctest::Approx(83.18f).epsilon(2e-3));
+
+    const float3 blue = lab_of(float3{0.f, 0.f, 1.f});
+    CHECK(blue.x == doctest::Approx(32.30f).epsilon(2e-3));
+    CHECK(blue.y == doctest::Approx(79.19f).epsilon(2e-3));
+    CHECK(blue.z == doctest::Approx(-107.86f).epsilon(2e-3));
+
+    // White through the same path, which ties the matrix and the reference white together.
+    const float3 w = lab_of(float3{1.f, 1.f, 1.f});
+    CHECK(w.x == doctest::Approx(100.f).epsilon(1e-3));
+    CHECK(w.y == doctest::Approx(0.f).epsilon(2e-2));
+    CHECK(w.z == doctest::Approx(0.f).epsilon(2e-2));
 }

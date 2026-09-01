@@ -1739,6 +1739,7 @@ set(HDRVIEW_SOURCES
     src/imageio/xmp.cpp
     src/app-colorpass.cpp
     src/app-draw.cpp
+    src/app-edit.cpp
     src/app-file-io.cpp
     src/app-gui.cpp
     src/app-windows.cpp
@@ -1748,6 +1749,19 @@ set(HDRVIEW_SOURCES
     src/colorspace.cpp
     src/common.cpp
     src/display_colorspace.cpp
+    src/edit/commands.cpp
+    src/edit/commands/clipboard.cpp
+    src/edit/commands/channels.cpp
+    src/edit/commands/mipmap.cpp
+    src/edit/commands/color.cpp
+    src/edit/commands/envmap_commands.cpp
+    src/edit/commands/filter.cpp
+    src/edit/commands/tonal.cpp
+    src/edit/commands/transform.cpp
+    src/edit/envmap.cpp
+    src/edit/poisson.cpp
+    src/edit/filters.cpp
+    src/edit/undo.cpp
     src/dithermatrix256.cpp
     src/platform_utils.cpp
     src/fonts.cpp
@@ -1829,7 +1843,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
                                 tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_numeric_edge_cases.cpp tests/test_loader_limits.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
-                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_cicp_video_range.cpp tests/test_orientation_windows.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
+                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_cicp_video_range.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
                                 ${HDRVIEW_IPC_TESTS}
   )
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -2028,7 +2042,7 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_view.cpp
     tests/gui/test_gui_viewport.cpp
     tests/gui/test_gui_display.cpp
-    tests/gui/test_gui_tools.cpp
+    tests/gui/test_gui_tools.cpp tests/gui/test_gui_edit.cpp
     tests/gui/test_gui_stats.cpp
     tests/gui/test_gui_filtering.cpp
     tests/gui/test_gui_navigation.cpp
