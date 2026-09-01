@@ -149,6 +149,13 @@ public:
     void save_session();
     void load_session();
     void load_session(const string &filename);
+    //! The "HDRView session" manifest for the images and view settings as they stand.
+    /*!
+        Shared by save_session() and export_session_bundle(), which differ only in what "path" each image
+        gets -- `path_of` supplies it: a filesystem-relative path for a plain .hsess, an in-bundle
+        location for a zip export.
+    */
+    json build_session_manifest(const std::function<string(ConstImagePtr)> &path_of) const;
     void export_session_bundle();
     // Emscripten's "Load session..." entry point: uploads a .zip and loads it strictly as a session bundle,
     // erroring rather than falling back to plain image loading if it doesn't contain a manifest.
@@ -378,6 +385,14 @@ public:
         keyboard chord cannot reach it by different routes.
     */
     void invoke_edit_command(EditCommand &cmd);
+    //! Run \p cmd once per image it covers, each with its own undo entry.
+    /*!
+        Which is every selected image for an edit that takes a subject, and the current one alone for
+        everything else; see edit_command_images().
+    */
+    void apply_edit_command(EditCommand &cmd);
+    //! The images one invocation of \p cmd covers.
+    std::vector<ImagePtr> edit_command_images(const EditCommand &cmd);
     //! Whether \p cmd could run now: the image accepts edits, and the command itself is satisfied.
     bool edit_command_enabled(const EditCommand &cmd);
     //! The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
@@ -398,9 +413,18 @@ public:
     /// Whether any open image has edits that are not in its file.
     bool any_image_modified() const;
 
-    /// Reverse the current image's most recent edit. False if there was nothing to undo.
+    //! Reverse the most recent edit of every selected image. False if the current image had none.
+    /*!
+        Offered and labeled from the current image alone -- the button says what undoing the image being
+        looked at would do -- but applied across the selection, each image stepping its own history. One
+        that cannot, because a renderer owns it or because it has nothing left to undo, sits it out rather
+        than stopping the rest.
+
+        The result is the current image's, not "any image undid", because that is what
+        draw_history_window()'s walk to a clicked entry terminates on.
+    */
     bool undo();
-    /// Reapply the edit undo() last reversed. False if there was nothing to redo.
+    //! Reapply the edit undo() last reversed, across the selection. False if the current image had none.
     bool redo();
 
     //! Everything a completed edit invalidates, applied to \p img.
@@ -465,6 +489,8 @@ public:
     void select_image_range_to(int index);
     //! Select every target between the current one and (\p index, \p group), inclusive.
     void select_group_range_to(int index, int group);
+    //! Every selected image, in list order; the current one alone when nothing is selected.
+    std::vector<ImagePtr> selected_images();
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -667,12 +693,6 @@ public:
 private:
     void load_fonts();
 
-    // Builds the "HDRView session" manifest for the currently loaded images/view settings, shared by
-    // save_session() and export_session_bundle() -- they differ only in what "path" each image gets, which
-    // `path_of` supplies (a filesystem-relative path for a plain .hsess, an in-bundle location for a zip
-    // export).
-    json build_session_manifest(const std::function<string(ConstImagePtr)> &path_of) const;
-
     // Begins asynchronously loading the images listed in a parsed session file `j` (paths resolved relative to
     // `dir`), populating m_pending_session so the per-frame image-loader drain can apply the rest of the session
     // (current/reference selection, blend mode, view settings) once every image has finished loading.
@@ -823,8 +843,22 @@ private:
     int2 m_running_filter_size{0};
 
     std::unique_ptr<RunningFilter> m_running_filter;
+
+    //! The filters still waiting for the one in flight, one per image a fan-out has yet to reach.
+    /*!
+        Only one filter can run at a time -- there is one progress dialog and one Cancel -- but an edit
+        over a multi-selection arrives as one call per image within a single frame. The rest wait here
+        rather than being dropped, and each is started as the one before it lands.
+    */
+    std::vector<std::function<void()>> m_filter_queue;
+
     //! Applies a finished filter's results, or clears an abandoned one. Called once a frame.
     void drain_running_filter();
+    //! Starts the next queued filter, if a fan-out left any waiting.
+    void start_next_filter();
+
+    //! The shared body of undo() and redo().
+    bool step_selected_histories(bool forward);
 
     //! What the menu's edits apply to; see Edit > Apply to.
     EditSubject m_edit_subject;
@@ -1096,11 +1130,12 @@ private:
     {
         struct Entry
         {
-            fs::path path;
-            string   channel_selector;
-            bool     alpha_is_transparency = true;
-            int      selected_group = 0, reference_group = 0;
-            ImagePtr loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
+            fs::path       path;
+            string         channel_selector;
+            bool           alpha_is_transparency = true;
+            int            selected_group = 0, reference_group = 0;
+            vector<string> selected_channels; ///< The multi-selection, by channel name; see Channel::selected
+            ImagePtr       loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
         };
         vector<Entry> entries; ///< One per saved "images" entry, in file order; the same path may repeat
         int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset

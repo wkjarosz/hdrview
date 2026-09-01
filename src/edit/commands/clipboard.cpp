@@ -46,6 +46,9 @@ public:
         // Reading an image is not editing it, so this is offered for one whose pixels a renderer owns --
         // taking a copy is in fact how a frame of one is kept.
         i.needs_editable = false;
+        // One clipboard, so copying from every selected image at once would just be copying from the last
+        // of them.
+        i.fans_out = false;
         return i;
     }
 
@@ -61,7 +64,13 @@ public:
 class Cut final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Cut", "Cut selection"}, ICON_MY_CUT, ImGuiMod_Ctrl | ImGuiKey_X}; }
+    Info info() const override
+    {
+        Info i{{"Cut", "Cut selection"}, ICON_MY_CUT, ImGuiMod_Ctrl | ImGuiKey_X};
+        // Cutting is a copy as much as it is an edit, and the copy is what cannot fan out; see Copy.
+        i.fans_out = false;
+        return i;
+    }
 
     void apply(EditContext &ctx) override
     {

@@ -69,6 +69,71 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 {
     ImGuiTest *t = nullptr;
 
+    t           = IM_REGISTER_TEST(engine, "edit", "an edit covers every selected image");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        reset_images(ctx);
+        hdrview()->roi()          = Box2i{};
+        hdrview()->edit_subject() = EditSubject{};
+        IM_CHECK_SILENT(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}) == 2);
+
+        // Selected here rather than clicked: the chords that build a selection are navigation's business,
+        // and what this is about is what an edit does once there is one.
+        hdrview()->set_current_image_index(0);
+        hdrview()->toggle_group_selected(1, hdrview()->image(1)->selected_group);
+        IM_CHECK(hdrview()->image(0)->is_selected());
+        IM_CHECK(hdrview()->image(1)->is_selected());
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+
+        // An edit that takes a subject reaches both, each as an entry in its own history.
+        menu_click(ctx, "Edit/Invert");
+        for (int i = 0; i < 2; ++i)
+        {
+            IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+            IM_CHECK_STR_EQ(hdrview()->image(i)->history.undo_name().c_str(), "Invert");
+        }
+
+        // Undo and redo step every selected image, not only the one being looked at.
+        menu_click(ctx, "Edit/Undo");
+        for (int i = 0; i < 2; ++i) IM_CHECK_EQ(hdrview()->image(i)->history.has_undo(), false);
+        menu_click(ctx, "Edit/Redo");
+        for (int i = 0; i < 2; ++i) IM_CHECK_EQ(hdrview()->image(i)->history.has_undo(), true);
+
+        // An edit that covers the image entire has no subject to narrow, so there is nothing in it that
+        // names one selected image over another: it stays with the one being looked at.
+        menu_click(ctx, "Edit/Flip image horizontally");
+        IM_CHECK_EQ((int)hdrview()->image(0)->history.size(), 2);
+        IM_CHECK_EQ((int)hdrview()->image(1)->history.size(), 1);
+
+        // And copying reads one image however many are selected -- there is one clipboard.
+        menu_click(ctx, "Edit/Copy");
+        IM_CHECK(hdrview()->clipboard() != nullptr);
+        IM_CHECK_EQ(hdrview()->clipboard()->size().x, hdrview()->image(0)->size().x);
+        IM_CHECK_EQ(hdrview()->clipboard()->size().y, hdrview()->image(0)->size().y);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a filter over a selection reaches every image in turn");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        reset_images(ctx);
+        hdrview()->roi()          = Box2i{};
+        hdrview()->edit_subject() = EditSubject{};
+        IM_CHECK_SILENT(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}) == 2);
+
+        hdrview()->set_current_image_index(0);
+        hdrview()->toggle_group_selected(1, hdrview()->image(1)->selected_group);
+
+        // Only one filter runs at a time -- there is one progress bar and one Cancel -- so the second
+        // image's blur waits for the first and is started as it lands, rather than being dropped.
+        menu_click(ctx, "Edit/Blur...");
+        ctx->SetRef("Blur...");
+        ctx->KeyPress(ImGuiKey_Enter);
+        wait_until(ctx,
+                   [] { return hdrview()->image(0)->history.has_undo() && hdrview()->image(1)->history.has_undo(); });
+
+        for (int i = 0; i < 2; ++i) IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "flip from the menu changes the pixels");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

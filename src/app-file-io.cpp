@@ -854,6 +854,9 @@ void HDRViewApp::close_image_immediately(int index)
 
 void HDRViewApp::close_all_images_immediately()
 {
+    // Nothing left for a queued filter to be applied to.
+    m_filter_queue.clear();
+
     m_images.clear();
     m_current   = -1;
     m_reference = -1;
@@ -889,6 +892,16 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
         entry["alpha_is_transparency"] = img->alpha_is_transparency;
         entry["selected_group"]        = img->selected_group;
         entry["reference_group"]       = img->reference_group;
+
+        // The multi-selection, by channel name rather than by group index: a group index means whatever
+        // the rebuild after loading makes it mean, while the names are what the grouping is derived from
+        // and what the panel addresses.
+        json selected_channels = json::array();
+        for (const auto &c : img->channels)
+            if (c.selected)
+                selected_channels.push_back(c.name);
+        entry["selected_channels"] = selected_channels;
+
         images.push_back(entry);
     }
     j["images"] = images;
@@ -1181,6 +1194,7 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
         e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
         e.selected_group        = entry.value<int>("selected_group", 0);
         e.reference_group       = entry.value<int>("reference_group", 0);
+        e.selected_channels     = entry.value<vector<string>>("selected_channels", {});
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
@@ -1225,6 +1239,7 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
         e.selected_group        = entry.value<int>("selected_group", 0);
         e.reference_group       = entry.value<int>("reference_group", 0);
+        e.selected_channels     = entry.value<vector<string>>("selected_channels", {});
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
@@ -1273,6 +1288,13 @@ void HDRViewApp::finish_pending_session()
             // meaningful "no reference group" state that update_visibility() assigns.
             e.loaded->selected_group  = clamp(e.selected_group, 0, std::max(0, (int)e.loaded->groups.size() - 1));
             e.loaded->reference_group = e.reference_group;
+
+            // A name the image no longer has simply selects nothing. A session written before this was
+            // saved leaves every channel unselected, and update_visibility() below then collapses the
+            // selection onto the group each image is showing, which is where a fresh load starts anyway.
+            for (auto &c : e.loaded->channels)
+                c.selected = std::find(e.selected_channels.begin(), e.selected_channels.end(), c.name) !=
+                             e.selected_channels.end();
         }
 
     // Rebuild m_images in the saved order: images arrive in whatever order their independent background

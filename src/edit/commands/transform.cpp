@@ -33,6 +33,9 @@ public:
     Geometric(Info info, std::function<void(Image &)> forward, std::function<void(Image &)> backward) :
         m_info(std::move(info)), m_forward(std::move(forward)), m_backward(std::move(backward))
     {
+        // A flip or a quarter turn moves every sample of every channel by definition, so there is no
+        // subject for it to carry and nothing for a scope to narrow.
+        m_info.has_subject = false;
     }
 
     Info info() const override { return m_info; }
@@ -47,7 +50,14 @@ private:
 class Crop final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C}; }
+    Info info() const override
+    {
+        Info i{{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C};
+        // Reshapes the image rather than writing into it, as the other two size commands do, so the
+        // subject has nothing to say about it.
+        i.has_subject = false;
+        return i;
+    }
 
     //! Only when there is something to crop to, and it is not already the whole image.
     bool enabled(const EditContext &ctx) const override

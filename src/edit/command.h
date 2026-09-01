@@ -135,9 +135,22 @@ public:
             contents; see HDRViewApp::draw_edit_command_dialog().
         */
         float width_em = 24.f;
-        //! Whether the dialog carries the "Apply to" controls. False for the edits that cover the whole
-        //! image whatever the subject says -- a crop, a resize.
+        //! Whether the edit is narrowed by the subject at all.
+        /*!
+            False for the ones that cover the whole image whatever the subject says -- a crop, a resize, a
+            quarter turn -- which is both why their dialogs do not carry the "Apply to" controls and why
+            they stay with the image being looked at: an edit that says which of an image's samples it
+            covers has nothing in it that names one image over another, and so runs once per selected
+            image, but one that covers the image entire does not.
+        */
         bool has_subject = true;
+
+        //! Whether this may run over the whole selection, for a command that does take a subject.
+        /*!
+            False for the ones whose result lives outside the image: the clipboard has one slot, so
+            copying from several images at once has no meaning. Ignored when has_subject is false.
+        */
+        bool fans_out = true;
 
         //! Whether the image has to accept edits for this to be offered. False for the one command that
         //! only reads: copying is not editing, and is worth having on an image a renderer owns.

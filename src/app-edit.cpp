@@ -38,54 +38,63 @@ struct AppEditContext final : EditContext
 {
     HDRViewApp *app;
 
-    explicit AppEditContext(HDRViewApp *a) : app(a) {}
+    //! The image this run of the command is against, which is the current one unless it is fanning out
+    //! over the selection; see HDRViewApp::apply_edit_command().
+    ImagePtr img;
 
-    ImagePtr           image() const override { return app->current_image(); }
+    explicit AppEditContext(HDRViewApp *a) : app(a), img(a->current_image()) {}
+    AppEditContext(HDRViewApp *a, ImagePtr i) : app(a), img(std::move(i)) {}
+
+    ImagePtr           image() const override { return img; }
     const EditSubject &subject() const override { return app->edit_subject(); }
-    int                target_group() const override { return app->target_group(); }
-    std::vector<int>   target_groups() const override { return app->target_groups(); }
-    Box2i              selection() const override { return app->roi(); }
-    void               set_selection(const Box2i &box) override { app->set_selection(box); }
-    float4             background_color() const override { return app->background_color(); }
-    ConstImagePtr      clipboard() const override { return app->clipboard(); }
-    void               set_clipboard(ImagePtr img) override { app->set_clipboard(std::move(img)); }
+
+    // Both name groups of the *current* image. Only the commands that take no subject ask -- ungrouping,
+    // regrouping, deleting a group -- and those never fan out, so `img` is the current image whenever
+    // these are read.
+    int              target_group() const override { return app->target_group(); }
+    std::vector<int> target_groups() const override { return app->target_groups(); }
+    Box2i            selection() const override { return app->roi(); }
+    void             set_selection(const Box2i &box) override { app->set_selection(box); }
+    float4           background_color() const override { return app->background_color(); }
+    ConstImagePtr    clipboard() const override { return app->clipboard(); }
+    void             set_clipboard(ImagePtr img) override { app->set_clipboard(std::move(img)); }
 
     bool modify_pixels(const string &name, const function<float(float, int2, int)> &op) override
     {
-        return app->modify_pixels(app->current_image(), name, app->edit_subject(), op);
+        return app->modify_pixels(img, name, app->edit_subject(), op);
     }
     bool modify_colors(const string &name, const function<float4(const float4 &, int2)> &op,
                        const function<void(Image &)> &retag) override
     {
-        return app->modify_colors(app->current_image(), name, app->edit_subject(), op, retag);
+        return app->modify_colors(img, name, app->edit_subject(), op, retag);
     }
     bool modify_neighborhood(const string &name, const function<float4(const function<float4(int2)> &, int2)> &op,
                              int border_x, int border_y) override
     {
-        return app->modify_neighborhood(app->current_image(), name, app->edit_subject(), op, border_x, border_y);
+        return app->modify_neighborhood(img, name, app->edit_subject(), op, border_x, border_y);
     }
     bool modify_channels(const string &name, const function<Array2Df(const Array2Df &, const Box2i &)> &filter) override
     {
-        return app->modify_channels(app->current_image(), name, app->edit_subject(), filter);
+        return app->modify_channels(img, name, app->edit_subject(), filter);
     }
     void modify_channels_async(
         const string &name, const function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &f) override
     {
-        app->modify_channels_async(app->current_image(), name, app->edit_subject(), f);
+        app->modify_channels_async(img, name, app->edit_subject(), f);
     }
     void modify_image_async(const string &name, int2 size,
                             const function<Array2Df(const Array2Df &, AtomicProgress)> &op) override
     {
-        app->modify_image_async(app->current_image(), name, size, op);
+        app->modify_image_async(img, name, size, op);
     }
     bool modify_structure(const string &name, const function<void(Image &)> &op) override
     {
-        return app->modify_structure(app->current_image(), name, op);
+        return app->modify_structure(img, name, op);
     }
     bool modify_reversibly(const string &name, const function<void(Image &)> &forward,
                            const function<void(Image &)> &backward) override
     {
-        return app->modify_image_reversibly(app->current_image(), name, forward, backward);
+        return app->modify_image_reversibly(img, name, forward, backward);
     }
 
     void add_image(ImagePtr img, const std::string &partname) override { app->add_image_beside_current(img, partname); }
@@ -132,6 +141,33 @@ void HDRViewApp::invoke_action_on_group(const string &action_name, int group)
     m_target_group_override = previous;
 }
 
+std::vector<ImagePtr> HDRViewApp::edit_command_images(const EditCommand &cmd)
+{
+    auto current = current_image();
+    if (!current)
+        return {};
+
+    // An edit with no subject covers the image entire, and one that reads or writes the clipboard has a
+    // single result -- neither has anything in it that names one selected image over another. Pointing at
+    // a group from the Images panel likewise names one group of one image, whatever else is selected.
+    if (!cmd.info().has_subject || !cmd.info().fans_out || m_target_group_override >= 0)
+        return {current};
+
+    return selected_images();
+}
+
+void HDRViewApp::apply_edit_command(EditCommand &cmd)
+{
+    // One context per image, and one call of apply() per image, so each lands as its own undo entry --
+    // there is no cross-image entry to reverse, and an image that refuses the edit does not take the
+    // others down with it.
+    for (const auto &img : edit_command_images(cmd))
+    {
+        AppEditContext ctx{this, img};
+        cmd.apply(ctx);
+    }
+}
+
 void HDRViewApp::invoke_edit_command(EditCommand &cmd)
 {
     if (cmd.has_dialog())
@@ -140,8 +176,7 @@ void HDRViewApp::invoke_edit_command(EditCommand &cmd)
         return;
     }
 
-    AppEditContext ctx{this};
-    cmd.apply(ctx);
+    apply_edit_command(cmd);
 }
 
 bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
@@ -179,7 +214,9 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
         const auto result = ImGui::DialogButtons(info.confirm.c_str());
         if (result == ImGui::DialogResult::Confirm)
         {
-            cmd.apply(ctx);
+            // The dialog itself is drawn against the current image -- its defaults, its size, its
+            // preview -- but confirming applies across the selection.
+            apply_edit_command(cmd);
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
@@ -510,35 +547,38 @@ bool HDRViewApp::modify_structure(const ImagePtr &img, const string &name, const
     return true;
 }
 
-bool HDRViewApp::undo()
+bool HDRViewApp::step_selected_histories(bool forward)
 {
-    auto img = current_image();
-    if (!can_edit(img) || !img->history.has_undo())
-        return false;
+    // One image's own history, stepped one entry. False when it had nothing to step.
+    auto step = [this, forward](const ImagePtr &img)
+    {
+        if (!can_edit(img) || (forward ? !img->history.has_redo() : !img->history.has_undo()))
+            return false;
 
-    for (auto &c : img->channels) c.cancel_stats();
+        for (auto &c : img->channels) c.cancel_stats();
 
-    if (!img->history.undo(*img))
-        return false;
+        if (!(forward ? img->history.redo(*img) : img->history.undo(*img)))
+            return false;
 
-    after_modify(img);
-    return true;
+        after_modify(img);
+        return true;
+    };
+
+    // Every selected image steps, but the answer is the current image's; see undo().
+    auto current = current_image();
+    bool stepped = false;
+    for (const auto &img : selected_images())
+    {
+        const bool ok = step(img);
+        if (img == current)
+            stepped = ok;
+    }
+    return stepped;
 }
 
-bool HDRViewApp::redo()
-{
-    auto img = current_image();
-    if (!can_edit(img) || !img->history.has_redo())
-        return false;
+bool HDRViewApp::undo() { return step_selected_histories(false); }
 
-    for (auto &c : img->channels) c.cancel_stats();
-
-    if (!img->history.redo(*img))
-        return false;
-
-    after_modify(img);
-    return true;
-}
+bool HDRViewApp::redo() { return step_selected_histories(true); }
 
 void HDRViewApp::close_image(int index)
 {
@@ -703,8 +743,15 @@ void HDRViewApp::modify_channels_async(
     const ImagePtr &img, const string &name, const EditSubject &subject,
     const function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &filter)
 {
-    if (!can_edit(img) || m_running_filter)
+    if (!can_edit(img))
         return;
+
+    if (m_running_filter)
+    {
+        m_filter_queue.push_back([this, img, name, subject, filter]
+                                 { modify_channels_async(img, name, subject, filter); });
+        return;
+    }
 
     auto [channels, bounds] = resolve_subject(img, subject);
     if (channels.empty() || !bounds.has_volume())
@@ -775,8 +822,14 @@ void HDRViewApp::modify_channels_async(
 void HDRViewApp::modify_image_async(const ImagePtr &img, const string &name, int2 size,
                                     const function<Array2Df(const Array2Df &, AtomicProgress)> &op)
 {
-    if (!can_edit(img) || m_running_filter || size.x <= 0 || size.y <= 0)
+    if (!can_edit(img) || size.x <= 0 || size.y <= 0)
         return;
+
+    if (m_running_filter)
+    {
+        m_filter_queue.push_back([this, img, name, size, op] { modify_image_async(img, name, size, op); });
+        return;
+    }
 
     auto running    = std::make_unique<RunningFilter>();
     running->image  = img;
@@ -832,6 +885,8 @@ void HDRViewApp::drain_running_filter()
     {
         spdlog::debug("Filter '{}' was canceled.", running->name);
         m_running_filter_resizes = false;
+        // Cancel means the whole run, not just the image it happened to have reached.
+        m_filter_queue.clear();
         return;
     }
 
@@ -856,6 +911,7 @@ void HDRViewApp::drain_running_filter()
                              image.data_window    = Box2i{image.data_window.min, image.data_window.min + size};
                              image.display_window = image.data_window;
                          });
+        start_next_filter();
         return;
     }
 
@@ -874,6 +930,18 @@ void HDRViewApp::drain_running_filter()
         },
         [&channels, &bounds, &running](const Image &image) -> UndoPtr
         { return std::make_unique<ChannelRectUndo>(image, channels, bounds, running->name); });
+
+    start_next_filter();
+}
+
+void HDRViewApp::start_next_filter()
+{
+    if (m_filter_queue.empty())
+        return;
+
+    auto next = m_filter_queue.front();
+    m_filter_queue.erase(m_filter_queue.begin());
+    next();
 }
 
 void HDRViewApp::draw_filter_progress_dialog(bool &open)
@@ -898,6 +966,12 @@ void HDRViewApp::draw_filter_progress_dialog(bool &open)
         ImGui::Dummy(ImVec2(24.f * HelloImGui::EmSize(), 0.f));
 
         ImGui::TextUnformatted(m_running_filter->name.c_str());
+        if (!m_filter_queue.empty())
+        {
+            // The bar measures one image; an edit over a multi-selection runs them one after another.
+            ImGui::SameLine();
+            ImGui::TextDisabled("(%d more image%s)", int(m_filter_queue.size()), m_filter_queue.size() == 1 ? "" : "s");
+        }
         ImGui::ProgressBar(m_running_filter->progress.progress(), ImVec2(-FLT_MIN, 0.f));
 
         // Only asks the filter to stop; the work unwinds on its own thread and drain_running_filter()

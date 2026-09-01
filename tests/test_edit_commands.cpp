@@ -563,8 +563,15 @@ TEST_CASE("An edit covers the subject it was given and nothing else")
 
             cmd->apply(ctx);
 
-            // Nothing to check unless the edit both happened and went through a chokepoint that takes the
-            // subject: a flip moves every sample by definition, and a resize has no rectangle to stay in.
+            // An edit that changed the image without going through a chokepoint that takes the subject
+            // covers the image entire, and has to say so: has_subject is also what decides whether the
+            // edit runs once per selected image or only on the one being looked at.
+            if (img->history.size() != steps && !ctx.last_edit_used_subject())
+                CHECK_FALSE(cmd->info().has_subject);
+
+            // Nothing more to check unless the edit both happened and went through a chokepoint that takes
+            // the subject: a flip moves every sample by definition, and a resize has no rectangle to stay
+            // in.
             if (img->history.size() == steps || img->size() != k_size || !ctx.last_edit_used_subject())
                 continue;
 

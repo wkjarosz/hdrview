@@ -514,6 +514,10 @@ void HDRViewApp::draw_history_window()
 
     // Clicking a row walks there one entry at a time, which is the only way to get from one state to
     // another: each entry knows how to reverse the one edit it describes and nothing knows how to skip.
+    //
+    // The cursor read here is the current image's while undo() and redo() step every selected image --
+    // intended, since this window shows the current image's history, and they report what that image did,
+    // so the walk still ends when it runs out.
     if (target >= 0)
     {
         while (history.current_state() > target && undo()) {}
@@ -757,6 +761,22 @@ std::vector<std::pair<int, int>> HDRViewApp::selected_targets() const
             if (img->groups[size_t(g)].visible)
                 out.emplace_back(int(i), g);
     }
+    return out;
+}
+
+std::vector<ImagePtr> HDRViewApp::selected_images()
+{
+    std::vector<ImagePtr> out;
+    for (size_t i : m_visible_images)
+        if (m_images[i]->is_selected())
+            out.push_back(m_images[i]);
+
+    // Visible only, and the current image is always both visible and selected -- so an empty result means
+    // the panel has never had a say, which is how a test driving the app directly finds it.
+    if (out.empty())
+        if (auto img = current_image())
+            out.push_back(img);
+
     return out;
 }
 
