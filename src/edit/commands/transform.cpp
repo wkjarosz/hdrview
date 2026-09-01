@@ -34,8 +34,10 @@ public:
         m_info(std::move(info)), m_forward(std::move(forward)), m_backward(std::move(backward))
     {
         // A flip or a quarter turn moves every sample of every channel by definition, so there is no
-        // subject for it to carry and nothing for a scope to narrow.
+        // subject for it to carry and nothing for a scope to narrow -- and nothing in it that names one
+        // selected image over another either.
         m_info.has_subject = false;
+        m_info.fans_out    = false;
     }
 
     Info info() const override { return m_info; }
@@ -54,8 +56,9 @@ public:
     {
         Info i{{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C};
         // Reshapes the image rather than writing into it, as the other two size commands do, so the
-        // subject has nothing to say about it.
+        // subject has nothing to say about it, and it stays with the image being looked at.
         i.has_subject = false;
+        i.fans_out    = false;
         return i;
     }
 
@@ -170,13 +173,17 @@ class ImageSize final : public EditCommand
 public:
     Info info() const override
     {
-        return {{"Image size...", "Resize the image"},
-                ICON_MY_IMAGE_SIZE,
-                ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
-                ImGuiInputFlags_None,
-                "Resize",
-                30.f,
-                false};
+        Info i{{"Image size...", "Resize the image"},
+               ICON_MY_IMAGE_SIZE,
+               ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
+               ImGuiInputFlags_None,
+               "Resize",
+               30.f};
+        // Replaces the image rather than writing into it, so the subject has nothing to say about it, and
+        // it stays with the image being looked at.
+        i.has_subject = false;
+        i.fans_out    = false;
+        return i;
     }
 
     //! Opens on the image's own size, and does not carry it to the next one.
@@ -233,13 +240,15 @@ class CanvasSize final : public EditCommand
 public:
     Info info() const override
     {
-        return {{"Canvas size..."},
-                ICON_MY_CANVAS_SIZE,
-                ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C,
-                ImGuiInputFlags_None,
-                "Resize",
-                30.f,
-                false};
+        Info i{{"Canvas size..."},
+               ICON_MY_CANVAS_SIZE,
+               ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C,
+               ImGuiInputFlags_None,
+               "Resize",
+               30.f};
+        i.has_subject = false;
+        i.fans_out    = false;
+        return i;
     }
 
     //! Opens describing the canvas as it is: its own size, or -- given relatively -- no change at all.

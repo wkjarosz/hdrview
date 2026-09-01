@@ -879,33 +879,46 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
 
         // Right-clicking a group points at it without selecting it: the viewport goes on showing whatever
         // it was showing, and only the operation is told which group was meant -- so a lone depth channel
-        // can be deleted while a color stays on screen.
+        // can be deleted while a color stays on screen. Right-clicking one that is already selected covers
+        // the whole selection instead; see HDRViewApp::target_groups().
         const int this_group = layer.groups[g];
 
         if (ImGui::BeginPopupContextItem())
         {
             ImGui::TextDisabled("%s", name.c_str());
             ImGui::Separator();
-            for (const char *command : {"Ungroup channels", "Regroup channels", "Delete channel group"})
-            {
-                const auto &a = hdrview()->action(command);
 
-                // Deleting one channel is not deleting a group, and the label says which it is about to
-                // be; the action's name stays put, since that is what addresses it.
-                const string label = string(command) == "Delete channel group"
-                                         ? delete_channels_label(hdrview()->current_image(), this_group)
-                                         : a.names[0];
+            // Drawn as if the group were already pointed at, so what each item says and whether it is
+            // offered match what choosing it would do -- on this image, which need not be the current one.
+            hdrview()->with_target_group(
+                img_idx, this_group,
+                [&]
+                {
+                    for (const char *command : {"Ungroup channels", "Regroup channels", "Delete channel group"})
+                    {
+                        const auto &a = hdrview()->action(command);
 
-                // Spelled out as strings: imgui_ext declares a MenuItemEx taking std::string, and a
-                // null here binds to that rather than to Dear ImGui's char* one, which constructs a
-                // string from nullptr.
-                if (ImGui::MenuItemEx(label, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), nullptr, a.enabled()))
-                    // Next frame rather than now: deleting a group rebuilds the very layers and groups
-                    // this loop is walking, and the rest of the tree would be drawn from vectors that had
-                    // moved out from under it.
-                    hdrview()->post_to_main_thread([command, this_group]
-                                                   { hdrview()->invoke_action_on_group(command, this_group); });
-            }
+                        // Deleting one channel is not deleting a group, nor several groups, and the label
+                        // says which it is about to be; the action's name stays put, since that is what
+                        // addresses it.
+                        auto         target = hdrview()->target_image();
+                        const string label  = string(command) == "Delete channel group"
+                                                  ? delete_channels_label(target, hdrview()->target_groups(target))
+                                                  : a.names[0];
+
+                        // Spelled out as strings: imgui_ext declares a MenuItemEx taking std::string, and a
+                        // null here binds to that rather than to Dear ImGui's char* one, which constructs a
+                        // string from nullptr.
+                        if (ImGui::MenuItemEx(label, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), nullptr,
+                                              a.enabled()))
+                            // Next frame rather than now: deleting a group rebuilds the very layers and
+                            // groups this loop is walking, and the rest of the tree would be drawn from
+                            // vectors that had moved out from under it.
+                            hdrview()->post_to_main_thread(
+                                [command, img_idx, this_group]
+                                { hdrview()->invoke_action_on_group(command, img_idx, this_group); });
+                    }
+                });
             ImGui::EndPopup();
         }
 

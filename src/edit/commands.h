@@ -31,10 +31,10 @@ void add_channel_commands(std::vector<EditCommandPtr> &out);
 
 //! What "Delete channel group" should be labelled for \p group of \p img.
 /*!
-    One channel or several: deleting a lone depth channel is not deleting a group, and saying so is worth
-    the one call. The action's name stays put either way, since that is what addresses it.
+    One channel, one group or several: deleting a lone depth channel is not deleting a group, and saying so
+    is worth the one call. The action's name stays put either way, since that is what addresses it.
 */
-std::string delete_channels_label(const ImagePtr &img, int group);
+std::string delete_channels_label(const ImagePtr &img, const std::vector<int> &groups);
 void        add_mipmap_commands(std::vector<EditCommandPtr> &out);
 void        add_filter_commands(std::vector<EditCommandPtr> &out);
 void        add_envmap_commands(std::vector<EditCommandPtr> &out);

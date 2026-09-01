@@ -36,7 +36,9 @@ static void load_both_fixtures(ImGuiTestContext *ctx)
     ctx->SetRef("Images");
     ctx->ItemInputValue("##file filter", "");
 
-    hdrview()->close_all_images();
+    // Closed outright rather than through close_all_images(), which prompts when an earlier test left an
+    // edited image behind and would then leave both fixtures loaded on top of it.
+    reset_images(ctx);
     hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2});
     wait_for_loads(ctx);
     IM_CHECK_EQ(hdrview()->num_images(), 2);
@@ -69,6 +71,42 @@ static bool image_is_selected(int i)
 {
     ConstImagePtr img = hdrview()->image(i);
     return img && img->is_selected();
+}
+
+//! Switches the Images window to its flat channel-group list, which is where group rows exist at all.
+/*!
+    The mode persists in the app settings, so drive the combo rather than relying on whatever this run
+    started with. Its entries are icon-prefixed, so address them by position in the popup: 1 = flat list.
+*/
+static void use_flat_list_mode(ImGuiTestContext *ctx)
+{
+    ctx->SetRef("");
+    ctx->ItemClick("//Images/##channel list mode");
+    ImGuiTestItemList modes;
+    ctx->GatherItems(&modes, "//$FOCUSED", -1);
+    IM_CHECK_SILENT(modes.GetSize() > 1);
+    ctx->ItemClick(modes[1]->ID);
+    ctx->Yield(2);
+}
+
+//! The channel-group rows named "(R,G,B,A)", one per fixture.
+/*!
+    A group row is a depth-3 item in the ImageList child window; so are the table's own header cells, and
+    every one of these is drawn with a leading icon glyph, so neither depth nor an empty-label test
+    separates them. Match the group name instead: both fixtures are RGBA PNGs, so each contributes exactly
+    one such row.
+*/
+static std::vector<ImGuiID> gather_rgba_group_rows(ImGuiTestContext *ctx)
+{
+    ImGuiTestItemList all_items;
+    ctx->GatherItems(&all_items, "//Images", -1);
+
+    std::vector<ImGuiID> ids;
+    for (const ImGuiTestItemInfo &item : all_items)
+        if (item.Depth == 3 && item.Window && strstr(item.Window->Name, "ImageList") != nullptr &&
+            strstr(item.DebugLabel, "(R,G,B,A)") != nullptr)
+            ids.push_back(item.ID);
+    return ids;
 }
 
 void RegisterTests_Navigation(ImGuiTestEngine *engine)
@@ -247,5 +285,78 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
 
         // Shift alone still means the reference, which is why the range chord needs ctrl as well.
         IM_CHECK_EQ(hdrview()->reference_image_index(), -1);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "navigation", "right_click_on_a_selected_group_covers_the_selection");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        load_both_fixtures(ctx);
+        use_flat_list_mode(ctx);
+
+        std::vector<ImGuiID> group_ids = gather_rgba_group_rows(ctx);
+        IM_CHECK_EQ((int)group_ids.size(), 2);
+
+        ctx->ItemClick(group_ids[0]);
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->ItemClick(group_ids[1]);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+        for (int i = 0; i < 2; ++i) IM_CHECK(image_is_selected(i));
+
+        // Right-clicking a row that is in the selection covers the selection rather than that row alone,
+        // the same way a plain click inside one keeps it.
+        ctx->ItemClick(group_ids[1], ImGuiMouseButton_Right);
+        ctx->ItemClick("//$FOCUSED/Ungroup channels");
+        // The action is posted to the main thread rather than run from the popup, since it rebuilds the
+        // very layer list the panel is walking.
+        ctx->Yield(4);
+
+        for (int i = 0; i < 2; ++i)
+        {
+            IM_CHECK_EQ((int)hdrview()->image(i)->groups.size(), 4);
+            IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+        }
+
+        // Edited images left loaded would make the next test's close_all_images() prompt rather than
+        // close.
+        reset_images(ctx);
+    };
+
+    // Every image numbers its own groups, and the panel lists every image's rows, so a group index alone
+    // cannot say which image a right-click meant.
+    t           = IM_REGISTER_TEST(engine, "navigation", "right_click_names_the_image_whose_row_it_is");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        load_both_fixtures(ctx);
+        use_flat_list_mode(ctx);
+
+        // Give the two images different group structures: after this, image 0 has four single-channel
+        // groups where image 1 still has one of four channels, so the index 0 means different things.
+        std::vector<ImGuiID> group_ids = gather_rgba_group_rows(ctx);
+        IM_CHECK_EQ((int)group_ids.size(), 2);
+        ctx->ItemClick(group_ids[0]);
+        ctx->ItemClick(group_ids[0], ImGuiMouseButton_Right);
+        ctx->ItemClick("//$FOCUSED/Ungroup channels");
+        ctx->Yield(4);
+        IM_CHECK_EQ((int)hdrview()->image(0)->groups.size(), 4);
+        IM_CHECK_EQ((int)hdrview()->image(1)->groups.size(), 1);
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+
+        // Now right-click the other image's row while image 0 is still the current one. Image 0's group 0
+        // is a lone channel by now, so a command that took the index and applied it to the current image
+        // would quietly do nothing and leave image 1 whole.
+        group_ids = gather_rgba_group_rows(ctx);
+        IM_CHECK_EQ((int)group_ids.size(), 1); // only image 1 still has an (R,G,B,A) row
+        ctx->ItemClick(group_ids[0], ImGuiMouseButton_Right);
+        ctx->ItemClick("//$FOCUSED/Ungroup channels");
+        ctx->Yield(4);
+
+        IM_CHECK_EQ((int)hdrview()->image(1)->groups.size(), 4);
+        IM_CHECK_EQ((int)hdrview()->image(1)->history.size(), 1);
+
+        // And the image being looked at was left alone, having neither moved nor gained an entry.
+        IM_CHECK_EQ((int)hdrview()->image(0)->history.size(), 1);
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+
+        reset_images(ctx);
     };
 }

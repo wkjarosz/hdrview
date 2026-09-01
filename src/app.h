@@ -119,12 +119,20 @@ public:
         viewport goes on showing whatever it was showing, and only the operation is told which group was
         meant.
     */
-    void invoke_action_on_group(const std::string &action_name, int group);
-    //! The group an edit acts on: the one being pointed at, or the one on screen.
-    int target_group() const;
-    //! The plural counterpart: the pointed-at group, or every group selected in the current image.
-    //! Falls back to target_group() for an image with nothing selected.
-    std::vector<int> target_groups() const;
+    void invoke_action_on_group(const std::string &action_name, int image_index, int group);
+    //! Point at \p group of image \p image_index for the duration of \p body.
+    /*!
+        What makes the Images panel's context menu name a group: while this is in force, the commands and
+        the menu that offers them address that group of that image rather than the current one.
+    */
+    void with_target_group(int image_index, int group, const std::function<void()> &body);
+    //! The image an edit acts on: the one being pointed at, or the current one.
+    ImagePtr target_image();
+    //! The groups of \p img an edit acts on: the selected ones, or a group pointed at from outside them.
+    //! Falls back to the group on screen for an image with nothing selected.
+    std::vector<int> target_groups(const ConstImagePtr &img) const;
+    //! The same, for a group named by the caller rather than by what is currently pointed at.
+    std::vector<int> target_groups(const ConstImagePtr &img, int pointed_at) const;
     //! Put \p img into the list just after the current image, named \p partname, and select it.
     /*!
         Where duplicate_image() and the commands that derive an image from another one both land. Beside
@@ -880,8 +888,14 @@ private:
     std::vector<std::function<void()>> m_main_thread_queue;
 
     //! The group a command acts on while one is being pointed at rather than selected; -1 otherwise.
-    int  m_target_group_override = -1;
-    void drain_main_thread_queue();
+    //! The group the Images panel's context menu is pointing at, and the image whose group it is.
+    /*!
+        A group index means nothing on its own -- every image numbers its own groups, and the panel lists
+        every image's -- so the two are only ever set and read together; see with_target_group().
+    */
+    ImagePtr m_target_image_override;
+    int      m_target_group_override = -1;
+    void     drain_main_thread_queue();
 
 #if HDRVIEW_ENABLE_IPC
     IpcServer m_ipc_server;

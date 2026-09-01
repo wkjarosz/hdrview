@@ -39,21 +39,15 @@ struct EditContext
     //! Which of that image's samples the edit covers.
     virtual const EditSubject &subject() const = 0;
 
-    //! The channel group an operation acts on: normally the one being shown.
+    //! The channel groups an operation acts on: normally the selected ones.
     /*!
-        Named separately from the selection because a group can be pointed at without being selected --
-        right-clicking one in the Images panel says which group is meant without disturbing what the
-        viewport is showing, so a lone depth channel can be deleted while a color stays on screen.
+        Not simply the selection, because a group can be pointed at without being selected: right-clicking
+        one *outside* the selection in the Images panel says which group is meant without disturbing what
+        is selected or what the viewport is showing, so a lone depth channel can be deleted while a color
+        stays on screen. Right-clicking one that is *in* the selection covers the selection, the same way
+        a plain click inside one keeps it rather than replacing it.
 
-        -1 when the image has no group to speak of.
-    */
-    virtual int target_group() const = 0;
-
-    //! The channel groups an operation acts on: every selected one, or just the one being pointed at.
-    /*!
-        The plural counterpart to target_group(), with the same distinction behind it -- reached from the
-        Images panel's context menu this is the one group that was named, and reached from the menu it is
-        the whole multi-selection.
+        Empty when the image has no group to speak of.
     */
     virtual std::vector<int> target_groups() const = 0;
 
@@ -135,20 +129,19 @@ public:
             contents; see HDRViewApp::draw_edit_command_dialog().
         */
         float width_em = 24.f;
-        //! Whether the edit is narrowed by the subject at all.
-        /*!
-            False for the ones that cover the whole image whatever the subject says -- a crop, a resize, a
-            quarter turn -- which is both why their dialogs do not carry the "Apply to" controls and why
-            they stay with the image being looked at: an edit that says which of an image's samples it
-            covers has nothing in it that names one image over another, and so runs once per selected
-            image, but one that covers the image entire does not.
-        */
+        //! Whether the edit is narrowed by the subject at all, which is what puts the "Apply to" controls
+        //! on its dialog. False for the ones that cover the whole image whatever the subject says -- a
+        //! crop, a resize, a quarter turn.
         bool has_subject = true;
 
-        //! Whether this may run over the whole selection, for a command that does take a subject.
+        //! Whether this runs once per selected image, rather than on the current one alone.
         /*!
-            False for the ones whose result lives outside the image: the clipboard has one slot, so
-            copying from several images at once has no meaning. Ignored when has_subject is false.
+            True for the edits whose reach is stated relative to an image -- the samples a subject names,
+            the groups a selection names -- since nothing in that says which image is meant.
+
+            False for the ones that cover an image entire, which stay with the image being looked at, and
+            for the ones whose result lives outside it: the clipboard has one slot, so copying from
+            several images at once would just be copying from the last of them.
         */
         bool fans_out = true;
 

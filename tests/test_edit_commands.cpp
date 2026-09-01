@@ -50,27 +50,21 @@ public:
     ImagePtr           image() const override { return m_image; }
     const EditSubject &subject() const override { return m_subject; }
 
-    //! The group being pointed at when one has been set, and otherwise the one the image is showing.
-    int target_group() const override
-    {
-        if (m_target_group >= 0)
-            return m_target_group;
-        return m_image ? m_image->active_group_index(Target_Primary) : -1;
-    }
-
-    //! The pointed-at group when one has been set, and otherwise the image's selection; mirrors
-    //! HDRViewApp::target_groups(), including its fallback to the group on screen when nothing is
-    //! selected.
+    //! Mirrors HDRViewApp::target_groups(): a group pointed at from outside the selection names itself
+    //! alone, one inside it covers the selection, and an image the panel has never had a say over falls
+    //! back to the group it is showing.
     std::vector<int> target_groups() const override
     {
-        if (m_target_group >= 0)
-            return {m_target_group};
         if (!m_image)
             return {};
 
+        if (m_target_group >= 0 && !m_image->is_group_selected(m_target_group))
+            return {m_target_group};
+
         std::vector<int> groups = m_image->selected_groups();
-        if (groups.empty() && m_image->is_valid_group(target_group()))
-            groups.push_back(target_group());
+        const int        shown  = m_image->active_group_index(Target_Primary);
+        if (groups.empty() && m_image->is_valid_group(shown))
+            groups.push_back(shown);
         return groups;
     }
 
@@ -1118,19 +1112,115 @@ TEST_CASE("Regrouping from a selection puts back exactly the channels it names")
     CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
 }
 
+TEST_CASE("Ungrouping and deleting cover every selected group")
+{
+    // Both used to reach only the group on screen, so selecting several and asking for them to come apart
+    // took apart one of them.
+    SUBCASE("ungrouping")
+    {
+        auto img = make_layered_image();
+        REQUIRE(img->groups.size() == 3); // R,G,B,A -- Z -- normal.R,G,B
+
+        img->selected_group = group_of_channel(img, "R");
+        img->select_group(group_of_channel(img, "R"));
+        img->select_group(group_of_channel(img, "normal.R"));
+
+        TestEditContext ctx{img};
+        auto            explode = find_command("Ungroup channels");
+        REQUIRE(explode);
+        REQUIRE(explode->enabled(ctx));
+        explode->apply(ctx);
+
+        // Both color groups came apart, and the depth channel -- which was not selected -- did not.
+        CHECK(img->groups.size() == 8);
+        for (const char *n : {"R", "G", "B", "A", "normal.R", "normal.G", "normal.B"})
+            CHECK(img->channels[size_t(channel_index(img, n))].ungrouped);
+        CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
+
+        // One entry over the lot, not one per group, so one undo puts all of it back.
+        CHECK(img->history.size() == 1);
+        REQUIRE(img->history.undo(*img));
+        CHECK(img->groups.size() == 3);
+        for (const auto &c : img->channels) CHECK_FALSE(c.ungrouped);
+    }
+
+    SUBCASE("deleting")
+    {
+        auto img            = make_layered_image();
+        img->selected_group = group_of_channel(img, "R");
+        img->select_group(group_of_channel(img, "R"));
+        img->select_group(group_of_channel(img, "normal.R"));
+
+        TestEditContext ctx{img};
+
+        // And the menu says so: one channel, one group, or several.
+        CHECK(delete_channels_label(img, ctx.target_groups()) == "Delete channel groups");
+
+        auto del = find_command("Delete channel group");
+        REQUIRE(del);
+        REQUIRE(del->enabled(ctx));
+        del->apply(ctx);
+
+        // Only the channel whose group was not selected is left.
+        REQUIRE(img->channels.size() == 1);
+        CHECK(img->channels[0].name == "Z");
+
+        REQUIRE(img->history.undo(*img));
+        CHECK(img->channels.size() == 8);
+    }
+
+    SUBCASE("a group pointed at from outside the selection still names itself alone")
+    {
+        auto img            = make_layered_image();
+        img->selected_group = group_of_channel(img, "R");
+        img->select_group(group_of_channel(img, "R"));
+        img->select_group(group_of_channel(img, "normal.R"));
+
+        TestEditContext ctx{img};
+        ctx.set_target_group(group_of_channel(img, "Z"));
+
+        CHECK(ctx.target_groups() == std::vector<int>{group_of_channel(img, "Z")});
+        CHECK(delete_channels_label(img, ctx.target_groups()) == "Delete channel");
+
+        find_command("Delete channel group")->apply(ctx);
+
+        // The depth channel is gone; the two selected color groups it was pointed away from are not.
+        CHECK(img->channels.size() == 7);
+        CHECK(channel_index(img, "Z") == -1);
+    }
+
+    SUBCASE("a group pointed at from inside the selection covers the selection")
+    {
+        auto img            = make_layered_image();
+        img->selected_group = group_of_channel(img, "R");
+        img->select_group(group_of_channel(img, "R"));
+        img->select_group(group_of_channel(img, "normal.R"));
+
+        TestEditContext ctx{img};
+        // Right-clicking one of the selected rows, which is the case the reported bug was about.
+        ctx.set_target_group(group_of_channel(img, "normal.R"));
+
+        CHECK(ctx.target_groups().size() == 2);
+
+        find_command("Ungroup channels")->apply(ctx);
+        for (const char *n : {"R", "G", "B", "A", "normal.R", "normal.G", "normal.B"})
+            CHECK(img->channels[size_t(channel_index(img, n))].ungrouped);
+    }
+}
+
 TEST_CASE("The delete command says whether it is about to take one channel or a group")
 {
     // The label follows the group on screen while the action's name stays put, since the name is what the
     // registry, the palette and these tests address it by.
     auto img = make_image();
-    REQUIRE(delete_channels_label(img, img->selected_group) == "Delete channel group");
+    REQUIRE(delete_channels_label(img, {img->selected_group}) == "Delete channel group");
 
     TestEditContext ctx{img};
     find_command("Ungroup channels")->apply(ctx);
 
     // Now every group is a lone channel, and deleting one is not deleting a group.
     REQUIRE(img->groups[size_t(img->selected_group)].num_channels == 1);
-    CHECK(delete_channels_label(img, img->selected_group) == "Delete channel");
+    CHECK(delete_channels_label(img, {img->selected_group}) == "Delete channel");
 
     // The command is still registered under the one name throughout.
     CHECK(find_command("Delete channel group") != nullptr);
@@ -1160,8 +1250,8 @@ TEST_CASE("A group can be acted on without becoming the one on screen")
     TestEditContext ctx{img};
 
     // What the label says it is about to do differs between the two, which is the point of it varying.
-    CHECK(delete_channels_label(img, color) == "Delete channel group");
-    CHECK(delete_channels_label(img, depth) == "Delete channel");
+    CHECK(delete_channels_label(img, {color}) == "Delete channel group");
+    CHECK(delete_channels_label(img, {depth}) == "Delete channel");
 
     // Point at the depth channel without selecting it.
     ctx.set_target_group(depth);

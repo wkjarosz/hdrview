@@ -110,6 +110,10 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->clipboard() != nullptr);
         IM_CHECK_EQ(hdrview()->clipboard()->size().x, hdrview()->image(0)->size().x);
         IM_CHECK_EQ(hdrview()->clipboard()->size().y, hdrview()->image(0)->size().y);
+
+        // Edited images left loaded would make the next test's close_all_images() prompt rather than
+        // close.
+        reset_images(ctx);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "a filter over a selection reaches every image in turn");
@@ -132,6 +136,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                    [] { return hdrview()->image(0)->history.has_undo() && hdrview()->image(1)->history.has_undo(); });
 
         for (int i = 0; i < 2; ++i) IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+
+        reset_images(ctx);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "flip from the menu changes the pixels");

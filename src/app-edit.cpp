@@ -42,17 +42,13 @@ struct AppEditContext final : EditContext
     //! over the selection; see HDRViewApp::apply_edit_command().
     ImagePtr img;
 
-    explicit AppEditContext(HDRViewApp *a) : app(a), img(a->current_image()) {}
+    explicit AppEditContext(HDRViewApp *a) : app(a), img(a->target_image()) {}
     AppEditContext(HDRViewApp *a, ImagePtr i) : app(a), img(std::move(i)) {}
 
     ImagePtr           image() const override { return img; }
     const EditSubject &subject() const override { return app->edit_subject(); }
 
-    // Both name groups of the *current* image. Only the commands that take no subject ask -- ungrouping,
-    // regrouping, deleting a group -- and those never fan out, so `img` is the current image whenever
-    // these are read.
-    int              target_group() const override { return app->target_group(); }
-    std::vector<int> target_groups() const override { return app->target_groups(); }
+    std::vector<int> target_groups() const override { return app->target_groups(img); }
     Box2i            selection() const override { return app->roi(); }
     void             set_selection(const Box2i &box) override { app->set_selection(box); }
     float4           background_color() const override { return app->background_color(); }
@@ -104,53 +100,71 @@ struct AppEditContext final : EditContext
 
 } // namespace
 
-int HDRViewApp::target_group() const
-{
-    if (m_target_group_override >= 0)
-        return m_target_group_override;
+ImagePtr HDRViewApp::target_image() { return m_target_image_override ? m_target_image_override : current_image(); }
 
-    auto img = current_image();
-    return img ? img->active_group_index(Target_Primary) : -1;
+std::vector<int> HDRViewApp::target_groups(const ConstImagePtr &img) const
+{
+    // The override names a group of one image, and every image numbers its own groups -- so it says
+    // nothing about the others a fan-out reaches.
+    return target_groups(img, img == m_target_image_override ? m_target_group_override : -1);
 }
 
-std::vector<int> HDRViewApp::target_groups() const
+std::vector<int> HDRViewApp::target_groups(const ConstImagePtr &img, int pointed_at) const
 {
-    if (m_target_group_override >= 0)
-        return {m_target_group_override};
-
-    auto img = current_image();
     if (!img)
         return {};
+
+    // A group pointed at from the Images panel names itself alone -- unless it is one of the selected
+    // ones, in which case the right-click covers the selection, the same way a click inside a selection
+    // keeps it rather than replacing it.
+    if (pointed_at >= 0 && !img->is_group_selected(pointed_at))
+        return {pointed_at};
 
     // The current group is always among the selected ones, so the fallback is for an image that has not
     // been through the panel at all -- a freshly built one, or a test driving a command directly.
     std::vector<int> groups = img->selected_groups();
-    if (groups.empty() && img->is_valid_group(target_group()))
-        groups.push_back(target_group());
+    if (groups.empty() && img->is_valid_group(img->active_group_index(Target_Primary)))
+        groups.push_back(img->active_group_index(Target_Primary));
 
     return groups;
 }
 
-void HDRViewApp::invoke_action_on_group(const string &action_name, int group)
+void HDRViewApp::with_target_group(int image_index, int group, const std::function<void()> &body)
 {
-    // Restored however the action leaves, since pointing at a group must not move the selection -- and an
-    // action that removes the group would otherwise leave the override naming one that is gone.
-    const int previous      = m_target_group_override;
-    m_target_group_override = group;
-    action(action_name).callback();
-    m_target_group_override = previous;
+    // Restored however `body` leaves things, since pointing at a group must not move the selection -- and
+    // an action that removes the group would otherwise leave the override naming one that is gone.
+    auto      previous_image = m_target_image_override;
+    const int previous_group = m_target_group_override;
+
+    m_target_image_override = image(image_index);
+    m_target_group_override = m_target_image_override ? group : -1;
+    body();
+    m_target_image_override = previous_image;
+    m_target_group_override = previous_group;
+}
+
+void HDRViewApp::invoke_action_on_group(const string &action_name, int image_index, int group)
+{
+    with_target_group(image_index, group, [this, &action_name] { action(action_name).callback(); });
 }
 
 std::vector<ImagePtr> HDRViewApp::edit_command_images(const EditCommand &cmd)
 {
+    // A group pointed at from the Images panel names one group of one image, which need not be the
+    // current one -- every image's groups are listed. That image is what the command runs on, alone,
+    // unless the group is part of the selection, in which case the right-click covers the selection.
+    if (m_target_image_override)
+    {
+        if (!cmd.info().fans_out || !m_target_image_override->is_group_selected(m_target_group_override))
+            return {m_target_image_override};
+        return selected_images();
+    }
+
     auto current = current_image();
     if (!current)
         return {};
 
-    // An edit with no subject covers the image entire, and one that reads or writes the clipboard has a
-    // single result -- neither has anything in it that names one selected image over another. Pointing at
-    // a group from the Images panel likewise names one group of one image, whatever else is selected.
-    if (!cmd.info().has_subject || !cmd.info().fans_out || m_target_group_override >= 0)
+    if (!cmd.info().fans_out)
         return {current};
 
     return selected_images();
@@ -182,7 +196,7 @@ void HDRViewApp::invoke_edit_command(EditCommand &cmd)
 bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
 {
     AppEditContext ctx{this};
-    if (cmd.info().needs_editable && !can_edit(current_image()))
+    if (cmd.info().needs_editable && !can_edit(target_image()))
         return false;
     return cmd.enabled(ctx);
 }

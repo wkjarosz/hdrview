@@ -486,7 +486,8 @@ void HDRViewApp::draw_menus()
 
         MenuItem(action("Ungroup channels"));
         MenuItem(action("Regroup channels"));
-        MenuItem(action("Delete channel group"), delete_channels_label(current_image(), target_group()));
+        MenuItem(action("Delete channel group"),
+                 delete_channels_label(current_image(), target_groups(current_image())));
 
         // The edits that read the samples around the one they are writing.
         ImGui::SeparatorText("Neighborhood filters");

@@ -53,8 +53,30 @@ std::vector<int> group_channels(const ImagePtr &img, int group)
     return out;
 }
 
-//! The channels of the group an edit is about to act on, which is not always the one on screen.
-std::vector<int> target_channels(const EditContext &ctx) { return group_channels(ctx.image(), ctx.target_group()); }
+//! Every channel of every group an edit is about to act on, which is not always the one on screen.
+std::vector<int> target_channels(const EditContext &ctx)
+{
+    std::vector<int> out;
+    for (int g : ctx.target_groups())
+        for (int c : group_channels(ctx.image(), g)) out.push_back(c);
+    return out;
+}
+
+//! The channel to leave the viewport on after a rebuild, or -1 to leave it where it is.
+/*!
+    A rebuild renumbers the groups, so the index that was selected can afterwards mean something else
+    entirely -- following a channel is the only way to stay on what was being shown. Only when the group
+    on screen is one of the ones being changed; one merely pointed at from the panel must leave the
+    viewport where it was.
+*/
+int followed_channel(const ImagePtr &img, const std::vector<int> &changed)
+{
+    const std::vector<int> showing = group_channels(img, img->selected_group);
+    for (int c : changed)
+        if (std::find(showing.begin(), showing.end(), c) != showing.end())
+            return c;
+    return -1;
+}
 
 //! The layer \p group belongs to, which is the prefix its channel names share.
 std::string layer_of(const ImagePtr &img, int group)
@@ -123,38 +145,60 @@ public:
                 ImGuiInputFlags_None,
                 "Ungroup",
                 24.f,
+                // No subject: the channels are named by the selection, not by a scope. It still fans
+                // out, since a selection can hold groups of more than one image.
                 /* has_subject */ false};
     }
 
-    //! Only worth offering for a group that is more than one channel already.
-    bool enabled(const EditContext &ctx) const override { return target_channels(ctx).size() > 1; }
+    //! Only worth offering while one of the groups it would take apart is more than one channel.
+    bool enabled(const EditContext &ctx) const override { return !ungroupable_channels(ctx).empty(); }
 
     void apply(EditContext &ctx) override
     {
-        const std::vector<int> channels = target_channels(ctx);
-        if (channels.size() < 2)
+        auto img = ctx.image();
+        if (!img)
             return;
 
-        // Only follow the channels across the rebuild when it was the group on screen that was ungrouped;
-        // one pointed at from the panel must leave the viewport where it was.
-        const bool follow = ctx.target_group() == ctx.image()->selected_group;
+        const std::vector<int> channels = ungroupable_channels(ctx);
+        if (channels.empty())
+            return;
+
+        const int follow = followed_channel(img, channels);
 
         ctx.modify_reversibly(
             "Ungroup channels",
-            [channels, follow](Image &img)
+            [channels, follow](Image &img2)
             {
-                for (int c : channels) img.channels[size_t(c)].ungrouped = true;
-                img.rebuild_layers();
-                if (follow)
-                    select_channels_group(img, channels.front());
+                for (int c : channels) img2.channels[size_t(c)].ungrouped = true;
+                img2.rebuild_layers();
+                if (follow >= 0)
+                    select_channels_group(img2, follow);
             },
-            [channels, follow](Image &img)
+            [channels, follow](Image &img2)
             {
-                for (int c : channels) img.channels[size_t(c)].ungrouped = false;
-                img.rebuild_layers();
-                if (follow)
-                    select_channels_group(img, channels.front());
+                for (int c : channels) img2.channels[size_t(c)].ungrouped = false;
+                img2.rebuild_layers();
+                if (follow >= 0)
+                    select_channels_group(img2, follow);
             });
+    }
+
+private:
+    //! The channels of the target groups that hold more than one, which are all this can take apart.
+    /*!
+        A group already standing alone is skipped rather than marked: marking it would change nothing but
+        would still record an entry, and undoing that entry would clear a flag the channel never had.
+    */
+    static std::vector<int> ungroupable_channels(const EditContext &ctx)
+    {
+        std::vector<int> out;
+        for (int g : ctx.target_groups())
+        {
+            const std::vector<int> channels = group_channels(ctx.image(), g);
+            if (channels.size() > 1)
+                out.insert(out.end(), channels.begin(), channels.end());
+        }
+        return out;
     }
 };
 
@@ -179,6 +223,8 @@ public:
                 ImGuiInputFlags_None,
                 "Regroup",
                 24.f,
+                // No subject: the channels are named by the selection, not by a scope. It still fans
+                // out, since a selection can hold groups of more than one image.
                 /* has_subject */ false};
     }
 
@@ -194,16 +240,7 @@ public:
         if (marked.empty())
             return;
 
-        // Follow the group on screen across the rebuild when it is one of the ones being put back
-        // together; one merely pointed at from the panel must leave the viewport where it was.
-        const std::vector<int> showing = group_channels(img, img->selected_group);
-        int                    follow  = -1;
-        for (int c : marked)
-            if (std::find(showing.begin(), showing.end(), c) != showing.end())
-            {
-                follow = c;
-                break;
-            }
+        const int follow = followed_channel(img, marked);
 
         ctx.modify_reversibly(
             "Regroup channels",
@@ -241,10 +278,12 @@ public:
                 ImGuiInputFlags_None,
                 "Delete",
                 24.f,
+                // No subject: the channels are named by the selection, not by a scope. It still fans
+                // out, since a selection can hold groups of more than one image.
                 /* has_subject */ false};
     }
 
-    //! Never the last group: an image with no channels is not an image.
+    //! Never every group: an image with no channels is not an image.
     bool enabled(const EditContext &ctx) const override
     {
         auto img = ctx.image();
@@ -284,11 +323,15 @@ public:
 
 } // namespace
 
-std::string delete_channels_label(const ImagePtr &img, int group)
+std::string delete_channels_label(const ImagePtr &img, const std::vector<int> &groups)
 {
     // The action's own name never changes -- it is the key the registry, the palette and the tests address
     // it by -- so only what the menu shows is chosen here.
-    return group_channels(img, group).size() == 1 ? "Delete channel" : "Delete channel group";
+    if (groups.size() > 1)
+        return "Delete channel groups";
+
+    return groups.size() == 1 && group_channels(img, groups.front()).size() == 1 ? "Delete channel"
+                                                                                 : "Delete channel group";
 }
 
 void add_channel_commands(std::vector<EditCommandPtr> &out)
