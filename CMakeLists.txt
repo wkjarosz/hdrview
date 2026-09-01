@@ -1749,6 +1749,12 @@ set(HDRVIEW_SOURCES
     src/colorspace.cpp
     src/common.cpp
     src/display_colorspace.cpp
+    src/edit/commands.cpp
+    src/edit/commands/color.cpp
+    src/edit/commands/envmap_commands.cpp
+    src/edit/commands/filter.cpp
+    src/edit/commands/tonal.cpp
+    src/edit/commands/transform.cpp
     src/edit/envmap.cpp
     src/edit/filters.cpp
     src/edit/undo.cpp

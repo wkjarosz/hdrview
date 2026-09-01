@@ -171,6 +171,13 @@ Chromaticities chromaticities_from_CICP(int cp);
 int         chromaticities_to_CICP(const Chromaticities &chr);
 ColorGamut_ named_color_gamut(const Chromaticities &chr);
 
+//! Smallest gamma that still describes a power curve.
+/*!
+    It is inverted before use, so zero divides by zero and a negative value sends a black pixel to
+    infinity; nothing above this needs a bound.
+*/
+constexpr float MIN_GAMMA = 1e-4f;
+
 struct TransferFunction
 {
     using Type = int;

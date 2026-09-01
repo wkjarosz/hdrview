@@ -81,6 +81,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 {
     setup_window_and_backend(force_sdr);
     setup_hello_imgui_params();
+    m_edit_commands = all_edit_commands();
+
     auto window_setup = setup_dockable_windows();
     setup_platform_backend_callbacks(in_files);
     setup_persistence_callbacks(force_exposure, force_gamma, force_dither, force_apple_keys);
@@ -755,34 +757,16 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         make_unique<PopupDialog>("Replace session?", [this](bool &open) { draw_confirm_load_session_dialog(open); }));
     m_dialogs.push_back(make_unique<PopupDialog>("Discard unsaved changes?",
                                                  [this](bool &open) { draw_confirm_discard_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Exposure/gamma...", [this](bool &open) { draw_exposure_gamma_dialog(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Brightness/contrast...",
-                                                 [this](bool &open) { draw_brightness_contrast_dialog(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Fill...", [this](bool &open) { draw_fill_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Canvas size...", [this](bool &open) { draw_canvas_size_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Image size...", [this](bool &open) { draw_image_size_dialog(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Blur...", [this](bool &open) { draw_blur_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Unsharp mask...", [this](bool &open) { draw_unsharp_mask_dialog(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Median filter...", [this](bool &open) { draw_median_dialog(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Shift...", [this](bool &open) { draw_shift_dialog(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Convert color space...",
-                                                 [this](bool &open) { draw_convert_colorspace_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Channel mixer...", [this](bool &open) { draw_channel_mixer_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Hue/saturation...", [this](bool &open) { draw_hue_saturation_dialog(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Flatten...", [this](bool &open) { draw_flatten_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Bump to normal map...", [this](bool &open) { draw_bump_to_normal_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Zap gremlins...", [this](bool &open) { draw_zap_gremlins_dialog(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Remap envmap...", [this](bool &open) { draw_remap_dialog(open); }));
-    m_dialogs.push_back(
-        make_unique<PopupDialog>("Irradiance envmap...", [this](bool &open) { draw_irradiance_dialog(open); }));
+    // Every command that has one, so a dialog cannot be forgotten when a command is added, and all of
+    // them wear the same shell, subject selector and footer; see draw_edit_command_dialog().
+    for (auto &cmd : m_edit_commands)
+        if (cmd->has_dialog())
+        {
+            EditCommand *c = cmd.get();
+            m_dialogs.push_back(make_unique<PopupDialog>(c->info().names.front(), [this, c](bool &open)
+                                                         { draw_edit_command_dialog(*c, open); }));
+        }
+
     m_dialogs.push_back(
         make_unique<PopupDialog>("Applying filter...", [this](bool &open) { draw_filter_progress_dialog(open); }));
     m_dialogs.push_back(
@@ -1671,121 +1655,15 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        return can_edit(img) && img->history.has_redo();
                    }});
 
-        add(Action{{"Blur...", "Gaussian blur", "Box blur"},
-                   ICON_MY_BLUR,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Blur...").open = true; },
-                   if_editable});
-        add(Action{{"Unsharp mask...", "Sharpen"},
-                   ICON_MY_SHARPEN,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Unsharp mask...").open = true; },
-                   if_editable});
-        add(Action{{"Median filter...", "Remove fireflies and outliers"},
-                   ICON_MY_MEDIAN,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Median filter...").open = true; },
-                   if_editable});
-        add(Action{{"Shift...", "Offset", "Translate", "Wrap around"},
-                   ICON_MY_SHIFT,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Shift...").open = true; },
-                   if_editable});
-        add(Action{{"Convert color space...", "Change primaries", "Change white point", "Gamut conversion"},
-                   ICON_MY_COLORSPACE,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Convert color space...").open = true; },
-                   if_editable});
-        add(Action{{"Channel mixer...", "Mix channels", "Monochrome"},
-                   ICON_MY_CHANNEL_MIXER,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Channel mixer...").open = true; },
-                   if_editable});
-        add(Action{{"Hue/saturation...", "Colorize", "Desaturate"},
-                   ICON_MY_HUE_SATURATION,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Hue/saturation...").open = true; },
-                   if_editable});
-        add(Action{{"Flatten...", "Composite over a background", "Remove transparency"},
-                   ICON_MY_FLATTEN,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Flatten...").open = true; },
-                   if_editable});
-        add(Action{{"Bump to normal map...", "Height to normal", "Normal map"},
-                   ICON_MY_NORMAL_MAP,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Bump to normal map...").open = true; },
-                   if_editable});
-        add(Action{{"Remap envmap...", "Change environment map format", "Spherical remapping"},
-                   ICON_MY_ENVMAP,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Remap envmap...").open = true; },
-                   if_editable});
-        add(Action{{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
-                   ICON_MY_IRRADIANCE,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Irradiance envmap...").open = true; },
-                   if_editable});
-
-        add(Action{{"Crop to selection"},
-                   ICON_MY_CROP,
-                   ImGuiMod_Alt | ImGuiKey_C,
-                   0,
-                   [this]()
-                   {
-                       const Box2i box = m_roi;
-                       modify_structure(current_image(), "Crop to selection", [box](Image &i) { i.crop(box); });
-                       // What was selected is now the whole image, so the selection has nothing left to say.
-                       set_selection(Box2i{});
-                   },
-                   [this]()
-                   {
-                       // Needs something to crop to, and cropping to the whole image would do nothing.
-                       auto img = current_image();
-                       if (!can_edit(img) || !m_roi.has_volume())
-                           return false;
-                       Box2i box = m_roi;
-                       box.intersect(img->data_window);
-                       return box.has_volume() && box != img->data_window;
-                   }});
-        add(Action{{"Image size...", "Resize the image"},
-                   ICON_MY_IMAGE_SIZE,
-                   ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
-                   0,
-                   [this]() { dialog("Image size...").open = true; },
-                   if_editable});
-        add(Action{{"Canvas size..."},
-                   ICON_MY_CANVAS_SIZE,
-                   ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C,
-                   0,
-                   [this]() { dialog("Canvas size...").open = true; },
-                   if_editable});
-
-        add(Action{{"Exposure/gamma..."},
-                   ICON_MY_EXPOSURE,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Exposure/gamma...").open = true; },
-                   if_editable});
-        add(Action{{"Brightness/contrast..."},
-                   ICON_MY_BRIGHTNESS_CONTRAST,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Brightness/contrast...").open = true; },
-                   if_editable});
-        add(Action{
-            {"Fill..."}, ICON_MY_FILL, ImGuiKey_None, 0, [this]() { dialog("Fill...").open = true; }, if_editable});
+        // Every edit, from the one list that owns them. What each is called, what it looks like and what
+        // it does are the command's own business; all that is registered here is the way in.
+        for (auto &cmd : m_edit_commands)
+        {
+            EditCommand *c    = cmd.get();
+            const auto   info = c->info();
+            add(Action{info.names, info.icon, info.chord, info.flags, [this, c]() { invoke_edit_command(*c); },
+                       [this, c]() { return edit_command_enabled(*c); }});
+        }
 
         add(Action{{"Select all", "Select the entire image"},
                    ICON_MY_SELECT_ALL,
@@ -1803,78 +1681,6 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]() { set_selection(Box2i{}); },
                    [this]() { return m_roi.has_volume(); }});
-
-        add(Action{{"Invert", "Negative"},
-                   ICON_MY_INVERT,
-                   ImGuiMod_Ctrl | ImGuiKey_I,
-                   0,
-                   [this]() {
-                       modify_pixels(current_image(), "Invert", m_edit_subject,
-                                     [](float v, int2, int) { return 1.f - v; });
-                   },
-                   if_editable});
-        add(Action{{"Clamp to [0,1]", "Clip to LDR range"},
-                   ICON_MY_CLAMP,
-                   ImGuiKey_None,
-                   0,
-                   [this]()
-                   {
-                       modify_pixels(current_image(), "Clamp to [0,1]", m_edit_subject,
-                                     [](float v, int2, int) { return std::min(1.f, std::max(0.f, v)); });
-                   },
-                   if_editable});
-        add(Action{{"Zap gremlins...", "Replace NaNs and infinities"},
-                   ICON_MY_ZAP_GREMLINS,
-                   ImGuiKey_None,
-                   0,
-                   [this]() { dialog("Zap gremlins...").open = true; },
-                   if_editable});
-
-        add(Action{{"Flip image horizontally", "Mirror the pixels horizontally"},
-                   ICON_MY_FLIP_HORIZ,
-                   ImGuiKey_None,
-                   0,
-                   [this]()
-                   {
-                       // Its own inverse, so one function serves both directions.
-                       modify_image_reversibly(
-                           current_image(), "Flip image horizontally", [](Image &img) { img.flip_horizontal(); },
-                           [](Image &img) { img.flip_horizontal(); });
-                   },
-                   if_editable});
-        add(Action{{"Flip image vertically", "Mirror the pixels vertically"},
-                   ICON_MY_FLIP_VERT,
-                   ImGuiKey_None,
-                   0,
-                   [this]()
-                   {
-                       modify_image_reversibly(
-                           current_image(), "Flip image vertically", [](Image &img) { img.flip_vertical(); },
-                           [](Image &img) { img.flip_vertical(); });
-                   },
-                   if_editable});
-        add(Action{{"Rotate 90 degrees clockwise", "Turn clockwise"},
-                   ICON_MY_ROTATE_CW,
-                   ImGuiMod_Ctrl | ImGuiKey_RightBracket,
-                   0,
-                   [this]()
-                   {
-                       modify_image_reversibly(
-                           current_image(), "Rotate 90 degrees clockwise", [](Image &img) { img.rotate_90_cw(); },
-                           [](Image &img) { img.rotate_90_ccw(); });
-                   },
-                   if_editable});
-        add(Action{{"Rotate 90 degrees counter-clockwise", "Turn counter-clockwise"},
-                   ICON_MY_ROTATE_CCW,
-                   ImGuiMod_Ctrl | ImGuiKey_LeftBracket,
-                   0,
-                   [this]()
-                   {
-                       modify_image_reversibly(
-                           current_image(), "Rotate 90 degrees counter-clockwise",
-                           [](Image &img) { img.rotate_90_ccw(); }, [](Image &img) { img.rotate_90_cw(); });
-                   },
-                   if_editable});
 
         add(Action{{"Go to next image"},
                    ICON_MY_BLANK,

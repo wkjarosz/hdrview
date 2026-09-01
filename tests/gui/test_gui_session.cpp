@@ -271,7 +271,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // Gamma keeps only its floor -- it is inverted before use. Exposure and offset are carried back
         // as written, since Ctrl+click entry and the keyboard shortcuts can set values outside the
         // sliders' travel and a session has to round-trip those.
-        IM_CHECK(hdrview()->gamma() >= HDRViewApp::MIN_GAMMA);
+        IM_CHECK(hdrview()->gamma() >= MIN_GAMMA);
         IM_CHECK_EQ(hdrview()->exposure(), 1e30f);
         IM_CHECK_EQ(hdrview()->offset(), -1e30f);
 

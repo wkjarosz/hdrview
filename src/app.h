@@ -7,6 +7,7 @@
 #include "box.h"
 #include "colormap.h"
 #include "display_colorspace.h"
+#include "edit/commands.h"
 #include "edit/envmap.h"
 #include "edit/filters.h"
 #include "edit/subject.h"
@@ -338,28 +339,23 @@ public:
     //! Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
     void draw_filter_progress_dialog(bool &open);
 
+    /*!
+        Run \p cmd, or open its dialog when it has one.
+
+        The single path by which an edit command is invoked, so the menu, the command palette and a
+        keyboard chord cannot reach it by different routes.
+    */
+    void invoke_edit_command(EditCommand &cmd);
+    //! Whether \p cmd could run now: the image accepts edits, and the command itself is satisfied.
+    bool edit_command_enabled(const EditCommand &cmd);
+    //! The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
+    void draw_edit_command_dialog(EditCommand &cmd, bool &open);
+
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
 
     // The parameterized point edits. Each applies on confirm rather than as its controls move; see
     // draw_exposure_gamma_dialog().
-    void draw_exposure_gamma_dialog(bool &open);
-    void draw_brightness_contrast_dialog(bool &open);
-    void draw_fill_dialog(bool &open);
-    void draw_canvas_size_dialog(bool &open);
-    void draw_image_size_dialog(bool &open);
-    void draw_blur_dialog(bool &open);
-    void draw_shift_dialog(bool &open);
-    void draw_convert_colorspace_dialog(bool &open);
-    void draw_channel_mixer_dialog(bool &open);
-    void draw_hue_saturation_dialog(bool &open);
-    void draw_flatten_dialog(bool &open);
-    void draw_bump_to_normal_dialog(bool &open);
-    void draw_unsharp_mask_dialog(bool &open);
-    void draw_median_dialog(bool &open);
-    void draw_zap_gremlins_dialog(bool &open);
-    void draw_remap_dialog(bool &open);
-    void draw_irradiance_dialog(bool &open);
 
     /// The subject the menu's edits use, shown and changed under Edit > Apply to.
     EditSubject &edit_subject() { return m_edit_subject; }
@@ -532,10 +528,6 @@ public:
     /// exposure/gamma keyboard shortcuts step past them, so values outside these are reachable and are
     /// kept as given.
     static constexpr float2 EXPOSURE_RANGE{-9.f, 9.f}, OFFSET_RANGE{-1.f, 1.f}, GAMMA_RANGE{0.02f, 9.f};
-
-    /// Smallest gamma that still describes a power curve. It is inverted before use, so zero divides by
-    /// zero and a negative value sends a black pixel to infinity; nothing above this needs a bound.
-    static constexpr float MIN_GAMMA = 1e-4f;
     //-----------------------------------------------------------------------------
 
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;
@@ -577,6 +569,8 @@ public:
     float     &histogram_height() { return m_histogram_height; }
     Box2i     &roi_live() { return m_roi_live; }
     Box2i     &roi() { return m_roi; }
+    //! The color the viewport draws behind the image, for the edits that composite against it.
+    float4 background_color() const { return m_bg_color; }
 
     //! Set the selection, both the committed rectangle and the one drawn over the viewport.
     /*!
@@ -754,6 +748,13 @@ private:
 
     //! What the menu's edits apply to; see Edit > Apply to.
     EditSubject m_edit_subject;
+
+    //! Every edit command, built once at startup; see edit/commands.h.
+    /*!
+        Owns each command's parameters, which is what makes a dialog reopen with the settings it was left
+        with. The actions, the dialogs and the Edit menu all address them through this one list.
+    */
+    vector<EditCommandPtr> m_edit_commands;
 
     BackgroundImageLoader m_image_loader;
 
