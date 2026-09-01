@@ -422,6 +422,68 @@ TEST_CASE("EWA lands on the mean whatever shape the reduction is")
     }
 }
 
+TEST_CASE("A lat-long source is read as a sphere, not as a rectangle")
+{
+    // Reading past the left edge of a lat-long image is reading the right edge: the two are the same
+    // meridian. Clamping instead puts a wall there, and a sample just inside the edge sees its own column
+    // twice rather than its neighbor across the seam.
+    //
+    // Magnified, so that the reach past the edge is a single texel and what comes back is unambiguous:
+    // the first column of the source is dark, the last is bright, and everything between is mid gray.
+    const int2 src_size{8, 4};
+    Array2Df   src{src_size};
+    for (int y = 0; y < src_size.y; ++y)
+        for (int x = 0; x < src_size.x; ++x) src(x, y) = x == 0 ? 0.f : (x == src_size.x - 1 ? 1.f : 0.5f);
+
+    for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+    {
+        CAPTURE(sampler);
+        const Array2Df out =
+            remapped_envmap(src, int2{64, 32}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling(sampler), 4);
+
+        // The leftmost output column sits half a source texel in from the seam, so its reconstruction
+        // reaches across it and picks up the bright column on the far side. Clamped, it would see only the
+        // dark column it sits on and stay at zero.
+        for (int y = 4; y < 28; ++y)
+        {
+            CAPTURE(y);
+            CHECK(out(0, y) > 0.1f);
+        }
+    }
+}
+
+TEST_CASE("A lat-long pole is crossed rather than smeared")
+{
+    // Past the top row the sphere continues down the far side, half a turn round. An image whose two
+    // halves differ tells the two apart: clamping extends the near half upward, while crossing brings the
+    // far half in.
+    const int2 src_size{64, 32};
+    Array2Df   src{src_size};
+    for (int y = 0; y < src_size.y; ++y)
+        for (int x = 0; x < src_size.x; ++x) src(x, y) = x < src_size.x / 2 ? 0.f : 1.f;
+
+    // A footprint at the very top row reaches past the pole, where the other half of the image lies.
+    const Array2Df out =
+        remapped_envmap(src, int2{32, 16}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 8);
+
+    // Along the top row, a sample from the dark half now sees some of the bright half across the pole, and
+    // the other way about -- so neither is still exactly 0 or 1 the way clamping would leave them.
+    float darkest = 1.f, brightest = 0.f;
+    for (int x = 0; x < out.width(); ++x)
+    {
+        darkest   = std::min(darkest, out(x, 0));
+        brightest = std::max(brightest, out(x, 0));
+    }
+
+    // Still mostly its own half -- the pole is one direction, so this is a nudge and not a blend to gray.
+    CHECK(darkest < 0.5f);
+    CHECK(brightest > 0.5f);
+
+    // ...but no longer pinned at the extremes, which is what tells crossing from clamping.
+    CHECK(darkest > 0.f);
+    CHECK(brightest < 1.f);
+}
+
 TEST_CASE("Magnifying reconstructs rather than repeating source texels")
 {
     // The complement of the reduction sweep: what happens when the footprint is *smaller* than a texel.

@@ -325,8 +325,46 @@ float2 envmap_xyz_to_uv(EnvMapping mapping, float3 xyz)
 namespace
 {
 
-//! Bilinear read with the borders clamped, in [0,1]^2 image coordinates.
-float sample_bilinear(const Array2Df &a, float2 uv)
+//! Whether \p mapping's u covers a full turn, so that one edge of the image continues at the other.
+/*!
+    True of the two that lay longitude out along u. A disc has no such edge -- what lies outside it is not
+    sphere at all -- and neither the equal-area square nor the cube cross joins up so simply.
+*/
+bool wraps_in_u(EnvMapping mapping) { return mapping == EnvMapping_LatLong || mapping == EnvMapping_Cylindrical; }
+
+//! One texel of \p a, addressed the way \p mapping's own topology says.
+/*!
+    Reading past the edge of an image is reading somewhere else on the sphere, and where that is depends
+    on the parameterization. Clamping is right only where the edge really is the end of the data.
+
+    For the two that wrap: a step past the left edge arrives at the right, and a step past a pole carries
+    on down the *far* side -- the row reflects and the longitude turns half way round, which is what the
+    sphere does there. Clamping instead extends the pole row outward, which smears whatever sits at the
+    top of the image along a band beneath it.
+*/
+float texel(const Array2Df &a, int x, int y, EnvMapping mapping)
+{
+    if (wraps_in_u(mapping))
+    {
+        if (y < 0)
+        {
+            y = -1 - y;
+            x += a.width() / 2;
+        }
+        else if (y >= a.height())
+        {
+            y = 2 * a.height() - 1 - y;
+            x += a.width() / 2;
+        }
+
+        return a(mod(x, a.width()), std::clamp(y, 0, a.height() - 1));
+    }
+
+    return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
+}
+
+//! Bilinear read in [0,1]^2 image coordinates, reading past the edges as \p mapping says.
+float sample_bilinear(const Array2Df &a, float2 uv, EnvMapping mapping)
 {
     const float x = uv.x * float(a.width()) - 0.5f;
     const float y = uv.y * float(a.height()) - 0.5f;
@@ -334,7 +372,7 @@ float sample_bilinear(const Array2Df &a, float2 uv)
     const int   x0 = int(std::floor(x)), y0 = int(std::floor(y));
     const float tx = x - float(x0), ty = y - float(y0);
 
-    auto at = [&a](int i, int j) { return a(std::clamp(i, 0, a.width() - 1), std::clamp(j, 0, a.height() - 1)); };
+    auto at = [&a, mapping](int i, int j) { return texel(a, i, j, mapping); };
 
     return (1.f - ty) * ((1.f - tx) * at(x0, y0) + tx * at(x0 + 1, y0)) +
            ty * ((1.f - tx) * at(x0, y0 + 1) + tx * at(x0 + 1, y0 + 1));
@@ -453,7 +491,7 @@ std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
 
     Follows PBRT's `MIPMap::EWA`.
 */
-float ewa_level(const Array2Df &lvl, float2 uv, float2 d0, float2 d1)
+float ewa_level(const Array2Df &lvl, float2 uv, float2 d0, float2 d1, EnvMapping mapping)
 {
     const float2 res{float(lvl.width()), float(lvl.height())};
 
@@ -480,8 +518,7 @@ float ewa_level(const Array2Df &lvl, float2 uv, float2 d0, float2 d1)
     const int s0 = int(std::ceil(st.x - ext_s)), s1 = int(std::floor(st.x + ext_s));
     const int t0 = int(std::ceil(st.y - ext_t)), t1 = int(std::floor(st.y + ext_t));
 
-    auto at = [&lvl](int i, int j)
-    { return lvl(std::clamp(i, 0, lvl.width() - 1), std::clamp(j, 0, lvl.height() - 1)); };
+    auto at = [&lvl, mapping](int i, int j) { return texel(lvl, i, j, mapping); };
 
     float sum = 0.f, total = 0.f;
     for (int t = t0; t <= t1; ++t)
@@ -504,7 +541,7 @@ float ewa_level(const Array2Df &lvl, float2 uv, float2 d0, float2 d1)
     }
 
     // An ellipse narrow enough to fall between texels encloses none of them; read the level instead.
-    return total > 0.f ? sum / total : sample_bilinear(lvl, uv);
+    return total > 0.f ? sum / total : sample_bilinear(lvl, uv, mapping);
 }
 
 /*!
@@ -522,7 +559,8 @@ float ewa_level(const Array2Df &lvl, float2 uv, float2 d0, float2 d1)
 
     Follows PBRT's `MIPMap::Filter`.
 */
-float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv, int max_aniso, float mip_bias)
+float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, float2 dv, int max_aniso, float mip_bias,
+                 EnvMapping mapping)
 {
     const float2 base{float(levels[0].width()), float(levels[0].height())};
 
@@ -545,7 +583,7 @@ float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, floa
     }
 
     if (shorter <= 0.f)
-        return sample_bilinear(levels[0], uv);
+        return sample_bilinear(levels[0], uv, mapping);
 
     // Blended across the two levels either side rather than snapped to one: a snapped level is up to a
     // factor of two too sharp, which aliases in bands wherever the scale crosses a power of two.
@@ -559,8 +597,9 @@ float sample_ewa(const std::vector<Array2Df> &levels, float2 uv, float2 du, floa
     const int   hi    = std::min(lo + 1, int(levels.size()) - 1);
     const float blend = lod - float(lo);
 
-    const float low = ewa_level(levels[size_t(lo)], uv, d0, d1);
-    return lo == hi || blend <= 0.f ? low : (1.f - blend) * low + blend * ewa_level(levels[size_t(hi)], uv, d0, d1);
+    const float low = ewa_level(levels[size_t(lo)], uv, d0, d1, mapping);
+    return lo == hi || blend <= 0.f ? low
+                                    : (1.f - blend) * low + blend * ewa_level(levels[size_t(hi)], uv, d0, d1, mapping);
 }
 
 } // namespace
@@ -621,7 +660,7 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                         };
 
                         out(x, y) = sample_ewa(levels, c, step(float2{1.f / float(size.x), 0.f}),
-                                               step(float2{0.f, 1.f / float(size.y)}), ss, mip_bias);
+                                               step(float2{0.f, 1.f / float(size.y)}), ss, mip_bias, src_mapping);
                         continue;
                     }
 
@@ -631,7 +670,7 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                         {
                             const float2 s_uv{(float(x) + (float(sx) + 0.5f) / float(ss)) / float(size.x),
                                               (float(y) + (float(sy) + 0.5f) / float(ss)) / float(size.y)};
-                            sum += sample_bilinear(src, convert_envmap_uv(src_mapping, dst_mapping, s_uv));
+                            sum += sample_bilinear(src, convert_envmap_uv(src_mapping, dst_mapping, s_uv), src_mapping);
                         }
                     out(x, y) = sum * inv;
                 }
