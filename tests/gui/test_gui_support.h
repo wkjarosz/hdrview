@@ -22,6 +22,7 @@
 #include "imgui_test_engine/imgui_te_context.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -36,6 +37,43 @@ namespace hdrview_test
 {
 
 namespace fs = std::filesystem;
+
+//! Counts the warnings and errors logged while it is alive.
+/*!
+    For the paths whose whole point is to say something rather than to change something. Counted rather
+    than matched: what matters is that the app spoke up at all, and pinning the wording would make a test
+    that fails when the wording improves.
+*/
+class LogWatcher
+{
+public:
+    LogWatcher() : m_sink(std::make_shared<Sink>()) { spdlog::default_logger()->sinks().push_back(m_sink); }
+    ~LogWatcher()
+    {
+        auto &sinks = spdlog::default_logger()->sinks();
+        sinks.erase(std::remove(sinks.begin(), sinks.end(), m_sink), sinks.end());
+    }
+
+    LogWatcher(const LogWatcher &)            = delete;
+    LogWatcher &operator=(const LogWatcher &) = delete;
+
+    int warnings() const { return m_sink->count.load(); }
+
+private:
+    struct Sink final : spdlog::sinks::base_sink<std::mutex>
+    {
+        std::atomic<int> count{0};
+
+        void sink_it_(const spdlog::details::log_msg &msg) override
+        {
+            if (msg.level >= spdlog::level::warn)
+                ++count;
+        }
+        void flush_() override {}
+    };
+
+    std::shared_ptr<Sink> m_sink;
+};
 
 //! Yields until `done` holds, or `timeout` passes. Returns whether it held.
 /*!

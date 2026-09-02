@@ -406,7 +406,13 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
 
     auto [groups, channels] = subject_color_groups(*img, subject);
     if (groups.empty())
+    {
+        // "Apply to" can name a set of groups holding no color at all -- an ungrouped image, two depth
+        // passes -- and a color operation then has nothing to do. Said out loud, because the alternative
+        // is a menu item that appears to work and does nothing.
+        spdlog::warn("'{}' covers no color channel group of '{}'.", name, img->file_and_partname());
         return false;
+    }
 
     Box2i bounds = img->data_window;
     if (subject.selection_only && m_roi.has_volume())
@@ -482,7 +488,10 @@ bool HDRViewApp::modify_neighborhood(const ImagePtr &img, const string &name, co
 
     auto [groups, channels] = subject_color_groups(*img, subject);
     if (groups.empty())
+    {
+        spdlog::warn("'{}' covers no color channel group of '{}'.", name, img->file_and_partname());
         return false;
+    }
 
     Box2i bounds = img->data_window;
     if (subject.selection_only && m_roi.has_volume())

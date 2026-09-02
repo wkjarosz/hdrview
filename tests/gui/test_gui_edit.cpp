@@ -119,6 +119,35 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
+    t           = IM_REGISTER_TEST(engine, "edit", "a color edit that covers nothing says so");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        // Ungrouping leaves every channel standing alone, and a lone channel is not a color group -- so
+        // the scope now names groups that a color operation has nothing to do with. Reachable from the
+        // menu in two clicks, which is why doing nothing quietly is not good enough.
+        menu_click(ctx, "Edit/Ungroup channels");
+        auto img = hdrview()->current_image();
+        IM_CHECK_EQ((int)img->groups.size(), 4);
+
+        const auto original = snapshot(img);
+        const int  entries  = (int)img->history.size();
+
+        LogWatcher  log;
+        EditSubject all_channels;
+        all_channels.scope = EditSubject::Scope_AllChannels;
+        IM_CHECK_EQ(hdrview()->modify_colors(img, "Test", all_channels, [](const float4 &c, int2) { return -c; }),
+                    false);
+
+        IM_CHECK(snapshot(img) == original);
+        IM_CHECK_EQ((int)img->history.size(), entries);
+        IM_CHECK(log.warnings() > 0);
+
+        reset_images(ctx);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "a filter over a selection reaches every image in turn");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
