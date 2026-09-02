@@ -220,7 +220,10 @@ TEST_CASE("The history cursor tracks what can be undone and redone")
 
     int  applied        = 0;
     auto counting_entry = [&applied](std::string name)
-    { return std::make_unique<LambdaUndo>(std::move(name), [&applied](Image &) { ++applied; }); };
+    {
+        auto count = [&applied](Image &) { ++applied; };
+        return std::make_unique<LambdaUndo>(std::move(name), count, count);
+    };
 
     history.add(counting_entry("First"));
     history.add(counting_entry("Second"));
@@ -251,7 +254,8 @@ TEST_CASE("A new edit discards what had been undone")
     auto           img = make_test_image(1);
     CommandHistory history;
 
-    auto noop = [](std::string name) { return std::make_unique<LambdaUndo>(std::move(name), [](Image &) {}); };
+    auto noop = [](std::string name)
+    { return std::make_unique<LambdaUndo>(std::move(name), [](Image &) {}, [](Image &) {}); };
 
     history.add(noop("First"));
     history.add(noop("Second"));
@@ -269,7 +273,8 @@ TEST_CASE("The modified flag follows the distance from the last save in both dir
     auto           img = make_test_image(1);
     CommandHistory history;
 
-    auto noop = [](std::string name) { return std::make_unique<LambdaUndo>(std::move(name), [](Image &) {}); };
+    auto noop = [](std::string name)
+    { return std::make_unique<LambdaUndo>(std::move(name), [](Image &) {}, [](Image &) {}); };
 
     CHECK_FALSE(history.is_modified());
 
@@ -300,7 +305,8 @@ TEST_CASE("A save point that is discarded cannot be returned to")
     auto           img = make_test_image(1);
     CommandHistory history;
 
-    auto noop = [](std::string name) { return std::make_unique<LambdaUndo>(std::move(name), [](Image &) {}); };
+    auto noop = [](std::string name)
+    { return std::make_unique<LambdaUndo>(std::move(name), [](Image &) {}, [](Image &) {}); };
 
     history.add(noop("First"));
     history.add(noop("Second"));

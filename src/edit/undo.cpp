@@ -66,55 +66,37 @@ size_t ChannelRectUndo::memory_usage() const
     return total;
 }
 
-/// Everything about an image that says what its samples mean as color.
-struct ColorMetadataUndo::State
+ColorMetadataUndo::ColorMetadataUndo(const Image &img, std::vector<int> channels, const Box2i &bounds,
+                                     std::string name) :
+    m_pixels(img, std::move(channels), bounds, std::move(name)), m_chromaticities(img.chromaticities),
+    m_adopted_neutral(img.adopted_neutral), m_RGB_to_XYZ(img.M_RGB_to_XYZ), m_XYZ_to_RGB(img.M_XYZ_to_RGB),
+    m_to_sRGB(img.M_to_sRGB), m_luminance_weights(img.luminance_weights), m_adaptation_method(img.adaptation_method),
+    m_color_space(img.color_space), m_white_point(img.white_point),
+    m_color_profile(img.metadata.value<std::string>("color profile", ""))
 {
-    std::optional<Chromaticities> chromaticities;
-    std::optional<float2>         adopted_neutral;
-    float3x3                      M_RGB_to_XYZ, M_XYZ_to_RGB, M_to_sRGB;
-    float3                        luminance_weights;
-    AdaptationMethod              adaptation_method;
-    ColorGamut_                   color_space;
-    WhitePoint_                   white_point;
-    std::string                   color_profile; ///< metadata["color profile"], the panel's "Profile name"
-};
-
-ColorMetadataUndo::ColorMetadataUndo(const Image &img, std::string name) :
-    m_state(std::make_unique<State>()), m_name(std::move(name))
-{
-    m_state->chromaticities    = img.chromaticities;
-    m_state->adopted_neutral   = img.adopted_neutral;
-    m_state->M_RGB_to_XYZ      = img.M_RGB_to_XYZ;
-    m_state->M_XYZ_to_RGB      = img.M_XYZ_to_RGB;
-    m_state->M_to_sRGB         = img.M_to_sRGB;
-    m_state->luminance_weights = img.luminance_weights;
-    m_state->adaptation_method = img.adaptation_method;
-    m_state->color_space       = img.color_space;
-    m_state->white_point       = img.white_point;
-    m_state->color_profile     = img.metadata.value<std::string>("color profile", "");
 }
-
-ColorMetadataUndo::~ColorMetadataUndo() = default;
 
 void ColorMetadataUndo::swap(Image &img)
 {
-    std::swap(m_state->chromaticities, img.chromaticities);
-    std::swap(m_state->adopted_neutral, img.adopted_neutral);
-    std::swap(m_state->M_RGB_to_XYZ, img.M_RGB_to_XYZ);
-    std::swap(m_state->M_XYZ_to_RGB, img.M_XYZ_to_RGB);
-    std::swap(m_state->M_to_sRGB, img.M_to_sRGB);
-    std::swap(m_state->luminance_weights, img.luminance_weights);
-    std::swap(m_state->adaptation_method, img.adaptation_method);
-    std::swap(m_state->color_space, img.color_space);
-    std::swap(m_state->white_point, img.white_point);
+    m_pixels.undo(img); // swaps, whichever direction this is
+
+    std::swap(m_chromaticities, img.chromaticities);
+    std::swap(m_adopted_neutral, img.adopted_neutral);
+    std::swap(m_RGB_to_XYZ, img.M_RGB_to_XYZ);
+    std::swap(m_XYZ_to_RGB, img.M_XYZ_to_RGB);
+    std::swap(m_to_sRGB, img.M_to_sRGB);
+    std::swap(m_luminance_weights, img.luminance_weights);
+    std::swap(m_adaptation_method, img.adaptation_method);
+    std::swap(m_color_space, img.color_space);
+    std::swap(m_white_point, img.white_point);
 
     // an image whose profile was never named has no entry, not an empty one, so the panel falls back
     std::string current = img.metadata.value<std::string>("color profile", "");
-    if (m_state->color_profile.empty())
+    if (m_color_profile.empty())
         img.metadata.erase("color profile");
     else
-        img.metadata["color profile"] = m_state->color_profile;
-    m_state->color_profile = std::move(current);
+        img.metadata["color profile"] = m_color_profile;
+    m_color_profile = std::move(current);
 }
 
 void CommandHistory::add(UndoPtr entry)
@@ -223,4 +205,13 @@ size_t StructureUndo::memory_usage() const
     size_t total = 0;
     for (const auto &c : m_channels) total += size_t(c.num_elements()) * sizeof(float);
     return total;
+}
+
+UndoPtr structure_undo(const Image &img, const std::string &name) { return std::make_unique<StructureUndo>(img, name); }
+
+UndoFactory reversible(std::function<void(Image &)> forward, std::function<void(Image &)> backward)
+{
+    return [forward = std::move(forward), backward = std::move(backward)](const Image &,
+                                                                          const std::string &name) -> UndoPtr
+    { return std::make_unique<LambdaUndo>(name, backward, forward); };
 }

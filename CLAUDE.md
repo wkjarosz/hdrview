@@ -107,8 +107,9 @@ constantly, and a slow one stops being run.
   assertions fail: one out of forty thousand means the test barely detects it and wants broadening. This has
   caught tests that could never have failed, such as a symmetric input that agreed with an asymmetric bug.
 - **Prefer the cheapest level that can see the failure.** Logic in `hdrview_tests` runs in milliseconds; a
-  GUI test spins a real window and frame loop. Edit commands are written against `EditContext`
-  (`src/edit/command.h`) so their logic can be driven from a test implementation of it without a GUI; see
+  GUI test spins a real window and frame loop. Edit commands are written against the plain `EditContext`
+  struct (`src/edit/command.h`) and apply through the free functions in `src/edit/edit_ops.h`, so a test
+  fills in the same struct the app does and drives the same code without a GUI; see
   `tests/test_edit_commands.cpp`. Reserve `hdrview_gui_tests` for what only the GUI can show: menus and
   shortcuts, dialog wiring, progress and cancellation, undo through the app.
 

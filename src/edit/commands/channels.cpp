@@ -13,6 +13,7 @@
 
 #include "edit/commands.h"
 
+#include "edit/edit_ops.h"
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
@@ -57,8 +58,8 @@ std::vector<int> group_channels(const ImagePtr &img, int group)
 std::vector<int> target_channels(const EditContext &ctx)
 {
     std::vector<int> out;
-    for (int g : ctx.target_groups())
-        for (int c : group_channels(ctx.image(), g)) out.push_back(c);
+    for (int g : ctx.target_groups)
+        for (int c : group_channels(ctx.image, g)) out.push_back(c);
     return out;
 }
 
@@ -89,11 +90,11 @@ std::string layer_of(const ImagePtr &img, int group)
 */
 std::vector<int> regroup_channels(const EditContext &ctx)
 {
-    auto img = ctx.image();
+    auto img = ctx.image;
     if (!img)
         return {};
 
-    const std::vector<int> groups = ctx.target_groups();
+    const std::vector<int> groups = ctx.target_groups;
     if (groups.size() == 1)
         return ungrouped_in_layer(img, layer_of(img, groups.front()));
 
@@ -121,6 +122,22 @@ void select_channels_group(Image &img, int channel)
             }
 }
 
+/// Mark \p channels as standing alone or not and rebuild the groups derived from their names.
+/**
+    Leaves the viewport on whichever group now holds \p follow. Ungrouping and regrouping are this in both
+    directions.
+*/
+std::function<void(Image &)> mark_ungrouped(std::vector<int> channels, int follow, bool ungrouped)
+{
+    return [channels = std::move(channels), follow, ungrouped](Image &img)
+    {
+        for (int c : channels) img.channels[size_t(c)].ungrouped = ungrouped;
+        img.rebuild_layers();
+        if (follow >= 0)
+            select_channels_group(img, follow);
+    };
+}
+
 /// Show a group's channels one at a time rather than as a color.
 /**
     Groups are derived from channel names, so this marks the channels and the rebuild that follows declines
@@ -129,15 +146,14 @@ void select_channels_group(Image &img, int channel)
 class UngroupChannels final : public EditCommand
 {
 public:
-    Info info() const override
+    UngroupChannels() :
+        EditCommand({{"Ungroup channels", "Explode channel group", "Split channel group"},
+                     ICON_MY_NO_CHANNEL_GROUP,
+                     ImGuiKey_None,
+                     "Ungroup",
+                     24.f,
+                     /* draws_subject_selector */ false})
     {
-        return {{"Ungroup channels", "Explode channel group", "Split channel group"},
-                ICON_MY_NO_CHANNEL_GROUP,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Ungroup",
-                24.f,
-                /* draws_subject_selector */ false};
     }
 
     /// Only worth offering while one of the target groups holds more than one channel.
@@ -145,7 +161,7 @@ public:
 
     void apply(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -155,22 +171,9 @@ public:
 
         const int follow = followed_channel(img, channels);
 
-        ctx.modify_reversibly(
-            "Ungroup channels",
-            [channels, follow](Image &img2)
-            {
-                for (int c : channels) img2.channels[size_t(c)].ungrouped = true;
-                img2.rebuild_layers();
-                if (follow >= 0)
-                    select_channels_group(img2, follow);
-            },
-            [channels, follow](Image &img2)
-            {
-                for (int c : channels) img2.channels[size_t(c)].ungrouped = false;
-                img2.rebuild_layers();
-                if (follow >= 0)
-                    select_channels_group(img2, follow);
-            });
+        auto forward  = mark_ungrouped(channels, follow, true);
+        auto backward = mark_ungrouped(channels, follow, false);
+        modify_image(ctx, "Ungroup channels", forward, reversible(forward, backward));
     }
 
 private:
@@ -182,9 +185,9 @@ private:
     static std::vector<int> ungroupable_channels(const EditContext &ctx)
     {
         std::vector<int> out;
-        for (int g : ctx.target_groups())
+        for (int g : ctx.target_groups)
         {
-            const std::vector<int> channels = group_channels(ctx.image(), g);
+            const std::vector<int> channels = group_channels(ctx.image, g);
             if (channels.size() > 1)
                 out.insert(out.end(), channels.begin(), channels.end());
         }
@@ -202,22 +205,21 @@ private:
 class RegroupChannels final : public EditCommand
 {
 public:
-    Info info() const override
+    RegroupChannels() :
+        EditCommand({{"Regroup channels", "Rejoin exploded channels"},
+                     ICON_MY_CHANNEL_GROUP,
+                     ImGuiKey_None,
+                     "Regroup",
+                     24.f,
+                     /* draws_subject_selector */ false})
     {
-        return {{"Regroup channels", "Rejoin exploded channels"},
-                ICON_MY_CHANNEL_GROUP,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Regroup",
-                24.f,
-                /* draws_subject_selector */ false};
     }
 
     bool enabled(const EditContext &ctx) const override { return !regroup_channels(ctx).empty(); }
 
     void apply(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -227,22 +229,9 @@ public:
 
         const int follow = followed_channel(img, marked);
 
-        ctx.modify_reversibly(
-            "Regroup channels",
-            [marked, follow](Image &img2)
-            {
-                for (int c : marked) img2.channels[size_t(c)].ungrouped = false;
-                img2.rebuild_layers();
-                if (follow >= 0)
-                    select_channels_group(img2, follow);
-            },
-            [marked, follow](Image &img2)
-            {
-                for (int c : marked) img2.channels[size_t(c)].ungrouped = true;
-                img2.rebuild_layers();
-                if (follow >= 0)
-                    select_channels_group(img2, follow);
-            });
+        auto forward  = mark_ungrouped(marked, follow, false);
+        auto backward = mark_ungrouped(marked, follow, true);
+        modify_image(ctx, "Regroup channels", forward, reversible(forward, backward));
     }
 };
 
@@ -253,21 +242,20 @@ public:
 class DeleteChannelGroup final : public EditCommand
 {
 public:
-    Info info() const override
+    DeleteChannelGroup() :
+        EditCommand({{"Delete channel group", "Remove channels"},
+                     ICON_MY_TRASH_CAN,
+                     ImGuiKey_None,
+                     "Delete",
+                     24.f,
+                     /* draws_subject_selector */ false})
     {
-        return {{"Delete channel group", "Remove channels"},
-                ICON_MY_TRASH_CAN,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Delete",
-                24.f,
-                /* draws_subject_selector */ false};
     }
 
     /// Never every group: an image with no channels is not an image.
     bool enabled(const EditContext &ctx) const override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img || img->groups.size() < 2)
             return false;
 
@@ -277,7 +265,7 @@ public:
 
     void apply(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -288,16 +276,15 @@ public:
         // erase from the back, so the indices still to be erased are not shifted
         std::sort(channels.begin(), channels.end(), std::greater<int>());
 
-        ctx.modify_structure("Delete channel group",
-                             [channels](Image &image)
-                             {
-                                 for (int c : channels)
-                                     if (c >= 0 && c < int(image.channels.size()))
-                                         image.channels.erase(image.channels.begin() + c);
-
-                                 // the groups and layer tree are derived from the channel names
-                                 image.rebuild_layers();
-                             });
+        modify_image(
+            ctx, "Delete channel group",
+            [channels](Image &image)
+            {
+                for (int c : channels)
+                    if (c >= 0 && c < int(image.channels.size()))
+                        image.channels.erase(image.channels.begin() + c);
+            },
+            structure_undo, Extent_Structure);
     }
 };
 

@@ -1741,6 +1741,7 @@ set(HDRVIEW_SOURCES
     src/edit/envmap.cpp
     src/edit/poisson.cpp
     src/edit/filters.cpp
+    src/edit/edit_ops.cpp
     src/edit/undo.cpp
     src/dithermatrix256.cpp
     src/platform_utils.cpp

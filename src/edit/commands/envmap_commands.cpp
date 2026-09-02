@@ -36,23 +36,21 @@ void mapping_combo(const char *label, int *value)
 class Remap final : public EditCommand
 {
 public:
-    Info info() const override
+    Remap() :
+        EditCommand({{"Remap envmap...", "Change environment map format", "Spherical remapping"},
+                     ICON_MY_ENVMAP,
+                     ImGuiKey_None,
+                     "Remap",
+                     27.f})
     {
-        Info i{{"Remap envmap...", "Change environment map format", "Spherical remapping"},
-               ICON_MY_ENVMAP,
-               ImGuiKey_None,
-               ImGuiInputFlags_None,
-               "Remap",
-               27.f};
         // reparameterizes the whole image, so there is no subject to narrow
-        i.draws_subject_selector = false;
-        return i;
+        m_info.draws_subject_selector = false;
     }
 
     /// Opens at the current image's size, then follows the target mapping's aspect.
     void on_open(EditContext &ctx) override
     {
-        if (auto img = ctx.image())
+        if (auto img = ctx.image)
         {
             m_size = img->size();
             if (m_auto_aspect)
@@ -63,7 +61,7 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -155,29 +153,27 @@ private:
 class Irradiance final : public EditCommand
 {
 public:
-    Info info() const override
+    Irradiance() :
+        EditCommand({{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
+                     ICON_MY_IRRADIANCE,
+                     ImGuiKey_None,
+                     "Convolve",
+                     27.f})
     {
-        Info i{{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
-               ICON_MY_IRRADIANCE,
-               ImGuiKey_None,
-               ImGuiInputFlags_None,
-               "Convolve",
-               27.f};
-        i.draws_subject_selector = false;
-        return i;
+        m_info.draws_subject_selector = false;
     }
 
     /// The current image's size, since the result is usually looked at beside it.
     void on_open(EditContext &ctx) override
     {
-        if (auto img = ctx.image())
+        if (auto img = ctx.image)
             m_size = img->size();
     }
     void on_close(EditContext &) override { m_size = int2{0}; }
 
     void draw(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (img && (m_size.x <= 0 || m_size.y <= 0))
             m_size = img->size();
 

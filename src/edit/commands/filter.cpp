@@ -13,6 +13,7 @@
 
 #include "edit/commands.h"
 
+#include "edit/edit_ops.h"
 #include "edit/filters.h"
 #include "fonts.h"
 #include "image.h"
@@ -50,7 +51,7 @@ void border_fields(int *border_x, int *border_y, bool *linked, const char *toolt
 class Blur final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Blur...", "Gaussian blur", "Box blur"}, ICON_MY_BLUR}; }
+    Blur() : EditCommand({{"Blur...", "Gaussian blur", "Box blur"}, ICON_MY_BLUR}) {}
 
     void draw(EditContext &) override
     {
@@ -138,7 +139,7 @@ private:
 class UnsharpMask final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Unsharp mask...", "Sharpen"}, ICON_MY_SHARPEN}; }
+    UnsharpMask() : EditCommand({{"Unsharp mask...", "Sharpen"}, ICON_MY_SHARPEN}) {}
 
     void draw(EditContext &) override
     {
@@ -163,7 +164,7 @@ private:
 class Median final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Median filter...", "Remove fireflies and outliers"}, ICON_MY_MEDIAN}; }
+    Median() : EditCommand({{"Median filter...", "Remove fireflies and outliers"}, ICON_MY_MEDIAN}) {}
 
     void draw(EditContext &) override
     {
@@ -193,13 +194,8 @@ private:
 class Shift final : public EditCommand
 {
 public:
-    Info info() const override
+    Shift() : EditCommand({{"Shift...", "Offset", "Translate", "Wrap around"}, ICON_MY_SHIFT, ImGuiKey_None, "Shift"})
     {
-        return {{"Shift...", "Offset", "Translate", "Wrap around"},
-                ICON_MY_SHIFT,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Shift"};
     }
 
     void draw(EditContext &) override
@@ -231,8 +227,8 @@ public:
         const float2 d  = m_offset;
         const int    s  = m_sampler;
         const int    bx = m_border_x, by = m_link_borders ? m_border_x : m_border_y;
-        ctx.modify_channels("Shift", [d, s, bx, by](const Array2Df &src, const Box2i &r)
-                            { return shifted(src, r, d.x, d.y, s, bx, by); });
+        ctx.modify_channels_async("Shift", [d, s, bx, by](const Array2Df &src, const Box2i &r, int, AtomicProgress)
+                                  { return shifted(src, r, d.x, d.y, s, bx, by); });
     }
 
 private:
@@ -246,13 +242,9 @@ private:
 class ZapGremlins final : public EditCommand
 {
 public:
-    Info info() const override
+    ZapGremlins() :
+        EditCommand({{"Zap gremlins...", "Replace NaNs and infinities"}, ICON_MY_ZAP_GREMLINS, ImGuiKey_None, "Zap"})
     {
-        return {{"Zap gremlins...", "Replace NaNs and infinities"},
-                ICON_MY_ZAP_GREMLINS,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Zap"};
     }
 
     void draw(EditContext &ctx) override
@@ -261,7 +253,7 @@ public:
                            "replace them with a specified color, or with the median of their neighborhood.");
         ImGui::Spacing();
 
-        if (auto img = ctx.image())
+        if (auto img = ctx.image)
             if (auto *stats = img->channels[img->groups[img->selected_group].channels[0]].get_stats())
                 if (stats->computed)
                     ImGui::TextFmt("{} NaN and {} infinite samples in this channel.", stats->summary.nan_pixels,
@@ -283,14 +275,14 @@ public:
     void apply(EditContext &ctx) override
     {
         if (m_mode == Mode_Median)
-            ctx.modify_channels("Zap gremlins",
-                                [](const Array2Df &src, const Box2i &r) { return zapped_gremlins(src, r); });
+            ctx.modify_channels_async("Zap gremlins", [](const Array2Df &src, const Box2i &r, int, AtomicProgress)
+                                      { return zapped_gremlins(src, r); });
         else
         {
             // per channel, so the chosen color reaches the component it belongs to
             const float4 v = m_value;
-            ctx.modify_pixels("Zap gremlins",
-                              [v](float s, int2, int slot) { return std::isfinite(s) ? s : v[slot % 4]; });
+            modify_pixels(ctx, "Zap gremlins",
+                          [v](float s, int2, int slot) { return std::isfinite(s) ? s : v[slot % 4]; });
         }
     }
 
@@ -308,14 +300,13 @@ private:
 class BumpToNormal final : public EditCommand
 {
 public:
-    Info info() const override
+    BumpToNormal() :
+        EditCommand({{"Bump to normal map...", "Height to normal", "Normal map"},
+                     ICON_MY_NORMAL_MAP,
+                     ImGuiKey_None,
+                     "Convert",
+                     27.f})
     {
-        return {{"Bump to normal map...", "Height to normal", "Normal map"},
-                ICON_MY_NORMAL_MAP,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Convert",
-                27.f};
     }
 
     void draw(EditContext &) override
@@ -340,8 +331,15 @@ public:
 
     void apply(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
+            return;
+
+        // the heights are read from a copy of the image, so a slope never straddles a normal already
+        // written; the groups are taken with it, since the copy derives its own from the channel names
+        auto       src    = img->duplicate();
+        const auto groups = img->groups;
+        if (!src)
             return;
 
         // slopes in the image's own coordinates, so height is per unit of the whole image and the same
@@ -349,30 +347,42 @@ public:
         const float2 size{float(img->size().x), float(img->size().y)};
         const float  s      = m_scale;
         const float  y_sign = m_flip_y ? -1.f : 1.f;
+        const int    bx = m_border_x, by = m_link_borders ? m_border_x : m_border_y;
 
-        ctx.modify_neighborhood(
-            "Bump to normal map",
-            [s, size, y_sign](const std::function<float4(int2)> &read, int2 p)
-            {
-                auto height = [&read](int2 q)
-                {
-                    const float4 c = read(q);
-                    return (c.x + c.y + c.z) / 3.f;
-                };
+        modify_colors(ctx, "Bump to normal map",
+                      [src, groups, s, size, y_sign, bx, by](const float4 &, int2 p, int g)
+                      {
+                          // reads anywhere in the channel, not merely the selection; only past the image itself
+                          // does the border mode decide what is there
+                          auto height = [&](int2 q)
+                          {
+                              const int4 channels = groups[size_t(g)].channels;
+                              const int2 extent   = src->channels[size_t(channels[0])].size();
+                              const int  x        = wrap_coord(q.x - src->data_window.min.x, extent.x, bx);
+                              const int  y        = wrap_coord(q.y - src->data_window.min.y, extent.y, by);
 
-                // forward differences: the finest slope the samples can express
-                const float h00 = height(p);
-                const float dx  = height(p + int2{1, 0}) - h00;
-                const float dy  = height(p + int2{0, 1}) - h00;
+                              // where the border mode says there is nothing, no height either
+                              if (x < 0 || y < 0)
+                                  return 0.f;
 
-                // the surface z = h(x,y) has normal (-dh/dx, -dh/dy, 1), the sign folded into the scale
-                float3 n = la::normalize(float3{s * dx * size.x, y_sign * s * dy * size.y, 1.f});
+                              // a color group's first three channels; its alpha says nothing about height
+                              float sum = 0.f;
+                              for (int k = 0; k < 3; ++k) sum += src->channels[size_t(channels[k])](x, y);
+                              return sum / 3.f;
+                          };
 
-                // into the [0,1] range a normal map is stored in, where flat is (0.5, 0.5, 1)
-                n = n * 0.5f + 0.5f;
-                return float4{n, 1.f};
-            },
-            m_border_x, m_link_borders ? m_border_x : m_border_y);
+                          // forward differences: the finest slope the samples can express
+                          const float h00 = height(p);
+                          const float dx  = height(p + int2{1, 0}) - h00;
+                          const float dy  = height(p + int2{0, 1}) - h00;
+
+                          // the surface z = h(x,y) has normal (-dh/dx, -dh/dy, 1), the sign folded into the scale
+                          float3 n = la::normalize(float3{s * dx * size.x, y_sign * s * dy * size.y, 1.f});
+
+                          // into the [0,1] range a normal map is stored in, where flat is (0.5, 0.5, 1)
+                          n = n * 0.5f + 0.5f;
+                          return float4{n, 1.f};
+                      });
     }
 
 private:

@@ -13,6 +13,7 @@
 
 #include "edit/commands.h"
 
+#include "edit/edit_ops.h"
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
@@ -30,59 +31,57 @@ class Geometric final : public EditCommand
 {
 public:
     Geometric(Info info, std::function<void(Image &)> forward, std::function<void(Image &)> backward) :
-        m_info(std::move(info)), m_forward(std::move(forward)), m_backward(std::move(backward))
+        EditCommand(std::move(info)), m_forward(std::move(forward)), m_backward(std::move(backward))
     {
         // moves every sample of every channel, so there is nothing for a scope to narrow
         m_info.draws_subject_selector = false;
     }
 
-    Info info() const override { return m_info; }
-
-    void apply(EditContext &ctx) override { ctx.modify_reversibly(m_info.names.front(), m_forward, m_backward); }
+    void apply(EditContext &ctx) override
+    {
+        modify_image(ctx, m_info.names.front(), m_forward, reversible(m_forward, m_backward));
+    }
 
 private:
-    Info                         m_info;
     std::function<void(Image &)> m_forward, m_backward;
 };
 
 class Crop final : public EditCommand
 {
 public:
-    Info info() const override
+    Crop() : EditCommand({{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C})
     {
-        Info i{{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C};
         // reshapes the image rather than writing into it, so the subject has nothing to say about it
-        i.draws_subject_selector = false;
-        return i;
+        m_info.draws_subject_selector = false;
     }
 
     /// Only when there is something to crop to, and it is not already the whole image.
     bool enabled(const EditContext &ctx) const override
     {
         // cropping to the whole image would do nothing
-        auto img = ctx.image();
-        if (!img || !ctx.selection().has_volume())
+        auto img = ctx.image;
+        if (!img || !ctx.roi.has_volume())
             return false;
 
-        Box2i box = ctx.selection();
+        Box2i box = ctx.roi;
         box.intersect(img->data_window);
         return box.has_volume() && box != img->data_window;
     }
 
     void apply(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
         // enabled()'s conditions again, per image: a fan-out reaches images the rectangle misses, or
         // already is, and neither is a crop
-        Box2i box = ctx.selection();
+        Box2i box = ctx.roi;
         box.intersect(img->data_window);
         if (!box.has_volume() || box == img->data_window)
             return;
 
-        ctx.modify_structure("Crop to selection", [box](Image &i) { i.crop(box); });
+        modify_image(ctx, "Crop to selection", [box](Image &i) { i.crop(box); }, structure_undo, Extent_Structure);
 
         // what was selected is now the whole image
         ctx.set_selection(Box2i{});
@@ -169,23 +168,21 @@ void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
 class ImageSize final : public EditCommand
 {
 public:
-    Info info() const override
+    ImageSize() :
+        EditCommand({{"Image size...", "Resize the image"},
+                     ICON_MY_IMAGE_SIZE,
+                     ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
+                     "Resize",
+                     30.f})
     {
-        Info i{{"Image size...", "Resize the image"},
-               ICON_MY_IMAGE_SIZE,
-               ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
-               ImGuiInputFlags_None,
-               "Resize",
-               30.f};
         // replaces the image rather than writing into it, so the subject has nothing to say about it
-        i.draws_subject_selector = false;
-        return i;
+        m_info.draws_subject_selector = false;
     }
 
     /// Opens on the image's own size, and does not carry it to the next one.
     void on_open(EditContext &ctx) override
     {
-        if (auto img = ctx.image())
+        if (auto img = ctx.image)
             m_size = img->size();
         m_have_size = true;
     }
@@ -193,7 +190,7 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -221,7 +218,7 @@ public:
     {
         const int2 out = m_size;
         if (m_have_size && out.x > 0 && out.y > 0)
-            ctx.modify_structure("Image size", [out](Image &i) { i.resample(out); });
+            modify_image(ctx, "Image size", [out](Image &i) { i.resample(out); }, structure_undo, Extent_Structure);
     }
 
 private:
@@ -234,16 +231,11 @@ private:
 class CanvasSize final : public EditCommand
 {
 public:
-    Info info() const override
+    CanvasSize() :
+        EditCommand(
+            {{"Canvas size..."}, ICON_MY_CANVAS_SIZE, ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C, "Resize", 30.f})
     {
-        Info i{{"Canvas size..."},
-               ICON_MY_CANVAS_SIZE,
-               ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C,
-               ImGuiInputFlags_None,
-               "Resize",
-               30.f};
-        i.draws_subject_selector = false;
-        return i;
+        m_info.draws_subject_selector = false;
     }
 
     /// Opens describing the canvas as it is: its own size, or, given relatively, no change at all.
@@ -252,7 +244,7 @@ public:
     */
     void on_open(EditContext &ctx) override
     {
-        if (auto img = ctx.image())
+        if (auto img = ctx.image)
             m_size = m_relative ? int2{0} : img->size();
         m_have_size = true;
     }
@@ -260,7 +252,7 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -305,13 +297,14 @@ public:
 
     void apply(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img || !m_have_size)
             return;
 
         const int2 out = m_relative ? la::max(img->size() + m_size, int2{1}) : la::max(m_size, int2{1});
         const auto a   = m_anchor;
-        ctx.modify_structure("Canvas size", [out, a](Image &i) { i.resize_canvas(out, a); });
+        modify_image(
+            ctx, "Canvas size", [out, a](Image &i) { i.resize_canvas(out, a); }, structure_undo, Extent_Structure);
     }
 
 private:

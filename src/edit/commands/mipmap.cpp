@@ -33,35 +33,33 @@ int level_count(int2 size) { return 1 + int(std::floor(std::log2(float(std::max(
 class GenerateMipmaps final : public EditCommand
 {
 public:
-    Info info() const override
+    GenerateMipmaps() :
+        EditCommand({{"Generate mipmaps...", "Build a mip pyramid", "Halve repeatedly"},
+                     ICON_MY_CHANNEL_GROUP,
+                     ImGuiKey_None,
+                     "Generate",
+                     26.f})
     {
-        Info i{{"Generate mipmaps...", "Build a mip pyramid", "Halve repeatedly"},
-               ICON_MY_CHANNEL_GROUP,
-               ImGuiKey_None,
-               ImGuiInputFlags_None,
-               "Generate",
-               26.f};
         // rewrites the whole image into a pyramid, so there is no subject to narrow
-        i.draws_subject_selector = false;
-        return i;
+        m_info.draws_subject_selector = false;
     }
 
     bool enabled(const EditContext &ctx) const override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         return img && level_count(img->size()) > 1;
     }
 
     void on_open(EditContext &ctx) override
     {
         // the whole chain by default, clamped to what this image has
-        if (auto img = ctx.image())
+        if (auto img = ctx.image)
             m_levels = std::min(m_levels, level_count(img->size()) - 1);
     }
 
     void draw(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -86,7 +84,7 @@ public:
 
     void apply(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
