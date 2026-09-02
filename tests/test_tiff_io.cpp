@@ -77,6 +77,38 @@ std::string tiff_with_second_pixel_color(uint16_t extra_samples, unsigned char v
     return bytes;
 }
 
+// Reads the samples of an uncompressed, single-strip TIFF straight out of its strip, so a written file
+// can be checked against what other applications produce rather than against HDRView's own reader. A
+// save/load round trip cannot do that: writer and reader share a convention and agree either way.
+std::vector<unsigned char> tiff_raw_samples(const std::string &bytes)
+{
+    auto read_u16 = [&](size_t o) { return uint16_t(uint8_t(bytes[o]) | (uint8_t(bytes[o + 1]) << 8)); };
+    auto read_u32 = [&](size_t o) { return uint32_t(read_u16(o)) | (uint32_t(read_u16(o + 2)) << 16); };
+
+    REQUIRE(bytes.compare(0, 2, "II") == 0);
+    const uint32_t ifd     = read_u32(4);
+    const uint16_t entries = read_u16(ifd);
+
+    uint32_t offset = 0, count = 0, compression = 1;
+    for (uint16_t i = 0; i < entries; ++i)
+    {
+        const size_t   entry = ifd + 2 + size_t(i) * 12;
+        const uint16_t tag   = read_u16(entry);
+        const uint32_t value = read_u16(entry + 8); // every tag read here is a single SHORT or LONG
+        if (tag == 273)
+            offset = read_u32(entry + 8);
+        else if (tag == 279)
+            count = read_u32(entry + 8);
+        else if (tag == 259)
+            compression = value;
+    }
+
+    REQUIRE(compression == 1); // the fixtures below ask for none
+    REQUIRE(offset != 0);
+    REQUIRE(count != 0);
+    return {bytes.begin() + offset, bytes.begin() + offset + count};
+}
+
 ImagePtr load_tiff(const std::string &bytes)
 {
     std::istringstream in(bytes, std::ios::binary);
@@ -182,6 +214,40 @@ TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
     CHECK(images[0]->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
     REQUIRE(images[0]->groups.size() == 2);
     CHECK(images[0]->groups[1].type == ChannelGroup::Single_Channel);
+}
+
+TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
+{
+    // The writer's half of the associated-alpha convention, checked on the bytes. HDRView holds
+    // premultiplied linear color, so a straight color of 1.0 under half coverage is stored linear as 0.5;
+    // the file has to hold alpha * OETF(1.0) = alpha, not OETF(0.5) = 0.735.
+    auto img = std::make_shared<Image>(int2{1, 1}, 4);
+    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.5f; // premultiplied linear
+    img->channels[3](0, 0) = 0.5f;
+    img->finalize();
+
+    std::ostringstream out(std::ios::binary);
+    save_tiff_image(*img, out, "assoc.tif", /*gain*/ 1.f, TransferFunction::sRGB, /*compression*/ 0,
+                    /*data_type*/ 0);
+
+    auto samples = tiff_raw_samples(out.str());
+    REQUIRE(samples.size() >= 4);
+
+    const unsigned char alpha = samples[3];
+    CHECK(int(alpha) == doctest::Approx(127).epsilon(0.02)); // 0.5 quantized over 8 bits
+    // a*OETF(C) == 0.5 * 1.0
+    CHECK(int(samples[0]) == doctest::Approx(127).epsilon(0.02));
+    // Not OETF(a*C) == 0.735, which is what leaving the premultiply in place across the transfer gives.
+    CHECK(int(samples[0]) != doctest::Approx(188).epsilon(0.02));
+
+    // The invariant that identifies the convention in a real file: a stored color can never exceed its
+    // alpha, since it is that alpha times an encoded value of at most one.
+    for (int c = 0; c < 3; ++c) CHECK(samples[c] <= alpha);
+
+    // And it reads back as what it started as.
+    auto reloaded = load_tiff(out.str());
+    CHECK(reloaded->alpha_type == AlphaType_PremultipliedNonLinear);
+    CHECK(reloaded->channels[0](0, 0) == doctest::Approx(0.5f).epsilon(0.02));
 }
 
 TEST_CASE("TIFF save/load round-trips alpha without repeated premultiplication")

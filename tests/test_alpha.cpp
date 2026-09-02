@@ -9,7 +9,11 @@
 #include "colorspace.h"
 #include "image.h"
 #include "imageio/alpha.h"
+#include "imageio/exr.h"
 #include "imageio/image_loader.h"
+#include "imageio/png.h"
+
+#include <sstream>
 
 #include <vector>
 
@@ -18,6 +22,16 @@ namespace
 
 // One interleaved RGBA pixel, so a scale by alpha is visible in a single value.
 std::vector<float> pixel(float r, float g, float b, float a) { return {r, g, b, a}; }
+
+// Channels by name: OpenEXR stores them alphabetically, so position says nothing about which is which.
+float channel_value(const ImagePtr &img, const std::string &name)
+{
+    for (const auto &c : img->channels)
+        if (Channel::tail(c.name) == name)
+            return c(0, 0);
+    FAIL("no channel named ", name);
+    return 0.f;
+}
 
 // The two conventions a premultiplied file can hold, for straight color `c` under coverage `a`.
 float post_transfer(float c, float a) { return a * from_linear(c, TransferFunction::sRGB); }
@@ -152,4 +166,83 @@ TEST_CASE("finalize() premultiplies straight alpha and leaves the other kinds al
     // Already multiplied, whichever space it happened in: finalize() would be doing it a second time.
     CHECK(make(AlphaType_PremultipliedLinear)->channels[0](0, 0) == doctest::Approx(1.f));
     CHECK(make(AlphaType_PremultipliedNonLinear)->channels[0](0, 0) == doctest::Approx(1.f));
+}
+
+// The override exists for files that contradict their own format's convention, which is the case no
+// per-format tagging can catch. These two are the ones that motivated it.
+
+TEST_CASE("An associated-alpha PNG can be read as premultiplied, against the PNG spec")
+{
+    // PNG is unassociated by spec, so HDRView premultiplies on load -- doing that to a file someone
+    // wrote premultiplied would multiply twice and darken every semi-transparent pixel.
+    // The PNG writer divides alpha out before encoding, so to land a file whose stored samples are
+    // a*OETF(C) -- half coverage over a fully bright color, encoded as 128 -- the linear color going in
+    // has to be a * EOTF(0.5).
+    auto img = std::make_shared<Image>(int2{1, 1}, 4);
+    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.5f * to_linear(0.5f, TransferFunction::sRGB);
+    img->channels[3](0, 0) = 0.5f;
+    img->finalize();
+
+    std::ostringstream out(std::ios::binary);
+    save_png_image(*img, out, "premul.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+                   /*sixteen_bit*/ false, TransferFunction::sRGB);
+
+    // Read as the spec says: the samples are taken as straight and multiplied by alpha again.
+    {
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               images = load_image(in, "premul.png", ImageLoadOptions{});
+        REQUIRE(images.size() == 1);
+        CHECK(images[0]->alpha_type == AlphaType_Straight);
+        // Taken as straight: EOTF(0.5) linearized, then multiplied by coverage a second time.
+        CHECK(channel_value(images[0], "R") ==
+              doctest::Approx(0.5f * to_linear(0.5f, TransferFunction::sRGB)).epsilon(0.05));
+    }
+
+    // Read as what it is: divided out across the transfer, then restored, ending where it started.
+    {
+        ImageLoadOptions opts;
+        opts.override_alpha = true;
+        opts.alpha_override = AlphaType_PremultipliedNonLinear;
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               images = load_image(in, "premul.png", opts);
+        REQUIRE(images.size() == 1);
+        CHECK(images[0]->alpha_type == AlphaType_PremultipliedNonLinear);
+        // Divided out across the transfer: the bright color the file really encodes, times its coverage.
+        CHECK(channel_value(images[0], "R") == doctest::Approx(0.5f).epsilon(0.05));
+    }
+}
+
+TEST_CASE("A straight-alpha EXR can be read as straight, against the EXR spec")
+{
+    // EXR is associated by spec, so HDRView leaves its samples alone. A file written straight needs
+    // the multiply that assumption skips.
+    auto img = std::make_shared<Image>(int2{1, 1}, 4);
+    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f; // straight, linear
+    img->channels[3](0, 0) = 0.5f;
+    img->finalize();
+
+    std::ostringstream out(std::ios::binary);
+    save_exr_image(*img, out, "straight.exr");
+
+    {
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               images = load_image(in, "straight.exr", ImageLoadOptions{});
+        REQUIRE(images.size() == 1);
+        CHECK(images[0]->alpha_type == AlphaType_PremultipliedLinear);
+        CHECK(channel_value(images[0], "R") == doctest::Approx(1.f).epsilon(0.01));
+    }
+
+    {
+        ImageLoadOptions opts;
+        opts.override_alpha = true;
+        opts.alpha_override = AlphaType_Straight;
+
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               images = load_image(in, "straight.exr", opts);
+        REQUIRE(images.size() == 1);
+        CHECK(images[0]->alpha_type == AlphaType_Straight);
+        // finalize() now multiplies by the coverage the file's samples were never scaled by.
+        CHECK(channel_value(images[0], "R") == doctest::Approx(0.5f).epsilon(0.01));
+    }
 }
