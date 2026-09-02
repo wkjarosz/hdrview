@@ -434,9 +434,9 @@ public:
 
     int id;
 
-    std::string                   filename;
-    std::string                   partname;
-    std::string                   channel_selector;
+    std::string filename;
+    std::string partname;
+    std::string channel_selector;
     //! The alpha override this image was loaded under, so a reload or a saved session can repeat it.
     //! Empty when the file's own interpretation was used, which is then re-derived on reload.
     std::optional<AlphaType_>     alpha_override;
@@ -460,7 +460,7 @@ public:
     //! displaced. set_alpha() maintains these together with alpha_type.
     AlphaType_           alpha_type_from_file = AlphaType_None;
     AlphaSource_         alpha_source         = AlphaSource_Assumed;
-    json                 metadata   = json::object();
+    json                 metadata             = json::object();
     Exif                 exif;     //!< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any
     std::vector<uint8_t> icc_data; //!< The raw ICC profile data from the file, if any

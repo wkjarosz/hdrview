@@ -15,8 +15,8 @@ struct Image;
 // pointer don't pay for parsing OpenEXR's headers.
 struct EXRSaveOptions
 {
-    std::vector<bool> group_enabled;                     // size = img.groups.size()
-    int               pixel_type  = 1;                   // 0 = Imf::FLOAT, 1 = Imf::HALF
+    std::vector<bool> group_enabled;                      // size = img.groups.size()
+    int               pixel_type  = 1;                    // 0 = Imf::FLOAT, 1 = Imf::HALF
     Imf::Compression  compression = Imf::PIZ_COMPRESSION; // Default compression
     bool              tiled       = false;
     int               tile_width  = 64;

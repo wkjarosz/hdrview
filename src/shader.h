@@ -222,8 +222,8 @@ public:
         \param values
             The members to set, as `{"member_name", value}` pairs. Naming a member the block doesn't have throws.
     */
-    void set_uniform_block(const std::string                                              &block_name,
-                           std::initializer_list<std::pair<const char *, UniformValue>>    values);
+    void set_uniform_block(const std::string                                           &block_name,
+                           std::initializer_list<std::pair<const char *, UniformValue>> values);
 
     /// Return the names of \p block_name's members, without the `"block."` prefix. Backend-specific.
     std::vector<std::string> block_member_names(const std::string &block_name) const;

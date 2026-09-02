@@ -9,11 +9,8 @@ bool check_glerror(const char *cmd, const char *file, int line);
 #define CHK(cmd) cmd
 #else
 #define CHK(cmd)                                                                                                       \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         cmd;                                                                                                           \
-        while (check_glerror(#cmd, __FILE__, __LINE__))                                                                \
-        {                                                                                                              \
-        }                                                                                                              \
+        while (check_glerror(#cmd, __FILE__, __LINE__)) {}                                                             \
     } while (false)
 #endif

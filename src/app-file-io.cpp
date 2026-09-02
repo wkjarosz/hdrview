@@ -714,9 +714,9 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     }
 
     spdlog::info("Reloading file '{}' with channel selector '{}'...", image->filename, image->channel_selector);
-    auto opts                  = load_image_options();
-    opts.channel_selector      = image->channel_selector;
-    opts.override_alpha        = image->alpha_override.has_value();
+    auto opts             = load_image_options();
+    opts.channel_selector = image->channel_selector;
+    opts.override_alpha   = image->alpha_override.has_value();
     if (image->alpha_override)
         opts.alpha_override = *image->alpha_override;
 
@@ -913,12 +913,12 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
         entry_of_image[i] = int(images.size());
 
         json entry;
-        entry["path"]                  = path_of(img);
-        entry["channel_selector"]      = img->channel_selector;
+        entry["path"]             = path_of(img);
+        entry["channel_selector"] = img->channel_selector;
         if (img->alpha_override)
             entry["alpha_override"] = alpha_override_token(*img->alpha_override);
-        entry["selected_group"]        = img->selected_group;
-        entry["reference_group"]       = img->reference_group;
+        entry["selected_group"]  = img->selected_group;
+        entry["reference_group"] = img->reference_group;
 
         // The multi-selection, by channel name: a group index means whatever the rebuild after loading
         // makes it mean, while the names are what the grouping is derived from.
@@ -1211,12 +1211,12 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
             continue;
 
         PendingSession::Entry e;
-        e.path                  = resolve(rel);
-        e.channel_selector      = entry.value<string>("channel_selector", "");
-        e.alpha_override        = alpha_override_from_token(entry);
-        e.selected_group        = entry.value<int>("selected_group", 0);
-        e.reference_group       = entry.value<int>("reference_group", 0);
-        e.selected_channels     = entry.value<vector<string>>("selected_channels", {});
+        e.path              = resolve(rel);
+        e.channel_selector  = entry.value<string>("channel_selector", "");
+        e.alpha_override    = alpha_override_from_token(entry);
+        e.selected_group    = entry.value<int>("selected_group", 0);
+        e.reference_group   = entry.value<int>("reference_group", 0);
+        e.selected_channels = entry.value<vector<string>>("selected_channels", {});
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
@@ -1258,12 +1258,12 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         // extract_and_schedule() in image_loader.cpp), so "reveal in file manager" and reload_image() need
         // no session-specific handling.
         PendingSession::Entry e;
-        e.path                  = fs::path(zip_name) / fs::u8path(rel);
-        e.channel_selector      = entry.value<string>("channel_selector", "");
-        e.alpha_override        = alpha_override_from_token(entry);
-        e.selected_group        = entry.value<int>("selected_group", 0);
-        e.reference_group       = entry.value<int>("reference_group", 0);
-        e.selected_channels     = entry.value<vector<string>>("selected_channels", {});
+        e.path              = fs::path(zip_name) / fs::u8path(rel);
+        e.channel_selector  = entry.value<string>("channel_selector", "");
+        e.alpha_override    = alpha_override_from_token(entry);
+        e.selected_group    = entry.value<int>("selected_group", 0);
+        e.reference_group   = entry.value<int>("reference_group", 0);
+        e.selected_channels = entry.value<vector<string>>("selected_channels", {});
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);

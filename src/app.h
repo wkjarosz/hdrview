@@ -949,8 +949,8 @@ private:
             string               channel_selector;
             optional<AlphaType_> alpha_override; ///< Empty when the file's own interpretation was used
             int                  selected_group = 0, reference_group = 0;
-            vector<string> selected_channels; ///< The multi-selection, by channel name; see Channel::selected
-            ImagePtr       loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
+            vector<string>       selected_channels; ///< The multi-selection, by channel name; see Channel::selected
+            ImagePtr loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
         };
         vector<Entry> entries; ///< One per saved "images" entry, in file order; the same path may repeat
         int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset

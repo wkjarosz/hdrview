@@ -523,8 +523,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                          video_full_range_flag ? "full" : "narrow");
         }
 
-    // Done reading color chunks
-    //
+        // Done reading color chunks
+        //
 
 #if defined(PNG_TEXT_SUPPORTED)
     /* png_get_text returns the number of text chunks and writes a pointer to
@@ -701,8 +701,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 #endif
 
         int3 size{int(frame_width), int(frame_height), channels};
-        auto image            = make_shared<Image>(size.xy(), size.z);
-        image->filename       = filename;
+        auto image      = make_shared<Image>(size.xy(), size.z);
+        image->filename = filename;
         // PNG's spec makes alpha unassociated; a file carries no signal of its own
         image->set_alpha(size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
                          alpha_override_of(opts));

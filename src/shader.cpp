@@ -134,7 +134,7 @@ string Shader::prepend_includes(string_view shader_string, const std::vector<str
     return oss.str();
 }
 
-void Shader::set_uniform_block(const string                                              &block_name,
+void Shader::set_uniform_block(const string                                                &block_name,
                                std::initializer_list<std::pair<const char *, UniformValue>> values)
 {
     std::vector<string> written;

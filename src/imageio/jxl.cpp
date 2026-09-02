@@ -684,9 +684,9 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             spdlog::info("File has {} color channels", size.z);
             format = {(uint32_t)size.z, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
 
-            image                                         = make_shared<Image>(size.xy(), size.z);
-            image->filename                               = filename;
-            image->partname                               = frame_name;
+            image           = make_shared<Image>(size.xy(), size.z);
+            image->filename = filename;
+            image->partname = frame_name;
             // JxlBasicInfo always carries alpha_premultiplied, so a file with alpha has stated its kind,
             // though not the space it means; see where this is undone below
             image->set_alpha(!info.alpha_bits
@@ -1070,13 +1070,13 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     if (!pixels || w <= 0 || h <= 0)
         throw std::runtime_error("Empty image or invalid image dimensions");
 
-    info.xsize                 = w;
-    info.ysize                 = h;
+    info.xsize = w;
+    info.ysize = h;
     // One or two channels is a gray image, with the second channel its alpha; three or four is RGB.
-    info.num_color_channels    = n <= 2 ? 1 : 3;
-    info.num_extra_channels    = (n == 2 || n == 4) ? 1 : 0;
-    info.alpha_bits            = (n == 2 || n == 4) ? info.bits_per_sample : 0;
-    info.alpha_exponent_bits   = (n == 2 || n == 4) ? info.exponent_bits_per_sample : 0;
+    info.num_color_channels  = n <= 2 ? 1 : 3;
+    info.num_extra_channels  = (n == 2 || n == 4) ? 1 : 0;
+    info.alpha_bits          = (n == 2 || n == 4) ? info.bits_per_sample : 0;
+    info.alpha_exponent_bits = (n == 2 || n == 4) ? info.exponent_bits_per_sample : 0;
     // libjxl rejects lossless encoding of an XYB-encoded frame, and it uses XYB whenever the original
     // profile is not kept
     info.uses_original_profile = lossless ? JXL_TRUE : JXL_FALSE;

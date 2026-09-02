@@ -11,8 +11,8 @@
 #include "imageio/image_loader.h"
 #include "imageio/tiff.h"
 
-#include <initializer_list>
 #include <cstring>
+#include <initializer_list>
 #include <sstream>
 #include <string>
 #include <vector>

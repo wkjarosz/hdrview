@@ -722,8 +722,8 @@ bool is_raw_image(std::istream &is) noexcept
         // decline rather than throw, so the loaders after this one still get a look at the file
         if (ret && !plausible_raw_size(raw->imgdata.sizes.width, raw->imgdata.sizes.height, stream_size(is)))
         {
-            spdlog::debug("Declining {}x{} raw: too little data to back those dimensions.",
-                          raw->imgdata.sizes.width, raw->imgdata.sizes.height);
+            spdlog::debug("Declining {}x{} raw: too little data to back those dimensions.", raw->imgdata.sizes.width,
+                          raw->imgdata.sizes.height);
             ret = false;
         }
 
@@ -1054,10 +1054,10 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 int h = thumb->height;
                 int n = thumb->colors;
 
-                auto timg                                = std::make_shared<Image>(int2{w, h}, n);
-                timg->filename                           = filename;
-                timg->partname                           = fmt::format("thumbnail:{}", ti);
-                timg->metadata["pixel format"]           = fmt::format("{}-bit ({} bpc)", n * thumb->bits, thumb->bits);
+                auto timg                      = std::make_shared<Image>(int2{w, h}, n);
+                timg->filename                 = filename;
+                timg->partname                 = fmt::format("thumbnail:{}", ti);
+                timg->metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", n * thumb->bits, thumb->bits);
                 timg->set_bits_per_sample(thumb->bits);
                 timg->metadata["loader"]                 = "LibRaw";
                 timg->metadata["header"]["Is thumbnail"] = {{"value", true},

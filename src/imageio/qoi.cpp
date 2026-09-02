@@ -99,8 +99,8 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
     if (size.z == 0)
         throw invalid_argument{"Image has zero channels."};
 
-    auto image                      = make_shared<Image>(size.xy(), size.z);
-    image->filename                 = filename;
+    auto image      = make_shared<Image>(size.xy(), size.z);
+    image->filename = filename;
     // QOI's spec makes alpha unassociated
     image->set_alpha(size.z > 3 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format, alpha_override_of(opts));
     image->metadata["loader"]       = "qoi";

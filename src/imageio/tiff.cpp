@@ -184,7 +184,7 @@ struct TiffOutput
     static toff_t seek(thandle_t handle, toff_t offset, int whence)
     {
         auto tiff = reinterpret_cast<TiffOutput *>(handle);
-        auto base = whence == SEEK_SET  ? toff_t(0)
+        auto base = whence == SEEK_SET   ? toff_t(0)
                     : whence == SEEK_CUR ? toff_t(tiff->pos)
                                          : toff_t(tiff->buffer.size());
         tiff->pos = size_t(base + offset);
@@ -536,9 +536,9 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             // Pre-compute bias and inverse divisor for integer formats from the file's bit depth. That
             // depth comes straight from the tag and reaches 64 (libtiff's own caspian.tif), so guard the
             // shifts: 1ull << 64 is undefined, and a declared zero would shift by -1.
-            const uint64_t int_max_value = file_bits_per_sample == 0    ? 1ull
-                                           : file_bits_per_sample >= 64 ? ~0ull
-                                                                        : ((1ull << file_bits_per_sample) - 1);
+            const uint64_t int_max_value   = file_bits_per_sample == 0    ? 1ull
+                                             : file_bits_per_sample >= 64 ? ~0ull
+                                                                          : ((1ull << file_bits_per_sample) - 1);
             float          int_inv_divisor = 1.0f / (float)int_max_value;
             float          int_bias        = sample_format == SAMPLEFORMAT_INT && file_bits_per_sample > 0
                                                  ? (float)(1ull << (file_bits_per_sample - 1))
@@ -575,8 +575,8 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                     const size_t count            = std::min(output.size(), input_size / bytes_per_sample);
                     for (size_t i = 0; i < count; ++i)
                     {
-                        output[i] = read_partial_as<uint32_t>(input + i * bytes_per_sample, bytes_per_sample,
-                                                              host_endian());
+                        output[i] =
+                            read_partial_as<uint32_t>(input + i * bytes_per_sample, bytes_per_sample, host_endian());
 
                         // If signbit is set, set all bits to the left to 1
                         if (handle_sign && (output[i] & sign_bit))
@@ -620,7 +620,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                     // unpack_bits sign-extends a signed sample across the 32-bit accumulator, so read it
                     // back as signed for the bias to land it in [0,1].
                     const float value = sample_format == SAMPLEFORMAT_INT ? (float)(int32_t)unpacked[buffer_idx]
-                                                                         : (float)unpacked[buffer_idx];
+                                                                          : (float)unpacked[buffer_idx];
                     return (value + int_bias) * int_inv_divisor;
                 }
                 else // SAMPLEFORMAT_IEEEFP
@@ -1142,8 +1142,7 @@ vector<ImagePtr> load_sub_images(TIFF *tif, tdir_t dir, const ImageLoadOptions &
                 throw invalid_argument{"Failed to read sub IFD."};
 
             int j = 0;
-            do
-            {
+            do {
                 auto sub_images = load_image(tif, dir, i, j, opts);
                 for (auto sub_image : sub_images) images.push_back(sub_image);
                 ++j;
@@ -1255,8 +1254,7 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
     vector<ImagePtr> images;
 
     // TIFF files can contain multiple directories (sub-images)
-    do
-    {
+    do {
 
         tdir_t dir = TIFFCurrentDirectory(tif);
 

@@ -18,8 +18,8 @@ ImagePtr make_rgba_image(AlphaType_ alpha_type)
 {
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
     for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
-    img->channels[3](0, 0)      = 0.5f;
-    img->alpha_type             = alpha_type;
+    img->channels[3](0, 0) = 0.5f;
+    img->alpha_type        = alpha_type;
     img->finalize();
     return img;
 }

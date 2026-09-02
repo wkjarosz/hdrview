@@ -44,7 +44,7 @@ enum AlphaSource : AlphaSource_
     AlphaSource_Count
 };
 
-const char  *alpha_type_name(AlphaType_ at);
+const char *alpha_type_name(AlphaType_ at);
 //! How the alpha kind was arrived at, phrased to follow it: "Straight (from the file)".
 const char *alpha_source_suffix(AlphaSource_ as);
 //! The same, phrased to introduce a kind instead: "the file said Straight", for where an override has

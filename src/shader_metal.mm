@@ -90,35 +90,67 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
         size_t          component_count;
         switch (attr.attributeType)
         {
-        case MTLDataTypeFloat: format = MTLVertexFormatFloat; dtype = VariableType::Float32; component_count = 1; break;
-        case MTLDataTypeFloat2: format = MTLVertexFormatFloat2; dtype = VariableType::Float32; component_count = 2; break;
-        case MTLDataTypeFloat3: format = MTLVertexFormatFloat3; dtype = VariableType::Float32; component_count = 3; break;
-        case MTLDataTypeFloat4: format = MTLVertexFormatFloat4; dtype = VariableType::Float32; component_count = 4; break;
-        case MTLDataTypeInt: format = MTLVertexFormatInt; dtype = VariableType::Int32; component_count = 1; break;
-        case MTLDataTypeInt2: format = MTLVertexFormatInt2; dtype = VariableType::Int32; component_count = 2; break;
-        case MTLDataTypeInt3: format = MTLVertexFormatInt3; dtype = VariableType::Int32; component_count = 3; break;
-        case MTLDataTypeInt4: format = MTLVertexFormatInt4; dtype = VariableType::Int32; component_count = 4; break;
+        case MTLDataTypeFloat:
+            format          = MTLVertexFormatFloat;
+            dtype           = VariableType::Float32;
+            component_count = 1;
+            break;
+        case MTLDataTypeFloat2:
+            format          = MTLVertexFormatFloat2;
+            dtype           = VariableType::Float32;
+            component_count = 2;
+            break;
+        case MTLDataTypeFloat3:
+            format          = MTLVertexFormatFloat3;
+            dtype           = VariableType::Float32;
+            component_count = 3;
+            break;
+        case MTLDataTypeFloat4:
+            format          = MTLVertexFormatFloat4;
+            dtype           = VariableType::Float32;
+            component_count = 4;
+            break;
+        case MTLDataTypeInt:
+            format          = MTLVertexFormatInt;
+            dtype           = VariableType::Int32;
+            component_count = 1;
+            break;
+        case MTLDataTypeInt2:
+            format          = MTLVertexFormatInt2;
+            dtype           = VariableType::Int32;
+            component_count = 2;
+            break;
+        case MTLDataTypeInt3:
+            format          = MTLVertexFormatInt3;
+            dtype           = VariableType::Int32;
+            component_count = 3;
+            break;
+        case MTLDataTypeInt4:
+            format          = MTLVertexFormatInt4;
+            dtype           = VariableType::Int32;
+            component_count = 4;
+            break;
         default:
             throw std::invalid_argument("Shader::Shader(): vertex attribute \"" + std::string([attr.name UTF8String]) +
                                         "\": unsupported attribute type!");
         }
 
-        NSUInteger buffer_index                          = 30 - attr.attributeIndex;
+        NSUInteger buffer_index                                 = 30 - attr.attributeIndex;
         vertex_desc.attributes[attr.attributeIndex].format      = format;
         vertex_desc.attributes[attr.attributeIndex].offset      = 0;
         vertex_desc.attributes[attr.attributeIndex].bufferIndex = buffer_index;
         vertex_desc.layouts[buffer_index].stride                = type_size(dtype) * component_count;
-        vertex_desc.layouts[buffer_index].stepFunction           = MTLVertexStepFunctionPerVertex;
+        vertex_desc.layouts[buffer_index].stepFunction          = MTLVertexStepFunctionPerVertex;
 
-        std::string name              = [attr.name UTF8String];
-        Buffer      &buf              = m_buffers[name];
-        buf.index                     = (int)buffer_index;
-        buf.type                      = VertexBuffer;
-        buf.dtype                     = dtype;
-        buf.ndim                      = 1;
-        buf.shape[0]                  = 0;
-        buf.shape[1]                  = component_count;
-        buf.shape[2]                  = 1;
+        std::string name = [attr.name UTF8String];
+        Buffer     &buf  = m_buffers[name];
+        buf.index        = (int)buffer_index;
+        buf.type         = VertexBuffer;
+        buf.dtype        = dtype;
+        buf.ndim         = 1;
+        buf.shape[0]     = 0;
+        buf.shape[1]     = component_count;
+        buf.shape[2]     = 1;
     }
     pipeline_desc.vertexDescriptor = vertex_desc;
 
@@ -177,7 +209,7 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
         }
         for (MTLStructMember *member in arg.bufferStructType.members)
         {
-            std::string member_name = [member.name UTF8String];
+            std::string member_name                                = [member.name UTF8String];
             m_metal_struct_members[block_name + "." + member_name] = {block_name, (size_t)member.offset};
         }
     };
@@ -277,8 +309,8 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
     if (member_it != m_metal_struct_members.end())
     {
         const auto &[block_name, offset] = member_it->second;
-        Buffer     &block_buf            = m_buffers[block_name];
-        size_t      member_size          = type_size(dtype);
+        Buffer &block_buf                = m_buffers[block_name];
+        size_t  member_size              = type_size(dtype);
         for (size_t i = 0; i < ndim; ++i) member_size *= shape[i];
         if (offset + member_size > block_buf.size)
             throw std::invalid_argument("Shader::set_buffer(): \"" + name + "\": member write would overrun block \"" +

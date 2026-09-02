@@ -145,10 +145,10 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename, con
 {
     ScopedMDC mdc{"IO", "PFM"};
     int3      size;
-    auto      float_data             = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
-    auto      image                  = make_shared<Image>(size.xy(), size.z);
-    image->filename                  = filename;
-    image->metadata["pixel format"]  = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
+    auto      float_data            = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
+    auto      image                 = make_shared<Image>(size.xy(), size.z);
+    image->filename                 = filename;
+    image->metadata["pixel format"] = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
     image->set_bits_per_sample(0); //< floating point
     image->metadata["color profile"] = opts.override_profile
                                            ? color_profile_name(ColorGamut_Unspecified, opts.tf_override)

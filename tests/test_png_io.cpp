@@ -54,7 +54,7 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
                        /*sixteen_bit*/ false, TransferFunction::Linear);
 
         std::istringstream in(out.str(), std::ios::binary);
-        auto                reloaded = load_png_image(in, "test.png");
+        auto               reloaded = load_png_image(in, "test.png");
         REQUIRE(reloaded.size() == 1);
         REQUIRE(reloaded[0]->channels.size() == 3);
         // 8-bit quantization error tolerance
@@ -69,7 +69,7 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
                        /*sixteen_bit*/ true, TransferFunction::Linear);
 
         std::istringstream in(out.str(), std::ios::binary);
-        auto                reloaded = load_png_image(in, "test.png");
+        auto               reloaded = load_png_image(in, "test.png");
         REQUIRE(reloaded.size() == 1);
         // 16-bit quantization error is far smaller than 8-bit
         for (int c = 0; c < 3; ++c)
@@ -86,8 +86,8 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
     {
         INFO("transfer function = ", transfer_function_name(tf));
 
-        auto img              = make_test_image(int2{4, 3});
-        img->chromaticities   = gamut_chromaticities(ColorGamut_BT2020_2100); // wide gamut, as HDR content typically is
+        auto img            = make_test_image(int2{4, 3});
+        img->chromaticities = gamut_chromaticities(ColorGamut_BT2020_2100); // wide gamut, as HDR content typically is
 
         std::ostringstream out(std::ios::binary);
         // HDR transfer functions need far more than 8-bit precision to avoid banding
@@ -95,7 +95,7 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
                        /*sixteen_bit*/ true, tf);
 
         std::istringstream in(out.str(), std::ios::binary);
-        auto                reloaded = load_png_image(in, "test.png");
+        auto               reloaded = load_png_image(in, "test.png");
         REQUIRE(reloaded.size() == 1);
 
         auto &cicp_value = reloaded[0]->metadata["header"]["cICP"]["value"];
@@ -327,7 +327,7 @@ namespace
 std::vector<ImagePtr> load_test_png(const std::string &subdir, const std::string &filename,
                                     const ImageLoadOptions &opts = {})
 {
-    std::string  path = std::string(HDRVIEW_TEST_PNG_CONTRIB_DIR) + "/" + subdir + "/" + filename;
+    std::string   path = std::string(HDRVIEW_TEST_PNG_CONTRIB_DIR) + "/" + subdir + "/" + filename;
     std::ifstream file(path, std::ios::binary);
     REQUIRE_MESSAGE(file.good(), "Could not open vendored test PNG: ", path);
     return load_png_image(file, filename, opts);
@@ -343,7 +343,7 @@ TEST_CASE("PNG load handles the full PngSuite bit-depth/color-type matrix withou
     struct Case
     {
         const char *file;
-        int          expected_channels;
+        int         expected_channels;
         int         expected_bits;
     };
     static const Case cases[] = {
@@ -434,7 +434,6 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
     }
 #endif // PNG_cICP_SUPPORTED
 }
-
 
 TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
 {
@@ -541,7 +540,7 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
 
 TEST_CASE("saving gray+alpha applies the exposure gain to the color channel only")
 {
-    constexpr int2 size{2, 2};
+    constexpr int2  size{2, 2};
     constexpr float straight_y = 0.4f, a = 0.5f, gain = 2.f;
 
     auto img = std::make_shared<Image>(size, 2);
