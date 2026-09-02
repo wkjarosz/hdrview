@@ -13,7 +13,7 @@
 #include <stdexcept>
 
 #include "app.h"
-#include "heif.h" // for HEIFCodec, which the stubs below need as much as the real implementation
+#include "heif.h" // for HEIFCodec, which the stubs below need too
 #include "imgui.h"
 
 using namespace std;
@@ -101,14 +101,9 @@ static std::vector<const heif_encoder_descriptor *> s_encoder_descriptors;
 static std::vector<HeifEncoderPtr>                  s_encoders;
 static bool                                         s_encoders_initialized = false;
 
-//! libheif registers its codec plugins in heif_init().
-/*!
-    Distributions that ship those codecs as separate shared objects -- Ubuntu, Debian and Fedora all do --
-    register none of them until it is called, leaving only whatever was compiled into the library itself.
-    Without this HDRView finds no HEVC or AV1 encoder on such a system, and silently falls back to the
-    built-in JPEG one, which cannot store alpha. There is no matching heif_deinit(): the plugins stay
-    loaded for the life of the process, which is exactly as long as they are wanted.
-*/
+//! heif_init() loads libheif's codec plugins; without it, distributions that ship those codecs as separate
+//! shared objects (Debian, Ubuntu, Fedora) offer no HEVC or AV1 encoder at all. No matching heif_deinit():
+//! the plugins stay loaded for the life of the process.
 static void ensure_heif_initialized()
 {
     static std::once_flag once;
@@ -124,12 +119,8 @@ static void ensure_heif_initialized()
 //! JPEG has no alpha channel; every other codec HEIF can carry does.
 static bool codec_stores_alpha(heif_compression_format format) { return format != heif_compression_JPEG; }
 
-//! Whether `format` may be written under `codec`.
-/*!
-    An AV1 image item reports the 'avif' brand, and libheif makes the primary item's brand the file's
-    major brand -- so an AV1 payload is an AVIF whatever the file is named. AV1 is therefore AVIF's
-    alone, and the HEIF entry offers the codecs a .heif may actually carry.
-*/
+//! Whether `format` may be written under `codec`. libheif makes the primary item's brand the file's major
+//! brand, and an AV1 item reports 'avif', so an AV1 payload is an AVIF whatever the file is named.
 static bool codec_admits(HEIFCodec codec, heif_compression_format format)
 {
     switch (codec)
@@ -230,8 +221,7 @@ json get_heif_info()
         json entry{{"decoder", dec}, {"encoder", enc}};
 
         // libheif returns the descriptors in descending plugin priority, so the first is the one it will
-        // pick. That matters for AV1, where dav1d and libaom can both be present and one is about twice
-        // as fast as the other.
+        // pick; for AV1 that decides between dav1d and libaom, which differ by about 2x in speed
         const heif_decoder_descriptor *descriptors[8];
         if (int n = heif_get_decoder_descriptors(comp, descriptors, 8); n > 0)
             entry["decoder_used"] = heif_decoder_descriptor_get_name(descriptors[0]);
@@ -357,9 +347,7 @@ static auto chroma_name(heif_chroma ch)
     }
 }
 
-// Helper: process decoded heif image (populate metadata, linearize and copy channels)
 // Process decoded heif image: create an Image, populate metadata, linearize and copy channels.
-// Returns a newly created ImagePtr.
 static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_profile_nclx *handle_level_nclx,
                                            const std::vector<uint8_t> &handle_level_icc_profile,
                                            const ImageLoadOptions &opts, int3 &size, int cpp, int num_planes,
@@ -463,11 +451,9 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         }
         float bpc_div = 1.f / ((1 << bpc) - 1);
 
-        // Copy pixels into a contiguous float buffer, normalized to [0,1] -- tens of millions of samples at
-        // full resolution, so it runs on the thread pool like the linearize and channel-copy stages below.
-        // Branching on the sample width per row rather than per sample lets each loop vectorize, and the
-        // buffer is a unique_ptr because value-initializing a vector this size costs more than the loop
-        // that goes on to overwrite every element of it.
+        // copy the pixels into a contiguous float buffer, normalized to [0,1]. Branching on the sample width
+        // per row lets each loop vectorize; the buffer is a unique_ptr to skip a vector's value-init, which
+        // this immediately overwrites.
         auto       float_pixels = std::unique_ptr<float[]>(new float[(size_t)size.x * size.y * cpp]);
         const bool is_16bit     = (bpp_storage == cpp * 16);
         const int  block_size   = std::max(1, 1024 * 1024 / (size.x * cpp));
@@ -490,13 +476,12 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                          }
                      });
 
-        // Alpha is not a color: it carries neither a transfer function nor primaries, so it is copied
-        // through as decoded. Only the monochrome path reaches this with a separate alpha plane -- the
-        // interleaved paths hand alpha to linearize_pixels(), which already leaves the last channel alone.
+        // alpha carries neither a transfer function nor primaries, so copy it through as decoded. Only the
+        // monochrome path arrives here with a separate alpha plane; elsewhere linearize_pixels() gets the
+        // interleaved buffer and already leaves the last channel alone.
         if (out_planes[p] != heif_channel_Alpha)
         {
-            // Inverting the transfer function does not commute with multiplication by alpha; see
-            // imageio/alpha.h.
+            // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
             unpremultiply_before_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
 
             if (opts.override_profile)
@@ -555,23 +540,15 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     return image;
 }
 
-//! Decode an auxiliary image's samples into normalized floats, applying no color management.
-/*!
-    An auxiliary image such as a gain map is not a picture -- its samples are coefficients -- so
-    pushing it through the base image's ICC or NCLX profile would be meaningless. Unlike
-    process_decoded_heif_image(), this normalizes the samples to [0,1] and stops there.
-
-    \param aux_handle  Handle of the auxiliary image to decode
-    \return            The decoded map, at whatever resolution and channel count the file stored it
-*/
+//! Decode auxiliary image \p aux_handle into floats normalized to [0,1], at whatever resolution and channel
+//! count the file stored it. No color management: a gain map's samples are coefficients, not colors.
 static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
 {
     heif_colorspace preferred_colorspace = heif_colorspace_undefined;
     heif_chroma     preferred_chroma     = heif_chroma_undefined;
     heif_image_handle_get_preferred_decoding_colorspace(aux_handle, &preferred_colorspace, &preferred_chroma);
 
-    // Apple's maps are monochrome; decoding one as RGB would trigger a needless upsample to three
-    // identical planes. Anything else is asked for as interleaved RGB.
+    // decode a monochrome map as monochrome, to avoid an upsample to three identical planes
     const bool mono = (preferred_chroma == heif_chroma_monochrome);
 
     const heif_colorspace out_colorspace = mono ? heif_colorspace_monochrome : heif_colorspace_RGB;
@@ -629,11 +606,9 @@ static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
 
 //! Reconstruct \p image's HDR rendition from an Apple gain map, when the file carries one.
 /*!
-    Apple stores its gain maps as auxiliary images typed urn:com:apple:photo:<year>:aux:hdrgainmap,
-    and puts the reconstruction strength in the primary image's maker note rather than alongside the
-    map itself. ISO 21496-1 gain maps in HEIC are a different mechanism -- 'tmap' derived items --
-    that libheif has no API for yet, so files carrying only those are still read as their base
-    rendition.
+    Apple stores its gain maps as auxiliary images typed urn:com:apple:photo:<year>:aux:hdrgainmap, with the
+    reconstruction strength in the primary image's maker note. HEIC's ISO 21496-1 gain maps are 'tmap'
+    derived items, which libheif has no API for yet, so files carrying only those load as their base.
 
     \param ihandle  Handle of the top-level image whose auxiliary images to search
     \param image    Base image, already linearized. Modified in place
@@ -641,8 +616,7 @@ static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
 */
 static void apply_heif_gainmap(const heif_image_handle *ihandle, Image &image, const ImageLoadOptions &opts)
 {
-    // Alpha and depth are auxiliary images too, but neither is ever a gain map, and libheif has
-    // already folded any alpha into the base image by this point.
+    // alpha and depth are auxiliary images too, but neither is ever a gain map
     static constexpr int filter = LIBHEIF_AUX_IMAGE_FILTER_OMIT_ALPHA | LIBHEIF_AUX_IMAGE_FILTER_OMIT_DEPTH;
 
     const int num_aux = heif_image_handle_get_number_of_auxiliary_images(ihandle, filter);
@@ -690,8 +664,8 @@ static void apply_heif_gainmap(const heif_image_handle *ihandle, Image &image, c
             spdlog::warn("Failed to apply Apple gain map: {}", e.what());
         }
 
-        // Stop at the first: a file carrying both Apple's 2020 and 2023 aux types is
-        // describing one gain map twice, not two different ones.
+        // stop at the first: a file carrying both Apple's 2020 and 2023 aux types describes one gain map
+        // twice, not two of them
         return;
     }
 }
@@ -867,14 +841,13 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         return raw_img;
                     }(),
                     heif_image_release);
-                // MIAF settles this by the presence of a 'prem' reference from the master image to the alpha
-                // one: absent means not premultiplied, for every conforming file, so only its presence is
-                // something this file said.
+                // MIAF marks premultiplied alpha with a 'prem' reference from the master item to the alpha
+                // one; its absence means straight, so only its presence is something the file stated
                 const bool       premultiplied = heif_image_handle_is_premultiplied_alpha(ihandle.get());
                 const AlphaType_ from_file =
                     !has_alpha ? AlphaType_None : (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
 
-                // Resolved before decoding: the color management inside brackets itself with it.
+                // resolved before decoding, since the color management below brackets itself with it
                 const AlphaType_ alpha_type = alpha_override_of(opts).value_or(from_file);
 
                 // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
@@ -950,11 +923,9 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         }
                     }
 
-                    // An EXIF item begins with a four-byte big-endian offset to the TIFF header that
-                    // follows it (ISO/IEC 23008-12 Annex A.2.1). Most writers put an "Exif\0\0" marker in
-                    // between and set the offset to 6; the rest set it to zero. Honoring the offset finds
-                    // the header in either case, rather than relying on libexif recognizing and skipping a
-                    // marker it was given by accident.
+                    // an EXIF item begins with a four-byte big-endian offset to the TIFF header that follows
+                    // it (ISO/IEC 23008-12 Annex A.2.1): 6 for the writers that interpose an "Exif\0\0"
+                    // marker, 0 for the rest
                     if (exif_data.size() > 4)
                     {
                         const size_t tiff_header_offset = (size_t(exif_data[0]) << 24) | (size_t(exif_data[1]) << 16) |
@@ -984,7 +955,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         image->xmp_data = std::move(xmp_data);
                 }
 
-                // After the EXIF block above, since Apple's gain maps are sized by its maker note.
+                // after the EXIF block above, since Apple's gain maps are parameterized by its maker note
                 apply_heif_gainmap(ihandle.get(), *image, opts);
 
                 images.emplace_back(image);
@@ -1124,8 +1095,8 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 
     ensure_heif_initialized();
 
-    // The encoder the options name has to actually implement the codec they ask for -- a stale index, or
-    // one left over from the other of the two dialog entries, would otherwise write the wrong thing.
+    // the encoder the options name must implement the codec they ask for; a stale index, or one left over
+    // from the other dialog entry, would write the wrong thing
     size_t     encoder_index = params->encoder;
     const auto candidates    = encoders_for(params->codec);
     if (std::find(candidates.begin(), candidates.end(), encoder_index) == candidates.end())
@@ -1145,8 +1116,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         void                      *pixels = nullptr;
         pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, params->gain, params->tf, true, true, true);
 
-        // Not every codec a HEIF can hold has an alpha channel -- JPEG does not -- and losing one is a real
-        // change to the image, so it is said out loud rather than written quietly.
+        // not every codec a HEIF can hold has an alpha channel (JPEG does not), so warn before dropping it
         const auto encoder_format =
             heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[encoder_index]);
         const bool group_alpha = group_has_alpha(img.groups[img.selected_group].type);
@@ -1158,9 +1128,8 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             keep_alpha = false;
         }
 
-        // HEIF stores one or three color channels, each optionally with alpha. A group carrying alpha
-        // loses it when it cannot be kept; a two-channel U,V pair carries no alpha and has no
-        // one-channel reading, so it pads out to RGB with a zero third channel, as the viewport draws it.
+        // HEIF stores one or three color channels, each optionally with alpha. A two-channel U,V pair has
+        // no one-channel reading, so it pads out to RGB with a zero third channel, as the viewport draws it.
         const int n_out = (group_alpha && !keep_alpha) ? n - 1 : (n == 2 && !group_alpha ? 3 : n);
         if (n_out != n)
         {
@@ -1179,8 +1148,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         if (n < 1 || n > 4)
             throw std::invalid_argument("HEIF/AVIF output supports at most 4 channels");
 
-        // One or two channels is a gray image, which HEIF stores as 4:0:0 monochrome rather than as three
-        // equal color planes -- the same form load_heif_image() already decodes.
+        // one or two channels is a gray image, which HEIF stores as 4:0:0 monochrome
         const bool mono      = n <= 2;
         const bool has_alpha = n == 2 || n == 4;
 
@@ -1205,7 +1173,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 
         if (mono)
         {
-            // Monochrome keeps its channels in separate planes, so the interleaved buffer is split apart.
+            // monochrome keeps its channels in separate planes, so split the interleaved buffer apart
             throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Y, w, h, 8),
                            "HEIF: Failed to add luma plane");
             if (has_alpha)
@@ -1296,10 +1264,9 @@ spdlog::info("Saved image to '{}' in {} seconds.", filename, (timer.elapsed() / 
 catch (const std::exception &err) { throw std::runtime_error(fmt::format("HEIF error: {}", err.what())); }
 }
 
-// libaom accepts lossless coding only with chroma delta-q off, and the tuning metric libheif's aom plugin
-// picks by default for a still image ("auto", which becomes AOM_TUNE_IQ) turns delta-q on -- so the two
-// have to be set together. Under lossless coding the tuning metric has nothing to trade off, the output
-// being bit-exact either way, so pinning it costs nothing. Plugins with no "tune" parameter reject the call.
+// libaom accepts lossless coding only with chroma delta-q off, and the tuning metric its libheif plugin
+// defaults to for a still image ("auto", i.e. AOM_TUNE_IQ) turns delta-q on, so the two must be set
+// together. Plugins with no "tune" parameter reject the call.
 static void set_heif_lossless(heif_encoder *enc, bool lossless)
 {
     heif_encoder_set_lossless(enc, lossless);
@@ -1309,8 +1276,7 @@ static void set_heif_lossless(heif_encoder *enc, bool lossless)
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
                      bool lossless, bool use_alpha, HEIFCodec codec, TransferFunction tf)
 {
-    // The encoder table is built lazily, and only heif_parameters_gui() does it; a non-GUI caller would
-    // otherwise find it empty.
+    // the encoder table is built lazily, and only heif_parameters_gui() does it
     init_heif_supported_formats();
     if (encoders_for(codec).empty())
         throw std::runtime_error("HEIF: no encoder available for the requested codec");
@@ -1343,9 +1309,8 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
 {
     init_heif_supported_formats();
 
-    // The dialog's format list already chose the codec, so the combo below picks only among the encoders
-    // implementing it. Each entry remembers its own choice: switching to AVIF and back must not leave
-    // HEIF on the AV1 encoder AVIF had to move to, nor the other way round.
+    // the dialog's format list already chose the codec, so the combo below picks among the encoders
+    // implementing it; each codec remembers its own choice across switches between the two dialog entries
     static std::map<HEIFCodec, size_t> s_encoder_choice;
 
     s_opts.codec          = codec;
@@ -1423,9 +1388,8 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         {
-            // A build often has just one encoder for a given codec -- AV1 has three implementations in
-            // libheif but distributions package them separately -- and a dropdown offering one choice is
-            // only a dropdown by accident. Then it is simply named.
+            // a build often has just one encoder for a codec (libheif has three AV1 implementations, but
+            // distributions package them separately), so name it instead of offering a one-entry dropdown
             if (candidates.empty())
                 ImGui::TextUnformatted("No encoder available");
             else if (candidates.size() == 1)

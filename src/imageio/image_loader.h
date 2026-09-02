@@ -28,14 +28,7 @@ struct ImageLoadOptions
     string channel_selector;
 
     bool override_alpha = false;
-    //! Override what the file says about its alpha and interpret it this way instead.
-    /*!
-        A format states, or its spec implies, whether the color channels are multiplied by alpha and in what
-        space, and files routinely disagree with that: PNG is unassociated by spec but is sometimes written
-        premultiplied, EXR is premultiplied by spec but is sometimes written straight. AlphaType_None loads a
-        fourth channel as ordinary data rather than transparency, so nothing is multiplied by it and it is
-        grouped on its own. See Image::alpha_type.
-    */
+    //! Override what the file says about its alpha and interpret it this way instead. See Image::alpha_type.
     AlphaType_ alpha_override = AlphaType_Straight;
 
     bool override_profile = false;
@@ -48,49 +41,18 @@ struct ImageLoadOptions
     //! or Gray at D65 primaries as appropriate.
     bool keep_primaries = true;
 
-    //! Ceiling, in stops, on how much of an HDR gain map to reconstruct when a file carries one.
-    /*!
-        A gain map says how much brighter an image's HDR rendition is than the SDR pixels stored
-        alongside it. Infinity reconstructs all of it, which is the default since HDRView's working
-        space is unbounded; zero leaves the SDR rendition alone. See imageio/gainmap.h.
-    */
+    //! Ceiling, in stops, on how much of an HDR gain map to reconstruct. Infinity for all of it, zero for none.
     float gainmap_headroom = k_full_gainmap_headroom;
 
-    //! Whether to keep what a gain-mapped file actually stores, alongside the rendition built from it.
-    /*!
-        A gain-mapped file holds a base rendition and a map, and the image HDRView shows is the two
-        combined. With this on, both are kept as their own `base.*` and `gainmap.*` channel groups,
-        so everything in the file is loaded rather than only the result. Costs roughly 75% more
-        memory for a three-channel image with a single-channel map.
-    */
+    //! Also keep the file's base rendition and gain map as their own `base.*` and `gainmap.*` channel groups.
     bool gainmap_renditions = true;
 };
 
-/**
-    Reject dimensions no real image has, before a loader allocates or decodes for them.
-
-    Loaders size their buffers from the header, so a file declaring billions of pixels costs the memory or
-    the decode time whether or not the pixels are there. Image::finalize() rejects oversized images too, but
-    only once that cost has already been paid.
-
-    \param [] width    Width the file declares
-    \param [] height   Height the file declares
-    \param [] format   Format name, for the error message
-*/
+//! Throw if the header's dimensions are ones no real image has, before a loader sizes its buffers from them.
 void check_image_dimensions(int64_t width, int64_t height, string_view format);
 
-/**
-    Whether a zip entry's declared uncompressed size is one the archive could actually be holding.
-
-    Every entry is read whole into memory before anything looks at it, sized from what the archive's
-    directory claims rather than from the bytes present -- so a declared size costs that much memory, and
-    the time to decompress into it, whether or not the data is there. The same reasoning as
-    check_image_dimensions(), one layer further out.
-
-    \param [] uncompressed_size  Size the archive's directory declares for the entry
-    \param [] compressed_size    Size the archive's directory says it stores it in
-    \param [] entry_name         Entry name, for the warning
-*/
+//! Whether a zip entry's declared uncompressed size is one the archive could be holding. Entries are read
+//! whole into memory, sized from the directory's claim rather than from the bytes present.
 bool zip_entry_size_is_plausible(uint64_t uncompressed_size, uint64_t compressed_size, string_view entry_name);
 
 const ImageLoadOptions &load_image_options();
@@ -107,8 +69,7 @@ void                    draw_load_image_options_dialog(bool &open);
 vector<ImagePtr> load_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 
 /// Returns {entry_name, contents} for every root-level (no '/' in the stored path) entry in a zip archive
-/// whose name ends with `suffix` (case-insensitive). Used to look for a manifest at a zip's root without
-/// assuming a fixed filename. Returns an empty vector if `zip_bytes` isn't a valid zip.
+/// whose name ends with `suffix` (case-insensitive), or an empty vector if `zip_bytes` isn't a valid zip.
 vector<std::pair<string, string>> zip_root_entries_with_suffix(string_view zip_bytes, const string &suffix);
 
 /// Extracts one specific entry from a zip archive by its exact stored path. Returns std::nullopt if the
@@ -117,12 +78,7 @@ std::optional<string> zip_extract_entry(string_view zip_bytes, const string &ent
 
 struct BackgroundImageLoader
 {
-    //! Load `filename`, from `buffer` when one is supplied and from disk otherwise.
-    /*!
-        An absent buffer and an empty one are different things: a zip can hold a zero-byte entry, and a
-        download can return nothing, neither of which means "go and read this path". The path in those
-        cases is a name built for display (`archive.zip/entry.png`), which nothing can open.
-    */
+    //! Load `filename` from `buffer` if given (an empty buffer is an empty file, not "read from disk"), else from disk.
     void background_load(const string filename, std::optional<string_view> buffer = std::nullopt,
                          bool should_select = false, ImagePtr to_replace = nullptr, const ImageLoadOptions &opts = {});
     void get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback);
@@ -133,12 +89,7 @@ struct BackgroundImageLoader
     bool add_watched_directory(const fs::path &dir, bool ignore_existing);
     //! Remove all watched directories that match the criterion, however they came to be watched.
     void remove_watched_directories(function<bool(const fs::path &)> remove_criterion);
-    //! Same, but keeps the ones add_watched_directory() was asked for.
-    /*!
-        Callers prune by "no loaded image came from here", which is the right rule for a directory that is
-        only watched because its images were opened. A directory the user asked for holds no loaded images
-        of its own -- that is the point of it -- so that rule would always throw it away.
-    */
+    //! Same, but spares the ones add_watched_directory() was asked for, which hold no loaded images of their own.
     void remove_implicitly_watched_directories(function<bool(const fs::path &)> remove_criterion);
 
     void load_new_and_modified_files();
@@ -148,19 +99,17 @@ struct BackgroundImageLoader
     const vector<string> &recent_files() const { return m_recent_files; }
     vector<string>        recent_files_short(int head_length = 32, int tail_length = 25) const;
     //! The recent file at `index` in the most-recently-used-first order that recent_files_short() returns,
-    //! or an empty string if `index` is out of range. Opening it is left to the caller, since what a path
-    //! means (image, session, session bundle) is an app-level decision.
+    //! or an empty string if `index` is out of range. Opening it is left to the caller.
     string recent_file(int index) const;
-    //! Adds (or moves to the front of) the recent-files list. Public so callers that load something outside
-    //! background_load()'s own paths (e.g. HDRViewApp's session loading) can still register it as recent.
+    //! Adds (or moves to the front of) the recent-files list. Public so callers that load outside
+    //! background_load() (e.g. session loading) can still register a file as recent.
     void add_recent_file(const string &f);
 
     void draw_gui();
 
     // Called with the raw bytes of a top-level zip archive before it's extracted as a folder of images (not
     // called for a single-entry re-extraction from within a zip). Returning true means "handled, don't also
-    // extract this zip's images normally". A plain byte-buffer hook with no session/JSON knowledge, so this
-    // loader stays app-agnostic.
+    // extract this zip's images normally".
     function<bool(string_view zip_bytes, const string &zip_name)> zip_bundle_hook;
 
 private:
@@ -173,8 +122,7 @@ private:
 
     set<fs::path> m_directories;
 
-    // The subset of m_directories that add_watched_directory() was asked for, rather than ones picked up
-    // from the folder an image was opened from.
+    // the subset of m_directories that add_watched_directory() was asked for
     set<fs::path> m_explicit_directories;
 
     void remove_watched_directories_if(const function<bool(const fs::path &)> &criterion, bool keep_explicit);
@@ -183,7 +131,7 @@ private:
     // directory and manually closed them, so don't want to automatically reload them)
     set<fs::path> m_existing_files;
 
-    // loaded images whose backing file is currently missing on disk, so load_new_and_modified_files()
-    // only warns once per disappearance instead of on every watch-loop poll
+    // loaded images whose backing file is currently missing on disk, so we only warn once per disappearance
+    // instead of on every watch-loop poll
     set<fs::path> m_missing_files_warned;
 };

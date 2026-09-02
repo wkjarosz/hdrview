@@ -113,10 +113,8 @@ void PSDMetadata::read(std::istream &stream)
         // Read resource data size
         uint32_t data_size = read_uint32_be(stream);
 
-        // A resource lives inside the Image Resources section, so it cannot be larger than what is left of
-        // it. Without this the read runs on into the layer and pixel data that follows, and whatever it
-        // picks up is handed onwards as this image's XMP, EXIF or ICC profile -- and a block declaring
-        // megabytes is allocated for before the stream reports it has run out.
+        // a resource lives inside the Image Resources section, so it cannot be larger than what is left of
+        // it; otherwise the read runs on into the layer and pixel data that follows
         const std::streamoff remaining = section_end - stream.tellg();
         if (remaining < 0 || data_size > uint64_t(remaining))
         {

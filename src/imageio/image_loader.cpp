@@ -227,8 +227,8 @@ struct BackgroundImageLoader::PendingImages
         filename(f), add_to_recent(recent), should_select(should_select), to_replace(to_replace)
     {
         computation = do_async(
-            // give the async thread its own copy of the buffer, if there is one; whether there is decides
-            // where the bytes come from, which an empty buffer must not be mistaken for
+            // give the async thread its own copy of the buffer, if there is one; whether there is one is
+            // what decides between reading the bytes and reading the path
             [this, buffer_str = buffer ? std::optional<string>{string(*buffer)} : std::nullopt, path, opts]()
             {
                 fs::file_time_type last_modified = fs::file_time_type::clock::now();
@@ -259,9 +259,8 @@ struct BackgroundImageLoader::PendingImages
                 }
                 else if (buffer_str->empty())
                 {
-                    // A zero-byte zip entry, or a download that returned nothing. The path here is a
-                    // display name rather than something on disk, so falling through to the branch above
-                    // would blame the filesystem for a file that was never meant to be there.
+                    // a zero-byte zip entry, or a download that returned nothing; the path is a display
+                    // name, not something on disk
                     spdlog::error("'{}' is empty.", path.u8string());
                     return;
                 }
@@ -546,8 +545,7 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
             load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, opts);
         }
 
-        // Only somewhere that opened something belongs in the recent list, the same rule the file and zip
-        // paths follow; picking a folder that held no images does nothing at all.
+        // only a folder that opened something belongs in the recent list
         if (entries.empty())
             spdlog::warn("No loadable images found in '{}'.", filename);
         else
@@ -591,9 +589,8 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
             }
             spdlog::info("Loading zip file data took {:f} seconds.", timer.elapsed() / 1000.f);
 
-            // entry_fn non-empty means "re-extract this one already-known entry" (e.g. reload_image() on an
-            // image originally loaded from inside a zip), not "a zip was just opened" -- only the latter
-            // should be considered for session-bundle detection.
+            // a non-empty entry_fn means "re-extract this one already-known entry", not "a zip was just
+            // opened"; only the latter is a candidate session bundle
             if (entry_fn.empty() && zip_bundle_hook && zip_bundle_hook(string_view(buf.data(), buf.size()), zip_fn))
                 return;
 
@@ -678,9 +675,8 @@ void BackgroundImageLoader::remove_watched_directories_if(const std::function<bo
 
 void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback)
 {
-    // Take the finished loads out of the pending list before running any callbacks: the callback reaches
-    // back into the app, which is free to schedule further loads, and nothing should be walking
-    // pending_images while that happens.
+    // take the finished loads out of the pending list before running any callbacks, since a callback may
+    // schedule further loads and nothing should be walking pending_images while that happens
     vector<shared_ptr<PendingImages>> finished;
     for (auto it = pending_images.begin(); it != pending_images.end();)
     {
@@ -709,12 +705,7 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
         if (p->images.empty())
             continue;
 
-        // i == 0 both selects the first of possibly several images and claims the slot being replaced.
-        // Exactly one arrival can take a replaced image's place; any others are ordinary additions. That
-        // matters because the app reads "asked to replace, but the target is gone" as "the image was
-        // closed while loading" and drops the arrival -- a reading only this split makes safe. A reload
-        // happens to yield a single image today, since it carries the replaced image's channel selector
-        // and so re-reads only that part of a multi-part file, but nothing here should depend on that.
+        // only the first image replaces to_replace and gets selected; the rest are plain additions
         for (size_t i = 0; i < p->images.size(); ++i)
             callback(p->images[i], i == 0 ? p->to_replace : ImagePtr{}, p->should_select && i == 0);
 
@@ -722,12 +713,8 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
         if (p->add_to_recent)
             add_recent_file(p->filename);
 
-        // Another reload of the same image can still be in flight: the watch loop polls four times a
-        // second and schedules one on every timestamp change, so a file being written repeatedly -- a
-        // watched render folder, say -- outruns the load, and "Reload all images" pressed twice does the
-        // same. Each was told to replace an image that has now been replaced itself, and the arrival is
-        // matched to its slot by identity, so without this the later one finds nothing to replace and
-        // arrives as a second copy of the same file. Point it at whatever took that image's place.
+        // a later in-flight reload of the same image should replace the image that just replaced it,
+        // not arrive as a duplicate
         if (p->to_replace)
         {
             auto replacement = p->images.front();
@@ -756,8 +743,8 @@ void BackgroundImageLoader::load_new_and_modified_files()
         std::error_code ec;
         if (!fs::exists(img->path, ec) || ec)
         {
-            // this loop revisits every loaded image on each poll regardless of whether anything
-            // changed, so m_missing_files_warned is what limits the warning to once per disappearance
+            // this loop revisits every loaded image on each poll, so m_missing_files_warned is what limits
+            // the warning to once per disappearance
             if (m_missing_files_warned.insert(img->path).second)
                 spdlog::warn("File[{}] '{}' no longer exists, skipping reload.", i, img->path.u8string());
             if (auto it = m_existing_files.find(img->path); it != m_existing_files.end())
@@ -849,8 +836,7 @@ void BackgroundImageLoader::draw_gui()
     }
 }
 
-// A single axis this long, or this many pixels in total, is beyond anything that could be displayed: at
-// four float channels, the pixel cap alone is already 4 GB.
+// at four float channels, the pixel cap alone is already 4 GB
 static constexpr int64_t k_max_image_dimension = 65536;
 static constexpr int64_t k_max_image_pixels    = 1ll << 28;
 
@@ -865,12 +851,10 @@ void check_image_dimensions(int64_t width, int64_t height, string_view format)
 }
 
 // DEFLATE cannot expand data by more than 1032:1, so a larger ratio is a claim the archive's own bytes
-// cannot back, whatever wrote it. Stored (uncompressed) entries are covered by the same test, since their
-// ratio is 1.
+// cannot back; stored entries have a ratio of 1
 static constexpr uint64_t k_max_zip_expansion_ratio = 1032;
-// And a bound on the honest case, which the ratio test cannot catch: an archive really can hold gigabytes
-// of compressible data, and HDRView would read the entry whole into memory before finding out it is not an
-// image. No file it can load is anywhere near this large.
+// a bound the ratio test cannot catch: an archive can honestly hold gigabytes of compressible data, and the
+// entry is read whole into memory before anything finds out it isn't an image
 static constexpr uint64_t k_max_zip_entry_bytes = 2ull << 30;
 
 bool zip_entry_size_is_plausible(uint64_t uncompressed_size, uint64_t compressed_size, string_view entry_name)
@@ -882,8 +866,7 @@ bool zip_entry_size_is_plausible(uint64_t uncompressed_size, uint64_t compressed
         return false;
     }
 
-    // An empty entry compresses to a non-empty stream, so only guard the ratio once there is something to
-    // expand; a zero compressed size cannot back anything anyway.
+    // an empty entry still compresses to a non-empty stream, so clamp the divisor to 1
     if (uncompressed_size > k_max_zip_expansion_ratio * std::max<uint64_t>(compressed_size, 1))
     {
         spdlog::warn("Skipping zip entry '{}': it declares {:.0h} stored in {:.0h}, which no deflate stream "
@@ -960,9 +943,8 @@ void draw_load_image_options_dialog(bool &open)
         if (s_opts.override_profile)
         {
             ImGui::Indent();
-            // Item width is derived from the window, not the current indent, so indenting alone would push
-            // these widgets' labels (drawn just past each widget) right by the indent as well. Narrowing them
-            // by exactly that amount keeps their labels aligned with the non-indented widgets above.
+            // item width comes from the window, not the current indent, so narrow by the indent to keep the
+            // labels (drawn just past each widget) aligned with the non-indented widgets above
             ImGui::PushItemWidth(ImGui::CalcItemWidth() - ImGui::GetStyle().IndentSpacing);
             // ImGui::BeginDisabled(!s_opts.override_profile);
 
@@ -1024,8 +1006,7 @@ void draw_load_image_options_dialog(bool &open)
         ImGui::Spacing();
 
         {
-            // The stored value is a ceiling in stops, with infinity meaning "no ceiling". The checkbox
-            // and the slider are two views of that one number, so each writes it directly.
+            // the checkbox and the slider are two views of one number: a ceiling in stops, infinity for none
             bool full = !std::isfinite(s_opts.gainmap_headroom);
             if (ImGui::Checkbox("Reconstruct HDR gain maps fully", &full))
                 s_opts.gainmap_headroom = full ? k_full_gainmap_headroom : 2.f;
@@ -1197,8 +1178,8 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
         std::streampos size = is.tellg();
         is.seekg(pos);
 
-        // EXR and JPEG XL apply the channel selector while decoding, so they never read what they'd
-        // discard. Every other loader ignores it, so apply it here to whatever they produced.
+        // EXR and JPEG XL apply the channel selector while decoding; every other loader ignores it, so
+        // apply it here to whatever they produced
         ImGuiTextFilter filter{opts.channel_selector.c_str()};
         filter.Build();
 
@@ -1210,8 +1191,8 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
             {
                 if (!opts.channel_selector.empty())
                 {
-                    // Qualify each channel by its part and prefix a '.', so a selector like "-.A" excludes
-                    // a bare "A" as well as a layer's "diffuse.A".
+                    // qualify each channel by its part and prefix a '.', so a selector like "-.A" excludes
+                    // a bare "A" as well as a layer's "diffuse.A"
                     auto excluded = [&](const Channel &c)
                     {
                         auto name = i->partname.empty() ? "." + c.name : fmt::format(".{}.{}", i->partname, c.name);
@@ -1229,8 +1210,8 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
 
                 i->filename   = filename;
                 i->size_bytes = static_cast<size_t>(size);
-                // The loaders have already applied the override to alpha_type, via effective_alpha_type();
-                // recording the option itself is what lets a reload or a saved session repeat it.
+                // the loaders have already applied the override to alpha_type; record the option itself so a
+                // reload or a saved session can repeat it
                 if (opts.override_alpha)
                     i->alpha_override = opts.alpha_override;
                 // If multiple image "parts" were loaded and they have names, store these names in the image's
@@ -1250,7 +1231,6 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
                 }
                 i->short_name = i->file_and_partname();
 
-                // finalize() reads alpha_type, which each loader has already resolved against the options
                 i->finalize();
                 kept.push_back(i);
             }

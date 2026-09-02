@@ -94,8 +94,7 @@ public:
 
     /*! The code points from this profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
 
-        Read straight out of the profile bytes rather than through LCMS, which only learned the tag in 2.16
-        and would otherwise make this depend on which LCMS a given build links.
+        Read straight out of the profile bytes, since LCMS only learned the tag in 2.16.
     */
     CICPProfile cicp() const;
 
@@ -298,9 +297,8 @@ private:
 
 /*! The code points from an ICC profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
 
-    Reads the profile bytes directly, needing neither LCMS nor a constructed ICCProfile: LCMS only learned
-    the tag in 2.16, and a caller may need the code points -- the range flag in particular -- before it has
-    decided how to read the pixels at all.
+    Reads the profile bytes directly, needing neither LCMS (which only learned the tag in 2.16) nor a
+    constructed ICCProfile, so a caller can consult the range flag before deciding how to read the pixels.
 */
 CICPProfile icc_cicp_tag(const uint8_t *icc_profile, size_t icc_profile_size);
 

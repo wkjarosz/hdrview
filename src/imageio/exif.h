@@ -10,14 +10,8 @@
 #include <cstdint>
 #include <optional>
 
-/*!
-    Whether a maker-note tag's [offset, offset + size) lies inside a note of \p bound bytes.
-
-    All three are 32-bit fields read straight out of the file, so the arithmetic is 32-bit by nature and
-    adding the first two can wrap. Widening to size_t hides that only where size_t is wider -- not on the
-    wasm32 build, where an offset near 4 GB wrapped past the check and the read landed outside the note.
-    Compared by subtraction instead, which cannot wrap at any width.
-*/
+//! Whether a maker-note tag's [offset, offset + size) lies inside a note of \p bound bytes. Compared by
+//! subtraction: these are 32-bit file fields, and offset + size wraps where size_t is no wider (wasm32).
 bool maker_note_range_within(uint32_t offset, uint32_t size, uint32_t bound);
 
 json        entry_to_json(void *entry, int boi, unsigned int ifd_idx_i = 0);
@@ -43,14 +37,8 @@ public:
 
     json to_json() const;
 
-    //! Value of an Apple maker-note tag, when this file carries an Apple maker note holding it.
-    /*!
-        libexif has no decoder for Apple's maker note, so these tags never reach the ordinary EXIF
-        accessors. Tags 0x21 (HDR headroom) and 0x30 (HDR gain) parameterize Apple's HDR gain maps.
-
-        \param wanted_tag  Maker-note tag to look up
-        \return            The tag's value as a double, or nullopt if the tag is absent or not numeric
-    */
+    //! Value of Apple maker-note tag \p wanted_tag, or nullopt if it is absent or not numeric.
+    //! libexif has no decoder for Apple's maker note, so these tags never reach the ordinary EXIF accessors.
     std::optional<double> apple_makernote_value(uint16_t wanted_tag) const;
 
 private:

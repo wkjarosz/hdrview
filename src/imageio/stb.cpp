@@ -42,8 +42,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_FAILURE_USERMSG
 // stb_image allocates from the dimensions in the header before validating anything else, so a tiny file
-// declaring a huge canvas -- a GIF claiming 19789x19789, say -- costs gigabytes. stb's own limit defaults
-// to 1<<24 per axis; bring it down to something an image can plausibly be.
+// declaring a huge canvas (a GIF claiming 19789x19789, say) costs gigabytes. stb's own limit defaults to
+// 1<<24 per axis; bring it down to something an image can plausibly be.
 #define STBI_MAX_DIMENSIONS 65536
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
@@ -54,8 +54,8 @@
 #include "stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
 
-// Compiled here beside the other stb implementations, though it is Image::resample() that uses it
-// rather than any loader; it has to land in exactly one translation unit.
+// Compiled here beside the other stb implementations, since it has to land in one translation unit; its
+// user is Image::resample(), not any loader.
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "stb_image_resize2.h"
 #undef STB_IMAGE_RESIZE_IMPLEMENTATION
@@ -162,9 +162,8 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     is.clear();
     is.seekg(0);
 
-    // stbi_info only reads the header, so the declared dimensions can be vetted before stb allocates for
-    // them. STBI_MAX_DIMENSIONS caps each axis on its own, which still leaves room for a small file to
-    // claim hundreds of megapixels.
+    // stbi_info only reads the header, so vet the declared dimensions before stb allocates for them;
+    // STBI_MAX_DIMENSIONS caps each axis on its own, leaving room for hundreds of megapixels
     {
         int info_w = 0, info_h = 0, info_n = 0;
         if (stbi_info_from_callbacks(&stbi_callbacks, &is, &info_w, &info_h, &info_n))
@@ -294,7 +293,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
 
         image             = make_shared<Image>(size.xy(), size.z);
         image->filename   = filename;
-        // None of the stb-decoded formats carries an alpha-kind signal; all specify unassociated.
+        // none of the stb-decoded formats carries an alpha-kind signal; all specify unassociated
         image->set_alpha(size.z > 3 || size.z == 2 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
                          alpha_override_of(opts));
         if (size.w > 1)
@@ -359,7 +358,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
 
         string profile_desc = color_profile_name(cg, tf);
 
-        // Inverting the transfer function does not commute with multiplication by alpha; see imageio/alpha.h.
+        // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
         unpremultiply_before_transfer(float_pixels.data(), size.xyz(), image->alpha_type);
 
         if (opts.override_profile)

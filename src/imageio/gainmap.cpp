@@ -66,9 +66,8 @@ GainmapImage gainmap_from_image(const Image &map)
 
 float AppleGainmapParams::stops() const
 {
-    // Piecewise-linear fit relating the two maker-note fields to reconstruction strength, from
-    // https://developer.apple.com/forums/thread/709331. The 0.01 knee separates the range where a
-    // small change in the gain field moves the result a lot from the range where it barely does.
+    // piecewise-linear fit relating the two maker-note fields to reconstruction strength, from
+    // https://developer.apple.com/forums/thread/709331
     if (hdr_headroom < 1.f)
         return hdr_gain <= 0.01f ? -20.f * hdr_gain + 1.8f : -0.101f * hdr_gain + 1.601f;
     else
@@ -78,8 +77,7 @@ float AppleGainmapParams::stops() const
 //! Sample \p src bilinearly at the location destination pixel (\p x, \p y) of a \p dst_size grid maps to.
 static float sample_bilinear(const vector<float> &src, int2 src_size, int channels, int c, int2 dst_size, int x, int y)
 {
-    // Align pixel centers rather than pixel corners, so that upsampling doesn't shift the map by
-    // half of a destination pixel against the base image.
+    // align pixel centers, so upsampling doesn't shift the map half a destination pixel against the base
     const float sx = (x + 0.5f) * (float(src_size.x) / dst_size.x) - 0.5f;
     const float sy = (y + 0.5f) * (float(src_size.y) / dst_size.y) - 0.5f;
 
@@ -107,22 +105,8 @@ GainmapImage resample_gainmap(const GainmapImage &gainmap, int2 size, bool linea
     const vector<float> *src = &gainmap.pixels;
     if (linearize)
     {
-        // sRGB, though Apple documents Rec. 709 -- the map "is encoded using the Rec.709 transfer
-        // function", and applying it means "inverting the gain map gamma using the Rec.709 transfer
-        // function". Their own software disagrees with their prose.
-        //
-        // Checked against Preview's reconstruction of an iPhone 12 Pro capture, exported to linear
-        // float. Apple's own output is the reference, so fitting hdr/sdr - 1 against the decoded map
-        // decides it. Two ways, both for sRGB:
-        //
-        //   - Solving for the headroom recovers 7.72 under sRGB and 6.66 under Rec. 709. The maker
-        //     note independently gives 7.695, so only sRGB reproduces a quantity the fit never saw.
-        //   - Pinning the headroom to that 7.695 leaves no free parameter at all: the residual is
-        //     0.062 for sRGB against 0.207 for Rec. 709, and sRGB wins in every decile of gain-map
-        //     value rather than on average.
-        //
-        // tev reads these as sRGB too, having compared against the same scenes encoded as ISO
-        // 21496-1 gain maps -- a different route to the same conclusion.
+        // Apple documents Rec. 709 for the map, but Preview's own output only reproduces under sRGB
+        // (headroom fit 7.72 vs the maker note's 7.695; tev reads it as sRGB too). See commit 8b38d616.
         linearized = gainmap.pixels;
         for (auto &v : linearized) v = (float)sRGB_to_linear(v);
         src = &linearized;
@@ -172,8 +156,7 @@ void append_gainmap_channels(Image &image, const GainmapImage &gainmap)
     if (image.channels.empty() || !gainmap.valid())
         return;
 
-    // Name the channels the way Image names its own, so that finalize() gathers them into a group
-    // the same way it would any other layer.
+    // name the channels the way Image does, so finalize() gathers them into a group like any other layer
     append_group(image, gainmap, "gainmap.", std::min(gainmap.channels, 4));
 }
 
@@ -184,8 +167,7 @@ void append_base_rendition(Image &image, int num_base)
 
     const int2 size = image.channels.front().size();
 
-    // The color channels only. Alpha is not part of the rendition the gain map converts, and
-    // duplicating it would just cost memory.
+    // color channels only; alpha is not part of the rendition the gain map converts
     std::vector<int> color;
     for (int c = 0; c < num_base && c < (int)image.channels.size(); ++c)
         if (image.channels[c].name != "A")
@@ -194,8 +176,7 @@ void append_base_rendition(Image &image, int num_base)
     if (color.empty())
         return;
 
-    // "base", not "sdr": which rendition is stored is the file's choice, and a base-HDR JPEG XL
-    // keeps its HDR rendition here and derives an SDR one. ISO's own vocabulary is base/alternate.
+    // "base", not "sdr": ISO's own vocabulary, and a base-HDR JPEG XL keeps its HDR rendition here
     static const char *mono[] = {"base.Y"};
     static const char *rgb[]  = {"base.R", "base.G", "base.B"};
 
@@ -233,8 +214,7 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
 
     const int2 size = image.channels.front().size();
 
-    // Captured before appending anything, so the scaling loop below covers only the base image's own
-    // channels and not the groups it is about to grow.
+    // captured before appending anything, so the scaling loop below covers only the base image's channels
     const int num_base = (int)image.channels.size();
 
     const GainmapImage full = resample_gainmap(gainmap, size, true);
@@ -267,7 +247,7 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
                  gainmap.size.x, gainmap.size.y, gainmap.channels, stops, applied, params.hdr_headroom,
                  params.hdr_gain);
 
-    // The renditions the file actually holds, kept before the base is scaled out from under them.
+    // keep the file's own renditions before the base is scaled out from under them
     if (keep_renditions)
     {
         append_base_rendition(image, num_base);
@@ -287,13 +267,12 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
                  {
                      for (int c = 0; c < num_base; ++c)
                      {
-                         // Alpha is not a color: scaling it would change the image's transparency
-                         // rather than its brightness.
+                         // scaling alpha would change transparency, not brightness
                          if (image.channels[c].name == "A")
                              continue;
 
-                         // A monochrome map drives every color channel; a per-channel one pairs up
-                         // with the first three, and any beyond that reuse the last.
+                         // a monochrome map drives every color channel; a per-channel one pairs up with
+                         // the first three, and any beyond that reuse the last
                          const int p    = std::min(c, full.channels - 1);
                          auto     &base = image.channels[c];
 
@@ -367,8 +346,8 @@ private:
     size_t         m_pos = 0;
 };
 
-// Bits of the flags byte. Only UseBaseColorSpace and IsMultiChannel are in ISO 21496-1 itself;
-// libultrahdr writes the other two and other readers have followed it, so they are honored here.
+// Bits of the flags byte. Only UseBaseColorSpace and IsMultiChannel are in ISO 21496-1 itself; libultrahdr
+// writes the other two, and other readers honor them.
 enum IsoFlags : uint8_t
 {
     IsoFlag_BackwardDirection    = 1u << 2,
@@ -385,10 +364,8 @@ float IsoGainmapParams::weight(float target_stops) const
     if (span == 0.f)
         return 0.f;
 
-    // How far from the base rendition towards the alternate one the target sits. The sign of the
-    // span carries the direction: when the alternate is the darker rendition, an unbounded target
-    // asks for the base as it stands (weight 0) and a target of zero stops asks for the alternate
-    // in full (weight -1).
+    // how far from the base rendition towards the alternate one the target sits; the span's sign carries
+    // the direction, so a darker alternate gives a weight of 0 for an unbounded target and -1 for zero
     const float t = std::clamp((target_stops - base_headroom) / span, 0.f, 1.f);
     return span < 0.f ? -t : t;
 }
@@ -400,9 +377,8 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
     const auto minimum_version = r.u16();
     const auto writer_version  = r.u16();
 
-    // A writer that needs fields this version does not define raises minimum_version; anything above
-    // 0 is metadata this cannot read. A raised writer_version alone is fine, and may leave trailing
-    // bytes here that are deliberately ignored.
+    // a writer needing fields this version does not define raises minimum_version, so anything above 0 is
+    // unreadable here; a raised writer_version alone is fine, and may leave trailing bytes to ignore
     if (minimum_version != 0)
         throw invalid_argument{fmt::format("ISO 21496-1: unsupported minimum version {}", minimum_version)};
 
@@ -449,7 +425,7 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
         }
     }
 
-    // A single-channel map drives all three the same way.
+    // a single-channel map drives all three the same way
     for (int c = channels; c < 3; ++c)
     {
         p.min[c]              = p.min[0];
@@ -471,8 +447,8 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
     return p;
 }
 
-// At namespace scope because GCC's -Wunused-but-set-variable does not see through the lambda below that
-// is this constant's only reader, and reports a function-local one as unused.
+// at namespace scope because GCC's -Wunused-but-set-variable reports a function-local one as unused,
+// not seeing through the lambda below that reads it
 constexpr string_view k_hdrgm_ns = "http://ns.adobe.com/hdr-gain-map/1.0/";
 
 std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
@@ -480,9 +456,8 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
     if (!xml || len == 0)
         return std::nullopt;
 
-    // An XMP blob is usually wrapped in <?xpacket?> processing instructions, which tinyxml2 rejects
-    // as a malformed declaration. Strip them when they are there, and parse the blob as-is when they
-    // are not -- HEIF stores the packet without them.
+    // an XMP blob is usually wrapped in <?xpacket?> processing instructions, which tinyxml2 rejects as a
+    // malformed declaration; HEIF stores the packet without them
     string_view body{xml, len};
     if (const size_t open_pi = body.find("<?xpacket"); open_pi != string_view::npos)
     {
@@ -501,8 +476,8 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
         return std::nullopt;
 
     // hdrgm properties hang off an rdf:Description, as attributes when they are single-valued and as
-    // <hdrgm:Name><rdf:Seq><rdf:li>...</rdf:li></rdf:Seq></hdrgm:Name> when they are per-channel.
-    // Rather than walk the RDF model, find the prefix bound to the hdrgm namespace and match on it.
+    // <hdrgm:Name><rdf:Seq><rdf:li>...</rdf:li></rdf:Seq></hdrgm:Name> when they are per-channel. Match on
+    // the prefix bound to the hdrgm namespace instead of walking the RDF model.
     string     prefix;
     const auto find_prefix = [&](auto &&self, const tinyxml2::XMLElement *e) -> void
     {
@@ -546,7 +521,7 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
             if (name.rfind(prefix, 0) == 0)
             {
                 std::vector<string> values;
-                // An rdf:Seq or rdf:Bag of rdf:li, or a bare text value.
+                // an rdf:Seq or rdf:Bag of rdf:li, or a bare text value
                 for (auto *container = c->FirstChildElement(); container; container = container->NextSiblingElement())
                     for (auto *li = container->FirstChildElement(); li; li = li->NextSiblingElement())
                         if (const char *t = li->GetText())
@@ -580,7 +555,7 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
         }
     };
 
-    // Every hdrgm property but GainMapMax and HDRCapacityMax has a default in Adobe's schema.
+    // every hdrgm property but GainMapMax and HDRCapacityMax has a default in Adobe's schema
     const auto rgb = [&](const char *name, float3 fallback, bool required)
     {
         const auto it = props.find(name);
@@ -594,7 +569,7 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
         const auto &v = it->second;
         float3      out{to_float(v[0], fallback[0])};
         for (size_t c = 1; c < v.size() && c < 3; ++c) out[int(c)] = to_float(v[c], out[0]);
-        // A single value drives all three channels; two is malformed, so treat the rest as the first.
+        // a single value drives all three channels; two is malformed, so treat the rest as the first
         if (v.size() == 2)
             out[2] = out[0];
         return out;
@@ -625,11 +600,10 @@ std::optional<IsoGainmapParams> parse_hdrgm_xmp(const char *xml, size_t len)
     p.base_headroom      = scalar("HDRCapacityMin", 0.f, false);
     p.alternate_headroom = std::max(scalar("HDRCapacityMax", 1.f, true), p.base_headroom);
 
-    // The XMP schema has no equivalent of the ISO color-space flag; Adobe's maps apply in the base
-    // image's space.
+    // the XMP schema has no equivalent of the ISO color-space flag; Adobe's maps apply in the base space
     p.use_base_color_space = true;
 
-    // Older writers spelled the direction two different ways.
+    // older writers spelled the direction two different ways
     const auto base_rendition = props.find("BaseRendition");
     const auto base_is_hdr    = props.find("BaseRenditionIsHDR");
     if ((base_rendition != props.end() &&
@@ -660,8 +634,8 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
         return;
     }
 
-    // Decode the map out of its gamma and back into the log2 gain it stands for, before the resize:
-    // the spec interpolates in log space, and the two orders do not commute.
+    // decode the map out of its gamma and back into log2 gain before the resize: the spec interpolates in
+    // log space, and the two orders do not commute
     GainmapImage decoded;
     decoded.size     = gainmap.size;
     decoded.channels = gainmap.channels;
@@ -674,15 +648,14 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
                      for (size_t i = begin; i < end; ++i)
                          for (int c = 0; c < gainmap.channels; ++c)
                          {
-                             // Gain-map values are normalized, so anything outside [0,1] is codec
-                             // overshoot rather than signal. Clamping matters more than it looks:
-                             // gamma is commonly around 0.25, making the exponent below about 4, so
-                             // a lossily coded 1.19 would otherwise decode to twice the brightening
-                             // the file says its map can ask for.
+                             // gain-map values are normalized, so anything outside [0,1] is codec
+                             // overshoot. Gamma is commonly around 0.25, making the exponent below
+                             // about 4, so an unclamped 1.19 would decode to twice the brightening
+                             // the file's map asks for.
                              const float v = std::clamp(gainmap.pixels[i * gainmap.channels + c], 0.f, 1.f);
 
-                             // The channel index saturates so a 4-channel map's alpha reuses blue's
-                             // curve rather than reading past the parameters.
+                             // the channel index saturates, so a 4-channel map's alpha reuses blue's
+                             // curve instead of reading past the parameters
                              const int   p         = std::min(c, 2);
                              const float recovered = std::pow(v, 1.f / params.gamma[p]);
 
@@ -694,7 +667,7 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
     const int2 size     = image.channels.front().size();
     const int  num_base = (int)image.channels.size();
 
-    // Already in log space, so no transfer function to undo on the way in.
+    // already in log space, so no transfer function to undo on the way in
     const GainmapImage full = resample_gainmap(decoded, size, false);
     if (!full.valid())
         return;
@@ -727,7 +700,7 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
         spdlog::warn("Gain map declares the alternate image's color space as the application space; HDRView applies "
                      "it in the base image's space, which will shift saturated colors.");
 
-    // The renditions the file actually holds, kept before the base is scaled out from under them.
+    // keep the file's own renditions before the base is scaled out from under them
     if (keep_renditions)
     {
         append_base_rendition(image, num_base);
@@ -747,8 +720,7 @@ void apply_iso_gainmap(Image &image, const GainmapImage &gainmap, const IsoGainm
                  {
                      for (int c = 0; c < num_base; ++c)
                      {
-                         // Alpha is not a color: scaling it would change the image's transparency
-                         // rather than its brightness.
+                         // scaling alpha would change transparency, not brightness
                          if (image.channels[c].name == "A")
                              continue;
 

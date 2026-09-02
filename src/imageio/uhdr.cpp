@@ -206,9 +206,8 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
         throw_if_error(uhdr_dec_set_image(decoder.get(), &compressed_image));
         throw_if_error(uhdr_dec_set_out_color_transfer(decoder.get(), UHDR_CT_LINEAR));
 
-        // libultrahdr applies the gain map itself, so the target headroom has to be handed to it
-        // rather than applied afterwards. Left unset it reconstructs the map in full, which is what
-        // an unbounded target asks for anyway.
+        // libultrahdr applies the gain map itself, so hand it the target headroom; left unset it
+        // reconstructs the map in full
         if (std::isfinite(opts.gainmap_headroom))
         {
             const float boost = std::max(std::exp2(opts.gainmap_headroom), 1.f);
@@ -338,14 +337,12 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
     const uhdr_mem_block_t *icc_data = uhdr_dec_get_icc(decoder.get());
     if (icc_data && icc_data->data && icc_data->data_sz > 0)
     {
-        // libuhdr hands back the APP2 marker's whole payload rather than just the profile: the
-        // "ICC_PROFILE\0" signature, then this chunk's sequence number and the chunk count, and only
-        // then the profile itself. libjpeg-based readers strip that 14-byte header, which is why the
-        // sizes the two report for one file differ by exactly that much.
+        // libuhdr hands back the APP2 marker's whole payload: the "ICC_PROFILE\0" signature, this chunk's
+        // sequence number and the chunk count, and only then the profile. libjpeg-based readers strip that
+        // 14-byte header, so the sizes the two report for one file differ by it.
         //
-        // libuhdr keeps only the first such marker, so a profile large enough to have been split
-        // across several arrives truncated; ICCProfile then rejects it and the file falls back to its
-        // CICP-derived gamut, handled above.
+        // libuhdr keeps only the first such marker, so a profile split across several arrives truncated;
+        // ICCProfile then rejects it and the file falls back to its CICP-derived gamut, handled above.
         static constexpr uint8_t icc_sig[]  = {'I', 'C', 'C', '_', 'P', 'R', 'O', 'F', 'I', 'L', 'E', '\0'};
         static constexpr size_t  icc_hdr_sz = sizeof(icc_sig) + 2;
 

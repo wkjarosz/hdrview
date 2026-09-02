@@ -470,8 +470,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         "Coding-independent code points (CICP) is a way to signal the color properties of the image via four "
         "properties: color primaries (CP), transfer function (TF), matrix coefficients (MC), and full-range vs. "
         "narrow-range flag (FR).";
-    // Full range unless the cICP chunk or the ICC profile's cicp tag below says otherwise. Declared outside
-    // the #ifdef because the sample dequantization further down reads it even without cICP support.
+    // full range unless the cICP chunk or the ICC profile's cicp tag below says otherwise; declared outside
+    // the #ifdef since the dequantization below reads it even without cICP support
     png_byte video_full_range_flag = 1;
 #ifdef PNG_cICP_SUPPORTED
     png_byte color_primaries;
@@ -512,10 +512,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             {"value", "<not present>"}, {"string", "<not present>"}, {"type", "array"}, {"description", cicp_desc}};
     }
 
-    // A file can carry its code points in the ICC profile's `cicp` tag (ICC.1:2022) instead of a cICP chunk,
-    // and that tag holds the same narrow/full range flag. Read it here, before the samples are dequantized
-    // below, since without it a narrow-range file is stretched as though it were full range. The chunk wins
-    // when both are present, matching the PNG-3 priority order that puts cICP ahead of iCCP.
+    // a file can carry its code points in the ICC profile's `cicp` tag (ICC.1:2022) instead of a cICP
+    // chunk, with the same narrow/full range flag; read it before the samples are dequantized below. The
+    // chunk wins when both are present, per PNG-3's priority order.
     if (!cicp.valid() && !icc_profile.empty())
         if (auto codes = icc_cicp_tag(icc_profile.data(), icc_profile.size()); codes.valid())
         {
@@ -704,12 +703,12 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         int3 size{int(frame_width), int(frame_height), channels};
         auto image            = make_shared<Image>(size.xy(), size.z);
         image->filename       = filename;
-        // PNG's spec makes alpha unassociated; a file carries no per-file signal to read.
+        // PNG's spec makes alpha unassociated; a file carries no signal of its own
         image->set_alpha(size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
                          alpha_override_of(opts));
         image->chromaticities = chr;
         image->metadata       = metadata;
-        // A palette's IHDR depth counts bits per index; png_set_palette_to_rgb() expands those to 8-bit RGB.
+        // a palette's IHDR depth counts bits per index; png_set_palette_to_rgb() expands those to 8-bit RGB
         image->set_bits_per_sample(color_type == PNG_COLOR_TYPE_PALETTE ? 8 : file_bit_depth);
         if (exif.valid())
             image->exif = exif;
@@ -755,7 +754,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 
         string profile_desc = color_profile_name(chr ? named_color_gamut(*chr) : ColorGamut_Unspecified, tf);
 
-        // Inverting the transfer function does not commute with multiplication by alpha; see imageio/alpha.h.
+        // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
         unpremultiply_before_transfer(float_pixels.data(), size, image->alpha_type);
 
         if (opts.override_profile)
@@ -823,10 +822,8 @@ namespace
 {
 
 // How this build can record a transfer function in a PNG. Shared by the writer and the save-options GUI so
-// the dialog cannot describe an outcome different from the one saving produces.
-//
-// gAMA stores the exponent taking file samples toward linear light, inverted -- 1/2.2 for a 2.2 encode --
-// so only a pure power curve has an exact gAMA representation.
+// the two cannot disagree. gAMA stores the exponent taking file samples toward linear light, inverted
+// (1/2.2 for a 2.2 encode), so only a pure power curve has an exact gAMA representation.
 struct TransferSignalling
 {
     double file_gamma     = 0.0;   ///< gAMA value to write; 0 when the curve has no gAMA equivalent
@@ -840,17 +837,15 @@ TransferSignalling transfer_signaling(TransferFunction tf)
     {
     case TransferFunction::Linear: return {1.0, true, false};
     case TransferFunction::Gamma: return {(tf.gamma > 0.f) ? 1.0 / double(tf.gamma) : 0.0, true, false};
-    // sRGB and ITU are piecewise: a linear segment near black joined to a power curve. 1/2.2 is the
-    // long-standing convention for approximating either with gAMA, and sRGB has an exact chunk of its own.
+    // sRGB and ITU are piecewise, and 1/2.2 is the long-standing gAMA approximation of either
     case TransferFunction::sRGB: return {1.0 / 2.2, false, true};
     case TransferFunction::ITU: return {1.0 / 2.2, false, false};
     default: return {}; // PQ, HLG, the log curves and the rest: cICP or nothing
     }
 }
 
-// cICP expresses any curve exactly, but it is a recent addition to the PNG specification: libpng before
-// 1.6.46 cannot write it, and most readers still ignore it. A file tagged only with cICP is one that only a
-// cICP-aware reader interprets correctly, which is why the older chunks are written alongside it.
+// cICP expresses any curve exactly, but libpng before 1.6.46 cannot write it and most readers still ignore
+// it, so the older chunks go in alongside.
 constexpr bool k_can_write_cicp = PNG_cICP_SUPPORTED_ENABLED;
 
 } // namespace
@@ -955,10 +950,9 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, flo
     png_set_cICP(png_ptr, info_ptr.get(), color_primaries, transfer_function, matrix_coefficients, video_full_range);
 #endif
 
-    // The sRGB chunk asserts the whole colorspace, primaries included, so it may only be written when those
-    // really are sRGB's: stated as BT.709 (1), left unspecified (2, in which case no cHRM is written either
-    // and a reader assumes sRGB), or unrecognized (< 0, where the pixels were converted to sRGB above). A
-    // genuinely wide gamut -- BT.2020, Display P3 -- gets cHRM and gAMA instead.
+    // the sRGB chunk asserts the whole colorspace, primaries included, so it may only be written when those
+    // are sRGB's: BT.709 (1), unspecified (2, where no cHRM is written and a reader assumes sRGB), or
+    // unrecognized (< 0, where the pixels were converted to sRGB above). A wide gamut gets cHRM and gAMA.
     const bool primaries_are_srgb = cicp_primaries < 0 || cicp_primaries == 1 || cicp_primaries == 2;
     const auto signaling          = transfer_signaling(tf);
 
@@ -973,17 +967,14 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, flo
                           transfer_function_name(tf), signaling.file_gamma);
     }
     else if (!k_can_write_cicp)
-        // Writing the file regardless would encode the pixels with this curve while recording no curve at
-        // all, which a reader cannot recover from: it assumes sRGB and silently returns wrong values.
+        // writing anyway would encode the pixels with this curve while recording no curve at all
         throw runtime_error(fmt::format("PNG: cannot record the {} transfer function. It has no gAMA or sRGB "
                                         "equivalent, and this build's libpng ({}) predates the cICP chunk added "
                                         "in 1.6.46. Save to a format that can carry it, or rebuild against a "
                                         "newer libpng.",
                                         transfer_function_name(tf), PNG_LIBPNG_VER_STRING));
     else
-        // Not an error -- the file is correct and HDRView reads it back exactly -- but the caveat belongs in
-        // front of the user, since it only arises for HDR curves and those are precisely the saves where
-        // being misread as sRGB elsewhere matters.
+        // the file is correct and reads back exactly, but other applications will get it wrong
         spdlog::warn("PNG: the {} curve can only be recorded in the cICP chunk, which most readers still "
                      "ignore; other applications will interpret this file as sRGB",
                      transfer_function_name(tf));
@@ -1063,9 +1054,8 @@ PNGSaveOptions *png_parameters_gui()
         ImGui::PE::End();
     }
 
-    // How faithfully the chosen curve can be recorded, said here rather than only in the log after the fact:
-    // this is the moment the user can still pick a different curve or a different format. The classification
-    // is the writer's own, so the two cannot disagree.
+    // warn here, while the user can still pick a different curve or format; the classification comes from
+    // the writer's own transfer_signaling(), so the two cannot disagree
     if (const auto signaling = transfer_signaling(s_opts.tf); signaling.file_gamma <= 0.0)
     {
         const string name = transfer_function_name(s_opts.tf);
