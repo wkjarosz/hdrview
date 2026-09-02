@@ -43,9 +43,9 @@ static constexpr float k_small_alpha = 1.f / (1u << 26u);
 inline constexpr double axis_scale_eps     = 0.0001;
 inline constexpr double axis_scale_log_eps = -4; // std::log10(axis_scale_eps)
 
-// The asinh scale's knee sits well above axis_scale_eps so that the axis doesn't spend most of its width
-// below the darkest level an 8-bit source can represent: at 1.8e-4 the curve is logarithmic across all of
-// [0,1], which spreads consecutive dark levels tens of bins apart and combs the histogram.
+// The asinh scale's knee sits well above axis_scale_eps so the axis doesn't spend most of its width below
+// the darkest level an 8-bit source can represent: at 1.8e-4 the curve is logarithmic across all of [0,1],
+// which spreads consecutive dark levels tens of bins apart and combs the histogram.
 inline constexpr double axis_scale_a_0 = 0.01;
 
 //! Warp \p value into the space the histogram's x axis is drawn in.
@@ -162,14 +162,9 @@ struct PixelStats
         int    huge_pixels  = 0; ///< Finite, but a marker rather than a measurement; see is_marker()
         int    valid_pixels = 0;
 
-        //! Extremes over every sample, markers and infinities included -- unlike minimum/maximum, which
-        //! cover the measurements alone.
-        /*!
-            What the clip warnings ask about: the shader tests each sample itself against the clip bounds
-            and stripes an infinity or a marker like anything else past them, so the histogram's warning
-            triangles have to see the same samples the viewport does. NaN is left out of both, matching the
-            shader, where it compares false against either bound.
-        */
+        //! Extremes over every sample, markers and infinities included, unlike minimum/maximum, which cover
+        //! the measurements alone. What the clip warnings ask about, so that the histogram's warning
+        //! triangles see the same samples the viewport stripes. NaN is left out of both, as in the shader.
         float extreme_minimum = std::numeric_limits<float>::infinity();
         float extreme_maximum = -std::numeric_limits<float>::infinity();
     };
@@ -178,10 +173,8 @@ struct PixelStats
 
     bool computed = false; ///< Did we finish computing the stats?
 
-    // Histogram, binned separately for every AxisScale. Switching the x axis is then free, at the cost of
-    // transforming each sample once per scale in the single pass over the pixels that fills these.
-    // Fixed-size arrays rather than vectors: the GUI reads these from stats objects that have not been
-    // computed yet, which is only safe as long as they always hold storage.
+    // Histogram, binned separately for every AxisScale, so switching the x axis is free. Fixed-size arrays,
+    // not vectors: the GUI reads these from stats objects that have not been computed yet.
 
     int num_bins = MAX_BINS; ///< Only [0, num_bins) of each histogram below is meaningful
 
@@ -193,8 +186,8 @@ struct PixelStats
     /// Number of samples in each bin
     std::array<std::array<float, MAX_BINS>, AxisScale_COUNT> hist_ys{};
 
-    //! Leaves every histogram empty but with usable ranges, since the GUI draws stats objects that have
-    //! not been computed yet.
+    //! Leaves every histogram empty but with usable ranges, since the GUI draws stats objects that have not
+    //! been computed yet.
     PixelStats()
     {
         hist_y_limits.fill(float2{0.f, 1.f});
@@ -243,30 +236,18 @@ struct PixelStats
 
 struct Channel : public Array2Df
 {
-    //! Bits per sample of this channel's samples in the file, or 0 when the file stores them as floating
-    //! point or their depth is unknown. Sets the histogram's bin count, via bins_for_bit_depth().
+    //! Bits per sample in the file, or 0 when the file stores them as floating point or their depth is
+    //! unknown. Sets the histogram's bin count, via bins_for_bit_depth().
     int bits_per_sample = 0;
 
-    //! Keep this channel out of the multi-channel groups its name would otherwise put it in.
-    /*!
-        Channel groups are derived from channel names, so there is no group object to take a channel out
-        of -- the way to say "show me this one on its own" is to say it here and let the next rebuild
-        honor it. build_layers_and_groups() then refuses to match this channel into a group, and it falls
-        through to a group of its own.
-
-        Per channel rather than per group, so marking the alpha of an RGBA image still leaves R, G and B
-        grouped. Deliberately not saved and not carried into a duplicate: it says how to look at the
-        image, not what the image is.
-    */
+    //! Exclude from multi-channel groups on the next build_layers_and_groups(), which then leaves this
+    //! channel in a group of its own. Per channel, so marking an RGBA image's alpha still leaves R, G and B
+    //! grouped. Not saved and not carried into a duplicate.
     bool ungrouped = false;
 
-    //! Whether this channel is part of the multi-selection the Images panel shows and edits act on.
-    /*!
-        Per channel rather than per group, for the same reason as `ungrouped`: build_layers_and_groups()
-        rebuilds the whole group vector, so a flag kept on a group would not survive a rebuild -- including
-        one caused by an edit that never touched the channels. Read through Image::is_group_selected(),
-        which counts a group selected when all its channels are.
-    */
+    //! Whether this channel is part of the multi-selection the Images panel shows and edits act on. Per
+    //! channel, like `ungrouped`, so it survives build_layers_and_groups() rebuilding the group vector.
+    //! Read through Image::is_group_selected(), which counts a group selected when all its channels are.
     bool selected = false;
 
 private:
@@ -300,11 +281,8 @@ public:
     bool                     texture_is_dirty = true;
 
     //! Set when the texture's level 0 has changed but its mip chain has not been rebuilt from it yet.
-    /*!
-        Channel textures are created with manual mipmapping so that streaming a tile costs one
-        glTexSubImage2D rather than a full mip-chain rebuild per tile. get_texture() does the rebuild
-        instead, which folds any number of tiles that landed since the last draw into a single one.
-    */
+    //! Channel textures use manual mipmapping so streaming a tile costs one glTexSubImage2D; get_texture()
+    //! does the rebuild, folding every tile that landed since the last draw into one.
     bool mipmap_is_dirty = true;
 
     Channel() = delete;
@@ -367,25 +345,19 @@ public:
     }
 
     /*!
-        Overwrite a rectangle of this channel's pixels and push just that rectangle to the GPU.
+        Overwrite a rectangle of this channel's pixels and push just that rectangle to the GPU, for pixels
+        arriving a tile at a time as a renderer produces them.
 
-        The counterpart to loading: pixels arriving after the image exists, a tile at a time, as a renderer
-        produces them. \p bounds is in channel-local coordinates (the caller subtracts the data window's
-        origin) and is clipped to the channel, so a tile that hangs off the edge writes the part that lands.
+        Cancels any in-flight statistics computation, so batch a frame's worth of tiles rather than
+        interleaving them with get_stats(). Must be called from the main thread when the channel has a
+        texture, since it touches the graphics API; see HDRViewApp::post_to_main_thread(). The caller also
+        has to bump the owning image's content_version, which a channel cannot reach.
 
-        Any in-flight statistics computation is canceled first -- it reads these very pixels from a worker
-        thread -- so callers should batch a frame's worth of tiles rather than interleaving them with
-        get_stats(). Must be called from the main thread when the channel has a texture, since it touches
-        the graphics API; see HDRViewApp::post_to_main_thread().
-
-        A channel does not know which image owns it, so the caller is the one that has to bump that image's
-        content_version afterwards; without it the histogram keeps describing the pixels this overwrote.
-
-        \param [] bounds   Rectangle to overwrite, in channel-local coordinates
-        \param [] data     Source samples, row-major within \p bounds
-        \param [] x_stride Distance in floats between consecutive samples in a row; >1 reads one channel
-                           out of an interleaved payload without deinterleaving it first
-        \param [] y_stride Distance in floats between consecutive rows, or 0 for tightly packed rows
+        \param bounds   Rectangle to overwrite, in channel-local coordinates, clipped to the channel
+        \param data     Source samples, row-major within \p bounds
+        \param x_stride Distance in floats between consecutive samples in a row; >1 reads one channel out
+                        of an interleaved payload without deinterleaving it first
+        \param y_stride Distance in floats between consecutive rows, or 0 for tightly packed rows
     */
     void upload_tile(const Box2i &bounds, const float *data, int64_t x_stride = 1, int64_t y_stride = 0);
 
@@ -484,11 +456,8 @@ public:
     //! alpha-bearing group, so nothing is multiplied by it. Read by finalize(), so set it before calling.
     //! Equal to alpha_type_from_file unless alpha_override replaced it.
     AlphaType_ alpha_type = AlphaType_None;
-    //! What the loader concluded before any override, and how it got there.
-    /*!
-        Kept so an override can say what it displaced: contradicting a kind the file stated is a different
-        situation from filling in one it never did. set_alpha() maintains these together with alpha_type.
-    */
+    //! What the loader concluded before any override, and how it got there, so an override can say what it
+    //! displaced. set_alpha() maintains these together with alpha_type.
     AlphaType_           alpha_type_from_file = AlphaType_None;
     AlphaSource_         alpha_source         = AlphaSource_Assumed;
     json                 metadata   = json::object();
@@ -502,35 +471,21 @@ public:
     size_t             size_bytes = 0;
 
     //! True for an image whose pixels arrive from a running process rather than from a file.
-    /*!
-        Nothing on disk backs it, so it cannot be reloaded and is left out of a saved session -- a session
-        records where to find its images again, and there is nowhere to find this one. It is otherwise an
-        ordinary image.
-    */
+    //! Pixels are pushed in by another process: nothing on disk backs it, so it cannot be reloaded and is
+    //! left out of a saved session. Otherwise an ordinary image.
     bool is_live = false;
 
-    //! Drawing commands laid over this image, in its pixel coordinates; empty for almost every image.
-    /*!
-        Only a renderer streaming over IPC sets these, to annotate what it is producing -- box the tile it
-        just finished, label a value. Drawn by the viewport after the image itself; see vector_overlay.h.
-    */
+    //! Drawing commands laid over this image, in its pixel coordinates; set only by a renderer streaming
+    //! over IPC, and drawn by the viewport after the image itself. See vector_overlay.h.
     std::vector<VgCommand> vector_overlay;
 
-    //! This image's undo history. Empty for one that has never been edited.
-    /*!
-        Per image rather than per application: each image is its own document, so undoing is always
-        undoing something done to the image being looked at, and closing one takes its history with it.
-
-        Not written to directly -- HDRViewApp::modify_image() is the only thing that adds to it, which is
-        also what keeps every edit paired with an entry that can reverse it.
-    */
+    //! This image's undo history; each image is its own document, so closing one takes its history with it.
+    //! Only HDRViewApp::modify_image() adds to it, which is what keeps every edit paired with its reverse.
     CommandHistory history;
 
     //! Bumped whenever any of this image's pixels change after loading.
-    /*!
-        Statistics and histograms are cached against it (see PixelStats::Settings), so anything that writes
-        pixels must bump it or the cache will keep serving measurements of pixels that are gone.
-    */
+    //! Statistics and histograms are cached against it (see PixelStats::Settings), so anything that writes
+    //! pixels must bump it.
     int content_version = 0;
 
     //
@@ -613,8 +568,8 @@ public:
         \name Multi-selection
 
         Which of this image's channel groups the user has selected. Stored on the channels (see
-        Channel::selected) and only ever derived for a group, so that a rebuild of the group vector cannot
-        lose it. HDRViewApp owns the rules that relate the selection to the current and reference images.
+        Channel::selected) and only ever derived for a group, so a rebuild of the group vector cannot lose
+        it. HDRViewApp owns the rules relating the selection to the current and reference images.
     */
     ///@{
     //! Whether every channel of group \p index is selected.
@@ -660,10 +615,8 @@ public:
     ///@}
 
     //! The group index to use for `target`: `selected_group` for Target_Primary, `reference_group` for
-    //! Target_Secondary -- except reference_group can be left at -1 by update_visibility() (a channel
-    //! filter can hide the group an image was set as *reference* for without deselecting it as the
-    //! reference), so Target_Secondary falls back to `selected_group` whenever `reference_group` is
-    //! currently invalid, rather than indexing `groups` out of bounds.
+    //! Target_Secondary, falling back to `selected_group` when that is invalid -- update_visibility()
+    //! leaves it at -1 when a channel filter hides the group an image is the reference for.
     int active_group_index(Target_ target) const
     {
         return (target == Target_Secondary && is_valid_group(reference_group)) ? reference_group : selected_group;
@@ -678,25 +631,21 @@ public:
     /*!
         \name Geometric operations
 
-        The edits that change an image's shape, and the reason these are methods here while the rest of
-        them are commands under edit/. Each rewrites the channel list or the two windows, which only this
-        class can do; everything in edit/ writes samples into channels that already exist, reaching them
-        through EditContext, which has no way to restructure anything. So the commands for these are thin:
-        `ctx.modify_structure("Crop to selection", [box](Image &i) { i.crop(box); })`.
-
-        duplicate() is the odd one out below -- it is not an edit at all, but builds a second image.
+        The edits that change an image's shape. These are methods here because each rewrites the channel
+        list or the two windows, which only this class can do; the commands under edit/ reach an image
+        through EditContext, which cannot restructure anything, so they are thin wrappers around these.
+        duplicate() is the odd one out: it is not an edit, but builds a second image.
     */
     //! @{
     /*!
         Move this image's samples, carrying the data and display windows along with them.
 
-        Each is exact -- every sample survives, none is resampled -- so the pair of them is its own
-        inverse, which is what lets the undo history record one without storing any pixels.
+        Each is exact -- every sample survives, none is resampled -- so each is its own inverse, which lets
+        the undo history record one without storing any pixels.
 
-        None of them touches content_version or the statistics cache; the caller that invoked the edit
-        owns that, since it also owns the undo entry. They do mark every channel's texture dirty, because
-        transpose() changes each channel's shape and the texture has to be rebuilt rather than updated in
-        place.
+        None of them touches content_version or the statistics cache, which belong to the caller that owns
+        the undo entry. They do mark every channel's texture dirty, since transpose() changes each
+        channel's shape and the texture has to be rebuilt.
     */
     void flip_horizontal();
     void flip_vertical();
@@ -704,20 +653,12 @@ public:
     void rotate_90_cw();
     void rotate_90_ccw();
 
-    /*!
-        Reduce the image to \p box, in image coordinates, discarding everything outside it.
-
-        Both windows become the box: what is left is the whole image afterwards, not a crop sitting inside
-        the old canvas. Samples are moved, never resampled.
-    */
+    //! Reduce the image to \p box, in image coordinates, discarding everything outside it. Both windows
+    //! become the box, so what is left is the whole image afterwards. Samples are moved, never resampled.
     void crop(const Box2i &box);
 
-    /*!
-        Change the canvas to \p size, keeping the samples and placing them per \p anchor.
-
-        Nothing is resampled -- the image keeps its scale and either gains empty margins or loses what
-        falls outside. New samples are zero, which for an image with alpha reads as transparent.
-    */
+    //! Change the canvas to \p size, keeping the samples and placing them per \p anchor. Nothing is
+    //! resampled: the image gains empty margins or loses what falls outside. New samples are zero.
     enum CanvasAnchor : int
     {
         Anchor_TopLeft = 0,
@@ -734,35 +675,21 @@ public:
     };
     void resize_canvas(int2 size, CanvasAnchor anchor);
 
-    /*!
-        Rescale the image to \p size, resampling its samples.
-
-        Unlike resize_canvas(), this changes the scale rather than the frame: the same picture, at a
-        different number of samples. Reducing averages over the source samples each destination one covers,
-        so detail is combined rather than dropped -- point-sampling a reduction aliases badly. Enlarging
-        interpolates bilinearly between them.
-    */
+    //! Rescale the image to \p size: the same picture at a different number of samples, unlike
+    //! resize_canvas(), which changes the frame. Reducing averages over the source samples each
+    //! destination one covers; enlarging interpolates bilinearly between them.
     void resample(int2 size);
 
-    /*!
-        Rebuild the layers, groups, and tree from the channels, and nothing else.
-
-        What a structural edit needs after changing the channel list. Deliberately not finalize(), which
-        would also premultiply a straight-alpha image a second time and re-derive metadata that has not
-        changed.
-    */
+    //! Rebuild the layers, groups, and tree from the channels, and nothing else -- what a structural edit
+    //! needs after changing the channel list. Not finalize(), which would premultiply a second time.
     void rebuild_layers();
 
     /*!
         A separate image holding a copy of \p region of this one, or of all of it when \p region is empty.
 
-        Deep: the samples are copied rather than shared, so the two can be edited independently. Everything
-        describing how to read those samples comes with them, since a copy that lost its color space would
-        be a different picture.
-
-        The copy has no history and no texture. It is not live however this image arrived: pixels pushed in
-        by a renderer belong to that process, but a copy of them is an ordinary image and is exactly how
-        one keeps a frame the renderer is about to overwrite.
+        Deep: the samples are copied, not shared, and everything describing how to read them comes along.
+        The copy has no history and no texture, and is never live, which is how one keeps a frame a
+        renderer is about to overwrite.
     */
     ImagePtr duplicate(const Box2i &region = Box2i{}) const;
 
@@ -788,8 +715,7 @@ public:
     }
 
     //! True when `group`'s values were premultiplied by finalize() and so must be divided back out to
-    //! report what the file holds. Straight-alpha files only: a file that stored premultiplied values has
-    //! no straight form for its alpha=0 pixels.
+    //! report what the file holds. Straight-alpha files only.
     //! An 'A' channel is coverage rather than ordinary data.
     bool alpha_is_transparency() const { return alpha_type != AlphaType_None; }
 
@@ -838,8 +764,8 @@ public:
     void draw_chromaticity_diagram(float width);
     void draw_colorspace();
     //! Draws the channel-statistics rows (Minimum/Average/Maximum/Std. Dev./# NaNs/# Infs) as PropertyEditor
-    //! (PE) entries. Must be called between ImGui::PE::Begin()/End() -- the caller owns the table itself
-    //! since it also hosts entries (hovered pixel, watched pixels) that aren't Image state.
+    //! (PE) entries. Must be called between ImGui::PE::Begin()/End(); the caller owns the table, which also
+    //! hosts entries that aren't Image state.
     void draw_channel_stats();
 
 private:
@@ -852,12 +778,12 @@ private:
 /**
     Widen an interleaved 8-bit buffer to three or four channels, for a format that stores nothing narrower.
 
-    A gray group's luma is replicated across red, green and blue, which is what the viewport shows for it;
-    a U,V pair, which has no third channel, gets a zero one. Alpha, when the group carries it, stays last.
+    A gray group's luma is replicated across red, green and blue; a U,V pair gets a zero third channel.
+    Alpha, when the group carries it, stays last.
 
-    \param [] src    Interleaved samples, `w * h * n` of them
-    \param [] gray   True when the group is a lone luma channel or luma plus alpha, false for a U,V pair
-    \param [out] n_out  Channel count of the returned buffer: 3, or 4 when the group carries alpha
+    \param src        Interleaved samples, `w * h * n` of them
+    \param gray       True when the group is a lone luma channel or luma plus alpha, false for a U,V pair
+    \param[out] n_out Channel count of the returned buffer: 3, or 4 when the group carries alpha
 */
 std::unique_ptr<uint8_t[]> widen_to_rgb(const uint8_t *src, int w, int h, int n, bool gray, int *n_out);
 
@@ -872,8 +798,7 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     *n = group.num_channels;
 
     // Alpha is not a color: it takes neither the exposure gain nor the transfer function, and the group's
-    // remaining channels are divided back out by it when the caller wants straight alpha. It is always the
-    // group's last channel.
+    // remaining channels are divided back out by it when the caller wants straight alpha.
     const Channel *alpha = group_has_alpha(group.type) ? &channels[group.channels[*n - 1]] : nullptr;
 
     const bool luminance_chroma = group.type == ChannelGroup::YC_Channels || group.type == ChannelGroup::YCA_Channels;

@@ -334,8 +334,8 @@ inline T saturate(T a)
           0 -> no change; 45 degree diagonal line;
           1 -> no gray/black & white; vertical line.
 
-    This is the linear remapping, which may produce negative values and values > 1 -- deliberately, so that
-    an HDR sample keeps its relationship to the ones around it rather than being clamped into [0,1].
+    The linear remapping, which may produce negative values and values > 1, so that an HDR sample keeps its
+    relationship to the ones around it instead of being clamped into [0,1].
 */
 template <typename T>
 inline T brightness_contrast_linear(T v, T slope, T midpoint)
@@ -392,14 +392,9 @@ inline T bias_Schlick(T t, T a)
     return t / ((((T(1) / a) - T(2)) * (T(1) - t)) + T(1));
 }
 
-//! Contrast about a biased midpoint, as an s-curve that stays within [0,1].
-/*!
-    The other half of a brightness/contrast control. The bias slides the midpoint, and the gain steepens
-    the curve about it, so the result approaches black and white without ever passing them: an alternative
-    to the straight line for a picture that is meant to stay inside the display range.
-
-    Clamped on the way in, since both halves are only defined over [0,1].
-*/
+//! Contrast about a biased midpoint, as an s-curve that stays within [0,1]: the bias slides the midpoint
+//! and the gain steepens the curve about it, so the result approaches black and white without passing them.
+//! Clamped on the way in, since both halves are only defined over [0,1].
 template <typename T>
 inline T brightness_contrast_nonlinear(T v, T slope, T bias)
 {
@@ -584,21 +579,16 @@ std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &na
 //! Shorten a collection of related names (e.g. file paths) down to what distinguishes them.
 /*!
     Trims the prefix and suffix shared by every name, marking each trimmed end with an ellipsis, and keeps
-    whole words rather than cutting one in half. Names with nothing unique left -- the paths are all
-    identical, or one name is entirely a suffix of the others -- fall back to their own file name.
+    whole words. A name with nothing unique left -- the paths are all identical, or one name is entirely a
+    suffix of the others -- falls back to its own file name.
 
     \returns One short name per input, in the same order.
 */
 std::vector<std::string> shorten_names(const std::vector<std::string> &names);
 
-/// Percent of a download still outstanding, for the status bar's progress readout.
-/*!
-    Kept apart from the Emscripten download callbacks so the arithmetic is exercised on every platform.
-    It guards the two things the raw byte counts do not: a total of zero, which a server that sends no
-    content length reports and which the callbacks can also see before the headers arrive; and integer
-    division, which sends every partial fraction to zero. Rounds what is left up, so the bar stays
-    visible until the download is genuinely finished rather than vanishing on the last few bytes.
-*/
+/// Percent of a download still outstanding, for the status bar's progress readout. Guards a total of zero,
+/// which a server sending no content length reports, and rounds up, so the bar stays visible until the
+/// download is finished.
 int download_percent_remaining(int64_t bytes_loaded, int64_t total_bytes);
 
 // Compare two strings in "natural" order (e.g. file2 < file10)

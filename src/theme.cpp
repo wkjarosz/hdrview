@@ -1,4 +1,4 @@
-/** \file app.cpp
+/** \file theme.cpp
     \author Wojciech Jarosz
 */
 
@@ -212,8 +212,7 @@ static void apply(int theme)
     if (theme >= 0)
     {
         // A built-in theme's style function starts from the live style and sets only the fields it
-        // defines, so reset first: otherwise it inherits the previous theme's geometry, DPI scaling
-        // included.
+        // defines, so reset first, or it inherits the previous theme's geometry and DPI scaling.
         ImGui::GetStyle() = ImGuiStyle();
 
         ImGuiTheme::ImGuiTheme_ t                               = (ImGuiTheme::ImGuiTheme_)theme;
@@ -352,9 +351,9 @@ void Theme::load(json j)
             read_float1("DockingSeparatorSize", style.DockingSeparatorSize);
             read_float1("FontSizeBase", style.FontSizeBase);
             read_float1("FontScaleMain", style.FontScaleMain);
-            // FontScaleDpi belongs to Hello ImGui, which sets it from the current display, so a value
-            // saved against a different monitor must not be restored over it. Files still carrying the key
-            // have the DPI factor baked into FontSizeBase instead; divide it back out. Saving drops the key.
+            // FontScaleDpi belongs to Hello ImGui, which sets it from the current display, so a value saved
+            // against a different monitor must not be restored over it. A file still carrying the key has the
+            // DPI factor baked into FontSizeBase; divide it back out. Saving drops the key.
             if (j_style.contains("FontScaleDpi") && style.FontScaleDpi > 0.f)
                 style.FontSizeBase /= style.FontScaleDpi;
             read_float1("CircleTessellationMaxError", style.CircleTessellationMaxError);

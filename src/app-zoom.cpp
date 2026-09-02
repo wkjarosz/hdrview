@@ -33,9 +33,8 @@ float2 HDRViewApp::vp_pos_at_pixel(float2 pixel) const
 
 void HDRViewApp::set_zoom(float zoom)
 {
-    // The fit-to-window ratios divide by a window's size, which is zero for a degenerate one, and clamp()
-    // would pass the resulting NaN straight through -- both of its comparisons are false for one. Reject
-    // non-finite input first and fall back to 1:1.
+    // The fit-to-window ratios divide by a window's size, zero for a degenerate one, and clamp() passes the
+    // resulting NaN straight through, since both of its comparisons are false for one.
     m_zoom = std::isfinite(zoom) ? clamp(zoom, MIN_ZOOM, MAX_ZOOM) : 1.f;
 }
 
@@ -98,8 +97,8 @@ void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
     reposition_pixel_to_vp_pos(focus_vp_pos, focused_pixel);
 }
 
-//! The nudge that keeps a zoom already sitting on a power of two from being rounded to the wrong side of
-//! it by float error in log2(), while being far too small to reach the neighboring stop.
+//! Keeps a zoom already sitting on a power of two from being rounded to the wrong side of it by float error
+//! in log2(), while being far too small to reach the neighboring stop.
 static constexpr float k_zoom_step_epsilon = 1e-4f;
 
 void HDRViewApp::zoom_in()
@@ -144,15 +143,14 @@ float2 HDRViewApp::center_offset() const
 {
     const Box2f dw = scaled_display_window(current_image());
     // Center the display window in the viewport. Unflipped, the mapping is zoom*pixel + offset, so the
-    // window's min corner still has to be pulled back to the viewport's margin; flipped, it is
+    // window's min corner has to be pulled back to the viewport's margin; flipped, it is
     // zoom*(display_window.max - pixel) + offset, which already puts that corner at zero.
     return (viewport_size() - dw.size()) / 2.f - select(m_flip, float2{0.f}, dw.min);
 }
 
-// The quad the image shader samples an image over spans its data window, uv 0 at the min corner and uv 1
-// at the max one. Both ends come from vp_pos_at_pixel(), so the drawn image, the overlays and the pixel
-// readouts share one transform -- including which display window a flip mirrors about, which is always the
-// current image's, never the reference's own.
+// The quad the image shader samples an image over spans its data window, uv 0 at the min corner and uv 1 at
+// the max one. Both ends come from vp_pos_at_pixel(), so the drawn image, the overlays and the pixel readouts
+// share one transform, including the display window a flip mirrors about, always the current image's.
 float2 HDRViewApp::image_position(ConstImagePtr img) const
 {
     const Box2f dw = img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}};
@@ -208,9 +206,8 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
 
 float4 HDRViewApp::tonemap_value(float4 value) const
 {
-    // The exposure/offset step the image shader applies, on the same premultiplied values: the offset is
-    // a straight-color quantity, so it enters scaled by alpha (see main() in image-shader.sglsl). Readouts
-    // built on this therefore report what the viewport shows, translucent pixels included.
+    // The exposure/offset step the image shader applies, on the same premultiplied values: the offset is a
+    // straight-color quantity, so it enters scaled by alpha (see main() in image-shader.sglsl).
     float3 exposed = powf(2.f, m_exposure_live) * value.xyz() + m_offset_live * value.w;
     return ::tonemap(float4{exposed, value.w}, m_gamma_live, m_tonemap, m_colormaps[m_colormap_index],
                      m_reverse_colormap);
@@ -241,14 +238,11 @@ static constexpr int k_scroll_gesture_gap = 10;
 
 //! Puts a wheel delta on one scale, whichever kind of device produced it.
 /*!
-    Every backend HDRView builds against reports a discrete wheel as one whole unit per notch, and a
-    trackpad -- or any other precise device -- as a stream of small fractions that add up to many units
-    over a single gesture. Nothing but the magnitude tells the two apart, so a whole-numbered delta is
-    taken for notches and brought up to the rate the fractions arrive at. Scaling both the same way
-    leaves either a notch changing the zoom by a fraction of a percent or a trackpad flying.
-
-    The classification is latched for the length of a gesture, so a precise device that happens to land
-    on a whole unit part way through one doesn't produce a single jumped frame.
+    Every backend HDRView builds against reports a discrete wheel as one whole unit per notch, and a precise
+    device (a trackpad) as a stream of small fractions adding up to many units over a gesture. Nothing but
+    the magnitude tells the two apart, so a whole-numbered delta is taken for notches and brought up to the
+    rate the fractions arrive at. The classification is latched for the length of a gesture, so a precise
+    device landing on a whole unit part way through one doesn't jump a frame.
 */
 static float2 scroll_units(float2 wheel)
 {
@@ -319,9 +313,9 @@ void HDRViewApp::handle_mouse_interaction()
     {
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
         {
-            // A second finger means a pinch, and the first one is still driving a synthesized left-drag;
-            // pan would fight the zoom for the same gesture. The drag is still consumed while it does --
-            // left to accumulate, it would pan by the whole pinch's travel the moment a finger lifts.
+            // A second finger means a pinch, while the first still drives a synthesized left-drag, so
+            // panning would fight the zoom. The drag is consumed meanwhile: left to accumulate, it would
+            // pan by the whole pinch's travel the moment a finger lifts.
             if (m_active_touches < 2)
             {
                 cancel_autofit = true;
@@ -343,9 +337,8 @@ void HDRViewApp::touch_gesture(int num_touches, float scale, float2 from_app_pos
     if (scale == 1.f && from_app_pos == to_app_pos)
         return;
 
-    // Pin whatever the fingers' midpoint was over to wherever that midpoint has moved, and magnify by
-    // exactly the ratio their separation grew by. The image then stays under the fingers: spreading them
-    // apart by a factor magnifies by that factor, and moving both together pans without zooming.
+    // Pin whatever the fingers' midpoint was over to wherever that midpoint has moved, and magnify by the
+    // ratio their separation grew by, so the image stays under the fingers.
     const float2 to    = vp_pos_at_app_pos(to_app_pos);
     const float2 pixel = pixel_at_vp_pos(vp_pos_at_app_pos(from_app_pos));
     set_zoom(scale * m_zoom);

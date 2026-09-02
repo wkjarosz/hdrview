@@ -37,9 +37,9 @@ using namespace std;
 namespace
 {
 
-// Stable, lowercase snake_case identifiers for enum values as stored in .hsess session files. These are
-// deliberately independent from any GUI display-string table (e.g. blend_mode_names()/channel_names() in
-// common.cpp), so relabeling a dropdown can never silently change what an existing session file means.
+// Stable, lowercase snake_case identifiers for enum values as stored in .hsess session files. Independent
+// of the GUI display-string tables (blend_mode_names()/channel_names() in common.cpp), so relabeling a
+// dropdown cannot change what an existing session file means.
 const char *const g_blend_mode_ids[BlendMode_COUNT] = {
     "normal",     "multiply",           "divide", "add", "average", "subtract", "relative_subtract",
     "difference", "relative_difference"};
@@ -68,9 +68,8 @@ Enum id_to_enum(const json &j, const char *key, const char *const (&ids)[N], Enu
 }
 
 // A session records the alpha override the user chose, not the interpretation it produced: with no override
-// the file is read afresh, so a corrected loader or an edited file is picked up rather than frozen in.
-// Spelled out rather than stored as the enum's ordinal, which would silently reinterpret every session if a
-// value were ever inserted.
+// the file is read afresh, so a corrected loader or an edited file is picked up. Spelled out, not stored as
+// the enum's ordinal, which would reinterpret every session if a value were ever inserted.
 static const char *alpha_override_token(AlphaType_ at)
 {
     switch (at)
@@ -100,9 +99,9 @@ static optional<AlphaType_> alpha_override_from_token(const json &j)
     return nullopt;
 }
 
-// Checks "type"/"version" on a parsed session manifest, logging as needed (`source_name` is a filename or
-// zip archive name, for the log message only). Returns false if `j` doesn't look like a session at all --
-// callers should treat that as "not a session", not a hard failure.
+// Checks "type"/"version" on a parsed session manifest (`source_name` is a filename or zip archive name,
+// for the log message only). False means `j` does not look like a session at all, which callers should
+// treat as "not a session" rather than a failure.
 bool validate_session_manifest(const json &j, const string &source_name)
 {
     if (j.value<string>("type", "") != "HDRView session")
@@ -290,8 +289,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         }
         break;
 
-        // Two entries rather than one, so the file's extension and the codec inside it cannot disagree:
-        // AVIF is AV1 by definition, while a .heif may hold HEVC, JPEG or JPEG 2000.
+        // Two entries, so the file's extension and the codec inside it cannot disagree: AVIF is AV1 by
+        // definition, while a .heif may hold HEVC, JPEG or JPEG 2000.
         case Format_HEIF:
         case Format_AVIF:
         {
@@ -484,12 +483,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                 );
 #endif
 
-                // The file now holds what the image holds, so its edits are no longer unsaved -- the mark
-                // in the Images panel clears and closing stops asking about them.
-                //
-                // Not for a composite, which is a different image: exposure, tonemapping and the blend are
-                // baked into it, so what was written is a rendition of the view rather than the image, and
-                // reopening it would not give the image back.
+                // The file now holds what the image holds, so its edits count as saved. Not for a
+                // composite, which bakes in exposure, tonemapping and the blend: what was written is a
+                // rendition of the view, and reopening it would not give the image back.
                 if (!composite)
                     current_image()->history.mark_saved();
             }
@@ -524,15 +520,14 @@ void HDRViewApp::load_images(const vector<string> &filenames)
 
         if (to_lower(fs::path(filenames[i]).extension().string()) == ".hsess")
         {
-            // a session file can arrive via the same paths as an image (drag-and-drop, CLI args, Finder
-            // "Open With", the "Open image..." dialog) -- route it to session loading instead of trying
-            // (and failing) to decode it as an image.
+            // a session file arrives by the same paths as an image (drag-and-drop, CLI args, Finder
+            // "Open With", the "Open image..." dialog), so route it to session loading
             load_session(filenames[i]);
             continue;
         }
 
-        // A .zip might be a session bundle -- see zip_bundle_hook (wired in the constructor), checked inside
-        // background_load() once it has the zip's bytes in hand.
+        // A .zip might be a session bundle; see zip_bundle_hook, checked inside background_load() once it
+        // has the zip's bytes in hand.
         load_image(filenames[i], std::nullopt, i == 0, opts);
     }
 }
@@ -594,8 +589,8 @@ void HDRViewApp::open_session_bundle()
             spdlog::debug("User uploaded a {:.0h} file with filename '{}' of mime-type '{}'",
                           human_readible{buffer.size()}, filename, mime_type);
 
-            // Explicit "load a session" entry point -- error rather than silently falling back to plain
-            // image loading if the uploaded zip isn't actually a session bundle.
+            // Explicit "load a session" entry point: an error, not a silent fallback to plain image
+            // loading, if the uploaded zip is not a session bundle.
             if (!hdrview()->try_load_zip_as_session(buffer, filename))
                 spdlog::error("'{}' does not contain a session manifest at its root.", filename);
         });
@@ -619,8 +614,8 @@ void HDRViewApp::load_url(string_view url, bool should_select, ImagePtr to_repla
 #else
     spdlog::info("Entered URL: {}", url);
 
-    // Everything the callbacks need travels through the payload: they are captureless lambdas, since
-    // emscripten takes them as plain function pointers.
+    // Everything the callbacks need travels through the payload: emscripten takes them as plain function
+    // pointers, so they are captureless.
     struct Payload
     {
         string           url;
@@ -695,13 +690,11 @@ bool HDRViewApp::can_reload(const ConstImagePtr &image) const
         return false;
 
 #if defined(__EMSCRIPTEN__)
-    // A URL can be fetched again. Bytes the browser handed over once -- an upload, or an entry of an
-    // uploaded zip -- carry only a display name, with nothing behind it to read.
+    // A URL can be fetched again; bytes the browser handed over once carry only a display name.
     return is_url(image->filename);
 #else
     // Every way in reads from disk, so there is always something to read again. Whether it is still there
-    // is reload_image()'s problem: this gates a keyboard shortcut, whose enabled() runs every frame for
-    // every loaded image, and a filesystem probe does not belong on that path.
+    // is reload_image()'s problem: this gates a shortcut, whose enabled() runs every frame per image.
     return true;
 #endif
 }
@@ -745,22 +738,20 @@ void HDRViewApp::duplicate_image()
     if (!img)
         return;
 
-    // With a selection, what is duplicated is the selection. The menu says which of the two it is about
-    // to do.
+    // With a selection, what is duplicated is the selection; the menu says which of the two it will do.
     auto copy = img->duplicate(m_roi);
     if (!copy)
         return;
 
-    // A duplicate is not the file it came from, and neither is a piece of one. Saying so in the part name
-    // keeps the Images panel able to tell them apart while the file name still says where it came from.
+    // A duplicate is not the file it came from; the part name keeps the Images panel able to tell them
+    // apart while the file name still says where it came from.
     copy->partname = m_roi.has_volume() ? "selection" : "copy";
 
     // Nothing on disk holds this, so it counts as unsaved from the start and closing it will say so.
     copy->history = CommandHistory{true};
 
-    // Deliberately not finalize(): duplicate() has already built the layers, and these samples came from an
-    // image that was finalized once already -- premultiplying a straight-alpha image a second time would
-    // quietly darken the copy.
+    // Not finalize(): duplicate() has already built the layers, and these samples came from an image that
+    // was finalized once already, so premultiplying again would darken the copy.
 
     add_image_beside_current(copy, copy->partname);
 }
@@ -896,8 +887,8 @@ void HDRViewApp::close_all_images_immediately()
     m_current   = -1;
     m_reference = -1;
     m_active_directories.clear();
-    // Only the folders opened alongside these images; one the user asked to watch stays watched, since
-    // what it is for -- files that do not exist yet -- has nothing to do with what is currently loaded.
+    // Only the folders opened alongside these images; one the user asked to watch stays watched, since it
+    // is there for files that do not exist yet.
     m_image_loader.remove_implicitly_watched_directories([](const fs::path &) { return true; });
     update_visibility(); // this also calls set_image_textures();
 }
@@ -908,9 +899,9 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
     j["type"]    = "HDRView session";
     j["version"] = fmt::format("{}.{}.{}", version_major(), version_minor(), version_patch());
 
-    // A live image's pixels come from a running process, so a session -- which records where to find its
-    // images again -- has nothing it could write for it. Leaving it out renumbers the remaining entries,
-    // so keep a map from image index to manifest entry for the current/reference indices below.
+    // A live image's pixels come from a running process, so a session, which records where to find its
+    // images again, has nothing to write for it. Leaving it out renumbers the remaining entries, hence the
+    // map from image index to manifest entry for the current/reference indices below.
     json             images = json::array();
     std::vector<int> entry_of_image(m_images.size(), -1);
     for (size_t i = 0; i < m_images.size(); ++i)
@@ -929,9 +920,8 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
         entry["selected_group"]        = img->selected_group;
         entry["reference_group"]       = img->reference_group;
 
-        // The multi-selection, by channel name rather than by group index: a group index means whatever
-        // the rebuild after loading makes it mean, while the names are what the grouping is derived from
-        // and what the panel addresses.
+        // The multi-selection, by channel name: a group index means whatever the rebuild after loading
+        // makes it mean, while the names are what the grouping is derived from.
         json selected_channels = json::array();
         for (const auto &c : img->channels)
             if (c.selected)
@@ -941,9 +931,8 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
         images.push_back(entry);
     }
     j["images"] = images;
-    // Indices into "images", not paths: the same file can legitimately be listed more than once (e.g. to
-    // compare two channel groups of it side by side), so a path alone can't identify which occurrence is
-    // current/reference. -1 when there is no such image, or when it was a live one that was left out.
+    // Indices into "images", not paths: the same file can be listed more than once, so a path alone can't
+    // identify which occurrence is current/reference. -1 when there is no such image.
     auto entry_index = [&](int idx) { return idx >= 0 && idx < (int)entry_of_image.size() ? entry_of_image[idx] : -1; };
     j["current"]     = entry_index(image_index(current_image()));
     j["reference"]   = entry_index(image_index(reference_image()));
@@ -1026,9 +1015,8 @@ void HDRViewApp::export_session_bundle()
     if (filename.empty())
         return;
 
-    // Flatten every image into "images/<index>_<original filename>" inside the bundle -- index-prefixed so
-    // two source images that happen to share a filename (from different original directories) can't collide,
-    // without needing real collision-detection logic.
+    // Flatten every image into "images/<index>_<original filename>" inside the bundle; the index prefix
+    // keeps two source images that share a filename from colliding.
     vector<string> archive_paths(m_images.size());
     for (size_t i = 0; i < m_images.size(); ++i)
         archive_paths[i] = fmt::format("images/{:03d}_{}", i, m_images[i]->path.filename().u8string());
@@ -1055,10 +1043,8 @@ void HDRViewApp::export_session_bundle()
         string source_zip, entry_path;
         if (split_zip_entry(source, source_zip, entry_path) && !entry_path.empty())
         {
-            // This image's own source is an entry inside another zip (e.g. it was loaded from a plain
-            // image zip, or from a previously-loaded session bundle) rather than a standalone file on
-            // disk -- re-extract its bytes from that zip and embed them directly instead of adding a
-            // filesystem file.
+            // This image's source is an entry inside another zip, not a standalone file on disk, so
+            // re-extract its bytes from that zip and embed them directly.
             ifstream ifs{fs::u8path(source_zip), std::ios::binary};
             string   zip_bytes{std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>()};
             auto     bytes = ifs ? zip_extract_entry(zip_bytes, entry_path) : std::nullopt;
@@ -1110,8 +1096,8 @@ void HDRViewApp::load_session(const string &filename)
 #if !defined(__EMSCRIPTEN__)
     if (to_lower(fs::path(filename).extension().string()) == ".zip")
     {
-        // An explicit "load a session" action: an error if the zip isn't actually a bundle, not a silent
-        // fallback to plain image loading (unlike a zip opened generically via drag-and-drop/"Open image...").
+        // An explicit "load a session" action: an error if the zip is not a bundle, unlike a zip opened
+        // generically via drag-and-drop or "Open image...", which falls back to plain image loading.
         ifstream ifs{filename, ios::binary};
         string   bytes;
         if (ifs)
@@ -1268,9 +1254,9 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         if (rel.empty())
             continue;
 
-        // Follows the same "zip_name/entry_path" synthetic identity already used for regular zip-loaded
-        // images (image_loader.cpp's extract_and_schedule) -- this is also why "reveal in file manager" and
-        // reload_image() already handle these correctly with no session-specific work.
+        // The same "zip_name/entry_path" synthetic identity regular zip-loaded images get (see
+        // extract_and_schedule() in image_loader.cpp), so "reveal in file manager" and reload_image() need
+        // no session-specific handling.
         PendingSession::Entry e;
         e.path                  = fs::path(zip_name) / fs::u8path(rel);
         e.channel_selector      = entry.value<string>("channel_selector", "");
@@ -1285,9 +1271,8 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         auto bytes = zip_extract_entry(zip_bytes, rel);
         if (!bytes)
         {
-            // Never issued to the loader, so it stays permanently unresolved -- finish_pending_session()
-            // reports it as a load failure once everything else has settled, same as a missing file on
-            // disk in the plain (non-bundle) case.
+            // Never issued to the loader, so it stays unresolved and finish_pending_session() reports it
+            // as a load failure, as it does a missing file on disk.
             spdlog::warn("Session bundle '{}' references '{}', but it isn't present in the zip.", zip_name, rel);
             continue;
         }
@@ -1323,30 +1308,28 @@ void HDRViewApp::finish_pending_session()
         else
         {
             // Group indices are whatever the file holds, and the image they name is only known now that it
-            // has loaded. selected_group is read unchecked -- active_group_index() validates only
-            // reference_group, which every reader guards with is_valid_group() and for which -1 is the
-            // meaningful "no reference group" state that update_visibility() assigns.
+            // has loaded. reference_group is left unchecked: every reader guards it with is_valid_group(),
+            // and -1 is the "no reference group" state update_visibility() assigns.
             e.loaded->selected_group  = clamp(e.selected_group, 0, std::max(0, (int)e.loaded->groups.size() - 1));
             e.loaded->reference_group = e.reference_group;
 
-            // A name the image no longer has simply selects nothing. A session written before this was
-            // saved leaves every channel unselected, and update_visibility() below then collapses the
-            // selection onto the group each image is showing, which is where a fresh load starts anyway.
+            // A name the image no longer has selects nothing, and a session with no "selected_channels"
+            // leaves every channel unselected; update_visibility() below then collapses the selection onto
+            // the group each image is showing.
             for (auto &c : e.loaded->channels)
                 c.selected = std::find(e.selected_channels.begin(), e.selected_channels.end(), c.name) !=
                              e.selected_channels.end();
         }
 
-    // Rebuild m_images in the saved order: images arrive in whatever order their independent background
-    // loads finish (not necessarily file order), and the same path can appear more than once, so
-    // entries -> loaded is the only reliable source of truth for both order and identity.
+    // Rebuild m_images in the saved order: images arrive in whatever order their background loads finish,
+    // and the same path can appear more than once, so entries -> loaded is what carries order and identity.
     m_images.clear();
     for (auto &e : entries)
         if (e.loaded)
             m_images.push_back(e.loaded);
 
-    // current_index/reference_index index into `entries`, not m_images -- bounds-check against that, not
-    // is_valid() (which checks against the just-rebuilt m_images and would be the wrong index space here).
+    // current_index/reference_index index into `entries`, not m_images, so bounds-check against that
+    // rather than with is_valid().
     auto entry_loaded = [&entries](int idx) -> ImagePtr
     { return (idx >= 0 && idx < (int)entries.size()) ? entries[idx].loaded : nullptr; };
 
@@ -1360,8 +1343,8 @@ void HDRViewApp::finish_pending_session()
 
     const json &view = m_pending_session->view;
     m_exposure_live = m_exposure = view.value<float>("exposure", m_exposure);
-    // Only the floor; see MIN_GAMMA. Exposure and offset have no unsafe values, and a session has to be
-    // able to carry back whatever the sliders' Ctrl+click entry and keyboard shortcuts can set.
+    // Only the floor; see MIN_GAMMA. Exposure and offset have no unsafe values, and a session has to carry
+    // back whatever Ctrl+click entry and the keyboard shortcuts can set.
     m_gamma_live = m_gamma = std::max(MIN_GAMMA, view.value<float>("gamma", m_gamma));
     m_offset_live = m_offset = view.value<float>("offset", m_offset);
     m_tonemap                = id_to_enum(view, "tonemap", g_tonemap_ids, m_tonemap);
@@ -1397,9 +1380,8 @@ void HDRViewApp::finish_pending_session()
     m_request_sort = true;
     m_pending_session.reset();
 
-    // m_images was rebuilt above, and m_visible_images indexes into it -- the file list reads one through
-    // the other, so leaving the old indices in place walks off the end of the new vector. Every other path
-    // that touches m_images ends here too.
+    // m_images was rebuilt above and m_visible_images indexes into it, so leaving the old indices in place
+    // would walk off the end of the new vector.
     update_visibility();
 }
 

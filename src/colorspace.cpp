@@ -479,9 +479,8 @@ static const char *s_transfer_function_names[TransferFunction::Count + 1] = {
 static const char *s_alpha_type_names[] = {"None", "Premultiplied Linear", "Premultiplied Non-Linear", "Straight",
                                            nullptr};
 
-// Spelled out rather than reusing s_alpha_type_names: the metadata panel reports what the file turned out
-// to hold, where one word is enough, while the combo asks the user to choose between kinds they may not
-// have had to think about before.
+// Spelled out, unlike s_alpha_type_names: the metadata panel reports what the file turned out to hold,
+// where one word is enough, while the combo asks the user to choose between the kinds.
 static const char *s_alpha_override_names[] = {"None (channel is data)", "Premultiplied, in linear light",
                                                "Premultiplied, after transfer", "Straight", nullptr};
 
@@ -501,13 +500,12 @@ const char **alpha_type_names() { return s_alpha_type_names; }
 namespace
 {
 
-// The CIE's own values for the linear segment near black, exact rather than the rounded 0.008856 and
-// 903.3 that often stand in for them.
+// The CIE's own values for the linear segment near black, not the rounded 0.008856 and 903.3.
 constexpr float k_Lab_eps   = 216.f / 24389.f;
 constexpr float k_Lab_kappa = 24389.f / 27.f;
 
-// The range normalize_Lab() maps onto [0,1]. The opponent axes are given the widest an eight-bit
-// encoding can reach rather than the tighter bounds of the sRGB gamut, so nothing real is ever clipped.
+// The range normalize_Lab() maps onto [0,1]. The opponent axes get the widest an eight-bit encoding can
+// reach, not the tighter bounds of the sRGB gamut, so nothing real is ever clipped.
 constexpr float3 k_Lab_min{0.f, -128.f, -128.f};
 constexpr float3 k_Lab_max{100.f, 128.f, 128.f};
 
@@ -538,8 +536,7 @@ float3 Lab_to_XYZ(float3 Lab, float3 white)
     const float fx = Lab.y / 500.f + fy;
     const float fz = fy - Lab.z / 200.f;
 
-    // Y has a closed form of its own rather than going through Lab_f_inv(): the test there is on the
-    // cube, and for Y the threshold is expressed in L directly.
+    // Y has a closed form of its own: Lab_f_inv() tests the cube, while for Y the threshold is in L.
     const float yr = Lab.x > k_Lab_kappa * k_Lab_eps ? fy * fy * fy : Lab.x / k_Lab_kappa;
 
     return float3{Lab_f_inv(fx) * white.x, yr * white.y, Lab_f_inv(fz) * white.z};
@@ -918,9 +915,9 @@ float3 RGB_to_HSL(float3 rgb)
     if (diff < 1e-6f) // achromatic: there is no hue to name, and no saturation to measure it with
         return float3{0.f, 0.f, L};
 
-    // Which end of the range the saturation is measured against flips at mid lightness, and a component
-    // outside [0,1] is carried by taking that end directly rather than as a fraction -- which is what lets
-    // a color brighter than white or darker than black survive the round trip.
+    // Which end of the range the saturation is measured against flips at mid lightness; a component outside
+    // [0,1] takes that end directly, not as a fraction, so a color brighter than white or darker than black
+    // survives the round trip.
     float S;
     if (L <= 0.5f)
         S = (mn < 0.f) ? 1.f - mn : diff / sum;
@@ -1008,8 +1005,8 @@ float3 adjust_saturation(float3 rgb, float s)
     }
     const float x2 = 2.f * L - y2;
 
-    // The map taking the old extremes to the new ones is affine, so it applies to all three components at
-    // once and each keeps its position between them -- which is what leaves the hue untouched.
+    // The map taking the old extremes to the new ones is affine, so applying it to all three components at
+    // once leaves each in its position between them, and the hue untouched.
     const float t    = 1.f / (mx - mn);
     const float fac1 = (y2 - x2) * t;
     const float fac2 = (mx * x2 - mn * y2) * t;
@@ -1029,7 +1026,7 @@ float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness
     hsl.y *= saturation;
     float3 out = HSL_to_RGB(hsl);
 
-    // Mixed toward black or white rather than changing L, which would desaturate on the way.
+    // Mixed toward black or white; changing L would desaturate on the way.
     return lightness < 0.f ? la::lerp(out, float3{0.f}, -lightness) : la::lerp(out, float3{1.f}, lightness);
 }
 

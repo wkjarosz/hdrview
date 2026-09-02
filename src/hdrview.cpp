@@ -197,8 +197,7 @@ until another channel selector is encountered.)")
             spdlog::debug("Launching HDRView with no command line arguments.");
 
         spdlog::info("Welcome to HDRView!");
-        // Log the same string --version reports: bug reports usually arrive as a copy of this console
-        // output, and the version is the first thing needed to interpret them.
+        // Log the same string --version reports: bug reports usually arrive as a copy of this output.
         spdlog::info("{}", version_string);
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
 
@@ -226,8 +225,8 @@ until another channel selector is encountered.)")
 
 #if HDRVIEW_ENABLE_IPC
         hdrview()->ipc_port() = uint16_t(ipc_port);
-        // Failing to bind is reported and left at that: the port being taken is a reason not to listen, not
-        // a reason to refuse to show the images the user asked for.
+        // Failing to bind is reported and left at that: a taken port is no reason to refuse to show the
+        // images the user asked for.
         if (listen)
             hdrview()->start_ipc_listening(uint16_t(ipc_port));
 #endif

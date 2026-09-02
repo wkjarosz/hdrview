@@ -47,8 +47,8 @@ enum AlphaSource : AlphaSource_
 const char  *alpha_type_name(AlphaType_ at);
 //! How the alpha kind was arrived at, phrased to follow it: "Straight (from the file)".
 const char *alpha_source_suffix(AlphaSource_ as);
-//! The same, phrased to introduce a kind instead: "the file said Straight". Used where an override has
-//! displaced one and both have to appear, since the suffix form then reads as an idiom.
+//! The same, phrased to introduce a kind instead: "the file said Straight", for where an override has
+//! displaced one and both have to appear.
 const char *alpha_source_phrase(AlphaSource_ as);
 //! Name for the alpha-override combo, which needs to say more than the metadata panel's one-word label.
 const char  *alpha_override_name(AlphaType_ at);
@@ -602,9 +602,8 @@ inline Real OOTF_BT2100_HLG(Real E_S, Real Y_S, Real alpha, Real gamma = Real(1.
 template <typename Real>
 inline Real inverse_OOTF_BT2100_HLG(Real E_D, Real Y_D, Real alpha = Real(1.0), Real gamma = Real(1.2))
 {
-    // The luminance only scales the result, so its magnitude is what matters -- colour-science's inverse
-    // OOTF takes the same absolute value. E_D carries the sign. A zero luminance would diverge here, since
-    // the exponent is negative, and means there is no light to invert.
+    // The luminance only scales the result, so its magnitude is what matters, as colour-science's inverse
+    // OOTF also takes. E_D carries the sign; a zero luminance would diverge, the exponent being negative.
     const Real Y_abs = std::abs(Y_D);
     if (!(Y_abs > Real(0)))
         return Real(0);
@@ -643,8 +642,8 @@ inline Real EOTF_BT2100_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000))
     const Real gamma = HLG_system_gamma(L_W);
     const Real alpha = L_W - L_B;
     const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
-    // The black-lift beta applies to the magnitude, so it raises the floor rather than folding the sign;
-    // inverse_OETF_BT2100_HLG is itself mirrored, which carries the sign through the rest of the chain.
+    // The black-lift beta applies to the magnitude, so it raises the floor without folding the sign;
+    // inverse_OETF_BT2100_HLG is itself mirrored, carrying the sign through the rest of the chain.
     const Real E_p_lifted = mirrored(E_p, [beta](Real v) { return (Real(1) - beta) * v + beta; });
     auto       E_s        = inverse_OETF_BT2100_HLG(E_p_lifted);
     return OOTF_BT2100_HLG(E_s, E_s, alpha, gamma);
@@ -930,9 +929,9 @@ Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_
 inline Color4 tonemap(const Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
     Color3 rgb = tonemap(color.xyz(), gamma, tonemap_mode, colormap, reverse_colormap);
-    // A colormap lookup answers with a straight color, while everything around it is premultiplied, so the
-    // two false-color modes premultiply their result -- the gamma curve, applied to values that already
-    // are, does not. Mirrors tonemap() in assets/shaders/image-shader.sglsl.
+    // A colormap lookup answers with a straight color while everything around it is premultiplied, so the
+    // two false-color modes premultiply their result; the gamma curve, applied to values that already are,
+    // does not. Mirrors tonemap() in assets/shaders/image-shader.sglsl.
     if (tonemap_mode == Tonemap_FalseColor || tonemap_mode == Tonemap_PositiveNegative)
         rgb *= color.w;
     return Color4(rgb, color.w);
@@ -940,15 +939,11 @@ inline Color4 tonemap(const Color4 color, float gamma, Tonemap_ tonemap_mode, Co
 
 float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode);
 
-// Kept inline (unlike its float2/float4 siblings, moved to colorspace.cpp): called per-pixel from
-// image.cpp's parallel_for computing channel statistics, a different translation unit, and the project has
-// no LTO/IPO enabled -- de-inlining this one would be a real cross-TU perf regression.
+// inline, unlike its float2/float4 siblings: called per pixel from PixelStats::calculate(), in another
+// translation unit, and the project builds without LTO.
 inline float blend(float top, float bottom, BlendMode_ blend_mode)
 {
-    // std::abs, qualified: this is a header, with no `using namespace std` to bring the floating-point
-    // overloads into scope. libstdc++ leaves only <stdlib.h>'s integer ::abs visible at global scope, which
-    // would truncate; libc++ happens to declare the float ones there too.
-    using std::abs;
+    using std::abs; // ::abs is the integer one on libstdc++, and would truncate
 
     float diff = top - bottom;
     switch (blend_mode)
@@ -997,8 +992,8 @@ T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
     constexpr auto min_val = std::numeric_limits<T>::min();
     constexpr auto max_val = std::numeric_limits<T>::max();
     const float    range   = float(max_val) - float(min_val);
-    // std::clamp lets a NaN through -- both of its comparisons are false for one -- and converting that to
-    // an integer type is undefined. Real images do carry NaN, so map it to zero before quantizing.
+    // std::clamp lets a NaN through, both of its comparisons being false for one, and converting that to an
+    // integer type is undefined.
     if constexpr (!std::is_floating_point_v<T>)
         if (std::isnan(v))
             v = 0.f;
