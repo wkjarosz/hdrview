@@ -23,10 +23,7 @@ namespace
 {
 
 //! How many levels an image of \p size has, counting the image itself, down to a single sample.
-int level_count(int2 size)
-{
-    return 1 + int(std::floor(std::log2(float(std::max(1, std::max(size.x, size.y))))));
-}
+int level_count(int2 size) { return 1 + int(std::floor(std::log2(float(std::max(1, std::max(size.x, size.y)))))); }
 
 /*!
     Halve an image repeatedly, putting each level in the list as an image of its own.
@@ -45,13 +42,15 @@ class GenerateMipmaps final : public EditCommand
 public:
     Info info() const override
     {
-        return {{"Generate mipmaps...", "Build a mip pyramid", "Halve repeatedly"},
-                ICON_MY_CHANNEL_GROUP,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Generate",
-                26.f,
-                /* has_subject */ false};
+        Info i{{"Generate mipmaps...", "Build a mip pyramid", "Halve repeatedly"},
+               ICON_MY_CHANNEL_GROUP,
+               ImGuiKey_None,
+               ImGuiInputFlags_None,
+               "Generate",
+               26.f};
+        // Rewrites the whole image into a pyramid, so there is no subject to narrow.
+        i.draws_subject_selector = false;
+        return i;
     }
 
     bool enabled(const EditContext &ctx) const override

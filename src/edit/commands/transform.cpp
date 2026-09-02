@@ -33,6 +33,9 @@ public:
     Geometric(Info info, std::function<void(Image &)> forward, std::function<void(Image &)> backward) :
         m_info(std::move(info)), m_forward(std::move(forward)), m_backward(std::move(backward))
     {
+        // A flip or a quarter turn moves every sample of every channel by definition, so there is
+        // nothing for a scope to narrow.
+        m_info.draws_subject_selector = false;
     }
 
     Info info() const override { return m_info; }
@@ -47,7 +50,14 @@ private:
 class Crop final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C}; }
+    Info info() const override
+    {
+        Info i{{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C};
+        // Reshapes the image rather than writing into it, as the other two size commands do, so the
+        // subject has nothing to say about it.
+        i.draws_subject_selector = false;
+        return i;
+    }
 
     //! Only when there is something to crop to, and it is not already the whole image.
     bool enabled(const EditContext &ctx) const override
@@ -64,7 +74,18 @@ public:
 
     void apply(EditContext &ctx) override
     {
-        const Box2i box = ctx.selection();
+        auto img = ctx.image();
+        if (!img)
+            return;
+
+        // The same two conditions enabled() asks about, asked again per image: running over a selection
+        // reaches images the rectangle misses entirely, or already is, and neither is a crop -- an entry
+        // for one would sit in the history changing nothing.
+        Box2i box = ctx.selection();
+        box.intersect(img->data_window);
+        if (!box.has_volume() || box == img->data_window)
+            return;
+
         ctx.modify_structure("Crop to selection", [box](Image &i) { i.crop(box); });
 
         // What was selected is now the whole image, so the selection has nothing left to say.
@@ -160,13 +181,15 @@ class ImageSize final : public EditCommand
 public:
     Info info() const override
     {
-        return {{"Image size...", "Resize the image"},
-                ICON_MY_IMAGE_SIZE,
-                ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
-                ImGuiInputFlags_None,
-                "Resize",
-                30.f,
-                false};
+        Info i{{"Image size...", "Resize the image"},
+               ICON_MY_IMAGE_SIZE,
+               ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
+               ImGuiInputFlags_None,
+               "Resize",
+               30.f};
+        // Replaces the image rather than writing into it, so the subject has nothing to say about it.
+        i.draws_subject_selector = false;
+        return i;
     }
 
     //! Opens on the image's own size, and does not carry it to the next one.
@@ -223,13 +246,14 @@ class CanvasSize final : public EditCommand
 public:
     Info info() const override
     {
-        return {{"Canvas size..."},
-                ICON_MY_CANVAS_SIZE,
-                ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C,
-                ImGuiInputFlags_None,
-                "Resize",
-                30.f,
-                false};
+        Info i{{"Canvas size..."},
+               ICON_MY_CANVAS_SIZE,
+               ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C,
+               ImGuiInputFlags_None,
+               "Resize",
+               30.f};
+        i.draws_subject_selector = false;
+        return i;
     }
 
     //! Opens describing the canvas as it is: its own size, or -- given relatively -- no change at all.

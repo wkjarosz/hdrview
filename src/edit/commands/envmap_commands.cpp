@@ -40,13 +40,15 @@ class Remap final : public EditCommand
 public:
     Info info() const override
     {
-        return {{"Remap envmap...", "Change environment map format", "Spherical remapping"},
-                ICON_MY_ENVMAP,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Remap",
-                27.f,
-                false};
+        Info i{{"Remap envmap...", "Change environment map format", "Spherical remapping"},
+               ICON_MY_ENVMAP,
+               ImGuiKey_None,
+               ImGuiInputFlags_None,
+               "Remap",
+               27.f};
+        // Reparameterizes the whole image, so there is no subject to narrow.
+        i.draws_subject_selector = false;
+        return i;
     }
 
     //! Opens at the current image's size, then follows the target's own aspect from there.
@@ -160,13 +162,14 @@ class Irradiance final : public EditCommand
 public:
     Info info() const override
     {
-        return {{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
-                ICON_MY_IRRADIANCE,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Convolve",
-                27.f,
-                false};
+        Info i{{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
+               ICON_MY_IRRADIANCE,
+               ImGuiKey_None,
+               ImGuiInputFlags_None,
+               "Convolve",
+               27.f};
+        i.draws_subject_selector = false;
+        return i;
     }
 
     //! The current image's size, rather than a fixed small one: the result is usually looked at beside it.

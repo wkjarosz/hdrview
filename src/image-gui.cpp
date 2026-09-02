@@ -657,8 +657,12 @@ void Image::draw_histogram()
                     heights[c] = shown[c] ? std::max(0.f, column_height(stats[c], xa, xb)) : 0.f;
                     order[c]   = c;
                 }
-                std::sort(order.begin(), order.begin() + n_channels,
-                          [&](int a, int b) { return heights[a] < heights[b]; });
+                // Insertion sort rather than std::sort: this runs once per pixel column over at most four
+                // elements, where std::sort's machinery costs more than the sort, and its bounds stay
+                // plain enough that the optimizer does not lose them.
+                for (int i = 1; i < n_channels; ++i)
+                    for (int j = i; j > 0 && heights[order[j]] < heights[order[j - 1]]; --j)
+                        std::swap(order[j], order[j - 1]);
 
                 // Sweep bands from the baseline upward; the channels active in a band are exactly those
                 // whose height reaches into it, so their colors sum additively.
@@ -855,12 +859,15 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
         if (!group.visible)
             continue;
 
-        bool is_selected_channel  = is_current && selected_group == layer.groups[g];
+        // The group on screen, and the group's membership of the multi-selection: two different things,
+        // and a row can be either without being the other.
+        bool is_current_channel   = is_current && selected_group == layer.groups[g];
         bool is_reference_channel = is_reference && reference_group == layer.groups[g];
+        bool is_selected_channel  = is_group_selected(layer.groups[g]);
 
-        ImGuiTreeNodeFlags flags =
-            tree_node_flags |
-            (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_None);
+        ImGuiTreeNodeFlags flags = tree_node_flags | (is_current_channel || is_reference_channel || is_selected_channel
+                                                          ? ImGuiTreeNodeFlags_Selected
+                                                          : ImGuiTreeNodeFlags_None);
         ImGui::TreeRow((void *)(intptr_t)id_++, flags, name.c_str(),
                        [&]
                        {
@@ -869,44 +876,62 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                                                  : "";
                            ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
                        },
-                       [&]
-                       { ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift); });
+                       [&] {
+                           ImGui::PushRowColors(is_current_channel, is_reference_channel, ImGui::GetIO().KeyShift,
+                                                is_selected_channel);
+                       });
 
         // Right-clicking a group points at it without selecting it: the viewport goes on showing whatever
         // it was showing, and only the operation is told which group was meant -- so a lone depth channel
-        // can be deleted while a color stays on screen.
+        // can be deleted while a color stays on screen. Right-clicking one that is already selected covers
+        // the whole selection instead; see HDRViewApp::target_groups().
         const int this_group = layer.groups[g];
 
         if (ImGui::BeginPopupContextItem())
         {
             ImGui::TextDisabled("%s", name.c_str());
             ImGui::Separator();
-            for (const char *command : {"Ungroup channels", "Regroup channels", "Delete channel group"})
-            {
-                const auto &a = hdrview()->action(command);
 
-                // Deleting one channel is not deleting a group, and the label says which it is about to
-                // be; the action's name stays put, since that is what addresses it.
-                const string label = string(command) == "Delete channel group"
-                                         ? delete_channels_label(hdrview()->current_image(), this_group)
-                                         : a.names[0];
+            // Drawn as if the group were already pointed at, so what each item says and whether it is
+            // offered match what choosing it would do -- on this image, which need not be the current one.
+            hdrview()->with_target_group(
+                img_idx, this_group,
+                [&]
+                {
+                    for (const char *command : {"Ungroup channels", "Regroup channels", "Delete channel group"})
+                    {
+                        const auto &a = hdrview()->action(command);
 
-                // Spelled out as strings: imgui_ext declares a MenuItemEx taking std::string, and a
-                // null here binds to that rather than to Dear ImGui's char* one, which constructs a
-                // string from nullptr.
-                if (ImGui::MenuItemEx(label, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), nullptr, a.enabled()))
-                    // Next frame rather than now: deleting a group rebuilds the very layers and groups
-                    // this loop is walking, and the rest of the tree would be drawn from vectors that had
-                    // moved out from under it.
-                    hdrview()->post_to_main_thread([command, this_group]
-                                                   { hdrview()->invoke_action_on_group(command, this_group); });
-            }
+                        // Deleting one channel is not deleting a group, nor several groups, and the label
+                        // says which it is about to be; the action's name stays put, since that is what
+                        // addresses it.
+                        auto         target = hdrview()->target_image();
+                        const string label  = string(command) == "Delete channel group"
+                                                  ? delete_channels_label(target, hdrview()->target_groups(target))
+                                                  : a.names[0];
+
+                        // Spelled out as strings: imgui_ext declares a MenuItemEx taking std::string, and a
+                        // null here binds to that rather than to Dear ImGui's char* one, which constructs a
+                        // string from nullptr.
+                        if (ImGui::MenuItemEx(label, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), nullptr,
+                                              a.enabled()))
+                            // Next frame rather than now: deleting a group rebuilds the very layers and
+                            // groups this loop is walking, and the rest of the tree would be drawn from
+                            // vectors that had moved out from under it.
+                            hdrview()->post_to_main_thread(
+                                [command, img_idx, this_group]
+                                { hdrview()->invoke_action_on_group(command, img_idx, this_group); });
+                    }
+                });
             ImGui::EndPopup();
         }
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
-            if (ImGui::GetIO().KeyShift)
+            // Shift on its own is the reference modifier, as it has always been; everything else is the
+            // selection, with ctrl/cmd to toggle one group and ctrl/cmd+shift to take a range.
+            auto &io = ImGui::GetIO();
+            if (io.KeyShift && !io.KeyCtrl)
             {
                 spdlog::trace("Shift-clicked on {}", name);
                 // check if we are already the reference channel group
@@ -920,18 +945,26 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                 {
                     spdlog::trace("Setting reference image to {}", img_idx);
                     hdrview()->set_reference_image_index(img_idx);
-                    reference_group = layer.groups[g];
+                    reference_group = this_group;
                 }
                 set_as_texture(Target_Secondary);
             }
             else
             {
-                hdrview()->set_current_image_index(img_idx);
-                selected_group = layer.groups[g];
-                set_as_texture(Target_Primary);
+                if (io.KeyShift)
+                    hdrview()->select_group_range_to(img_idx, this_group);
+                else if (io.KeyCtrl)
+                    hdrview()->toggle_group_selected(img_idx, this_group);
+                else
+                    hdrview()->set_current_group(img_idx, this_group);
+
+                // Not necessarily this image: taking the current target out of the selection hands current
+                // to whatever is still in it, which can be another image entirely.
+                if (auto cur = hdrview()->current_image())
+                    cur->set_as_texture(Target_Primary);
             }
         }
-        else if (is_selected_channel && scroll_to >= -0.5f)
+        else if (is_current_channel && scroll_to >= -0.5f)
         {
             if (!ImGui::IsItemVisible())
                 ImGui::SetScrollHereY(scroll_to);

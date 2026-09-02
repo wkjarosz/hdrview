@@ -39,15 +39,17 @@ struct EditContext
     //! Which of that image's samples the edit covers.
     virtual const EditSubject &subject() const = 0;
 
-    //! The channel group an operation acts on: normally the one being shown.
+    //! The channel groups an operation acts on: normally the selected ones.
     /*!
-        Named separately from the selection because a group can be pointed at without being selected --
-        right-clicking one in the Images panel says which group is meant without disturbing what the
-        viewport is showing, so a lone depth channel can be deleted while a color stays on screen.
+        Not simply the selection, because a group can be pointed at without being selected: right-clicking
+        one *outside* the selection in the Images panel says which group is meant without disturbing what
+        is selected or what the viewport is showing, so a lone depth channel can be deleted while a color
+        stays on screen. Right-clicking one that is *in* the selection covers the selection, the same way
+        a plain click inside one keeps it rather than replacing it.
 
-        -1 when the image has no group to speak of.
+        Empty when the image has no group to speak of.
     */
-    virtual int target_group() const = 0;
+    virtual std::vector<int> target_groups() const = 0;
 
     virtual Box2i selection() const               = 0;
     virtual void  set_selection(const Box2i &box) = 0;
@@ -127,9 +129,22 @@ public:
             contents; see HDRViewApp::draw_edit_command_dialog().
         */
         float width_em = 24.f;
-        //! Whether the dialog carries the "Apply to" controls. False for the edits that cover the whole
-        //! image whatever the subject says -- a crop, a resize.
-        bool has_subject = true;
+        //! Whether the "Apply to" settings -- the channel scope and "selection only" -- mean anything for
+        //! this edit, and so whether its dialog shows them.
+        /*!
+            False for the edits that replace or reshape the image: there is no rotating only the green
+            channel, or only the marquee. Independent of fans_out below -- ungrouping shows no controls
+            but does run over the selection.
+        */
+        bool draws_subject_selector = true;
+
+        //! With several images selected, whether this runs on all of them or only the current one.
+        /*!
+            Each selected image gets its own invocation and its own undo entry, and each starts from the
+            same selection. False only for Copy and Cut: there is one clipboard, so running them per image
+            would leave only the last one's copy in it.
+        */
+        bool fans_out = true;
 
         //! Whether the image has to accept edits for this to be offered. False for the one command that
         //! only reads: copying is not editing, and is worth having on an image a renderer owns.

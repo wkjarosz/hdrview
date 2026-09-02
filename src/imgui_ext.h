@@ -286,7 +286,13 @@ inline void AlignCursor(const std::string &text, float align) { AlignCursor(Calc
 // right-align the truncated file name
 std::string TruncatedText(const std::string &filename, const std::string &icon);
 
-void PushRowColors(bool is_current, bool is_reference, bool reference_mod = false);
+//! Push the Header/HeaderHovered/HeaderActive colors an image-list row is drawn with.
+/*!
+    A row can be the current one, one of several selected, the reference, or both current and reference --
+    which draws the average of the two, since those are independent of each other. `reference_mod` previews
+    what a shift-click would do, so hovering with shift held tints in the reference color.
+*/
+void PushRowColors(bool is_current, bool is_reference, bool reference_mod = false, bool is_selected = false);
 
 //! Draws one row of a table-as-tree/outliner view -- the shared skeleton behind the image list's three
 //! row kinds (top-level image rows, flat/tree channel-group rows, tree-mode layer-path rows): TableNextRow(),

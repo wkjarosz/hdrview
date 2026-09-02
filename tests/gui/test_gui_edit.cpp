@@ -69,6 +69,109 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 {
     ImGuiTest *t = nullptr;
 
+    t           = IM_REGISTER_TEST(engine, "edit", "an edit covers every selected image");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        reset_images(ctx);
+        hdrview()->roi()          = Box2i{};
+        hdrview()->edit_subject() = EditSubject{};
+        IM_CHECK_SILENT(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}) == 2);
+
+        // Selected here rather than clicked: the chords that build a selection are navigation's business,
+        // and what this is about is what an edit does once there is one.
+        hdrview()->set_current_image_index(0);
+        hdrview()->toggle_group_selected(1, hdrview()->image(1)->selected_group);
+        IM_CHECK(hdrview()->image(0)->is_selected());
+        IM_CHECK(hdrview()->image(1)->is_selected());
+        IM_CHECK_EQ(hdrview()->current_image_index(), 0);
+
+        // An edit that takes a subject reaches both, each as an entry in its own history.
+        menu_click(ctx, "Edit/Invert");
+        for (int i = 0; i < 2; ++i)
+        {
+            IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+            IM_CHECK_STR_EQ(hdrview()->image(i)->history.undo_name().c_str(), "Invert");
+        }
+
+        // Undo and redo step every selected image, not only the one being looked at.
+        menu_click(ctx, "Edit/Undo");
+        for (int i = 0; i < 2; ++i) IM_CHECK_EQ(hdrview()->image(i)->history.has_undo(), false);
+        menu_click(ctx, "Edit/Redo");
+        for (int i = 0; i < 2; ++i) IM_CHECK_EQ(hdrview()->image(i)->history.has_undo(), true);
+
+        // An edit that reshapes an image reaches both too: nothing about a quarter turn names one
+        // selected image over another.
+        menu_click(ctx, "Edit/Rotate 90 degrees clockwise");
+        for (int i = 0; i < 2; ++i) IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 2);
+
+        // Cutting is the exception, and copying with it: there is one clipboard, so both read and clear
+        // the image being looked at and leave the rest of the selection alone.
+        menu_click(ctx, "Edit/Select all");
+        menu_click(ctx, "Edit/Cut");
+        IM_CHECK_EQ((int)hdrview()->image(0)->history.size(), 3);
+        IM_CHECK_EQ((int)hdrview()->image(1)->history.size(), 2);
+        IM_CHECK(hdrview()->clipboard() != nullptr);
+        IM_CHECK_EQ(hdrview()->clipboard()->size().x, hdrview()->image(0)->size().x);
+        IM_CHECK_EQ(hdrview()->clipboard()->size().y, hdrview()->image(0)->size().y);
+
+        // Edited images left loaded would make the next test's close_all_images() prompt rather than
+        // close.
+        reset_images(ctx);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a color edit that covers nothing says so");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        // Ungrouping leaves every channel standing alone, and a lone channel is not a color group -- so
+        // the scope now names groups that a color operation has nothing to do with. Reachable from the
+        // menu in two clicks, which is why doing nothing quietly is not good enough.
+        menu_click(ctx, "Edit/Ungroup channels");
+        auto img = hdrview()->current_image();
+        IM_CHECK_EQ((int)img->groups.size(), 4);
+
+        const auto original = snapshot(img);
+        const int  entries  = (int)img->history.size();
+
+        LogWatcher  log;
+        EditSubject all_channels;
+        all_channels.scope = EditSubject::Scope_AllChannels;
+        IM_CHECK_EQ(hdrview()->modify_colors(img, "Test", all_channels, [](const float4 &c, int2) { return -c; }),
+                    false);
+
+        IM_CHECK(snapshot(img) == original);
+        IM_CHECK_EQ((int)img->history.size(), entries);
+        IM_CHECK(log.warnings() > 0);
+
+        reset_images(ctx);
+    };
+
+    t           = IM_REGISTER_TEST(engine, "edit", "a filter over a selection reaches every image in turn");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        reset_images(ctx);
+        hdrview()->roi()          = Box2i{};
+        hdrview()->edit_subject() = EditSubject{};
+        IM_CHECK_SILENT(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}) == 2);
+
+        hdrview()->set_current_image_index(0);
+        hdrview()->toggle_group_selected(1, hdrview()->image(1)->selected_group);
+
+        // Only one filter runs at a time -- there is one progress bar and one Cancel -- so the second
+        // image's blur waits for the first and is started as it lands, rather than being dropped.
+        menu_click(ctx, "Edit/Blur...");
+        ctx->SetRef("Blur...");
+        ctx->KeyPress(ImGuiKey_Enter);
+        wait_until(ctx,
+                   [] { return hdrview()->image(0)->history.has_undo() && hdrview()->image(1)->history.has_undo(); });
+
+        for (int i = 0; i < 2; ++i) IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+
+        reset_images(ctx);
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "flip from the menu changes the pixels");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -410,6 +513,29 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(img->size() == size);
         IM_CHECK(snapshot(img) == original);
+
+        // With several images selected it crops all of them, to the same rectangle. Cropping consumes the
+        // selection it just made the whole image, so every image after the first would find nothing to
+        // crop to unless each invocation starts from the same one.
+        reset_images(ctx);
+        hdrview()->roi()          = Box2i{};
+        hdrview()->edit_subject() = EditSubject{};
+        IM_CHECK_SILENT(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}) == 2);
+        hdrview()->set_current_image_index(0);
+        hdrview()->toggle_group_selected(1, hdrview()->image(1)->selected_group);
+
+        hdrview()->set_selection(Box2i{int2{1, 1}, int2{5, 4}});
+        ctx->Yield();
+        menu_click(ctx, "Edit/Crop to selection");
+
+        for (int i = 0; i < 2; ++i)
+        {
+            IM_CHECK((hdrview()->image(i)->size() == int2{4, 3}));
+            IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+        }
+        IM_CHECK_EQ(hdrview()->roi().has_volume(), false);
+
+        reset_images(ctx);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "cropping is only offered when it would do something");

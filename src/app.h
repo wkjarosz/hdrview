@@ -119,9 +119,20 @@ public:
         viewport goes on showing whatever it was showing, and only the operation is told which group was
         meant.
     */
-    void invoke_action_on_group(const std::string &action_name, int group);
-    //! The group an edit acts on: the one being pointed at, or the one on screen.
-    int target_group() const;
+    void invoke_action_on_group(const std::string &action_name, int image_index, int group);
+    //! Point at \p group of image \p image_index for the duration of \p body.
+    /*!
+        What makes the Images panel's context menu name a group: while this is in force, the commands and
+        the menu that offers them address that group of that image rather than the current one.
+    */
+    void with_target_group(int image_index, int group, const std::function<void()> &body);
+    //! The image an edit acts on: the one being pointed at, or the current one.
+    ImagePtr target_image();
+    //! The groups of \p img an edit acts on: the selected ones, or a group pointed at from outside them.
+    //! Falls back to the group on screen for an image with nothing selected.
+    std::vector<int> target_groups(const ConstImagePtr &img) const;
+    //! The same, for a group named by the caller rather than by what is currently pointed at.
+    std::vector<int> target_groups(const ConstImagePtr &img, int pointed_at) const;
     //! Put \p img into the list just after the current image, named \p partname, and select it.
     /*!
         Where duplicate_image() and the commands that derive an image from another one both land. Beside
@@ -146,6 +157,13 @@ public:
     void save_session();
     void load_session();
     void load_session(const string &filename);
+    //! The "HDRView session" manifest for the images and view settings as they stand.
+    /*!
+        Shared by save_session() and export_session_bundle(), which differ only in what "path" each image
+        gets -- `path_of` supplies it: a filesystem-relative path for a plain .hsess, an in-bundle
+        location for a zip export.
+    */
+    json build_session_manifest(const std::function<string(ConstImagePtr)> &path_of) const;
     void export_session_bundle();
     // Emscripten's "Load session..." entry point: uploads a .zip and loads it strictly as a session bundle,
     // erroring rather than falling back to plain image loading if it doesn't contain a manifest.
@@ -375,6 +393,14 @@ public:
         keyboard chord cannot reach it by different routes.
     */
     void invoke_edit_command(EditCommand &cmd);
+    //! Run \p cmd once per image it covers, each with its own undo entry.
+    /*!
+        Which is every selected image for an edit that takes a subject, and the current one alone for
+        everything else; see edit_command_images().
+    */
+    void apply_edit_command(EditCommand &cmd);
+    //! The images one invocation of \p cmd covers.
+    std::vector<ImagePtr> edit_command_images(const EditCommand &cmd);
     //! Whether \p cmd could run now: the image accepts edits, and the command itself is satisfied.
     bool edit_command_enabled(const EditCommand &cmd);
     //! The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
@@ -395,9 +421,14 @@ public:
     /// Whether any open image has edits that are not in its file.
     bool any_image_modified() const;
 
-    /// Reverse the current image's most recent edit. False if there was nothing to undo.
+    //! Reverse the most recent edit of every selected image. False if the *current* image had none.
+    /*!
+        Offered and labeled from the current image, applied across the selection, each image stepping its
+        own history; one with nothing to undo sits it out. The result is the current image's rather than
+        "any image undid", which is what draw_history_window()'s walk to a clicked entry terminates on.
+    */
     bool undo();
-    /// Reapply the edit undo() last reversed. False if there was nothing to redo.
+    //! Reapply the edit undo() last reversed, across the selection. False if the current image had none.
     bool redo();
 
     //! Everything a completed edit invalidates, applied to \p img.
@@ -424,16 +455,49 @@ public:
     int           image_index(ConstImagePtr img) const;
     ConstImagePtr image(int index) const { return is_valid(index) ? m_images[index] : nullptr; }
     ImagePtr      image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
-    void          set_current_image_index(int index, bool force = false)
-    {
-        m_current = force || is_valid(index) ? index : m_current;
-    }
-    void set_reference_image_index(int index, bool force = false)
+    void          set_current_image_index(int index, bool force = false);
+    void          set_reference_image_index(int index, bool force = false)
     {
         m_reference = force || is_valid(index) ? index : m_reference;
     }
     int next_visible_image_index(int index, Direction_ direction) const;
     int nth_visible_image_index(int n) const;
+    //-----------------------------------------------------------------------------
+
+    //-----------------------------------------------------------------------------
+    // the multi-selection
+    //-----------------------------------------------------------------------------
+    /*!
+        A target -- an (image, channel group) pair -- can have four states:
+          * deselected
+          * selected
+          * current
+          * reference
+
+        Multiple targets can be selected, but only one can be current, and only one can be reference. If a
+        target is current, it is automatically selected. An image counts as selected when any of its
+        groups is.
+
+        Every entry point below maintains that, and something is selected whenever there is an image to
+        select. The flags live on Channel, read through Image::is_group_selected() and the helpers beside
+        it.
+    */
+    //! Every selected target, as (image index, group index) pairs, in the order the panel lists them.
+    std::vector<std::pair<int, int>> selected_targets() const;
+    //! Make group \p group of image \p index the current target, and reconcile the selection with it.
+    /*!
+        A target that was already selected simply becomes the selection's current member; one that was not
+        replaces the whole selection, which is how a plain click starts a new one.
+    */
+    void set_current_group(int index, int group);
+    //! Add group \p group of image \p index to the selection, or take it out.
+    void toggle_group_selected(int index, int group);
+    //! Select every image between the current one and \p index, each by the group it is showing.
+    void select_image_range_to(int index);
+    //! Select every target between the current one and (\p index, \p group), inclusive.
+    void select_group_range_to(int index, int group);
+    //! Every selected image, in list order; the current one alone when nothing is selected.
+    std::vector<ImagePtr> selected_images();
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -636,12 +700,6 @@ public:
 private:
     void load_fonts();
 
-    // Builds the "HDRView session" manifest for the currently loaded images/view settings, shared by
-    // save_session() and export_session_bundle() -- they differ only in what "path" each image gets, which
-    // `path_of` supplies (a filesystem-relative path for a plain .hsess, an in-bundle location for a zip
-    // export).
-    json build_session_manifest(const std::function<string(ConstImagePtr)> &path_of) const;
-
     // Begins asynchronously loading the images listed in a parsed session file `j` (paths resolved relative to
     // `dir`), populating m_pending_session so the per-frame image-loader drain can apply the rest of the session
     // (current/reference selection, blend mode, view settings) once every image has finished loading.
@@ -792,8 +850,21 @@ private:
     int2 m_running_filter_size{0};
 
     std::unique_ptr<RunningFilter> m_running_filter;
+
+    //! Filters waiting for the one in flight, one per image a fan-out has yet to reach.
+    /*!
+        Only one can run at a time -- one progress dialog, one Cancel -- but an edit over a multi-selection
+        arrives as one call per image in a single frame. Each is started as the one before it lands.
+    */
+    std::vector<std::function<void()>> m_filter_queue;
+
     //! Applies a finished filter's results, or clears an abandoned one. Called once a frame.
     void drain_running_filter();
+    //! Starts the next queued filter, if a fan-out left any waiting.
+    void start_next_filter();
+
+    //! The shared body of undo() and redo().
+    bool step_selected_histories(bool forward);
 
     //! What the menu's edits apply to; see Edit > Apply to.
     EditSubject m_edit_subject;
@@ -815,8 +886,14 @@ private:
     std::vector<std::function<void()>> m_main_thread_queue;
 
     //! The group a command acts on while one is being pointed at rather than selected; -1 otherwise.
-    int  m_target_group_override = -1;
-    void drain_main_thread_queue();
+    //! The group the Images panel's context menu is pointing at, and the image whose group it is.
+    /*!
+        A group index means nothing on its own -- every image numbers its own groups, and the panel lists
+        every image's -- so the two are only ever set and read together; see with_target_group().
+    */
+    ImagePtr m_target_image_override;
+    int      m_target_group_override = -1;
+    void     drain_main_thread_queue();
 
 #if HDRVIEW_ENABLE_IPC
     IpcServer m_ipc_server;
@@ -1065,11 +1142,12 @@ private:
     {
         struct Entry
         {
-            fs::path path;
-            string   channel_selector;
-            bool     alpha_is_transparency = true;
-            int      selected_group = 0, reference_group = 0;
-            ImagePtr loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
+            fs::path       path;
+            string         channel_selector;
+            bool           alpha_is_transparency = true;
+            int            selected_group = 0, reference_group = 0;
+            vector<string> selected_channels; ///< The multi-selection, by channel name; see Channel::selected
+            ImagePtr       loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
         };
         vector<Entry> entries; ///< One per saved "images" entry, in file order; the same path may repeat
         int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset

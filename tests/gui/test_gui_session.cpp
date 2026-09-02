@@ -38,6 +38,9 @@ using namespace hdrview_test;
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
 #endif
+#ifndef HDRVIEW_GUI_TEST_IMAGE_2
+#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a second, distinctly-named fixture image path"
+#endif
 
 namespace
 {
@@ -182,6 +185,37 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->current_image() != hdrview()->reference_image());
         IM_CHECK_EQ(hdrview()->current_image()->selected_group, 0);
         IM_CHECK_EQ(hdrview()->reference_image()->reference_group, 1);
+    };
+
+    // Written by build_session_manifest() rather than by hand, so a name it writes and a name the loader
+    // reads that had drifted apart would show up as a selection that did not come back.
+    t           = IM_REGISTER_TEST(engine, "session", "multi_selection_survives_a_round_trip");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        reset_images(ctx);
+        IM_CHECK_SILENT(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}) == 2);
+
+        hdrview()->set_current_image_index(0);
+        hdrview()->toggle_group_selected(1, hdrview()->image(1)->selected_group);
+        IM_CHECK(hdrview()->image(0)->is_selected());
+        IM_CHECK(hdrview()->image(1)->is_selected());
+
+        // Absolute paths, so the file can sit in the temp directory and still find its images.
+        json     j = hdrview()->build_session_manifest([](ConstImagePtr img) { return img->path.generic_u8string(); });
+        fs::path session_path = write_temp_session(j, "hdrview_test_selection.hsess");
+
+        reset_images(ctx);
+        hdrview()->load_session(session_path.string());
+        wait_for_loads(ctx);
+        wait_until(ctx, [] { return hdrview()->num_images() == 2; });
+
+        IM_CHECK_EQ(hdrview()->num_images(), 2);
+
+        // Both come back selected. Without the selection in the file, update_visibility() would collapse
+        // it onto the group the current image is showing, leaving the other one out.
+        for (int i = 0; i < 2; ++i) IM_CHECK(hdrview()->image(i)->is_selected());
+
+        fs::remove(session_path);
     };
 
     t           = IM_REGISTER_TEST(engine, "session", "missing_file_entry_logs_warning_and_loads_rest");

@@ -8,6 +8,10 @@
     \author Wojciech Jarosz
 
     The edits that change which channels an image has, and how they are grouped.
+
+    None of them carries a subject: the channels they cover are named by the multi-selection, or by a
+    single group right-clicked from outside it, rather than by a scope over one image's channels. They do
+    still fan out, since a selection can hold groups of more than one image.
 */
 
 #include "edit/commands.h"
@@ -21,14 +25,6 @@
 
 namespace
 {
-
-//! The layer the group on screen belongs to, which is the prefix its channel names share.
-/*!
-    What scopes regrouping. A group can be selected but a set of them cannot, so an operation that puts
-    channels back together has to work out for itself which ones are meant -- and once a group has been
-    ungrouped, the only thing its channels still have in common is the layer they came from.
-*/
-std::string target_layer(const EditContext &ctx);
 
 //! Every channel of \p img in the layer \p layer that ungrouping marked.
 /*!
@@ -61,8 +57,61 @@ std::vector<int> group_channels(const ImagePtr &img, int group)
     return out;
 }
 
-//! The channels of the group an edit is about to act on, which is not always the one on screen.
-std::vector<int> target_channels(const EditContext &ctx) { return group_channels(ctx.image(), ctx.target_group()); }
+//! Every channel of every group an edit is about to act on, which need not include the one on screen.
+std::vector<int> target_channels(const EditContext &ctx)
+{
+    std::vector<int> out;
+    for (int g : ctx.target_groups())
+        for (int c : group_channels(ctx.image(), g)) out.push_back(c);
+    return out;
+}
+
+//! The channel to leave the viewport on after a rebuild, or -1 to leave it where it is.
+/*!
+    Only a group being changed is worth following: one merely pointed at from the panel must leave the
+    viewport where it was. See select_channels_group() for why following it is what it takes.
+*/
+int followed_channel(const ImagePtr &img, const std::vector<int> &changed)
+{
+    const std::vector<int> showing = group_channels(img, img->selected_group);
+    for (int c : changed)
+        if (std::find(showing.begin(), showing.end(), c) != showing.end())
+            return c;
+    return -1;
+}
+
+//! The layer \p group belongs to, which is the prefix its channel names share.
+std::string layer_of(const ImagePtr &img, int group)
+{
+    const std::vector<int> channels = group_channels(img, group);
+    return channels.empty() ? std::string{} : Channel::head(img->channels[size_t(channels.front())].name);
+}
+
+//! The channels regrouping would put back together.
+/*!
+    Every marked channel of every group the command was invoked on -- except that a single group cannot
+    say which channels it should rejoin, since ungrouping left each of them standing alone. One group
+    therefore restores its whole layer, which is all its channels still have in common, and that is also
+    what the Images panel's context menu asks for when it names one group. Two or more say exactly which.
+*/
+std::vector<int> regroup_channels(const EditContext &ctx)
+{
+    auto img = ctx.image();
+    if (!img)
+        return {};
+
+    const std::vector<int> groups = ctx.target_groups();
+    if (groups.size() == 1)
+        return ungrouped_in_layer(img, layer_of(img, groups.front()));
+
+    std::vector<int> out;
+    for (int g : groups)
+        for (int c : group_channels(img, g))
+            if (img->channels[size_t(c)].ungrouped)
+                out.push_back(c);
+
+    return out;
+}
 
 //! Leave the viewport on whichever group now holds \p channel.
 /*!
@@ -79,12 +128,6 @@ void select_channels_group(Image &img, int channel)
                 img.selected_group = int(g);
                 return;
             }
-}
-
-std::string target_layer(const EditContext &ctx)
-{
-    const std::vector<int> channels = target_channels(ctx);
-    return channels.empty() ? std::string{} : Channel::head(ctx.image()->channels[size_t(channels.front())].name);
 }
 
 /*!
@@ -104,51 +147,70 @@ public:
                 ImGuiInputFlags_None,
                 "Ungroup",
                 24.f,
-                /* has_subject */ false};
+                /* draws_subject_selector */ false};
     }
 
-    //! Only worth offering for a group that is more than one channel already.
-    bool enabled(const EditContext &ctx) const override { return target_channels(ctx).size() > 1; }
+    //! Only worth offering while one of the groups it would take apart is more than one channel.
+    bool enabled(const EditContext &ctx) const override { return !ungroupable_channels(ctx).empty(); }
 
     void apply(EditContext &ctx) override
     {
-        const std::vector<int> channels = target_channels(ctx);
-        if (channels.size() < 2)
+        auto img = ctx.image();
+        if (!img)
             return;
 
-        // Only follow the channels across the rebuild when it was the group on screen that was ungrouped;
-        // one pointed at from the panel must leave the viewport where it was.
-        const bool follow = ctx.target_group() == ctx.image()->selected_group;
+        const std::vector<int> channels = ungroupable_channels(ctx);
+        if (channels.empty())
+            return;
+
+        const int follow = followed_channel(img, channels);
 
         ctx.modify_reversibly(
             "Ungroup channels",
-            [channels, follow](Image &img)
+            [channels, follow](Image &img2)
             {
-                for (int c : channels) img.channels[size_t(c)].ungrouped = true;
-                img.rebuild_layers();
-                if (follow)
-                    select_channels_group(img, channels.front());
+                for (int c : channels) img2.channels[size_t(c)].ungrouped = true;
+                img2.rebuild_layers();
+                if (follow >= 0)
+                    select_channels_group(img2, follow);
             },
-            [channels, follow](Image &img)
+            [channels, follow](Image &img2)
             {
-                for (int c : channels) img.channels[size_t(c)].ungrouped = false;
-                img.rebuild_layers();
-                if (follow)
-                    select_channels_group(img, channels.front());
+                for (int c : channels) img2.channels[size_t(c)].ungrouped = false;
+                img2.rebuild_layers();
+                if (follow >= 0)
+                    select_channels_group(img2, follow);
             });
+    }
+
+private:
+    //! The channels of the target groups that hold more than one, which are all this can take apart.
+    /*!
+        A group already standing alone is skipped rather than marked: marking it would change nothing but
+        would still record an entry, and undoing that entry would clear a flag the channel never had.
+    */
+    static std::vector<int> ungroupable_channels(const EditContext &ctx)
+    {
+        std::vector<int> out;
+        for (int g : ctx.target_groups())
+        {
+            const std::vector<int> channels = group_channels(ctx.image(), g);
+            if (channels.size() > 1)
+                out.insert(out.end(), channels.begin(), channels.end());
+        }
+        return out;
     }
 };
 
 /*!
-    Put the channels of a layer back into the groups their names ask for.
+    Put ungrouped channels back into the groups their names ask for.
 
-    The counterpart to ungrouping, and scoped to a layer because that is all there is to go on.
-    Ungrouping leaves a group's channels standing on their own, and only one group can be selected at a
-    time -- so selecting any one of them and asking for its layer back is the way to say which of them is
-    meant.
+    The counterpart to ungrouping, and scoped by the selection: selecting the channels that should end up
+    together and asking for them back is how an RGBA group becomes an RGB group beside a lone alpha. The
+    groups are still derived from the names, so this only decides which channels are available to match --
+    with A held out, the R,G,B,A pattern comes up short and R,G,B matches instead.
 
-    A layer holding two ungrouped groups is restored in one go, since nothing distinguishes them once they
-    are apart.
+    A single selected group falls back to its whole layer; see regroup_channels().
 */
 class RegroupChannels final : public EditCommand
 {
@@ -161,14 +223,10 @@ public:
                 ImGuiInputFlags_None,
                 "Regroup",
                 24.f,
-                /* has_subject */ false};
+                /* draws_subject_selector */ false};
     }
 
-    bool enabled(const EditContext &ctx) const override
-    {
-        auto img = ctx.image();
-        return img && !ungrouped_in_layer(img, target_layer(ctx)).empty();
-    }
+    bool enabled(const EditContext &ctx) const override { return !regroup_channels(ctx).empty(); }
 
     void apply(EditContext &ctx) override
     {
@@ -176,11 +234,11 @@ public:
         if (!img)
             return;
 
-        const std::vector<int> marked = ungrouped_in_layer(img, target_layer(ctx));
+        const std::vector<int> marked = regroup_channels(ctx);
         if (marked.empty())
             return;
 
-        const bool follow = ctx.target_group() == img->selected_group;
+        const int follow = followed_channel(img, marked);
 
         ctx.modify_reversibly(
             "Regroup channels",
@@ -188,15 +246,15 @@ public:
             {
                 for (int c : marked) img2.channels[size_t(c)].ungrouped = false;
                 img2.rebuild_layers();
-                if (follow)
-                    select_channels_group(img2, marked.front());
+                if (follow >= 0)
+                    select_channels_group(img2, follow);
             },
             [marked, follow](Image &img2)
             {
                 for (int c : marked) img2.channels[size_t(c)].ungrouped = true;
                 img2.rebuild_layers();
-                if (follow)
-                    select_channels_group(img2, marked.front());
+                if (follow >= 0)
+                    select_channels_group(img2, follow);
             });
     }
 };
@@ -218,10 +276,10 @@ public:
                 ImGuiInputFlags_None,
                 "Delete",
                 24.f,
-                /* has_subject */ false};
+                /* draws_subject_selector */ false};
     }
 
-    //! Never the last group: an image with no channels is not an image.
+    //! Never every group: an image with no channels is not an image.
     bool enabled(const EditContext &ctx) const override
     {
         auto img = ctx.image();
@@ -261,11 +319,15 @@ public:
 
 } // namespace
 
-std::string delete_channels_label(const ImagePtr &img, int group)
+std::string delete_channels_label(const ImagePtr &img, const std::vector<int> &groups)
 {
     // The action's own name never changes -- it is the key the registry, the palette and the tests address
     // it by -- so only what the menu shows is chosen here.
-    return group_channels(img, group).size() == 1 ? "Delete channel" : "Delete channel group";
+    if (groups.size() > 1)
+        return "Delete channel groups";
+
+    return groups.size() == 1 && group_channels(img, groups.front()).size() == 1 ? "Delete channel"
+                                                                                 : "Delete channel group";
 }
 
 void add_channel_commands(std::vector<EditCommandPtr> &out)
