@@ -134,14 +134,21 @@ public:
         //! crop, a resize, a quarter turn.
         bool has_subject = true;
 
-        //! Whether this runs once per selected image, rather than on the current one alone.
+        //! Whether invoking this with several images selected runs it on all of them, or only the current
+        //! one.
         /*!
-            True for the edits whose reach is stated relative to an image -- the samples a subject names,
-            the groups a selection names -- since nothing in that says which image is meant.
+            Each selected image gets its own invocation and its own undo entry; one that refuses the edit
+            sits it out rather than stopping the rest. True for the edits that write samples, and for the
+            three the selection itself names -- ungrouping, regrouping, deleting a group.
 
-            False for the ones that cover an image entire, which stay with the image being looked at, and
-            for the ones whose result lives outside it: the clipboard has one slot, so copying from
-            several images at once would just be copying from the last of them.
+            False for Copy and Cut, where it is forced: there is one clipboard, so running them once per
+            image would leave only the last image's copy in it.
+
+            Also false for the edits that reshape or replace an image -- a crop, a resize, a quarter turn,
+            a mip pyramid -- and that one is a choice rather than a constraint. Cropping every selected
+            image to the same rectangle would be perfectly meaningful; a shape change is just a blunter
+            thing to spread over a selection from one keystroke than a tonal edit is, so these stay with
+            the image being looked at.
         */
         bool fans_out = true;
 
