@@ -375,11 +375,14 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 
         // Only guess when the file said nothing. An EXTRASAMPLES tag naming something other than alpha
         // (EXTRASAMPLE_UNSPECIFIED) is the file stating the extra sample is arbitrary data, so honor it.
+        AlphaSource_ alpha_source = AlphaSource_File;
         if (!has_alpha && !has_extra_samples && num_channels == 4)
         {
             has_alpha = true;
-            // Default to straight alpha if not specified
+            // Straight is the likelier reading for an unlabeled RGBA TIFF, but it is a guess, and this is
+            // the one place in this loader where nothing in the file settles the question.
             is_premultiplied = false;
+            alpha_source     = AlphaSource_Assumed;
             spdlog::debug("Inferred alpha channel from channel count (assuming straight alpha)");
         }
 
@@ -388,9 +391,9 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         // other than alpha leaves has_alpha false, and AlphaType_None then keeps that sample out of an
         // alpha-bearing group. Associated alpha is multiplied into the encoded samples, which is what every
         // writer that produces one -- Photoshop, OpenImageIO, ImageMagick, vips -- does.
-        image->alpha_type = effective_alpha_type(
-            opts,
-            has_alpha ? (is_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight) : AlphaType_None);
+        image->set_alpha(has_alpha ? (is_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight)
+                                   : AlphaType_None,
+                         alpha_source, alpha_override_of(opts));
         image->metadata["loader"] = "libtiff";
         image->partname           = partname;
 

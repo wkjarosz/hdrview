@@ -7,21 +7,17 @@
 #include "colorspace.h"
 #include "fwd.h"
 #include "imageio/image_loader.h"
+#include <optional>
 
-//! What the file says its alpha is, unless the load options override it.
+//! The alpha override the load options carry, if any, in the form Image::set_alpha() takes.
 /*!
-    Resolved by each loader rather than stamped on afterwards, because the answer decides whether the color
+    Applied by each loader rather than stamped on afterwards, because the answer decides whether the color
     channels have to be divided by alpha before the transfer function is inverted -- which happens while the
     loader still holds the encoded samples.
-
-    This is only half of an override. AlphaType_None also has to keep the channel out of an alpha-bearing
-    group, and that half is applied centrally, once a loader returns, by BackgroundImageLoader. So a caller
-    that reaches a loader directly rather than through load_image() gets the premultiplication but not the
-    grouping.
 */
-inline AlphaType_ effective_alpha_type(const ImageLoadOptions &opts, AlphaType_ from_file)
+inline std::optional<AlphaType_> alpha_override_of(const ImageLoadOptions &opts)
 {
-    return opts.override_alpha ? opts.alpha_override : from_file;
+    return opts.override_alpha ? std::optional<AlphaType_>{opts.alpha_override} : std::nullopt;
 }
 
 /** \name Premultiplied alpha across a transfer function

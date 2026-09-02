@@ -522,7 +522,8 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
         for (const auto &c : img->channels)
             if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
             {
-                img->alpha_type = effective_alpha_type(opts, AlphaType_PremultipliedLinear);
+                // OpenEXR's spec makes alpha associated, and its samples are linear.
+                img->set_alpha(AlphaType_PremultipliedLinear, AlphaSource_Format, alpha_override_of(opts));
                 break;
             }
 

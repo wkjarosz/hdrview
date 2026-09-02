@@ -485,7 +485,11 @@ static const char *s_alpha_type_names[] = {"None", "Premultiplied Linear", "Prem
 static const char *s_alpha_override_names[] = {"None (channel is data)", "Premultiplied, in linear light",
                                                "Premultiplied, after transfer", "Straight", nullptr};
 
+static const char *s_alpha_source_suffixes[] = {"assumed", "per the format", "from the file", nullptr};
+
 const char *alpha_type_name(AlphaType_ at) { return s_alpha_type_names[at]; }
+
+const char *alpha_source_suffix(AlphaSource_ as) { return s_alpha_source_suffixes[as]; }
 
 const char *alpha_override_name(AlphaType_ at) { return s_alpha_override_names[at]; }
 

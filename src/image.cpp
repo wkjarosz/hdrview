@@ -897,16 +897,24 @@ Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
     set_default_alpha_type();
 }
 
+void Image::set_alpha(AlphaType_ from_file, AlphaSource_ source, const std::optional<AlphaType_> &override_with)
+{
+    alpha_type_from_file = from_file;
+    alpha_source         = source;
+    alpha_type           = override_with.value_or(from_file);
+}
+
 void Image::set_default_alpha_type()
 {
     for (const auto &c : channels)
         if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
         {
-            alpha_type = AlphaType_PremultipliedLinear;
+            // Assembled rather than read, so nothing declared this; see set_default_alpha_type()'s comment.
+            set_alpha(AlphaType_PremultipliedLinear, AlphaSource_Assumed, std::nullopt);
             return;
         }
 
-    alpha_type = AlphaType_None;
+    set_alpha(AlphaType_None, AlphaSource_Assumed, std::nullopt);
 }
 
 map<string, int> Image::channels_in_layer(const string &layer) const

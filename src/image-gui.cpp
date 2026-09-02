@@ -1315,9 +1315,17 @@ void Image::draw_info()
             filtered_property("Display window",
                               fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
-            filtered_property("Alpha", alpha_type_name(alpha_type),
-                              "How this image's alpha is being read: whether the color channels are multiplied "
-                              "by it, and in what space. Reflects the override below when one is set.");
+            // An override says what it displaced, since contradicting a kind the file stated is a different
+            // situation from filling in one nothing ever did.
+            filtered_property(
+                "Alpha",
+                alpha_override ? fmt::format("{} (override; {} {})", alpha_type_name(alpha_type),
+                                             alpha_type_name(alpha_type_from_file), alpha_source_suffix(alpha_source))
+                               : fmt::format("{} ({})", alpha_type_name(alpha_type), alpha_source_suffix(alpha_source)),
+                "How this image's alpha is being read: whether the color channels are multiplied "
+                "by it, and in what space, and where that came from. \"Assumed\" means nothing "
+                "stated it and the loader picked a default, which is where the override below is "
+                "most likely wanted.");
 
             if (filter.PassFilter("Alpha override"))
             {

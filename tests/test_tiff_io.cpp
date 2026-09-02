@@ -109,6 +109,34 @@ std::vector<unsigned char> tiff_raw_samples(const std::string &bytes)
     return {bytes.begin() + offset, bytes.begin() + offset + count};
 }
 
+// The fixture with nothing left saying what its fourth sample is, which is how most RGBA TIFFs in the wild
+// look. The entry is renumbered to a private tag rather than erased: removing it would shift every
+// out-of-line value in the file without shifting the offsets that point at them. EXTRASAMPLES is the
+// highest tag here, so the IFD stays sorted.
+std::string tiff_without_extra_samples()
+{
+    std::string bytes = tiff_with_extra_samples(2);
+
+    auto read_u16 = [&](size_t o) { return uint16_t(uint8_t(bytes[o]) | (uint8_t(bytes[o + 1]) << 8)); };
+    auto read_u32 = [&](size_t o) { return uint32_t(read_u16(o)) | (uint32_t(read_u16(o + 2)) << 16); };
+
+    const uint32_t ifd     = read_u32(4);
+    const uint16_t entries = read_u16(ifd);
+    for (uint16_t i = 0; i < entries; ++i)
+    {
+        const size_t entry = ifd + 2 + size_t(i) * 12;
+        if (read_u16(entry) != k_extra_samples_tag)
+            continue;
+
+        constexpr uint16_t k_private_tag = 65000;
+        bytes[entry]                     = char(k_private_tag & 0xff);
+        bytes[entry + 1]                 = char(k_private_tag >> 8);
+        return bytes;
+    }
+    FAIL("fixture has no EXTRASAMPLES tag");
+    return bytes;
+}
+
 ImagePtr load_tiff(const std::string &bytes)
 {
     std::istringstream in(bytes, std::ios::binary);
@@ -214,6 +242,40 @@ TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
     CHECK(images[0]->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
     REQUIRE(images[0]->groups.size() == 2);
     CHECK(images[0]->groups[1].type == ChannelGroup::Single_Channel);
+}
+
+TEST_CASE("A TIFF says where its alpha kind came from")
+{
+    // EXTRASAMPLES settles it, whichever value it carries -- including the one saying the sample is data.
+    for (uint16_t tag : {uint16_t(0), uint16_t(1), uint16_t(2)})
+    {
+        CAPTURE(tag);
+        auto img = load_tiff(tiff_with_extra_samples(tag));
+        CHECK(img->alpha_source == AlphaSource_File);
+    }
+
+    // With the tag gone, nothing in the file states a kind and straight is the loader's guess. This is
+    // the one case in this format where an override is answering a question rather than contradicting one.
+    auto guessed = load_tiff(tiff_without_extra_samples());
+    CHECK(guessed->alpha_source == AlphaSource_Assumed);
+    CHECK(guessed->alpha_type == AlphaType_Straight);
+}
+
+TEST_CASE("An override leaves what the file said intact")
+{
+    ImageLoadOptions opts;
+    opts.override_alpha = true;
+    opts.alpha_override = AlphaType_PremultipliedNonLinear;
+
+    std::istringstream in(tiff_with_extra_samples(2), std::ios::binary); // unassociated
+    auto               images = load_image(in, "rgba.tif", opts);
+    REQUIRE(images.size() == 1);
+
+    // What is used, what the file declared, and how it declared it -- all three still answerable, which
+    // is what lets the Info panel say the override is contradicting rather than filling a gap.
+    CHECK(images[0]->alpha_type == AlphaType_PremultipliedNonLinear);
+    CHECK(images[0]->alpha_type_from_file == AlphaType_Straight);
+    CHECK(images[0]->alpha_source == AlphaSource_File);
 }
 
 TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")

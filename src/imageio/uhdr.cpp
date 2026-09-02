@@ -239,7 +239,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
 
     auto image                = make_shared<Image>(size, 4);
     image->filename           = filename;
-    image->alpha_type         = effective_alpha_type(opts, AlphaType_Straight);
+    image->set_alpha(AlphaType_Straight, AlphaSource_Format, alpha_override_of(opts));
     image->metadata["loader"] = "libuhdr";
 
     if (auto md = uhdr_dec_get_gainmap_metadata(decoder.get()))

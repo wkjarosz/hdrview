@@ -693,10 +693,13 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             image                                         = make_shared<Image>(size.xy(), size.z);
             image->filename                               = filename;
             image->partname                               = frame_name;
-            image->alpha_type                             = effective_alpha_type(
-                opts, !info.alpha_bits
-                                                      ? AlphaType_None
-                                                      : (info.alpha_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight));
+            // JxlBasicInfo always carries alpha_premultiplied, so a file with alpha has stated its kind --
+            // though not the space it means, which is why the premultiplied case is the assumed one. See
+            // the note where it is undone below.
+            image->set_alpha(!info.alpha_bits
+                                 ? AlphaType_None
+                                 : (info.alpha_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight),
+                             info.alpha_bits ? AlphaSource_File : AlphaSource_Format, alpha_override_of(opts));
             image->metadata["loader"]                     = "libjxl";
             image->metadata["header"]["original profile"] = {
                 {"value", (bool)info.uses_original_profile},

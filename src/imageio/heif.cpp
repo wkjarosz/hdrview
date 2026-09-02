@@ -867,12 +867,15 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         return raw_img;
                     }(),
                     heif_image_release);
+                // MIAF settles this by the presence of a 'prem' reference from the master image to the alpha
+                // one: absent means not premultiplied, for every conforming file, so only its presence is
+                // something this file said.
+                const bool       premultiplied = heif_image_handle_is_premultiplied_alpha(ihandle.get());
+                const AlphaType_ from_file =
+                    !has_alpha ? AlphaType_None : (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
+
                 // Resolved before decoding: the color management inside brackets itself with it.
-                const AlphaType_ alpha_type =
-                    effective_alpha_type(opts, !has_alpha ? AlphaType_None
-                                                          : (heif_image_handle_is_premultiplied_alpha(ihandle.get())
-                                                                 ? AlphaType_PremultipliedLinear
-                                                                 : AlphaType_Straight));
+                const AlphaType_ alpha_type = alpha_override_of(opts).value_or(from_file);
 
                 // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
                 ImagePtr image =
@@ -880,8 +883,9 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                                                size, cpp, num_planes, out_planes, fmt::format("{:d}", id), alpha_type);
 
                 // preserve file-level metadata that comes from the handle/context
-                image->filename                         = filename;
-                image->alpha_type                       = alpha_type;
+                image->filename = filename;
+                image->set_alpha(from_file, premultiplied ? AlphaSource_File : AlphaSource_Format,
+                                 alpha_override_of(opts));
                 image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                 image->metadata["header"]["Main brand"] = {
                     {"value", main_brand}, {"string", main_brand}, {"type", "string"}};

@@ -737,10 +737,16 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
             const bool premultiplied = dds.alpha_mode == DDSFile::ALPHA_MODE_PREMULTIPLIED ||
                                        dds.compression == DDSFile::Compression::BC2_DXT2 ||
                                        dds.compression == DDSFile::Compression::BC3_DXT4;
-            const int num_ch  = (int)image->channels.size();
-            image->alpha_type = effective_alpha_type(
-                opts, num_ch >= 4 || num_ch == 2 ? (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight)
-                                                 : AlphaType_None);
+            const int  num_ch    = (int)image->channels.size();
+            const bool has_alpha = num_ch >= 4 || num_ch == 2;
+            // A DX9 header has no misc_flags2 to read, so outside the DXT2/DXT4 spellings nothing in such a
+            // file states the kind and straight is a guess.
+            const AlphaSource_ alpha_source =
+                !has_alpha || premultiplied || dds.alpha_mode != DDSFile::ALPHA_MODE_UNKNOWN ? AlphaSource_File
+                                                                                             : AlphaSource_Assumed;
+            image->set_alpha(has_alpha ? (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight)
+                                       : AlphaType_None,
+                             alpha_source, alpha_override_of(opts));
 
             // sRGB to linear for uncompressed sRGB formats
             if (dds.is_sRGB())

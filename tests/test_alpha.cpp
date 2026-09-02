@@ -127,27 +127,31 @@ TEST_CASE("A single-channel buffer has no alpha to divide by and is left alone")
     CHECK(px[0] == doctest::Approx(0.25f));
 }
 
-TEST_CASE("effective_alpha_type reports the file's kind until the options override it")
+TEST_CASE("set_alpha records what the file said, and what an override replaced it with")
 {
-    ImageLoadOptions opts;
-    REQUIRE_FALSE(opts.override_alpha);
+    auto img = std::make_shared<Image>(int2{1, 1}, 4);
 
-    // Off: whatever the loader concluded stands, for every kind.
+    // No override: the effective kind is the file's, and the file's is still there to compare against.
     for (AlphaType_ at :
          {AlphaType_None, AlphaType_Straight, AlphaType_PremultipliedLinear, AlphaType_PremultipliedNonLinear})
-        CHECK(effective_alpha_type(opts, at) == at);
+    {
+        img->set_alpha(at, AlphaSource_File, std::nullopt);
+        CHECK(img->alpha_type == at);
+        CHECK(img->alpha_type_from_file == at);
+        CHECK(img->alpha_source == AlphaSource_File);
+    }
 
-    // On: the option replaces it, including asserting alpha over a file that declared none and
-    // declaring data over a file that claimed transparency.
-    opts.override_alpha = true;
+    // Overridden: the effective kind changes, what the file said does not, and neither does how it said it.
     for (AlphaType_ forced :
          {AlphaType_None, AlphaType_Straight, AlphaType_PremultipliedLinear, AlphaType_PremultipliedNonLinear})
-    {
-        opts.alpha_override = forced;
         for (AlphaType_ from_file :
              {AlphaType_None, AlphaType_Straight, AlphaType_PremultipliedLinear, AlphaType_PremultipliedNonLinear})
-            CHECK(effective_alpha_type(opts, from_file) == forced);
-    }
+        {
+            img->set_alpha(from_file, AlphaSource_Assumed, forced);
+            CHECK(img->alpha_type == forced);
+            CHECK(img->alpha_type_from_file == from_file);
+            CHECK(img->alpha_source == AlphaSource_Assumed);
+        }
 }
 
 TEST_CASE("finalize() premultiplies straight alpha and leaves the other kinds alone")
@@ -245,4 +249,48 @@ TEST_CASE("A straight-alpha EXR can be read as straight, against the EXR spec")
         // finalize() now multiplies by the coverage the file's samples were never scaled by.
         CHECK(channel_value(images[0], "R") == doctest::Approx(0.5f).epsilon(0.01));
     }
+}
+
+TEST_CASE("A format that settles alpha for every conforming file says so")
+{
+    auto img = std::make_shared<Image>(int2{1, 1}, 4);
+    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.5f;
+    img->channels[3](0, 0) = 0.5f;
+    img->finalize();
+
+    SUBCASE("PNG is unassociated by spec, with nothing per-file to read")
+    {
+        std::ostringstream out(std::ios::binary);
+        save_png_image(*img, out, "a.png", 1.f, false, false, false, TransferFunction::sRGB);
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               images = load_image(in, "a.png", ImageLoadOptions{});
+        REQUIRE(images.size() == 1);
+        CHECK(images[0]->alpha_source == AlphaSource_Format);
+        CHECK(images[0]->alpha_type_from_file == AlphaType_Straight);
+    }
+
+    SUBCASE("EXR is associated by spec")
+    {
+        std::ostringstream out(std::ios::binary);
+        save_exr_image(*img, out, "a.exr");
+        std::istringstream in(out.str(), std::ios::binary);
+        auto               images = load_image(in, "a.exr", ImageLoadOptions{});
+        REQUIRE(images.size() == 1);
+        CHECK(images[0]->alpha_source == AlphaSource_Format);
+        CHECK(images[0]->alpha_type_from_file == AlphaType_PremultipliedLinear);
+    }
+}
+
+TEST_CASE("An image assembled in memory reports its alpha as assumed")
+{
+    // Nothing read it from anywhere -- the samples are simply already in HDRView's working form, which is
+    // what the IPC path relies on for tiles that arrive before the alpha channel they would be scaled by.
+    auto img = std::make_shared<Image>(int2{1, 1}, 4);
+    CHECK(img->alpha_type == AlphaType_PremultipliedLinear);
+    CHECK(img->alpha_source == AlphaSource_Assumed);
+
+    // And one with no alpha channel says None, still without claiming anyone stated it.
+    auto rgb = std::make_shared<Image>(int2{1, 1}, 3);
+    CHECK(rgb->alpha_type == AlphaType_None);
+    CHECK(rgb->alpha_source == AlphaSource_Assumed);
 }
