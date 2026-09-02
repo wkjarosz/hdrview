@@ -1320,7 +1320,7 @@ void Image::draw_info()
             filtered_property(
                 "Alpha",
                 alpha_override ? fmt::format("{} (override; {} {})", alpha_type_name(alpha_type),
-                                             alpha_type_name(alpha_type_from_file), alpha_source_suffix(alpha_source))
+                                             alpha_source_phrase(alpha_source), alpha_type_name(alpha_type_from_file))
                                : fmt::format("{} ({})", alpha_type_name(alpha_type), alpha_source_suffix(alpha_source)),
                 "How this image's alpha is being read: whether the color channels are multiplied "
                 "by it, and in what space, and where that came from. \"Assumed\" means nothing "
