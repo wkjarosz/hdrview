@@ -1691,7 +1691,7 @@ endif()
 if(HDRVIEW_ENABLE_IPC)
   list(APPEND EXTRA_SOURCES src/ipc/ipc_packet.cpp src/ipc/ipc_server.cpp src/app-ipc.cpp)
   # left empty when the IPC sources are not built, so the test target names no file whose subject is gone
-  set(HDRVIEW_IPC_TESTS tests/test_ipc_packet.cpp tests/test_ipc_server.cpp tests/test_vector_overlay.cpp)
+  set(HDRVIEW_IPC_TESTS tests/test_ipc_packet.cpp tests/test_ipc_server.cpp)
   if(WIN32)
     # Winsock is not among the libraries a Windows link pulls in by default
     list(APPEND HDRVIEW_DEPENDENCIES ws2_32)
@@ -1763,6 +1763,7 @@ set(HDRVIEW_SOURCES
     src/texture_gl.cpp
     src/texture.cpp
     src/theme.cpp
+    src/annotations.cpp
     src/vector_overlay.cpp
     ${EXTRA_SOURCES}
 )
@@ -1850,6 +1851,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
                                 tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
                                 tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
+                                tests/test_vector_overlay.cpp tests/test_annotations.cpp
                                 ${HDRVIEW_IPC_TESTS}
   )
   hdrview_setup_target(hdrview_tests)
