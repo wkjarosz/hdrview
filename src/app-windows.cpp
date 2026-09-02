@@ -809,8 +809,8 @@ void HDRViewApp::set_current_group(int index, int group)
     if (!img->is_valid_group(img->selected_group))
         return;
 
-    // A target already in the selection keeps it and merely becomes its current member; one outside it
-    // starts the selection over.
+    // If the target wasn't already selected, deselect the others -- a click outside the selection starts
+    // a new one, while one inside it only moves current.
     if (!img->is_group_selected(img->selected_group))
     {
         for (auto &i : m_images) i->deselect_all();
@@ -820,6 +820,11 @@ void HDRViewApp::set_current_group(int index, int group)
 
 void HDRViewApp::toggle_group_selected(int index, int group)
 {
+    // logic:
+    // if the target is not selected, then select it
+    // if the target is already selected, then deselect it (but only if some other target is selected)
+    //   if it was also the current target, then need to find a different current one from the selected
+
     auto img = image(index);
     if (!img || !img->is_valid_group(group))
         return;
@@ -830,15 +835,12 @@ void HDRViewApp::toggle_group_selected(int index, int group)
         return;
     }
 
-    // Never down to nothing: an empty selection would leave every edit with nothing to act on and no way
-    // back except clicking something.
     auto selected = selected_targets();
     if (selected.size() < 2)
         return;
 
     img->select_group(group, false);
 
-    // Current has to stay selected, so hand it to whichever target still is.
     if (index == m_current && group == img->selected_group)
         for (const auto &[i, g] : selected)
             if (i != index || g != group)

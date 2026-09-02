@@ -468,12 +468,19 @@ public:
     // the multi-selection
     //-----------------------------------------------------------------------------
     /*!
-        Selection runs over (image, channel group) targets, not over images: an image counts as selected
-        when any of its groups is. Two rules hold at all times -- something is selected whenever there is
-        an image to select, and the current target is one of the selected ones -- and every entry point
-        below maintains them. The reference is a separate axis and is not touched by any of this.
+        A target -- an (image, channel group) pair -- can have four states:
+          * deselected
+          * selected
+          * current
+          * reference
 
-        The flags themselves live on Channel; see Image::is_group_selected() and the helpers beside it.
+        Multiple targets can be selected, but only one can be current, and only one can be reference. If a
+        target is current, it is automatically selected. An image counts as selected when any of its
+        groups is.
+
+        Every entry point below maintains that, and something is selected whenever there is an image to
+        select. The flags live on Channel, read through Image::is_group_selected() and the helpers beside
+        it.
     */
     //! Every selected target, as (image index, group index) pairs, in the order the panel lists them.
     std::vector<std::pair<int, int>> selected_targets() const;
@@ -484,10 +491,6 @@ public:
     */
     void set_current_group(int index, int group);
     //! Add group \p group of image \p index to the selection, or take it out.
-    /*!
-        Refuses to empty the selection, and hands current to another selected target when it is current
-        that leaves.
-    */
     void toggle_group_selected(int index, int group);
     //! Select every image between the current one and \p index, each by the group it is showing.
     void select_image_range_to(int index);
