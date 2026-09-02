@@ -12,8 +12,13 @@
 #include "imageio/exr.h"
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
+#include "imageio/qoi.h"
+#include "imageio/stb.h"
+#include "imageio/tiff.h"
 
+#include <functional>
 #include <sstream>
+#include <vector>
 
 #include <vector>
 
@@ -251,33 +256,59 @@ TEST_CASE("A straight-alpha EXR can be read as straight, against the EXR spec")
     }
 }
 
-TEST_CASE("A format that settles alpha for every conforming file says so")
+TEST_CASE("Every loader says where its alpha kind came from")
 {
+    // One property asserted of every format that can round-trip alpha, rather than of whichever one
+    // happened to break: a loader must report both what it concluded and how, and the two must agree with
+    // what the format actually settles. A loader that silently claims a file stated something is the
+    // failure this is here to catch, and it is invisible in the pixels.
+    struct Case
+    {
+        const char                                        *name;
+        std::function<void(const Image &, std::ostream &)> save;
+        AlphaSource_                                       source;
+        AlphaType_                                         from_file;
+    };
+
+    const std::vector<Case> cases = {
+        {"a.png", [](const Image &i, std::ostream &o)
+         { save_png_image(i, o, "a.png", 1.f, false, false, false, TransferFunction::sRGB); }, AlphaSource_Format,
+         AlphaType_Straight},
+        {"a.exr", [](const Image &i, std::ostream &o) { save_exr_image(i, o, "a.exr"); }, AlphaSource_Format,
+         AlphaType_PremultipliedLinear},
+        {"a.qoi", [](const Image &i, std::ostream &o) { save_qoi_image(i, o, "a.qoi", 1.f, true, false); },
+         AlphaSource_Format, AlphaType_Straight},
+        {"a.tga", [](const Image &i, std::ostream &o)
+         { save_stb_tga(i, o, "a.tga", 1.f, TransferFunction::sRGB, false); }, AlphaSource_Format, AlphaType_Straight},
+#if HDRVIEW_ENABLE_LIBTIFF
+        // The one format here that carries a per-file signal, so it is the one that may say File.
+        {"a.tif",
+         [](const Image &i, std::ostream &o) { save_tiff_image(i, o, "a.tif", 1.f, TransferFunction::sRGB, 0, 0); },
+         AlphaSource_File, AlphaType_PremultipliedNonLinear},
+#endif
+    };
+
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
-    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.5f;
+    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.25f;
     img->channels[3](0, 0) = 0.5f;
     img->finalize();
 
-    SUBCASE("PNG is unassociated by spec, with nothing per-file to read")
+    for (const auto &c : cases)
     {
+        CAPTURE(c.name);
         std::ostringstream out(std::ios::binary);
-        save_png_image(*img, out, "a.png", 1.f, false, false, false, TransferFunction::sRGB);
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               images = load_image(in, "a.png", ImageLoadOptions{});
-        REQUIRE(images.size() == 1);
-        CHECK(images[0]->alpha_source == AlphaSource_Format);
-        CHECK(images[0]->alpha_type_from_file == AlphaType_Straight);
-    }
+        c.save(*img, out);
+        REQUIRE(out.str().size() > 8);
 
-    SUBCASE("EXR is associated by spec")
-    {
-        std::ostringstream out(std::ios::binary);
-        save_exr_image(*img, out, "a.exr");
         std::istringstream in(out.str(), std::ios::binary);
-        auto               images = load_image(in, "a.exr", ImageLoadOptions{});
+        auto               images = load_image(in, c.name, ImageLoadOptions{});
         REQUIRE(images.size() == 1);
-        CHECK(images[0]->alpha_source == AlphaSource_Format);
-        CHECK(images[0]->alpha_type_from_file == AlphaType_PremultipliedLinear);
+
+        CHECK(images[0]->alpha_source == c.source);
+        CHECK(images[0]->alpha_type_from_file == c.from_file);
+        // With nothing overridden the effective kind is the file's, and no override is recorded.
+        CHECK(images[0]->alpha_type == c.from_file);
+        CHECK_FALSE(images[0]->alpha_override.has_value());
     }
 }
 
