@@ -876,7 +876,8 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                                                  : "";
                            ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
                        },
-                       [&] {
+                       [&]
+                       {
                            ImGui::PushRowColors(is_current_channel, is_reference_channel, ImGui::GetIO().KeyShift,
                                                 is_selected_channel);
                        });
@@ -1288,6 +1289,7 @@ void Image::draw_info()
     if (selected_view == 0)
     {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
         if (ImGui::PE::Begin("Image info", ImGuiTableFlags_ScrollY))
         {
             // calculate left column based on the longest property name
@@ -1391,6 +1393,7 @@ void Image::draw_info()
             ImGui::PE::End();
         }
 
+        ImGui::PopStyleVar();
         ImGui::PopStyleColor();
     }
     else if (selected_view == 1)
