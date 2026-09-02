@@ -54,17 +54,17 @@ static int alpha_channel_index(const ChannelGroup &group)
     }
 }
 
-/*!
+/**
     Hit-tests the two clip-warning toggles in the histogram's top corners -- shadows on the left, highlights
     on the right -- flipping \p warnings when one is clicked, and reports where they landed so
     paint_clip_warning_toggles() can render them later. \p ui_font_size is the app's normal text size,
     captured before the plot's reduced font was pushed, and is used for the tooltips.
 
-    Call between BeginPlot and EndPlot, *before* the drag tools. ImPlot hit-tests the whole plot rect with
+    Call between BeginPlot and EndPlot, before the drag tools. ImPlot hit-tests the whole plot rect with
     ImGuiButtonFlags_AllowOverlap, so later items can still claim hover from it, but DragLineX's grab rect
-    does not allow overlap and spans the full plot height -- so whichever of the two is submitted first owns
-    the corner. These claim it; a drag line under one stays grabbable over the rest of its height. Painting
-    is deliberately deferred to the opposite end of that ordering, so the buttons sit *above* the lines.
+    does not allow overlap and spans the full plot height, so whichever is submitted first owns the corner.
+    These claim it, and a drag line under one stays grabbable over the rest of its height. Painting is
+    deferred to the opposite end of that ordering, so the buttons sit above the lines.
 */
 static ClipWarningToggles place_clip_warning_toggles(bool2 &warnings, float ui_font_size)
 {
@@ -77,9 +77,8 @@ static ClipWarningToggles place_clip_warning_toggles(bool2 &warnings, float ui_f
     static const char *tooltips[2] = {"Toggle zebra stripes on values below the low clip bound.",
                                       "Toggle zebra stripes on values above the high clip bound."};
 
-    // BeginPlot() already advanced the layout cursor past the whole plot, so park it back where it was once
-    // these manually-positioned buttons are placed -- otherwise whatever is drawn after EndPlot() starts at
-    // the last button's corner instead of below the plot.
+    // BeginPlot() already advanced the layout cursor past the whole plot, so park it back once these
+    // manually-positioned buttons are placed.
     const ImVec2       saved_cursor = ImGui::GetCursorScreenPos();
     ClipWarningToggles toggles;
 
@@ -92,9 +91,8 @@ static ClipWarningToggles place_clip_warning_toggles(bool2 &warnings, float ui_f
         if (ImGui::IsItemClicked())
             on = !on;
         {
-            // draw_histogram() runs under a reduced font so the plot's own tick labels stay compact; the
-            // tooltip is ordinary UI text and should read at the app's normal size, which the caller has to
-            // supply -- by now style.FontSizeBase reports the reduced size, not the app's.
+            // draw_histogram() runs under a reduced font so the plot's tick labels stay compact, so the
+            // caller has to supply the app's normal size: style.FontSizeBase now reports the reduced one.
             ImGui::ScopedFont f{nullptr, ui_font_size};
             ImGui::SetItemTooltip("%s", tooltips[e]);
         }
@@ -107,17 +105,16 @@ static ClipWarningToggles place_clip_warning_toggles(bool2 &warnings, float ui_f
     return toggles;
 }
 
-/*!
+/**
     Paints the clip-warning toggles placed by place_clip_warning_toggles(): a rounded square button holding
     an upward isosceles triangle, i.e. an inverted take on a combo box's dropdown arrow button.
 
     The button's background says whether that end's zebra striping is enabled (dark when off, light when on,
-    lighter still under the cursor), while the triangle says what is *currently* clipping, so it stays a live
+    lighter still under the cursor), while the triangle says what is clipping right now, so it stays a live
     indicator whether or not the striping is switched on. \p clip_colors carries that per-end color, with
     `w == 0` meaning nothing crosses that bound.
 
-    Call between BeginPlot and EndPlot, *after* the drag tools, so the buttons cover the vertical lines
-    rather than the other way around.
+    Call between BeginPlot and EndPlot, after the drag tools, so the buttons cover the vertical lines.
 */
 static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const bool2 &warnings,
                                        const float4 clip_colors[2])
@@ -149,10 +146,10 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
     }
 }
 
-//! Fraction of its usual alpha a display-range mark keeps while the range it describes is out of reach.
+/// Fraction of its usual alpha a display-range mark keeps while the range it describes is out of reach.
 static constexpr float unreachable_alpha = 0.5f;
 
-/*!
+/**
     Names the two halves of what the display can show, the way Lightroom does, as tick labels on a second
     x axis along the top of the plot.
 
@@ -173,9 +170,9 @@ static constexpr float unreachable_alpha = 0.5f;
     middle of a band as though it marked a value there. Its range and scale are copied from X1 so the two
     stay in lockstep as the exposure moves and the user pans.
 
-    Call during the plot's setup phase, *after* X1's limits and scale are set, since it reads the range X1
+    Call during the plot's setup phase, after X1's limits and scale are set, since it reads the range X1
     settled on. Being set up rather than drawn, the labels follow the exposure a frame behind a drag in
-    progress -- the same frame behind as X1's own ticks, which are fixed at setup for the same reason.
+    progress, as X1's own ticks do.
 
     \param sdr_x       Plot-space x of display values 0 and 1
     \param ceiling_x   Plot-space x of the headroom ceiling
@@ -205,21 +202,19 @@ static optional<double> setup_display_range_axis(const Box1d &sdr_x, double ceil
         if (span <= 0.0)
             return {};
 
-        // Clamp to what is on screen, so a band running off an edge still centers its label within the
-        // part that can be read.
+        // Clamp to what is on screen, so a band running off an edge still centers its label in the part
+        // that can be read.
         const double wa = ImMax(axis_scale_fwd(a, x_scale), lo), wb = ImMin(axis_scale_fwd(b, x_scale), hi);
 
-        // Leave a band too narrow for its name unlabeled. ImPlot draws every tick it is handed, so two
-        // that no longer fit side by side would overlap rather than drop out. The plot rect is a frame
-        // stale here, which is plenty for deciding whether three characters fit -- but it is empty on the
-        // very first frame, where assuming they fit keeps the axis from appearing late and jogging the
-        // layout.
+        // Leave a band too narrow for its name unlabeled: ImPlot draws every tick it is handed, so two that
+        // no longer fit side by side would overlap. The plot rect is a frame stale here, and empty on the
+        // very first frame, where assuming they fit keeps the axis from appearing late.
         const float plot_w = plot->PlotRect.GetWidth();
         if (plot_w > 0.f && (float)((wb - wa) / span) * plot_w < ImGui::CalcTextSize(label).x + EmSize(0.5f))
             return {};
 
-        // Midway along the band's *pixels*, which is where the label centers. Midway in value space would
-        // sit visibly off-center on the nonlinear scales.
+        // Midway along the band's pixels, which is where the label centers; midway in value space would sit
+        // visibly off-center on the nonlinear scales.
         return axis_scale_inv(0.5 * (wa + wb), x_scale);
     };
 
@@ -244,15 +239,13 @@ static optional<double> setup_display_range_axis(const Box1d &sdr_x, double ceil
             add_tick(hdr_name, "HDR");
     }
 
-    // Face the way X1 faces and take whichever side it leaves free, rather than being fixed to the top
-    // pointing right: X1's context menu lets the user invert it or send it to the opposite side, and this
-    // is a second labeling of that axis, not an independent one. Its flags survive from frame to frame
-    // (ImPlotAxis::Reset() leaves them alone), so they can simply be read back here.
+    // A second labeling of X1, not an independent axis, so it faces the way X1 faces and takes whichever
+    // side X1 leaves free; X1's own context menu can invert it or send it opposite. Its flags survive from
+    // frame to frame (ImPlotAxis::Reset() leaves them alone) and are read back here.
     //
-    // It gets no menu of its own for the same reason. ImPlot's axis menu writes Invert and Opposite
-    // straight into the axis flags with no way to omit just those entries, and a toggle there would stick
-    // rather than be corrected on the next frame -- SetupAxis only reapplies flags that have themselves
-    // changed since it was last called.
+    // It gets no menu of its own: ImPlot's axis menu writes Invert and Opposite straight into the flags with
+    // no way to omit those entries, and SetupAxis only reapplies flags that have themselves changed, so a
+    // toggle there would stick.
     const ImPlotAxisFlags x1_flags = plot->Axes[ImAxis_X1].Flags;
     ImPlotAxisFlags x2_flags = ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoMenus |
                                ImPlotAxisFlags_NoHighlight | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_Lock;
@@ -271,7 +264,7 @@ static optional<double> setup_display_range_axis(const Box1d &sdr_x, double ceil
     return dimmed_hdr_name;
 }
 
-/*!
+/**
     Draws each display range's extent into the top axis as a square bracket over the band: a run out from
     either side of the band's name, each turning back toward the axis at the boundary it reaches.
 
@@ -306,11 +299,9 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     const float        txt_h     = ImGui::GetTextLineHeight();
     const float        x_lo = plot->PlotRect.Min.x, x_hi = plot->PlotRect.Max.x;
 
-    // Down the middle of the row ImPlot puts this axis's tick labels in, mirroring the placement in its
-    // own axis rendering: one LabelPadding out from the axis line, then half a line of text.
-    //
-    // Landed on a pixel center rather than a boundary, so a one-pixel stroke covers a single row exactly
-    // instead of half of each row either side of it. Every x below is snapped the same way.
+    // Down the middle of the row ImPlot puts this axis's tick labels in, mirroring its own axis rendering:
+    // one LabelPadding out from the axis line, then half a line of text. Landed on a pixel center, so a
+    // one-pixel stroke covers a single row exactly; every x below is snapped the same way.
     const float y_row =
         opposite ? ax.Datum1 - style.LabelPadding.y - 0.5f * txt_h : ax.Datum1 + style.LabelPadding.y + 0.5f * txt_h;
     const float y = ImFloor(y_row) + 0.5f;
@@ -321,10 +312,8 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     // How far outside the plot a boundary may be and still be pulled in to the edge; see above.
     const float near_tol = 0.02f * (x_hi - x_lo);
 
-    // A leg stops short of the boundary it marks, and short of the axis line it turns towards. The first
-    // keeps neighboring brackets apart where they meet -- one band's upper boundary is the next one's
-    // lower -- so the two read as separate spans rather than one fused rail. The second keeps the bracket
-    // sitting above the plot instead of welded to its edge.
+    // A leg stops short of the boundary it marks, so neighboring brackets meeting at a shared boundary read
+    // as separate spans, and short of the axis line, so the bracket is not welded to the plot's edge.
     const float leg_inset = 2.f;
     const float leg_end   = ax.Datum1 + (opposite ? -2.f : 2.f);
 
@@ -332,23 +321,21 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     auto on_plot     = [&](float px) { return px >= x_lo - near_tol && px <= x_hi + near_tol; };
     auto snap        = [&](float px) { return ImFloor(ImClamp(px, x_lo, x_hi)) + 0.5f; };
 
-    // Strokes are rects rather than lines, since a filled rect carries no antialiased fringe and so stays
-    // crisp on whole-pixel bounds. The color is semitransparent, so the corner belongs to the leg alone
-    // and the run stops against it: overlapping the two would print a darker square there.
+    // Strokes are filled rects: no antialiased fringe, so they stay crisp on whole-pixel bounds. The color
+    // is semitransparent, so the run stops against the leg; overlapping the two would darken the corner.
     auto stroke = [&](float x0, float y0, float x1, float y1, ImU32 col)
     { draw_list->AddRectFilled(ImVec2{ImMin(x0, x1), ImMin(y0, y1)}, ImVec2{ImMax(x0, x1), ImMax(y0, y1)}, col); };
 
     // One side of a bracket: the run out from the name, and the leg turning back towards the axis line at
-    // the end of it. \p dir is +1 for the side running right, so the run stops half a pixel short on the
-    // side the leg occupies. Without a leg the run carries on to the boundary and off the plot.
+    // the end of it. \p dir is +1 for the side running right. Without a leg the run carries on to the
+    // boundary and off the plot.
     auto side = [&](float from, float edge, bool leg, float dir, ImU32 col)
     {
         const float x = edge - dir * leg_inset;
         stroke(from, y - 0.5f, leg ? x - dir * 0.5f : edge, y + 0.5f, col);
         if (leg)
-            // Spanning the run's whole row, not just down from one side of it. Reaching from y - 0.5
-            // meets the run where the axis is above the plot and the leg descends, but falls a row short
-            // of it where the axis is below and the leg climbs, leaving the corner visibly unjoined.
+            // Spans the run's whole row: reaching from y - 0.5 alone falls a row short where the axis is
+            // below the plot and the leg climbs, leaving the corner unjoined.
             stroke(x - 0.5f, ImMin(y - 0.5f, leg_end), x + 0.5f, ImMax(y + 0.5f, leg_end), col);
     };
 
@@ -360,13 +347,10 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
         if (b - a < w + 2.f * (gap + min_run + leg_inset))
             return;
 
-        // Both runs are placed by one offset either side of one center, so that the two gaps around the
-        // name are equal by construction. Rounding each end on its own left them up to a pixel apart,
-        // which is plainly visible against letters this size.
-        //
-        // The center is the midpoint of the *unsnapped* boundaries, which is exactly where ImPlot centers
-        // the name: it puts the tick at the middle of the band in the axis's warped space, and warped
-        // space maps to pixels linearly, so the two midpoints are the same point.
+        // Both runs are placed by one offset either side of one center, so the two gaps around the name are
+        // equal by construction. The center is the midpoint of the unsnapped boundaries, which is where
+        // ImPlot centers the name: it puts the tick at the middle of the band in the axis's warped space,
+        // and warped space maps to pixels linearly.
         const float center = IM_ROUND(0.5f * (ImClamp(pa, x_lo, x_hi) + ImClamp(pb, x_lo, x_hi)));
         const float reach  = IM_ROUND(0.5f * w + gap);
         side(center - reach, a, on_plot(pa), -1.f, col);
@@ -388,7 +372,7 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     }
 }
 
-/*!
+/**
     Draws the vertical line marking the ceiling of what the display can currently show.
 
     The ceiling is only ever as good as the peak the display reports, which on Wayland is whatever the
@@ -413,7 +397,7 @@ static void draw_display_ceiling_line(double ceiling_x, bool dimmed)
     ImPlot::PopPlotClipRect();
 }
 
-/*!
+/**
     Draws the drag-to-resize grip below the histogram, modeled on the column-resize divider of a PE table:
     ImGui's TableUpdateBorders()/TableGetColumnBorderCol() rotated 90 degrees, reusing its 4px hit band, its
     delayed hover feedback, its Separator colors, and its double-click-to-restore gesture.
@@ -523,9 +507,8 @@ void Image::draw_histogram()
 
     ImPlot::GetStyle().PlotMinSize = {100, 100};
 
-    // PushFont() overwrites style.FontSizeBase with whatever size it pushes (see UpdateCurrentFontSize), so
-    // the plot's reduced font below makes the style's value unusable as "the app's normal size" from here on.
-    // Capture it first, for the widgets inside the plot that want ordinary UI text.
+    // PushFont() overwrites style.FontSizeBase with the size it pushes (see UpdateCurrentFontSize), so
+    // capture the app's normal size here, before the plot's reduced font below.
     const float ui_font_size = ImGui::GetStyle().FontSizeBase;
 
     // Display values map into plot space through the live exposure and offset. Needed both to set up the
@@ -574,15 +557,14 @@ void Image::draw_histogram()
         }
         }
 
-        // "Clamp to LDR" caps the output at display white, so whatever headroom the display has above it
-        // cannot be shown: the highlighted region ends at white, and everything naming the range beyond --
-        // the HDR name and bracket, the ceiling line and its tag -- is dimmed along with it.
+        // "Clamp to LDR" caps the output at display white, so the highlighted region ends there and
+        // everything naming the range beyond -- the HDR name and bracket, the ceiling line and its tag --
+        // is dimmed with it.
         const bool hdr_dimmed = hdrview()->clamp_to_LDR();
         // Set during the plot's setup phase, drawn once it is open; see setup_display_range_axis().
         optional<double> dimmed_hdr_name;
         {
-            // 0 means the display never told us its ceiling, which is not the same as having none, so
-            // there is no HDR band to name in that case.
+            // 0 means the display never told us its ceiling, which is not the same as having none.
             const float headroom = hdrview()->display_headroom();
             const bool  has_hdr  = headroom > 1.f;
             dimmed_hdr_name =
@@ -595,13 +577,11 @@ void Image::draw_histogram()
         //
 
         {
-            // ImPlot/Dear ImGui only ever composites with straight-alpha "over", so overlapping translucent
-            // fills can't reproduce true additive blending (e.g. red+green overlap should read as yellow,
-            // and red+green+blue as white). Instead, rasterize the fill ourselves one screen pixel column at
-            // a time: sample every channel's histogram height at that column, sum the colors of whichever
-            // channels reach into each height band, and hand ImGui a single already-blended rectangle per
-            // band. That way only one ordinary alpha-over (against the plot background) is ever needed,
-            // which is exact rather than an approximation.
+            // ImPlot/Dear ImGui only composite with straight-alpha "over", so overlapping translucent fills
+            // cannot reproduce additive blending (red+green should read yellow, red+green+blue white). So
+            // rasterize the fill here, one screen pixel column at a time: sample every channel's histogram
+            // height at that column, sum the colors of whichever channels reach into each height band, and
+            // hand ImGui one already-blended rectangle per band, leaving a single alpha-over to do.
             const int   n_channels = std::min(4, group.num_channels);
             const float fill_alpha = 0.75f;
             ImVec2      plot_pos   = ImPlot::GetPlotPos();
@@ -611,10 +591,10 @@ void Image::draw_histogram()
             ImDrawList *draw_list  = ImPlot::GetPlotDrawList();
 
             // The histogram is piecewise-constant (one count per bin), so a screen column shows the tallest
-            // bin it covers. Reducing by the maximum keeps a bin narrower than a pixel from falling between
-            // samples, so a gap that survives is a range of values the source has no code for. The column's
-            // edges have to be resolved through value_to_bin() rather than scaled by their position, since
-            // the plot's x range follows exposure while the binned range follows the data.
+            // bin it covers; reducing by the maximum keeps a bin narrower than a pixel from falling between
+            // samples, so a surviving gap is a range of values the source has no code for. The column's
+            // edges go through value_to_bin(), since the plot's x range follows exposure while the binned
+            // range follows the data.
             auto column_height = [x_scale](const PixelStats *s, double xa, double xb) -> float
             {
                 int i0 = s->value_to_bin(std::min(xa, xb), x_scale);
@@ -628,15 +608,14 @@ void Image::draw_histogram()
                 return h;
             };
 
-            // Raw ImDrawList calls (unlike ImPlot's own Plot* items, e.g. PlotStairs below) aren't
-            // automatically clipped to the plot's data rectangle, so scope them explicitly -- same as the
-            // CIE-diagram code further below in this file does around its own manual AddPolyline calls.
+            // Raw ImDrawList calls, unlike ImPlot's own Plot* items, aren't clipped to the plot's data
+            // rectangle, so scope them explicitly.
             ImPlot::PushPlotClipRect();
 
-            // This fill isn't a real ImPlot item, so it doesn't participate in ImPlot's legend-driven
-            // show/hide on its own. Mirror each channel's outline item (registered under the same label by
-            // PlotStairs below) so a channel hidden via the legend also drops out of the fill; an item that
-            // hasn't been registered yet (e.g. the very first frame) defaults to shown.
+            // This fill isn't a real ImPlot item, so it takes no part in ImPlot's legend-driven show/hide.
+            // Mirror each channel's outline item, registered under the same label by PlotStairs below, so a
+            // channel hidden via the legend drops out of the fill too; one not yet registered counts as
+            // shown.
             std::array<bool, 4> shown{true, true, true, true};
             for (int c = 0; c < n_channels; ++c)
             {
@@ -657,9 +636,7 @@ void Image::draw_histogram()
                     heights[c] = shown[c] ? std::max(0.f, column_height(stats[c], xa, xb)) : 0.f;
                     order[c]   = c;
                 }
-                // Insertion sort rather than std::sort: this runs once per pixel column over at most four
-                // elements, where std::sort's machinery costs more than the sort, and its bounds stay
-                // plain enough that the optimizer does not lose them.
+                // Insertion sort: at most four elements, once per pixel column.
                 for (int i = 1; i < n_channels; ++i)
                     for (int j = i; j > 0 && heights[order[j]] < heights[order[j - 1]]; --j)
                         std::swap(order[j], order[j - 1]);
@@ -692,10 +669,9 @@ void Image::draw_histogram()
         for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
             // PlotStairs holds each x[i]'s y-value constant across [x[i], x[i+1)), so hist_xs (each bin's
-            // left edge) rather than a bin center is what aligns the steps with the true bin boundaries.
-            // The stairs themselves are invisible (ImPlot skips line rendering entirely at zero alpha) --
-            // the visible curve is the additive fill rasterized above. The item still has to be plotted,
-            // since it owns the legend entry whose Show flag gates that fill.
+            // left edge) is what aligns the steps with the true bin boundaries. The stairs are invisible
+            // (ImPlot skips line rendering at zero alpha) and the visible curve is the additive fill above,
+            // but the item still owns the legend entry whose Show flag gates that fill.
             ImPlotSpec spec;
             spec.LineColor = float4{colors[c].xyz(), 0.25f};
             spec.FillColor = float4{0.f};
@@ -704,8 +680,7 @@ void Image::draw_histogram()
 
             // Re-register the same label opaque to recolor its legend swatch: PlotDummy adopts the first
             // non-auto color in its spec as the legend icon color, and the legend isn't rendered until
-            // EndPlot, so this second, geometry-free item wins. Without it the swatch would inherit the
-            // transparent line color above and the legend would be invisible.
+            // EndPlot, so this geometry-free item wins.
             ImPlotSpec legend_spec;
             legend_spec.LineColor = float4{colors[c].xyz(), 1.f};
             ImPlot::PlotDummy(names[c].c_str(), legend_spec);
@@ -744,9 +719,8 @@ void Image::draw_histogram()
         auto plt_range = ImPlot::GetPlotLimits(ImAxis_X1);
         ImPlot::DragRect(0, &plt_range.X.Min, &plt_range.Y.Min, &xrange.min.x, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
-        // Dim from the display's ceiling rather than from white: the range between the two is real headroom
-        // this display can show, so it belongs to the highlighted region -- until clamping puts it out of
-        // reach, and white is once again as far as the display goes.
+        // Dim from the display's ceiling, not from white: the range between the two is headroom this display
+        // can show, so it belongs to the highlighted region until clamping puts it out of reach.
         ImPlot::DragRect(0, &dim_from_x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
                          ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
 
@@ -811,11 +785,9 @@ void Image::draw_histogram()
         }
 
         // Color each triangle by which channels cross its bound, summing their canonical colors additively
-        // the way the histogram fill does -- red plus blue reads magenta, all three read white. Alpha is
-        // left out, matching the shader, which only tests rgb. Both bounds are already in plot space, so
-        // they compare directly against the stored per-channel extremes -- the ones taking in the
-        // infinities and markers rather than the measurement range, since the viewport stripes those
-        // samples too, and a channel whose only content above white is a marker still has to light up.
+        // as the histogram fill does: red plus blue reads magenta, all three read white. Alpha is left out,
+        // matching the shader, which only tests rgb. Both bounds are in plot space already, and compare
+        // against the extremes taking in infinities and markers, which the viewport stripes too.
         float4 clip_colors[2] = {float4{0.f}, float4{0.f}};
         for (int e = 0; e < 2; ++e)
         {
@@ -876,16 +848,14 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                                                  : "";
                            ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
                        },
-                       [&]
-                       {
+                       [&] {
                            ImGui::PushRowColors(is_current_channel, is_reference_channel, ImGui::GetIO().KeyShift,
                                                 is_selected_channel);
                        });
 
-        // Right-clicking a group points at it without selecting it: the viewport goes on showing whatever
-        // it was showing, and only the operation is told which group was meant -- so a lone depth channel
-        // can be deleted while a color stays on screen. Right-clicking one that is already selected covers
-        // the whole selection instead; see HDRViewApp::target_groups().
+        // Right-clicking a group points at it without selecting it, so a lone depth channel can be deleted
+        // while a color stays on screen. Right-clicking one that is already selected covers the whole
+        // selection instead; see HDRViewApp::target_groups().
         const int this_group = layer.groups[g];
 
         if (ImGui::BeginPopupContextItem())
@@ -894,7 +864,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
             ImGui::Separator();
 
             // Drawn as if the group were already pointed at, so what each item says and whether it is
-            // offered match what choosing it would do -- on this image, which need not be the current one.
+            // offered match what choosing it would do on this image, which need not be the current one.
             hdrview()->with_target_group(
                 img_idx, this_group,
                 [&]
@@ -903,22 +873,19 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
                     {
                         const auto &a = hdrview()->action(command);
 
-                        // Deleting one channel is not deleting a group, nor several groups, and the label
-                        // says which it is about to be; the action's name stays put, since that is what
-                        // addresses it.
+                        // The label says whether it is about to delete one channel, a group, or several;
+                        // the action's name stays put, since that is what addresses it.
                         auto         target = hdrview()->target_image();
                         const string label  = string(command) == "Delete channel group"
                                                   ? delete_channels_label(target, hdrview()->target_groups(target))
                                                   : a.names[0];
 
                         // Spelled out as strings: imgui_ext declares a MenuItemEx taking std::string, and a
-                        // null here binds to that rather than to Dear ImGui's char* one, which constructs a
-                        // string from nullptr.
+                        // null here would bind to that and construct a string from nullptr.
                         if (ImGui::MenuItemEx(label, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), nullptr,
                                               a.enabled()))
-                            // Next frame rather than now: deleting a group rebuilds the very layers and
-                            // groups this loop is walking, and the rest of the tree would be drawn from
-                            // vectors that had moved out from under it.
+                            // Next frame: deleting a group rebuilds the layers and groups this loop is
+                            // walking.
                             hdrview()->post_to_main_thread(
                                 [command, img_idx, this_group]
                                 { hdrview()->invoke_action_on_group(command, img_idx, this_group); });
@@ -976,7 +943,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
     }
 }
 
-/*!
+/**
 
 */
 void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id_, bool is_current, bool is_reference,
@@ -1317,8 +1284,8 @@ void Image::draw_info()
             filtered_property("Display window",
                               fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
-            // An override says what it displaced, since contradicting a kind the file stated is a different
-            // situation from filling in one nothing ever did.
+            // An override says what it displaced, since contradicting a kind the file stated is not the
+            // same as filling in one nothing ever did.
             filtered_property(
                 "Alpha",
                 alpha_override ? fmt::format("{} (override; {} {})", alpha_type_name(alpha_type),
@@ -1861,9 +1828,9 @@ void Image::draw_colorspace()
     auto bold_font = hdrview()->font("sans bold");
 
     static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
-    // The enclosing window scrolls this panel (see the ImGuiWindowFlags_AlwaysVerticalScrollbar the Colorspace
-    // DockableWindow is created with), so the table itself neither scrolls nor sits in a scrolling child: the
-    // window's padding is what separates it from the scrollbar.
+    // The enclosing window scrolls this panel (see the ImGuiWindowFlags_AlwaysVerticalScrollbar the
+    // Colorspace DockableWindow is created with), so the table itself neither scrolls nor sits in a
+    // scrolling child.
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
         // The diagram gets its own full-width row when the value column alone is too narrow to render it legibly.
@@ -2097,9 +2064,8 @@ void Image::draw_channel_stats()
 
     float exposure_gain = pow(2.f, hdrview()->exposure_live());
 
-    // Persisted per-row display mode. A module-static (rather than a per-Image field) is a simplification
-    // carried over from the pre-existing `value_mode` this replaces -- shared across all images, which is
-    // fine since only one image's stats are ever shown at a time.
+    // Persisted per-row display mode. Module-static, so shared across all images, which only one image's
+    // stats being shown at a time makes safe.
     static int mode_min = ImGui::ChannelDisplayMode_Raw, mode_avg = ImGui::ChannelDisplayMode_Raw,
                mode_max = ImGui::ChannelDisplayMode_Raw, mode_stddev = ImGui::ChannelDisplayMode_Raw,
                mode_nan = ImGui::ChannelDisplayMode_Raw, mode_inf = ImGui::ChannelDisplayMode_Raw,
@@ -2116,8 +2082,8 @@ void Image::draw_channel_stats()
         if (show_swatch)
         {
             // The swatch goes through the tonemap and, in false-color mode, a colormap lookup that indexes
-            // with an integer -- a NaN sample survives neither. The numbers printed beside the swatch come
-            // from `raw`, so they still report the value the file holds.
+            // with an integer, neither of which a NaN sample survives. The numbers beside it come from
+            // `raw` and still report what the file holds.
             float4 finite{raw[0], raw[1], raw[2], raw[3]};
             for (int c = 0; c < 4; ++c)
                 if (!std::isfinite(finite[c]))
@@ -2139,9 +2105,8 @@ void Image::draw_channel_stats()
             tooltip);
     };
 
-    // Channel names as a row of their own, positioned via the PE table's actual value-column width -- a PE
-    // table has no shared header row to put them in otherwise. No left-column label: "Statistics" already
-    // lives in the SeparatorText above the table.
+    // Channel names as a row of their own, positioned via the PE table's value-column width, since a PE
+    // table has no shared header row. No left-column label: "Statistics" is in the SeparatorText above.
     ImGui::PE::Entry("",
                      [&]
                      {

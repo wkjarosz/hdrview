@@ -35,27 +35,23 @@ void HDRViewApp::run()
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
 
 #if defined(HELLOIMGUI_HAS_OPENGL)
-//! Screen capture that reads the colorpass's offscreen target rather than the window's framebuffer.
-/*!
-    Hello ImGui's default capture reads the window, which is display-referred: whenever the colorpass is
-    running, that holds whatever transfer function the display asked for -- linear light on a Wayland
-    compositor that negotiated a linear transfer, PQ on an HDR display. Saved into a PNG, which is read back
-    as sRGB, linear light in particular comes out markedly too dark.
+/// Screen capture that reads the colorpass's offscreen target instead of the window's framebuffer.
+/**
+    Hello ImGui's default capture reads the window, which is display-referred: whenever the colorpass runs,
+    that holds whatever transfer function the display asked for (linear light, PQ, ...), and a PNG of linear
+    light is read back as sRGB and comes out markedly too dark.
 
-    The pass's own target is the buffer worth capturing: it holds HDRView's extended sRGB, which is already
-    sRGB-encoded with 1.0 at SDR white (see the tail of assets/shaders/image-shader.sglsl and colorpass.sglsl,
-    which linearizes it back out). Reading it as fixed-point clamps that to [0, 1] and quantizes, which is
-    exactly the SDR rendition a screenshot should hold -- no inverse of the display conversion required, and
-    the app goes on rendering in HDR while being photographed.
+    The pass's own target holds HDRView's extended sRGB, already sRGB-encoded with 1.0 at SDR white (see the
+    tail of assets/shaders/image-shader.sglsl). Reading it as fixed-point clamps to [0, 1] and quantizes,
+    which is the SDR rendition a screenshot wants, while the app goes on rendering in HDR.
 
-    Everything else -- the y-flip, the framebuffer scale -- is Hello ImGui's, which only ever reads whatever
-    framebuffer is bound.
+    Everything else -- the y-flip, the framebuffer scale -- is Hello ImGui's.
 */
 static bool capture_colorpass_framebuffer(ImGuiID viewport_id, int x, int y, int w, int h, unsigned int *pixels,
                                           void *user_data)
 {
-    // Null whenever the frame went straight to the window -- a display needing no color management, or
-    // before the pass exists -- and then the window's framebuffer is already the sRGB one to read.
+    // Null whenever the frame went straight to the window, in which case its framebuffer is already the
+    // sRGB one to read.
     const RenderPass *pass = ((const HDRViewApp *)user_data)->capture_source();
     const uint32_t    fbo  = pass ? pass->framebuffer_handle() : 0;
 
@@ -77,30 +73,22 @@ static bool capture_colorpass_framebuffer(ImGuiID viewport_id, int x, int y, int
 
 void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *))
 {
-    // The test binary drives a real HDRViewApp, which otherwise reads and rewrites the very settings file
-    // the installed HDRView uses: a run would leave its fixture images in the recent-file list and persist
-    // whatever exposure, gamma and window layout the tests happened to leave behind. iniDisable makes
-    // IniSettingsLocation() return nothing, which both the ImGui layout and HelloImGui's LoadUserPref/
-    // SaveUserPref (the "UserSettings" JSON in setup_persistence_callbacks) treat as "don't". Tests then
-    // start from the built-in defaults every run, which is what they should be asserting against anyway.
+    // The test binary drives a real HDRViewApp, which would otherwise read and rewrite the settings file the
+    // installed HDRView uses. iniDisable makes IniSettingsLocation() return nothing, which both the ImGui
+    // layout and HelloImGui's LoadUserPref/SaveUserPref treat as "don't", so tests start from the built-in
+    // defaults every run.
     m_params.iniDisable = true;
 
-    // The suite is a long sequence of "yield until this becomes true", so what it costs is frames, and
-    // both of these make a frame wait rather than run. Idling throttles the rate whenever nothing is
-    // animating, which during a test run is nearly always; vsync then blocks every remaining frame until
-    // the monitor is ready. Together they were almost the entire wall clock: 57 seconds became 4.
-    //
-    // This applies to the interactive run too, where the display would otherwise pace it. Watching the
-    // suite go past at full speed is less useful than watching it at 60 Hz, but a run that finishes in
-    // seconds is the better tool for finding out why a test fails, and the alternative is a knob nobody
-    // would remember to set. rememberEnableIdling is off so a run cannot inherit the user's own setting.
+    // The suite is a long sequence of "yield until this becomes true", so what it costs is frames, and both
+    // idling and vsync make a frame wait: idling throttles the rate whenever nothing is animating, which
+    // during a test run is nearly always, and vsync blocks every remaining frame until the monitor is ready.
+    // rememberEnableIdling is off so a run cannot inherit the user's own setting.
     m_params.fpsIdling.enableIdling         = false;
     m_params.fpsIdling.rememberEnableIdling = false;
     m_params.fpsIdling.vsyncToMonitor       = false;
 
-    // A screenshot run wants a window of a stated size rather than whatever the last one happened to be:
-    // the pictures sit next to each other in the README, and a layout that reflows with the window would
-    // make every one of them a different composition.
+    // A screenshot run wants a window of a stated size: the pictures sit next to each other in the README,
+    // and a layout that reflows with the window would make every one a different composition.
     if (const char *size = getenv("HDRVIEW_SCREENSHOT_SIZE"))
     {
         int w = 0, h = 0;
@@ -110,9 +98,8 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
             spdlog::warn("Ignoring HDRVIEW_SCREENSHOT_SIZE='{}'; expected e.g. '1400x880'.", size);
     }
 
-    // The size above is in 96-PPI units, which this factor turns into pixels -- and it scales the fonts and
-    // widget paddings with them, so a factor of 2 is a genuinely 2x-density picture rather than the same
-    // interface stretched. Screenshots are viewed scaled down, where 1x text stops being legible.
+    // The size above is in 96-PPI units, which this factor turns into pixels, scaling fonts and widget
+    // paddings with them: a factor of 2 gives a 2x-density picture, not the same interface stretched.
     if (const char *scale = getenv("HDRVIEW_SCREENSHOT_SCALE"))
     {
         const float f = strtof(scale, nullptr);
@@ -139,21 +126,18 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
         io.ScreenCaptureUserData = this;
 #endif
         // Defaults to off, since it's meant for the interactive Test Engine UI; the terminal is this
-        // binary's only way to report *why* a test failed under CI.
+        // binary's only way to report why a test failed under CI.
         io.ConfigLogToTTY            = true;
         io.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
-        // Hello ImGui's own test-engine Setup() (called before this callback runs) hardcodes
-        // ConfigRunSpeed = Normal ("slowest mode in this demo" - it's tuned for a watchable interactive
-        // demo, not headless test runs). Normal/Cinematic speed animates every simulated mouse move over
-        // many real frames (see MouseMoveToPos() in imgui_te_context.cpp); Fast teleports it in 2 frames.
-        // Override back to Fast, since nothing else resets it after this point.
+        // Hello ImGui's own test-engine Setup() (called before this callback runs) hardcodes ConfigRunSpeed
+        // = Normal ("slowest mode in this demo"), which animates every simulated mouse move over many real
+        // frames (see MouseMoveToPos() in imgui_te_context.cpp); Fast teleports it in 2 frames.
         io.ConfigRunSpeed = ImGuiTestRunSpeed_Fast;
         register_tests(engine);
         ImGuiTestEngine_QueueTests(engine, ImGuiTestGroup_Tests, nullptr, ImGuiTestRunFlags_RunFromCommandLine);
     };
-    // HelloImGui's own PostSwap hook steps the running test forward each frame; here we just watch for the
-    // queue draining and ask the app to exit once every queued test has finished, the same way a window-close
-    // request does (via m_params.appShallExit) rather than forcing an abrupt process exit.
+    // HelloImGui's own PostSwap hook steps the running test forward each frame; this watches for the queue
+    // draining and asks the app to exit via m_params.appShallExit, as a window-close request does.
     m_params.callbacks.AfterSwap = [this]()
     {
         ImGuiTestEngine *engine = GetImGuiTestEngine();
@@ -174,45 +158,41 @@ void HDRViewApp::draw_tool_palette()
     if (!m_show_tool_palette)
         return;
 
-    // Anchor to a corner of the central dockspace node rather than the whole window, so the palette floats
-    // over the image and never over the docked panels. calculate_viewport() has already run this frame,
-    // from the CustomBackground callback, so the rect below is current.
+    // Anchor to a corner of the central dockspace node, not the whole window, so the palette floats over the
+    // image and never over the docked panels. calculate_viewport() has already run this frame, from the
+    // CustomBackground callback, so the rect below is current.
     const float2 pivot{(m_tool_palette_corner & 1) ? 1.f : 0.f, (m_tool_palette_corner & 2) ? 1.f : 0.f};
     const float2 margin{EmSize(0.5f)};
     const float2 anchor = m_viewport_min + margin + pivot * max(m_viewport_size - 2.f * margin, float2{0.f});
 
-    // While the user is dragging the palette, ImGui owns its position; we take it back on release and snap
-    // it to whichever corner it landed nearest.
+    // While the palette is being dragged ImGui owns its position; we take it back on release and snap it to
+    // whichever corner it landed nearest.
     if (!m_tool_palette_dragging)
         ImGui::SetNextWindowPos(anchor, ImGuiCond_Always, pivot);
 
     // Whole pixels: ImGui truncates the layout cursor to integers as it stacks items, so fractional padding
-    // or spacing drifts out of step with the auto-fit size and leaves the bottom edge tighter than the top.
+    // drifts out of step with the auto-fit size and leaves the bottom edge tighter than the top.
     const float gap = ImTrunc(ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ImTrunc(EmSize(0.3f)), ImTrunc(EmSize(0.3f))));
 
-    // Opaque: the palette sits over image content of arbitrary brightness, which at a high exposure would
-    // wash a translucent background right out.
+    // Opaque: the palette sits over image content of arbitrary brightness.
     ImGui::SetNextWindowBgAlpha(1.f);
 
     // ImGui owns the collapsed state from here on; seed it from ours once, and read it back below.
     ImGui::SetNextWindowCollapsed(m_tool_palette_collapsed, ImGuiCond_Once);
 
-    // ImGui renders the title bar inside Begin() and sizes its collapse arrow from the current font, which
-    // has no style var of its own, so shrink the font to shrink the arrow. Padding makes up the difference,
-    // keeping the bar a standard frame tall and - since ImGui insets the arrow by that same padding - the
-    // arrow centered within it.
+    // ImGui sizes the title bar's collapse arrow from the current font, which has no style var of its own,
+    // so shrink the font to shrink the arrow; padding makes up the difference, keeping the bar a standard
+    // frame tall and the arrow centered within it.
     const float bar_height = ImGui::GetFrameHeight();
     ImGui::PushFont(nullptr, 0.75f * ImGui::GetStyle().FontSizeBase);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
                         ImVec2(ImGui::GetStyle().FramePadding.x, 0.5f * (bar_height - ImGui::GetFontSize())));
 
     // The stock title bar supplies the drag handle and the collapse arrow, and a "##" name suppresses its
-    // text. No close button: it would widen the palette past its buttons, and the Windows menu already
-    // hides it. AlwaysAutoResize keeps this a compact box hugging its buttons rather than a full-width bar;
-    // NoDocking is required, since the app runs in ProvideFullScreenDockSpace mode and the dockspace would
-    // otherwise swallow the window; NoSavedSettings keeps a stale position in imgui.ini from fighting the
-    // anchoring above.
+    // text. AlwaysAutoResize keeps this a compact box hugging its buttons; NoDocking is required, since the
+    // app runs in ProvideFullScreenDockSpace mode and the dockspace would otherwise swallow the window;
+    // NoSavedSettings keeps a stale position in imgui.ini from fighting the anchoring above.
     bool open = ImGui::Begin("##ToolPalette", nullptr,
                              ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
                                  ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
@@ -243,10 +223,9 @@ void HDRViewApp::draw_tool_palette()
         }
     }
 
-    // Dragging the title bar has ImGui move the window itself; asking it which window that is beats
-    // inferring it from mouse state, since the title bar is an item of its own and so defeats the usual
-    // "pressed the background" tests. Outside the open block, so the drop still registers on a frame the
-    // window is collapsed or clipped away.
+    // Dragging the title bar has ImGui move the window itself, so ask it which window that is: the title bar
+    // is an item of its own and defeats the usual "pressed the background" tests. Outside the open block, so
+    // the drop still registers on a frame the window is collapsed or clipped away.
     if (ImGuiContext *g = ImGui::GetCurrentContext(); g->MovingWindow == ImGui::GetCurrentWindow())
         m_tool_palette_dragging = true;
     else if (m_tool_palette_dragging)
@@ -448,8 +427,7 @@ void HDRViewApp::draw_history_window()
     ImGui::IconButton(action("Redo"));
     ImGui::SameLine();
 
-    // The total is only worth saying once there is one: most of these steps are a pair of lambdas and
-    // hold nothing at all.
+    // Only worth saying once there is one: most steps are a pair of lambdas and hold nothing.
     if (const size_t held = history.memory_usage(); held > 0)
         ImGui::TextDisabled("%d step%s, %s", history.size(), history.size() == 1 ? "" : "s",
                             fmt::format("{:.1H}", human_readible{held}).c_str());
@@ -458,15 +436,14 @@ void HDRViewApp::draw_history_window()
 
     ImGui::Separator();
 
-    // The state to move to once the list has been drawn: stepping through the history mid-list would
-    // renumber the rows still to be drawn.
+    // The state to move to once the list has been drawn: stepping mid-list would renumber the rows still
+    // to be drawn.
     int target = -1;
 
     if (ImGui::BeginChild("##History list", ImVec2(0, 0), ImGuiChildFlags_None))
     {
-        // One row per *state*, not per entry: state 0 is the image as it was opened, and state k is the
-        // image after entries 0 through k-1. That is also how the cursor is numbered, so the highlighted
-        // row is m_current_state directly.
+        // One row per state, not per entry: state 0 is the image as it was opened, and state k is the image
+        // after entries 0 through k-1. The cursor is numbered the same way.
         for (int state = 0; state <= history.size(); ++state)
         {
             ImGui::PushID(state);
@@ -474,8 +451,7 @@ void HDRViewApp::draw_history_window()
             const bool current = state == history.current_state();
             const bool undone  = state > history.current_state();
 
-            // Everything past the cursor is what redo would reapply, and is not what the image currently
-            // holds -- faded rather than hidden, since it is still reachable.
+            // Everything past the cursor is what redo would reapply; faded, since it is still reachable.
             if (undone)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 
@@ -494,8 +470,7 @@ void HDRViewApp::draw_history_window()
             }
 
             // What this step costs to be able to go back past, right-aligned so the names stay readable.
-            // Blank rather than "0 B" for a step that stores no pixels: a flip is undone by flipping back,
-            // and saying it holds nothing on every such row is noise.
+            // Blank, not "0 B", for a step that stores no pixels, as a flip undone by flipping back does.
             if (const size_t held = state > 0 ? history.entry_memory_usage(state - 1) : 0; held > 0)
             {
                 const string text = fmt::format("{:.1H}", human_readible{held});
@@ -512,12 +487,9 @@ void HDRViewApp::draw_history_window()
     }
     ImGui::EndChild();
 
-    // Clicking a row walks there one entry at a time, which is the only way to get from one state to
-    // another: each entry knows how to reverse the one edit it describes and nothing knows how to skip.
-    //
-    // The cursor read here is the current image's while undo() and redo() step every selected image --
-    // intended, since this window shows the current image's history, and they report what that image did,
-    // so the walk still ends when it runs out.
+    // Clicking a row walks there one entry at a time: each entry knows how to reverse the one edit it
+    // describes and nothing knows how to skip. The cursor read here is the current image's, whose history
+    // this window shows, while undo()/redo() step every selected image.
     if (target >= 0)
     {
         while (history.current_state() > target && undo()) {}
@@ -536,7 +508,7 @@ void HDRViewApp::draw_statistics_window()
     current_image()->draw_histogram();
 
     // Label column of the Statistics and Watched pixels tables below: bold, to read as a header against the
-    // values beside it (as the channel-name row drawn by ChannelValuesRowHeader() already does).
+    // values beside it.
     auto bold_font = font("sans bold");
 
     // ImGui::SeparatorText("Selection");
@@ -549,10 +521,9 @@ void HDRViewApp::draw_statistics_window()
         ImGui::PE::Entry("Selection",
                          [&]
                          {
-                             // Same width-budget shape as ChannelValuesRow (N boxes + a trailing swatch-
-                             // sized slot), but these boxes are genuinely editable (DragInt, not read-only
-                             // text) and the trailing slot holds a "clear the selection" close button
-                             // instead of a color swatch.
+                             // Same width budget as ChannelValuesRow (N boxes + a trailing swatch-sized
+                             // slot), but these boxes are editable DragInts and the trailing slot holds a
+                             // "clear the selection" close button.
                              float col_w   = ImGui::PE::ColumnWidth(1);
                              float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
                              float sz      = ImGui::GetFontSize();
@@ -571,8 +542,7 @@ void HDRViewApp::draw_statistics_window()
                                      committed = true;
                              }
                              // A cleared selection is the inverted box, whose corners are INT_MAX and
-                             // INT_MIN -- and size() is max minus min, which overflows on it. Nothing to
-                             // report there anyway: an empty selection is no pixels wide.
+                             // INT_MIN, and size() is max minus min, which overflows on it.
                              const int2 extent = m_roi_live.has_volume() ? m_roi_live.size() : int2{0};
                              ImGui::SetItemTooltip("W x H: (%d x %d)", extent.x, extent.y);
                              if (committed)
@@ -595,37 +565,32 @@ void HDRViewApp::draw_statistics_window()
     ImGui::SeparatorText("Statistics");
 
     // Draws one PE::TreeNode row: the value column holds X/Y coordinate boxes (draggable for watched pixels,
-    // disabled for the hovered pixel -- ReadOnly alone doesn't block DragInt's drag gesture, only keyboard
-    // entry) plus, for watched pixels, a trailing delete button. Children (open only) are Current/Reference/
-    // Composite ChannelValuesRow entries. Returns true if the delete button was clicked.
+    // disabled for the hovered pixel, since ReadOnly blocks only keyboard entry) plus, for watched pixels, a
+    // trailing delete button. Children, when open, are Current/Reference/Composite ChannelValuesRow entries.
+    // Returns true if the delete button was clicked.
     auto PixelTreeNodePE = [&](const string &icon_title, int2 &pixel, int3 &color_mode, bool editable, bool show_delete)
     {
         bool deleted = false;
-        // SpanAllColumns extends the tree node's own click rect across the whole row (see TreeNodeBehavior()
-        // in imgui_widgets.cpp), processed before the X/Y/delete controls below are drawn -- on its own, a
-        // click meant for them would toggle the tree node instead. AllowOverlap defers that first claim,
-        // letting a later, geometrically overlapping widget take the click instead: the same fix
-        // CollapsingHeader(label, p_visible, ...) applies whenever it's given a close button.
+        // SpanAllColumns extends the tree node's click rect across the whole row (see TreeNodeBehavior() in
+        // imgui_widgets.cpp), claiming it before the X/Y/delete controls below are drawn; AllowOverlap defers
+        // that claim so a later overlapping widget can take the click, as CollapsingHeader's own close button
+        // does.
         bool open = ImGui::PE::TreeNode(icon_title.c_str(),
                                         ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanFullWidth |
                                             ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_AllowOverlap);
         ImGui::TableNextColumn();
-        // Row's own top-left, before anything else is drawn in this column -- the reference point for the
-        // close button below, matching CollapsingHeader's own (g.LastItemData.Rect.Min.y + FramePadding.y).
+        // Row's own top-left, before anything else is drawn in this column: the reference point for the close
+        // button below, matching CollapsingHeader's own (g.LastItemData.Rect.Min.y + FramePadding.y).
         ImVec2 row_screen_pos = ImGui::GetCursorScreenPos();
 
         float col_w   = ImGui::PE::ColumnWidth(1);
         float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-        // GetFontSize(), not GetFrameHeight(): the children rows below (Current/Reference/Composite) are
-        // drawn compact (FramePadding.y == 0, where FrameHeight == FontSize), so their ChannelValuesRow
-        // swatch slot is FontSize wide. This row's own FramePadding is still the ambient (normal) one at
-        // this point -- using GetFrameHeight() here would reserve a *larger* slot than the children's,
-        // shifting the close button left of where their swatches actually sit.
+        // GetFontSize(), not GetFrameHeight(): the children rows are drawn compact (FramePadding.y == 0),
+        // so their ChannelValuesRow swatch slot is FontSize wide, while this row still has the ambient
+        // padding.
         float sz = ImGui::GetFontSize();
-        // Two inter-item gaps (X-to-Y, Y-to-close-slot), not one -- always reserve the same swatch-sized
-        // slot ChannelValuesRow reserves for its color swatch (real close button here, or nothing for the
-        // Mouse row), so the X/Y boxes end at the same place regardless of show_delete, matching the
-        // channel value boxes' own column width below them.
+        // Two inter-item gaps (X-to-Y, Y-to-close-slot), and always the swatch-sized slot ChannelValuesRow
+        // reserves, so the X/Y boxes end at the same place whether or not show_delete.
         float drag_size = ImMax((col_w - 2.f * spacing - sz) * 0.5f, 1.f);
 
         ImGuiInputTextFlags_ flags = editable ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
@@ -689,9 +654,8 @@ void HDRViewApp::draw_statistics_window()
 
     if (ImGui::PE::Begin("StatisticsPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        // Initial (still user-resizable) label-column width: fits the widest label ("Maximum"), matching
-        // the pattern draw_info() uses for its own "Property" column. Measured in the bold label font the
-        // rows themselves use, so the labels fit without truncation.
+        // Initial (still user-resizable) label-column width, fitting the widest label ("Maximum"), measured
+        // in the bold label font the rows themselves use.
         ImGui::PushFont(bold_font, 0.f);
         float label_col_w = ImGui::CalcTextSize("Maximum").x + ImGui::GetStyle().CellPadding.x;
         ImGui::PopFont();
@@ -714,7 +678,7 @@ void HDRViewApp::draw_statistics_window()
     if (ImGui::PE::Begin("WatchedPixelsPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         // Same initial-width pattern as the Statistics table above, sized to the widest child-row label
-        // ("Composite") rather than the (typically shorter) top-level tree node labels.
+        // ("Composite"), not the shorter top-level tree node labels.
         ImGui::PushFont(bold_font, 0.f);
         float label_col_w = ImGui::CalcTextSize("Composite").x + ImGui::GetStyle().CellPadding.x;
         ImGui::PopFont();
@@ -727,8 +691,7 @@ void HDRViewApp::draw_statistics_window()
             auto        hovered_pixel = *hp;
             static int3 hover_color_mode{0, 0, 0};
             // PE::TreeNode only keeps its own PushID(icon_title) alive while open, so a caller-owned PushID
-            // is needed to keep the X/Y/delete controls' IDs (drawn unconditionally below) stable across
-            // collapsed rows too.
+            // keeps the X/Y/delete controls' IDs stable across collapsed rows too.
             ImGui::PushID("Mouse");
             PixelTreeNodePE(ICON_MY_CURSOR_ARROW " Mouse", hovered_pixel, hover_color_mode, false, false);
             ImGui::PopID();
@@ -771,8 +734,8 @@ std::vector<ImagePtr> HDRViewApp::selected_images()
         if (m_images[i]->is_selected())
             out.push_back(m_images[i]);
 
-    // Visible only, and the current image is always both visible and selected -- so an empty result means
-    // the panel has never had a say, which is how a test driving the app directly finds it.
+    // Visible only, and the current image is always both visible and selected, so an empty result means the
+    // panel has never had a say.
     if (out.empty())
         if (auto img = current_image())
             out.push_back(img);
@@ -809,8 +772,8 @@ void HDRViewApp::set_current_group(int index, int group)
     if (!img->is_valid_group(img->selected_group))
         return;
 
-    // If the target wasn't already selected, deselect the others -- a click outside the selection starts
-    // a new one, while one inside it only moves current.
+    // If the target wasn't already selected, deselect the others: a click outside the selection starts a
+    // new one, while one inside it only moves current.
     if (!img->is_group_selected(img->selected_group))
     {
         for (auto &i : m_images) i->deselect_all();
@@ -870,8 +833,8 @@ void HDRViewApp::select_image_range_to(int index)
         img->select_group(img->selected_group);
     }
 
-    // The far end is selected by the loop above, so set_current_image_index() moves current into the
-    // range rather than collapsing the selection onto it.
+    // The far end is selected by the loop above, so set_current_image_index() moves current into the range
+    // without collapsing the selection onto it.
     set_current_image_index(index);
 }
 
@@ -968,13 +931,12 @@ void HDRViewApp::update_visibility()
     //
     // compute short (i.e. unique) names for visible images
 
-    // m_visible_images and visible_image_names were appended to together above, so they index each other:
-    // one shortened name per visible image, in the same order.
+    // m_visible_images and visible_image_names were appended to together above, so they index each other.
     auto short_names = shorten_names(visible_image_names);
     for (size_t n = 0; n < m_visible_images.size(); ++n) m_images[m_visible_images[n]]->short_name = short_names[n];
 
-    // Filtering moves current and the group it shows by assignment above rather than through
-    // set_current_group(), so the rule that the current target is selected is restored once, here.
+    // Filtering moves current and the group it shows by assignment above, not through set_current_group(),
+    // so the rule that the current target is selected is restored here.
     if (auto img = current_image())
         set_current_group(m_current, img->selected_group);
 
@@ -1157,9 +1119,8 @@ void HDRViewApp::draw_file_window()
         int hidden_groups  = 0;
         int image_to_close = -1;
 
-        // The image rows' font depends only on the list mode, so it's pushed once around the whole list
-        // rather than per row. Pushed before the clipper is set up so that the row height it measures is
-        // the height rows are actually drawn at.
+        // The image rows' font depends only on the list mode, so push it once around the whole list, before
+        // the clipper is set up, so the row height it measures is the height rows are drawn at.
         ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
 
         // currently we only support the clipper when each image is one row
@@ -1170,10 +1131,8 @@ void HDRViewApp::draw_file_window()
             clipper.Begin((int)m_visible_images.size());
 
             // A pending scroll-to-selection request is consumed inside the per-row loop below, which the
-            // clipper only enters for rows it decided to draw. Without this, a request made while the
-            // target is scrolled out of view (e.g. a next/prev-image shortcut) would never reach its
-            // SetScrollHereY() call, and -- since the clipper computes the same range again next frame --
-            // would stay pending forever, until the user manually scrolled the target back into view.
+            // clipper only enters for rows it decided to draw. Without this, a request made while the target
+            // is scrolled out of view would never reach its SetScrollHereY() call and would stay pending.
             if (m_scroll_to_next_frame >= -0.5f && is_valid(m_current))
             {
                 auto it = find(m_visible_images.begin(), m_visible_images.end(), (size_t)m_current);
@@ -1214,13 +1173,13 @@ void HDRViewApp::draw_file_window()
                 string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
                                   (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
-                // Marks edits that exist only in memory -- the same ones the close prompt asks about.
-                // Appended rather than prefixed because the name below is truncated from the front.
+                // Marks edits that exist only in memory. Appended, not prefixed, because the name below is
+                // truncated from the front.
                 if (img->history.is_modified())
                     filename += " *";
 
                 // Drawn with an empty label -- SpanAllColumns still makes this the row's click target -- so
-                // the icon and front-truncated filename below can be laid out and drawn by hand afterward.
+                // the icon and front-truncated filename below can be laid out by hand afterward.
                 bool open = ImGui::TreeRow((void *)(intptr_t)i, node_flags, "", [&]
                                            { ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str()); },
                                            [&]
@@ -1275,9 +1234,8 @@ void HDRViewApp::draw_file_window()
 
                 if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
                 {
-                    // Shift is the reference modifier, as it has always been, so the selection chords are
-                    // ctrl/cmd and ctrl/cmd+shift. An image row stands for the group the image is
-                    // showing, which is the target the selection is actually made of.
+                    // Shift is the reference modifier, so the selection chords are ctrl/cmd and
+                    // ctrl/cmd+shift. An image row stands for the group the image is showing.
                     auto &io = ImGui::GetIO();
                     if (io.KeyCtrl && io.KeyShift)
                         select_image_range_to(i);

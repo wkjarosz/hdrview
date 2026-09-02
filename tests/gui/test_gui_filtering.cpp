@@ -2,10 +2,7 @@
     \author Wojciech Jarosz
 
     File-list filtering (the "##file filter" field in the "Images" window) and its interaction with the
-    current/reference image selection. HDRViewApp::update_visibility() (src/app-windows.cpp) deliberately
-    auto-advances the current selection to the next *visible* image when filtering hides it, and clears the
-    reference outright when filtering hides it (there's no well-defined "next reference") - this exercises
-    that real, intentional behavior rather than assuming selection is simply immune to filtering.
+    current/reference image selection.
 */
 
 #include "app.h"
@@ -28,8 +25,7 @@ using namespace hdrview_test;
 
 static void load_both_fixtures(ImGuiTestContext *ctx)
 {
-    // Defensive: clear any file filter a prior test in this run may have left active (e.g. an earlier
-    // assertion failure that returned before its own cleanup ran).
+    // clear any file filter a prior test left active
     ctx->SetRef("Images");
     ctx->ItemInputValue("##file filter", "");
 
@@ -40,8 +36,7 @@ static void load_both_fixtures(ImGuiTestContext *ctx)
     IM_CHECK_EQ(hdrview()->num_visible_images(), 2);
 }
 
-// Background loads of a multi-file batch can complete (and land in m_images) in any order, not necessarily
-// request order - look up which index actually holds which fixture rather than assuming it.
+// background loads of a batch land in m_images in any order, so look up which index holds which fixture
 static int find_image_index_containing(const char *substr)
 {
     for (int i = 0; i < hdrview()->num_images(); ++i)
@@ -84,10 +79,8 @@ void RegisterTests_Filtering(ImGuiTestEngine *engine)
         hdrview()->set_current_image_index(icon_idx);
         hdrview()->set_reference_image_index(icon256_idx);
 
-        // Filter to "256": hides the *current* image (icon.png), leaving only the reference (icon-256.png)
-        // visible. update_visibility() auto-advances current to the next visible image (here, icon256_idx -
-        // the only one left) rather than leaving it pointing at a hidden image; the reference stays put
-        // since it's still visible.
+        // filtering to "256" hides the current image, and update_visibility() advances current to the only
+        // visible one left; the reference stays put since it is still visible
         ctx->SetRef("Images");
         ctx->ItemInputValue("##file filter", "256");
         IM_CHECK_EQ(hdrview()->num_visible_images(), 1);
@@ -96,8 +89,8 @@ void RegisterTests_Filtering(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->current_image_index(), icon256_idx);
         IM_CHECK_EQ(hdrview()->reference_image_index(), icon256_idx);
 
-        // Now filter to something matching neither fixture: both current and reference become hidden.
-        // Current has nowhere visible left to advance to (-1); reference is simply cleared.
+        // matching neither fixture hides both: current has nowhere visible to advance to (-1), and the
+        // reference is cleared
         ctx->ItemInputValue("##file filter", "no_such_file");
         IM_CHECK_EQ(hdrview()->num_visible_images(), 0);
         IM_CHECK_EQ(hdrview()->current_image_index(), -1);

@@ -203,9 +203,8 @@ void exif_handler(void *context, int tag, int type, int len, unsigned int ord, v
         break;
     }
 
-    // `type` is the IFD entry's type straight out of the file, and ExifFormat names nothing outside
-    // 1..12; a value matching no enumerator is undefined to load back out of entry->format, which
-    // exif_format_get_size() below does. Kodak's KDC files carry types that are not EXIF's.
+    // ExifFormat names nothing outside 1..12, and reading back a value matching no enumerator (as
+    // exif_format_get_size() below does) is undefined. Kodak's KDC files carry types that are not EXIF's.
     if (type < EXIF_FORMAT_BYTE || type > EXIF_FORMAT_DOUBLE)
     {
         spdlog::debug("Skipping EXIF tag 0x{:04x} with unrecognized type {}", actual_tag, type);
@@ -685,19 +684,14 @@ Box2i get_display_window(const libraw_data_t &idata)
 
 } // namespace
 
-// LibRaw's "is this a raw file?" test is a full parse, and its parser is permissive enough to read
-// arbitrary bytes as sensor metadata: a 156-byte corrupted PNG opens as a 3072x2047 "Contax N Digital",
-// which then costs a full AHD demosaic of a 6.3-megapixel image that isn't there. The dimensions alone
-// look ordinary, so the giveaway is how little data backs them.
-//
-// Measured over 316 real files spanning 14 formats (CR2, CRW, NEF, ARW, ORF, RAF, RW2, PEF, DNG, SRW,
-// KDC, 3FR, MOS, DCR), a raw carries between 0.17 and 6.1 pixels per byte; the high end is a Kodak KDC
-// storing JPEG-compressed sensor data. The limit sits well above that while still being far below what
-// a confabulated image asks for -- the PNG above wants 40,310 -- since rejecting a real raw would be a
-// visible failure whereas letting an implausible one through only costs time.
+// LibRaw's "is this a raw file?" test is a full parse, and its parser will read arbitrary bytes as sensor
+// metadata: a 156-byte corrupted PNG opens as a 3072x2047 "Contax N Digital", costing a full AHD demosaic
+// of an image that isn't there. The dimensions look ordinary; the giveaway is how little data backs them.
+// Measured over 316 real files in 14 formats, a raw carries 0.17 to 6.1 pixels per byte (the high end a
+// Kodak KDC storing JPEG-compressed sensor data), while that PNG wants 40,310.
 static constexpr double k_max_raw_pixels_per_byte = 512.0;
 
-//! Whether \p width by \p height is plausible for a raw file of \p bytes.
+/// Whether \p width by \p height is plausible for a raw file of \p bytes.
 static bool plausible_raw_size(int64_t width, int64_t height, std::streamoff bytes)
 {
     if (width <= 0 || height <= 0 || bytes <= 0)
@@ -705,7 +699,7 @@ static bool plausible_raw_size(int64_t width, int64_t height, std::streamoff byt
     return double(width) * double(height) <= k_max_raw_pixels_per_byte * double(bytes);
 }
 
-//! Size of \p is in bytes, restoring the stream position.
+/// Size of \p is in bytes, restoring the stream position.
 static std::streamoff stream_size(std::istream &is)
 {
     auto pos = is.tellg();
@@ -725,12 +719,11 @@ bool is_raw_image(std::istream &is) noexcept
 
         auto ret = raw->open_datastream(&ds) == LIBRAW_SUCCESS;
 
-        // Decline rather than throw, so a file LibRaw merely thinks it recognizes still gets offered to
-        // the loaders after this one.
+        // decline rather than throw, so the loaders after this one still get a look at the file
         if (ret && !plausible_raw_size(raw->imgdata.sizes.width, raw->imgdata.sizes.height, stream_size(is)))
         {
-            spdlog::debug("Declining {}x{} raw: too little data to back those dimensions.",
-                          raw->imgdata.sizes.width, raw->imgdata.sizes.height);
+            spdlog::debug("Declining {}x{} raw: too little data to back those dimensions.", raw->imgdata.sizes.width,
+                          raw->imgdata.sizes.height);
             ret = false;
         }
 
@@ -803,7 +796,7 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
     if (auto ret = raw->open_datastream(&libraw_stream); ret != LIBRAW_SUCCESS)
         throw std::runtime_error(fmt::format("Failed to open RAW file: {}", libraw_strerror(ret)));
 
-    // Checked again here, since this is reachable without going through is_raw_image().
+    // checked again here, since this is reachable without going through is_raw_image()
     if (!plausible_raw_size(raw->imgdata.sizes.width, raw->imgdata.sizes.height, stream_size(is)))
         throw std::runtime_error(fmt::format("RAW: {}x{} is too large to be backed by {} bytes.",
                                              raw->imgdata.sizes.width, raw->imgdata.sizes.height,
@@ -984,12 +977,11 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                     cfa_img->channels[0].copy_from_interleaved<float>(cfa_pixels.data(), raw_w, raw_h, 1, 0,
                                                                       [](float v) { return v; });
 
-                    // The whole raw frame is the data window, but LibRaw's unpackers fill only the active
-                    // area: a frame carrying masked columns or rows leaves the rest holding whatever the
-                    // allocation did, which for several Olympus bodies is values no 12-bit sensor could
-                    // produce. Those photosites are still worth keeping -- some cameras do write optical
-                    // black there -- so the display window marks the region LibRaw actually decodes and
-                    // the rest stays available outside it.
+                    // the whole raw frame is the data window, but LibRaw's unpackers fill only the active
+                    // area, leaving masked columns and rows holding whatever the allocation did (for
+                    // several Olympus bodies, values no 12-bit sensor could produce). Some cameras do
+                    // write optical black there, so keep them, and mark the decoded region as the display
+                    // window.
                     const int2 active_min{idata.sizes.left_margin, idata.sizes.top_margin};
                     const int2 active_max{active_min.x + idata.sizes.width, active_min.y + idata.sizes.height};
                     cfa_img->display_window = (idata.sizes.width > 0 && idata.sizes.height > 0 &&
@@ -1062,10 +1054,10 @@ vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const Im
                 int h = thumb->height;
                 int n = thumb->colors;
 
-                auto timg                                = std::make_shared<Image>(int2{w, h}, n);
-                timg->filename                           = filename;
-                timg->partname                           = fmt::format("thumbnail:{}", ti);
-                timg->metadata["pixel format"]           = fmt::format("{}-bit ({} bpc)", n * thumb->bits, thumb->bits);
+                auto timg                      = std::make_shared<Image>(int2{w, h}, n);
+                timg->filename                 = filename;
+                timg->partname                 = fmt::format("thumbnail:{}", ti);
+                timg->metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", n * thumb->bits, thumb->bits);
                 timg->set_bits_per_sample(thumb->bits);
                 timg->metadata["loader"]                 = "LibRaw";
                 timg->metadata["header"]["Is thumbnail"] = {{"value", true},

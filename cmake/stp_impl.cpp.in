@@ -1,8 +1,7 @@
-// See the "Pluggable diagnostics" comment in smallthreadpool.h for the safety contract these bindings
-// must satisfy. spdlog's default logger has its own lazily-constructed lifetime (not process-lifetime
-// duration like stderr/std::cout), so HDRView must call stop() on every ThreadPool it uses -- including
-// ThreadPool::singleton() -- at a well-defined point before shutdown, rather than relying on static
-// destruction order. See HDRViewApp's BeforeExit callback and hdrview_tests' main().
+// See the "Pluggable diagnostics" comment in smallthreadpool.h for the safety contract these bindings must
+// satisfy. spdlog's default logger is lazily constructed and does not last for the whole process, so every
+// ThreadPool, ThreadPool::singleton() included, must be stop()ed before shutdown instead of at static
+// destruction. See HDRViewApp's BeforeExit callback and hdrview_tests' main().
 #include <spdlog/spdlog.h>
 #define STP_LOG_TRACE(...) spdlog::trace(__VA_ARGS__)
 #define STP_LOG_ERROR(...) spdlog::error(__VA_ARGS__)

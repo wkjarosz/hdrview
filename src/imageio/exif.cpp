@@ -139,12 +139,7 @@ struct Exif::Impl
     std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data{nullptr, &exif_data_unref};
     std::unique_ptr<ExifLog, decltype(&exif_log_unref)>   exif_log{nullptr, &exif_log_unref};
 
-    //! Set by the log callback below, which libexif keeps calling for as long as exif_log lives.
-    /*!
-        It must therefore live that long too. The callback fires well after loading -- reading an entry's
-        value logs, so exif_entry_get_value() during to_json() reaches it -- and a flag local to the
-        constructor would by then be a dead stack slot.
-    */
+    /// libexif's log callback keeps firing after the constructor (e.g. from to_json()), so this can't be local.
     bool load_error = false;
 };
 
@@ -241,14 +236,14 @@ void           Exif::reset() { m_impl.reset(); }
 size_t         Exif::size() const { return m_impl ? m_impl->data.size() : 0; }
 const uint8_t *Exif::data() const { return m_impl ? m_impl->data.data() : nullptr; }
 
-// Declared in exif.h, where the reasoning behind the subtraction lives.
+// see exif.h for why this compares by subtraction
 bool maker_note_range_within(uint32_t offset, uint32_t size, uint32_t bound)
 {
     return offset <= bound && size <= bound - offset;
 }
 
-//! Walk the entries of an Apple maker note, which libexif has no decoder for.
-/*!
+/// Walk the entries of an Apple maker note, which libexif has no decoder for.
+/**
     The note is a TIFF-style IFD preceded by a 12-byte "Apple iOS" header, with its own byte order and
     with entry offsets counted from the start of the note rather than the start of the EXIF block.
 
@@ -549,7 +544,7 @@ std::optional<double> Exif::apple_makernote_value(uint16_t wanted_tag) const
         m_impl->exif_data.get(),
         [&](uint16_t tag, uint16_t format, uint32_t components, const uint8_t *data, Endian endian)
         {
-            // The note may repeat a tag; the first well-formed one wins.
+            // the note may repeat a tag; the first well-formed one wins
             if (result || tag != wanted_tag)
                 return;
 
@@ -569,7 +564,7 @@ json Exif::to_json() const
     json        j;
 
     static const char *ExifIfdTable[] = {"TIFF IFD0", "TIFF IFD1", "EXIF", "GPS", "Interoperability"};
-    // The loop below indexes this by libexif's own IFD enum, so the two have to stay the same length.
+    // the loop below indexes this by libexif's own IFD enum, so the two must stay the same length
     static_assert(std::size(ExifIfdTable) == EXIF_IFD_COUNT, "ExifIfdTable must name every libexif IFD");
 
     spdlog::debug("Exif::to_json: Starting to process {} IFDs", (int)EXIF_IFD_COUNT);
@@ -596,10 +591,8 @@ json Exif::to_json() const
 
             spdlog::debug("Exif::to_json: Processing entry {} (tag 0x{:04x}) in IFD {}", i, (int)entry->tag, ifd_idx);
 
-            // One tag is not worth the rest of them. entry_to_json() names a tag's value by reading it back
-            // out of JSON as the scalar the tag number implies -- at forty-odd sites, none of which the file
-            // is obliged to agree with -- and the throw would otherwise leave this loop, abandoning every
-            // tag in the image including the ones already decoded.
+            // entry_to_json() reads each value back out of JSON as the scalar its tag number implies, at
+            // dozens of sites the file is not obliged to agree with; one bad tag must not lose the rest
             try
             {
                 ifd_json.update(entry_to_json(entry, exif_data_get_byte_order(ed), ifd_idx));

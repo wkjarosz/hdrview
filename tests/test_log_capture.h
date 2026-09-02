@@ -1,14 +1,7 @@
 /** \file test_log_capture.h
     \author Wojciech Jarosz
 
-    Collects everything logged while it is in scope.
-
-    Some guards have no other observable effect. Refusing to extract a zip entry that lies about its size
-    and failing to extract it look identical from outside -- same empty result, same absent image -- and
-    differ only in the memory and time spent finding out. Asserting on the returned value there passes
-    whether or not the guard exists; the warning is what tells the two apart.
-
-    Shared by the doctest and GUI suites, which both need it for exactly that reason.
+    Captures spdlog output for the duration of a scope, for guards whose only visible effect is a warning.
 */
 
 #pragma once
@@ -31,7 +24,7 @@ public:
         sinks.erase(std::remove(sinks.begin(), sinks.end(), m_sink), sinks.end());
     }
 
-    //! Whether anything logged so far contains `substring`.
+    /// Whether anything logged so far contains `substring`.
     bool saw(const std::string &substring) const
     {
         std::lock_guard<std::mutex> lock(m_sink->mutex_);

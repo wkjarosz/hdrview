@@ -7,9 +7,7 @@
 /** \file test_index_helpers.cpp
     \author Wojciech Jarosz
 
-    Small pure helpers the app leans on, checked exhaustively over their input range rather than at a few
-    sampled points: the index arithmetic that walks the image list, and the download-progress arithmetic the
-    status bar reads.
+    The index arithmetic that walks the image list, and the download-progress arithmetic the status bar reads.
 */
 
 #include <doctest/doctest.h>
@@ -34,10 +32,8 @@ TEST_CASE("next_matching_index steps through a vector in both directions")
 
 TEST_CASE("next_matching_index starts at the near end when nothing is selected")
 {
-    // -1 is the "nothing selected" index (m_current with no image, or selected_group/reference_group after
-    // update_visibility() hides every group). It is not a position to step from, and adding a step to it in
-    // unsigned arithmetic would give a remainder of 2^64 % size rather than of the index, so the search
-    // starts at the near end instead.
+    // -1 is the "nothing selected" index (m_current with no image, or selected_group/reference_group once
+    // update_visibility() has hidden every group), not a position to step from
     auto all = [](size_t, const int &) { return true; };
 
     for (int size = 1; size <= 8; ++size)
@@ -79,7 +75,7 @@ TEST_CASE("next_matching_index skips elements that don't match")
 
     SUBCASE("an out-of-range index still lands on a match")
     {
-        // A session file can name a group index the image doesn't have.
+        // a session file can name a group index the image doesn't have
         std::vector<bool> v{false, true, false};
         auto              is_set = [](size_t, const bool &b) { return b; };
         CHECK(next_matching_index(v, 9999, is_set, Direction_Forward) == 1);
@@ -100,9 +96,8 @@ TEST_CASE("nth_matching_index finds the nth match or reports past-the-end")
 
 TEST_CASE("next_matching_index holds its invariants over every small vector and starting index")
 {
-    // The hand-picked cases above name the behaviors worth reading; this pins them over the whole
-    // small-input space, where the interesting starting indices are the ones outside the vector -- -1
-    // for "nothing selected", and anything a stale session file might name.
+    // starting indices outside the vector are included: -1 for "nothing selected", and anything a stale
+    // session file might name
     auto is_set = [](size_t, const bool &b) { return b; };
 
     for (int size = 0; size <= 6; ++size)
@@ -126,19 +121,17 @@ TEST_CASE("next_matching_index holds its invariants over every small vector and 
 
                     if (num_matches == 0)
                     {
-                        // Nothing to move to, so the caller's own index comes back untouched -- never an
-                        // index into a vector that has no match to offer.
+                        // nothing to move to, so the caller's own index comes back untouched
                         CHECK(next == start);
                         continue;
                     }
 
-                    // Any result is a real position holding a match.
+                    // any result is a real position holding a match
                     REQUIRE(next >= 0);
                     REQUIRE(next < size);
                     CHECK(v[next]);
 
-                    // Stepping repeatedly visits every match and nothing else, so no match is
-                    // unreachable and none is visited twice per cycle.
+                    // stepping repeatedly visits every match once per cycle and nothing else
                     std::vector<int> visited;
                     int              at = next;
                     for (int step = 0; step < num_matches; ++step)
@@ -167,7 +160,7 @@ TEST_CASE("nth_matching_index agrees with a direct scan for every small vector")
                 if ((v[i] = (mask >> i) & 1))
                     matches.push_back(i);
 
-            // One past the last match too, which has to report past-the-end rather than an index.
+            // one past the last match too, which has to report past-the-end
             for (int n = 0; n <= (int)matches.size() + 1; ++n)
             {
                 CAPTURE(size);
@@ -181,13 +174,12 @@ TEST_CASE("nth_matching_index agrees with a direct scan for every small vector")
 
 TEST_CASE("download_percent_remaining reports a usable percentage for any byte counts")
 {
-    // The status bar draws its progress bar only while this is above zero, and computes the filled
-    // fraction as (100 - remaining) / 100, so the value has to stay inside [0, 100], fall as bytes
-    // arrive, and reach zero only when the transfer is actually complete.
+    // The status bar draws its bar only while this is above zero and fills it by (100 - remaining) / 100, so
+    // the value has to stay inside [0, 100], fall as bytes arrive, and reach zero only when the transfer is.
     SUBCASE("a total the server has not reported yet cannot divide")
     {
         // Emscripten's progress callback can fire before the content length is known, and some servers
-        // never send one. The previous form divided by this directly.
+        // never send one
         CHECK(download_percent_remaining(0, 0) == 100);
         CHECK(download_percent_remaining(1234, 0) == 100);
         CHECK(download_percent_remaining(0, -1) == 100);
@@ -197,18 +189,17 @@ TEST_CASE("download_percent_remaining reports a usable percentage for any byte c
     {
         CHECK(download_percent_remaining(0, 1000) == 100);
         CHECK(download_percent_remaining(1000, 1000) == 0);
-        // Over-reporting (more bytes than the declared total) still reads as finished, not negative.
+        // over-reporting more bytes than the declared total still reads as finished, not negative
         CHECK(download_percent_remaining(1500, 1000) == 0);
     }
 
     SUBCASE("a partial transfer is neither 0 nor 100")
     {
-        // Integer division sent all of these to zero, so the bar vanished the moment the first bytes
-        // landed and the download appeared to finish instantly.
+        // a plain integer division would send all of these to zero
         CHECK(download_percent_remaining(500, 1000) == 50);
         CHECK(download_percent_remaining(250, 1000) == 75);
         CHECK(download_percent_remaining(999, 1000) == 1);
-        // Rounded up, so a nearly-finished transfer still shows rather than disappearing early.
+        // rounded up, so a nearly-finished transfer still shows
         CHECK(download_percent_remaining(999999, 1000000) == 1);
     }
 

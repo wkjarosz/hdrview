@@ -11,8 +11,8 @@
 #include <iostream>
 #include <limits> // for numeric_limits
 
-//! Represents a bounded interval in higher dimensions.
-/*!
+/// Represents a bounded interval in higher dimensions.
+/**
     Box is an N-D interval.
 */
 template <typename Vec_, typename Value_, int Dims_>
@@ -24,8 +24,8 @@ public:
     using Vec                 = Vec_;
     using BoxT                = Box<Vec, Value, Dims>;
 
-    Vec min; //!< The lower-bound of the interval
-    Vec max; //!< The upper-bound of the interval
+    Vec min; ///< The lower-bound of the interval
+    Vec max; ///< The upper-bound of the interval
 
     //-----------------------------------------------------------------------
     //@{ \name Constructors
@@ -244,10 +244,9 @@ public:
 template <typename Vec, typename Value, int Dims>
 inline std::ostream &operator<<(std::ostream &o, const Box<Vec, Value, Dims> &b)
 {
-    // linalg.h deliberately scopes its vec/mat operator<< overloads inside linalg::ostream_overloads rather than
-    // the plain linalg namespace, so merely including linalg.h doesn't inject them into every consumer's ADL
-    // lookup. Opt in here, scoped to just this function body, so b.min/b.max stream correctly regardless of
-    // whether the calling translation unit has separately opted in.
+    // linalg.h scopes its vec/mat operator<< overloads inside linalg::ostream_overloads, so including it does
+    // not inject them into a consumer's ADL lookup. Opt in here, scoped to this function body, so b.min/b.max
+    // stream whether or not the calling translation unit has opted in itself.
     using namespace linalg::ostream_overloads;
     return o << "[(" << b.min << "),(" << b.max << ")]";
 }

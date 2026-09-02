@@ -35,11 +35,10 @@ jobs:
             }
 
     steps:
-      # jpeg-xl/libultrahdr/libheif/libpng/imath/cli11/spdlog/fmt are deliberately not installed here: both
-      # configs in this matrix use -cpm presets, which build them from source via CPM regardless. Installing the
-      # Homebrew packages leaks /usr/local/include into the CPM build's implicit compiler search path on the
-      # Intel runner (where /usr/local/include is a default system include dir, unlike /opt/homebrew on Apple
-      # Silicon), shadowing CPM's own internal headers for those packages and breaking the build.
+      # jpeg-xl/libultrahdr/libheif/libpng/imath/cli11/spdlog/fmt are left out: both configs here use -cpm
+      # presets, which build them from source, and the Homebrew packages leak /usr/local/include into the CPM
+      # build's implicit search path on the Intel runner (a default system include dir there, unlike
+      # /opt/homebrew on Apple Silicon), shadowing CPM's own headers and breaking the build.
       - name: Install dependencies
         run: brew install ninja create-dmg dylibbundler little-cms2 aom libde265 x265
 
@@ -54,9 +53,8 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
 
-      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink and
-      # every installed Xcode SDK - prohibitively expensive to glob. cpm_modules is always at the workspace root
-      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
+      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink
+      # and every installed Xcode SDK. cpm_modules is always at the workspace root (CPM_SOURCE_CACHE above).
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"
@@ -143,9 +141,8 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
 
-      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink and
-      # every installed Xcode SDK - prohibitively expensive to glob. cpm_modules is always at the workspace root
-      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
+      # path and hashFiles avoid a workspace-root "**", scoped the same way as the macOS job above.
+      # cpm_modules is always at the workspace root (CPM_SOURCE_CACHE above).
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"
@@ -174,8 +171,8 @@ jobs:
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{ env.BUILD_TYPE }} -G External
 
-      # Verifies the artifact about to be published actually starts, unlike the build-tree --help check above
-      # (see .github/scripts/check-appimage.sh).
+      # verifies the artifact about to be published starts, unlike the build-tree --help check above; see
+      # .github/scripts/check-appimage.sh
       - name: Checking that the AppImage runs
         run: xvfb-run -a ${{github.workspace}}/.github/scripts/check-appimage.sh ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage
 
@@ -272,14 +269,14 @@ jobs:
   build_emscripten:
     name: Build and deploy emscripten webapp
     runs-on: ubuntu-24.04
-    # Prerelease tags share ci-emscripten.yml's /dev group (same destination_dir); final releases get
-    # their own, since /release is never touched by anything else.
+    # prerelease tags share ci-emscripten.yml's /dev group (same destination_dir); final releases get their
+    # own, since nothing else touches /release
     concurrency:
       group: gh-pages-deploy-${{ contains(github.ref_name, '-') && 'dev' || 'release' }}
 
     steps:
-      # Everything the wasm build links is fetched by CPM and compiled by emcc, so only the host-side build
-      # tools are needed here - none of the -dev packages the Linux jobs install.
+      # everything the wasm build links is fetched by CPM and compiled by emcc, so only host-side build tools
+      # are needed here, none of the -dev packages the Linux jobs install
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
@@ -287,12 +284,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Placed after the checkout, whose default clean would otherwise wipe actions-cache-folder back out
-      # of the workspace.
-      #
-      # Pinned rather than tracking latest, and kept in step with ci-emscripten.yml: this job publishes
-      # straight to gh-pages, so a toolchain regression ships a broken web app with nothing in the diff to
-      # explain it. Emscripten 4.0.13 does not build HDRView; don't pin back to it.
+      # Placed after the checkout, whose default clean would otherwise wipe actions-cache-folder back out of
+      # the workspace. Pinned, and kept in step with ci-emscripten.yml: this job publishes straight to
+      # gh-pages, so a toolchain regression ships a broken web app. Emscripten 4.0.13 does not build HDRView.
       - name: Install Emscripten
         uses: emscripten-core/setup-emsdk@v16
         with:
@@ -300,7 +294,7 @@ jobs:
           actions-cache-folder: emsdk-cache
 
       # cpm_modules is always at the workspace root (CPM_SOURCE_CACHE above), so neither path nor hashFiles
-      # needs a "**" that would walk into build/.
+      # needs a "**" that would walk into build/
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"
@@ -309,7 +303,7 @@ jobs:
             ${{ github.workflow }}-cpm-modules-
 
       # Caching of build artifacts to reduce total build time. This action only installs ccache and restores
-      # its cache; the compiler-launcher flags on the configure step are what route emcc through it.
+      # its cache; the compiler-launcher flags on the configure step route emcc through it.
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.23
 
@@ -333,9 +327,8 @@ jobs:
           cmake --install .
           mv deploy/HDRView.html deploy/index.html
 
-      # Final releases and prereleases (tags with a SemVer -suffix) each get their own destination_dir,
-      # so peaceiris/actions-gh-pages' default "wipe the deploy scope first" behavior can't delete the
-      # other's files.
+      # final releases and prereleases (tags with a SemVer -suffix) each get their own destination_dir, so
+      # peaceiris/actions-gh-pages' default "wipe the deploy scope first" cannot delete the other's files
 
       - name: Publish final release to /release
         if: ${{ !contains(github.ref_name, '-') }}
@@ -355,8 +348,8 @@ jobs:
           destination_dir: dev
           publish_dir: ${{github.workspace}}/build/emscripten/deploy
 
-      # Root is just a static redirect to /release/, redeployed each final release. keep_files: true
-      # since its destination_dir is the branch root, unlike the steps above.
+      # The root is a static redirect to /release/, redeployed each final release. keep_files: true since its
+      # destination_dir is the branch root, unlike the steps above.
       - name: Stage root redirect
         if: ${{ !contains(github.ref_name, '-') }}
         run: |

@@ -21,9 +21,8 @@
 namespace
 {
 
-// Encodes a single-pixel-per-value RGB QOI file holding `values` verbatim, tagged with `colorspace`
-// (QOI_SRGB or QOI_LINEAR). Going through qoi_encode() rather than save_qoi_image() keeps the stored
-// bytes exactly what the test asks for, independent of the save path's own gain/dither/transfer handling.
+// A single-pixel-per-value RGB QOI file holding `values` verbatim, tagged QOI_SRGB or QOI_LINEAR.
+// qoi_encode() is used directly so the save path's gain/dither/transfer handling doesn't alter the bytes.
 std::string encode_qoi_rgb(const std::vector<unsigned char> &values, unsigned char colorspace)
 {
     const int      w = (int)values.size();
@@ -41,9 +40,7 @@ std::string encode_qoi_rgb(const std::vector<unsigned char> &values, unsigned ch
 
 } // namespace
 
-// A QOI file tagged QOI_SRGB stores sRGB-encoded samples, so the loader has to linearize them the way every
-// other 8-bit loader does. The values below are the ones that separate "linearized" from "left encoded":
-// mid-gray 128 lands at 0.216 linear but 0.502 if the transfer function is skipped.
+// Mid-gray 128 separates the two: 0.216 linearized, 0.502 left encoded.
 TEST_CASE("QOI tagged sRGB is linearized on load")
 {
     const std::vector<unsigned char> values{0, 64, 128, 192, 255};
@@ -64,12 +61,10 @@ TEST_CASE("QOI tagged sRGB is linearized on load")
             CHECK(img->channels[c](x, 0) == doctest::Approx(expected).epsilon(1e-5));
         }
 
-    // The distinction the guard turns on: mid-gray must not still be its encoded value.
     CHECK(img->channels[0](2, 0) == doctest::Approx(0.21586f).epsilon(1e-4));
     CHECK(img->channels[0](2, 0) != doctest::Approx(128.f / 255.f).epsilon(1e-4));
 }
 
-// The other half of the same guard: a file that declares its samples already linear must be left alone.
 TEST_CASE("QOI tagged linear is not linearized on load")
 {
     const std::vector<unsigned char> values{0, 64, 128, 192, 255};

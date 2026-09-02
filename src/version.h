@@ -25,12 +25,10 @@ struct SemVer
 {
     int major = 0, minor = 0, patch = 0;
 
-    // Same combining formula as version_combined(), which is defined in terms of this so the two can't
-    // diverge.
+    // same combining formula as version_combined(), which is defined in terms of this
     int combined() const { return patch + 100 * (minor + 100 * major); }
 };
 
-/// Parses a leading "MAJOR.MINOR.PATCH" out of `s` (an optional leading 'v' is skipped; anything after the
-/// patch number, e.g. "-6-gbd77763-dirty", is ignored). Returns std::nullopt if `s` doesn't start with
-/// three dot-separated non-negative integers.
+/// Parses a leading "MAJOR.MINOR.PATCH" out of `s`, or nullopt if it does not start with one.
+/** A leading 'v' is skipped, and anything after the patch number, e.g. "-6-gbd77763-dirty", is ignored. */
 std::optional<SemVer> parse_version(std::string_view s);

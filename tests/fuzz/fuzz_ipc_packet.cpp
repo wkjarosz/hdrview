@@ -4,13 +4,11 @@
 // be found in the LICENSE.txt file.
 //
 
-// libFuzzer entry point for the IPC packet parser. Unlike the image loaders, whose input is a file the user
-// chose to open, this input arrives unprompted over a socket from another process -- so every count, offset
-// and stride in it is attacker-controlled, and the parser is the only thing standing between them and the
-// image model.
+// libFuzzer entry point for the IPC packet parser, whose input arrives unprompted over a socket from
+// another process: every count, offset and stride in it is attacker-controlled.
 //
-// Feeding the bytes through extract_ipc_packets() rather than straight to IpcPacket covers the framing too:
-// the length prefix decides how much is read, so it is as much part of the attack surface as the payload.
+// The bytes go through extract_ipc_packets() to cover the framing too: the length prefix decides how much
+// is read, so it is as much part of the attack surface as the payload.
 //
 // Build:  cmake --preset linux-cpm -B build/fuzz -DHDRVIEW_BUILD_FUZZERS=ON \
 //                -DUSE_SANITIZER="Address;Undefined" -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -44,9 +42,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
             buffer,
             [](const IpcPacket &packet)
             {
-                // Read each packet as whatever it claims to be. Reading it as the wrong type
-                // throws, which is the parser working, so the type is dispatched on rather
-                // than every reader being tried.
+                // read each packet as whatever it claims to be; reading it as the wrong type
+                // throws, which is the parser working
                 try
                 {
                     switch (packet.type())
@@ -61,10 +58,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
                     case IpcPacketType::UpdateImageV3:
                     {
                         const auto update = packet.as_update_image();
-                        // Touch every sample the parser said was addressable: an offset or
-                        // stride that passed validation but does not actually land inside
-                        // the payload is exactly the bug worth finding, and it only shows
-                        // up when the addressing is used.
+                        // touch every sample the parser said was addressable: an offset or
+                        // stride that passed validation but does not land inside the payload
+                        // shows up only when the addressing is used
                         const int64_t  n_pixels = int64_t(update.bounds.size().x) * update.bounds.size().y;
                         volatile float sink     = 0.f;
                         for (int c = 0; c < update.num_channels(); ++c)
@@ -75,9 +71,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
                     }
                     case IpcPacketType::VectorGraphics:
                     {
-                        // The command stream carries no per-command length -- each type implies its own --
-                        // so a wrong entry in that table walks the parser into the next command's bytes.
-                        // Reading every command's arguments back is what makes such a slip observable.
+                        // the command stream carries no per-command length, each type implying its own, so
+                        // a wrong entry in that table walks the parser into the next command's bytes;
+                        // reading every command's arguments back makes such a slip observable
                         const auto     vg   = packet.as_vector_graphics();
                         volatile float sink = 0.f;
                         for (const auto &cmd : vg.commands)
@@ -93,13 +89,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
                 }
                 catch (const std::exception &)
                 {
-                    // Refusing a malformed packet is the correct behavior, not a finding.
+                    // refusing a malformed packet is the correct behavior, not a finding
                 }
             });
     }
     catch (const std::exception &)
     {
-        // Likewise for a stream whose framing is unusable.
+        // likewise for a stream whose framing is unusable
     }
 
     return 0;

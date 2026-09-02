@@ -46,16 +46,16 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
     }
 }
 
-// The round-trip test above passes for any choice of normalization constant, since to_linear and from_linear
-// scale by it symmetrically. These cases pin the absolute mapping against the values BT.2100/BT.2408 specify.
+// The round trip above passes for any normalization constant, since to_linear and from_linear scale by it
+// symmetrically. These pin the absolute mapping against the values BT.2100/BT.2408 specify.
 TEST_CASE("PQ maps absolute luminance relative to BT.2408 reference white")
 {
-    // The PQ EOTF is defined over 0 to 10000 cd/m^2.
+    // the PQ EOTF is defined over 0 to 10000 cd/m^2
     CHECK(EOTF_BT2100_PQ(1.0f) == doctest::Approx(10000.f));
     CHECK(EOTF_BT2100_PQ(0.0f) == doctest::Approx(0.f));
 
-    // to_linear additionally normalizes so that reference white lands at 1.0. These expectations spell out 203
-    // rather than referring to HDR_REFERENCE_WHITE_NITS, so that they pin the constant instead of tracking it.
+    // to_linear also normalizes so reference white lands at 1.0. 203 is spelled out here rather than taken
+    // from HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of tracking it.
     CHECK(to_linear(1.0f, TransferFunction::BT2100_PQ) == doctest::Approx(10000.f / 203.f));
 
     const float reference_white_signal = inverse_EOTF_BT2100_PQ(203.f);
@@ -64,8 +64,8 @@ TEST_CASE("PQ maps absolute luminance relative to BT.2408 reference white")
 
 TEST_CASE("HLG maps its 75% reference level to BT.2408 reference white")
 {
-    // BT.2408 places HLG reference white at 75% signal, which the 1000 cd/m^2 reference display renders at
-    // approximately 203 cd/m^2.
+    // BT.2408 places HLG reference white at 75% signal, which a 1000 cd/m^2 reference display renders at
+    // about 203 cd/m^2
     CHECK(EOTF_BT2100_HLG(0.75f) == doctest::Approx(203.f).epsilon(0.002));
     CHECK(to_linear(0.75f, TransferFunction::BT2100_HLG) == doctest::Approx(1.f).epsilon(0.002));
 }
@@ -77,8 +77,7 @@ TEST_CASE("HLG system gamma follows display peak luminance")
     CHECK(HLG_system_gamma(500.f) == doctest::Approx(1.2f - 0.42f * std::log10(2.f)));
 }
 
-// Narrow (studio) range packs luma into 16..235, a span of 219. This 219 is unrelated to the HDR reference
-// white above; the two must not be conflated.
+// Narrow (studio) range packs luma into 16..235, a span of 219, unrelated to the HDR reference white above.
 TEST_CASE("narrow-range dequantization maps the studio range to [0,1]")
 {
     CHECK(dequantize_narrow<uint8_t>(16) == doctest::Approx(0.f));
@@ -123,10 +122,8 @@ TEST_CASE("RGB_to_XYZ/XYZ_to_RGB are inverses for the default (sRGB/BT.709) prim
 
 TEST_CASE("color_conversion_matrix's Rec.709->BT.2020 matches the published ITU-R BT.2087 reference matrix")
 {
-    // The HDR colorpass shader needs a linear-light Rec.709 -> BT.2020 primaries conversion. Confirms
-    // color_conversion_matrix() (computed from this codebase's own Chromaticities tables) agrees with the
-    // commonly published ITU-R BT.2087 reference matrix, so the shader can use the former (computed in C++,
-    // uploaded as a uniform) instead of hardcoding the latter.
+    // The colorpass uploads color_conversion_matrix()'s linear-light Rec.709 -> BT.2020 as a uniform instead
+    // of hardcoding the published matrix, so the two have to agree.
     float3x3 M;
     bool     needs_conversion = color_conversion_matrix(M, gamut_chromaticities(ColorGamut_sRGB_BT709),
                                                         gamut_chromaticities(ColorGamut_BT2020_2100));
@@ -143,21 +140,19 @@ TEST_CASE("color_conversion_matrix's Rec.709->BT.2020 matches the published ITU-
 
 TEST_CASE("color_conversion_matrix generalizes to the colorpass's other reachable display gamuts")
 {
-    // The colorpass uploads color_conversion_matrix(Rec.709 -> display primaries) as a uniform, so every
-    // gamut query_display_colorspace() can produce has to survive that call. Display-P3 is the one most
-    // likely to actually show up (Wayland reports it, and it is what most laptop panels advertise).
+    // Every gamut query_display_colorspace() can produce has to survive that call. Display-P3 is the one most
+    // likely to show up: Wayland reports it, and most laptop panels advertise it.
     float3x3 M;
     CHECK(color_conversion_matrix(M, gamut_chromaticities(ColorGamut_sRGB_BT709),
                                   gamut_chromaticities(ColorGamut_Display_P3_SMPTE432)));
 
-    // White must stay white: an equal-energy RGB triple is the same color in both gamuts, since they share
-    // the D65 white point. This is the property the shader actually depends on.
+    // white stays white: an equal-energy RGB triple is the same color in both gamuts, which share D65
     float3 white = mul(M, float3{1.f, 1.f, 1.f});
     INFO("M * (1,1,1) = ", white);
     CHECK(approx_equal(white, float3{1.f, 1.f, 1.f}, 1e-4f));
 
-    // Rec.709 is a subset of Display-P3, so saturated primaries must map inside the unit cube (no negative
-    // lobes), unlike the reverse direction.
+    // Rec.709 is a subset of Display-P3, so saturated primaries map inside the unit cube with no negative
+    // lobes, unlike the reverse direction
     for (const float3 &primary : {float3{1, 0, 0}, float3{0, 1, 0}, float3{0, 0, 1}})
     {
         float3 converted = mul(M, primary);
@@ -165,8 +160,8 @@ TEST_CASE("color_conversion_matrix generalizes to the colorpass's other reachabl
         CHECK(la::all(la::gequal(converted, float3{-1e-4f})));
     }
 
-    // And converting a gamut to itself must be reported as unnecessary, which is what lets the colorpass
-    // keep an identity matrix in the common sRGB case.
+    // and converting a gamut to itself is reported as unnecessary, so the colorpass keeps an identity matrix
+    // in the common sRGB case
     float3x3 I;
     CHECK_FALSE(color_conversion_matrix(I, gamut_chromaticities(ColorGamut_sRGB_BT709),
                                         gamut_chromaticities(ColorGamut_sRGB_BT709)));
@@ -175,21 +170,18 @@ TEST_CASE("color_conversion_matrix generalizes to the colorpass's other reachabl
 TEST_CASE("the image shader isolates luminance in the primaries it has already converted to")
 {
     // assets/shaders/image-shader.sglsl converts every image into sRGB/BT.709 primaries before
-    // choose_channel() runs, so the Channels_Y case weighs with sRGB's own luminance weights -- spelled out
-    // in colorspaces.sglsl as sRGB_Yw, since GLSL can't include colorspace.h. If you edit either side, edit
-    // both.
-    // The shader spells them as the middle row of its own RGB2XYZ, the classic rounded sRGB matrix, while
-    // colorspace.h derives them from the BT.709 chromaticities; the two agree to about 3e-5 per weight,
-    // which is well under a code value at any bit depth HDRView displays.
+    // choose_channel() runs, so Channels_Y weighs with sRGB's own luminance weights, spelled out in
+    // colorspaces.sglsl as sRGB_Yw since GLSL cannot include colorspace.h. Edit either side, edit both.
+    // The shader takes them from the middle row of the classic rounded sRGB matrix and colorspace.h derives
+    // them from the BT.709 chromaticities; the two agree to about 3e-5 per weight.
     const float3 glsl_sRGB_Yw{0.212671f, 0.715160f, 0.072169f};
     INFO("colorspace.h says ", sRGB_Yw().x, ", ", sRGB_Yw().y, ", ", sRGB_Yw().z);
     CHECK(approx_equal(sRGB_Yw(), glsl_sRGB_Yw, 1e-4f));
     CHECK(glsl_sRGB_Yw.x + glsl_sRGB_Yw.y + glsl_sRGB_Yw.z == doctest::Approx(1.f).epsilon(1e-5));
 
-    // What makes those the right weights for a value that arrived in some other gamut: luminance is a
-    // property of the color, not of the primaries it is written in, so converting into sRGB and weighing
-    // with sRGB's weights recovers the luminance the source gamut's own weights describe. Restricted to
-    // gamuts that share sRGB's D65 white, since a chromatic adaptation is free to move Y.
+    // Luminance is a property of the color, not of the primaries it is written in, so converting into sRGB
+    // and weighing with sRGB's weights recovers what the source gamut's own weights describe. Restricted to
+    // gamuts sharing sRGB's D65 white, since a chromatic adaptation is free to move Y.
     for (ColorGamut_ gamut : {ColorGamut_Display_P3_SMPTE432, ColorGamut_BT2020_2100, ColorGamut_AdobeRGB})
     {
         const Chromaticities chr = gamut_chromaticities(gamut);
@@ -207,8 +199,7 @@ TEST_CASE("the image shader isolates luminance in the primaries it has already c
             CHECK(dot(mul(M, rgb), sRGB_Yw()) == doctest::Approx(dot(rgb, native_Yw)).epsilon(1e-4));
         }
 
-        // And that the weights actually differ, so the check above is not passing on a coincidence: this
-        // is the whole reason using the source gamut's weights after the conversion is wrong.
+        // and the weights differ, so the check above is not passing on a coincidence
         CHECK_FALSE(approx_equal(native_Yw, sRGB_Yw(), 1e-3f));
     }
 }
@@ -216,25 +207,23 @@ TEST_CASE("the image shader isolates luminance in the primaries it has already c
 TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_PQ")
 {
     // assets/shaders/colorspaces.sglsl's pq_encode() hand-duplicates the five ST.2084 constants as decimal
-    // literals, because GLSL can't include colorspace.h. Nothing in the build enforces that they stay in
-    // sync -- this test does. If you edit either side, edit both.
+    // literals, since GLSL cannot include colorspace.h; nothing in the build keeps them in sync. Edit either
+    // side, edit both.
     //
-    // First: the decimals in the shader are exactly the rationals in colorspace.h, not approximations. Every
-    // one of these has a power-of-two denominator, so it is exactly representable and == is the right test.
+    // First, the decimals in the shader are the rationals in colorspace.h and not approximations. Each has a
+    // power-of-two denominator, so it is exactly representable and == is the right test.
     CHECK(0.1593017578125 == 2610.0 / 16384.0);
     CHECK(78.84375 == 2523.0 * 128.0 / 4096.0);
     CHECK(0.8359375 == 3424.0 / 4096.0);
     CHECK(18.8515625 == 2413.0 / 4096.0 * 32.0);
     CHECK(18.6875 == 2392.0 / 4096.0 * 32.0);
 
-    // Second, and more important: the shader's *calling convention*. pq_encode() consumes absolute nits and
-    // does its own /10000 normalization, matching inverse_EOTF_BT2100_PQ() one-for-one. This is deliberately
-    // NOT the convention of colorspace.h's from_linear(), which pre-multiplies by HDR_REFERENCE_WHITE_NITS
-    // (see below) -- feeding the shader a from_linear()-style value would silently shift everything on
-    // screen by ~2.7 stops.
+    // Second, the calling convention: pq_encode() consumes absolute nits and does its own /10000
+    // normalization, matching inverse_EOTF_BT2100_PQ(). That is not from_linear()'s convention, which
+    // pre-multiplies by HDR_REFERENCE_WHITE_NITS; feeding the shader one of those shifts the screen 2.7 stops.
     auto glsl_pq_encode = [](float nits)
     {
-        // Transcribed literally from pq_encode() in assets/shaders/colorspaces.sglsl.
+        // transcribed from pq_encode() in assets/shaders/colorspaces.sglsl
         const float m1  = 0.1593017578125f;
         const float m2  = 78.84375f;
         const float c1  = 0.8359375f;
@@ -251,18 +240,17 @@ TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_
         CHECK(glsl_pq_encode(nits) == doctest::Approx(inverse_EOTF_BT2100_PQ(nits)).epsilon(1e-5));
     }
 
-    // PQ has no negative representation; both sides must clip rather than produce NaN from pow().
+    // PQ has no negative representation; both sides clip instead of producing NaN from pow()
     CHECK(glsl_pq_encode(-100.f) == doctest::Approx(0.f));
 
-    // Anchor points, so a botched edit that keeps the two implementations consistent but wrong still fails:
-    // PQ is absolute, with 10000 nits at the top of the range and the SDR reference at ~0.58.
+    // anchors, so an edit that keeps the two implementations consistent but wrong still fails: PQ is
+    // absolute, with 10000 nits at the top of the range and the SDR reference at ~0.58
     CHECK(inverse_EOTF_BT2100_PQ(10000.f) == doctest::Approx(1.f));
     CHECK(inverse_EOTF_BT2100_PQ(0.f) == doctest::Approx(0.f));
     CHECK(inverse_EOTF_BT2100_PQ(203.f) == doctest::Approx(0.5806f).epsilon(1e-3));
 
-    // Pin the reference-white divergence itself: from_linear() treats 1.0 as HDR_REFERENCE_WHITE_NITS (203
-    // cd/m^2, the BT.2408 reference white), so it is NOT interchangeable with the shader's absolute-nits
-    // input.
+    // from_linear() treats 1.0 as HDR_REFERENCE_WHITE_NITS (203 cd/m^2), so it is not interchangeable with
+    // the shader's absolute-nits input
     CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) ==
           doctest::Approx(inverse_EOTF_BT2100_PQ(HDR_REFERENCE_WHITE_NITS)));
     CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(inverse_EOTF_BT2100_PQ(1.f)));
@@ -270,8 +258,8 @@ TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_
 
 TEST_CASE("blend()'s overloads agree on every blend mode")
 {
-    // The three overloads are separate switches over the same enum, so a mode present in one and absent
-    // from another silently blends as whatever its `default:` is.
+    // the three overloads are separate switches over the same enum, so a mode present in one and missing
+    // from another blends as whatever its `default:` is
     const float top = 0.6f, bottom = 0.25f, top_a = 0.75f, bottom_a = 0.5f;
 
     for (int m = 0; m < BlendMode_COUNT; ++m)
@@ -283,15 +271,14 @@ TEST_CASE("blend()'s overloads agree on every blend mode")
         float2 v2 = blend(float2{top, top_a}, float2{bottom, bottom_a}, mode);
         float4 v4 = blend(float4{top, top, top, top_a}, float4{bottom, bottom, bottom, bottom_a}, mode);
 
-        // The two vector overloads carry the same alpha and must agree on both color and alpha.
+        // the two vector overloads carry the same alpha and must agree on both color and alpha
         CHECK(v2.x == doctest::Approx(v4.x));
         CHECK(v4.x == doctest::Approx(v4.y));
         CHECK(v4.x == doctest::Approx(v4.z));
         CHECK(v2.y == doctest::Approx(v4.w));
 
-        // The scalar overload has no alpha to composite with, so for Normal it keeps the top sample rather
-        // than compositing -- which is what the statistics pass wants of it. Every other mode is pure
-        // per-channel arithmetic and must match.
+        // the scalar overload has no alpha to composite with, so Normal keeps the top sample, as the
+        // statistics pass wants; every other mode is per-channel arithmetic and must match
         if (mode != BlendMode_Normal)
             CHECK(v4.x == doctest::Approx(s));
     }
@@ -299,16 +286,16 @@ TEST_CASE("blend()'s overloads agree on every blend mode")
 
 TEST_CASE("blend() keeps fractional results in the difference modes")
 {
-    // colorspace.h is a header, where only a qualified std::abs is sure to reach the floating-point
-    // overloads: libstdc++ leaves just <stdlib.h>'s integer ::abs at global scope, libc++ the float ones
-    // too. Every difference here is below 1, so an integer abs would return exactly zero.
+    // colorspace.h is a header, where only a qualified std::abs is sure to reach the floating-point overloads:
+    // libstdc++ leaves only <stdlib.h>'s integer ::abs at global scope. Every difference here is below 1, so an
+    // integer abs would return zero.
     const float top = 0.6f, bottom = 0.25f;
 
     CHECK(blend(top, bottom, BlendMode_Difference) == doctest::Approx(0.35f));
     CHECK(blend(bottom, top, BlendMode_Difference) == doctest::Approx(0.35f));
     CHECK(blend(top, bottom, BlendMode_Relative_Difference) == doctest::Approx(0.35f / 0.26f));
 
-    // Also below 1 with the operands the other way round.
+    // also below 1 with the operands the other way round
     CHECK(blend(0.2f, 0.1f, BlendMode_Difference) == doctest::Approx(0.1f));
     CHECK(blend(0.1f, 0.2f, BlendMode_Difference) == doctest::Approx(0.1f));
 }
@@ -316,8 +303,7 @@ TEST_CASE("blend() keeps fractional results in the difference modes")
 namespace
 {
 
-//! Colors spanning what an HSL adjustment has to handle, including the ones outside [0,1] that a textbook
-//! HSL has no answer for.
+/// Colors spanning what an HSL adjustment has to handle, including values outside [0,1].
 const float3 k_hsl_colors[] = {
     {0.5f, 0.25f, 0.125f}, {1.f, 0.f, 0.f},    {0.f, 1.f, 0.f},       {0.f, 0.f, 1.f}, {0.2f, 0.7f, 0.9f},
     {0.f, 0.f, 0.f},       {1.f, 1.f, 1.f},    {0.35f, 0.35f, 0.35f}, // achromatic, where hue is undefined
@@ -330,8 +316,8 @@ float hsl_spread(float3 c) { return std::max({c.x, c.y, c.z}) - std::min({c.x, c
 
 TEST_CASE("a color survives the trip through HSL and back")
 {
-    // What makes these usable on an HDR image at all: the textbook version measures saturation as a
-    // fraction of the unit range, which has no meaning for a value brighter than white, and loses it.
+    // the textbook version measures saturation as a fraction of the unit range, which has no meaning for a
+    // value brighter than white
     for (const float3 &rgb : k_hsl_colors)
     {
         CAPTURE(rgb.x);
@@ -361,7 +347,7 @@ TEST_CASE("HSL's lightness is the midpoint of the extremes, and gray has no hue"
         CHECK(hsl.x >= 0.f);
         CHECK(hsl.x <= 1.f);
 
-        // The case a hue rotation has to leave alone: there is no hue to rotate.
+        // no hue to rotate, which a rotation has to leave alone
         if (mx - mn < 1e-6f)
             CHECK(hsl.y == doctest::Approx(0.f));
         else
@@ -371,8 +357,7 @@ TEST_CASE("HSL's lightness is the midpoint of the extremes, and gray has no hue"
 
 TEST_CASE("an HSL adjustment that asks for nothing changes nothing")
 {
-    // Exact rather than approximate: this is what an opened dialog applies before any slider is touched,
-    // and a whole turn of the hue has to land back where it started for the same reason.
+    // exact, not approximate: this is what an opened dialog applies before any slider is touched
     for (const float3 &rgb : k_hsl_colors)
     {
         CAPTURE(rgb.x);
@@ -411,7 +396,7 @@ TEST_CASE("rotating the hue moves it around the wheel and leaves the lightness a
             moved -= std::floor(moved + 0.5f); // the shortest way round, so the wrap does not count
             CHECK(std::abs(moved) < 0.01f);
 
-            // A rotation is a move around the wheel and nothing else.
+            // a rotation is a move around the wheel and nothing else
             CHECK(out.z == doctest::Approx(hsl.z).epsilon(1e-3));
         }
     }
@@ -429,17 +414,16 @@ TEST_CASE("saturation spreads the components apart, and zero of it leaves gray")
         CHECK(gray.y == doctest::Approx(gray.x).epsilon(1e-3));
         CHECK(gray.z == doctest::Approx(gray.x).epsilon(1e-3));
 
-        // At the lightness it had, which says desaturating did not also darken it.
+        // at the lightness it had, so desaturating did not also darken it
         CHECK(gray.x == doctest::Approx(RGB_to_HSL(rgb).z).epsilon(1e-3));
 
-        // A turn of something with no hue is a no-op, whichever path the adjustment takes through it.
+        // a turn of something with no hue is a no-op, whichever path the adjustment takes
         const float3 turned = adjust_HSL(gray, 0.25f, 1.f, 0.f);
         CHECK(turned.x == doctest::Approx(gray.x).epsilon(1e-3));
         CHECK(turned.y == doctest::Approx(gray.y).epsilon(1e-3));
         CHECK(turned.z == doctest::Approx(gray.z).epsilon(1e-3));
 
-        // Monotonic either side of where it started, which is what a slider needs and what an
-        // implementation that clamps somewhere in the middle would lose.
+        // monotonic either side of where it started, as a slider needs
         if (RGB_to_HSL(rgb).y > 1e-6f)
         {
             CHECK(hsl_spread(adjust_HSL(rgb, 0.f, 0.5f, 0.f)) < hsl_spread(rgb));
@@ -450,8 +434,7 @@ TEST_CASE("saturation spreads the components apart, and zero of it leaves gray")
 
 TEST_CASE("the lightness control mixes toward black and white rather than washing the color out")
 {
-    // Photoshop's slider of that name: changing L directly desaturates on the way, so at the ends this has
-    // to land exactly on black and white, and halfway exactly halfway.
+    // Photoshop's slider of that name; changing L directly desaturates on the way
     const float3 rgb{0.5f, 0.25f, 0.125f};
 
     const float3 black = adjust_HSL(rgb, 0.f, 1.f, -1.f);
@@ -469,13 +452,12 @@ TEST_CASE("the lightness control mixes toward black and white rather than washin
 
 TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen for")
 {
-    // These are shape functions, and what makes them usable is a handful of exact identities rather than
-    // their formulas -- so those are what is checked.
+    // shape functions, checked on the identities that make them usable rather than on their formulas
     for (float P : {0.25f, 0.5f, 1.f, 2.f, 4.f})
     {
         CAPTURE(P);
 
-        // Pinned at both ends and at the middle, whatever the shape.
+        // pinned at both ends and at the middle, whatever the shape
         CHECK(gain_Perlin(0.f, P) == doctest::Approx(0.f));
         CHECK(gain_Perlin(0.5f, P) == doctest::Approx(0.5f));
         CHECK(gain_Perlin(1.f, P) == doctest::Approx(1.f));
@@ -485,11 +467,11 @@ TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen 
             const float t = float(i) / 20.f;
             CAPTURE(t);
 
-            // An exponent of one is the identity, and the inverse exponent undoes it.
+            // an exponent of one is the identity, and the inverse exponent undoes it
             CHECK(gain_Perlin(t, 1.f) == doctest::Approx(t));
             CHECK(gain_Perlin(gain_Perlin(t, P), 1.f / P) == doctest::Approx(t).epsilon(1e-4));
 
-            // It never leaves [0,1], which is the whole reason for having it beside the straight line.
+            // it never leaves [0,1]
             CHECK(gain_Perlin(t, P) >= -1e-6f);
             CHECK(gain_Perlin(t, P) <= 1.f + 1e-6f);
         }
@@ -499,12 +481,12 @@ TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen 
     {
         CAPTURE(a);
 
-        // Bias is defined by where it sends the midpoint, which is the parameter itself.
+        // bias is defined by where it sends the midpoint, which is the parameter itself
         CHECK(bias_Schlick(0.f, a) == doctest::Approx(0.f));
         CHECK(bias_Schlick(0.5f, a) == doctest::Approx(a));
         CHECK(bias_Schlick(1.f, a) == doctest::Approx(1.f));
 
-        // Monotone, so it reorders nothing.
+        // monotone, so it reorders nothing
         float previous = -1.f;
         for (int i = 0; i <= 20; ++i)
         {
@@ -517,9 +499,8 @@ TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen 
 
 TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and steepen together")
 {
-    // What the two controls mean, taken from the sliders rather than from the functions: contrast is an
-    // angle, so that its ends are a flat line and a vertical one, and brightness slides the point the
-    // curve pivots about.
+    // What the sliders mean: contrast is an angle, so its ends are a flat line and a vertical one, and
+    // brightness slides the point the curve pivots about.
     auto slope_of    = [](float c) { return float(std::tan(lerp(0.0, M_PI_2, c / 2.0 + 0.5))); };
     auto midpoint_of = [](float b) { return (1.f - b) / 2.f; };
     auto bias_of     = [](float b) { return (b + 1.f) / 2.f; };
@@ -530,7 +511,7 @@ TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and ste
     CHECK(midpoint_of(0.f) == doctest::Approx(0.5f));
     CHECK(bias_of(0.f) == doctest::Approx(0.5f));
 
-    // Neither curve moves anything when both controls are centered.
+    // neither curve moves anything when both controls are centered
     for (int i = 0; i <= 20; ++i)
     {
         const float v = float(i) / 20.f;
@@ -539,7 +520,7 @@ TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and ste
         CHECK(brightness_contrast_nonlinear(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
     }
 
-    // Raising contrast pushes the ends apart about the midpoint, and both curves still meet at it.
+    // raising contrast pushes the ends apart about the midpoint, and both curves still meet at it
     for (float c : {0.3f, 0.6f})
     {
         CAPTURE(c);
@@ -554,8 +535,8 @@ TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and ste
         CHECK(brightness_contrast_nonlinear(0.25f, slope, 0.5f) < 0.25f);
     }
 
-    // The difference between them: the straight line runs out of [0,1] and is meant to, so that an HDR
-    // sample keeps its relation to its neighbors; the s-curve approaches the ends without reaching them.
+    // the straight line runs out of [0,1], so an HDR sample keeps its relation to its neighbors; the s-curve
+    // approaches the ends without reaching them
     const float steep = slope_of(0.8f);
     CHECK(brightness_contrast_linear(1.f, steep, 0.5f) > 1.f);
     CHECK(brightness_contrast_linear(0.f, steep, 0.5f) < 0.f);
@@ -567,31 +548,30 @@ TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and ste
         CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) <= 1.f + 1e-6f);
     }
 
-    // Brightness moves which input lands on the middle, in opposite directions for the two curves'
-    // parameters but to the same effect: a positive setting lifts the picture.
+    // brightness moves which input lands on the middle, in opposite directions for the two curves' parameters
+    // but to the same effect
     CHECK(brightness_contrast_linear(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
     CHECK(brightness_contrast_nonlinear(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
 }
 
 TEST_CASE("L*a*b* agrees with the values the standard defines it by")
 {
-    // Checked against the definition rather than against itself: a round trip would pass just as well
-    // with both halves wrong in the same way.
+    // checked against the definition, since a round trip passes just as well with both halves wrong the same way
     const float3 white = Lab_reference_white();
 
-    // The reference white is the point L* is scaled to, and it is achromatic.
+    // the reference white is the point L* is scaled to, and it is achromatic
     const float3 w = XYZ_to_Lab(white, white);
     CHECK(w.x == doctest::Approx(100.f).epsilon(1e-4));
     CHECK(w.y == doctest::Approx(0.f).epsilon(1e-4));
     CHECK(w.z == doctest::Approx(0.f).epsilon(1e-4));
 
-    // Black is the other end, and also achromatic.
+    // black is the other end, and also achromatic
     const float3 k = XYZ_to_Lab(float3{0.f, 0.f, 0.f}, white);
     CHECK(k.x == doctest::Approx(0.f).epsilon(1e-4));
     CHECK(k.y == doctest::Approx(0.f).epsilon(1e-4));
     CHECK(k.z == doctest::Approx(0.f).epsilon(1e-4));
 
-    // Any neutral is achromatic whatever its level, since the three ratios to the white are equal.
+    // any neutral is achromatic whatever its level, since the three ratios to the white are equal
     for (float y : {0.02f, 0.18f, 0.5f, 0.9f})
     {
         CAPTURE(y);
@@ -600,8 +580,8 @@ TEST_CASE("L*a*b* agrees with the values the standard defines it by")
         CHECK(gray.z == doctest::Approx(0.f).epsilon(1e-3));
     }
 
-    // The two published anchors of the lightness curve: mid gray at Y = 0.18 sits near L* = 49.5, and the
-    // linear segment below Y = 216/24389 has slope kappa = 24389/27 in Y.
+    // the published anchors of the lightness curve: mid gray at Y = 0.18 sits near L* = 49.5, and the linear
+    // segment below Y = 216/24389 has slope kappa = 24389/27 in Y
     CHECK(XYZ_to_Lab(white * 0.184187f, white).x == doctest::Approx(50.f).epsilon(1e-3));
 
     const float y_knee = 216.f / 24389.f;
@@ -609,7 +589,7 @@ TEST_CASE("L*a*b* agrees with the values the standard defines it by")
     const float y_small = 0.5f * y_knee;
     CHECK(XYZ_to_Lab(white * y_small, white).x == doctest::Approx((24389.f / 27.f) * y_small).epsilon(1e-3));
 
-    // L* rises with luminance and nothing else does.
+    // L* rises with luminance and nothing else does
     float previous = -1.f;
     for (int i = 0; i <= 20; ++i)
     {
@@ -618,8 +598,8 @@ TEST_CASE("L*a*b* agrees with the values the standard defines it by")
         previous = lab.x;
     }
 
-    // a* is the green-red axis and b* the blue-yellow one: more X than the white asks for reads red, more
-    // Z reads blue.
+    // a* is the green-red axis and b* the blue-yellow one: more X than the white asks for reads red, more Z
+    // reads blue
     CHECK(XYZ_to_Lab(float3{white.x * 1.2f, white.y, white.z}, white).y > 0.f);
     CHECK(XYZ_to_Lab(float3{white.x * 0.8f, white.y, white.z}, white).y < 0.f);
     CHECK(XYZ_to_Lab(float3{white.x, white.y, white.z * 1.2f}, white).z < 0.f);
@@ -630,8 +610,7 @@ TEST_CASE("A color survives the trip through L*a*b* and back")
 {
     const float3 white = Lab_reference_white();
 
-    // Across the linear segment near black and the cube root above it, and out past the white, since an
-    // HDR sample is not bounded by it.
+    // across the linear segment near black, the cube root above it, and out past the white
     for (float x : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
         for (float y : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
             for (float z : {0.0f, 0.002f, 0.05f, 0.4f, 1.0f, 4.0f})
@@ -648,7 +627,7 @@ TEST_CASE("A color survives the trip through L*a*b* and back")
                 CHECK(back.z == doctest::Approx(z).epsilon(1e-3));
             }
 
-    // And through the normalized form the editing controls use.
+    // and through the normalized form the editing controls use
     for (float L : {0.f, 12.f, 50.f, 88.f, 100.f})
         for (float a : {-100.f, -20.f, 0.f, 35.f, 120.f})
         {
@@ -662,8 +641,8 @@ TEST_CASE("A color survives the trip through L*a*b* and back")
             CHECK(back.z == doctest::Approx(-a).epsilon(1e-4));
         }
 
-    // The normalized form puts black at zero, the white's lightness at one, and neutral chroma in the
-    // middle -- which is what lets a tone curve be applied to it unchanged.
+    // the normalized form puts black at zero, the white's lightness at one, and neutral chroma in the middle,
+    // so a tone curve applies to it unchanged
     const float3 n = normalize_Lab(float3{100.f, 0.f, 0.f});
     CHECK(n.x == doctest::Approx(1.f).epsilon(1e-4));
     CHECK(n.y == doctest::Approx(0.5f).epsilon(1e-4));
@@ -673,9 +652,8 @@ TEST_CASE("A color survives the trip through L*a*b* and back")
 
 TEST_CASE("sRGB primaries land where L*a*b* is documented to put them")
 {
-    // The whole path an edit takes -- linear sRGB through XYZ into L*a*b* -- against values published for
-    // the sRGB primaries under D65. These catch a transposed matrix or a swapped axis, which the
-    // achromatic checks above cannot see.
+    // The path an edit takes, linear sRGB through XYZ into L*a*b*, against values published for the sRGB
+    // primaries under D65. These catch a transposed matrix or a swapped axis; the achromatic checks cannot.
     const float3 white  = Lab_reference_white();
     auto         lab_of = [&](float3 rgb) { return XYZ_to_Lab(mul(sRGB_to_XYZ(), rgb), white); };
 
@@ -694,7 +672,7 @@ TEST_CASE("sRGB primaries land where L*a*b* is documented to put them")
     CHECK(blue.y == doctest::Approx(79.19f).epsilon(2e-3));
     CHECK(blue.z == doctest::Approx(-107.86f).epsilon(2e-3));
 
-    // White through the same path, which ties the matrix and the reference white together.
+    // white through the same path, tying the matrix and the reference white together
     const float3 w = lab_of(float3{1.f, 1.f, 1.f});
     CHECK(w.x == doctest::Approx(100.f).epsilon(1e-3));
     CHECK(w.y == doctest::Approx(0.f).epsilon(2e-2));

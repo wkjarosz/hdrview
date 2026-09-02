@@ -15,15 +15,14 @@
 
 TEST_CASE("PSDMetadata::color_mode_name is defined for every 16-bit value")
 {
-    // color_mode is whatever uint16 the file's header holds -- including PSDMetadata's own NotSet default
-    // of 0xFFFF -- while the names table has ten entries, so it is not an index to use unchecked.
+    // color_mode is any uint16 the header holds, including the NotSet default of 0xFFFF; the names table
+    // has ten entries, so it is not an index to use unchecked
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::RGB)) == "RGB");
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::Bitmap)) == "Bitmap");
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::Lab)) == "Lab");
     CHECK(std::string(PSDMetadata::color_mode_name(PSDMetadata::NotSet)) == "Unknown");
 
-    // Every value the header can hold has to name something, not walk off the table. Counted rather than
-    // asserted per iteration, so one summary failure stands in for 65536 identical ones.
+    // counted, so one summary failure stands in for 65536 identical ones
     int bad = 0;
     for (int m = 0; m <= 0xFFFF; ++m)
     {
@@ -43,11 +42,10 @@ void be32(std::string &o, uint32_t v)
     for (int i = 3; i >= 0; --i) o += char((v >> (8 * i)) & 0xff);
 }
 
-//! A PSD holding one image resource, whose declared data size need not match what follows it.
-/*!
-    `declared` is what the resource block claims; `payload` is what the section actually holds. Real files
-    agree; a truncated or hand-edited one does not, and the parser reads from the same stream the pixel
-    data lives in.
+/// A PSD holding one image resource.
+/**
+    `declared` is the size the resource block claims, `payload` what the section holds; a truncated or
+    hand-edited file has them disagree.
 */
 std::string psd_with_resource(uint16_t resource_id, uint32_t declared, const std::string &payload,
                               const std::string &trailing)
@@ -94,8 +92,7 @@ TEST_CASE("A PSD resource cannot read past the section that contains it")
 
     SUBCASE("a resource claiming more than the section holds does not reach past it")
     {
-        // The section ends after `xmp`; everything after it is the layer and pixel data the resource has
-        // no business seeing.
+        // the section ends after `xmp`; what follows is layer and pixel data
         const std::string  secret = std::string(4096, 'P');
         std::istringstream is{psd_with_resource(1060, (uint32_t)(xmp.size() + secret.size()), xmp, secret)};
 
@@ -106,7 +103,7 @@ TEST_CASE("A PSD resource cannot read past the section that contains it")
         }
         catch (const std::exception &)
         {
-            // Refusing the file outright is a fine answer; swallowing the pixels is not.
+            // refusing the file outright is a fine answer; swallowing the pixels is not
         }
         CHECK(psd.xmp.size() <= xmp.size());
     }

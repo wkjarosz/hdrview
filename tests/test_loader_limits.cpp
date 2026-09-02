@@ -5,8 +5,7 @@
 //
 
 // Loaders size their buffers from the header, so a file declaring billions of pixels costs the memory or the
-// decode time whether or not the pixels are there. The headers below are the ones a fuzzer found; each is a
-// few dozen bytes and declares a canvas nothing could display.
+// decode time whether or not the pixels are there. The headers below came from the fuzzer.
 
 #include <doctest/doctest.h>
 
@@ -44,7 +43,7 @@ void append_be32(std::vector<uint8_t> &v, uint32_t x)
     v.insert(v.end(), {uint8_t(x >> 24), uint8_t(x >> 16), uint8_t(x >> 8), uint8_t(x)});
 }
 
-//! A QOI header declaring \p w by \p h. Big-endian dimensions at bytes 4..12, then channels and colorspace.
+/// A QOI header declaring \p w by \p h. Big-endian dimensions at bytes 4..12, then channels and colorspace.
 std::string qoi_header(uint32_t w, uint32_t h)
 {
     std::vector<uint8_t> v{'q', 'o', 'i', 'f'};
@@ -56,10 +55,9 @@ std::string qoi_header(uint32_t w, uint32_t h)
     return as_stream_contents(v);
 }
 
-//! A DDS header declaring \p w by \p h, complete enough that the parse reaches the dimensions.
-/*!
-    Offsets follow the DDS_HEADER layout: size, flags, height, width at 4..20, and the 32-byte
-    DDS_PIXELFORMAT at 76. An empty pixel format makes the parse stop before it ever reads the size.
+/// A DDS header declaring \p w by \p h, complete enough that the parse reaches the dimensions.
+/**
+    DDS_HEADER layout: size, flags, height, width at 4..20, and the 32-byte DDS_PIXELFORMAT at 76.
 */
 std::string dds_header(uint32_t w, uint32_t h)
 {
@@ -93,7 +91,7 @@ std::string dds_header(uint32_t w, uint32_t h)
     return as_stream_contents(v);
 }
 
-//! A GIF87a header declaring \p w by \p h. Little-endian 16-bit dimensions at bytes 6..10.
+/// A GIF87a header declaring \p w by \p h. Little-endian 16-bit dimensions at bytes 6..10.
 std::string gif_header(uint16_t w, uint16_t h)
 {
     std::vector<uint8_t> v{'G', 'I', 'F', '8', '7', 'a'};
@@ -103,10 +101,10 @@ std::string gif_header(uint16_t w, uint16_t h)
     return as_stream_contents(v);
 }
 
-//! Why \p loader refused \p bytes, or an empty string if it didn't refuse.
-/*!
-    The message matters, not just the throw: these headers are truncated, so a loader that skipped the
-    dimension check would still fail -- just later, slower, and for a different reason.
+/// Why \p loader refused \p bytes, or an empty string if it didn't refuse.
+/**
+    These headers are truncated, so a loader skipping the dimension check still fails, just later and for a
+    different reason.
 */
 template <typename Loader>
 std::string rejection_reason(Loader &&loader, const std::string &bytes, const char *filename)
@@ -123,7 +121,7 @@ std::string rejection_reason(Loader &&loader, const std::string &bytes, const ch
     }
 }
 
-//! Whether \p reason is the dimension check's complaint rather than some later decode failure.
+/// Whether \p reason is the dimension check's complaint and not a later decode failure.
 bool blames_dimensions(const std::string &reason) { return reason.find("implausibly large") != std::string::npos; }
 
 } // namespace
@@ -131,7 +129,7 @@ bool blames_dimensions(const std::string &reason) { return reason.find("implausi
 namespace
 {
 
-//! A one-entry deflated zip holding `contents` under `name`.
+/// A one-entry deflated zip holding `contents` under `name`.
 std::string make_zip(const std::string &name, const std::string &contents)
 {
     mz_zip_archive zip;
@@ -146,8 +144,8 @@ std::string make_zip(const std::string &name, const std::string &contents)
     return out;
 }
 
-/*!
-    Overwrites the uncompressed-size field in both of an entry's headers, leaving the stored bytes alone --
+/**
+    Overwrites the uncompressed-size field in both of an entry's headers, leaving the stored bytes alone;
     a zip whose directory claims far more than the archive is holding. Real-world equivalents are a
     truncated or hand-edited archive and a deliberate decompression bomb; both reach the same code.
 
@@ -170,9 +168,8 @@ void declare_uncompressed_size(std::string &zip, uint32_t declared)
 
 TEST_CASE("A zip entry declaring more than the archive holds is skipped before it is allocated for")
 {
-    // Same reasoning as the image headers above, one layer out: an entry is read whole into memory, sized
-    // from what the archive's directory claims. A claim the stored bytes cannot back costs that memory --
-    // and the decompression time to fill it -- before anything discovers it is not an image.
+    // A zip entry is read whole into memory, sized from what the archive's directory claims. A claim the
+    // stored bytes cannot back costs that memory, and the time to fill it, before anything looks at it.
     const std::string manifest = R"({"type": "HDRView session"})";
 
     SUBCASE("an honest archive is untouched")
@@ -192,9 +189,8 @@ TEST_CASE("A zip entry declaring more than the archive holds is skipped before i
     SUBCASE("a ratio no deflate stream could produce is refused before extraction is attempted")
     {
         std::string zip = make_zip("manifest.json", manifest);
-        // Well past deflate's 1032:1 ceiling, but small enough that a build without the guard merely wastes
-        // the allocation instead of exhausting the machine -- vector<char>(n) zero-fills, so the pages are
-        // really touched.
+        // well past deflate's 1032:1 ceiling, but small enough that a build without the guard wastes the
+        // allocation instead of exhausting the machine
         declare_uncompressed_size(zip, 64u << 20);
 
         {
@@ -211,17 +207,17 @@ TEST_CASE("A zip entry declaring more than the archive holds is skipped before i
 
     SUBCASE("the ratio and the absolute bound are both enforced, and neither rejects a real entry")
     {
-        // Plausible: an ordinary entry, and one compressed as hard as deflate can manage.
+        // an ordinary entry, and one compressed as hard as deflate can manage
         CHECK(zip_entry_size_is_plausible(1024, 512, "ordinary"));
         CHECK(zip_entry_size_is_plausible(1032 * 4096, 4096, "maximally compressible"));
-        // A stored (ratio 1) entry of any workable size, and an empty one.
+        // a stored (ratio 1) entry of any workable size, and an empty one
         CHECK(zip_entry_size_is_plausible(64 * 1024 * 1024, 64 * 1024 * 1024, "stored"));
         CHECK(zip_entry_size_is_plausible(0, 2, "empty"));
 
-        // Beyond what deflate can expand to, however large the archive says it is.
+        // beyond what deflate can expand to, however large the archive says it is
         CHECK_FALSE(zip_entry_size_is_plausible(1033 * 4096, 4096, "past the ratio"));
         CHECK_FALSE(zip_entry_size_is_plausible(1ull << 40, 8, "wildly past the ratio"));
-        // And an honestly-compressible bomb, which the ratio test alone would let through.
+        // and a genuinely compressible bomb, which the ratio test alone would let through
         CHECK_FALSE(zip_entry_size_is_plausible(8ull << 30, 8ull << 20, "decompression bomb"));
     }
 }
@@ -236,17 +232,16 @@ TEST_CASE("check_image_dimensions accepts real sizes and rejects degenerate ones
     CHECK_THROWS_AS(check_image_dimensions(16, 0, "test"), std::invalid_argument);
     CHECK_THROWS_AS(check_image_dimensions(-1, 16, "test"), std::invalid_argument);
 
-    // One axis alone is enough, even when the pixel count would fit.
+    // one axis alone is enough, even when the pixel count would fit
     CHECK_THROWS_AS(check_image_dimensions(4, 16776963, "test"), std::invalid_argument);
-    // As is the total, even when each axis would fit on its own.
+    // as is the total, even when each axis would fit on its own
     CHECK_THROWS_AS(check_image_dimensions(19789, 19789, "test"), std::invalid_argument);
     CHECK_THROWS_AS(check_image_dimensions(4294967295ll, 4294967295ll, "test"), std::invalid_argument);
 }
 
 TEST_CASE("Loaders reject implausible dimensions before decoding")
 {
-    // The four headers a fuzzer found. Before the check these took 32-38 seconds or exhausted memory; the
-    // point of asserting the throw rather than timing the call is that it stays deterministic on any runner.
+    // the four headers the fuzzer found, each declaring a canvas nothing could display
     SUBCASE("QOI declaring 4 x 16776963")
     {
         auto reason = rejection_reason(load_qoi_image, qoi_header(4, 16776963), "bomb.qoi");
@@ -275,8 +270,8 @@ TEST_CASE("Loaders reject implausible dimensions before decoding")
 
 TEST_CASE("A header declaring an ordinary size is not rejected for its dimensions")
 {
-    // Guards against the limits being tightened into the range of real images: these headers are truncated,
-    // so they still fail, but they must not fail with a dimension complaint.
+    // guards against the limits being tightened into the range of real images: these headers are truncated,
+    // so they still fail, but not with a dimension complaint
     std::istringstream is(qoi_header(64, 64), std::ios::binary);
     try
     {
@@ -291,10 +286,9 @@ TEST_CASE("A header declaring an ordinary size is not rejected for its dimension
 #ifdef HDRVIEW_TEST_ARTIFACTS_DIR
 TEST_CASE("A file that only LibRaw claims is declined when too little data backs it")
 {
-    // LibRaw's sniff is a full parse, and its parser is permissive enough to read this corrupted PNG as a
-    // 3072x2047 sensor -- 6.3 megapixels from 156 bytes, which it would then demosaic. The dimensions look
-    // ordinary, so the size check that guards the other loaders doesn't catch it; what gives it away is the
-    // ratio of declared pixels to bytes present.
+    // LibRaw's sniff is a full parse, and its parser reads this corrupted PNG as a 3072x2047 sensor: 6.3
+    // megapixels from 156 bytes, which it would then demosaic. The dimensions look ordinary, so what gives it
+    // away is the ratio of declared pixels to bytes present.
     std::ifstream f(std::string(HDRVIEW_TEST_ARTIFACTS_DIR) + "/libraw-claims-this-png.bin", std::ios::binary);
     REQUIRE(f.good());
     CHECK_FALSE(is_raw_image(f));

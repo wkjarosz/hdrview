@@ -1,9 +1,8 @@
 /** \file test_gui_stats.cpp
     \author Wojciech Jarosz
 
-    Loads a fixture image and asserts on the computed PixelStats for its current channel group, read
-    directly off the data model (Channel::get_stats()) rather than parsed from the "Pixel statistics"
-    window's rendered text, which has no per-cell widget ID to read back through Test Engine.
+    Loads a fixture image and asserts on the computed PixelStats for its current channel group, read off
+    Channel::get_stats(): the "Pixel statistics" window's text has no per-cell widget ID to read back.
 */
 
 #include "app.h"
@@ -55,9 +54,9 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "stats", "selection_off_the_image_computes_empty_stats");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // The app-level counterpart to test_pixel_stats.cpp's "A selection that misses the channel" case:
-        // a selection is not clamped to the image anywhere, so one dragged into the empty area beside it
-        // reaches PixelStats::calculate() as a region that intersects the data window into an inverted box.
+        // the app-level counterpart to test_pixel_stats.cpp's "A selection that misses the channel": a
+        // selection is never clamped to the image, so one dragged into the empty area beside it reaches
+        // PixelStats::calculate() as a region that intersects the data window into an inverted box
         if (hdrview()->num_images() == 0)
         {
             hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
@@ -68,10 +67,9 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         auto img = hdrview()->current_image();
         IM_CHECK(img != nullptr);
 
-        // Well past the data window in y, overlapping it in x -- the one-axis miss, whose volume() is
-        // negative rather than spuriously positive. The gap has to exceed the statistics pass's block size
-        // (1 << 20) once multiplied by the width, or the same overflow lands on a block count of zero and
-        // nothing runs; one block's worth of rows clears that for any width.
+        // well past the data window in y and overlapping it in x: the one-axis miss, whose volume() is
+        // negative. The gap must exceed the statistics pass's block size (1 << 20) times the width, or the
+        // overflow lands on a block count of zero and nothing runs; one block's worth of rows clears that.
         constexpr int gap = 1 << 20;
         const int2    lo = img->data_window.min, hi = img->data_window.max;
         hdrview()->roi() = hdrview()->roi_live() = Box2i{int2{lo.x, hi.y + gap}, int2{hi.x, hi.y + 2 * gap}};
@@ -85,7 +83,7 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         IM_CHECK(stats->computed);
         IM_CHECK_EQ(stats->summary.valid_pixels, 0);
 
-        // Put the selection back so later tests see the default state.
+        // put the selection back so later tests see the default state
         hdrview()->roi() = hdrview()->roi_live() = Box2i{int2{0}};
         ctx->Yield(3);
     };

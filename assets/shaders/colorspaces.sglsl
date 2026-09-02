@@ -1,7 +1,6 @@
-// Shared colorspace math, written once and cross-compiled to GLSL/GLES/Metal via sokol-shdc.
-// This is a @block, not a standalone program: it only produces output once @include_block'd into
-// a @vs/@fs section of a real @program (see image-shader.sglsl). See SokolShaderCompiler.cmake
-// and CMakeLists.txt for the CMake wiring.
+// Shared colorspace math, cross-compiled to GLSL/GLES/Metal via sokol-shdc. This is a @block, not a
+// standalone program: it produces output only once @include_block'd into a @vs/@fs section of a real
+// @program (see image-shader.sglsl).
 @block colorspaces
 
 // Luminance-chroma to RGB conversion
@@ -28,9 +27,8 @@ float linearToS(float a)
 {
     float old_sign = sign(a);
     a              = abs(a);
-    // The whole curve must be sign-extended, so the -0.055 offset has to be inside the multiplication by
-    // old_sign, not outside it. Extended sRGB carries genuinely negative (out-of-gamut) values, and the
-    // colorpass decodes what this encodes -- getting the sign wrong here breaks that round-trip.
+    // The whole curve is sign-extended, so the -0.055 offset has to be inside the multiplication by
+    // old_sign: extended sRGB carries negative (out-of-gamut) values, which the colorpass decodes again.
     return a < 0.0031308 ? old_sign * 12.92 * a : old_sign * (1.055 * pow(a, 1.0 / 2.4) - 0.055);
 }
 
@@ -51,8 +49,7 @@ vec4 sRGBToLinear(vec4 color) { return vec4(sRGBToLinear(color.rgb), color.a); }
 float RGBToY(vec3 rgb, vec3 weights) { return dot(weights, rgb); }
 
 // Luminance weights for linear sRGB/BT.709 primaries: the middle row of RGB2XYZ below, and what
-// colorspace.h's sRGB_Yw() computes. Any value already converted into those primaries is weighed by
-// these, whatever gamut it arrived in.
+// colorspace.h's sRGB_Yw() computes.
 const vec3 sRGB_Yw = vec3(0.212671, 0.715160, 0.072169);
 
 // Converts a color from linear RGB to XYZ space
@@ -72,20 +69,16 @@ vec3 XYZToRGB(vec3 xyz)
 
 @end
 
-// HDR display-transfer encoders, shared by the colorpass (see colorpass.sglsl) -- kept separate from the
-// @block above so image-shader.sglsl, which doesn't need them, doesn't pull them in.
+// HDR display-transfer encoders for the colorpass (see colorpass.sglsl), in their own @block so that
+// image-shader.sglsl does not pull them in
 @block hdr_transfer
 
-// Recommendation ITU-R BT.2100-2 PQ inverse EOTF. PQ is an *absolute* transfer function: it maps luminance
-// in nits straight to a code value, so unlike the encoders below it takes absolute nits and does its own
-// 10000-nit normalization rather than a caller-supplied reference white. PQ has no negative representation,
-// so clip below zero.
+// Recommendation ITU-R BT.2100-2 PQ inverse EOTF. PQ is an absolute transfer function: it maps luminance in
+// nits straight to a code value, so this takes absolute nits and does its own 10000-nit normalization
+// instead of a caller-supplied reference white. PQ has no negative representation, so clip below zero.
 //
-// The five constants below are the decimal expansions of the exact rationals in inverse_EOTF_BT2100_PQ() in
-// src/colorspace.h. Nothing in the build enforces that -- tests/test_colorspace.cpp does, in
-// "colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_PQ", which also pins the fact that
-// this function takes absolute nits while colorspace.h's from_linear() applies its HDR_REFERENCE_WHITE_NITS
-// (203 cd/m^2, BT.2408) scaling first. Edit both sides together.
+// The five constants are the decimal expansions of the rationals in inverse_EOTF_BT2100_PQ() in
+// src/colorspace.h, whose from_linear() scales by HDR_REFERENCE_WHITE_NITS (203 cd/m^2, BT.2408) first.
 float pq_encode(float nits)
 {
     const float m1  = 0.1593017578125; // 2610 / 16384
@@ -99,12 +92,12 @@ float pq_encode(float nits)
 }
 vec3 pq_encode(vec3 nits) { return vec3(pq_encode(nits.r), pq_encode(nits.g), pq_encode(nits.b)); }
 
-// A literal power curve (not the piecewise sRGB OETF above), sign-extended so out-of-gamut (negative)
-// values survive the pass. Takes a value already normalized by the transfer function's reference white.
+// A literal power curve, not the piecewise sRGB OETF above, sign-extended so out-of-gamut values survive.
+// Takes a value already normalized by the transfer function's reference white.
 vec3 gamma_encode(vec3 relative, float gamma) { return sign(relative) * pow(abs(relative), vec3(1.0 / gamma)); }
 
 // The ITU-T BT.601/BT.709/BT.2020 OETF, sign-extended. Mirrors OETF_ITU() in src/colorspace.h; sign-extended
-// it is also exactly IEC 61966-2-4 (xvYCC), which colorspace.h defines as copysign(OETF_ITU(abs(x)), x).
+// it is also IEC 61966-2-4 (xvYCC), which colorspace.h defines as copysign(OETF_ITU(abs(x)), x).
 float itu_encode(float relative)
 {
     const float alpha = 1.09929682680944;

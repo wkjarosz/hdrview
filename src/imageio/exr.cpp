@@ -442,13 +442,6 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
         int2         size          = {dataWindow.max.x - dataWindow.min.x + 1, dataWindow.max.y - dataWindow.min.y + 1};
         check_image_dimensions(size.x, size.y, "EXR");
 
-        if (size.x <= 0 || size.y <= 0)
-        {
-            spdlog::warn("EXR part {}: '{}' has zero pixels, skipping...", p,
-                         part.header().hasName() ? part.header().name() : "unnamed");
-            continue;
-        }
-
         auto img = make_shared<Image>();
         if (auto a = part.header().findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
             img->chromaticities = {{a->value().red.x, a->value().red.y},
@@ -503,8 +496,7 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
             name = c.name();
 
             img->channels.emplace_back(name, size);
-            // EXR records a pixel type per channel, so one part can mix depths. Only UINT is quantized;
-            // half and float get the histogram's full bin resolution.
+            // EXR records a pixel type per channel, so one part can mix depths; only UINT is quantized
             img->channels.back().bits_per_sample = c.channel().type == Imf::UINT ? 32 : 0;
             framebuffer.insert(c.name(), Imf::Slice::Make(Imf::FLOAT, img->channels.back().data(), dataWindow, 0, 0,
                                                           c.channel().xSampling, c.channel().ySampling));
@@ -517,12 +509,10 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
             continue;
         }
 
-        // EXR stores color channels premultiplied, so record that rather than leaving the default of
-        // AlphaType_None -- Image::finalize() and the display path both key off this.
         for (const auto &c : img->channels)
             if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
             {
-                // OpenEXR's spec makes alpha associated, and its samples are linear.
+                // OpenEXR's spec makes alpha associated, and its samples are linear
                 img->set_alpha(AlphaType_PremultipliedLinear, AlphaSource_Format, alpha_override_of(opts));
                 break;
             }
@@ -560,8 +550,7 @@ void save_exr_image(const Image &img, ostream &os_, string_view filename, const 
 {
     try
     {
-        // s_opts is only meaningful once exr_parameters_gui() has sized group_enabled for this image;
-        // without the GUI it is empty, which would enable no groups and write an empty channel list.
+        // without the GUI, group_enabled is empty, which would enable no groups and write no channels
         EXRSaveOptions defaults;
         if (!params)
         {

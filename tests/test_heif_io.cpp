@@ -30,7 +30,7 @@ ImagePtr make_rgb(int2 size = int2{16, 12})
     return img;
 }
 
-//! The major brand out of the file's ftyp box: 4 bytes of size, 'ftyp', then the brand.
+/// The major brand out of the file's ftyp box: 4 bytes of size, 'ftyp', then the brand.
 std::string major_brand(const std::string &bytes)
 {
     REQUIRE(bytes.size() >= 12);
@@ -42,9 +42,7 @@ std::string major_brand(const std::string &bytes)
 
 TEST_CASE("The HEIF and AVIF save entries write files branded as what their extension claims")
 {
-    // libheif takes the primary item's brand as the file's major brand, and an AV1 item's brand is
-    // 'avif' -- so offering AV1 under the HEIF entry would write an AVIF called .heif. The two entries
-    // therefore carry disjoint codec sets rather than one list shared between them.
+    // libheif brands the file after the primary item's codec, so an AV1 item makes an 'avif' file
     auto img = make_rgb();
 
     SUBCASE("HEIF")
@@ -56,9 +54,7 @@ TEST_CASE("The HEIF and AVIF save entries write files branded as what their exte
         }
         catch (const std::exception &e)
         {
-            // Whether a given codec can be encoded at all depends on the plugins the libheif build has,
-            // and the Windows CPM build has few. There is no brand to inspect if nothing was written, and
-            // whether the save should have succeeded is the export table's question, not this test's.
+            // which codecs encode at all depends on the plugins this libheif build found
             MESSAGE("no HEIF written here: ", e.what());
             return;
         }
@@ -85,8 +81,7 @@ TEST_CASE("The HEIF and AVIF save entries write files branded as what their exte
 
 TEST_CASE("The HEIF and AVIF entries offer disjoint encoders")
 {
-    // AV1 belongs to AVIF alone, so no encoder may appear under both -- picking aom under HEIF would
-    // write a file libheif brands 'avif' while the name says .heif.
+    // aom offered under HEIF would write a file libheif brands 'avif' under a .heif name
     const auto heif = heif_encoder_names(HEIFCodec::HEIF);
     const auto avif = heif_encoder_names(HEIFCodec::AV1);
 

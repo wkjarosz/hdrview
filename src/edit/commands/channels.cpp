@@ -7,11 +7,8 @@
 /** \file channels.cpp
     \author Wojciech Jarosz
 
-    The edits that change which channels an image has, and how they are grouped.
-
-    None of them carries a subject: the channels they cover are named by the multi-selection, or by a
-    single group right-clicked from outside it, rather than by a scope over one image's channels. They do
-    still fan out, since a selection can hold groups of more than one image.
+    The edits that change which channels an image has, and how they are grouped. None carries a subject:
+    the channels they cover come from HDRViewApp::target_groups().
 */
 
 #include "edit/commands.h"
@@ -26,11 +23,10 @@
 namespace
 {
 
-//! Every channel of \p img in the layer \p layer that ungrouping marked.
-/*!
-    Marked, rather than merely standing alone: a layer can hold channels whose names never grouped -- a
-    depth channel beside a color -- and those are not what regrouping is about. Clearing a flag they never
-    had would do nothing, but the entry that reverses it would then set one they never had either.
+/// Every channel of \p img in the layer \p layer that ungrouping marked.
+/**
+    Marked, not merely standing alone: a channel whose name never grouped has no flag to clear, and undo
+    would then set one.
 */
 std::vector<int> ungrouped_in_layer(const ImagePtr &img, const std::string &layer)
 {
@@ -45,7 +41,7 @@ std::vector<int> ungrouped_in_layer(const ImagePtr &img, const std::string &laye
     return out;
 }
 
-//! The channels of \p group, or empty when that is not a group of \p img.
+/// The channels of \p group, or empty when that is not a group of \p img.
 std::vector<int> group_channels(const ImagePtr &img, int group)
 {
     std::vector<int> out;
@@ -57,7 +53,7 @@ std::vector<int> group_channels(const ImagePtr &img, int group)
     return out;
 }
 
-//! Every channel of every group an edit is about to act on, which need not include the one on screen.
+/// Every channel of every group an edit is about to act on.
 std::vector<int> target_channels(const EditContext &ctx)
 {
     std::vector<int> out;
@@ -66,10 +62,9 @@ std::vector<int> target_channels(const EditContext &ctx)
     return out;
 }
 
-//! The channel to leave the viewport on after a rebuild, or -1 to leave it where it is.
-/*!
-    Only a group being changed is worth following: one merely pointed at from the panel must leave the
-    viewport where it was. See select_channels_group() for why following it is what it takes.
+/// The channel to leave the viewport on after a rebuild, or -1 to leave it where it is.
+/**
+    Only a group being changed is followed; see select_channels_group().
 */
 int followed_channel(const ImagePtr &img, const std::vector<int> &changed)
 {
@@ -80,19 +75,17 @@ int followed_channel(const ImagePtr &img, const std::vector<int> &changed)
     return -1;
 }
 
-//! The layer \p group belongs to, which is the prefix its channel names share.
+/// The layer \p group belongs to, which is the prefix its channel names share.
 std::string layer_of(const ImagePtr &img, int group)
 {
     const std::vector<int> channels = group_channels(img, group);
     return channels.empty() ? std::string{} : Channel::head(img->channels[size_t(channels.front())].name);
 }
 
-//! The channels regrouping would put back together.
-/*!
-    Every marked channel of every group the command was invoked on -- except that a single group cannot
-    say which channels it should rejoin, since ungrouping left each of them standing alone. One group
-    therefore restores its whole layer, which is all its channels still have in common, and that is also
-    what the Images panel's context menu asks for when it names one group. Two or more say exactly which.
+/// The channels regrouping would put back together: every marked channel of every group invoked on.
+/**
+    One group alone cannot say which channels to rejoin, ungrouping having left each standing alone, so it
+    restores its whole layer instead.
 */
 std::vector<int> regroup_channels(const EditContext &ctx)
 {
@@ -113,11 +106,9 @@ std::vector<int> regroup_channels(const EditContext &ctx)
     return out;
 }
 
-//! Leave the viewport on whichever group now holds \p channel.
-/*!
-    A rebuild renumbers the groups, so the index that was selected can afterwards mean something else
-    entirely -- and it is the selection that says what the next command will act on. Following the channel
-    across the rebuild is what lets exploding and regrouping be used one after the other.
+/// Leave the viewport on whichever group now holds \p channel.
+/**
+    A rebuild renumbers the groups, so the index that was selected can afterwards mean something else.
 */
 void select_channels_group(Image &img, int channel)
 {
@@ -130,11 +121,10 @@ void select_channels_group(Image &img, int channel)
             }
 }
 
-/*!
-    Show a group's channels one at a time rather than as a color.
-
-    Groups are derived from channel names, so this cannot remove a group -- it marks the channels, and the
-    rebuild that follows declines to put them back together. The inverse is Regroup channels.
+/// Show a group's channels one at a time rather than as a color.
+/**
+    Groups are derived from channel names, so this marks the channels and the rebuild that follows declines
+    to put them back together.
 */
 class UngroupChannels final : public EditCommand
 {
@@ -150,7 +140,7 @@ public:
                 /* draws_subject_selector */ false};
     }
 
-    //! Only worth offering while one of the groups it would take apart is more than one channel.
+    /// Only worth offering while one of the target groups holds more than one channel.
     bool enabled(const EditContext &ctx) const override { return !ungroupable_channels(ctx).empty(); }
 
     void apply(EditContext &ctx) override
@@ -184,10 +174,10 @@ public:
     }
 
 private:
-    //! The channels of the target groups that hold more than one, which are all this can take apart.
-    /*!
-        A group already standing alone is skipped rather than marked: marking it would change nothing but
-        would still record an entry, and undoing that entry would clear a flag the channel never had.
+    /// The channels of the target groups that hold more than one.
+    /**
+        A group already standing alone is skipped, since marking it would change nothing but would still
+        record an entry.
     */
     static std::vector<int> ungroupable_channels(const EditContext &ctx)
     {
@@ -202,15 +192,12 @@ private:
     }
 };
 
-/*!
-    Put ungrouped channels back into the groups their names ask for.
+/**
+    Put ungrouped channels back into the groups their names ask for; the counterpart to ungrouping.
 
-    The counterpart to ungrouping, and scoped by the selection: selecting the channels that should end up
-    together and asking for them back is how an RGBA group becomes an RGB group beside a lone alpha. The
-    groups are still derived from the names, so this only decides which channels are available to match --
-    with A held out, the R,G,B,A pattern comes up short and R,G,B matches instead.
-
-    A single selected group falls back to its whole layer; see regroup_channels().
+    The groups are still derived from the names, so this only decides which channels are available to
+    match: with A held out of the selection, R,G,B,A comes up short and R,G,B matches instead. A single
+    selected group falls back to its whole layer; see regroup_channels().
 */
 class RegroupChannels final : public EditCommand
 {
@@ -259,11 +246,9 @@ public:
     }
 };
 
-/*!
-    Remove a group's channels from the image outright.
-
-    Unlike ungrouping, this is a real edit: the channels are gone, and saving writes the smaller image.
-    Undo brings them back, since the whole channel list is what a structural entry records.
+/// Remove a group's channels from the image outright, so saving writes the smaller image.
+/**
+    Undo brings them back, the whole channel list being what a structural entry records.
 */
 class DeleteChannelGroup final : public EditCommand
 {
@@ -279,7 +264,7 @@ public:
                 /* draws_subject_selector */ false};
     }
 
-    //! Never every group: an image with no channels is not an image.
+    /// Never every group: an image with no channels is not an image.
     bool enabled(const EditContext &ctx) const override
     {
         auto img = ctx.image();
@@ -300,7 +285,7 @@ public:
         if (channels.empty() || channels.size() >= img->channels.size())
             return;
 
-        // Erased from the back, so the indices still to be erased are not shifted out from under it.
+        // erase from the back, so the indices still to be erased are not shifted
         std::sort(channels.begin(), channels.end(), std::greater<int>());
 
         ctx.modify_structure("Delete channel group",
@@ -310,8 +295,7 @@ public:
                                      if (c >= 0 && c < int(image.channels.size()))
                                          image.channels.erase(image.channels.begin() + c);
 
-                                 // The groups and the layer tree are built from the channel names, so they
-                                 // have to be derived again rather than patched.
+                                 // the groups and layer tree are derived from the channel names
                                  image.rebuild_layers();
                              });
     }
@@ -321,8 +305,7 @@ public:
 
 std::string delete_channels_label(const ImagePtr &img, const std::vector<int> &groups)
 {
-    // The action's own name never changes -- it is the key the registry, the palette and the tests address
-    // it by -- so only what the menu shows is chosen here.
+    // only the menu label varies; the action's own name is the key everything addresses it by
     if (groups.size() > 1)
         return "Delete channel groups";
 

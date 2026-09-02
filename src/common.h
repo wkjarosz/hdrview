@@ -26,7 +26,7 @@
 #include <spdlog/mdc.h>
 #include <spdlog/spdlog.h>
 
-/*!
+/**
     @brief A generic scope guard that invokes a callback upon destruction.
 
     This class template allows you to create a scope guard that executes a
@@ -325,8 +325,8 @@ inline T saturate(T a)
     return std::clamp(a, T(0), T(1));
 }
 
-//! Contrast about \p midpoint, as a straight line of the given slope through it.
-/*!
+/// Contrast about \p midpoint, as a straight line of the given slope through it.
+/**
     The pair a brightness/contrast control produces. Brightness moves the midpoint the line pivots about,
     by b/2; contrast sets the slope of the mapping at that midpoint, where
 
@@ -334,8 +334,8 @@ inline T saturate(T a)
           0 -> no change; 45 degree diagonal line;
           1 -> no gray/black & white; vertical line.
 
-    This is the linear remapping, which may produce negative values and values > 1 -- deliberately, so that
-    an HDR sample keeps its relationship to the ones around it rather than being clamped into [0,1].
+    The linear remapping, which may produce negative values and values > 1, so that an HDR sample keeps its
+    relationship to the ones around it instead of being clamped into [0,1].
 */
 template <typename T>
 inline T brightness_contrast_linear(T v, T slope, T midpoint)
@@ -343,7 +343,7 @@ inline T brightness_contrast_linear(T v, T slope, T midpoint)
     return (v - midpoint) * slope + T(0.5);
 }
 
-/*!
+/**
     Evaluates Perlin's gain function.
 
     As described in:
@@ -374,7 +374,7 @@ inline T gain_Perlin(T t, T P)
         return T(0.5) * std::pow(T(2) * t, P);
 }
 
-/*!
+/**
     Evaluates Schlick's rational version of Perlin's bias function.
 
     As described in:
@@ -392,13 +392,10 @@ inline T bias_Schlick(T t, T a)
     return t / ((((T(1) / a) - T(2)) * (T(1) - t)) + T(1));
 }
 
-//! Contrast about a biased midpoint, as an s-curve that stays within [0,1].
-/*!
-    The other half of a brightness/contrast control. The bias slides the midpoint, and the gain steepens
-    the curve about it, so the result approaches black and white without ever passing them: an alternative
-    to the straight line for a picture that is meant to stay inside the display range.
-
-    Clamped on the way in, since both halves are only defined over [0,1].
+/// Contrast about a biased midpoint, as an s-curve that stays within [0,1].
+/**
+    The bias slides the midpoint and the gain steepens the curve about it, so the result approaches black
+    and white without passing them. Clamped on the way in, since both halves are only defined over [0,1].
 */
 template <typename T>
 inline T brightness_contrast_nonlinear(T v, T slope, T bias)
@@ -406,7 +403,7 @@ inline T brightness_contrast_nonlinear(T v, T slope, T bias)
     return gain_Perlin(bias_Schlick(std::clamp(v, T(0), T(1)), bias), slope);
 }
 
-/*!
+/**
  * @brief  Linear interpolation.
  *
  * Linearly interpolates between \a a and \a b, using parameter t.
@@ -423,7 +420,7 @@ inline T lerp(T a, T b, S t)
     return T((S(1) - t) * a + t * b);
 }
 
-/*!
+/**
  * @brief Inverse linear interpolation.
  *
  * Given three values \a a, \a b, \a m, determines the parameter value
@@ -440,7 +437,7 @@ inline T lerp_factor(T a, T b, T m)
     return (m - a) / (b - a);
 }
 
-/*!
+/**
  * @brief Smoothly interpolates between 0 and 1 as x moves between a and b.
  *
  * Does a smooth s-curve (Hermite) interpolation between two values.
@@ -457,7 +454,7 @@ inline T smoothstep(T a, T b, T x)
     return t * t * (T(3) - T(2) * t);
 }
 
-/*!
+/**
  * @brief Smoothly interpolates between 0 and 1 as x moves between a and b.
  *
  * Does a smooth s-curve interpolation between two values using the
@@ -475,7 +472,7 @@ inline T smootherstep(T a, T b, T x)
     return t * t * t * (t * (t * T(6) - T(15)) + T(10));
 }
 
-//! Returns a modulus b.
+/// Returns a modulus b.
 template <typename T>
 inline T mod(T a, T b)
 {
@@ -502,7 +499,7 @@ std::string                   to_lower(std::string_view str);
 std::string                   to_upper(std::string_view str);
 // Helper to split "archive.zip/entry.png" into zip and entry
 bool split_zip_entry(std::string_view filename, std::string &zip_path, std::string &entry_path);
-//! Whether `path` names an http(s) URL rather than something on the filesystem.
+/// Whether `path` names an http(s) URL rather than something on the filesystem.
 bool is_url(std::string_view path);
 
 /// Run func on each line of the input string
@@ -577,27 +574,23 @@ size_t nth_matching_index(const std::vector<T> &vec, size_t n, Criterion criteri
     return vec.size(); // Return vec.size() if the nth matching element is not found
 }
 
-//! Given a collection of strings (e.g. file names) that might share a common prefix and suffix, determine the character
-//! range that is unique across the strings
+/// The character range that is unique across a collection of strings (e.g. file names) sharing prefix and suffix
 std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &names);
 
-//! Shorten a collection of related names (e.g. file paths) down to what distinguishes them.
-/*!
+/// Shorten a collection of related names (e.g. file paths) down to what distinguishes them.
+/**
     Trims the prefix and suffix shared by every name, marking each trimmed end with an ellipsis, and keeps
-    whole words rather than cutting one in half. Names with nothing unique left -- the paths are all
-    identical, or one name is entirely a suffix of the others -- fall back to their own file name.
+    whole words. A name with nothing unique left -- the paths are all identical, or one name is entirely a
+    suffix of the others -- falls back to its own file name.
 
     \returns One short name per input, in the same order.
 */
 std::vector<std::string> shorten_names(const std::vector<std::string> &names);
 
 /// Percent of a download still outstanding, for the status bar's progress readout.
-/*!
-    Kept apart from the Emscripten download callbacks so the arithmetic is exercised on every platform.
-    It guards the two things the raw byte counts do not: a total of zero, which a server that sends no
-    content length reports and which the callbacks can also see before the headers arrive; and integer
-    division, which sends every partial fraction to zero. Rounds what is left up, so the bar stays
-    visible until the download is genuinely finished rather than vanishing on the last few bytes.
+/**
+    Guards a total of zero, which a server sending no content length reports, and rounds up, so the bar
+    stays visible until the download is finished.
 */
 int download_percent_remaining(int64_t bytes_loaded, int64_t total_bytes);
 

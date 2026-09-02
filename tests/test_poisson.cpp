@@ -14,7 +14,7 @@
 namespace
 {
 
-//! A mask covering everything but a border \p margin samples wide, which is what the solve requires.
+/// A mask covering everything but a border \p margin samples wide, which is what the solve requires.
 Array2Df interior_mask(int2 size, int margin = 1)
 {
     Array2Df m{size};
@@ -31,7 +31,7 @@ Array2Df filled(int2 size, float v)
     return a;
 }
 
-//! Values varying in both directions, whose Laplacian is not trivially zero.
+/// Values varying in both directions, whose Laplacian is not trivially zero.
 Array2Df bumpy(int2 size, float scale = 1.f)
 {
     Array2Df a{size};
@@ -51,13 +51,9 @@ float max_difference(const Array2Df &a, const Array2Df &b)
 
 TEST_CASE("A source with no gradients leaves a smooth patch, symmetric where the setup is")
 {
-    // The clearest statement of what the solve is for. Over a background that varies, with a source that
-    // does not, the answer is the harmonic function agreeing with the background around the mask: smooth
-    // everywhere inside, and carrying the surroundings inward without copying them.
-    //
-    // A checkerboard is the background to ask this of, because it is the one that catches a patch landing
-    // anywhere but where it was asked to. Over a flat background such a patch looks exactly like a
-    // correct one.
+    // With a source that does not vary, the answer is the harmonic function agreeing with the background
+    // around the mask. A checkerboard background is what catches a patch landing anywhere but where it was
+    // asked to; over a flat one, a misplaced patch looks like a correct one.
     const int2 size{64, 64};
     const int  square = 8;
 
@@ -67,16 +63,15 @@ TEST_CASE("A source with no gradients leaves a smooth patch, symmetric where the
 
     const Array2Df source = filled(size, 0.5f);
 
-    // Centered, so the mask shares the background's symmetries.
+    // centered, so the mask shares the background's symmetries
     Array2Df mask{size};
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x) mask(x, y) = (x >= 24 && x < 40 && y >= 24 && y < 40) ? 1.f : 0.f;
 
     const Array2Df out = poisson_blended(background, source, mask, 300, 1e-6f);
 
-    // Turning the picture half way round and reflecting it through the diagonal both leave this
-    // checkerboard alone, and the mask and the source with it -- so they must leave the answer alone too.
-    // Confirmed of the background first, since a symmetry it does not have would make this vacuous.
+    // A half turn and a reflection through the diagonal leave this checkerboard, the mask and the source
+    // alone, so they must leave the answer alone. Confirmed of the background first, or this is vacuous.
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x)
         {
@@ -87,8 +82,8 @@ TEST_CASE("A source with no gradients leaves a smooth patch, symmetric where the
             CHECK(out(x, y) == doctest::Approx(out(y, x)).epsilon(1e-5));
         }
 
-    // Smooth throughout the interior: with no gradients asked for, every sample is the average of its
-    // neighbors. This is what "no seam" means here -- a step anywhere inside would show up as curvature.
+    // with no gradients asked for, every interior sample is the average of its neighbors, so a step
+    // anywhere inside shows up as curvature
     const Array2Df lap = laplacian(out);
     for (int y = 25; y < 39; ++y)
         for (int x = 25; x < 39; ++x)
@@ -98,16 +93,14 @@ TEST_CASE("A source with no gradients leaves a smooth patch, symmetric where the
             CHECK(std::abs(lap(x, y)) < 1e-4f);
         }
 
-    // Far enough in, the border's alternation has averaged out to its mean.
+    // far enough in, the border's alternation has averaged out to its mean
     CHECK(out(32, 32) == doctest::Approx(0.5f).epsilon(0.02));
 }
 
 TEST_CASE("The default iteration count is enough for the regions a paste actually covers")
 {
-    // The bound exists to stop a runaway, not to cut the answer short, so it is worth knowing that the
-    // sizes a paste comes in reach the answer well inside it. Measured by how far from harmonic the
-    // result is, since a constant source asks for exactly that and needs no reference solve to compare
-    // against.
+    // Measured by how far from harmonic the result is, which a constant source asks for and which needs no
+    // reference solve to compare against.
     for (int n : {64, 128, 256})
     {
         CAPTURE(n);
@@ -130,8 +123,7 @@ TEST_CASE("The default iteration count is enough for the regions a paste actuall
         CAPTURE(worst);
         CHECK(worst < 1e-3f);
 
-        // And running it far longer changes nothing, which is what says the bound was not the thing that
-        // stopped it.
+        // and running it far longer changes nothing, so the bound was not what stopped it
         const Array2Df longer = poisson_blended(background, source, mask, 3000, 1e-6f);
         CHECK(max_difference(got, longer) < 1e-5f);
     }
@@ -139,8 +131,8 @@ TEST_CASE("The default iteration count is enough for the regions a paste actuall
 
 TEST_CASE("The Laplacian of a plane is zero, and of a known quadratic is its known value")
 {
-    // The operator the solve inverts, checked against what it is: a linear function has no curvature, and
-    // x^2 + y^2 has the same curvature everywhere. Away from the edges, where clamping takes over.
+    // A linear function has no curvature and x^2 + y^2 has the same curvature everywhere. Checked away from
+    // the edges, where clamping takes over.
     const int2 size{16, 16};
 
     Array2Df plane{size}, quad{size};
@@ -161,15 +153,14 @@ TEST_CASE("The Laplacian of a plane is zero, and of a known quadratic is its kno
             CAPTURE(y);
             CHECK(lap_plane(x, y) == doctest::Approx(0.f).epsilon(1e-4).scale(1.f));
 
-            // Eight neighbors: the four along the axes contribute 2+2, and the four diagonals 4+4.
+            // eight neighbors: the four along the axes contribute 2+2, and the four diagonals 4+4
             CHECK(lap_quad(x, y) == doctest::Approx(12.f).epsilon(1e-4));
         }
 }
 
 TEST_CASE("A seamless paste keeps the background exactly, outside the mask")
 {
-    // The whole point of solving rather than pasting: the border is the background's own values, so there
-    // is nothing for a seam to appear at.
+    // the border is the background's own values, so there is nothing for a seam to appear at
     const int2     size{32, 24};
     const Array2Df background = bumpy(size, 1.f);
     const Array2Df source     = filled(size, 5.f);
@@ -189,9 +180,9 @@ TEST_CASE("A seamless paste keeps the background exactly, outside the mask")
 
 TEST_CASE("A source with no gradients leaves the background's own values behind")
 {
-    // A constant has a Laplacian of zero, so the solution inside is the harmonic function agreeing with
-    // the background at the border -- and where the background is itself flat, that is the background.
-    // The pasted constant's own value never appears, which is what "gradient domain" means.
+    // A constant has a Laplacian of zero, so the solution inside is the harmonic function agreeing with the
+    // background at the border; where the background is flat, that is the background. The constant's own
+    // value never appears.
     const int2     size{24, 24};
     const Array2Df background = filled(size, 0.25f);
     const Array2Df mask       = interior_mask(size, 2);
@@ -206,9 +197,8 @@ TEST_CASE("A source with no gradients leaves the background's own values behind"
 
 TEST_CASE("Pasting an image onto itself changes nothing")
 {
-    // The strongest statement of correctness available without a reference solver: when the source and
-    // the background already agree, the background is the exact solution, and the iteration must not
-    // wander away from an answer it starts on.
+    // when the source and the background agree, the background is the exact solution, and the iteration
+    // must not wander away from an answer it starts on
     const int2     size{28, 20};
     const Array2Df background = bumpy(size, 1.f);
     const Array2Df mask       = interior_mask(size, 2);
@@ -220,8 +210,7 @@ TEST_CASE("Pasting an image onto itself changes nothing")
 
 TEST_CASE("The solved interior has the gradients it was given")
 {
-    // What the solve is for: inside the mask the Laplacian must match the source's, which is the equation
-    // being solved. Checked away from the mask's own border, where the equation is not imposed.
+    // checked away from the mask's own border, where the equation is not imposed
     const int2     size{40, 32};
     const Array2Df background = filled(size, 0.5f);
     const Array2Df source     = bumpy(size, 1.f);
@@ -240,8 +229,7 @@ TEST_CASE("The solved interior has the gradients it was given")
 
 TEST_CASE("An offset source is carried to the background's level rather than pasted at its own")
 {
-    // The behavior that distinguishes this from an ordinary paste: brightening the whole source shifts
-    // its values but not its gradients, so the result is unchanged. A paste would have moved with it.
+    // brightening the whole source shifts its values but not its gradients, so the result is unchanged
     const int2     size{32, 32};
     const Array2Df background = filled(size, 0.5f);
     const Array2Df mask       = interior_mask(size, 2);
@@ -255,7 +243,7 @@ TEST_CASE("An offset source is carried to the background's level rather than pas
 
     CHECK(max_difference(a, b) < 1e-2f);
 
-    // And it did do something: the interior is not simply the background it started from.
+    // and it did do something: the interior is not the background it started from
     CHECK(max_difference(a, background) > 0.05f);
 }
 
@@ -271,18 +259,15 @@ TEST_CASE("A canceled solve stops early and reports that it did")
 
     const Array2Df out = poisson_blended(background, source, mask, 500, 1e-6f, progress);
 
-    // Whatever it had reached, which for a cancel before the first step is where it started.
+    // whatever it had reached, which for a cancel before the first step is where it started
     CHECK(max_difference(out, background) == doctest::Approx(0.f));
     CHECK(progress.canceled());
 }
 
 TEST_CASE("Converging early costs fewer iterations than the bound allows")
 {
-    // The residual check is what makes a large paste finish in a reasonable time rather than running out
-    // the iteration bound every time, so it is worth pinning that it fires. The bound here is one no
-    // machine would reach: if the check did not fire, this would still be running minutes from now, so
-    // finishing at all is the evidence. The clock is only there to say so out loud, and is set far above
-    // any plausible slow build rather than near the fraction of a second this takes.
+    // The bound below is one no machine would reach, so finishing at all is the evidence that the residual
+    // check fired. The clock only says so out loud, and is set far above any plausible slow build.
     const int2     size{32, 32};
     const Array2Df background = filled(size, 0.5f);
     const Array2Df mask       = interior_mask(size, 2);
@@ -298,10 +283,8 @@ TEST_CASE("Converging early costs fewer iterations than the bound allows")
 
 TEST_CASE("Several shares of one job add up to it, whether or not they run to their bound")
 {
-    // What a progress bar driven by more than one reporter needs, and what is easy to get wrong: a share
-    // that stops early still owes the rest of its share, and a share that finishes must not report the
-    // whole job as finished. Getting the second wrong sends the bar to full while the other channels are
-    // still going, which is what it looked like.
+    // A share that stops early still owes the rest of its share, and a share that finishes must not report
+    // the whole job as finished.
     AtomicProgress whole{true};
 
     SUBCASE("a share that stops short of its bound still fills its share")
@@ -310,7 +293,7 @@ TEST_CASE("Several shares of one job add up to it, whether or not they run to th
         third.set_num_steps(1000);
         for (int i = 0; i < 300; ++i) ++third;
 
-        // Three tenths of a third of the job.
+        // three tenths of a third of the job
         CHECK(whole.progress() == doctest::Approx(0.1f).epsilon(0.01));
 
         third.finish_share();
@@ -350,10 +333,8 @@ TEST_CASE("Several shares of one job add up to it, whether or not they run to th
 
 TEST_CASE("A solve reports its whole share and no more, however it ends")
 {
-    // The solver stops as soon as the residual is small enough, so the iteration bound is almost never
-    // reached: a bar counting only the iterations taken would stall wherever the answer arrived. It must
-    // not overshoot either -- one solve among several reporting the *job* as done is what sent the bar
-    // straight to full while the other channels were still running.
+    // The solver stops as soon as the residual is small enough, so a bar counting only the iterations taken
+    // would stall wherever the answer arrived; and one solve among several must not report the job as done.
     const int2     size{32, 32};
     const Array2Df background = filled(size, 0.5f);
     const Array2Df mask       = interior_mask(size, 1);
@@ -373,7 +354,7 @@ TEST_CASE("A solve reports its whole share and no more, however it ends")
         AtomicProgress whole{true};
         AtomicProgress share{whole, 0.5f};
 
-        // Already the answer, so it returns before iterating.
+        // already the answer, so it returns before iterating
         poisson_blended(background, background, mask, 100000, 1e-4f, share);
 
         CHECK(whole.progress() == doctest::Approx(0.5f).epsilon(0.01));

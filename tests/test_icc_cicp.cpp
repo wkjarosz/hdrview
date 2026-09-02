@@ -26,9 +26,8 @@ void put_be32(std::vector<uint8_t> &v, size_t offset, uint32_t value)
     v[offset + 3] = uint8_t(value);
 }
 
-// Builds the smallest byte sequence that carries an ICC `cicp` tag: a 128-byte header, a one-entry tag
-// table, and the tag itself. LCMS will refuse to open it as a profile, which is deliberate -- the code
-// points have to be readable from the bytes alone, independent of what LCMS makes of the rest.
+// The smallest byte sequence carrying an ICC `cicp` tag: a 128-byte header, a one-entry tag table, and the
+// tag. LCMS refuses to open it as a profile, so the code points have to be readable from the bytes alone.
 std::vector<uint8_t> icc_bytes_with_cicp(uint8_t cp, uint8_t tc, uint8_t mc, uint8_t fr)
 {
     std::vector<uint8_t> v(128 + 4 + 12 + 12, 0);
@@ -47,9 +46,8 @@ std::vector<uint8_t> icc_bytes_with_cicp(uint8_t cp, uint8_t tc, uint8_t mc, uin
 
 } // namespace
 
-// ICC.1:2022 lets a profile declare CICP code points directly. HDRView reads them out of the profile bytes
-// rather than through LCMS, which only gained the tag in 2.16 -- so a build linking an older LCMS (libjxl
-// vendors 2.10) would otherwise see nothing here.
+// ICC.1:2022 lets a profile declare CICP code points directly. HDRView reads them from the profile bytes;
+// LCMS only gained the tag in 2.16 and libjxl vendors 2.10.
 TEST_CASE("ICC cicp tag is read from the profile bytes")
 {
     SUBCASE("PQ at BT.2020 primaries")
@@ -90,10 +88,8 @@ TEST_CASE("ICC cicp tag is read from the profile bytes")
     }
 }
 
-// The defect this guards: an HDR image whose transfer function is declared only by the profile's cicp tag
-// used to be linearized by transforming through the profile itself, and the ICC PCS is normalized to media
-// white -- so everything above diffuse white was clamped away. PQ's 1.0 is 10000 nits, which against a
-// 203-nit reference white is a little over 49, and that is what has to survive.
+// The ICC PCS is normalized to media white, so transforming through the profile would clamp away everything
+// above diffuse white. PQ's 1.0 is 10000 nits, a little over 49 against a 203-nit reference white.
 TEST_CASE("An ICC profile whose cicp tag declares PQ keeps its HDR range")
 {
     auto       bytes = icc_bytes_with_cicp(9, 16, 0, 1);
@@ -105,16 +101,15 @@ TEST_CASE("An ICC profile whose cicp tag declares PQ keeps its HDR range")
 
     REQUIRE(profile.linearize_pixels(pixels.data(), int3{2, 1, 3}, /*keep_primaries*/ true, &description, &chr));
 
-    // Fully-encoded PQ is far above SDR white; the pre-fix path could not return anything above it.
+    // fully-encoded PQ is far above SDR white
     CHECK(pixels[0] > 40.f);
     CHECK(pixels[0] == doctest::Approx(49.2611f).epsilon(1e-3));
-    // Mid-code PQ is a much dimmer absolute level, so the curve is being applied rather than a scale factor.
+    // mid-code PQ is a much dimmer absolute level, so this is the curve and not a scale factor
     CHECK(pixels[3] < 1.f);
     CHECK(pixels[3] > 0.f);
 }
 
-// The tag is parsed straight from untrusted bytes, so a truncated or self-inconsistent profile has to fall
-// out as "no code points" rather than reading past the buffer.
+// The tag is parsed straight from untrusted bytes.
 TEST_CASE("ICC cicp parsing rejects malformed profiles")
 {
     auto good = icc_bytes_with_cicp(9, 16, 0, 1);

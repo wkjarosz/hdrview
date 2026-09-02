@@ -37,13 +37,12 @@ TEST_CASE("shorten_names trims the shared prefix and suffix")
 
 TEST_CASE("shorten_names handles a name that is entirely the common suffix")
 {
-    // "a.exr" is a suffix of "xa.exr", so the whole of the shorter name is shared and the range left for
-    // it is empty -- the case where the byte before the range is at index -1 of an unsigned offset.
+    // "a.exr" is entirely shared, leaving an empty range whose preceding byte is at unsigned index -1
     vector<string> names{"a.exr", "xa.exr"};
     auto           shortened = shorten_names(names);
     REQUIRE(shortened.size() == 2);
 
-    // Nothing unique is left for "a.exr", so it keeps its own file name rather than an empty string.
+    // with nothing unique left, a name falls back to its own file name
     CHECK(shortened[0] == "a.exr");
     CHECK_FALSE(shortened[1].empty());
     CHECK(shortened[1].find("x") != string::npos);

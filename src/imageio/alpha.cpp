@@ -10,7 +10,7 @@ using namespace stp;
 namespace
 {
 
-//! Scale each pixel's color channels by `factor(alpha)`, leaving alpha itself alone.
+/// Scale each pixel's color channels by `factor(alpha)`, leaving alpha itself alone.
 template <typename F>
 void scale_colors_by_alpha(float *pixels, int3 size, F &&factor)
 {
@@ -40,7 +40,7 @@ void unpremultiply_before_transfer(float *pixels, int3 size, AlphaType_ alpha_ty
     if (!needs_undoing(size, alpha_type))
         return;
 
-    // A fully transparent pixel carries no color to recover, so leave it rather than dividing by zero.
+    // a fully transparent pixel carries no color to recover; don't divide by zero
     scale_colors_by_alpha(pixels, size, [](float a) { return a == 0.f ? 1.f : 1.f / a; });
 }
 

@@ -4,9 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-// Ahead of every other include, since spdlog and GLFW both pull in <windows.h> themselves and whichever
-// gets there first decides these: NOMINMAX keeps its min/max macros away from std::min/std::max, and
-// WIN32_LEAN_AND_MEAN trims a header this file needs almost nothing from.
+// Ahead of every other include, since spdlog and GLFW both pull in <windows.h> themselves and whichever gets
+// there first decides these. NOMINMAX keeps windows.h's min/max macros away from std::min/std::max.
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <dxgi1_6.h>
@@ -41,16 +40,13 @@ float win32_display_max_nits(void *window)
     if (!hwnd)
         return 0.f;
 
-    // Which monitor the window is mostly on. DXGI identifies its outputs by the same HMONITOR, which is what
-    // lets us pick the display the user is actually looking at rather than the first one enumerated.
+    // which monitor the window is mostly on; DXGI identifies its outputs by the same HMONITOR
     HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     if (!monitor)
         return 0.f;
 
-    // No D3D device needed -- a bare factory is enough to walk adapters and outputs -- and DXGI needs no
-    // CoInitialize. Created and released per call rather than kept alive: a cached factory goes stale
-    // (IDXGIFactory1::IsCurrent) whenever the display configuration changes, which is exactly when the
-    // answer here changes too.
+    // A bare factory is enough to walk adapters and outputs, and DXGI needs no CoInitialize. It is created
+    // per call because a cached one goes stale (IDXGIFactory1::IsCurrent) on any display configuration change.
     IDXGIFactory1 *factory = nullptr;
     if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void **)&factory)))
         return 0.f;
@@ -70,8 +66,8 @@ float win32_display_max_nits(void *window)
             if (adapter->EnumOutputs(o, &output) != S_OK)
                 break;
 
-            // GetDesc1 (and the luminance fields with it) arrived with IDXGIOutput6 in Windows 10 1703; the
-            // QueryInterface simply fails on anything older, leaving the ceiling unknown.
+            // GetDesc1 and its luminance fields arrived with IDXGIOutput6 in Windows 10 1703; the
+            // QueryInterface fails on anything older, leaving the ceiling unknown
             IDXGIOutput6     *output6 = nullptr;
             DXGI_OUTPUT_DESC1 desc{};
             if (SUCCEEDED(output->QueryInterface(__uuidof(IDXGIOutput6), (void **)&output6)) &&
@@ -93,9 +89,7 @@ float win32_display_max_nits(void *window)
     if (!matched)
         return 0.f;
 
-    // Logged only when the numbers change, since this is polled several times a second.
-    // MaxFullFrameLuminance appears nowhere else in HDRView, and a peak far above it is the usual reason an
-    // image starts clipping well below the ceiling the histogram draws.
+    // logged only when the numbers change, since this is polled several times a second
     static DXGI_OUTPUT_DESC1 last{};
     if (found.Monitor != last.Monitor || found.MaxLuminance != last.MaxLuminance ||
         found.MaxFullFrameLuminance != last.MaxFullFrameLuminance || found.MinLuminance != last.MinLuminance)
@@ -105,10 +99,8 @@ float win32_display_max_nits(void *window)
                      found.MaxLuminance, found.MaxFullFrameLuminance, found.MinLuminance);
     }
 
-    // MaxLuminance is the small-area peak; MaxFullFrameLuminance is what the panel can sustain across the
-    // whole screen, and on OLED the two differ severalfold. The peak is the one returned, matching what
-    // Wayland compositors and macOS's EDR headroom describe, and the one that fits an image whose highlights
-    // are small. Both come from EDID, which displays routinely overstate, so treat either as a claim rather
-    // than a measurement.
+    // MaxLuminance is the small-area peak, MaxFullFrameLuminance what the panel sustains across the whole
+    // screen; on OLED the two differ severalfold. The peak is what Wayland compositors and macOS's EDR
+    // headroom describe. Both come from EDID, which displays routinely overstate.
     return (float)found.MaxLuminance;
 }

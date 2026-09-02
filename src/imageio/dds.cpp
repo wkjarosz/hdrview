@@ -155,8 +155,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
         auto masks  = dds.header.pixel_format.masks;
         auto shifts = dds.right_shifts;
 
-        // A bitmasked pixel is Bpp bytes wide -- 1 for A8/L8, 2 for the 16-bit formats -- and DDS stores
-        // it little-endian.
+        // a bitmasked pixel is Bpp bytes wide (1 for A8/L8, 2 for the 16-bit formats), stored little-endian
         auto read_packed = [Bpp](const uint8_t *p)
         { return read_partial_as<uint32_t>(p, (size_t)Bpp, Endian::Little); };
         // special cases
@@ -238,8 +237,8 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
                 // mask_c = max(c, mask_c);
                 while (mask_c < 4 && masks[mask_c] == 0) ++mask_c;
 
-                // A file declaring fewer non-empty masks than it has channels runs this past the last one,
-                // and masks/bit_counts/right_shifts all hold exactly four.
+                // a file declaring fewer non-empty masks than it has channels runs this past the last of
+                // the four that masks/bit_counts/right_shifts hold
                 if (mask_c >= 4)
                     break;
 
@@ -422,11 +421,9 @@ vector<ImagePtr> load_compressed(const DDSFile::ImageData *data, const DDSFile &
                         auto block = start_of_slice + (by * width_in_blocks + bx) * block_size;
 
                         // bcdec reads each block as two unsigned long longs straight out of the pointer it
-                        // is given. A DDS carrying a DXT10 header -- which BC6H and BC7 require -- puts its
-                        // pixel data at byte 148 of the file, so those blocks are 4-aligned and never
-                        // 8-aligned. Stage those through an aligned buffer; data that is already aligned,
-                        // including every pre-DX10 format at byte 128, is used in place. block_size is 8 or
-                        // 16, so it always fits.
+                        // is given, but a DXT10 header (which BC6H and BC7 require) puts the pixel data at
+                        // byte 148, leaving every block 4-aligned. Stage those through an aligned buffer;
+                        // block_size is 8 or 16, so it always fits.
                         alignas(unsigned long long) uint8_t aligned_block[16];
                         if (reinterpret_cast<uintptr_t>(block) % alignof(unsigned long long) != 0)
                         {
@@ -731,16 +728,14 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
         {
             ImagePtr image = new_images[i];
 
-            // DXT2 and DXT4 are the premultiplied-alpha spellings of DXT3 and DXT5, and a DX9 file carries
-            // that only in its FourCC -- there is no misc_flags2 to read it from. Without this the values,
-            // which arrive already multiplied by alpha, would be premultiplied a second time by finalize().
+            // DXT2 and DXT4 are the premultiplied-alpha spellings of DXT3 and DXT5, which a DX9 file states
+            // only in its FourCC
             const bool premultiplied = dds.alpha_mode == DDSFile::ALPHA_MODE_PREMULTIPLIED ||
                                        dds.compression == DDSFile::Compression::BC2_DXT2 ||
                                        dds.compression == DDSFile::Compression::BC3_DXT4;
             const int  num_ch    = (int)image->channels.size();
             const bool has_alpha = num_ch >= 4 || num_ch == 2;
-            // A DX9 header has no misc_flags2 to read, so outside the DXT2/DXT4 spellings nothing in such a
-            // file states the kind and straight is a guess.
+            // a DX9 header has no misc_flags2, so outside DXT2/DXT4 nothing states the kind
             const AlphaSource_ alpha_source =
                 !has_alpha || premultiplied || dds.alpha_mode != DDSFile::ALPHA_MODE_UNKNOWN ? AlphaSource_File
                                                                                              : AlphaSource_Assumed;
@@ -753,8 +748,8 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
             {
                 spdlog::info("Converting sRGB to linear for uncompressed image.");
 
-                // Color premultiplied after encoding has to be divided out across the conversion, which the
-                // channels are laid out for here rather than interleaved; see imageio/alpha.h.
+                // color premultiplied after encoding has to be divided out across the conversion; the
+                // channels are planar here, so alpha is addressed directly. See alpha.h.
                 const Channel *alpha =
                     image->alpha_type == AlphaType_PremultipliedNonLinear && (num_ch >= 4 || num_ch == 2)
                         ? &image->channels[num_ch - 1]

@@ -63,9 +63,9 @@ void HDRViewApp::draw_pixel_info() const
     if (!img || !m_draw_pixel_info)
         return;
 
-    // These numbers report the same pixel the status bar does (see m_status_pixel_target), values and
-    // labels alike, so the two readouts can never disagree about what is being shown. The composite is a
-    // blend of both images and has no channel layout of its own, so it borrows the current image's.
+    // These numbers report the same pixel the status bar does, values and labels alike; see
+    // m_status_pixel_target. The composite has no channel layout of its own, so it borrows the current
+    // image's.
     const bool from_reference = m_status_pixel_target == 1;
     auto       src            = from_reference ? reference_image() : img;
     if (!src)
@@ -122,8 +122,7 @@ void HDRViewApp::draw_pixel_info() const
             float4 r_pixel = pixel_value({x, y}, true, m_status_pixel_target);
             float4 t_pixel = linear_to_sRGB(pixel_value({x, y}, false, m_status_pixel_target));
             float4 pixel   = m_status_color_mode == 0 ? r_pixel : t_pixel;
-            // Legibility is against what is on screen, which is the composite however the numbers
-            // themselves are sourced.
+            // Legibility is against what is on screen, which is the composite whatever the numbers show.
             float4 displayed  = m_status_pixel_target == 2 ? t_pixel : linear_to_sRGB(pixel_value({x, y}, false, 2));
             float3 text_color = contrasting_color(displayed.xyz());
             float3 shadow     = contrasting_color(text_color);
@@ -204,15 +203,15 @@ void HDRViewApp::draw_image_border() const
 
 void HDRViewApp::draw_vector_overlays() const
 {
-    // The current image and, when one is set, the reference: a renderer can annotate either, and which is
-    // which has to stay readable, so they get different default colors -- matching what tev does.
+    // The current image and, when one is set, the reference: a renderer can annotate either, so they get
+    // different default colors, matching tev's.
     const std::pair<ConstImagePtr, ImU32> targets[] = {{current_image(), IM_COL32(255, 255, 255, 200)},
                                                        {reference_image(), IM_COL32(255, 128, 0, 200)}};
 
     VgTransform xform;
     xform.to_screen = [this](float2 p) { return app_pos_at_pixel(p); };
-    // Screen pixels per image pixel, read off the transform itself so it stays right under a flip, which
-    // mirrors the mapping but must not give a stroke a negative width.
+    // Screen pixels per image pixel, read off the transform itself; abs() because a flip mirrors the
+    // mapping but must not give a stroke a negative width.
     xform.scale        = std::abs(app_pos_at_pixel(float2{1.f, 0.f}).x - app_pos_at_pixel(float2{0.f, 0.f}).x);
     xform.default_font = font("sans regular");
     xform.font_for     = [this](const std::string &face) -> void *
@@ -236,7 +235,7 @@ void HDRViewApp::draw_vector_overlays() const
                             [](const char *what)
                             {
                                 // Throttled: an overlay is redrawn every frame, so an unsupported command
-                                // in it would otherwise report itself at the frame rate.
+                                // in it would report itself at the frame rate.
                                 if (static LogThrottle throttle{std::chrono::seconds(10)}; throttle)
                                     spdlog::warn("Vector overlay uses {}, which HDRView does not draw.", what);
                             });
@@ -301,7 +300,7 @@ void HDRViewApp::draw_image() const
         }
 
         // Both targets report their alpha convention: choose_channel() runs after blend(), so undoing the
-        // premultiply on an isolated channel is only safe when the reference qualifies as well.
+        // premultiply on an isolated channel is only safe when the reference qualifies too.
         if (target == Target_Primary)
             m_shader->set_uniform_block("fsp", {{"primary_M_to_sRGB", M_to_sRGB},
                                                 {"primary_channels_type", channels_type},
@@ -367,11 +366,10 @@ void HDRViewApp::draw_background()
 {
     using namespace literals;
 
-    // Decide once, here, whether this frame needs color management, so that the two halves of the colorpass
-    // -- which run at different points in the frame -- can never disagree. Then, if it does, redirect this
-    // frame's rendering (this call, and the ImGui rendering that follows it) into an offscreen target
-    // instead of the real framebuffer; end_colorpass_frame() converts it to the real framebuffer right
-    // before the frame is presented. Both no-op otherwise.
+    // Decide once, here, whether this frame needs color management, so the two halves of the colorpass,
+    // which run at different points in the frame, cannot disagree. If it does, this frame's rendering goes
+    // into an offscreen target that end_colorpass_frame() converts to the real framebuffer just before the
+    // frame is presented. Both no-op otherwise.
     update_colorpass();
     begin_colorpass_frame();
 
@@ -381,17 +379,15 @@ void HDRViewApp::draw_background()
 
     if (m_play_forward || m_play_backward)
     {
-        // Keep the period in floating-point seconds. Rounding it to whole milliseconds would quantize the
-        // achievable rates to 1000/n and collapse each broadcast rate onto its nominal neighbor: 23.976 and
-        // 24 fps would both land on 41ms. The clamp matches the slider's range and bounds the catch-up
-        // loop below, since the settings file this is restored from can carry any value at all.
+        // Keep the period in floating-point seconds: whole milliseconds would quantize the achievable rates
+        // to 1000/n, landing 23.976 and 24 fps both on 41ms. The clamp matches the slider's range and bounds
+        // the catch-up loop below, since the settings file can carry any value at all.
         const auto period = chrono::duration_cast<chrono::steady_clock::duration>(
             chrono::duration<float>{1.f / std::clamp(m_playback_speed, 1.f / 20.f, 60.f)});
         const auto direction = m_play_forward ? Direction_Forward : Direction_Backward;
 
-        // Past this, either playback has just started -- prev_frame still dates from the first frame drawn
-        // -- or the app stalled. Stepping through the whole backlog an image at a time would be a burst of
-        // work whose result is discarded, so drop it and resync instead.
+        // Past this, either playback has just started (prev_frame still dates from the first frame drawn)
+        // or the app stalled; stepping through the whole backlog would be work whose result is discarded.
         const auto resync_after = std::max(period, chrono::steady_clock::duration{1s});
 
         bool advanced = false;
@@ -403,9 +399,8 @@ void HDRViewApp::draw_background()
         }
         else
         {
-            // Accumulating whole periods rather than resetting to now keeps the average rate exact, and
-            // lets a render slower than the playback rate step several images per frame instead of
-            // silently capping playback at the render rate.
+            // Accumulating whole periods, instead of resetting to now, keeps the average rate right and
+            // lets a render slower than the playback rate step several images per frame.
             while (this_frame - prev_frame >= period)
             {
                 prev_frame += period;
@@ -463,8 +458,7 @@ void HDRViewApp::draw_background()
 void HDRViewApp::set_image_textures()
 {
     // Every binding below goes through the shader, which setup_rendering() creates once the graphics
-    // backend is up. Images can arrive before that -- a session passed on the command line resolves and
-    // refreshes its textures as it loads -- and the next frame binds them anyway.
+    // backend is up. Images can arrive before that; the next frame binds them anyway.
     if (!m_shader)
         return;
 

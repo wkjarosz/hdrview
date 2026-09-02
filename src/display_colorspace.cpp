@@ -21,16 +21,15 @@
 
 using namespace std;
 
-// Everything in here exists only to translate what an HDR-enabling GLFW fork reports. Against stock GLFW
-// (and on Emscripten) none of it is reachable, so it is compiled out entirely rather than left as dead code.
+// everything in here translates what an HDR-enabling GLFW fork reports, so it compiles out against stock
+// GLFW and on Emscripten
 #if defined(GLFW_FLOATBUFFER)
 namespace
 {
 
-// The wp_color_manager_v1 code points GLFW reports. GLFW publishes no enum or macro for these -- the Wayland
-// protocol's numbering is the de facto cross-platform ABI of glfwGetWindowTransfer()/glfwGetWindowPrimaries(),
-// which return these same integers verbatim on Windows and macOS too (where only a small subset is
-// reachable). Mirrored from wayland-protocols' staging/color-management/color-management-v1.xml.
+// The wp_color_manager_v1 code points GLFW reports. GLFW publishes no enum or macro for these; the Wayland
+// protocol's numbering is the de facto ABI of glfwGetWindowTransfer()/glfwGetWindowPrimaries() on Windows and
+// macOS too. Mirrored from wayland-protocols' staging/color-management/color-management-v1.xml.
 enum WpTransfer : uint32_t
 {
     WpTransfer_BT1886 = 1,
@@ -74,9 +73,7 @@ TransferFunction transfer_from_wp(uint32_t wp)
     case WpTransfer_Log100: return TransferFunction::Log100;
     case WpTransfer_Log316: return TransferFunction::Log100_Sqrt10;
     case WpTransfer_xvYCC: return TransferFunction::IEC61966_2_4;
-    // Plain and extended sRGB share the same curve; HDRView's sRGB encoders are sign-extended already, so
-    // the extended variant needs no separate case. Reachable on Windows whenever advanced color is enabled
-    // but the framebuffer is only 8 bits per channel.
+    // plain and extended sRGB share the same curve, and HDRView's sRGB encoders are sign-extended already
     case WpTransfer_sRGB: [[fallthrough]];
     case WpTransfer_ExtsRGB: return TransferFunction::sRGB;
     case WpTransfer_ST2084_PQ: return TransferFunction::BT2100_PQ;
@@ -115,12 +112,12 @@ float DisplayColorSpace::transfer_white_nits() const
 {
     switch (tf.type)
     {
-    // PQ maps absolute luminance straight to code values -- there is no reference white to normalize by.
+    // PQ maps absolute luminance straight to code values, with no reference white to normalize by
     case TransferFunction::BT2100_PQ: return 0.f;
     case TransferFunction::BT2100_HLG: return 1000.f;
     case TransferFunction::ITU: [[fallthrough]];
     case TransferFunction::IEC61966_2_4: return 100.f;
-    // scRGB's fixed convention, and the sane default for everything else.
+    // scRGB's fixed convention, and the default for everything else
     default: return 80.f;
     }
 }
@@ -154,9 +151,8 @@ DisplayColorSpace query_display_colorspace([[maybe_unused]] void *window)
     DisplayColorSpace cs;
 
 #if defined(GLFW_FLOATBUFFER)
-    // These queries are window-scoped, so they need the real window/context to exist. They exist only in
-    // HDR-enabling GLFW forks (see the Tom94/glfw pin in CMakeLists.txt); against stock GLFW this whole
-    // block compiles out and the plain-SDR default above is returned, making the colorpass inert.
+    // These queries are window-scoped, so they need the real window/context to exist, and they exist only in
+    // HDR-enabling GLFW forks (see the Tom94/glfw pin in CMakeLists.txt).
     auto *w = (GLFWwindow *)window;
     if (!w)
         return cs;
@@ -168,12 +164,10 @@ DisplayColorSpace query_display_colorspace([[maybe_unused]] void *window)
     cs.max_nits = glfwGetWindowMaxLuminance(w);
 
 #if defined(_WIN32)
-    // Both of the queries below walk every display path -- QueryDisplayConfig for the white level, DXGI's
-    // adapter/output enumeration for the ceiling -- which is far too expensive to do every frame (nanogui
-    // gives up and caches it once at startup). Re-query a few times a second instead: still fast enough to
-    // follow the "SDR content brightness" slider live, without the per-frame cost.
-    // These are function-local statics rather than per-window state because HDRView only ever has one
-    // window; if that ever changes, this cache would need to move to a per-window key.
+    // Both queries below walk every display path (QueryDisplayConfig for the white level, DXGI's
+    // adapter/output enumeration for the ceiling), which is too expensive to do every frame. A few times a
+    // second still follows the "SDR content brightness" slider live. The cache is a function-local static
+    // because HDRView only ever has one window.
     static auto  last_query       = std::chrono::steady_clock::now() - std::chrono::hours(1);
     static float cached_sdr_white = 0.f;
     static float cached_max_nits  = 0.f;
@@ -182,9 +176,8 @@ DisplayColorSpace query_display_colorspace([[maybe_unused]] void *window)
     if (now - last_query >= std::chrono::milliseconds(250))
     {
         cached_sdr_white = glfwGetWindowSdrWhiteLevel(w);
-        // GLFW's Win32 backend reports max luminance as a flag rather than a measurement: 80 nits when the
-        // display is not in HDR mode, and 0 -- "unknown" -- when it is. Only that unknown is worth asking
-        // DXGI about, and only it gets replaced below; the definite SDR answer stands.
+        // GLFW's Win32 backend reports max luminance as a flag, not a measurement: 80 nits when the display
+        // is not in HDR mode, 0 ("unknown") when it is. Only the unknown is worth asking DXGI about.
         cached_max_nits = cs.max_nits == 0.f ? win32_display_max_nits(w) : 0.f;
         last_query      = now;
     }

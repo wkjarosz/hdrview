@@ -4,9 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-// XMP is informational: it decorates an image, it does not describe its pixels. Image::finalize() parses it
-// with no guard around the call, so anything the parser does to a packet it dislikes happens to the whole
-// load.
+// XMP decorates an image, it does not describe its pixels; but Image::finalize() parses it with no guard
+// around the call, so whatever the parser does to a packet it dislikes happens to the whole load.
 
 #include <doctest/doctest.h>
 
@@ -22,7 +21,7 @@
 namespace
 {
 
-//! Wraps `body` in the packet framing a writer normally emits.
+/// Wraps `body` in the packet framing a writer normally emits.
 std::string packet(const std::string &body)
 {
     return "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
@@ -44,8 +43,7 @@ json parse(const std::string &xml)
 
 TEST_CASE("An ordinary XMP packet parses into its schemas")
 {
-    // Baseline: without this, a change that stops XMP parsing altogether looks the same as one that fixes
-    // a crash in it.
+    // baseline, so a change that stops XMP parsing altogether cannot pass as one that hardens it
     const json j = parse(packet(R"(<rdf:Description rdf:about=""
         xmlns:dc="http://purl.org/dc/elements/1.1/"
         xmlns:xmp="http://ns.adobe.com/xap/1.0/"
@@ -58,16 +56,14 @@ TEST_CASE("An ordinary XMP packet parses into its schemas")
     CHECK(j["dc"]["format"] == "image/jpeg");
     REQUIRE(j.contains("xmp"));
     CHECK(j["xmp"]["CreatorTool"] == "HDRView");
-    // The namespace table the Info panel groups and orders by.
+    // the namespace table the Info panel groups and orders by
     REQUIRE(j.contains("xmlns"));
     CHECK(j["xmlns"]["dc"]["name"] == "Dublin Core");
 }
 
 TEST_CASE("A default namespace declaration does not take the image down with it")
 {
-    // xmlns= has no colon, so it is stored as a plain string; xmlns:dc= then addresses it as an object.
-    // Both are ordinary XML, and a packet carrying the two together is not exotic -- but the second one
-    // used to throw straight out of Image::finalize(), so the pixels never arrived either.
+    // xmlns= has no colon, so it is stored as a plain string; xmlns:dc= then addresses it as an object
     const std::string with_default_ns = packet(R"(<rdf:Description rdf:about=""
         xmlns="http://purl.org/dc/elements/1.1/"
         xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -78,14 +74,14 @@ TEST_CASE("A default namespace declaration does not take the image down with it"
     CHECK_NOTHROW(j = parse(with_default_ns));
     CHECK(j.is_object());
 
-    // Same collision reached through an element's own attributes rather than a namespace declaration.
+    // the same collision reached through an element's own attributes
     const std::string prefix_used_twice = packet(R"(<rdf:Description rdf:about=""
         xmlns:dc="http://purl.org/dc/elements/1.1/"
         dc="plain"
         dc:title="structured"/>)");
     CHECK_NOTHROW(parse(prefix_used_twice));
 
-    // And through a child element whose prefix an attribute already claimed as a plain value.
+    // and through a child element whose prefix an attribute already claimed as a plain value
     const std::string child_after_attribute = packet(R"(<rdf:Description rdf:about=""
         xmlns:dc="http://purl.org/dc/elements/1.1/"
         dc="plain">
@@ -106,7 +102,7 @@ TEST_CASE("A packet that cannot be parsed yields nothing rather than throwing")
 namespace
 {
 
-//! A 1x1 PNG carrying `xmp` in the iTXt chunk the XMP spec assigns it, which png.cpp reads.
+/// A 1x1 PNG carrying `xmp` in the iTXt chunk the XMP spec assigns it, which png.cpp reads.
 std::string png_with_xmp(const std::string &xmp)
 {
     auto be32 = [](uint32_t v)
@@ -122,7 +118,7 @@ std::string png_with_xmp(const std::string &xmp)
                be32((uint32_t)crc32(0, (const Bytef *)body.data(), (uInt)body.size()));
     };
 
-    // 1x1 8-bit RGB, one uncompressed zlib block holding a single filtered scanline.
+    // 1x1 8-bit RGB, one uncompressed zlib block holding a single filtered scanline
     std::string        ihdr = be32(1) + be32(1) + std::string("\x08\x02\x00\x00\x00", 5);
     std::string        raw  = std::string("\x00\xff\x00\x00", 4);
     uLongf             cap  = compressBound((uLong)raw.size());
@@ -140,15 +136,14 @@ std::string png_with_xmp(const std::string &xmp)
 
 TEST_CASE("An image whose XMP the parser dislikes still loads its pixels")
 {
-    // The point of the whole exercise: XMP decorates an image, so however badly a packet is formed, the
-    // pixels have to arrive. Image::finalize() parses XMP with nothing catching around the call.
+    // Image::finalize() parses XMP with nothing catching around the call
     const std::string xmp = packet(R"(<rdf:Description rdf:about=""
         xmlns="http://purl.org/dc/elements/1.1/"
         xmlns:dc="http://purl.org/dc/elements/1.1/">
         <dc:title>ok</dc:title>
       </rdf:Description>)");
 
-    // First the control, so a broken fixture cannot masquerade as the bug.
+    // first the control, so a broken fixture cannot masquerade as the bug
     std::istringstream    plain{png_with_xmp("")};
     std::vector<ImagePtr> plain_images;
     CHECK_NOTHROW(plain_images = load_image(plain, "plain.png"));

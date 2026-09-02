@@ -22,20 +22,13 @@
 namespace
 {
 
-//! How many levels an image of \p size has, counting the image itself, down to a single sample.
+/// How many levels an image of \p size has, counting the image itself, down to a single sample.
 int level_count(int2 size) { return 1 + int(std::floor(std::log2(float(std::max(1, std::max(size.x, size.y)))))); }
 
-/*!
-    Halve an image repeatedly, putting each level in the list as an image of its own.
-
-    Separate images rather than levels within one, because every channel of an Image shares a single data
-    window -- subsampled channels are stretched to it at load precisely to keep that true -- so a chain of
-    different-sized levels has nowhere to live inside one. As separate images they work with everything
-    already here: the panel lists them, the viewport compares them, saving writes them.
-
-    This does not read or write the levels an OpenEXR file can carry in its own mip-mapped tiles. Those are
-    reported in the metadata panel and otherwise passed over; reading them would want the level dimension
-    this deliberately avoids.
+/// Halve the image repeatedly, adding each level as a separate Image.
+/**
+    Separate Images because all the channels of one Image share a data window. Unrelated to OpenEXR's own
+    mip levels, which are not read.
 */
 class GenerateMipmaps final : public EditCommand
 {
@@ -48,7 +41,7 @@ public:
                ImGuiInputFlags_None,
                "Generate",
                26.f};
-        // Rewrites the whole image into a pyramid, so there is no subject to narrow.
+        // rewrites the whole image into a pyramid, so there is no subject to narrow
         i.draws_subject_selector = false;
         return i;
     }
@@ -61,8 +54,7 @@ public:
 
     void on_open(EditContext &ctx) override
     {
-        // The whole chain by default, which is what "mipmaps" usually means, but clamped to what this
-        // image actually has.
+        // the whole chain by default, clamped to what this image has
         if (auto img = ctx.image())
             m_levels = std::min(m_levels, level_count(img->size()) - 1);
     }
@@ -81,7 +73,7 @@ public:
 
         m_levels = std::clamp(m_levels, 1, most);
 
-        // What is about to appear, since the count alone does not say how small it gets.
+        // the count alone does not say how small it gets
         int2 size = img->size();
         for (int i = 0; i < m_levels && i < 4; ++i)
         {
@@ -101,9 +93,7 @@ public:
         const int most = level_count(img->size()) - 1;
         const int want = std::clamp(m_levels, 1, most);
 
-        // Each level is halved from the one before rather than resampled from the original: that is what
-        // a mip chain is, and it costs a quarter as much as going back to the full-resolution image every
-        // time.
+        // each level is halved from the one before, as a mip chain is, and not resampled from the original
         ImagePtr previous = img;
         for (int level = 1; level <= want; ++level)
         {
@@ -113,8 +103,7 @@ public:
             if (!next)
                 return;
 
-            // stb's resampler, the same one Image size uses: it averages over the samples each destination
-            // one covers rather than dropping three of every four.
+            // stb's resampler, as Image size uses: it averages over the samples each destination covers
             next->resample(size);
             next->rebuild_layers();
 
@@ -124,7 +113,7 @@ public:
     }
 
 private:
-    int m_levels = 32; //!< Clamped to what the image has when the dialog opens
+    int m_levels = 32; ///< Clamped to what the image has when the dialog opens
 };
 
 } // namespace

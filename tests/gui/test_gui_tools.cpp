@@ -1,9 +1,9 @@
 /** \file test_gui_tools.cpp
     \author Wojciech Jarosz
 
-    Mouse-mode actions, driven from both the Tools menu and the floating tool palette: confirms exactly one
-    of Pan/Rectangular-select/Pixel-inspector is active at a time, and that the palette stays a compact box
-    inside the image viewport, snaps to the corner it is dropped nearest, and can be collapsed and hidden.
+    Mouse-mode actions, driven from the Tools menu and the floating tool palette: one of
+    Pan/Rectangular-select/Pixel-inspector is active at a time, and the palette stays a compact box inside
+    the image viewport, snaps to the corner it is dropped nearest, and can be collapsed and hidden.
 */
 
 #include "app.h"
@@ -30,9 +30,7 @@ static void assert_only(const char *active_name)
 
 static const char *palette_window_ref = PALETTE;
 
-//! Test-engine ref of one of the palette's tool buttons, whose label ImGui::IconButton() builds as
-//! "<icon>##<action name>". A literal '/' in the name (e.g. "Pixel/color inspector") has to be escaped, or
-//! the engine reads it as a path separator.
+/// Test-engine ref of a palette tool button, whose label ImGui::IconButton() builds as "<icon>##<action>".
 static string palette_tool_ref(const char *action_name)
 {
     string escaped = action_name;
@@ -40,14 +38,13 @@ static string palette_tool_ref(const char *action_name)
     return PALETTE "/" + hdrview()->action(action_name).icon + "##" + escaped;
 }
 
-//! True when the palette is expanded; collapsed, ImGui submits its title bar and nothing else.
+/// True when the palette is expanded; collapsed, ImGui submits its title bar and nothing else.
 static bool palette_expanded(ImGuiTestContext *ctx)
 {
     return ctx->ItemExists(palette_tool_ref("Rectangular select").c_str());
 }
 
-//! The palette's visibility and collapsed state are restored from the user's settings file, so no test may
-//! assume how it starts out. Put it in a known state instead.
+/// Puts the palette in a known state: its visibility and collapsed state come from the user's settings.
 static void show_and_expand_palette(ImGuiTestContext *ctx)
 {
     ctx->SetRef("##MainMenuBar");
@@ -60,8 +57,7 @@ static void show_and_expand_palette(ImGuiTestContext *ctx)
     IM_CHECK(palette_expanded(ctx));
 }
 
-//! A point on the palette's title bar clear of its collapse arrow. Not GetWindowTitlebarPoint(), which
-//! returns the bar's center - on a palette only as wide as its buttons, that is the arrow itself.
+/// A point on the palette's title bar clear of its collapse arrow, which sits at the bar's center here.
 static float2 palette_grab_point(ImGuiTestContext *ctx)
 {
     ImGuiWindow *w = ctx->WindowInfo(palette_window_ref).Window;
@@ -71,9 +67,11 @@ static float2 palette_grab_point(ImGuiTestContext *ctx)
     return float2{w->Pos} + float2{0.5f * (arrow_right + w->Size.x), 0.5f * w->TitleBarHeight};
 }
 
-//! Drag the palette by its title bar to \p target, which is where ImGui leaves it and where the snapping
-//! logic then takes over. Deliberately not ImGuiTestContext::WindowMove(), which force-expands the window
-//! and skips the drag entirely when the target is where the window already sits.
+/// Drag the palette by its title bar to \p target, where the snapping logic then takes over.
+/**
+    Not ImGuiTestContext::WindowMove(), which force-expands the window and skips the drag entirely when the
+    target is where the window already sits.
+*/
 static void drag_palette_to(ImGuiTestContext *ctx, float2 target)
 {
     ctx->MouseMoveToPos(palette_grab_point(ctx));
@@ -94,9 +92,8 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
         ctx->MenuClick("Tools/Rectangular select");
         assert_only("Rectangular select");
 
-        // The action's own name contains a literal '/' ("Pixel/color inspector"), which MenuClick would
-        // otherwise misparse as a submenu path separator - escape it, mirroring how Dear ImGui's own demo
-        // addresses its "Metrics/Debugger" menu item ("Tools/Metrics\\/Debugger").
+        // the action's name contains a literal '/' ("Pixel/color inspector"), which MenuClick would parse
+        // as a submenu separator: escape it, as Dear ImGui's demo does for "Tools/Metrics\\/Debugger"
         ctx->MenuClick("Tools/Pixel\\/color inspector");
         assert_only("Pixel/color inspector");
 
@@ -116,7 +113,7 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
             IM_CHECK_EQ(hdrview()->mouse_mode(), i);
         }
 
-        // The palette and the menu are two views of the same actions.
+        // the palette and the menu are two views of the same actions
         ctx->SetRef("##MainMenuBar");
         ctx->MenuClick("Tools/Rectangular select");
         ctx->SetRef("");
@@ -138,9 +135,8 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
         ImGuiWindow *w = ctx->WindowInfo(palette_window_ref).Window;
         IM_CHECK(w != nullptr);
 
-        // The buttons sit centered in the window's padding. ImGui truncates the layout cursor to whole
-        // pixels as it stacks items, so fractional padding or spacing shows up here as a bottom edge
-        // tighter than the top one.
+        // the buttons sit centered in the window's padding; ImGui truncates the layout cursor to whole
+        // pixels, so fractional padding or spacing shows up as a bottom edge tighter than the top one
         {
             ImGuiTestItemInfo first = ctx->ItemInfo(palette_tool_ref(mouse_mode_action_name(0)).c_str());
             ImGuiTestItemInfo last =
@@ -150,14 +146,13 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
             IM_CHECK_EQ(first.RectFull.Min.x - w->Pos.x, (w->Pos.x + w->Size.x) - first.RectFull.Max.x);
         }
 
-        // The palette hugs its buttons; it is not an edge toolbar spanning the image view.
+        // the palette hugs its buttons; it is not an edge toolbar spanning the image view
         IM_CHECK_LT(w->Size.x, 0.25f * vp_size.x);
         IM_CHECK_LT(w->Size.y, 0.5f * vp_size.y);
-        // Tighter: a vertical palette is one button wide plus padding, and the title bar must not widen it.
+        // a vertical palette is one button wide plus padding, and the title bar must not widen it
         IM_CHECK_LT(w->Size.x, 2.f * ImGui::IconButtonSize().x);
 
-        // Dropped anywhere, it snaps to whichever corner of the central node it landed nearest, and ends up
-        // wholly inside that node.
+        // dropped anywhere, it snaps to the nearest corner of the central node and ends up inside it
         for (int corner = 0; corner < 4; ++corner)
         {
             float2 frac{(corner & 1) ? 0.8f : 0.2f, (corner & 2) ? 0.8f : 0.2f};
@@ -182,8 +177,8 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
     {
         show_and_expand_palette(ctx);
 
-        // The title bar's collapse arrow hides the buttons and leaves the bar. The engine hands back item
-        // info gathered a couple of frames ago, so let the vanished items age out before asserting.
+        // the collapse arrow hides the buttons and leaves the bar; the engine hands back item info gathered
+        // a couple of frames ago, so let the vanished items age out before asserting
         ctx->WindowCollapse(palette_window_ref, true);
         ctx->Yield(4);
         IM_CHECK(!palette_expanded(ctx));
@@ -193,7 +188,7 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
         ctx->Yield(4);
         IM_CHECK(palette_expanded(ctx));
 
-        // There is no close button: the Windows menu is what hides the palette, and brings it back.
+        // there is no close button: the Windows menu hides the palette and brings it back
         ctx->SetRef("##MainMenuBar");
         ctx->MenuClick("Windows/Show tool palette");
         ctx->SetRef("");

@@ -1,16 +1,9 @@
 /** \file test_gui_session_bundle.cpp
     \author Wojciech Jarosz
 
-    Coverage for loading a session bundled inside a zip (a "*.hsess" manifest at the zip's root, alongside
-    the images it references) - the mechanism that makes session sharing work on the Emscripten/web build,
-    which has no real filesystem and whose file-upload helper can only select one file at a time (so a
-    manifest plus several images has to arrive as one zip). The load-side logic is identical on native and
-    web (same shared code, fed zip bytes from different sources), so exercising it here via
-    HDRViewApp::load_images() - the same entry point drag-and-drop and CLI args use - gives real coverage of
-    the web path too, even though this test suite can't drive an actual browser.
-
-    Bundles are built directly with miniz's writer API here rather than through
-    HDRViewApp::export_session_bundle() (which opens a native save-file dialog that can't be automated).
+    Loading a session bundled inside a zip: a "*.hsess" manifest at the zip's root alongside the images it
+    references, which is how session sharing works on the web build. Bundles are built with miniz's writer
+    API here, since HDRViewApp::export_session_bundle() opens a native save-file dialog.
 */
 
 #include "app.h"
@@ -81,11 +74,8 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
         j["images"]    = json::array({entry});
         j["current"]   = 0;
         j["reference"] = -1;
-        // A non-default value that only gets applied if this actually went through session loading (the
-        // plain-multi-image-zip fallback never touches blend_mode) -- without this, a single-image bundle
-        // is indistinguishable from "detection silently failed, but the fallback path happened to load the
-        // one image anyway", since extract_and_schedule() would extract this same entry as an ordinary
-        // image regardless.
+        // a non-default value only session loading applies: the plain-multi-image-zip fallback never
+        // touches blend_mode, and would extract this same entry as an ordinary image and look identical
         j["blend_mode"] = "difference";
         j["view"]       = json::object();
 
@@ -96,7 +86,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
                                                        {"images/000_fixture.png", read_file(HDRVIEW_GUI_TEST_IMAGE)}});
 
         hdrview()->close_all_images();
-        // The same entry point drag-and-drop and CLI args use.
+        // the same entry point drag-and-drop and CLI args use
         hdrview()->load_images({zip_path.string()});
         wait_for_loads(ctx);
 
@@ -108,8 +98,7 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session_bundle", "zip_without_manifest_loads_as_plain_images");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // Regression check: a zip with no root .hsess entry must still load as an ordinary multi-image zip
-        // (the pre-existing behavior), not be mistaken for a broken session bundle.
+        // a zip with no root .hsess entry still loads as an ordinary multi-image zip
         fs::path zip_path = write_test_zip("hdrview_test_plain.zip", {{"a.png", read_file(HDRVIEW_GUI_TEST_IMAGE)},
                                                                       {"b.png", read_file(HDRVIEW_GUI_TEST_IMAGE_2)}});
 
@@ -123,10 +112,8 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session_bundle", "duplicate_image_in_bundle_stays_distinct");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // Mirrors test_gui_session.cpp's duplicate-image case, but for a zip-bundled session: the same
-        // in-bundle path listed twice, to confirm the (path, channel_selector) matching machinery shared
-        // with the plain-file case also disambiguates correctly when entries are extracted from a zip
-        // rather than read from disk.
+        // test_gui_session.cpp's duplicate-image case for a zip-bundled session: the same in-bundle path
+        // twice, so the shared (path, channel_selector) matching disambiguates entries extracted from a zip
         json entry0, entry1;
         entry0["path"]            = "images/000_fixture.png";
         entry0["selected_group"]  = 0;
@@ -162,9 +149,8 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session_bundle", "explicit_load_session_accepts_zip_bundle");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // load_session(const string&) -- the function behind the "Load session..." menu item -- must accept
-        // a .zip bundle directly, not just a plain .hsess (this is what "Load session..." should now support
-        // on native, per the explicit request to unify it with bundle loading).
+        // load_session(const string&), behind the "Load session..." menu item, accepts a .zip bundle
+        // directly, not only a plain .hsess
         json entry;
         entry["path"] = "images/000_fixture.png";
         json j;
@@ -191,9 +177,8 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session_bundle", "explicit_load_session_rejects_non_bundle_zip");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // The strict counterpart of the above: an explicit "Load session..." on a zip with no manifest
-        // must not silently fall back to loading it as plain images (unlike drag-and-drop/"Open image...",
-        // where that fallback is the right move) -- num_images() should stay at whatever it was.
+        // an explicit "Load session..." on a zip with no manifest must not fall back to loading it as plain
+        // images, which is what drag-and-drop and "Open image..." do
         fs::path zip_path =
             write_test_zip("hdrview_test_explicit_load_rejects.zip", {{"a.png", read_file(HDRVIEW_GUI_TEST_IMAGE)}});
 
@@ -208,11 +193,9 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session_bundle", "reexporting_bundle_loaded_image_recovers_its_bytes");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // An image loaded from inside a bundle carries a synthetic "zip_path/entry_path" identity rather
-        // than a real filesystem path (see begin_bundle_session_load) -- export_session_bundle() must
-        // recognize that and re-extract the original bytes from the source zip rather than silently
-        // omitting the image (which previously produced a bundle containing only the manifest, with no
-        // images, whenever every loaded image came from a zip).
+        // an image loaded from inside a bundle carries a synthetic "zip_path/entry_path" identity, not a
+        // filesystem path (see begin_bundle_session_load), and export_session_bundle() has to recognize
+        // that and re-extract the original bytes from the source zip
         std::string fixture_bytes = read_file(HDRVIEW_GUI_TEST_IMAGE);
 
         json entry;
@@ -235,11 +218,10 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
 
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         auto img = hdrview()->image(0);
-        // Confirms the loaded image's path is indeed the synthetic, non-real-file form this test targets.
+        // the loaded image's path is the synthetic form this test targets
         IM_CHECK(!fs::exists(img->path));
 
-        // Exercises the same split_zip_entry()+zip_extract_entry() combination export_session_bundle() uses
-        // to recover the original bytes from a synthetic zip-entry path.
+        // the same split_zip_entry() + zip_extract_entry() combination export_session_bundle() uses
         std::string source = img->path.u8string();
         std::string source_zip, entry_path;
         IM_CHECK(split_zip_entry(source, source_zip, entry_path));

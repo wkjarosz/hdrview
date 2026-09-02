@@ -17,11 +17,9 @@ project(
 include(DetectArchitecture)
 detect_architecture()
 
-# Controls `cmake --install`/packaging layout only, not build-tree asset lookup (see
-# HDRVIEW_BUILD_TREE_ASSETS_DIR below for that).
-#   ON  (default): exe and assets/ install together in one relocatable prefix.
-#   OFF: exe installs to CMAKE_INSTALL_BINDIR, assets to a separate FHS location (or a caller-supplied
-#        ASSETS_LOCATION) baked in as a compile definition. Used by the linux-appimage preset.
+# Affects `cmake --install`/packaging layout only, not build-tree asset lookup (HDRVIEW_BUILD_TREE_ASSETS_DIR
+# below). ON: exe and assets/ install together in one relocatable prefix. OFF (the linux-appimage preset):
+# exe to CMAKE_INSTALL_BINDIR, assets to an FHS location baked in as a compile definition.
 option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 option(HDRVIEW_ENABLE_LIBJPEG "Enable libjpeg(-turbo) support" ON)
@@ -39,8 +37,7 @@ option(HDRVIEW_ENABLE_LIBTIFF "Enable LIBTIFF support" ON)
 option(HDRVIEW_ENABLE_LIBRAW "Enable LibRaw support" ON)
 option(HDRVIEW_ENABLE_X3F "Enable LibRaw X3F support" ON)
 
-# Listening for pixels pushed in by a renderer, over tev's protocol. The listener is off until the user
-# turns it on, so building this in costs nothing at runtime. A browser has no raw sockets to listen on.
+# receiving pixels pushed in by a renderer, over tev's protocol; a browser has no raw sockets to listen on
 option(HDRVIEW_ENABLE_IPC "Enable receiving live image updates from renderers (tev-compatible)" ON)
 if(EMSCRIPTEN)
   set(HDRVIEW_ENABLE_IPC OFF)
@@ -51,9 +48,8 @@ option(
   ON
 )
 
-# Declared here (rather than alongside HDRVIEW_BUILD_TESTS near the bottom of this file) because it must be known
-# before the hello_imgui CPMAddPackage() call below, so it can conditionally request hello_imgui's own
-# HELLOIMGUI_WITH_TEST_ENGINE option.
+# declared here, not alongside HDRVIEW_BUILD_TESTS at the bottom, since the hello_imgui CPMAddPackage() below
+# needs it to decide whether to request HELLOIMGUI_WITH_TEST_ENGINE
 option(HDRVIEW_BUILD_GUI_TESTS "Build Dear ImGui Test Engine GUI regression tests" OFF)
 
 set(HDRVIEW_ENABLE_LIBHEIF OFF)
@@ -119,9 +115,8 @@ elseif(WIN32)
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
 elseif(UNIX)
-  # Linux/other non-Apple Unix: sokol-shdc already writes generated shaders directly into
-  # ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders (see SokolShaderCompiler.cmake), so only Roboto and
-  # the top-level *.png (e.g. dither-texture-256.png) need copying here, unlike the branches above.
+  # sokol-shdc already writes the generated shaders into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders, so only
+  # Roboto and the top-level *.png need copying here
   file(
     GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -159,8 +154,8 @@ list(APPEND CMD "-D" "CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR}")
 list(APPEND CMD "-D" "EMSCRIPTEN=${EMSCRIPTEN}")
 list(APPEND CMD "-D" "HDRVIEW_TARGET_ARCH=${HDRVIEW_TARGET_ARCH}")
 list(APPEND CMD "-P" "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake")
-# Runs on every build so version.cpp tracks the current commit and branch. configure_file() rewrites the file
-# only when the git-derived contents change, so this does not force a relink every build.
+# Runs on every build so version.cpp tracks the current commit and branch. configure_file() rewrites it only
+# when the git-derived contents change, so this does not force a relink every build.
 add_custom_target(
   hdrview_check_version ALL
   COMMAND ${CMD}
@@ -226,8 +221,8 @@ if(MSVC)
   # Disable annoying secure CRT warnings
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_CRT_SECURE_NO_WARNINGS")
 
-  # CMake's default flags carry /W3. Drop it so no warning level is inherited globally: each target picks its own
-  # (HDRVIEW_WARNING_OPTIONS below, or /w from disable_target_warnings()), and cl only reports D9025 when it sees both.
+  # drop CMake's default /W3 so no warning level is inherited globally; each target sets its own, and cl warns
+  # (D9025) when it sees two
   string(REGEX REPLACE "/W[0-4]" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
   string(REGEX REPLACE "/W[0-4]" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 
@@ -349,20 +344,18 @@ endfunction()
 # =====================================================================================
 include(cmake/SokolShaderCompiler.cmake)
 
-# Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime (see
-# src/app-colorpass.cpp). colorspaces.sglsl is @include_block'd directly into the compiled output, so it has
-# no separate build step of its own. Written straight into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders,
-# the same tree hello_imgui_add_app(... ASSETS_LOCATION ...) below already treats as the runtime asset
-# root, so no additional copy step is needed.
+# Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime.
+# colorspaces.sglsl is @include_block'd into the compiled output, so it needs no build step of its own.
+# The output goes into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders, which hello_imgui_add_app(...
+# ASSETS_LOCATION ...) below already treats as the runtime asset root.
 #
-# sokol-shdc writes one shader dialect, chosen to match the rendering backend used, and includes a
-# #version line at the top of the generated file. Desktop GL targets glsl410, and src/app.cpp
-# correspondingly requests a GL 4.1 core context.
+# sokol-shdc writes one shader dialect, matching the rendering backend, with a #version line at the top.
+# Desktop GL targets glsl410, so src/app.cpp requests a GL 4.1 core context.
 if(EMSCRIPTEN)
   set(HDRVIEW_SHADER_SLANG glsl300es)
   set(HDRVIEW_SHADER_EXT glsl)
 elseif(APPLE)
-  # macOS is Metal-only (see the renderpass_metal.mm/shader_metal.mm sources added further below)
+  # macOS is Metal-only
   set(HDRVIEW_SHADER_SLANG metal_macos)
   set(HDRVIEW_SHADER_EXT metal)
 else()
@@ -383,9 +376,8 @@ sokol_shdc_generate(
          image-shader_frag.${HDRVIEW_SHADER_EXT}
 )
 
-# The final HDR/EDR display color-management pass (see colorpass.sglsl). Only ever needed on the desktop
-# OpenGL backend -- macOS/Metal EDR consumes HDRView's extended-sRGB output directly, and Emscripten has no
-# HDR path at all -- so a single glsl410 target suffices (no metal_macos, no glsl300es).
+# The final HDR/EDR display color-management pass (see colorpass.sglsl). Only the desktop OpenGL backend
+# needs it: macOS/Metal EDR consumes extended sRGB directly, and Emscripten has no HDR path.
 if(NOT APPLE AND NOT EMSCRIPTEN)
   sokol_shdc_generate(
     INPUT ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorpass.sglsl
@@ -404,8 +396,7 @@ if(APPLE AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_HAS_METAL ON)
   set(HELLOIMGUI_USE_GLFW3 ON)
 
-  # display_headroom_cocoa.mm queries the one display property GLFW's Cocoa backend leaves unreported; the
-  # others are the Metal rendering backend.
+  # display_headroom_cocoa.mm queries the one display property GLFW's Cocoa backend leaves unreported
   list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm
        src/display_headroom_cocoa.mm
   )
@@ -414,34 +405,21 @@ if(APPLE AND NOT EMSCRIPTEN)
   enable_language(OBJC)
 endif()
 
-# Use https://github.com/Tom94/glfw, the fork that adds true HDR/EDR display output (proven in production by
-# tev, https://github.com/Tom94/tev) and also carries the macOS drag-files-onto-app-icon support (see
-# glfwGetOpenedFilenames/glfwSetOpenedFilenamesCallback usage in src/app.cpp). Covers Windows (WGL float
-# pixel format), macOS (Cocoa/EDR), and Linux/Wayland (wp_color_manager_v1, negotiated at runtime between
-# scRGB and PQ depending on compositor/driver support).
-#
-# Mandatory on macOS regardless of HDRVIEW_ENABLE_HDR_DISPLAY: src/app.cpp's Apple-only opened-filenames
-# handling has no vanilla-GLFW equivalent, so dropping the fork there would fail to link.
-#
-# The commit is pinned deliberately: it is the tip of the fork's master/tev branches, but a divergent
-# `tev-rebased` branch exists that is not an ancestor of it. Upstreaming to glfw/glfw has no timeline
-# (glfw/glfw#890 has been open since 2016 and glfw/glfw#1907 since 2021, with at least three competing
-# color-management forks), so every use of the fork's API in HDRView is guarded by `#if
-# defined(GLFW_FLOATBUFFER)` / `#if defined(GLFW_WAYLAND_COLOR_MANAGEMENT)` and degrades to plain SDR against
-# stock GLFW. Those guards are load-bearing, not temporary scaffolding.
-#
-# Note the fork also pulls in a hard dbus-1 dependency on Linux (for sandboxed Wayland file drop), which is
-# why libdbus-1-dev and libxkbcommon-dev appear in .github/workflows/ci-linux.yml.
+# Tom94/glfw adds HDR/EDR display output (float framebuffer on Windows, wp_color_manager_v1 on Wayland, EDR
+# on macOS) and the macOS drag-onto-icon support src/app.cpp needs, so it is required on macOS regardless of
+# HDRVIEW_ENABLE_HDR_DISPLAY. Nothing upstream yet (glfw/glfw#890 since 2016, glfw/glfw#1907 since 2021), so
+# every use of its API is behind GLFW_FLOATBUFFER / GLFW_WAYLAND_COLOR_MANAGEMENT and builds SDR-only against
+# stock GLFW. On Linux the fork needs dbus-1 and xkbcommon (see .github/workflows/ci-linux.yml).
 if((APPLE OR ((WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND HDRVIEW_ENABLE_HDR_DISPLAY)) AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
   set(HELLOIMGUI_USE_GLFW3 ON)
   if(NOT APPLE)
-    # macOS selects Metal above; Windows/Linux render through OpenGL/GLES.
+    # macOS selects Metal above; Windows/Linux render through OpenGL/GLES
     set(HELLOIMGUI_HAS_OPENGL3 ON)
   endif()
   if(WIN32)
-    # display_luminance_win32.cpp supplies the one display property the fork's Win32 backend reports only as
-    # a flag; DXGI is where the real peak luminance lives. Wayland needs no such supplement.
+    # the fork's Win32 backend reports peak luminance only as a flag, so display_luminance_win32.cpp asks
+    # DXGI for the real number
     list(APPEND EXTRA_SOURCES src/display_luminance_win32.cpp)
     list(APPEND HDRVIEW_DEPENDENCIES dxgi)
   endif()
@@ -490,16 +468,13 @@ set(HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCR
                            "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
 )
 if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
-  # Turns on hello_imgui's own bundled Dear ImGui Test Engine integration (fetches imgui_test_engine, builds it,
-  # and links it into the shared `imgui` target) - see hdrview_gui_tests below, the only target that uses it.
+  # fetches imgui_test_engine and links it into the shared `imgui` target, for hdrview_gui_tests below
   list(APPEND HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_WITH_TEST_ENGINE ON")
 endif()
 
-# HDR display output relies on two things here: RunnerCallbacks::BeforeSwap, the one point in the render
-# loop where a full-screen pass over the whole frame (Dear ImGui's UI included) is still presented, and
-# RendererBackendOptions::requestFloatBuffer on the GLFW3+OpenGL backend, not just Metal. The latter needs
-# a GLFW defining GLFW_FLOATBUFFER (see the Tom94/glfw pin above); against stock GLFW, Hello ImGui reports
-# back that no float framebuffer was obtained.
+# HDR display output needs two things from this version: RunnerCallbacks::BeforeSwap, the one point in the
+# render loop where a full-screen pass can still reach the whole frame, and requestFloatBuffer on the
+# GLFW3+OpenGL backend, not just Metal. The latter needs a GLFW defining GLFW_FLOATBUFFER (see the pin above).
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY pthom/hello_imgui
@@ -525,7 +500,7 @@ else()
 endif()
 
 # Must track the Dear ImGui that hello_imgui vendors: implot draws through ImDrawList directly, and
-# IMGUI_DISABLE_OBSOLETE_FUNCTIONS (set above) deletes superseded overloads rather than keeping shims.
+# IMGUI_DISABLE_OBSOLETE_FUNCTIONS (set above) deletes superseded overloads instead of keeping shims.
 CPMAddPackage("gh:epezent/implot#7eeb9168d2e5e6b14e266d8782ecf7e649dfc3a4")
 if(NOT implot_ADDED)
   message(FATAL_ERROR "Could not download implot library.")
@@ -605,9 +580,8 @@ add_library(stp STATIC "${CMAKE_CURRENT_BINARY_DIR}/stp_impl.cpp")
 target_include_directories(stp PUBLIC "${smallthreadpool_SOURCE_DIR}")
 target_link_libraries(stp PRIVATE spdlog::spdlog)
 target_compile_features(stp PUBLIC cxx_std_17)
-# stp doesn't link against hello_imgui (which is where HELLOIMGUI_EMSCRIPTEN_PTHREAD is normally defined, as a
-# PUBLIC compile definition propagated to whatever links against it), so translate it into smallthreadpool's own,
-# HelloImGui-agnostic macro name directly here rather than relying on it being visible in stp_impl.cpp.in.
+# stp doesn't link against hello_imgui, the usual source of HELLOIMGUI_EMSCRIPTEN_PTHREAD, so translate it
+# into smallthreadpool's own macro name here
 if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
   target_compile_definitions(stp PRIVATE STP_EMSCRIPTEN_PTHREAD)
 endif()
@@ -713,9 +687,8 @@ if(tinyxml2_ADDED)
   mark_as_system_library(tinyxml2)
   list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2")
 elseif(TARGET tinyxml2::tinyxml2)
-  # When CPM_USE_LOCAL_PACKAGES finds a system tinyxml2 via its own Config.cmake, CPM's
-  # find_package() result (tinyxml2_FOUND) is scoped to CPM's internal function and never
-  # reaches this scope, but the imported target it creates is global, so check for that instead.
+  # CPM's find_package() result (tinyxml2_FOUND) is scoped to CPM's internal function and never reaches this
+  # scope, but the imported target it creates is global, so check for that instead
   message(STATUS "Using system-installed tinyxml2 library")
   list(APPEND HDRVIEW_DEPENDENCIES "tinyxml2::tinyxml2")
 else()
@@ -1194,16 +1167,15 @@ else()
   endif()
 endif()
 
-# libheif reaches its codecs through find_package(), which only ever turns up a library the system has
-# installed, and Emscripten has none -- so the AV1 codec AVIF needs is built here instead. CPM already
-# leaves a redirect in CMAKE_FIND_PACKAGE_REDIRECTS_DIR that points libheif's find_package(AOM) at this
-# build of it; the -extra.cmake below adds the rest of what libheif's own FindAOM.cmake would have set.
+# libheif finds its codecs with find_package(), which only turns up an installed library, and Emscripten has
+# none, so AVIF's AV1 codec is built here. CPM already leaves a redirect in CMAKE_FIND_PACKAGE_REDIRECTS_DIR
+# pointing libheif's find_package(AOM) at this build; the -extra.cmake below fills in the rest of what
+# libheif's own FindAOM.cmake would have set.
 if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
   # aom appends the compiler flags it wants straight to the cache with FORCE. A cache entry is global and
-  # read at generate time, so those flags reach every target in the build -- the -std=c99 among them stops
-  # OpenEXR's C sources compiling. Snapshot what aom rewrites and put it back once it has been added, the
-  # cache entry from the cache and the directory-scope variable from the directory, or a configure would
-  # bake this directory's own flags into the cache for the next one to append to again.
+  # read at generate time, so those flags reach every target in the build; the -std=c99 among them stops
+  # OpenEXR's C sources compiling. Snapshot what aom rewrites and put both the cache entry and the
+  # directory-scope variable back afterwards, or a configure bakes this directory's flags into the cache.
   set(HDRVIEW_AOM_CLOBBERED_VARS "")
   foreach(_flags CMAKE_C_FLAGS CMAKE_CXX_FLAGS CMAKE_EXE_LINKER_FLAGS)
     foreach(_config "" "_DEBUG" "_RELEASE" "_MINSIZEREL" "_RELWITHDEBINFO")
@@ -1221,14 +1193,14 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
     NAME aom
     VERSION 3.13.1
     URL https://storage.googleapis.com/aom-releases/libaom-3.13.1.tar.gz
-    OPTIONS # No SIMD path, no thread pool, and no CPU to probe for features: wasm has none of aom's
-            # assembly, and this build has no pthreads.
+    OPTIONS # no SIMD path, no thread pool, and no CPU to probe: wasm has none of aom's assembly, and this
+            # build has no pthreads
             "AOM_TARGET_CPU generic"
             "CONFIG_MULTITHREAD 0"
             "CONFIG_RUNTIME_CPU_DETECT 0"
             "CONFIG_AV1_DECODER 1"
             "CONFIG_AV1_ENCODER 1"
-            # Container and scaling code only aom's own command-line tools use
+            # container and scaling code only aom's own command-line tools use
             "CONFIG_WEBM_IO 0"
             "CONFIG_LIBYUV 0"
             "ENABLE_EXAMPLES OFF"
@@ -1250,8 +1222,7 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
   message(STATUS "Will build libaom library")
   mark_as_system_library(aom)
   disable_target_warnings(aom)
-  # aom publishes its headers only to an install tree, so the source directory is what libheif's plugins
-  # have to include the aom/*.h they ask for from.
+  # aom publishes its headers only to an install tree, so libheif's plugins include aom/*.h from the sources
   file(
     WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/aom-extra.cmake"
     "set(AOM_LIBRARIES aom)\n" "set(AOM_INCLUDE_DIRS \"${aom_SOURCE_DIR}\")\n"
@@ -1259,8 +1230,8 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
   )
 endif()
 
-# The same story as libaom above: OpenJPEG is what decodes the J2K- and HTJ2K-compressed HEIF images, and
-# under Emscripten there is no installed copy for libheif's find_package(OpenJPEG) to turn up.
+# OpenJPEG decodes the J2K- and HTJ2K-compressed HEIF images, and under Emscripten there is no installed
+# copy for libheif's find_package(OpenJPEG) to turn up, so build it here as with libaom above.
 if(EMSCRIPTEN AND HDRVIEW_ENABLE_J2K)
   CPMAddPackage(
     NAME OpenJPEG
@@ -1277,16 +1248,15 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_J2K)
   if(NOT OpenJPEG_ADDED)
     message(FATAL_ERROR "Failed to fetch OpenJPEG, which the Emscripten build needs for J2K support.")
   endif()
-  # OpenJPEG puts the legacy EXECUTABLE_OUTPUT_PATH and LIBRARY_OUTPUT_PATH into the cache, and both are
-  # global: left there, every target in the build -- HDRView's own executable included -- is written into
-  # OpenJPEG's bin directory. Nothing else here sets them, so dropping them restores the default layout.
+  # OpenJPEG puts the legacy EXECUTABLE_OUTPUT_PATH and LIBRARY_OUTPUT_PATH into the cache, which is global,
+  # so left there every target in the build lands in OpenJPEG's bin directory. Nothing else sets them.
   unset(EXECUTABLE_OUTPUT_PATH CACHE)
   unset(LIBRARY_OUTPUT_PATH CACHE)
 
   message(STATUS "Will build OpenJPEG library")
   mark_as_system_library(openjp2)
   disable_target_warnings(openjp2)
-  # openjpeg.h lives beside the sources, and the opj_config.h it includes is generated into the build tree.
+  # openjpeg.h lives beside the sources, and the opj_config.h it includes is generated into the build tree
   file(
     WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/openjpeg-extra.cmake"
     "set(OPENJPEG_FOUND TRUE)\n" "set(OPENJPEG_LIBRARIES openjp2)\n"
@@ -1295,11 +1265,11 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_J2K)
 endif()
 
 # dav1d decodes the AV1 in an AVIF about twice as fast as libaom's decoder, to the same pixels, so libheif
-# prefers it (plugin priority 150 vs 100) whenever both are compiled in. libaom stays in the build
-# regardless -- it is still the AVIF *encoder*, and its decoder is the fallback when dav1d is absent.
+# prefers it (plugin priority 150 vs 100) when both are compiled in. libaom stays in the build either way:
+# it is the AVIF encoder, and its decoder is the fallback when dav1d is absent.
 #
-# dav1d builds only under meson, so unlike libaom above there is no CPM fallback: this uses a dav1d the
-# system already has, and quietly leaves libheif on libaom when there is none. Emscripten never has one.
+# dav1d builds only under meson, so there is no CPM fallback: this uses a dav1d the system already has, and
+# leaves libheif on libaom when there is none. Emscripten never has one.
 if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
   find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND)
@@ -1313,11 +1283,9 @@ if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
     endif()
   endif()
   if(HDRVIEW_DAV1D_FOUND)
-    # libheif's dav1d plugin sets Dav1dSettings::n_threads, which arrived in dav1d 1.0.0 when it merged the
-    # separate frame- and tile-thread counts into one; against an older dav1d (Ubuntu 22.04 still ships
-    # 0.9.2) the plugin, and with it all of libheif, fails to compile. Probe the header for the member
-    # rather than compare versions, since the find_path fallback above locates a dav1d without learning
-    # which version it is.
+    # libheif's dav1d plugin sets Dav1dSettings::n_threads, which arrived in dav1d 1.0.0; against an older
+    # dav1d (Ubuntu 22.04 ships 0.9.2) the plugin, and with it all of libheif, fails to compile. Probe the
+    # header for the member, since the find_path fallback above locates a dav1d without learning its version.
     include(CheckStructHasMember)
     set(CMAKE_REQUIRED_INCLUDES ${HDRVIEW_DAV1D_INCLUDE_DIRS} ${HDRVIEW_DAV1D_INCLUDE_DIR})
     check_struct_has_member("Dav1dSettings" n_threads "dav1d/dav1d.h" HDRVIEW_DAV1D_HAS_N_THREADS LANGUAGE C)
@@ -1378,9 +1346,8 @@ if(HDRVIEW_ENABLE_LIBHEIF)
       message(STATUS "Will decode AVIF with dav1d ${HDRVIEW_DAV1D_VERSION}")
     endif()
     if(EMSCRIPTEN)
-      # Otherwise libheif compiles in the embind bindings for its JavaScript API, which HDRView has no use
-      # for and which no longer compile: they bind raw pointers, which embind has since made an error. This
-      # is the switch libheif's own build-emscripten.sh uses to leave them out.
+      # leaves out the embind bindings for libheif's JavaScript API, which fail to compile because they bind
+      # raw pointers, an error in current embind; the same switch libheif's build-emscripten.sh uses
       target_compile_definitions(heif PRIVATE __EMSCRIPTEN_STANDALONE_WASM__=1)
     endif()
     # Remove the doc_doxygen target created with 'ALL'
@@ -1404,9 +1371,8 @@ if(HDRVIEW_ENABLE_LIBHEIF)
     mark_as_system_library(heif)
     disable_target_warnings(heif)
   elseif(TARGET heif)
-    # A system libheif brings whichever decoders the distribution compiled into it, so WITH_DAV1D above was
-    # never read and this build cannot claim dav1d either way. The image info panel reports which AV1
-    # decoder libheif actually chose.
+    # a system libheif brings whichever decoders the distribution compiled into it, so WITH_DAV1D above was
+    # never read; the image info panel reports which AV1 decoder libheif chose
     set(HDRVIEW_ENABLE_DAV1D OFF)
     message(STATUS "Using system-installed libheif library")
   else()
@@ -1516,8 +1482,7 @@ if(HDRVIEW_ENABLE_LIBRAW)
 
   # Emscripten's OpenMP runtime is pthread-backed, so in a non-pthread build it drags the -mt sysroot
   # libraries onto a link line that already carries the single-threaded ones and every pthread symbol comes
-  # up duplicated. LibRaw-cmake defaults ENABLE_OPENMP to ON and only probes whether OpenMP works, so the
-  # exclusion has to be stated here.
+  # up duplicated. LibRaw-cmake defaults ENABLE_OPENMP to ON and only probes whether OpenMP works.
   if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
     set(LIBRAW_OPENMP OFF)
   else()
@@ -1546,10 +1511,9 @@ if(HDRVIEW_ENABLE_LIBRAW)
       disable_target_warnings(libraw::libraw_r)
       # LibRaw sizes its raw store from raw_width x raw_height but its unpackers fill only the active area,
       # so on a sensor whose frame carries a masked margin the rest is whatever malloc last held. HDRView
-      # keeps that margin (see the CFA part in imageio/raw.cpp), so this switches those allocations to
-      # calloc and makes the untouched photosites a deterministic zero instead. Both of LibRaw-cmake's
-      # targets get it: they compile the same sources under the same symbol names and both reach the link
-      # line, so whichever one resolves has to behave the same. A system LibRaw decides this for itself.
+      # keeps that margin (see the CFA part in imageio/raw.cpp), so this switches those allocations to calloc
+      # and zeroes the untouched photosites. Both LibRaw-cmake targets get it, since they compile the same
+      # sources under the same symbol names and both reach the link line.
       foreach(libraw_target raw raw_r)
         if(TARGET ${libraw_target})
           target_compile_definitions(${libraw_target} PRIVATE LIBRAW_CALLOC_RAWSTORE)
@@ -1683,10 +1647,10 @@ add_enabled_definition(HDRVIEW_ENABLE_IPC)
 # ============================================================================
 # Compiler warnings for HDRView's own code
 # ============================================================================
-# Applied per-target (see the loop after the targets are declared) rather than through CMAKE_CXX_FLAGS, which would
-# also reach the third-party targets declared in this directory and leave them compiling at two warning levels at once.
+# Applied per-target, in the loop after the targets are declared. CMAKE_CXX_FLAGS would also reach the
+# third-party targets declared in this directory and leave them compiling at two warning levels at once.
 if(MSVC)
-  # /wd4100 is MSVC's spelling of -Wno-unused-parameter below.
+  # /wd4100 is MSVC's spelling of -Wno-unused-parameter below
   set(HDRVIEW_WARNING_OPTIONS /W4 /wd4100)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
   set(HDRVIEW_WARNING_OPTIONS -Wall -Wextra -Wno-unused-parameter)
@@ -1723,11 +1687,10 @@ endif()
 
 if(HDRVIEW_ENABLE_IPC)
   list(APPEND EXTRA_SOURCES src/ipc/ipc_packet.cpp src/ipc/ipc_server.cpp src/app-ipc.cpp)
-  # Only meaningful when the IPC sources are built; left empty otherwise so the test target's source list
-  # does not name a file whose subject was compiled out.
+  # left empty when the IPC sources are not built, so the test target names no file whose subject is gone
   set(HDRVIEW_IPC_TESTS tests/test_ipc_packet.cpp tests/test_ipc_server.cpp tests/test_vector_overlay.cpp)
   if(WIN32)
-    # Winsock is not among the libraries a Windows link pulls in by default.
+    # Winsock is not among the libraries a Windows link pulls in by default
     list(APPEND HDRVIEW_DEPENDENCIES ws2_32)
   endif()
 endif()
@@ -1797,8 +1760,8 @@ set(HDRVIEW_SOURCES
     ${EXTRA_SOURCES}
 )
 
-# Compiled once here and linked into both HDRView and hdrview_tests: listing a shared generated source directly
-# in multiple targets makes the Visual Studio generator emit its build rule into every consuming .vcxproj, where
+# Compiled once here and linked into both HDRView and hdrview_tests: a shared generated source listed in
+# several targets makes the Visual Studio generator emit its build rule into every consuming .vcxproj, where
 # parallel MSBuild can regenerate it concurrently.
 add_library(hdrview_version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
 add_dependencies(hdrview_version hdrview_check_version)
@@ -1811,10 +1774,9 @@ if(HDRVIEW_SOKOL_SHDC_TARGETS)
   add_dependencies(HDRView ${HDRVIEW_SOKOL_SHDC_TARGETS})
 endif()
 if(WIN32)
-  # Opt in to Windows 10 1607+ long-path support: removes the ~260-char MAX_PATH limit for
-  # CreateFileW & friends, which std::filesystem/std::ifstream/std::ofstream route through on
-  # Windows. This alone is not sufficient -- the system-wide "Enable Win32 long paths" policy
-  # must also be turned on (see README); the manifest is the piece HDRView controls.
+  # Opt in to Windows 10 1607+ long-path support, removing the ~260-char MAX_PATH limit for CreateFileW &
+  # friends, which std::filesystem and the fstreams route through. The system-wide "Enable Win32 long paths"
+  # policy must be on as well (see README).
   target_sources(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
 endif()
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -1834,11 +1796,10 @@ target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES} hdrview_version)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
 if(NOT EMSCRIPTEN)
-  # Multi-config generators (e.g. Ninja Multi-Config, used by every preset here) build the exe into
-  # a per-config Debug/Release subdirectory, below where HelloImGui's build-time asset copy lands;
-  # HelloImGui's own fallback for that mismatch is MSVC-only. This gives every other compiler an
-  # equivalent fallback, consumed via HelloImGui::AddAssetsSearchPath() in hdrview.cpp. Distinct
-  # from ASSETS_LOCATION below, which is an absolute *installed* path for non-portable builds.
+  # Multi-config generators (every preset here) build the exe into a per-config subdirectory, below where
+  # HelloImGui's build-time asset copy lands, and HelloImGui's own fallback for that mismatch is MSVC-only.
+  # hdrview.cpp passes this to HelloImGui::AddAssetsSearchPath(). Distinct from ASSETS_LOCATION below, which
+  # is an absolute installed path for non-portable builds.
   target_compile_definitions(HDRView PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
 endif()
 
@@ -1848,9 +1809,8 @@ if(APPLE)
   target_compile_definitions(HDRView PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
 endif(APPLE)
 
-# Unit tests. Off by default: reuses the same HDRVIEW_SOURCES/HDRVIEW_DEPENDENCIES/HDRVIEW_DEFINITIONS as the main
-# app (minus src/hdrview.cpp, which defines main() — doctest provides its own), since the sources under test
-# (e.g. image.cpp) aren't separated from the rest of the app's dependency graph.
+# Unit tests, off by default. They reuse the app's own HDRVIEW_SOURCES/HDRVIEW_DEPENDENCIES/HDRVIEW_DEFINITIONS
+# minus src/hdrview.cpp, which defines the main() doctest supplies itself.
 option(HDRVIEW_BUILD_TESTS "Build unit tests (requires doctest, fetched via CPM)" OFF)
 if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   CPMAddPackage("gh:doctest/doctest@2.4.11")
@@ -1866,18 +1826,16 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
   target_compile_definitions(hdrview_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
-  # Mirrors HDRView's own HDRVIEW_BUILD_TREE_ASSETS_DIR definition above, so tests/test_assets.cpp
-  # can exercise the same asset lookup the app uses.
+  # mirrors the HDRVIEW_BUILD_TREE_ASSETS_DIR above, so tests/test_assets.cpp exercises the app's own lookup
   target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
-  # Fuzzer-found inputs that can't be synthesized; see tests/fuzz/artifacts/README.md.
+  # fuzzer-found inputs that can't be synthesized; see tests/fuzz/artifacts/README.md
   target_compile_definitions(
     hdrview_tests PRIVATE HDRVIEW_TEST_ARTIFACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/artifacts"
   )
   target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version doctest::doctest)
 
   if(WIN32)
-    # Same long-path opt-in as the HDRView target above: hdrview_tests is a separate executable and doesn't
-    # inherit it, but tests/test_long_paths.cpp needs it to exercise paths over 260 characters on Windows.
+    # same long-path opt-in as the HDRView target above, which tests/test_long_paths.cpp needs
     target_sources(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
   endif()
 
@@ -1887,19 +1845,15 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_compile_definitions(hdrview_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
   endif()
 
-  # Several tests run against real-world image corpora that OpenEXR and libpng vendor in their own source
-  # trees. That data is an input to the tests, independent of where the libraries themselves came from, so
-  # both paths can be set directly:
+  # Several tests run against the real-world image corpora OpenEXR and libpng vendor in their source trees.
+  # Either path can also be set directly, at a checkout of the corresponding upstream tag:
   #
   #   -DHDRVIEW_TEST_OPENEXR_DIR=<openexr>/src/test/bin/test_images
   #   -DHDRVIEW_TEST_PNG_CONTRIB_DIR=<libpng>/contrib
   #
-  # -cpm/-universal presets fill them in from the CPM-fetched sources automatically. -local presets get the
-  # libraries from find_package and so have no source tree to read them from, but can still point at a
-  # checkout of the corresponding upstream tag -- a shallow, sparse one is enough, the two sets total under
-  # 8 MB. Left unset with no source tree available, the tests that need them are compiled out entirely
-  # (see the guards in tests/test_exr_io.cpp and tests/test_png_io.cpp) rather than failing or silently
-  # skipping at runtime.
+  # -cpm/-universal presets fill them in from the CPM-fetched sources; -local presets get the libraries from
+  # find_package and so have no source tree to read them from. With neither set, the tests that need them are
+  # compiled out (see the guards in tests/test_exr_io.cpp and tests/test_png_io.cpp).
   set(HDRVIEW_TEST_OPENEXR_DIR
       ""
       CACHE PATH "OpenEXR's vendored test images (src/test/bin/test_images in its source tree)"
@@ -1909,8 +1863,8 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
       CACHE PATH "libpng's contrib directory, holding the pngsuite and testpngs image sets"
   )
 
-  # A path the user supplied but that does not exist is a mistake worth surfacing, whereas simply having no
-  # source tree to default to is the ordinary -local case and only warrants a status line.
+  # a supplied path that does not exist is an error, while having no source tree to default to is the
+  # ordinary -local case and only warrants a status line
   if(HDRVIEW_TEST_OPENEXR_DIR)
     set(_hdrview_exr_images "${HDRVIEW_TEST_OPENEXR_DIR}")
     set(_hdrview_exr_explicit TRUE)
@@ -1922,8 +1876,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   if(DEFINED _hdrview_exr_images AND EXISTS "${_hdrview_exr_images}")
     target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${_hdrview_exr_images}")
   elseif(_hdrview_exr_explicit)
-    # Fatal rather than a warning: whoever set this asked for those tests, and quietly compiling them out
-    # instead would leave a build that looks like it ran them.
+    # fatal, since compiling the tests out instead would leave a build that looks like it ran them
     message(FATAL_ERROR "HDRVIEW_TEST_OPENEXR_DIR is set to '${_hdrview_exr_images}', which does not exist")
   else()
     message(STATUS "OpenEXR test images not available (no fetched source; set HDRVIEW_TEST_OPENEXR_DIR to "
@@ -1931,10 +1884,9 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     )
   endif()
 
-  # Same idea for libpng's two vendored image sets: contrib/pngsuite (the well-known PngSuite conformance set
-  # - bit depth/color type matrix, plus interlaced/non-interlaced pairs) and contrib/testpngs (a matrix of
-  # color-signaling methods: sRGB chunk, gAMA chunk at various gammas, no chunk at all, plus a dedicated
-  # cICP/Display-P3 example).
+  # Same for libpng's two vendored image sets: contrib/pngsuite (the PngSuite conformance set, a bit
+  # depth/color type matrix plus interlaced/non-interlaced pairs) and contrib/testpngs (a matrix of
+  # color-signaling methods: sRGB chunk, gAMA at various gammas, no chunk, and a cICP/Display-P3 example).
   if(HDRVIEW_TEST_PNG_CONTRIB_DIR)
     set(_hdrview_png_contrib "${HDRVIEW_TEST_PNG_CONTRIB_DIR}")
     set(_hdrview_png_explicit TRUE)
@@ -1963,9 +1915,8 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   doctest_discover_tests(hdrview_tests)
 endif()
 
-# libFuzzer target for the image loaders. Off by default and Clang-only: load_image() sniffs magic bytes to
-# pick a loader, so this single target reaches every format in default_loaders(). Reuses the same sources as
-# hdrview_tests, with libFuzzer supplying main() instead of doctest. Pair with -DUSE_SANITIZER.
+# libFuzzer targets, off by default and Clang-only. load_image() sniffs magic bytes to pick a loader, so the
+# one target reaches every format in default_loaders(). Pair with -DUSE_SANITIZER.
 option(HDRVIEW_BUILD_FUZZERS "Build libFuzzer targets for the image loaders (Clang only)" OFF)
 if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
   if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -1974,16 +1925,15 @@ if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
 
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
 
-  # One entry per fuzz target: "<target name>|<entry point source>". They differ only in that source, so
-  # everything else below is applied to each in turn.
+  # one entry per fuzz target, "<target name>|<entry point source>"; everything below is applied to each
   set(HDRVIEW_FUZZERS "hdrview_fuzz_load_image|tests/fuzz/fuzz_load_image.cpp")
   if(HDRVIEW_ENABLE_IPC)
     list(APPEND HDRVIEW_FUZZERS "hdrview_fuzz_ipc_packet|tests/fuzz/fuzz_ipc_packet.cpp")
   endif()
 
-  # Apple's clang instruments for libFuzzer but ships no fuzzer runtime, so on macOS one has to be linked
-  # explicitly -- from Homebrew's LLVM by default. Everywhere else -fsanitize=fuzzer supplies its own.
-  # Set HDRVIEW_FUZZER_RUNTIME to override the search.
+  # Apple's clang instruments for libFuzzer but ships no fuzzer runtime, so on macOS one is linked
+  # explicitly, from Homebrew's LLVM unless HDRVIEW_FUZZER_RUNTIME says otherwise. Elsewhere
+  # -fsanitize=fuzzer supplies its own.
   if(APPLE AND NOT HDRVIEW_FUZZER_RUNTIME)
     file(GLOB HDRVIEW_FUZZER_RUNTIME_CANDIDATES
          "/opt/homebrew/opt/llvm/lib/clang/*/lib/darwin/libclang_rt.fuzzer_osx.a"
@@ -2028,10 +1978,9 @@ if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
   endforeach()
 endif()
 
-# Times this build's libheif AV1 decoder plugins against each other, which is how the choice between dav1d
-# and libaom's decoder was made and how it can be re-checked on another machine or a newer libheif. It talks
-# to libheif directly and needs none of HDRView's own sources, so it is its own tiny target rather than a
-# doctest case -- and it is a measurement, not a pass/fail, so it stays out of ctest.
+# Times this build's libheif AV1 decoder plugins against each other, to re-check the dav1d-vs-libaom choice
+# on another machine or a newer libheif. It talks to libheif directly and needs none of HDRView's sources,
+# and is a measurement, not a pass/fail, so it is not registered with ctest.
 option(HDRVIEW_BUILD_BENCHMARKS "Build the libheif AV1 decoder benchmark" OFF)
 if(HDRVIEW_BUILD_BENCHMARKS AND HDRVIEW_ENABLE_LIBHEIF AND NOT EMSCRIPTEN)
   add_executable(hdrview_bench_heif tests/bench_heif_decode.cpp)
@@ -2039,14 +1988,11 @@ if(HDRVIEW_BUILD_BENCHMARKS AND HDRVIEW_ENABLE_LIBHEIF AND NOT EMSCRIPTEN)
   target_link_libraries(hdrview_bench_heif PRIVATE heif)
 endif()
 
-# GUI regression tests, driven by Dear ImGui Test Engine (https://github.com/ocornut/imgui_test_engine),
-# fetched/built for us by hello_imgui's own HELLOIMGUI_WITH_TEST_ENGINE option (see above). Unlike
-# hdrview_tests, these can't share doctest's binary/main(): a GUI test needs HelloImGui::Run() to own the
-# frame loop for the process's whole lifetime, so it gets its own executable and its own tests/gui/ sources,
-# reusing HDRVIEW_SOURCES/HDRVIEW_DEPENDENCIES the same way hdrview_tests does. HDRVIEW_ENABLE_GUI_TEST_ENGINE
-# gates the small opt-in hook on HDRViewApp (see src/app.h/src/app-windows.cpp) that lets this binary turn on
-# useImGuiTestEngine and register tests, without touching the production HDRView binary or hdrview_tests at
-# all.
+# GUI regression tests, driven by Dear ImGui Test Engine (https://github.com/ocornut/imgui_test_engine), which
+# hello_imgui's HELLOIMGUI_WITH_TEST_ENGINE option fetches and builds. A GUI test needs HelloImGui::Run() to
+# own the frame loop for the process's whole lifetime, so this cannot share hdrview_tests' binary and main().
+# HDRVIEW_ENABLE_GUI_TEST_ENGINE gates the opt-in hook on HDRViewApp (src/app.h, src/app-windows.cpp) that
+# turns on useImGuiTestEngine and registers tests, leaving HDRView and hdrview_tests untouched.
 if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(
@@ -2073,8 +2019,8 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)
   if(WIN32)
-    # Same long-path opt-in as the HDRView/hdrview_tests targets: needed for
-    # tests/gui/test_gui_image_io.cpp's load_from_long_path test to exercise paths over 260 characters.
+    # same long-path opt-in as the HDRView/hdrview_tests targets, for test_gui_image_io.cpp's
+    # load_from_long_path test
     target_sources(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
   endif()
   target_compile_definitions(
@@ -2083,22 +2029,18 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   target_compile_definitions(
     hdrview_gui_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
   )
-  # Reuses the app's own icons (always present, unlike the vendored OpenEXR/PNG conformance suites
-  # hdrview_tests conditionally compiles against, which only exist on -cpm/-universal presets) as tiny,
-  # always-available, distinctly-named image fixtures for the tests/gui/ suite.
+  # the app's own icons, as small always-present image fixtures for the tests/gui/ suite
   target_compile_definitions(
     hdrview_gui_tests
     PRIVATE HDRVIEW_GUI_TEST_IMAGE="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon.png"
             HDRVIEW_GUI_TEST_IMAGE_2="${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/icon-256.png"
   )
-  # Where tests/gui/test_gui_screenshots.cpp looks for the sample images it shoots when the environment
-  # names none of its own.
+  # where tests/gui/test_gui_screenshots.cpp looks for sample images when the environment names none
   target_compile_definitions(
     hdrview_gui_tests PRIVATE HDRVIEW_SCREENSHOT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
   )
-  # Same idea as the OpenEXR guard above, but for hdrview_gui_tests: on -cpm/-universal presets this makes a
-  # real multi-part EXR fixture available to tests/gui/test_gui_multipart.cpp; that file registers no
-  # tests at all when the define is absent (e.g. on -local presets).
+  # the OpenEXR guard above, for hdrview_gui_tests: tests/gui/test_gui_multipart.cpp needs a real multi-part
+  # EXR fixture, and registers no tests at all when this define is absent
   if(DEFINED OpenEXR_SOURCE_DIR AND EXISTS "${OpenEXR_SOURCE_DIR}/src/test/bin/test_images")
     target_compile_definitions(
       hdrview_gui_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${OpenEXR_SOURCE_DIR}/src/test/bin/test_images"
@@ -2112,14 +2054,13 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     target_compile_definitions(hdrview_gui_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
   endif()
 
-  # Its own ctest entry, kept separate from doctest_discover_tests(hdrview_tests) above so GUI-test
-  # failures/logs are never mixed in with the logic-level doctest suite's output.
+  # its own ctest entry, so GUI-test failures and logs are never mixed into the doctest suite's output
   enable_testing()
   add_test(NAME hdrview_gui_tests COMMAND hdrview_gui_tests)
 endif()
 
-# Turn warnings on for the targets built from HDRVIEW_SOURCES, now that all of them exist. The optional ones are
-# guarded because they only exist when HDRVIEW_BUILD_TESTS/_GUI_TESTS/_FUZZERS asked for them.
+# Turn warnings on for the targets built from HDRVIEW_SOURCES, now that all of them exist. The optional ones
+# only exist when HDRVIEW_BUILD_TESTS/_GUI_TESTS/_FUZZERS asked for them.
 foreach(hdrview_target HDRView hdrview_version hdrview_tests hdrview_gui_tests hdrview_fuzz_load_image)
   if(TARGET ${hdrview_target})
     target_compile_options(${hdrview_target} PRIVATE ${HDRVIEW_WARNING_OPTIONS})
@@ -2137,8 +2078,7 @@ if(EMSCRIPTEN)
     -sMAX_WEBGL_VERSION=2
     -sMIN_WEBGL_VERSION=2
     # Emscripten's 64 kB default stack is too small for libaom's AV1 decoder, which overflows it on HDR
-    # AVIFs and aborts the whole module rather than failing the load. Memory growth is enabled, so
-    # giving the stack a size comparable to a native thread's costs nothing.
+    # AVIFs and aborts the whole module. Memory growth is enabled, so a native-thread-sized stack is free.
     -sSTACK_SIZE=4MB
   )
   target_compile_options(HDRView PRIVATE -fexceptions -sNO_DISABLE_EXCEPTION_CATCHING)
@@ -2149,8 +2089,8 @@ if(EMSCRIPTEN)
   hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 120)
 endif()
 
-# Emscripten is excluded even though it sets UNIX: the target file there is the HTML shell, which GNU
-# strip rejects outright (Apple's only warns), and emcc has already stripped the wasm it links.
+# Emscripten is excluded even though it sets UNIX: the target file there is the HTML shell, which GNU strip
+# rejects outright (Apple's only warns), and emcc has already stripped the wasm it links.
 if(UNIX AND NOT EMSCRIPTEN AND NOT IS_MULTI AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
   add_custom_command(
     TARGET HDRView
@@ -2280,7 +2220,7 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
           DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
 
-  # Register the .hsess session file's mime type so file managers offer HDRView to open/associate with it
+  # register the .hsess session file's mime type so file managers offer HDRView to open it
   install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/hdrview-session-mime.xml"
           DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/mime/packages")
 

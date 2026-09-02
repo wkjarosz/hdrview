@@ -50,10 +50,7 @@ void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool
 
     g_hdrview = new HDRViewApp(exposure, gamma, dither, force_sdr, apple_keys, in_files);
 
-    // Loading is deliberately not part of construction: it reaches code that calls hdrview(), and until
-    // the assignment above returns there is nothing for that to return. A session is the case that gets
-    // there synchronously -- it resolves its entries and refreshes the textures on the spot -- so
-    // `HDRView some.hsess` used to dereference a null singleton before the window ever opened.
+    // load after g_hdrview is set: session loading calls hdrview()
     g_hdrview->load_images(in_files);
 }
 
@@ -109,7 +106,7 @@ void HDRViewApp::setup_window_and_backend(optional<bool> force_sdr)
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 
     // Lets any zip opened through m_image_loader (drag-and-drop, CLI args, "Open image...") be recognized as
-    // a session bundle -- see try_load_zip_as_session().
+    // a session bundle; see try_load_zip_as_session().
     m_image_loader.zip_bundle_hook = [this](string_view zip_bytes, const string &zip_name)
     { return try_load_zip_as_session(zip_bytes, zip_name); };
 
@@ -121,13 +118,10 @@ void HDRViewApp::setup_window_and_backend(optional<bool> force_sdr)
     // m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
 #endif
 
-    // Whether it is worth asking for a floating-point framebuffer at all.
-    //
-    // On macOS this is genuinely knowable up front: hasEdrSupport() inspects the attached NSScreens' EDR
-    // headroom. Everywhere else it is not -- the display's capabilities are window-scoped and there is no
-    // window yet -- so we simply ask, and find out afterwards whether we got one (see m_float_buffer, set
-    // in PostInit_AddPlatformBackendCallbacks below). Hello ImGui clears the request when it cannot be
-    // satisfied, so an optimistic ask costs nothing on a plain SDR setup.
+    // Whether it is worth asking for a floating-point framebuffer at all. Only macOS can answer up front:
+    // hasEdrSupport() inspects the attached NSScreens' EDR headroom. Elsewhere the display's capabilities are
+    // window-scoped and there is no window yet, so we ask and find out afterwards (see m_float_buffer, set in
+    // PostInit_AddPlatformBackendCallbacks below).
     m_force_sdr = force_sdr.value_or(false);
     if (m_force_sdr)
         spdlog::info("Forcing SDR display mode.");
@@ -302,9 +296,8 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
         DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
     m_params.dockingParams.dockingSplits = docking_splits;
 
-    // Builds an alternate layout that starts from the same dockable windows as the default layout, letting
-    // `customize` override each copy's dockSpaceName/isVisible/etc. (e.g. to re-tab or hide windows without
-    // redeclaring them from scratch).
+    // Builds an alternate layout from the same dockable windows as the default one, letting `customize`
+    // override each copy's dockSpaceName/isVisible/etc.
     auto make_layout = [&](string name, vector<DockingSplit> splits, auto &&customize)
     {
         DockingParams p;
@@ -315,15 +308,13 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
         return p;
     };
 
-    // "Image browser": same panel geometry as "Pixel peeper", but only the Images/Watched Folders panels start
-    // open -- a minimal layout for browsing/culling images without the inspector panels.
+    // "Image browser": the panel geometry of "Pixel peeper", but only Images/Watched Folders start open.
     DockingParams image_browser_layout =
         make_layout("Image browser", docking_splits,
                     [](DockableWindow &w) { w.isVisible = (w.label == "Images" || w.label == "Watched Folders"); });
 
-    // "Metadata": Images and Watched Folders tabbed together atop the left column, with Info below them (both
-    // share the left column here, unlike the other layouts); Log spans the full width along the bottom. Only
-    // Images/Watched Folders/Info start open, for a view focused on browsing images and inspecting their metadata.
+    // "Metadata": Images and Watched Folders tabbed together atop the left column, Info below them, Log along
+    // the bottom; only those three start open.
     DockingParams metadata_layout =
         make_layout("Metadata",
                     {DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f},
@@ -361,13 +352,11 @@ void HDRViewApp::setup_platform_backend_callbacks(vector<string> in_files)
                             });
 
         // Hello ImGui clears requestFloatBuffer when the request could not be satisfied, so by now this is
-        // the *achieved* framebuffer, not the one we asked for. It drives the HDR-related UI below; the
-        // display's actual color space is queried separately, and per frame, by update_colorpass().
+        // the achieved framebuffer, not the one we asked for.
         m_float_buffer = m_params.rendererBackendOptions.requestFloatBuffer;
         spdlog::info("Got a {} framebuffer.", m_float_buffer ? "floating-point precision" : "standard precision");
 
-        // Seed the display color space before the first frame so startup logs and the UI are right from the
-        // outset; update_colorpass() re-queries it every frame from here on.
+        // Seed the display color space before the first frame; update_colorpass() re-queries it every frame.
         m_display_cs = query_display_colorspace(m_params.backendPointers.glfwWindow);
         spdlog::info("Display color space is {} ({} HDR).", m_display_cs.name(),
                      supports_hdr() ? "supports" : "does not support");
@@ -557,10 +546,10 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
 
         SaveUserPref("UserSettings", j.dump(4));
 
-        // Stop the thread pool explicitly here rather than relying on its static destructor: that destructor's
-        // ordering relative to other statics (e.g. spdlog's logger registry, which worker threads touch) is
-        // unspecified, so a still-shutting-down worker could otherwise race the destruction of globals it
-        // depends on. try_singleton() is a no-op if the pool was never used.
+        // Stop the thread pool here rather than in its static destructor: that destructor's ordering against
+        // other statics (e.g. spdlog's logger registry, which worker threads touch) is unspecified, so a
+        // shutting-down worker could race the destruction of globals it depends on. try_singleton() is a
+        // no-op if the pool was never used.
         if (auto *pool = stp::ThreadPool::try_singleton())
             pool->stop();
     };
@@ -596,13 +585,11 @@ void HDRViewApp::setup_imgui_style_callbacks()
 
 void HDRViewApp::wake_event_loop()
 {
-    // glfwPostEmptyEvent() is the one GLFW entry point documented as callable from any thread, which is
-    // what makes this usable from the IPC receive thread. Every desktop backend HDRView builds is GLFW --
-    // Metal on macOS, OpenGL elsewhere -- so the only build without it is the web one, whose frame loop is
-    // driven by the browser and never waits on events anyway.
+    // glfwPostEmptyEvent() is the one GLFW entry point documented as callable from any thread, which is what
+    // makes this usable from the IPC receive thread. The web build has no GLFW here, and its frame loop is
+    // driven by the browser rather than by events.
 #if defined(HELLOIMGUI_USE_GLFW3)
-    // Nothing to wake before the window exists, and calling into GLFW that early is an error in its own
-    // right. Work posted then simply waits for the first frame, which is already on its way.
+    // Nothing to wake before the window exists, and calling into GLFW that early is an error.
     if (m_params.backendPointers.glfwWindow)
         glfwPostEmptyEvent();
 #endif
@@ -619,8 +606,8 @@ void HDRViewApp::post_to_main_thread(std::function<void()> f)
 
 void HDRViewApp::drain_main_thread_queue()
 {
-    // Swap the queue out under the lock and run the callables without it: they reach back into the app and
-    // are free to post further work, which belongs to the next frame rather than to this drain.
+    // Swap the queue out under the lock and run the callables without it: they reach back into the app, and
+    // work they post belongs to the next frame.
     std::vector<std::function<void()>> todo;
     {
         std::lock_guard lock{m_main_thread_mutex};
@@ -635,7 +622,7 @@ void HDRViewApp::drain_main_thread_queue()
         }
         catch (const std::exception &e)
         {
-            // One bad task must not take the frame -- and with it the whole app -- down with it.
+            // one bad task must not take the frame down with it
             spdlog::error("Exception while running main-thread task: {}", e.what());
         }
     }
@@ -674,7 +661,7 @@ void HDRViewApp::setup_frame_callbacks()
             [this](ImagePtr new_image, ImagePtr to_replace, bool should_select)
             {
                 // A replacement whose target has gone was a reload of an image closed while it was still
-                // loading. Appending it would put back the image that was just closed, so let it go.
+                // loading; appending it would put back the image that was just closed.
                 const int idx = to_replace ? image_index(to_replace) : -1;
                 if (to_replace && !is_valid(idx))
                 {
@@ -701,10 +688,8 @@ void HDRViewApp::setup_frame_callbacks()
 
                 if (m_pending_session)
                 {
-                    // Resolve this arrival to the earliest not-yet-filled entry sharing its load options
-                    // -- see PendingSession's comment in app.h for why matching by that key (rather than
-                    // by request order) is correct even when the same file is loaded more than once in
-                    // one session.
+                    // Resolve this arrival to the earliest not-yet-filled entry sharing its load options;
+                    // see PendingSession in app.h for why that key is the right one to match on.
                     auto key =
                         PendingSession::Key{new_image->path, new_image->channel_selector, new_image->alpha_override};
                     if (auto it = m_pending_session->unresolved.find(key); it != m_pending_session->unresolved.end())
@@ -934,9 +919,9 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         const auto if_img         = [this]() { return current_image() != nullptr; };
 
         // The emscripten GLFW port calls preventDefault() on every key it receives except cut/copy/paste, so
-        // on the web HDRView's chords reach it rather than the browser -- but only the ones the browser
-        // delivers at all. Ctrl/Cmd+Q, +W and +Shift+W are never sent to the page, so nothing can swallow
-        // them; leaving those bound would advertise a shortcut that quits the browser or closes the tab.
+        // on the web HDRView's chords reach it -- but only the ones the browser delivers at all. Ctrl/Cmd+Q,
+        // +W and +Shift+W never reach the page, so leaving them bound would advertise a shortcut that quits
+        // the browser or closes the tab.
 #if defined(__EMSCRIPTEN__)
         constexpr bool k_browser_reserved = true;
 #else
@@ -945,9 +930,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         using ImGui::Action;
         auto add = [this](const Action &a)
         {
-            // Actions are keyed by their primary name, so registering one twice replaces the first and
-            // leaves whatever referred to it pointing at the replacement instead -- with nothing to show
-            // for it but the wrong thing happening from a menu.
+            // Actions are keyed by their primary name, so registering one twice silently replaces the first.
             if (m_actions.count(a.names[0]))
                 spdlog::error("Action '{}' is registered more than once; the earlier one is unreachable.", a.names[0]);
             m_actions[a.names[0]] = a;
@@ -1235,9 +1218,8 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    "Reset the exposure and blackpoint offset to 0."});
         add(Action{
             {"Reverse colormap"}, ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false, &m_reverse_colormap});
-        // Registered unconditionally -- whether the display can actually show HDR isn't known yet here (the
-        // window doesn't exist), and can change while running when the window moves between monitors. The
-        // enabled predicate and the menu/toolbar sites consult supports_hdr() live instead.
+        // Registered unconditionally: there is no window yet to ask about HDR, and the answer changes as the
+        // window moves between monitors. The enabled predicate consults supports_hdr() live instead.
         add(Action{{"Clamp to LDR"},
                    ICON_MY_CLAMP_TO_LDR,
                    ImGuiMod_Ctrl | ImGuiKey_L,
@@ -1333,9 +1315,8 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    },
                    always_enabled});
 
-        // The tools are a radio group: each callback routes through set_mouse_mode(), which clears the
-        // other tools' selected flags. mouse_mode_action_name() maps back the other way, for the Tools
-        // menu and the tool palette.
+        // The tools are a radio group: each callback routes through set_mouse_mode(), which clears the other
+        // tools' selected flags.
         const ImGuiKeyChord tool_chords[MouseMode_COUNT] = {ImGuiKey_P, ImGuiKey_M, ImGuiKey_I};
         const char *tool_icons[MouseMode_COUNT] = {ICON_MY_PAN_ZOOM_TOOL, ICON_MY_SELECT, ICON_MY_WATCHED_PIXEL};
         for (int i = 0; i < MouseMode_COUNT; ++i)
@@ -1466,9 +1447,8 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                                if (group.num_channels >= 3 && !should_include[m_channel][c])
                                    continue;
                                // A summary's min/max already leave out NaNs, infinities and FLT_MAX-style
-                               // markers (see PixelStats::is_marker()), so what gets fitted is the range of
-                               // the channel's real measurements. A channel with no measurements at all
-                               // would otherwise contribute the infinities its summary starts at.
+                               // markers (see PixelStats::is_marker()); a channel with no measurements at
+                               // all still holds the infinities its summary starts at.
                                const auto &s = img->channels[group.channels[c]].get_stats()->summary;
                                if (!isfinite(s.minimum) || !isfinite(s.maximum))
                                    continue;
@@ -1476,9 +1456,8 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                                maximum = std::max(maximum, s.maximum);
                            }
 
-                           // Nothing measured, or every measurement the same value. Dividing by that span
-                           // sends the exposure to infinity or NaN, from which no further adjustment
-                           // recovers -- leaving it alone is the better answer to "fit this to [0, 1]".
+                           // Nothing measured, or every measurement the same value: dividing by that span
+                           // sends the exposure to infinity or NaN, from which no adjustment recovers.
                            if (!(maximum > minimum))
                                return;
 
@@ -1635,8 +1614,7 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    if_img});
 
         //
-        // Editing. Every one of these goes through modify_image(), which is what pairs the change with
-        // the entry that reverses it; see src/app-edit.cpp.
+        // Editing. Every one of these goes through modify_image(); see src/app-edit.cpp.
         //
         add(Action{{"Undo"},
                    ICON_MY_UNDO,
@@ -1888,10 +1866,9 @@ void HDRViewApp::process_shortcuts()
 
     for (auto &a : m_actions)
         if (a.second.chord)
-            // Held off only while something is taking typed characters, so that a letter meant for a text
-            // field is not also read as a shortcut. Deliberately not conditioned on keyboard navigation
-            // being idle, as it once was: arriving from the command palette or a dialog leaves navigation
-            // showing, and every shortcut in the application stopped working from there on.
+            // Held off only while something is taking typed characters, so a letter meant for a text field
+            // is not also read as a shortcut. Not conditioned on keyboard navigation being idle: arriving
+            // from the command palette or a dialog leaves navigation showing.
             if (a.second.enabled() && !ImGui::GetIO().WantTextInput &&
                 ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {

@@ -282,10 +282,9 @@ string TruncatedText(const string &filename, const string &icon)
     if (CalcTextSize((icon + filename).c_str()).x <= avail_width)
         return filename;
 
-    // Filenames here are `file:part.layer.channel` paths whose meaningful part is the *end*, so this
-    // keeps the tail and elides the front -- the opposite of ImGui's RenderTextEllipsis(), which
-    // keeps the prefix. Same technique as that function though: accumulate per-glyph advances in a
-    // single pass (here walking backwards from the end) rather than re-measuring a growing substring.
+    // Filenames here are `file:part.layer.channel` paths whose meaningful part is the end, so this keeps the
+    // tail and elides the front, the opposite of ImGui's RenderTextEllipsis(). Same technique as that
+    // function: accumulate per-glyph advances in a single pass, here walking backwards from the end.
     static const string ellipsis = " ...";
     const float         budget   = avail_width - CalcTextSize((icon + ellipsis).c_str()).x;
 
@@ -414,9 +413,8 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod, bool 
     float4 header  = GetStyleColorVec4(ImGuiCol_Header);
     float4 hovered = GetStyleColorVec4(ImGuiCol_HeaderHovered);
 
-    // The derived colors below depend only on those three theme colors, but this is called once per
-    // visible row per frame, so they're cached and rederived only when the theme actually changes --
-    // comparing three colors is much cheaper than six HSV<->RGB conversions.
+    // Called once per visible row per frame, so the derived colors below are cached and rederived only when
+    // the theme changes: comparing three colors is much cheaper than six HSV<->RGB conversions.
     static float4 cached_hovered{-1.f}, cached_header{-1.f}, cached_active{-1.f};
     static float4 hovered_c, header_c, active_c, hovered_avg, header_avg, active_avg, header_dim;
     if (hovered != cached_hovered || header != cached_header || active != cached_active)
@@ -436,9 +434,9 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod, bool 
         header_avg  = 0.5f * (header_c + header);
         active_avg  = 0.5f * (active_c + active);
 
-        // A selected row that isn't the current one is the same color at three quarters strength, which
-        // is done with the alpha rather than by scaling the color: against the light theme's background,
-        // a darker blue would read as more emphasis than the current row rather than less.
+        // A selected row that isn't the current one is the same color at three quarters strength, done with
+        // the alpha: against the light theme's background a darker blue would read as more emphasis, not
+        // less.
         header_dim = float4{header.xyz(), 0.75f * header.w};
     }
 
@@ -464,9 +462,9 @@ bool TreeRow(const void *id, ImGuiTreeNodeFlags flags, const char *label, const 
     return open;
 }
 
-// Splits `total_width` (already reduced by inter-item spacing) into `num_components` columns using the same
-// truncated allocation Dear ImGui's ColorEdit4 uses internally (remainder folded into the last column), so
-// a header row computed independently still lines up with the value boxes drawn below it.
+// Splits `total_width` (already reduced by inter-item spacing) into `num_components` columns the same way
+// Dear ImGui's ColorEdit4 does internally, remainder folded into the last column, so an independently
+// computed header row still lines up with the value boxes below it.
 static void split_channel_widths(float total_width, int num_components, float out_widths[4])
 {
     float prev_split = 0.f;
@@ -479,9 +477,8 @@ static void split_channel_widths(float total_width, int num_components, float ou
 }
 
 // Same left-edge tint ColorEdit4 draws on its R/G/B/A component sliders (see GDefaultRgbaColorMarkers in
-// imgui_widgets.cpp) -- InputFloat/InputScalar don't support ImGuiSliderFlags_ColorMarkers themselves (that
-// flag is only wired up in Drag/SliderScalar), so it's drawn manually via the same public
-// RenderColorComponentMarker() those widgets call internally.
+// imgui_widgets.cpp). ImGuiSliderFlags_ColorMarkers is only wired up in Drag/SliderScalar, not
+// InputFloat/InputScalar, so this is drawn via the public RenderColorComponentMarker() those widgets call.
 static const ImU32 rgba_marker_colors[4] = {IM_COL32(240, 20, 20, 255), IM_COL32(20, 240, 20, 255),
                                             IM_COL32(20, 20, 240, 255), IM_COL32(140, 140, 140, 255)};
 
@@ -500,11 +497,10 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
     float sz      = ImGui::GetFrameHeight();
     float label_w = label.empty() ? 0.f : ImGui::CalcTextSize(label.c_str()).x;
 
-    // `total_width`, when given, is the desired footprint for the *whole* row (boxes + swatch + label) --
-    // e.g. a PE table column's actual width, which the swatch must fit inside rather than overflow past
-    // (and get clipped by the cell's own clip rect). The box area is whatever's left after reserving space
-    // for the swatch (always) and the label (if given). Without an explicit total_width, it's the reverse:
-    // let the boxes take their natural CalcItemWidth(), and grow the row to fit the swatch/label beyond it.
+    // `total_width`, when given, is the footprint for the whole row (boxes + swatch + label) -- a PE table
+    // column's width, say, which the swatch must fit inside or be clipped by the cell's clip rect. The box
+    // area is what is left after reserving the swatch (always) and the label (if given). Without it, the
+    // boxes take their natural CalcItemWidth() and the row grows to fit the swatch and label beyond them.
     float w_full, row_width;
     if (total_width > 0.f)
     {
@@ -527,22 +523,18 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
     if (displayed)
         for (int c = 0; c < num_components; ++c)
         {
-            // IM_ROUND casts to int internally, and neither it nor ImClamp survives a non-finite input:
-            // NaN slips through both of ImClamp's comparisons, and the cast is then undefined. HDR images
-            // routinely contain both.
+            // IM_ROUND casts to int internally, and neither it nor ImClamp survives a non-finite input: NaN
+            // slips through both of ImClamp's comparisons, and the cast is then undefined.
             float v = displayed[c] * 255.f;
             ldr[c]  = std::isfinite(v) ? (int)ImClamp(IM_ROUND(ImClamp(v, 0.f, 255.f)), 0.f, 255.f) : 0;
         }
 
     // The whole row is one click target opening the Copy/Display-as popup. Real ImGui widgets (InputFloat,
-    // ColorButton, ...) call ButtonBehavior() -> ItemHoverable(), which claims g.HoveredId *regardless* of
-    // BeginDisabled() -- SetNextItemAllowOverlap() on this button doesn't stop a later, still-hoverable
-    // (if inert) widget from stealing that claim back. So the boxes/swatch/label below are drawn by hand,
-    // straight onto the draw list, with no ImGui item/ID of their own -- like TextUnformatted, which never
-    // competed for hover in the first place and is why the label already worked.
-    // Not wrapped in BeginDisabled(content_disabled): the click target (and its tooltip) stay active even
-    // when the content below is grayed out, e.g. a hovered pixel that's currently outside the image -- the
-    // popup (mode switching, copy) is still meaningful there, only the displayed sample isn't.
+    // ColorButton, ...) call ButtonBehavior() -> ItemHoverable(), which claims g.HoveredId regardless of
+    // BeginDisabled(), and SetNextItemAllowOverlap() here does not stop a later inert widget taking that
+    // claim back -- so the boxes, swatch and label below are drawn straight onto the draw list, with no
+    // ImGui item or ID of their own. The click target is outside BeginDisabled(content_disabled), so its
+    // popup stays usable when the sample itself is meaningless.
     bool clicked = ImGui::InvisibleButton("##click", ImVec2{row_width, sz});
     if (clicked)
         ImGui::OpenPopup("##dropdown");
@@ -556,11 +548,10 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
 
     ImGui::BeginDisabled(content_disabled);
 
-    // Read-only look: no fill/border (the optional color-component marker is the only framing left). Text
-    // is clipped to the box's own bounds via ImGui's standard clipped-text renderer (the same one
-    // Button/Selectable/etc. use for their labels) so an overly long value can't spill into the next box.
-    // Temporary: the numeric text itself (only) renders in the mono font, tightly scoped to this one draw
-    // call -- everything else in the row (label, tooltip, popup) stays in the ambient/regular font.
+    // Read-only look: no fill or border, the optional color-component marker being the only framing left.
+    // Text is clipped to the box's bounds through ImGui's standard clipped-text renderer, so a long value
+    // can't spill into the next box. Only the numeric text renders in the mono font; the label, tooltip and
+    // popup stay in the ambient one.
     auto draw_box = [&](ImVec2 p_min, float w, const char *text)
     {
         ImVec2 p_max{p_min.x + w, p_min.y + sz};
@@ -580,9 +571,8 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
         for (int c = 0; c < 4; ++c) hex |= (uint32_t)(c < num_components ? ldr[c] : 0) << (8 * (3 - c));
         ImFormatString(text_buf, IM_ARRAYSIZE(text_buf), "#%08X", hex);
         draw_box(ImVec2{x, row_pos.y}, w_full, text_buf);
-        // The per-component loop below advances by (width + spacing) on every iteration, including the
-        // last, so its cumulative x ends up w_full + spacing, not just w_full -- match that here too, or
-        // the swatch/label end up spacing px further left when in hex mode than in every other mode.
+        // The per-component loop below advances by (width + spacing) on every iteration, including the last,
+        // so match that here or the swatch and label sit a spacing further left in hex mode.
         x += w_full + spacing;
     }
     else
@@ -621,11 +611,10 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
         ImVec2 p_min{x, row_pos.y}, p_max{x + sz, row_pos.y + sz};
         if (swatch_color.w < 1.0f)
         {
-            // Same half-solid/half-checkerboard split ImGui::ColorButton's AlphaPreviewHalf flag draws (see
-            // ColorButton() in imgui_widgets.cpp), replicated by hand -- matching it exactly, including the
-            // rounding clamp and the inward bb shrink it applies for its (here, nonexistent) border -- since
-            // the swatch is a plain draw-list rect now, not an actual ColorButton (see the click-target note
-            // above). Approximating any of these made the split visibly not match a real ColorEdit's.
+            // The swatch is a plain draw-list rect, not a ColorButton (see the click-target note above), so
+            // the half-solid/half-checkerboard split ImGui::ColorButton's AlphaPreviewHalf flag draws is
+            // replicated here, down to the rounding clamp and the inward bb shrink it applies for its
+            // border; anything approximated visibly fails to match a real ColorEdit.
             float  grid_step = ImMin(sz, sz) / 2.99f;
             float  rounding  = ImMin(style.FrameRounding, grid_step * 0.5f);
             float  off       = -0.75f;
@@ -726,20 +715,16 @@ void ChannelValuesRowHeader(const std::string *names, int num_components, float 
     float widths[4];
     split_channel_widths(w_items, num_components, widths);
 
-    // Drawn straight onto the draw list (like ChannelValuesRow's boxes/swatch) rather than via per-iteration
-    // ImGui::SetCursorPos()+TextUnformatted() calls -- the latter looked equivalent but only the first label
-    // ever landed at the intended row_y, later ones drifted, for the same reason ChannelValuesRow's old
-    // approach needed defensive SetCursorPosY() calls: ImGui's cursor/same-line bookkeeping between
-    // ImGui-level item calls is easy to get subtly wrong across a loop. Raw draw-list positions sidestep it.
+    // Drawn straight onto the draw list, like ChannelValuesRow's boxes and swatch: ImGui's cursor and
+    // same-line bookkeeping across a loop of item calls drifts, leaving only the first label at row_y.
     ImVec2      row_pos   = ImGui::GetCursorScreenPos();
     ImDrawList *draw_list = ImGui::GetWindowDrawList();
     float       line_h    = ImGui::GetTextLineHeight();
     ImU32       text_col  = ImGui::GetColorU32(ImGuiCol_Text);
 
-    // Left-aligned (with the same FramePadding.x inset the value boxes below use for their own text) rather
-    // than centered, so a column's header lines up with its value text instead of just its box. Bold, to set
-    // the header apart from the values below it -- AddText() picks up the pushed font like any ImGui-level
-    // text call, since PushFont() also updates the shared draw-list state.
+    // Left-aligned, with the same FramePadding.x inset the value boxes use for their own text, so a column's
+    // header lines up with its value text and not just its box. AddText() picks up the pushed bold font like
+    // any ImGui-level text call, since PushFont() also updates the shared draw-list state.
     ImGui::PushFont(hdrview()->font("sans bold"), 0.f);
     float x = row_pos.x;
     for (int c = 0; c < num_components; ++c)
@@ -963,7 +948,7 @@ void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const string &subs
 //     return value_changed;
 // }
 
-//! Shared by both MenuItem() overloads; `name` is what the item is labelled and tooltipped with.
+/// Shared by both MenuItem() overloads; `name` is what the item is labelled and tooltipped with.
 static void menu_item(const Action &a, const std::string &name, bool include_name)
 {
     if (a.needs_menu)
@@ -1114,17 +1099,15 @@ DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, 
     DialogResult result = DialogResult::None;
 
     // Enter confirms and Escape cancels whatever else is going on, so a dialog reached from the command
-    // palette can be finished without touching the mouse. Neither is conditioned on keyboard navigation
-    // being idle: arriving from the palette leaves it active, which used to disable both.
-    //
-    // Two things do have to yield. An item being edited keeps Enter, so it commits the field rather than
-    // the dialog -- the next press then applies. And a button reached by keyboard navigation keeps it too,
-    // so that activating Cancel that way does not also confirm.
+    // palette can be finished without the mouse. Neither is conditioned on keyboard navigation being idle,
+    // which arriving from the palette leaves active. Two things do yield: an item being edited keeps Enter,
+    // so it commits the field and the next press applies the dialog, and so does a button reached by
+    // keyboard navigation, so activating Cancel that way does not also confirm.
     const bool editing = ImGui::IsAnyItemActive();
 
     // Omitting the size lets Dear ImGui auto-fit each button to its own label (text size + FramePadding*2),
-    // so a longer label like "Reset options to defaults" is never clipped -- which is also why the pair is
-    // right-aligned by measuring them rather than by a fixed offset.
+    // so a long label like "Reset options to defaults" is never clipped, and the pair is right-aligned by
+    // measuring the two rather than by a fixed offset.
     const ImGuiStyle &style = ImGui::GetStyle();
     const float       width = ImGui::CalcTextSize(cancel_label).x + ImGui::CalcTextSize(confirm_label).x +
                         4.f * style.FramePadding.x + style.ItemSpacing.x;
@@ -1256,16 +1239,15 @@ bool PE::FullWidthEntry(const char *id, const std::function<bool(float)> &conten
     ImGui::PushID(id);
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    // Advance into column 1 before drawing. The content below visually spans both columns (via the cursor/clip
-    // rect override), but ImGui's per-column auto-fit width tracking has no notion of "spans columns" — it
-    // attributes whatever the cursor reaches to whichever column is current. Landing on column 1 keeps that
-    // tracking out of column 0, which is the column double-clicking the (only) resize border auto-fits.
+    // Advance into column 1 before drawing. The content below spans both columns via the cursor/clip rect
+    // override, but ImGui's per-column auto-fit width tracking attributes whatever the cursor reaches to
+    // whichever column is current, and column 0 is the one double-clicking the resize border auto-fits.
     ImGui::TableNextColumn();
 
     // WidthGiven excludes each column's cell padding and inter-column spacing, so summing per-column widths
-    // falls short of the row's real span; read the bounds directly off the table instead. Also reset the cursor
-    // to column 0's true left edge, undoing any ambient Indent() a caller applied for ordinary column-0 rows
-    // (column 0 has ImGuiTableColumnFlags_IndentEnable on by default).
+    // falls short of the row's real span; read the bounds off the table instead. Also reset the cursor to
+    // column 0's true left edge, undoing any ambient Indent() a caller applied (column 0 has
+    // ImGuiTableColumnFlags_IndentEnable on by default).
     const ImGuiTable *table   = ImGui::GetCurrentTable();
     const float       left_x  = table ? table->Columns[0].WorkMinX : ImGui::GetCursorScreenPos().x;
     const float       right_x = table && table->ColumnsCount > 1 ? table->Columns[1].WorkMaxX : left_x;

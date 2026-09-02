@@ -149,8 +149,8 @@ struct TiffInput
 };
 
 // Custom TIFF I/O for writing to an ostream. libtiff seeks past the end of the output while laying out a
-// file and expects the gap to be filled, which ostringstream (HDRView's only save path) refuses to do, so
-// assemble the file in a memory buffer that grows on such seeks and hand it over once libtiff closes it.
+// file and expects the gap to be filled, which ostringstream refuses to do, so assemble the file in a
+// memory buffer that grows on such seeks and hand it over once libtiff closes it.
 struct TiffOutput
 {
     ostream     *os;
@@ -184,7 +184,7 @@ struct TiffOutput
     static toff_t seek(thandle_t handle, toff_t offset, int whence)
     {
         auto tiff = reinterpret_cast<TiffOutput *>(handle);
-        auto base = whence == SEEK_SET  ? toff_t(0)
+        auto base = whence == SEEK_SET   ? toff_t(0)
                     : whence == SEEK_CUR ? toff_t(tiff->pos)
                                          : toff_t(tiff->buffer.size());
         tiff->pos = size_t(base + offset);
@@ -373,24 +373,21 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             }
         }
 
-        // Only guess when the file said nothing. An EXTRASAMPLES tag naming something other than alpha
-        // (EXTRASAMPLE_UNSPECIFIED) is the file stating the extra sample is arbitrary data, so honor it.
+        // only guess when the file said nothing; an EXTRASAMPLES tag naming EXTRASAMPLE_UNSPECIFIED is the
+        // file saying the extra sample is arbitrary data
         AlphaSource_ alpha_source = AlphaSource_File;
         if (!has_alpha && !has_extra_samples && num_channels == 4)
         {
             has_alpha = true;
-            // Straight is the likelier reading for an unlabeled RGBA TIFF, but it is a guess, and this is
-            // the one place in this loader where nothing in the file settles the question.
+            // straight is the likelier reading for an unlabeled RGBA TIFF, but it is a guess
             is_premultiplied = false;
             alpha_source     = AlphaSource_Assumed;
             spdlog::debug("Inferred alpha channel from channel count (assuming straight alpha)");
         }
 
         auto image = make_shared<Image>(int2{(int)width, (int)height}, num_channels);
-        // What the file holds, not what it is converted to internally. An EXTRASAMPLES tag naming something
-        // other than alpha leaves has_alpha false, and AlphaType_None then keeps that sample out of an
-        // alpha-bearing group. Associated alpha is multiplied into the encoded samples, which is what every
-        // writer that produces one -- Photoshop, OpenImageIO, ImageMagick, vips -- does.
+        // TIFF associated alpha is multiplied into the encoded samples (Photoshop, OIIO, ImageMagick and
+        // vips all do this)
         image->set_alpha(has_alpha ? (is_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight)
                                    : AlphaType_None,
                          alpha_source, alpha_override_of(opts));
@@ -409,8 +406,8 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 fmt::format("{}-bit unsigned int ({} bpc)", bits_per_sample * samples_per_pixel, bits_per_sample);
 
         image->metadata["pixel format"] = format_str;
-        // file_bits_per_sample is the depth before the rounding above; the RGBA interface overrides it,
-        // since it always hands back 8-bit samples.
+        // file_bits_per_sample is the depth before the rounding above; the RGBA interface always hands
+        // back 8-bit samples
         image->set_bits_per_sample(sample_format == SAMPLEFORMAT_IEEEFP ? 0
                                    : use_rgba_interface                 ? 8
                                                                         : file_bits_per_sample);
@@ -536,22 +533,20 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         }
         else
         {
-            // Pre-compute bias and inverse divisor for integer formats based on file bit depth.
-            // file_bits_per_sample comes straight from the file's tag and reaches 64 for a 64-bit sample
-            // (libtiff's own caspian.tif is one), where 1ull << 64 is undefined; what is wanted is the mask
-            // of that many low bits. A file declaring zero bits per sample would likewise shift by -1.
-            const uint64_t int_max_value = file_bits_per_sample == 0    ? 1ull
-                                           : file_bits_per_sample >= 64 ? ~0ull
-                                                                        : ((1ull << file_bits_per_sample) - 1);
+            // Pre-compute bias and inverse divisor for integer formats from the file's bit depth. That
+            // depth comes straight from the tag and reaches 64 (libtiff's own caspian.tif), so guard the
+            // shifts: 1ull << 64 is undefined, and a declared zero would shift by -1.
+            const uint64_t int_max_value   = file_bits_per_sample == 0    ? 1ull
+                                             : file_bits_per_sample >= 64 ? ~0ull
+                                                                          : ((1ull << file_bits_per_sample) - 1);
             float          int_inv_divisor = 1.0f / (float)int_max_value;
             float          int_bias        = sample_format == SAMPLEFORMAT_INT && file_bits_per_sample > 0
                                                  ? (float)(1ull << (file_bits_per_sample - 1))
                                                  : 0.0f;
 
-            // TIFF has no field of its own for the video range, but a profile carrying CICP code points
-            // (ICC.1:2022) states it there. Narrow range puts black at 16 and white at 235, scaled by the
-            // sample depth, so it is the same normalization with a different divisor and offset -- and
-            // deliberately not clamped, since a narrow-range image may carry excursions beyond both.
+            // TIFF has no video-range field, but a profile carrying CICP code points (ICC.1:2022) states
+            // it. Narrow range puts black at 16 and white at 235, scaled by the sample depth: the same
+            // normalization with a different divisor and offset, unclamped so excursions survive.
             if (sample_format == SAMPLEFORMAT_UINT && file_bits_per_sample >= 8 && file_bits_per_sample <= 16)
                 if (auto codes = icc_cicp_tag(image->icc_data.data(), image->icc_data.size());
                     codes.valid() && !codes.fr())
@@ -566,30 +561,28 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             auto unpack_bits =
                 [&](const uint8_t *input, size_t input_size, int bitwidth, vector<uint32_t> &output, bool handle_sign)
             {
-                // Masks for a sample exactly as wide as the accumulator: 1u << 32 is undefined, and a
-                // 32-bit sample needs every bit anyway, so its "sign extension" is a no-op. Wider samples
-                // are rejected before any of this runs, but neither expression may shift off the end.
+                // masks for a sample as wide as the accumulator: 1u << 32 is undefined, and a 32-bit
+                // sample needs every bit anyway. Wider samples are rejected before this ever runs.
                 const uint32_t value_mask = bitwidth >= 32 ? ~0u : ((1u << bitwidth) - 1);
                 const uint32_t sign_bit   = (bitwidth >= 1 && bitwidth <= 32) ? (1u << (bitwidth - 1)) : 0u;
 
-                // A byte-aligned sample arrives in host order: libtiff byte-swaps 8-, 16-, 24- and 32-bit
-                // samples on the way out (tif_dir.c installs _TIFFSwab*BitData whenever the file's byte
-                // order differs from ours), so the sample is as many bytes as it is wide, ordered the way
-                // this machine orders that many bytes.
+                // a byte-aligned sample arrives in host order: libtiff byte-swaps 8-, 16-, 24- and 32-bit
+                // samples on the way out (tif_dir.c installs _TIFFSwab*BitData when the file's byte order
+                // differs from ours)
                 if (bitwidth % 8 == 0)
                 {
                     const size_t bytes_per_sample = bitwidth / 8;
                     const size_t count            = std::min(output.size(), input_size / bytes_per_sample);
                     for (size_t i = 0; i < count; ++i)
                     {
-                        output[i] = read_partial_as<uint32_t>(input + i * bytes_per_sample, bytes_per_sample,
-                                                              host_endian());
+                        output[i] =
+                            read_partial_as<uint32_t>(input + i * bytes_per_sample, bytes_per_sample, host_endian());
 
                         // If signbit is set, set all bits to the left to 1
                         if (handle_sign && (output[i] & sign_bit))
                             output[i] |= ~value_mask;
                     }
-                    // A row that ran short leaves the rest of the buffer defined rather than stale.
+                    // zero the tail so a row that ran short leaves no stale samples
                     for (size_t i = count; i < output.size(); ++i) output[i] = 0;
                     return;
                 }
@@ -623,12 +616,11 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             {
                 if (unpacked)
                 {
-                    // Handle integer data (already unpacked - both byte-aligned and bit-packed)
-                    // Works for both UINT (bias=0) and INT (bias=2^(n-1)).
-                    // unpack_bits sign-extends a signed sample across the 32-bit accumulator, so it has to
-                    // be read back as signed for the bias to land it in [0,1].
+                    // integer data, already unpacked; works for both UINT (bias=0) and INT (bias=2^(n-1)).
+                    // unpack_bits sign-extends a signed sample across the 32-bit accumulator, so read it
+                    // back as signed for the bias to land it in [0,1].
                     const float value = sample_format == SAMPLEFORMAT_INT ? (float)(int32_t)unpacked[buffer_idx]
-                                                                         : (float)unpacked[buffer_idx];
+                                                                          : (float)unpacked[buffer_idx];
                     return (value + int_bias) * int_inv_divisor;
                 }
                 else // SAMPLEFORMAT_IEEEFP
@@ -695,15 +687,12 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             const bool       needs_unpacking = sample_format != SAMPLEFORMAT_IEEEFP;
             vector<uint32_t> unpacked_buffer;
 
-            // unpack_bits accumulates into uint32_t, so a wider integer sample has nowhere to land and its
-            // masks would shift by 32 or more. Floating point never reaches it -- a 64-bit float sample is
-            // ordinary and is read directly.
+            // unpack_bits accumulates into uint32_t, so a wider integer sample has nowhere to land
             if (needs_unpacking && file_bits_per_sample > 32)
                 throw invalid_argument{
                     fmt::format("TIFF: {}-bit integer samples are not supported", file_bits_per_sample)};
 
-            // convert_to_float() reads a float sample as half, float or double, and has no meaning to
-            // give any other width.
+            // convert_to_float() reads a float sample as half, float or double, and nothing else
             if (!needs_unpacking && bits_per_sample != 16 && bits_per_sample != 32 && bits_per_sample != 64)
                 throw invalid_argument{
                     fmt::format("TIFF: {}-bit floating-point samples are not supported", bits_per_sample)};
@@ -882,8 +871,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         string         profile_desc;
         Chromaticities chr;
 
-        // The color management below inverts the file's transfer function, which does not commute with
-        // multiplication by alpha; see imageio/alpha.h.
+        // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
         unpremultiply_before_transfer(float_pixels.data(), size, image->alpha_type);
 
         if (opts.override_profile)
@@ -915,10 +903,8 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             if (has_transfer_function && tf_r && tf_g && tf_b && file_bits_per_sample <= 16)
             {
                 spdlog::debug("Applying TRANSFERFUNCTION tag for linearization");
-                // TIFF sizes each curve at 2^BitsPerSample entries, using the depth recorded in the
-                // file -- which is what libtiff allocated when it read the directory, and need not be
-                // the depth the pixels were widened to. The index therefore spans that table, not the
-                // 16-bit range its entries are quantized to.
+                // TIFF sizes each curve at 2^BitsPerSample entries, using the file's own depth, which need
+                // not be the depth the pixels were widened to; index across that table, not the 16-bit range
                 const uint32_t lut_max    = (1u << file_bits_per_sample) - 1u;
                 int            block_size = std::max(1, 1024 * 1024 / num_channels);
                 parallel_for(blocked_range<int>(0, (int)(width * height), block_size),
@@ -992,8 +978,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 
         image->metadata["color profile"] = profile_desc;
 
-        // Straight alpha is premultiplied by Image::finalize(), which is the single place that does so
-        // for every format; image->alpha_type above tells it what the file contained.
+        // Image::finalize() premultiplies straight alpha, keyed off the alpha_type set above
 
         // Copy processed pixels to image channels
         for (int c = 0; c < num_channels; ++c)
@@ -1015,8 +1000,9 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 }
 
 /// Extract EXIF data from TIFF file as a blob suitable for libexif parsing.
-/// Returns a vector with "Exif\0\0" header followed by minimal TIFF structure.
-/// Returns empty vector if extraction fails or is not possible.
+/**
+    An "Exif\0\0" header followed by a minimal TIFF structure, or empty if extraction is not possible.
+*/
 vector<uint8_t> extract_tiff_exif_blob(const vector<uint8_t> &data, bool reverse_endian)
 {
     if (data.size() < 8)
@@ -1157,8 +1143,7 @@ vector<ImagePtr> load_sub_images(TIFF *tif, tdir_t dir, const ImageLoadOptions &
                 throw invalid_argument{"Failed to read sub IFD."};
 
             int j = 0;
-            do
-            {
+            do {
                 auto sub_images = load_image(tif, dir, i, j, opts);
                 for (auto sub_image : sub_images) images.push_back(sub_image);
                 ++j;
@@ -1270,8 +1255,7 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
     vector<ImagePtr> images;
 
     // TIFF files can contain multiple directories (sub-images)
-    do
-    {
+    do {
 
         tdir_t dir = TIFFCurrentDirectory(tif);
 
@@ -1346,9 +1330,8 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, n);
     TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 
-    // EXTRASAMPLE_ASSOCALPHA describes color multiplied into the encoded samples, so as_interleaved() is
-    // asked to divide alpha out before the transfer function and multiply it back after -- not to leave the
-    // linear premultiplication in place, which would encode a different image. See imageio/alpha.h.
+    // EXTRASAMPLE_ASSOCALPHA describes color multiplied into the encoded samples, so as_interleaved() must
+    // divide alpha out before the transfer function and multiply it back after; see alpha.h
     if (n == 2 || n == 4)
     {
         uint16_t extra_samples[] = {EXTRASAMPLE_ASSOCALPHA};
@@ -1361,9 +1344,8 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     else
         TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
 
-    // The samples below keep the image's own primaries -- as_interleaved() is asked not to convert to
-    // sRGB -- so the file has to say which those are, or it reads back as though it were sRGB. The
-    // loader takes them from exactly these two tags.
+    // as_interleaved() below keeps the image's own primaries, so the file has to name them or it reads
+    // back as sRGB; these are the two tags the loader reads them from
     if (img.chromaticities && n >= 3)
     {
         const float white[2]     = {img.chromaticities->white.x, img.chromaticities->white.y};

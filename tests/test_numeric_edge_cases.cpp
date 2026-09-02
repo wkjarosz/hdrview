@@ -1,9 +1,7 @@
-/** \file test_probe.cpp
+/** \file test_numeric_edge_cases.cpp
     \author Wojciech Jarosz
 
-    Edge-case coverage for the numeric paths an HDR viewer actually reaches: values outside [0,1],
-    negatives produced by gamut conversion, and the NaN/Inf that real EXRs contain. Several of these
-    currently fail; see the accompanying bug report.
+    Values outside [0,1], negatives from gamut conversion, and the NaN/Inf real EXRs contain.
 */
 
 #include <doctest/doctest.h>
@@ -15,10 +13,8 @@
 
 TEST_CASE("Transfer functions mirror around the origin for negative input")
 {
-    // A wide-gamut color converted to a narrower gamut lands outside it, which is carried as negative
-    // components. The convention -- OpenColorIO's LIN_TO_PQ, colour-science's signed power, and this file's
-    // own linear_to_sRGB -- is to mirror the curve around the origin rather than clamp, so that the sign
-    // survives and the round trip stays exact.
+    // Gamut conversion produces negatives, and the convention (OpenColorIO's LIN_TO_PQ, colour-science's
+    // signed power, our own linear_to_sRGB) is to mirror the curve around the origin so the sign survives.
     for (int t = TransferFunction::Unspecified; t < TransferFunction::Count; ++t)
     {
         TransferFunction tf{static_cast<TransferFunction::Type_>(t)};
@@ -28,8 +24,7 @@ TEST_CASE("Transfer functions mirror around the origin for negative input")
             float encoded = from_linear(x, tf);
             REQUIRE(std::isfinite(encoded));
 
-            // Log100 and its sqrt10 variant are defined on a bounded domain and clamp by specification,
-            // so they are the one family that legitimately loses the sign.
+            // Log100 and its sqrt10 variant are specified on a bounded domain and clamp, losing the sign
             if (tf.type == TransferFunction::Log100 || tf.type == TransferFunction::Log100_Sqrt10)
                 continue;
 
@@ -80,8 +75,8 @@ TEST_CASE("Saving wide-gamut content through an HDR transfer function stays fini
     img.finalize();
 
     int  w, h, n;
-    auto px = img.as_interleaved<float>(&w, &h, &n, 1.f, TransferFunction{TransferFunction::BT2100_PQ}, false, true,
-                                        true);
+    auto px =
+        img.as_interleaved<float>(&w, &h, &n, 1.f, TransferFunction{TransferFunction::BT2100_PQ}, false, true, true);
     for (int i = 0; i < w * h * n; ++i)
     {
         INFO("sample ", i);
@@ -100,4 +95,3 @@ TEST_CASE("axis_scale_fwd/inv round-trip across the range the histogram spans")
             CHECK(axis_scale_inv(f, (AxisScale)s) == doctest::Approx(x).epsilon(1e-9));
         }
 }
-

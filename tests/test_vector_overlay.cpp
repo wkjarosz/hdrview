@@ -5,8 +5,7 @@
 //
 
 // The overlay interpreter, driven against a real ImDrawList and checked on the geometry it produces.
-// ImDrawList works without an ImGui context, so this needs no window and no graphics API -- which is what
-// makes the drawing itself testable rather than only inspectable in a screenshot.
+// ImDrawList works without an ImGui context, so this needs no window and no graphics API.
 
 #include <doctest/doctest.h>
 
@@ -20,7 +19,7 @@
 namespace
 {
 
-//! A draw list with just enough shared state to tessellate and emit geometry.
+/// A draw list with just enough shared state to tessellate and emit geometry.
 struct TestDrawList
 {
     ImDrawListSharedData shared;
@@ -30,18 +29,17 @@ struct TestDrawList
     {
         shared.ClipRectFullscreen   = ImVec4(-8192.f, -8192.f, 8192.f, 8192.f);
         shared.CurveTessellationTol = 1.25f;
-        // No anti-aliasing, so a vertex count reflects the path itself rather than the AA fringe around it.
+        // no anti-aliasing, so a vertex count reflects the path and not the fringe around it
         shared.InitialFlags = ImDrawListFlags_None;
         shared.SetCircleTessellationMaxError(0.30f);
 
-        // What ImGui does to a draw list at the top of each frame; without it the command buffer is empty
-        // and the first PushClipRect has no command to amend.
+        // what ImGui does at the top of each frame; without it the first PushClipRect has no command to amend
         list._ResetForNewFrame();
         list.PushClipRectFullScreen();
     }
 };
 
-//! Identity image-to-screen mapping, so expected coordinates are the ones the commands name.
+/// Identity image-to-screen mapping, so expected coordinates are the ones the commands name.
 VgTransform identity_transform()
 {
     VgTransform x;
@@ -50,7 +48,7 @@ VgTransform identity_transform()
     return x;
 }
 
-//! Axis-aligned bounds of everything written into the vertex buffer.
+/// Axis-aligned bounds of everything written into the vertex buffer.
 struct Bounds
 {
     float min_x = FLT_MAX, min_y = FLT_MAX, max_x = -FLT_MAX, max_y = -FLT_MAX;
@@ -79,7 +77,7 @@ TEST_CASE("A stroked rectangle lands where the commands put it")
 {
     TestDrawList d;
 
-    // The shape the official tevclient example draws around each finished tile.
+    // the shape the tevclient example draws around each finished tile
     draw_vector_overlay(&d.list,
                         {
                             cmd(VgCommand::Type::BeginPath),
@@ -93,8 +91,8 @@ TEST_CASE("A stroked rectangle lands where the commands put it")
     REQUIRE(d.list.VtxBuffer.Size > 0);
     const auto b = vertex_bounds(d.list);
 
-    // The stroke straddles the path, so with anti-aliasing off the geometry is exactly half a line width
-    // outside the rectangle on every side: [10,110]x[20,70] grown by 1.
+    // the stroke straddles the path, so with anti-aliasing off the geometry is half a line width outside the
+    // rectangle on every side: [10,110]x[20,70] grown by 1
     CHECK(b.min_x == doctest::Approx(9.f).epsilon(0.01f));
     CHECK(b.min_y == doctest::Approx(19.f).epsilon(0.01f));
     CHECK(b.max_x == doctest::Approx(111.f).epsilon(0.01f));
@@ -103,8 +101,8 @@ TEST_CASE("A stroked rectangle lands where the commands put it")
 
 TEST_CASE("Relative sizes scale with the image, absolute ones do not")
 {
-    // A stroke flagged Relative is in image pixels and so has to get thicker as the view zooms in; one
-    // flagged Absolute is in screen pixels and must not. Zoom is the only difference between these two.
+    // Relative widths are in image pixels and thicken as the view zooms in; Absolute ones are in screen
+    // pixels. Zoom is the only difference between the two draws below.
     auto stroked_line = [](float scale, VgCommand::ScaleKind kind)
     {
         TestDrawList d;
@@ -144,8 +142,7 @@ TEST_CASE("A filled circle covers its radius")
 
     REQUIRE(d.list.VtxBuffer.Size >= 3);
     const auto b = vertex_bounds(d.list);
-    // The polygon is inscribed, so it falls just inside the true circle -- by less than the tessellation
-    // error the segment count was chosen for, which is well under a pixel.
+    // the inscribed polygon falls inside the true circle by less than the tessellation error, well under a pixel
     CHECK(b.min_x == doctest::Approx(60.f).epsilon(0.005f));
     CHECK(b.max_x == doctest::Approx(140.f).epsilon(0.005f));
     CHECK(b.min_y == doctest::Approx(60.f).epsilon(0.005f));
@@ -154,8 +151,7 @@ TEST_CASE("A filled circle covers its radius")
 
 TEST_CASE("Each subpath is drawn, not just the last one")
 {
-    // NanoVG accumulates subpaths and paints them together; ImDrawList has one path buffer, so this is the
-    // case that would silently drop everything but the final MoveTo run if the staging were wrong.
+    // NanoVG accumulates subpaths and paints them together; ImDrawList has one path buffer to stage them in
     TestDrawList one, two;
 
     const auto square = [](float x)
@@ -181,14 +177,13 @@ TEST_CASE("Each subpath is drawn, not just the last one")
     draw_vector_overlay(&two.list, pair, identity_transform(), IM_COL32_WHITE);
 
     CHECK(two.list.VtxBuffer.Size == 2 * one.list.VtxBuffer.Size);
-    // ...and the second subpath is actually out at x=100, not collapsed onto the first.
+    // ...and the second subpath is out at x=100, not collapsed onto the first
     CHECK(vertex_bounds(two.list).max_x == doctest::Approx(110.f).epsilon(0.1f));
 }
 
 TEST_CASE("A path can be filled and then stroked, as NanoVG allows")
 {
-    // Only BeginPath discards the path; painting it does not. A viewer that cleared on Fill would drop the
-    // outline that a client expects to follow it.
+    // only BeginPath discards the path; painting it does not
     TestDrawList fill_only, fill_then_stroke;
 
     const std::vector<VgCommand> shape{
@@ -207,7 +202,7 @@ TEST_CASE("A path can be filled and then stroked, as NanoVG allows")
 
 TEST_CASE("Save and Restore bracket changes to the drawing state")
 {
-    // Restore has to put back the width Save captured; without it the second line would come out thick.
+    // Restore has to put back the width Save captured, or the second line comes out thick
     TestDrawList d;
     draw_vector_overlay(&d.list,
                         {
@@ -246,8 +241,7 @@ TEST_CASE("Commands HDRView cannot draw are reported rather than approximated")
 
 TEST_CASE("A command carrying the wrong number of arguments is skipped, not read past")
 {
-    // The interpreter is fed by a network parser, so a command whose data does not match its type has to be
-    // survivable rather than indexed into.
+    // the interpreter is fed by a network parser, so its input is untrusted
     TestDrawList             d;
     std::vector<std::string> reported;
 
@@ -267,14 +261,13 @@ TEST_CASE("A command carrying the wrong number of arguments is skipped, not read
 
 TEST_CASE("An overlay leaves the draw list's shared path buffer empty")
 {
-    // The path buffer is scratch space shared with everything else drawing this frame; leaving points in it
-    // would corrupt whatever primitive came next.
+    // the path buffer is scratch space shared with everything else drawing this frame
     TestDrawList d;
     draw_vector_overlay(&d.list,
                         {
                             cmd(VgCommand::Type::BeginPath), cmd(VgCommand::Type::MoveTo, {0.f, 0.f}),
                             cmd(VgCommand::Type::LineTo, {10.f, 10.f}),
-                            // deliberately left unpainted and unclosed
+                            // left unpainted and unclosed
                         },
                         identity_transform(), IM_COL32_WHITE);
 

@@ -17,18 +17,16 @@
 namespace
 {
 
-//! Reads fields out of a packet's bytes, refusing to run off the end of them.
-/*!
-    Every read is checked rather than the length being validated once up front, because the payload's own
-    contents decide how much follows: a channel count says how many strings come next, and a string ends
-    wherever its NUL is.
+/// Reads fields out of a packet's bytes, refusing to run off the end of them.
+/**
+    Every read is checked, since the payload's own contents decide how much follows it.
 */
 class PacketReader
 {
 public:
     PacketReader(const std::vector<char> &data) : m_data(data)
     {
-        // The length prefix is part of the framing and was checked when the packet was framed; step over it.
+        // step over the length prefix, which was checked when the packet was framed
         m_index = sizeof(uint32_t);
     }
 
@@ -57,17 +55,16 @@ public:
         return value;
     }
 
-    //! Number of bytes not yet read.
+    /// Number of bytes not yet read.
     size_t remaining() const { return m_data.size() - m_index; }
 
-    //! Read `count` floats, which must be the whole of what is left.
+    /// Read `count` floats, which must be the whole of what is left.
     std::vector<float> read_floats(size_t count)
     {
         require(count * sizeof(float), "sample data");
 
         std::vector<float> values(count);
-        // An empty vector's data() may be null, and memcpy is not allowed one even for zero bytes -- which
-        // every drawing command that takes no arguments would otherwise do.
+        // an empty vector's data() may be null, and memcpy is not allowed one even for zero bytes
         if (count == 0)
             return values;
 
@@ -89,7 +86,7 @@ private:
     size_t                   m_index = 0;
 };
 
-//! Builds a packet's bytes, keeping the length prefix up to date as it grows.
+/// Builds a packet's bytes, keeping the length prefix up to date as it grows.
 class PacketWriter
 {
 public:
@@ -137,7 +134,7 @@ private:
     std::vector<char> m_bytes;
 };
 
-//! Reads a channel-name list preceded by its count, bounded so a count cannot become an allocation.
+/// Reads a channel-name list preceded by its count, bounded so a count cannot become an allocation.
 std::vector<std::string> read_channel_names(PacketReader &r, int32_t count)
 {
     if (count <= 0 || count > k_max_ipc_channels)
@@ -150,7 +147,7 @@ std::vector<std::string> read_channel_names(PacketReader &r, int32_t count)
     return names;
 }
 
-//! The half-open rectangle an update packet covers, rejecting dimensions no tile has.
+/// The half-open rectangle an update packet covers, rejecting dimensions no tile has.
 Box2i read_bounds(PacketReader &r)
 {
     const int32_t x = r.read<int32_t>();
@@ -158,20 +155,19 @@ Box2i read_bounds(PacketReader &r)
     const int32_t w = r.read<int32_t>();
     const int32_t h = r.read<int32_t>();
 
-    // Width and height multiply into a pixel count and then index the payload, so a negative or absurd one
-    // has to be refused here rather than wrapping into a plausible-looking size later.
+    // width and height multiply into a pixel count that indexes the payload, so refuse anything that could
+    // wrap into a plausible-looking size
     if (w <= 0 || h <= 0 || int64_t(w) * h > int64_t(k_max_ipc_packet_size / sizeof(float)))
         throw std::runtime_error{fmt::format("IPC update packet has implausible dimensions {}x{}.", w, h)};
 
     return Box2i{int2{x, y}, int2{x + w, y + h}};
 }
 
-/*!
+/**
     Highest index into the sample payload that `offsets`/`strides` can reach, or none if they overflow.
 
-    Every access this addressing performs is `offset[c] + px * stride[c]` for px in [0, n_pixels), so
-    bounding the largest of them bounds all of them -- but only once negative offsets and strides are ruled
-    out, since with those the largest index is no longer the last pixel's.
+    Every access is `offset[c] + px * stride[c]` for px in [0, n_pixels), so the largest bounds all the
+    others -- but only once negative offsets and strides are ruled out.
 */
 std::optional<int64_t> max_sample_index(const std::vector<int64_t> &offsets, const std::vector<int64_t> &strides,
                                         int64_t n_pixels)
@@ -182,7 +178,7 @@ std::optional<int64_t> max_sample_index(const std::vector<int64_t> &offsets, con
         if (offsets[c] < 0 || strides[c] < 0)
             return std::nullopt;
 
-        // (n_pixels - 1) * stride + offset, refusing to wrap rather than computing a wrapped answer.
+        // (n_pixels - 1) * stride + offset, refusing to wrap
         constexpr int64_t k_max = std::numeric_limits<int64_t>::max();
         if (strides[c] != 0 && (n_pixels - 1) > k_max / strides[c])
             return std::nullopt;
@@ -226,8 +222,8 @@ IpcOpenImage IpcPacket::as_open_image() const
     IpcOpenImage result;
     result.grab_focus = r.read_bool();
     result.path       = r.read_string();
-    // v1 packed the channel selector into the path, and left it to the receiver to split; v2 sends it
-    // separately. Nothing here splits a v1 path -- HDRView's own loader takes a selector alongside a path.
+    // v1 packed the channel selector into the path; v2 sends it separately. A v1 path is left unsplit, since
+    // HDRView's loader takes a selector alongside a path.
     if (t == IpcPacketType::OpenImageV2)
         result.channel_selector = r.read_string();
     return result;
@@ -287,7 +283,7 @@ IpcUpdateImage IpcPacket::as_update_image() const
     result.grab_focus = r.read_bool();
     result.name       = r.read_string();
 
-    // v1 carried exactly one channel and did not say so.
+    // v1 carried one channel and did not say so
     const int32_t n_channels = t >= IpcPacketType::UpdateImageV2 ? r.read<int32_t>() : 1;
     result.channel_names     = read_channel_names(r, n_channels);
 
@@ -303,7 +299,7 @@ IpcUpdateImage IpcPacket::as_update_image() const
     }
     else
     {
-        // Before v3 the channels were simply concatenated, one contiguous plane after another.
+        // before v3 the channels were concatenated, one contiguous plane after another
         for (int32_t c = 0; c < n_channels; ++c)
         {
             result.channel_offsets[size_t(c)] = n_pixels * c;
@@ -346,9 +342,8 @@ IpcVectorGraphics IpcPacket::as_vector_graphics() const
         VgCommand cmd;
         cmd.type = VgCommand::Type(r.read<int8_t>());
 
-        // Nothing in the stream says how long a command is; its type does, via this table. So an
-        // unrecognized type is not a command to skip -- it leaves us with no idea where the next one
-        // starts, and the rest of the packet is unreadable.
+        // Only the command's type says how long it is, so an unrecognized type leaves no way to find where
+        // the next command starts and makes the rest of the packet unreadable.
         const int n = VgCommand::num_floats(cmd.type);
         if (n < 0)
             throw std::runtime_error{fmt::format("IPC VectorGraphics has an unknown command type {}.", int(cmd.type))};
@@ -472,7 +467,7 @@ void extract_ipc_packets(std::vector<char> &buffer, const std::function<void(con
             read_as<uint32_t>(reinterpret_cast<const unsigned char *>(buffer.data()) + consumed, Endian::Little);
 
         // A length that could never frame a packet means the stream is not carrying this protocol, or has
-        // lost sync. Nothing marks a packet boundary, so there is nothing to resynchronize to.
+        // lost sync; nothing marks a packet boundary, so there is nothing to resynchronize to.
         if (declared < sizeof(uint32_t) + 1 || declared > k_max_ipc_packet_size)
             throw std::runtime_error{fmt::format("IPC stream declares a {} byte packet.", declared)};
 

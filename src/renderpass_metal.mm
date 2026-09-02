@@ -17,17 +17,15 @@ RenderPass::RenderPass(bool write_depth, bool clear, Texture *color_target) :
     m_color_target(color_target), m_clear(clear), m_depth_test(write_depth ? DepthTest::Less : DepthTest::Always),
     m_depth_write(write_depth), m_cull_mode(CullMode::Back), m_pass_descriptor(nullptr)
 {
-    // The Metal backend always renders to the swapchain drawable (see begin()). Nothing on macOS asks for an
-    // offscreen target: EDR there consumes HDRView's extended-sRGB output directly, so the colorpass -- the
-    // only user of color targets -- is OpenGL-only.
+    // The Metal backend always renders to the swapchain drawable (see begin()). Offscreen targets are
+    // OpenGL-only: macOS EDR consumes extended sRGB directly, so there is no colorpass to render into one.
 #if !defined(NDEBUG)
     if (color_target)
         throw std::runtime_error("RenderPass: offscreen color targets are not supported on the Metal backend");
 #endif
     (void)m_color_target;
 
-    // Acquired only after the check above: a throw before this point leaves m_pass_descriptor untouched, so
-    // there's nothing for a never-constructed RenderPass to leak.
+    // acquired after the check above, so a throw leaves nothing for a never-constructed RenderPass to leak
     m_pass_descriptor = (__bridge_retained void *)[MTLRenderPassDescriptor renderPassDescriptor];
 
     set_clear_color(m_clear_color);

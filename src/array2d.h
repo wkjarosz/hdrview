@@ -9,7 +9,7 @@
 #include "fwd.h"
 #include <vector>
 
-//! Generic, resizable, 2D array class.
+/// Generic, resizable, 2D array class.
 template <typename T>
 class Array2D
 {

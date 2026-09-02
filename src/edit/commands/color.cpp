@@ -40,7 +40,7 @@ public:
                 27.f};
     }
 
-    //! The file's own tag, so a conversion starts from what the pixels actually are.
+    /// The file's own tag, so a conversion starts from what the pixels are.
     void on_open(EditContext &ctx) override
     {
         auto img = ctx.image();
@@ -114,8 +114,7 @@ public:
 
         ctx.modify_colors(
             "Convert color space",
-            // Premultiplied alpha is not in the way here: the conversion is a matrix, and scaling every
-            // component by alpha commutes with it.
+            // premultiplied alpha is no obstacle: scaling every component by alpha commutes with a matrix
             [M](const float4 &c, int2) { return float4{la::mul(M, c.xyz()), c.w}; },
             [g, w, m, tagged](Image &image)
             {
@@ -124,13 +123,13 @@ public:
                 image.adaptation_method = AdaptationMethod(m);
                 image.compute_color_transform();
 
-                // compute_color_transform() names the space from the chromaticities, which is the
-                // authority; these only matter when the destination is one it cannot recognize.
+                // compute_color_transform() names the space from the chromaticities; these only matter
+                // when the destination is one it cannot recognize
                 image.color_space = ColorGamut_(g);
                 image.white_point = WhitePoint_(w);
 
-                // The samples are linear light in the new primaries, and the Colorspace panel reads this
-                // as its "Profile name".
+                // the samples are linear light in the new primaries; the Colorspace panel reads this as
+                // its "Profile name"
                 image.metadata["color profile"] = color_profile_name(ColorGamut_(g), TransferFunction::Linear);
             });
     }
@@ -169,20 +168,18 @@ public:
 
     void draw(EditContext &) override
     {
-        // Radio-height text, so the label sits on the same line as the buttons beside it rather than
-        // riding above them.
+        // radio-height text, so the label sits on the same line as the buttons beside it
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Output channel");
 
-        // Each named in its own color, and gray last: the output is one of
-        // four rather than three plus a mode, so nothing has to say what happens when both are set.
+        // each named in its own color, gray last
         const char  *names[]  = {"Red", "Green", "Blue", "Monochrome"};
         const ImVec4 colors[] = {ImVec4(0.90f, 0.35f, 0.35f, 1.f), ImVec4(0.35f, 0.85f, 0.35f, 1.f),
                                  ImVec4(0.45f, 0.55f, 1.00f, 1.f), ImVec4(0.80f, 0.80f, 0.80f, 1.f)};
 
         for (int i = 0; i < Out_COUNT; ++i)
         {
-            // Only between them: SameLine() before the first would put it back on the line above.
+            // only between them: SameLine() before the first would put it back on the line above
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text, colors[i]);
             ImGui::PushStyleColor(ImGuiCol_CheckMark, colors[i]);
@@ -198,8 +195,7 @@ public:
         ImGui::DragFloat("Green##weight", &w.y, 0.5f, -200.f, 200.f, "%.1f%%");
         ImGui::DragFloat("Blue##weight", &w.z, 0.5f, -200.f, 200.f, "%.1f%%");
 
-        // The checkbox first, so that the total -- which changes width as it changes -- has nothing after
-        // it to push around.
+        // the checkbox first, so the total, whose width changes, has nothing after it to push around
         ImGui::Checkbox("Normalize", &m_normalize);
         ImGui::Tooltip("Divides each row by its own total, so the mix neither brightens nor darkens. Off, a "
                        "total above 100% lightens the result and one below darkens it.");
@@ -213,8 +209,7 @@ public:
         {
             const float3 v   = r / 100.f;
             const float  sum = v.x + v.y + v.z;
-            // A row summing to zero is a legitimate difference of channels; leaving it alone is the only
-            // thing to do rather than dividing by nothing.
+            // a row summing to zero is a legitimate difference of channels; leave it alone
             return norm && std::abs(sum) > 1e-6f ? v / sum : v;
         };
 
@@ -237,7 +232,7 @@ public:
     }
 
 private:
-    //! Which channel the weights are written to, gray among them rather than beside them.
+    /// Which channel the weights are written to.
     enum Output : int
     {
         Out_Red = 0,
@@ -248,12 +243,8 @@ private:
         Out_COUNT
     };
 
-    // A row of source weights per output channel, plus the one that makes a single gray from all three.
-    // Kept as percentages the way Photoshop presents them, since that is how the numbers are read:
-    // "40% of the red channel", not "0.4".
-    //
-    // Thirds rather than 33.3 each: a monochrome default that announces a total of 99.9% reads as an error
-    // in the dialog rather than as the rounding it is.
+    // a row of source weights per output channel, plus the one that makes a single gray from all three,
+    // as percentages the way Photoshop presents them. Thirds, so the monochrome default totals 100%.
     float3 m_rows[Out_COUNT] = {
         {100.f, 0.f, 0.f}, {0.f, 100.f, 0.f}, {0.f, 0.f, 100.f}, {100.f / 3.f, 100.f / 3.f, 100.f / 3.f}};
     int  m_output    = Out_Red;
@@ -275,25 +266,20 @@ public:
 
     void draw(EditContext &) override
     {
-        // The ranges Photoshop uses: hue in degrees around the wheel, the other two as a percentage away
-        // from where they are.
+        // the ranges Photoshop uses: hue in degrees around the wheel, the other two as a percentage
         ImGui::SliderFloat("Hue", &m_hue, -180.f, 180.f, "%+.0f deg");
         ImGui::SliderFloat("Saturation", &m_saturation, -100.f, 100.f, "%+.0f%%");
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
 
-        // The wheel as it is and as the settings would leave it, which is easier to judge than the numbers.
-        /*!
-            Drawn as shaded quads between the points where the sweep bends, rather than sampled: the hue
-            hexcone is piecewise linear in hue, and rotating the hue, scaling the saturation and mixing
-            toward black or white each either move those bends or are affine in every component. So
-            interpolating between them is not an approximation of the sweep, it is the sweep.
+        // The wheel as it is and as the settings would leave it.
+        /**
+            Drawn as shaded quads between the points where the sweep bends, which is not an approximation:
+            the hue hexcone is piecewise linear in hue, and the three settings each either move those
+            bends or are affine in every component.
 
-            Two kinds of bend. Six come from the hexcone's own corners, slid along by the hue rotation and
-            one of them wrapped. The rest come from the strip having to show a color the display can
-            reach: raising the saturation of an already-saturated hue sends components past 0 and 1, and
-            clamping them back bends the ramp where they cross. Those crossings are what a saturation
-            boost looks like -- flat, then a steeper ramp, then flat -- and interpolating straight through
-            them is what made raising saturation appear to do nothing at all.
+            Two kinds of bend. Six are the hexcone's own corners, slid along by the hue rotation and one of
+            them wrapped. The rest are where clamping to the display's range bends the ramp, which is what
+            raising the saturation of an already-saturated hue looks like: flat, a steeper ramp, then flat.
         */
         auto strip = [](const char *id, float h, float s, float l)
         {
@@ -301,7 +287,7 @@ public:
             const ImVec2 p  = ImGui::GetCursorScreenPos();
             auto        *dl = ImGui::GetWindowDrawList();
 
-            // Before the display's range is imposed, which is where the bends are still straight lines.
+            // before the display's range is imposed, where the bends are still straight lines
             auto raw = [&](float t)
             { return adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), h / 360.f, (s + 100.f) / 100.f, l / 100.f); };
 
@@ -312,7 +298,7 @@ public:
                     ImVec4(std::clamp(c.x, 0.f, 1.f), std::clamp(c.y, 0.f, 1.f), std::clamp(c.z, 0.f, 1.f), 1.f));
             };
 
-            // The hexcone's corners, moved by the hue rotation and wrapped back into the strip.
+            // the hexcone's corners, moved by the hue rotation and wrapped back into the strip
             std::vector<float> knots{0.f, 1.f};
             for (int k = 0; k < 6; ++k)
             {
@@ -321,8 +307,8 @@ public:
             }
             std::sort(knots.begin(), knots.end());
 
-            // Then wherever a component crosses 0 or 1 between two corners. It is linear in there, so each
-            // crossing is one division.
+            // then wherever a component crosses 0 or 1 between two corners; it is linear in there, so
+            // each crossing is one division
             std::vector<float> bends = knots;
             for (size_t i = 0; i + 1 < knots.size(); ++i)
             {
@@ -385,9 +371,7 @@ public:
 
     void draw(EditContext &) override
     {
-        // The curve first, since it is what the two sliders are for and reading it is quicker than
-        // reading the numbers. Both are drawn whichever is in force, the inactive one dimmed, so the
-        // difference between them is visible before it is chosen.
+        // the curve first, since it is what the two sliders are for
         draw_curve();
 
         ImGui::SliderFloat("Brightness", &m_brightness, -1.f, 1.f, "%+.3f");
@@ -439,8 +423,8 @@ public:
             return;
         }
 
-        // Through the image's own primaries rather than sRGB's: L*a*b* is defined from XYZ, and what the
-        // samples mean in XYZ is what the image says they do.
+        // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in
+        // XYZ is what the image says they do
         const float3x3 to_XYZ   = img->M_RGB_to_XYZ;
         const float3x3 from_XYZ = img->M_XYZ_to_RGB;
         const float3   white    = img->chromaticities ? XYZ_from_xy(img->chromaticities->white) : Lab_reference_white();
@@ -464,25 +448,23 @@ public:
     }
 
 private:
-    //! The slope the contrast slider asks for, as the tangent of an angle.
-    /*!
-        An angle rather than a multiplier, so that the two ends of the slider are the two extremes there
-        are: -1 is a horizontal line and no contrast at all, 0 is the 45-degree diagonal that changes
-        nothing, and +1 is vertical, which leaves only black and white.
+    /// The slope the contrast slider asks for, as the tangent of an angle.
+    /**
+        The slider's ends are then the two extremes: -1 horizontal and flat, 0 the 45-degree diagonal, +1
+        vertical and black-or-white.
     */
     static float slope_of(float contrast) { return float(std::tan(lerp(0.0, M_PI_2, contrast / 2.0 + 0.5))); }
 
-    //! The inverse of slope_of(): what the slider must read for the curve to have this slope.
+    /// The inverse of slope_of(): what the slider must read for the curve to have this slope.
     static float contrast_of(float slope)
     {
         return std::clamp(float(4.0 * std::atan(std::max(0.f, slope)) / M_PI) - 1.f, -1.f, 1.f);
     }
 
-    //! The slope that puts the straight line through (\p x, \p y); negative when nothing can.
-    /*!
-        The line is fixed through its pivot, so one more point determines it outright -- unless the point
-        asked for is the pivot itself, which every slope already passes through, or is on the wrong side of
-        it, which would need the line to run downhill.
+    /// The slope that puts the straight line through (\p x, \p y); negative when nothing can.
+    /**
+        The line is fixed through its pivot, so one more point determines it, unless that point is the pivot
+        itself.
     */
     static float line_slope_through(float x, float y, float midpoint)
     {
@@ -491,10 +473,9 @@ private:
         return (y - 0.5f) / (x - midpoint);
     }
 
-    //! The gain exponent that puts the s-curve through (\p x, \p y); negative when nothing can.
-    /*!
-        gain_Perlin is a power on each half of its range, so asking it to reach a value is one logarithm.
-        The bias is left where it is, which is what makes this a bend rather than a shift.
+    /// The gain exponent that puts the s-curve through (\p x, \p y); negative when nothing can.
+    /**
+        gain_Perlin is a power on each half of its range, so this is one logarithm; the bias stays put.
     */
     static float curve_gain_through(float x, float y, float bias)
     {
@@ -502,15 +483,15 @@ private:
         if (u <= 1e-4f || u >= 1.f - 1e-4f || y <= 1e-4f || y >= 1.f - 1e-4f)
             return -1.f;
 
-        // Each half is pinned at its own end and at the middle, so a target on the far side of the middle
-        // from the input is unreachable at any exponent.
+        // each half is pinned at its own end and at the middle, so a target on the far side of the
+        // middle from the input is unreachable at any exponent
         if ((u > 0.5f) != (y > 0.5f))
             return -1.f;
 
         return u > 0.5f ? std::log(2.f * (1.f - y)) / std::log(2.f - 2.f * u) : std::log(2.f * y) / std::log(2.f * u);
     }
 
-    //! Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
+    /// Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
     void draw_curve()
     {
         const float slope    = slope_of(m_contrast);
@@ -531,28 +512,22 @@ private:
         const ImVec4 active{1.f, 1.f, 1.f, 0.85f};
         const ImVec4 faint{1.f, 1.f, 1.f, 0.18f};
 
-        // Both are drawn whichever is in force, so the difference between them can be seen before it is
-        // chosen.
+        // both are drawn whichever is in force, the inactive one faint
         m_plot.curve("s-curve", curved, m_linear ? faint : active);
         m_plot.curve("line", linear, m_linear ? active : faint);
 
-        // The pivot: the one input both curves send to the middle, whatever the contrast. Drawn as a
+        // the pivot: the one input both curves send to the middle, whatever the contrast. Drawn as a
         // handle because it is also what the drag below grabs.
         m_plot.marker_x("pivot", midpoint, ImVec4(1.f, 1.f, 1.f, 0.35f));
         m_plot.handle(float2{midpoint, 0.5f}, ImVec4(1.f, 1.f, 1.f, 0.55f));
 
         /*
-            Dragging does one of two things, decided by what was under the cursor when it went down --
-            which is how a curve editor behaves, and the only way to give both directions a meaning here.
+            Dragging does one of two things, decided by what was under the cursor when it went down. Near
+            the pivot it drags the pivot, which is brightness alone; anywhere else it bends the curve, the
+            grabbed input keeping its place on the horizontal axis, which is contrast alone.
 
-            Near the pivot, it drags the pivot: brightness alone, and the curve slides sideways under the
-            cursor. Anywhere else, it bends the curve: the input grabbed keeps its place on the horizontal
-            axis and its output follows the cursor, which is contrast alone.
-
-            The two cannot be combined. The pivot's output is one half at every contrast, so a curve that
-            passes under the cursor and a pivot that sits under the cursor are the same request only when
-            the cursor is at one half -- and were both live at once, a straight-up drag would be asking the
-            pivot to move to where it already is.
+            The two cannot be combined: the pivot's output is one half at every contrast, so both requests
+            agree only when the cursor is at one half.
         */
         if (float2 p, from; m_plot.drag(p, &from))
         {
@@ -568,8 +543,8 @@ private:
                 const float wanted =
                     m_linear ? line_slope_through(from.x, p.y, midpoint) : curve_gain_through(from.x, p.y, bias);
 
-                // Left as it is where the cursor asks for something no setting produces, so the curve
-                // stops following rather than jumping to an end of the slider.
+                // left as it is where the cursor asks for something no setting produces, so the curve
+                // stops following instead of jumping to an end of the slider
                 if (wanted >= 0.f)
                     m_contrast = contrast_of(wanted);
             }
@@ -580,12 +555,12 @@ private:
         m_plot.end();
     }
 
-    //! Which of the image's qualities the curve is applied to.
+    /// Which of the image's qualities the curve is applied to.
     enum Channel : int
     {
-        Channel_RGB = 0,      //!< The three channels alike, saturation moving with everything else
-        Channel_Lightness,    //!< L* alone, so the colors stay where they are
-        Channel_Chromaticity, //!< a* and b*, so how light the image is does not change
+        Channel_RGB = 0,      ///< The three channels alike, saturation moving with everything else
+        Channel_Lightness,    ///< L* alone, so the colors stay where they are
+        Channel_Chromaticity, ///< a* and b*, so how light the image is does not change
 
         Channel_COUNT
     };
@@ -594,7 +569,7 @@ private:
     bool          m_linear  = false;
     int           m_channel = Channel_RGB;
     ToneCurvePlot m_plot;
-    //! Which of the two things the drag in progress is doing; unset between drags.
+    /// Which of the two things the drag in progress is doing; unset between drags.
     std::optional<bool> m_dragging_pivot;
 };
 
@@ -619,8 +594,7 @@ public:
         ImGui::ColorEdit4("Background", &m_bg.x,
                           ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar);
 
-        // The color the viewport is already showing behind the image, which is usually the one being
-        // matched.
+        // the color the viewport is already showing behind the image
         if (ImGui::Button("Use viewport background"))
             m_bg = ctx.background_color();
         ImGui::Tooltip("Takes the custom background color from the View menu.");
@@ -632,8 +606,8 @@ public:
         ctx.modify_colors("Flatten",
                           [b](const float4 &c, int2)
                           {
-                              // Samples are held premultiplied, so "over" is an addition rather than the
-                              // textbook's lerp; the background is given straight and is premultiplied here.
+                              // samples are held premultiplied, so "over" is an addition and not the
+                              // textbook's lerp; the background is given straight and premultiplied here
                               return float4{c.xyz() + b.xyz() * b.w * (1.f - c.w), c.w + b.w * (1.f - c.w)};
                           });
     }

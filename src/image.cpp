@@ -282,12 +282,10 @@ bool Image::loadable(const std::string &ext)
 
 float2 PixelStats::x_limits(float e, AxisScale scale, float headroom) const
 {
-    // Each scale reaches some multiple past display white, which sits at 2^-e. Asinh and sRGB both
-    // compress their far end, so they can afford to clear the display's ceiling -- with a little margin,
-    // so the ceiling lands inside the axis rather than on its edge -- and still leave the data legible.
-    // sRGB pays more for it than asinh does: at 16x headroom white falls around a third of the way
-    // across rather than two thirds. Linear pays far more still and keeps its old fixed reach, since
-    // stretching it that far would leave everything that matters in the first twentieth of the plot.
+    // Each scale reaches some multiple past display white, which sits at 2^-e. Asinh and sRGB compress
+    // their far end, so they can clear the display's ceiling (with a margin, so it lands inside the axis)
+    // and still leave the data legible; linear keeps a fixed reach, since stretching it that far would
+    // leave everything that matters in the first twentieth of the plot.
     const float past_white = scale == AxisScale_Linear ? 1.2f
                              : scale == AxisScale_SRGB ? std::max(1.5f, headroom * 1.15f)
                                                        : std::max(4.f, headroom * 1.15f);
@@ -295,23 +293,14 @@ float2 PixelStats::x_limits(float e, AxisScale scale, float headroom) const
     float2 ret;
     ret[1] = pow(2.f, -e) * past_white;
     if (summary.minimum < -summary.maximum / 255.f)
-        // Negatives get the room they actually occupy, plus a sliver so the extreme value does not land on
-        // the axis itself. Mirroring the positive reach instead spends half the plot on whatever ringing a
-        // lossy codec left around black -- a hundredth of a stop below zero in one channel is enough to
-        // trigger it -- and makes two encodes of the same image look nothing alike. Still capped at that
-        // mirror, so genuinely signed data cannot crowd out the range the exposure is set for.
+        // Negatives get the room they occupy, plus a sliver so the extreme value does not land on the axis
+        // itself, and are capped at the positive reach so signed data cannot crowd out the range the
+        // exposure is set for.
         ret[0] = std::max(-ret[1], 1.05f * summary.minimum);
     else
-        // A fixed fraction of display white, not of the axis top. The top grows with the display's
-        // headroom, and a floor tied to it carries display 0 further outside the axis the more headroom
-        // there is -- past about 14x, far enough for the SDR band's own lower boundary to count as off
-        // the plot and lose its bracket leg. Against white it stays the same hair outside at any
-        // headroom, and the axis it hides is empty in either case.
-        //
-        // A two-thousandth rather than a ten-thousandth, which is about what the old floor came to at the
-        // axis's shortest reach. It has to stay clear of a ten-thousandth: the asinh scale is very nearly
-        // linear that far below its knee, so an axis starting on that decade picks up ticks for both it
-        // and the next, a couple of pixels apart, and their labels land on top of each other.
+        // A fixed fraction of display white, not of the axis top, which grows with the display's headroom
+        // and would carry display 0 further off the axis the more of it there is. 1/2000 keeps the asinh
+        // axis off the decade where its ticks land a couple of pixels apart and their labels collide.
         ret[0] = pow(2.f, -e) / 2000.f;
 
     return ret;
@@ -351,10 +340,9 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
         if (croi.size() != rroi.size())
             spdlog::error("Image and reference channel ROIs are not the same size!");
 
-        // Number of pixels the two passes below visit. Box::intersect() clamps each bound against the
-        // other box without keeping min <= max, so a selection that misses the channel leaves an inverted
-        // box, whose volume() is negative in one axis and spuriously positive in two. Neither is a count,
-        // and both passes take theirs as a size_t, so ask has_volume() first.
+        // Number of pixels the two passes below visit. Box::intersect() clamps each bound against the other
+        // box without keeping min <= max, so a selection that misses the channel leaves an inverted box,
+        // whose volume() is negative in one axis and spuriously positive in two; hence has_volume() first.
         const size_t num_pixels = croi.has_volume() ? (size_t)croi.volume() : 0;
 
         // Report what the file holds: a straight-alpha channel was premultiplied on load, so divide that
@@ -372,9 +360,8 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
             }
             float val = sample(img, alpha, i2d + croi.min - img_data_origin);
             // BlendMode_Normal discards the reference sample (blend() just returns `val`), and croi is only
-            // intersected with rroi above when the reference is actually going to be sampled -- so sampling it
-            // here regardless of blend mode risks indexing outside ref's bounds whenever the two channels
-            // differ in size.
+            // intersected with rroi above when the reference is going to be sampled, so sampling it here
+            // regardless of blend mode could index outside ref's bounds when the two channels differ in size.
             if (ref && settings.blend_mode != BlendMode_Normal)
                 val = blend(val, sample(*ref, ref_alpha, i2d + croi.min - rroi.min), settings.blend_mode);
             return val;
@@ -492,15 +479,14 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
         // compute histograms
         //
         // Bins are laid out uniformly in the same transformed space the x axis is drawn in, so each bin is
-        // equally wide on screen and its height can be a plain count: with equal widths, bar height and bar
-        // area say the same thing. Every scale is binned in this one pass, which costs an extra transform
-        // per sample but leaves switching the x axis free. The bin count comes from the source's bit depth,
-        // since an n-bit channel cannot fill more bins than it has levels.
+        // equally wide on screen and its height can be a plain count. Every scale is binned in this one
+        // pass, which costs an extra transform per sample but leaves switching the x axis free. The bin
+        // count comes from the source's bit depth, since an n-bit channel cannot fill more bins than it has
+        // levels.
         //
-        // The bins span the channel's own range so that the histogram never depends on exposure. On a
-        // linear x axis a single very bright sample therefore stretches the bins far past the visible range
-        // and crowds everything into the first few; the nonlinear scales, which is what high-dynamic-range
-        // content wants anyway, are unaffected.
+        // The bins span the channel's own range, so the histogram never depends on exposure. On a linear x
+        // axis a single very bright sample therefore stretches the bins past the visible range and crowds
+        // everything into the first few; the nonlinear scales are unaffected.
 
         // A blended value lies on neither channel's lattice, so this is only exactly right without a
         // reference; it stays the best available bound on how many distinct values can show up.
@@ -565,9 +551,9 @@ void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_da
             // at the baseline.
             hist_y_limits[s][0] = 0.f;
 
-            // Take the (drop+1)-th tallest bin rather than the tallest, so the one enormous spike that a
-            // flat background or a clipped highlight produces doesn't squash everything else flat. Those
-            // few bins run off the top of the plot, which reads correctly as "off the scale".
+            // Take the (drop+1)-th tallest bin, not the tallest, so the one enormous spike a flat
+            // background or a clipped highlight produces doesn't squash everything else flat; those few
+            // bins then run off the top of the plot.
             const int                   drop = std::min(num_bins - 1, 1 + num_bins / 128);
             std::array<float, MAX_BINS> sorted;
             std::copy_n(hist_ys[s].begin(), num_bins, sorted.begin());
@@ -596,9 +582,8 @@ float4x4 ChannelGroup::colors() const
     case RGB_Channels:
     case UVorXY_Channels:
         // The histogram fill is composited additively in software (see Image::draw_histogram), so these are
-        // true emission colors: R+G+B sums to exactly white where all three channels overlap, R+G sums to
-        // yellow, etc. The alpha channel is unused by the fill (a single overall wash alpha is applied
-        // instead); it stays around only for the outline/hover-marker code paths that reuse this table.
+        // emission colors: R+G+B sums to white where all three channels overlap. The alpha is unused by the
+        // fill, which applies one overall wash, and is here for the outline/hover-marker paths.
         return float4x4{{1.f, 0.f, 0.f, 0.5f}, {0.f, 1.f, 0.f, 0.5f}, {0.f, 0.f, 1.f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}};
     case YCA_Channels:
     case YC_Channels:
@@ -630,9 +615,8 @@ Texture *Channel::get_texture()
 #else
         auto min_mode = Texture::InterpolationMode::Trilinear;
 #endif
-        // Mipmapping is driven from here rather than from each upload: upload_tile() writes a rectangle at
-        // a time, and letting every one of those rebuild the whole mip chain would cost far more than the
-        // tile itself.
+        // Manual mipmapping: upload_tile() writes a rectangle at a time, and rebuilding the whole mip chain
+        // per tile would cost far more than the tile itself.
         texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, size(),
                                             min_mode, Texture::InterpolationMode::Nearest,
                                             Texture::WrapMode::ClampToEdge, 1, Texture::TextureFlags::ShaderRead,
@@ -733,9 +717,8 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
                                           img2 ? img2->content_version : 0};
 
     // Pixels streaming in from a renderer change the content version faster than a full pass over the image
-    // can finish, and chasing every version would cancel each computation partway and show no statistics at
-    // all. So a newer version is only picked up once the cache has stood as a finished result for a moment:
-    // the histogram then refreshes at a bounded rate instead of never.
+    // can finish, and chasing every version would cancel each computation partway. So a newer version is
+    // only picked up once the cache has stood as a finished result for a moment.
     static constexpr auto k_min_stats_age = std::chrono::milliseconds{200};
     if (cached_stats->computed && std::chrono::steady_clock::now() - stats_ready_at < k_min_stats_age)
     {
@@ -743,8 +726,8 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
         desired_settings.ref_content_version = cached_stats->settings.ref_content_version;
     }
 
-    // The group's alpha channel, when this channel needs dividing by it to report the file's values.
-    // Null for the alpha channel itself, which is stored as the file had it.
+    // The group's alpha channel, when this channel needs dividing by it to report the file's values; null
+    // for the alpha channel itself, which is stored as the file had it.
     auto alpha_of = [c](const ConstImagePtr &img, int group_idx) -> const Channel *
     {
         if (!img || !img->is_valid_group(group_idx))
@@ -754,9 +737,9 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
                                                                   : nullptr;
     };
 
-    // img2 is captured so that the reference image outlives the task: the raw Channel pointers below point
-    // into it, and closing it drops the app's last reference. img1 needs no such capture -- it owns this
-    // Channel, whose destructor cancels and waits for the task.
+    // img2 is captured so the reference image outlives the task: the raw Channel pointers below point into
+    // it, and closing it drops the app's last reference. img1 owns this Channel, whose destructor cancels
+    // and waits for the task.
     auto recompute_async_stats = [this, desired_settings, img1, img2, img_data_origin = img1->data_window.min,
                                   alpha           = alpha_of(img1, img1->selected_group),
                                   ref             = (img2 && img2->is_valid_group(img2->reference_group))
@@ -973,19 +956,17 @@ void Image::build_layers_and_groups()
             string name = prefix + c;
             auto   it   = channels.find(name);
 
-            // A channel asked to stand alone is simply not available to match, so the pattern comes up
-            // short and every channel it would have taken falls through to a group of its own. Marking
-            // one channel of an RGBA set therefore still leaves the other three as RGB, since that
-            // pattern is tried next and does not want the marked one.
+            // A channel asked to stand alone is not available to match, so the pattern comes up short and
+            // every channel it would have taken falls through to a group of its own. Marking one channel of
+            // an RGBA set still leaves the other three as RGB, since that pattern is tried next.
             if (it != channels.end() && !this->channels[size_t(it->second)].ungrouped)
                 found.push_back(it);
         }
         return found;
     };
 
-    // Everything below appends, so anything left from a previous build would be duplicated rather than
-    // replaced -- the layer tree would gain a second leaf at every node and the channel counts would stop
-    // agreeing with the channels.
+    // Everything below appends, so anything left from a previous build would be duplicated: the layer tree
+    // would gain a second leaf at every node and the channel counts would stop agreeing with the channels.
     layers.clear();
     groups.clear();
     root = LayerTreeNode{};
@@ -1119,8 +1100,7 @@ void Image::compute_color_transform()
 }
 
 // These move the samples, so the windows have to move with them. Only matters when the display window is
-// something other than the whole frame -- a raw CFA part marks the sensor's active area with it -- but then
-// a flip lands it on the opposite edge from where it belongs.
+// something other than the whole frame, as a raw CFA part's sensor active area is.
 void Image::reflect_windows(bool horizontal)
 {
     const int extent  = horizontal ? data_window.min.x + data_window.max.x : data_window.min.y + data_window.max.y;
@@ -1233,10 +1213,8 @@ void Image::resample(int2 size)
     {
         Array2Df out{size};
 
-        // stb's resampler rather than one written here: it chooses a filter
-        // from the scale -- averaging on the way down, interpolating on the way up -- and deals with the
-        // edges, where a hand-rolled box-and-bilinear pair is cruder. One channel at a time, since these
-        // are stored planar rather than interleaved.
+        // stb's resampler chooses a filter from the scale -- averaging on the way down, interpolating on
+        // the way up -- and deals with the edges. One channel at a time, since these are stored planar.
         if (!stbir_resize_float_linear(channel.data(), old_size.x, old_size.y, 0, out.data(), size.x, size.y, 0,
                                        STBIR_1CHANNEL))
             throw std::runtime_error{"Failed to resample image."};
@@ -1272,35 +1250,34 @@ ImagePtr Image::duplicate(const Box2i &region) const
 
     // Everything that says what the samples mean. A copy that lost its primaries or its alpha convention
     // would be read differently from the image it was made of, which is not what "duplicate" means.
-    copy->filename              = filename;
-    copy->partname              = partname;
-    copy->channel_selector      = channel_selector;
-    copy->chromaticities        = chromaticities;
-    copy->adopted_neutral       = adopted_neutral;
-    copy->M_RGB_to_XYZ          = M_RGB_to_XYZ;
-    copy->M_XYZ_to_RGB          = M_XYZ_to_RGB;
-    copy->M_to_sRGB             = M_to_sRGB;
-    copy->luminance_weights     = luminance_weights;
-    copy->adaptation_method     = adaptation_method;
-    copy->color_space           = color_space;
-    copy->white_point           = white_point;
-    copy->alpha_type            = alpha_type;
-    copy->alpha_type_from_file  = alpha_type_from_file;
-    copy->alpha_source          = alpha_source;
-    copy->alpha_override        = alpha_override;
-    copy->metadata              = metadata;
-    copy->exif                  = exif;
-    copy->xmp_data              = xmp_data;
-    copy->icc_data              = icc_data;
-    copy->orientation_applied   = orientation_applied;
-    copy->path                  = path;
-    copy->last_modified         = last_modified;
-    copy->size_bytes            = size_bytes;
+    copy->filename             = filename;
+    copy->partname             = partname;
+    copy->channel_selector     = channel_selector;
+    copy->chromaticities       = chromaticities;
+    copy->adopted_neutral      = adopted_neutral;
+    copy->M_RGB_to_XYZ         = M_RGB_to_XYZ;
+    copy->M_XYZ_to_RGB         = M_XYZ_to_RGB;
+    copy->M_to_sRGB            = M_to_sRGB;
+    copy->luminance_weights    = luminance_weights;
+    copy->adaptation_method    = adaptation_method;
+    copy->color_space          = color_space;
+    copy->white_point          = white_point;
+    copy->alpha_type           = alpha_type;
+    copy->alpha_type_from_file = alpha_type_from_file;
+    copy->alpha_source         = alpha_source;
+    copy->alpha_override       = alpha_override;
+    copy->metadata             = metadata;
+    copy->exif                 = exif;
+    copy->xmp_data             = xmp_data;
+    copy->icc_data             = icc_data;
+    copy->orientation_applied  = orientation_applied;
+    copy->path                 = path;
+    copy->last_modified        = last_modified;
+    copy->size_bytes           = size_bytes;
 
-    // Deliberately not copied: `id`, which is this image's own and is handed out by the constructor;
-    // `history`, since the copy has had nothing done to it; `is_live`, because these samples are a
-    // snapshot and no process is going to write over them again; and `vector_overlay`, which annotates
-    // what a renderer is producing rather than the picture.
+    // Not copied: `id`, which the constructor hands out; `history`, since nothing has been done to the
+    // copy; `is_live`, since these samples are a snapshot; and `vector_overlay`, which annotates what a
+    // renderer is producing.
 
     const int2 extent = clipped.size();
     const int2 offset = clipped.min - data_window.min;
@@ -1498,11 +1475,9 @@ void Image::finalize()
     if (display_window.is_empty())
         display_window = Box2i{int2{0}, channels.front().size()};
 
-    // Centralized XMP parsing: if loaders stored raw XMP into image->xmp_data or into exif metadata,
-    // parse it once here and populate metadata["xmp"] with structured JSON.
-    // XMP decorates an image; it does not describe its pixels. Anything thrown while deriving it -- by the
-    // parser, or by a JSON value not having the type this code reads it as -- costs the metadata and
-    // nothing else. Without this it left finalize() and the image never arrived.
+    // Centralized XMP parsing: if loaders stored raw XMP into image->xmp_data or into exif metadata, parse
+    // it once here and populate metadata["xmp"] with structured JSON. XMP decorates an image, it does not
+    // describe its pixels, so anything thrown while deriving it costs the metadata and nothing else.
     try
     {
         if (!metadata.contains("xmp"))

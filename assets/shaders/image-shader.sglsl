@@ -50,13 +50,9 @@ layout(binding=0) uniform vs_params {
     vec2 primary_pos;
     vec2 secondary_scale;
     vec2 secondary_pos;
-    // Unused padding, deliberately not vec2/vec4-homogeneous with the members above: verified empirically that
-    // when every member of a uniform block packs cleanly into whole vec4 slots (as 4 vec2's do), SPIRV-Cross's
-    // glsl300es output flattens the block into a plain `uniform vec4 vs_params[2];` array (using the block's
-    // *type* name, not its instance name) instead of a real struct -- unlike fs_params below, which stays a
-    // struct because its mixed float/int/vec3/mat4 members can't be packed that way. The flattened form has no
-    // per-member names at all (each vec4 slot packs two vec2 members together), which set_buffer("vsp.*", ...)
-    // can't address. Adding one non-vec2 member is the simplest way to force the struct form uniformly.
+    // Padding. With only vec2 members SPIRV-Cross's glsl300es output flattens this block to
+    // `uniform vec4 vs_params[2]`, losing the member names set_buffer("vsp.*", ...) needs; one int keeps it a
+    // struct, as fs_params below already is by virtue of its mixed member types.
     int _pad;
 } vsp;
 
@@ -176,20 +172,17 @@ float rand_tent(vec2 xy)
 }
 
 // Isolating color channels shows them opaque, so undo the premultiply Image::finalize() applied on load.
-// Only for files that stored straight alpha: a premultiplied file's alpha=0 pixels carry real color, which
-// has no straight form and would blow up on the divide.
+// Only for files that stored straight alpha: a premultiplied file's alpha=0 pixels carry real color.
 vec4 isolate(vec4 rgba, int straight_alpha)
 {
     return vec4(straight_alpha != 0 ? rgba.rgb / max(k_small_alpha, rgba.a) : rgba.rgb, 1.0);
 }
 
-// Applied to each image separately, before any blending: an isolated channel is then undone with its own
-// file's alpha rather than a composite's, and comparison blend modes operate on the values being compared
-// instead of on premultiplied ones.
+// Applied to each image separately, before any blending, so an isolated channel is undone with its own
+// file's alpha and comparison blend modes see unpremultiplied values.
 //
-// Runs after the gamut conversion, so Channels_Y weighs with sRGB's luminance weights, not the source
-// gamut's: those belong to the YC decode above, which is the one step that still sees the file's own
-// primaries.
+// Runs after the gamut conversion, so Channels_Y weighs with sRGB's luminance weights; the source gamut's
+// belong to the YC decode above, the one step that still sees the file's own primaries.
 vec4 choose_channel(vec4 rgba, int straight_alpha)
 {
     switch (fsp.channel)
@@ -234,8 +227,8 @@ vec4 dither(vec4 color)
 
 float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
 {
-    // Sample unconditionally: a fetch reached only on some lanes has undefined implicit derivatives, and
-    // the mip level they select feeds the trilinear minification filter, which shows up at image edges.
+    // sample unconditionally: a fetch reached only on some lanes has undefined implicit derivatives, and the
+    // mip level they select feeds the trilinear minification filter
     float value = texture(sampler2D(tex, smp), uv).r;
     return within_image ? value : 0.0;
 }
@@ -298,7 +291,7 @@ void main()
     vec4  dithered   = dither(blended);
     dithered         = clamp(dithered, fsp.clamp_to_LDR != 0 ? 0.0 : -64.0, fsp.clamp_to_LDR != 0 ? 1.0 : 64.0);
     // Stripe only where the value came from real image data: sample_channel() returns 0 outside a data
-    // window, which the shadow test would otherwise read as crushed black across the whole background.
+    // window, which the shadow test would read as crushed black across the whole background.
     bool in_data = in_img || (fsp.has_reference != 0 && in_ref);
     if (in_data && fsp.clip_warnings.y != 0)
         dithered.rgb = mix(dithered.rgb, vec3(zebra1), clipped);

@@ -25,15 +25,12 @@ struct PSDMetadata
 
     static const char *color_mode_names[10];
 
-    //! Name of \p mode, or "Unknown" for a value the format doesn't define.
-    /*!
-        color_mode is whatever 16-bit value the file's header held, so it is not safe to index
-        color_mode_names with directly -- including its own NotSet default.
+    /// Name of \p mode, or "Unknown" for a value the format doesn't define.
+    /**
+        color_mode is whatever 16-bit value the header held, so it is not safe to index color_mode_names
+        with directly.
     */
-    static const char *color_mode_name(ColorMode mode)
-    {
-        return mode < 10 ? color_mode_names[mode] : "Unknown";
-    }
+    static const char *color_mode_name(ColorMode mode) { return mode < 10 ? color_mode_names[mode] : "Unknown"; }
 
     // Metadata blocks
     std::vector<uint8_t> exif, exif3, xmp, iptc, icc_profile, thumbnail;

@@ -45,7 +45,9 @@ public:
     std::shared_ptr<spdlog::sinks::dup_filter_sink_mt> &sink() { return m_filter_sink; }
 
     /// set the pattern of the underlying spdlog sink.
-    /// also adds support for the custom flag %* to show the log level icon.
+    /**
+        Also adds support for the custom flag %* to show the log level icon.
+    */
     void set_pattern(const std::string &pattern);
 
     void clear();
@@ -58,8 +60,7 @@ public:
     /// clears the badge state; called automatically once this window regains focus
     void mark_log_seen() { m_ringbuffer_sink->mark_badge_seen(); }
 
-    /// scrolls the log view to the item with the given seq (see ringbuffer_color_sink::LogItem::seq)
-    /// the next time draw() is called
+    /// scrolls the log view to the item with the given seq (see ringbuffer_color_sink::LogItem::seq) on the next draw()
     void scroll_to(uint64_t seq) { m_scroll_to_seq = seq; }
 
 protected:
@@ -82,15 +83,12 @@ ImVec2 IconSize();
 ImVec2 IconButtonSize();
 bool   IconButton(const char *icon, bool *v = nullptr, const ImVec2 &size = ImVec2(-1, -1));
 
-// A button with no background/border in its resting state (just a hover/press highlight), sized to fit
-// its label rather than forced into a fixed square like IconButton. Useful for compact status/toolbar
-// controls where the label itself (icon, text, or both) should be the only visible element. When
-// active is true, the resting state is filled with ImGuiCol_FrameBg instead of being transparent, for
-// a persistent toggled-on look (matching IconButton's toggle-pointer variant), without affecting the
-// return value based on the click that happened this frame.
+// A button with no background or border in its resting state (just a hover/press highlight), sized to fit
+// its label instead of a fixed square like IconButton. `active` fills the resting state with
+// ImGuiCol_FrameBg for a toggled-on look, without affecting the return value.
 bool FlatButton(const char *label, bool active = false, const ImVec2 &size = ImVec2(0, 0));
 
-//! A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
+/// A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
 struct Action
 {
     std::vector<std::string> names; // first element is primary name, rest are aliases
@@ -106,11 +104,11 @@ struct Action
 };
 
 void MenuItem(const Action &a, bool inlude_name = true);
-//! MenuItem() with the label spelled out rather than taken from the action's name.
-/*!
-    For an item whose text depends on something the action does not carry -- "Undo Rotate 90 degrees
-    clockwise" -- where the action's own name has to stay put, since it is the key both the action registry
-    and the command palette address it by.
+/// MenuItem() with the label spelled out instead of taken from the action's name.
+/**
+    For an item whose text depends on something the action does not carry ("Undo Rotate 90 degrees
+    clockwise"). The action's own name is the key the registry and the command palette address it by, so it
+    stays put.
 */
 void MenuItem(const Action &a, const std::string &label);
 void IconButton(const Action &a, bool include_name = false);
@@ -123,16 +121,15 @@ void Checkbox(const Action &a);
 
 enum class DialogPosition
 {
-    TopCenter, //!< centered horizontally, near the top of the viewport
-    Center,    //!< centered both horizontally and vertically in the viewport
-    None       //!< no positioning; caller may set its own via SetNextWindowPos/SetNextWindowSize
+    TopCenter, ///< centered horizontally, near the top of the viewport
+    Center,    ///< centered both horizontally and vertically in the viewport
+    None       ///< no positioning; caller may set its own via SetNextWindowPos/SetNextWindowSize
 };
 
-// Handles the open-on-request / startup-frame-safety / centering boilerplate common to every modal dialog:
-// fires ImGui::OpenPopup(title) the frame `open` becomes true (once HelloImGui's startup frames have settled,
-// so a dialog can safely start out already-open), consumes `open` itself, applies `position`, then forwards
-// to ImGui::BeginPopupModal. Caller must call ImGui::EndPopup() only when this returns true (same contract as
-// BeginPopupModal).
+// Handles the open-on-request/startup-frame-safety/centering boilerplate common to every modal dialog:
+// fires ImGui::OpenPopup(title) the frame `open` becomes true (once HelloImGui's startup frames have
+// settled, so a dialog can start out already-open), consumes `open`, applies `position`, then forwards to
+// ImGui::BeginPopupModal. Call ImGui::EndPopup() only when this returns true, as with BeginPopupModal.
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position = DialogPosition::TopCenter,
                       ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize);
 
@@ -143,12 +140,10 @@ enum class DialogResult
     Confirm
 };
 
-// Draws a Cancel/<confirm_label> button pair (SameLine-separated). If use_shortcuts is true, Escape or
-// Ctrl+. also trigger Cancel and Ctrl+Enter also triggers Confirm (ignored while ImGui nav is active); if
-// false, only the buttons themselves respond. Returns which one fired this frame, if any -- the caller
-// decides what each means and whether/when to call ImGui::CloseCurrentPopup() (a button's slot need not mean
-// "cancel"/"confirm" literally -- e.g. an in-place "Reset to defaults" action can use the Cancel slot and
-// simply never close the popup).
+// Draws a Cancel/<confirm_label> button pair (SameLine-separated). With use_shortcuts, Escape or Ctrl+.
+// also trigger Cancel and Ctrl+Enter also triggers Confirm (ignored while ImGui nav is active). Returns
+// which one fired this frame, if any; the caller decides what each means and whether to call
+// ImGui::CloseCurrentPopup(), so the Cancel slot can hold an in-place action that never closes the popup.
 DialogResult DialogButtons(const char *confirm_label = "OK", const char *cancel_label = "Cancel",
                            bool use_shortcuts = true, bool confirm_enabled = true);
 
@@ -229,9 +224,12 @@ void PlotMultiHistograms(const char *label, int num_hists, const char **names, c
                          int values_count, float scale_min = FLT_MAX, float scale_max = FLT_MAX,
                          ImVec2 graph_size = ImVec2(0, 0));
 
-//! How a ChannelValuesRow's numeric boxes currently render their values. Raw/ExposureAdjusted read from the
-//! row's `raw` array (Raw as-is, ExposureAdjusted scaled by `exposure_gain`); Displayed32/8/Hex read from
-//! the row's `displayed` array (already run through the app's exposure/tonemap/gamma/sRGB pipeline).
+/// How a ChannelValuesRow's numeric boxes render their values.
+/**
+    Raw/ExposureAdjusted read the row's `raw` array (ExposureAdjusted scaled by `exposure_gain`);
+    Displayed32/8/Hex read its `displayed` array, already run through the app's exposure/tonemap/gamma/sRGB
+    pipeline.
+*/
 enum ChannelDisplayMode_ : int
 {
     ChannelDisplayMode_Raw = 0,
@@ -247,19 +245,18 @@ constexpr ChannelDisplayModeMask ChannelDisplayMode_NoDisplayMask =
     (1u << ChannelDisplayMode_Raw) | (1u << ChannelDisplayMode_ExposureAdjusted);
 constexpr ChannelDisplayModeMask ChannelDisplayMode_AllMask = (1u << ChannelDisplayMode_COUNT) - 1u;
 
-//! Draws `num_components` read-only numeric boxes side by side, plus an optional trailing color swatch
-//! and/or text label -- all one click target opening a popup with "Copy to clipboard" (if `allow_copy`)
-//! and a "Display as:" list of ChannelDisplayMode_ entries (disabled, not omitted, per `enabled_modes`).
-//! The click target stays active under `content_disabled`; only the boxes/swatch/label gray out (e.g. for
-//! a meaningless/out-of-bounds sample). `*mode` is the caller-owned current selection. `raw` is required;
-//! `displayed` may be null unless a Displayed* mode is enabled. `id` scopes the row's widget IDs.
-//! `extra_popup_items`, if given, is drawn at the top of the row's click-to-open popup, above its own
-//! "Display as:" section -- for a caller with a further choice to offer about the value it is showing.
-//!
-//! `total_width`, if nonzero, overrides the row's natural (CalcItemWidth-based) width. `show_color_markers`
-//! tints each box's left edge per component (only meaningful with `show_swatch`). Row height follows the
-//! ambient FramePadding -- push ImGuiStyleVar_FramePadding for a more compact row; there is no compact
-//! default.
+/// Draws `num_components` read-only numeric boxes side by side, plus an optional swatch and/or text label.
+/**
+    All one click target opening a popup with "Copy to clipboard" (if `allow_copy`) and a "Display as:"
+    list of ChannelDisplayMode_ entries, disabled rather than omitted per `enabled_modes`.
+    `content_disabled` grays out the boxes, swatch and label but leaves the click target active. `*mode` is
+    the caller-owned current selection, `raw` is required, `displayed` may be null unless a Displayed* mode
+    is enabled, and `id` scopes the row's widget IDs. `extra_popup_items` is drawn at the top of the popup.
+
+    `total_width`, if nonzero, overrides the row's natural (CalcItemWidth-based) width.
+    `show_color_markers` tints each box's left edge per component, meaningful only with `show_swatch`. Row
+    height follows the ambient FramePadding, so push ImGuiStyleVar_FramePadding for a more compact row.
+*/
 void ChannelValuesRow(const char *id, const float *raw, const float *displayed, int num_components,
                       ImGuiDataType data_type, const char *format, float exposure_gain, int *mode,
                       ChannelDisplayModeMask enabled_modes = ChannelDisplayMode_AllMask, bool allow_copy = true,
@@ -267,11 +264,11 @@ void ChannelValuesRow(const char *id, const float *raw, const float *displayed, 
                       const std::string &label = {}, float total_width = 0.f, bool content_disabled = false,
                       bool show_color_markers = false, const std::function<void()> &extra_popup_items = {});
 
-//! Draws a row of `num_components` text labels (e.g. channel names), each left-aligned over the column
-//! ChannelValuesRow(..., num_components, ...) would draw for the same `total_width` -- for a
-//! column-header row placed above one or more ChannelValuesRow calls sharing that same num_components. Pass
-//! `reserve_swatch_gap = true` if any of those rows reserve a swatch column (see ChannelValuesRow) out of
-//! the same `total_width`, so the header's columns still line up with the (narrower) box columns below.
+/// Draws a row of `num_components` text labels (e.g. channel names) as a header above ChannelValuesRows.
+/**
+    Each is left-aligned over the column ChannelValuesRow would draw for the same `total_width`. Pass
+    `reserve_swatch_gap` when any of those rows reserve a swatch column out of that same `total_width`.
+*/
 void ChannelValuesRowHeader(const std::string *names, int num_components, float total_width = 0.f,
                             bool reserve_swatch_gap = false);
 
@@ -286,25 +283,22 @@ inline void AlignCursor(const std::string &text, float align) { AlignCursor(Calc
 // right-align the truncated file name
 std::string TruncatedText(const std::string &filename, const std::string &icon);
 
-//! Push the Header/HeaderHovered/HeaderActive colors an image-list row is drawn with.
-/*!
-    A row can be the current one, one of several selected, the reference, or both current and reference --
-    which draws the average of the two, since those are independent of each other. `reference_mod` previews
-    what a shift-click would do, so hovering with shift held tints in the reference color.
+/// Push the Header/HeaderHovered/HeaderActive colors an image-list row is drawn with.
+/**
+    A row can be current, selected, the reference, or both current and reference, which draws the average
+    of the two. `reference_mod` previews what a shift-click would do, tinting a hovered row in the
+    reference color.
 */
 void PushRowColors(bool is_current, bool is_reference, bool reference_mod = false, bool is_selected = false);
 
-//! Draws one row of a table-as-tree/outliner view -- the shared skeleton behind the image list's three
-//! row kinds (top-level image rows, flat/tree channel-group rows, tree-mode layer-path rows): TableNextRow(),
-//! an optional leading-column callback (drawn in column 0; pass nullptr to leave it empty), then
-//! TreeNodeEx(id, flags, "%s", label) in column 1. `before_node` runs immediately before the TreeNodeEx
-//! call (after the row has moved into the label column) and must push exactly 3 style colors -- e.g. via
-//! PushRowColors() above, or a plain dim/hover-neutralizing 3x PushStyleColor() for a non-selectable row --
-//! which TreeRow() pops again before returning; it's also the right place for any one-off Indent()/
-//! Unindent() that needs to apply specifically to this row's label column. `label` may be "" for callers
-//! that render their own content after TreeRow() returns instead (e.g. a row needing custom text
-//! truncation) -- SpanAllColumns keeps that row the click target either way. Returns TreeNodeEx's own
-//! open/closed result.
+/// One row of a table-as-tree view: TableNextRow(), `leading_column` in column 0, then a tree node.
+/**
+    `leading_column` may be null. TreeNodeEx(id, flags, "%s", label) is drawn in column 1 and its
+    open/closed result returned. `before_node` runs just before the TreeNodeEx call and must push exactly 3
+    style colors (e.g. PushRowColors()), which are popped here; it is also where a one-off
+    Indent()/Unindent() for this row's label column belongs. `label` may be "" for a caller that draws its
+    own content afterwards, since SpanAllColumns keeps the row the click target either way.
+*/
 bool TreeRow(const void *id, ImGuiTreeNodeFlags flags, const char *label, const std::function<void()> &leading_column,
              const std::function<void()> &before_node);
 
@@ -313,7 +307,7 @@ void TextAligned2(float align_x, float size_x, const char *fmt, ...);
 
 void Tooltip(const char *description, bool questionMark = false, float wrap_width = -1.f);
 
-/*!
+/**
     The right-hand extent of a run of rows, so that something can be hung off all of them at once.
 
     Fed by calling take() after each item that belongs to a row; it remembers the widest right edge and
@@ -321,15 +315,15 @@ void Tooltip(const char *description, bool questionMark = false, float wrap_widt
 */
 struct RowSpan
 {
-    float right = 0.f;             //!< Right edge of the widest row so far
-    float first = 0.f, last = 0.f; //!< Vertical centers of the first and most recent rows
+    float right = 0.f;             ///< Right edge of the widest row so far
+    float first = 0.f, last = 0.f; ///< Vertical centers of the first and most recent rows
     int   count = 0;
 
-    //! Take in the item just drawn.
+    /// Take in the item just drawn.
     void take();
 };
 
-/*!
+/**
     A button at the open end of a bracket joining \p rows, as Photoshop joins a width to a height.
 
     The bracket says what the button means better than the button can -- these rows are tied, and here is
@@ -389,10 +383,12 @@ bool Begin(const char     *label = "PE::Table",
            ImGuiTableFlags flag  = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable);
 void End();
 bool Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip = {});
-//! An unlabeled row whose content spans both columns. content_fct receives the available width, since a cell's
-//! content region only reports its own column.
+/// An unlabeled row whose content spans both columns.
+/**
+    content_fct receives the available width, since a cell's content region only reports its own column.
+*/
 bool FullWidthEntry(const char *id, const std::function<bool(float)> &content_fct);
-//! Width in pixels of a column of the innermost table, or 0 outside one. Valid between Begin and End.
+/// Width in pixels of a column of the innermost table, or 0 outside one. Valid between Begin and End.
 float       ColumnWidth(int column_n);
 inline void Entry(const std::string &property_name, const std::string &value)
 {
@@ -406,10 +402,11 @@ inline void Entry(const std::string &property_name, const std::string &value)
 bool TreeNode(const char *name, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanFullWidth);
 void TreePop();
 
-//! Font used by Entry()/TreeNode() for the property-name column only -- the content column keeps the ambient
-//! font, so a whole table's labels can be distinguished (e.g. bolded) with one push around it instead of a
-//! push/pop per row. Pushed at the ambient size, so row heights are unaffected. Stacked, so nested sections
-//! restore the enclosing choice.
+/// Font used by Entry()/TreeNode() for the property-name column only; the content column keeps the ambient one.
+/**
+    A whole table's labels can be bolded with one push around it. Pushed at the ambient size, so row
+    heights are unaffected, and stacked, so nested sections restore the enclosing choice.
+*/
 void PushLabelFont(ImFont *font);
 void PopLabelFont();
 

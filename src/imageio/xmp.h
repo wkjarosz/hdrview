@@ -17,6 +17,6 @@ public:
 private:
     std::string m_xml;
     bool        m_valid = false;
-    json m_json;
-    void parse();
+    json        m_json;
+    void        parse();
 };

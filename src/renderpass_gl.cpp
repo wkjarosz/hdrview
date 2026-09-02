@@ -52,8 +52,8 @@ void RenderPass::begin()
 #endif
     m_active = true;
 
-    // Save whatever was bound rather than assuming the default framebuffer, so passes can nest: the
-    // colorpass target stays bound across the whole frame while the image pass begins and ends inside it.
+    // save whatever was bound so passes can nest: the colorpass target stays bound across the whole frame
+    // while the image pass begins and ends inside it
     CHK(glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &m_framebuffer_backup));
     if (m_color_target)
         CHK(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_framebuffer_handle));
@@ -139,8 +139,8 @@ void RenderPass::resize(const int2 &size)
 
     if (m_color_target && m_color_target->size() != size)
     {
-        // Texture::resize() keeps the same GL name, but the attachment still has to be revalidated since
-        // the storage behind it was reallocated.
+        // Texture::resize() keeps the same GL name, but reallocates the storage behind it, so the
+        // attachment has to be revalidated
         m_color_target->resize(size);
         attach_color_target();
     }

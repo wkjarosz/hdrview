@@ -42,10 +42,9 @@ using namespace HelloImGui;
 void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy, float width,
                                     const string &trailing_label, const std::function<void()> &extra_popup_items) const
 {
-    // Shares ImGui::ChannelValuesRow with Image::draw_channel_stats() -- both use the exact same row shape,
-    // including its Copy/Display-as popup. Pixel rows always offer the full mode set: unlike stats, a
-    // "displayed color" is well-defined for any channel selection here (rgba_pixel() already does a
-    // sensible per-group reconstruction before tonemapping), not just literal RGB(A) groups.
+    // Shares ImGui::ChannelValuesRow with Image::draw_channel_stats(). Pixel rows offer the full mode set:
+    // a "displayed color" is well-defined for any channel selection here, since rgba_pixel() reconstructs
+    // per group before tonemapping.
     float4 raw           = pixel_value(pixel, true, which_image);
     float4 displayed     = linear_to_sRGB(pixel_value(pixel, false, which_image));
     float  exposure_gain = powf(2.f, m_exposure_live);
@@ -64,9 +63,8 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
     }
     else if (which_image == 1)
     {
-        // Unlike Current, this doesn't early-return when absent: the row stays visible (via the caller's
-        // label, e.g. "Reference"), just disabled -- reference_image() being null already makes `inside`
-        // false below, same mechanism as an out-of-bounds pixel.
+        // Unlike Current, this doesn't early-return when absent: the row stays visible, just disabled --
+        // a null reference_image() already makes `inside` false below, as an out-of-bounds pixel does.
         if (reference_image())
         {
             auto &group = reference_image()->groups[reference_image()->active_group_index(Target_Secondary)];
@@ -78,14 +76,13 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
             show_swatch = false;
     }
     else
-        // Composite is always the 4-channel blended visualization buffer, independent of the current
-        // image's channel-group semantics.
+        // Composite is always the 4-channel blended visualization buffer, whatever the current image's
+        // channel groups are.
         inside = (current_image() && current_image()->contains(pixel)) ||
                  (reference_image() && reference_image()->contains(pixel));
 
-    // content_disabled (not an outer BeginDisabled around the whole call): the row's popup -- mode
-    // switching, copy -- stays clickable even when the sample itself is meaningless (out of bounds, or no
-    // reference image), only the displayed values gray out.
+    // content_disabled, not an outer BeginDisabled: the row's popup (mode switching, copy) stays clickable
+    // when the sample itself is meaningless, and only the displayed values gray out.
     ImGui::ChannelValuesRow(fmt::format("##pixel_color_{}", which_image).c_str(), &raw.x, &displayed.x, components,
                             ImGuiDataType_Float, "%g", exposure_gain, &color_mode, ImGui::ChannelDisplayMode_AllMask,
                             allow_copy, show_swatch, ImVec4{displayed.x, displayed.y, displayed.z, displayed.w},
@@ -95,9 +92,8 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
 
 void HDRViewApp::draw_status_bar()
 {
-    // HelloImGui applies the theme's default WindowPadding.y (8px, see theme.cpp) to this window before
-    // this callback runs; override the starting cursor position with a smaller explicit top margin
-    // instead of accepting that default. Tune this constant directly to adjust the bar's top margin.
+    // HelloImGui applies the theme's default WindowPadding.y (8px, see theme.cpp) to this window before this
+    // callback runs, so set the starting cursor position from our own top margin.
     const float top_margin = HelloImGui::EmSize(0.25f);
 
     const float item_spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -107,20 +103,16 @@ void HDRViewApp::draw_status_bar()
     ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 1.f);
     ImGui::SetCursorPosY(top_margin + fpy);
     {
-        // drawn first so it always sits at a fixed position at the far left, regardless of whatever
-        // transient content (progress bars, etc.) follows
+        // drawn first so it sits at a fixed position at the far left, whatever transient content follows
         auto badge      = ImGui::GlobalSpdLogWindow().badge_state();
         bool has_unseen = badge.count > 0;
-        // Only warnings and above are surfaced in the bar itself. Quieter activity still counts towards the
-        // tooltip and the click's scroll target -- it just isn't worth interrupting the bar for, and the Log
-        // window is one click away.
+        // Only warnings and above are surfaced in the bar itself; quieter activity still counts towards the
+        // tooltip and the click's scroll target.
         bool show_badge  = has_unseen && badge.level >= spdlog::level::warn;
         bool log_visible = m_log_window && m_log_window->isVisible;
 
-        // the leading icon always identifies this as "the log" (matching the Log window's menu-bar
-        // toggle icon), reads as an ordinary active button since clicking it always does something
-        // (open/close the Log window); only the message that follows, when present, is colored and
-        // iconed by severity
+        // the leading icon identifies this as "the log" (matching the Log window's menu-bar toggle icon) and
+        // is always an active button; only the message that follows is colored and iconed by severity
         const string open_icon  = ICON_MY_LOG_WINDOW;
         const ImU32  open_color = ImGui::GetColorU32(ImGuiCol_Text);
 
@@ -133,9 +125,8 @@ void HDRViewApp::draw_status_bar()
         {
             msg_color = ImGui::GlobalSpdLogWindow().get_level_color(badge.level);
 
-            // truncated against its own fixed budget (not the space remaining on the line), so the
-            // message's width, and thus everything derived from it below, only ever depends on the
-            // badge's own state, never on where it happens to sit or what's drawn around it
+            // truncated against its own fixed budget, not the space remaining on the line, so the message's
+            // width depends only on the badge's own state
             string shown = badge.message;
             string ellipsis;
             while (!shown.empty() && ImGui::CalcTextSize((shown + ellipsis).c_str()).x > max_msg_w)
@@ -147,17 +138,16 @@ void HDRViewApp::draw_status_bar()
                                   shown.empty() ? "" : (" " + shown + ellipsis));
         }
 
-        // laid out and drawn manually (rather than via a single-colored FlatButton label) since the
-        // leading icon and the message need different colors within one clickable region
+        // laid out and drawn manually: the leading icon and the message need different colors within one
+        // clickable region
         const ImVec2 open_size = ImGui::CalcTextSize(open_icon.c_str());
         const ImVec2 msg_size  = show_badge ? ImGui::CalcTextSize(message.c_str()) : ImVec2(0.f, 0.f);
         const ImVec2 btn_size(open_size.x + (show_badge ? inner_spacing + msg_size.x : 0.f) +
                                   2 * ImGui::GetStyle().FramePadding.x,
                               ImGui::GetFrameHeight());
 
-        // whatever follows (the progress bar, etc.) always lands at the same fixed x: reserve room for
-        // the worst case (an icon-prefixed count plus a full-width message) rather than the button's
-        // actual current width, which varies with the badge's state
+        // reserve room for the worst case -- an icon-prefixed count plus a full-width message -- so whatever
+        // follows always lands at the same x as the badge's state changes
         badge_x    = ImGui::GetCursorPosX();
         reserved_w = open_size.x + inner_spacing + ImGui::CalcTextSize(ICON_MY_LOG_LEVEL_ERROR " 999").x + max_msg_w +
                      2 * ImGui::GetStyle().FramePadding.x;
@@ -193,8 +183,7 @@ void HDRViewApp::draw_status_bar()
         ImGui::SameLine(badge_x + reserved_w);
     }
 
-    // fixed zone right after the badge, reserved whether or not a progress bar is actually active, so
-    // whatever follows never has to move depending on it
+    // fixed zone right after the badge, reserved whether or not a progress bar is active
     const float progress_w = EmSize(15.f);
     const float progress_x = badge_x + reserved_w + item_spacing;
 
@@ -211,8 +200,8 @@ void HDRViewApp::draw_status_bar()
         ImGui::ProgressBar((100 - m_remaining_download) / 100.f, ImVec2(progress_w, 0.f), "Downloading image");
     }
 
-    // fixed zone right after the progress bar; drawn only if it fits before the right-aligned zone below
-    // (otherwise it would overlap it on a narrow window) rather than always being drawn on top of it
+    // fixed zone right after the progress bar; drawn only if it fits before the right-aligned zone below,
+    // which it would otherwise overlap on a narrow window
     const float hover_x = progress_x + progress_w + item_spacing;
 
     // right-aligned zone: zoom info, plus (if shown) the idling checkbox and FPS counter
@@ -232,10 +221,8 @@ void HDRViewApp::draw_status_bar()
 
     if (current_image())
     {
-        // sized_text() right-aligns the zoom text within its reserved EmSize(10.f) column (see the call
-        // below), so the column's own start (right_zone_x) sits to the left of the text's actual visual
-        // start whenever the text is narrower than the column; use that real visual start, not the
-        // column's nominal one, as the boundary hover info must clear
+        // sized_text() right-aligns the zoom text within its reserved EmSize(10.f) column, so the boundary
+        // the hover info must clear is the text's visual start, not the column's (right_zone_x)
         float  real_zoom     = m_zoom * pixel_ratio();
         int    numer         = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
         int    denom         = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
@@ -244,14 +231,13 @@ void HDRViewApp::draw_status_bar()
 
         const float drag_size = EmSize(5.f);
         const float inner_sp  = ImGui::GetStyle().ItemInnerSpacing.x;
-        // width the color row is given below; also part of the fit test, so the zone is only drawn when the
-        // whole thing -- coordinates, "=", color row -- clears the right-aligned zoom text
+        // width the color row is given below; also part of the fit test, so the zone is only drawn when
+        // coordinates, "=" and color row together clear the right-aligned zoom text
         const float color_w = EmSize(18.f);
         const float hover_w = 2.f * drag_size + 2.f * inner_sp + EmSize(0.5f) + inner_sp + color_w;
 
-        // last_hovered_pixel() freezes at the last real hover instead of clearing when the mouse leaves
-        // the viewport, so the color widget below stays reachable (e.g. to click its dropdown) instead
-        // of vanishing out from under the cursor on the way to it
+        // last_hovered_pixel() freezes at the last real hover, so the color widget below stays reachable
+        // while the cursor travels to it
         if (hover_x + hover_w + item_spacing <= zoom_visual_x)
         {
             if (auto hp = last_hovered_pixel())
@@ -259,8 +245,8 @@ void HDRViewApp::draw_status_bar()
                 auto hovered_pixel = *hp;
 
                 ImGui::SameLine(hover_x);
-                // ReadOnly alone doesn't block DragInt's drag gesture, only keyboard entry -- these
-                // coordinates track the live hover position and were never meant to be draggable at all.
+                // ReadOnly blocks only keyboard entry, not DragInt's drag gesture, and these coordinates
+                // track the live hover position.
                 ImGui::BeginDisabled();
                 ImGui::SetNextItemWidth(drag_size);
                 ImGui::DragInt("##pixel x coordinates", &hovered_pixel.x, 1.f, 0, 0, "X: %d",
@@ -274,9 +260,8 @@ void HDRViewApp::draw_status_bar()
                 float x = hover_x + 2.f * drag_size + 2.f * inner_sp;
                 sized_text(x, 0.5f, "=", 0.5f);
 
-                // Which pixel this reports is a choice, not a given, and the numbers already open a popup
-                // for the other one (their format) -- so it goes in there rather than costing the bar its
-                // own control. See m_status_pixel_target.
+                // Which pixel this reports goes in the popup the numbers already open for their format.
+                // See m_status_pixel_target.
                 static const char *target_names[] = {"Current", "Reference", "Composite"};
                 auto               choose_target  = [this]
                 {
@@ -379,9 +364,8 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        // Named for what it will actually do, since with a selection in force it copies just that. The
-        // "###" fixes the item's id the way Undo's does below, so the label can change without the item
-        // becoming unaddressable.
+        // Named for what it will do, since with a selection in force it copies just that. The "###" fixes
+        // the item's id the way Undo's does below, so the label can change without the id moving with it.
         MenuItem(action("Duplicate image"), m_roi.has_volume() ? string{"Duplicate selection###Duplicate image"}
                                                                : string{"Duplicate image###Duplicate image"});
 
@@ -418,15 +402,13 @@ void HDRViewApp::draw_menus()
 
     if (ImGui::BeginMenu("Edit"))
     {
-        // Naming the edit each would reverse or reapply saves the user remembering what they last did.
-        // The Action keeps its own name, which is what the registry and the command palette key on.
+        // Undo/Redo name the edit they would reverse or reapply; the Action keeps its own name, which is
+        // what the registry and the command palette key on.
         auto       img      = current_image();
         const bool editable = can_edit(img);
 
         // "###Undo" fixes the item's ImGui id to the part after it, so the visible half can name the edit
-        // without the id moving with it. An id derived from the whole label would change on every edit,
-        // which loses the item's hover and keyboard-navigation state -- and leaves nothing able to address
-        // it by a stable path.
+        // without the id moving with it and losing the item's hover and keyboard-navigation state.
         MenuItem(action("Undo"), editable && img->history.has_undo()
                                      ? fmt::format("Undo {}###Undo", img->history.undo_name())
                                      : string{"Undo###Undo"});
@@ -446,8 +428,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Select all"));
         MenuItem(action("Deselect"));
 
-        // How big the image is and which way round, rather than what its samples say. Some of these only
-        // move samples; resizing and halving resample them, but what they are for is still the shape.
         ImGui::SeparatorText("Size and orientation");
 
         MenuItem(action("Flip image horizontally"));
@@ -459,7 +439,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Canvas size..."));
         MenuItem(action("Generate mipmaps..."));
 
-        // A sample at a time, wherever it sits and whatever is beside it.
         ImGui::SeparatorText("Tone");
 
         MenuItem(action("Invert"));
@@ -469,10 +448,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Brightness/contrast..."));
         MenuItem(action("Fill..."));
 
-        // The edits that need a group's channels together: a color is three numbers and these read all of
-        // them. Grouped for the menu rather than by which file the commands live in -- brightness/contrast
-        // belongs beside exposure above, though it is written with these because it can work on lightness
-        // alone.
         ImGui::SeparatorText("Color");
 
         MenuItem(action("Convert color space..."));
@@ -480,8 +455,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Hue/saturation..."));
         MenuItem(action("Flatten..."));
 
-        // What the image is made of rather than what its samples say: which channels there are, and which
-        // of them are read together as one color.
         ImGui::SeparatorText("Channels");
 
         MenuItem(action("Ungroup channels"));
@@ -489,7 +462,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Delete channel group"),
                  delete_channels_label(current_image(), target_groups(current_image())));
 
-        // The edits that read the samples around the one they are writing.
         ImGui::SeparatorText("Neighborhood filters");
 
         MenuItem(action("Blur..."));
@@ -498,7 +470,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Shift..."));
         MenuItem(action("Bump to normal map..."));
 
-        // The edits that read the image as a parameterization of the sphere.
         ImGui::SeparatorText("Environment maps");
 
         MenuItem(action("Remap envmap..."));
@@ -506,8 +477,6 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        // What the edits above apply to, stated where they are rather than asked for one at a time. On a
-        // single-group image the two scopes name the same channels, so the choice is shown but says so.
         if (ImGui::BeginMenu("Apply to"))
         {
             const bool matters = can_edit(img) && scope_matters(img);
@@ -578,7 +547,7 @@ void HDRViewApp::draw_menus()
         ImGui::TextUnformatted("Clip warnings");
         ImGui::SameLine();
         // Each end's checkbox is followed by its own bound, so enabling one end never hands the user the
-        // other's draggable. The two bounds still can't cross, as a DragFloatRange2 would have enforced.
+        // other's draggable. The two bounds still can't cross.
         const float inner_sp = ImGui::GetStyle().ItemInnerSpacing.x;
         const float drag_w   = ImMax(
             0.5f * (ImGui::GetContentRegionAvail().x - 2.f * ImGui::GetFrameHeight() - 4.f * inner_sp), EmSize(4.f));
@@ -1039,17 +1008,17 @@ void HDRViewApp::draw_command_palette(bool &open)
                  set_background_last_used});
 
 #if HDRVIEW_ENABLE_IPC
-            // A two-step command for the port the image-update listener binds. PromptInt would be the
-            // obvious fit, but its buffer starts empty and nothing can seed it, so the port would have to be
-            // retyped rather than edited. A widget can be handed the current value, which is the point.
+            // A two-step command for the port the image-update listener binds. PromptInt's buffer starts
+            // empty and nothing can seed it, so the port would have to be retyped; a widget can be handed
+            // the current value.
             static int  set_ipc_port_last_used = 0;
             static bool first_frame_port       = true;
             ImCmd::AddCommand({{"Set image update port", "Set IPC port", "Set listening port"},
                                []()
                                {
                                    first_frame_port = true;
-                                   // Captures nothing: everything it touches is static or global, and the
-                                   // widget outlives this callback, so a reference capture would dangle.
+                                   // Captures nothing: the widget outlives this callback, so a reference
+                                   // capture would dangle.
                                    ImCmd::PromptWidget(
                                        []() -> bool
                                        {
@@ -1560,9 +1529,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info += fmt::format("{:<16} : {}\n", "ImGui version", ImGui::GetVersion());
                     info += fmt::format("{:<16} : {}\n", "HDR support", supports_hdr() ? "yes" : "no");
                     info += fmt::format("{:<16} : {}\n", "Display", m_display_cs.name());
-                    // Worth showing even though the histogram already draws it: this is the one display
-                    // property that moves on its own, and reading it here is how you tell a band that
-                    // shifted from a band that was always wrong.
+                    // Worth showing even though the histogram already draws it: the one display property
+                    // that moves on its own.
                     const float headroom = display_headroom();
                     info += fmt::format("{:<16} : {}\n", "Display headroom",
                                         headroom > 0.f ? fmt::format("{:.3g}x SDR white", headroom) : "unknown");

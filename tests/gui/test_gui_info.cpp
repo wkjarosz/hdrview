@@ -1,9 +1,8 @@
 /** \file test_gui_info.cpp
     \author Wojciech Jarosz
 
-    The Info window's "General" property table: that its one widget row ("Is transparency") lines up with the
-    text rows around it, and that HDRViewApp::can_reload() -- which decides whether that row is even offered --
-    agrees with what is actually readable.
+    The Info window's "General" property table: its one widget row lines up with the text rows around it,
+    and HDRViewApp::can_reload() agrees with what is readable.
 */
 
 #include "app.h"
@@ -32,8 +31,8 @@ static void load_fixture_and_show_info(ImGuiTestContext *ctx)
     }
     IM_CHECK(hdrview()->num_images() > 0);
 
-    // Which panels start open depends on the saved layout, so ask for this one rather than assuming it, and
-    // focus it: docked alongside other panels it would otherwise be an unselected tab, drawing nothing.
+    // which panels start open depends on the saved layout; focus it too, or docked alongside others it is
+    // an unselected tab that draws nothing
     *hdrview()->action("Show Info window").p_selected = true;
     ctx->Yield(2);
     ctx->WindowFocus("//Info");
@@ -53,8 +52,7 @@ void RegisterTests_Info(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->can_reload(hdrview()->current_image()));
         IM_CHECK(!hdrview()->can_reload(nullptr));
 
-        // Both reload actions are registered on every platform, and ask can_reload() rather than merely
-        // whether an image is loaded.
+        // both reload actions are registered on every platform, and ask can_reload()
         IM_CHECK(hdrview()->action("Reload image").enabled());
         IM_CHECK(hdrview()->action("Reload all images").enabled());
 

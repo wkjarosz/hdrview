@@ -94,30 +94,25 @@ void show_in_file_manager(const char *filename)
 //------------------------------------------------------------------------------
 //  Javascript interface functions
 //
-//! Two-finger pan and pinch-to-zoom, read straight from the browser's touch events.
-/*!
-    Neither backend supplies it. GLFW has no gesture API on any platform, and the Emscripten port
-    hello_imgui uses tracks a single touch point, synthesizing mouse events from it and discarding the
-    rest -- so the second finger never reaches the application otherwise.
+/// Two-finger pan and pinch-to-zoom, read straight from the browser's touch events.
+/**
+    GLFW has no gesture API, and the Emscripten port hello_imgui uses tracks a single touch point,
+    synthesizing mouse events from it and discarding the rest. Registering alongside the port's own
+    listeners leaves that synthesis intact, so one finger still pans through the ordinary mouse path.
 
-    Registering alongside the port's own listeners leaves that synthesis intact: one finger still pans
-    through the ordinary mouse path. The gesture is reduced here to how the first two fingers' separation
-    and midpoint changed; what that does to the viewport is HDRViewApp::touch_gesture()'s business.
-
-    The deltas are taken per event rather than per frame because several touchmoves can arrive between
-    two frames, and every one of them is part of the same continuous motion.
+    The gesture is reduced to how the first two fingers' separation and midpoint changed, per event rather
+    than per frame, since several touchmoves of one continuous motion can arrive between two frames.
 */
 static EM_BOOL on_touch(int event_type, const EmscriptenTouchEvent *event, void *)
 {
-    // The first two fingers are the gesture; a third changes nothing.
+    // the first two fingers are the gesture; a third changes nothing
     static float  previous_distance = 0.f;
     static float2 previous_midpoint{0.f};
 
     const bool ending = event_type == EMSCRIPTEN_EVENT_TOUCHEND || event_type == EMSCRIPTEN_EVENT_TOUCHCANCEL;
 
-    // touches[] carries the fingers that just left alongside those still down, so the ones that ended
-    // have to be skipped to find what is actually on the glass -- including when picking the first two,
-    // which a lifted finger would otherwise be one of.
+    // touches[] carries the fingers that just left alongside those still down, so skip the ones that ended
+    // to find what remains on the glass, the first two included
     int down[2]      = {0, 0};
     int touches_down = 0;
     for (int i = 0; i < event->numTouches; ++i)
@@ -140,7 +135,7 @@ static EM_BOOL on_touch(int event_type, const EmscriptenTouchEvent *event, void 
         const float  distance = length(b - a);
         const float2 midpoint = 0.5f * (a + b);
 
-        // The first event of a pinch has nothing to compare against, so it only sets the baseline.
+        // the first event of a pinch has nothing to compare against, so it only sets the baseline
         if (previous_distance > 0.f && distance > 0.f)
         {
             scale = distance / previous_distance;
@@ -155,14 +150,14 @@ static EM_BOOL on_touch(int event_type, const EmscriptenTouchEvent *event, void 
 
     hdrview()->touch_gesture(touches_down, scale, from, to);
 
-    // Claim the event only while pinching, so one finger still reaches the port's mouse synthesis.
+    // claim the event only while pinching, so one finger still reaches the port's mouse synthesis
     return pinching ? EM_TRUE : EM_FALSE;
 }
 
 void install_touch_handlers()
 {
-    // The canvas hello_imgui draws into (id="canvas" in shell.emscripten.html).
-    // EMSCRIPTEN_EVENT_TARGET_WINDOW would also catch touches beginning on the surrounding page.
+    // the canvas hello_imgui draws into (id="canvas" in shell.emscripten.html); EMSCRIPTEN_EVENT_TARGET_WINDOW
+    // would also catch touches beginning on the surrounding page
     const char *canvas = "#canvas";
     emscripten_set_touchstart_callback(canvas, nullptr, EM_FALSE, on_touch);
     emscripten_set_touchmove_callback(canvas, nullptr, EM_FALSE, on_touch);
@@ -170,7 +165,7 @@ void install_touch_handlers()
     emscripten_set_touchcancel_callback(canvas, nullptr, EM_FALSE, on_touch);
 }
 
-// A non-empty return asks the browser to confirm; it shows its own wording, not this text.
+// a non-empty return asks the browser to confirm; it shows its own wording, not this text
 static const char *on_before_unload(int, const void *, void *)
 {
     return hdrview()->num_images() > 0 ? "Images are open and are not saved anywhere." : nullptr;

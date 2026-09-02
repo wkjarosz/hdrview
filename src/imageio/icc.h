@@ -14,7 +14,7 @@
 
 class CICPProfile;
 
-/*! Wrapper for an ICC profile providing utility routines used by HDRView.
+/** Wrapper for an ICC profile providing utility routines used by HDRView.
 
     ICCProfile is non-copyable, and internally holds an opaque LCMS profile pointer (when built with LCMS2) and exposes
     a small set of convenience methods for creating linear profiles, extracting chromaticities, building linearized
@@ -23,7 +23,7 @@ class CICPProfile;
 class ICCProfile
 {
 public:
-    /*! Construct an ICCProfile from raw ICC profile data.
+    /** Construct an ICCProfile from raw ICC profile data.
 
         Parses and validates the provided ICC profile byte buffer and initializes
         the ICCProfile instance. The input data is copied into internal storage;
@@ -66,10 +66,10 @@ public:
     /// Construct a linear Gray ICC profile with the specified white point (or D65 if none is provided).
     static ICCProfile linear_Gray(const float2 &whitepoint = white_point(WhitePoint_D65));
 
-    ///< Get the version of the linked LCMS2 library (or 0 if not built with LCMS2).
+    /// Get the version of the linked LCMS2 library (or 0 if not built with LCMS2).
     static int lcms_version();
 
-    /*!
+    /**
         \brief Create a linearized version of this ICC profile.
 
         This function creates a new ICC profile that has the same primaries and white point as this profile,
@@ -92,10 +92,9 @@ public:
     std::string description() const;
     bool        extract_chromaticities(Chromaticities *c) const;
 
-    /*! The code points from this profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
+    /** The code points from this profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
 
-        Read straight out of the profile bytes rather than through LCMS, which only learned the tag in 2.16
-        and would otherwise make this depend on which LCMS a given build links.
+        Read straight out of the profile bytes, since LCMS only learned the tag in 2.16.
     */
     CICPProfile cicp() const;
 
@@ -105,7 +104,7 @@ public:
     bool is_RGB() const;  ///< Check if this is a RGB profile.
     bool is_Gray() const; ///< Check if this is a Grayscale profile.
 
-    /*!
+    /**
         \brief Linearize a (potentially interleaved) array of floating-point pixel values in-place using the transfer
                function of this ICC profile.
 
@@ -161,7 +160,7 @@ private:
     std::array<int, 4> m_cicp{{-1, -1, -1, -1}};
 };
 
-/*! A class to manage color profiles defined via Coding-independent code points (CICP).
+/** A class to manage color profiles defined via Coding-independent code points (CICP).
 
     CICP consists of three integers which specify the color primaries, the transfer characteristics, matrix
     coefficients, and a flag to indicate full or narrow range.
@@ -184,14 +183,14 @@ public:
     {
     }
 
+    /** @name Convenience constructors for common color spaces */
     ///@{
-    /// Convenience constructors for common color spaces
     static CICPProfile BT709() { return CICPProfile{1, 1, 1, 1}; }
     static CICPProfile sRGB() { return CICPProfile{1, 13, 0, 1}; }
     static CICPProfile linear_sRGB() { return CICPProfile{1, 8, 0, 1}; }
     ///@}
 
-    /*! Construct a CICPProfile from explicit enums.
+    /** Construct a CICPProfile from explicit enums.
 
         If the provided enums/map cannot be converted to CICP codes an invalid CICPProfile is returned (i.e. `valid()`
         will be false).
@@ -199,11 +198,11 @@ public:
     static CICPProfile from_gamut_and_transfer(ColorGamut_ gamut, TransferFunction tf, int matrix_coeffs = 0,
                                                int range = 1);
 
+    /** @name casting to array */
     ///@{
-    /// casting to array
     operator std::array<int, 4> &() noexcept { return m_quad; }
     operator const std::array<int, 4> &() const noexcept { return m_quad; }
-    /// My comment
+    /// Named form of the conversions above, for where an implicit one would not apply.
     const std::array<int, 4> &to_array() const { return m_quad; }
     ///@}
 
@@ -269,7 +268,7 @@ public:
     const char *r_short_name() const { return fr() ? "FR" : "NR"; }
     std::string short_name() const;
 
-    /*! Linearize a pixel buffer in-place with this CICP profile.
+    /** Linearize a pixel buffer in-place with this CICP profile.
 
         If `keep_primaries` is false, the pixels will also be converted to Rec.709/sRGB primaries.
 
@@ -280,7 +279,7 @@ public:
                           std::string *profile_description = nullptr, Chromaticities *c = nullptr,
                           AdaptationMethod CAT_method = AdaptationMethod_Bradford) const;
 
-    /*! Transform pixel buffer in-place from one CICP profile to another.
+    /** Transform pixel buffer in-place from one CICP profile to another.
 
         This performs inverse transfer of `profile_in`, optional primary conversion, and forward transfer of
        `profile_out`.
@@ -296,11 +295,10 @@ private:
     std::array<int, 4> m_quad;
 };
 
-/*! The code points from an ICC profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
+/** The code points from an ICC profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
 
-    Reads the profile bytes directly, needing neither LCMS nor a constructed ICCProfile: LCMS only learned
-    the tag in 2.16, and a caller may need the code points -- the range flag in particular -- before it has
-    decided how to read the pixels at all.
+    Reads the profile bytes directly, needing neither LCMS (which only learned the tag in 2.16) nor a
+    constructed ICCProfile, so a caller can consult the range flag before deciding how to read the pixels.
 */
 CICPProfile icc_cicp_tag(const uint8_t *icc_profile, size_t icc_profile_size);
 

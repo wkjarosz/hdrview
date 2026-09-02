@@ -76,8 +76,8 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
         throw invalid_argument{
             fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
 
-    // qoi_decode() sizes its output from the header, so the dimensions have to be checked before the call
-    // rather than after: bytes 4..12 are big-endian width and height.
+    // qoi_decode() sizes its output from the header, so check the dimensions first; bytes 4..12 are
+    // big-endian width and height
     if (raw_size >= 12)
     {
         auto be32 = [&raw_data](size_t o)
@@ -95,13 +95,13 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
         throw invalid_argument{"Failed to decode data from the QOI format."};
 
     int3 size{static_cast<int>(desc.width), static_cast<int>(desc.height), static_cast<int>(desc.channels)};
-    // The dimensions were vetted before decoding; only the channel count is still unchecked.
+    // the dimensions were vetted before decoding; only the channel count is still unchecked
     if (size.z == 0)
         throw invalid_argument{"Image has zero channels."};
 
-    auto image                      = make_shared<Image>(size.xy(), size.z);
-    image->filename                 = filename;
-    // QOI's spec makes alpha unassociated.
+    auto image      = make_shared<Image>(size.xy(), size.z);
+    image->filename = filename;
+    // QOI's spec makes alpha unassociated
     image->set_alpha(size.z > 3 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format, alpha_override_of(opts));
     image->metadata["loader"]       = "qoi";
     image->metadata["pixel format"] = fmt::format("{}-bit (8 bpc)", size.z * 8);
@@ -152,8 +152,8 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
         &w, &h, &n, opts->gain,
         opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, opts->dither);
 
-    // QOI's header describes only 3 = RGB and 4 = RGBA, so a narrower group is widened rather than
-    // refused: the file then holds what the viewport shows, at three times the samples.
+    // QOI's header describes only 3 = RGB and 4 = RGBA, so widen a narrower group to what the viewport
+    // shows
     if (n < 3)
     {
         const bool gray = n == 1 || group_has_alpha(img.groups[img.selected_group].type);

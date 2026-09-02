@@ -10,18 +10,11 @@
 
 #include <vector>
 
-/*!
-    Every edit command, in the order they are built.
-
-    One table rather than each file registering itself as it is loaded: static initialization runs in an
-    order nobody chooses, and a list that can be read start to finish is worth more than the line it saves
-    per command. Order here is only construction order -- the Edit menu says where each one appears.
-*/
+/// Every edit command. Menu order is set in app-gui.cpp, not here.
 std::vector<EditCommandPtr> all_edit_commands();
 
 //
-// One appender per file under edit/commands/, called by all_edit_commands(). A new command is added to
-// whichever of these it belongs beside, or to a new file with its own appender named here.
+// One appender per file under edit/commands/, called by all_edit_commands().
 //
 void add_clipboard_commands(std::vector<EditCommandPtr> &out);
 void add_tonal_commands(std::vector<EditCommandPtr> &out);
@@ -29,10 +22,9 @@ void add_transform_commands(std::vector<EditCommandPtr> &out);
 void add_color_commands(std::vector<EditCommandPtr> &out);
 void add_channel_commands(std::vector<EditCommandPtr> &out);
 
-//! What "Delete channel group" should be labelled for \p group of \p img.
-/*!
-    One channel, one group or several: deleting a lone depth channel is not deleting a group, and saying so
-    is worth the one call. The action's name stays put either way, since that is what addresses it.
+/// Menu label for deleting \p groups of \p img: one channel, one group or several.
+/**
+    The action's name stays fixed, since that is what addresses it.
 */
 std::string delete_channels_label(const ImagePtr &img, const std::vector<int> &groups);
 void        add_mipmap_commands(std::vector<EditCommandPtr> &out);

@@ -10,11 +10,9 @@
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
 
-// For PNG_cICP_SUPPORTED. libpng gained the cICP chunk in 1.6.46, and older releases remain current on
-// common distributions (Ubuntu 24.04 ships 1.6.43), so -local builds can link a libpng without it. HDRView's
-// writer guards png_set_cICP() on this same macro (src/imageio/png.cpp), so without the chunk a saved PNG
-// records no transfer function at all: the pixels are encoded with one, but nothing in the file says which,
-// and a reload falls back to sRGB. The tests guarded below all depend on that record surviving a round-trip.
+// For PNG_cICP_SUPPORTED. libpng gained the cICP chunk in 1.6.46 and Ubuntu 24.04 still ships 1.6.43, so a
+// -local build can link a libpng without it; src/imageio/png.cpp guards png_set_cICP() on the same macro,
+// and without the chunk a saved PNG records no transfer function at all.
 #include <png.h>
 
 #include <cmath>
@@ -56,7 +54,7 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
                        /*sixteen_bit*/ false, TransferFunction::Linear);
 
         std::istringstream in(out.str(), std::ios::binary);
-        auto                reloaded = load_png_image(in, "test.png");
+        auto               reloaded = load_png_image(in, "test.png");
         REQUIRE(reloaded.size() == 1);
         REQUIRE(reloaded[0]->channels.size() == 3);
         // 8-bit quantization error tolerance
@@ -71,7 +69,7 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
                        /*sixteen_bit*/ true, TransferFunction::Linear);
 
         std::istringstream in(out.str(), std::ios::binary);
-        auto                reloaded = load_png_image(in, "test.png");
+        auto               reloaded = load_png_image(in, "test.png");
         REQUIRE(reloaded.size() == 1);
         // 16-bit quantization error is far smaller than 8-bit
         for (int c = 0; c < 3; ++c)
@@ -82,24 +80,22 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
 #ifdef PNG_cICP_SUPPORTED
 TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide gamut via the cICP chunk")
 {
-    // HDRView cares specifically about HDR: CICPProfile::is_HDR() explicitly checks for PQ (CICP transfer
-    // characteristics code 16) or HLG (code 18). This is self-contained (no vendored data needed): the cICP
-    // chunk carries an arbitrary transfer function, and save_png_image can write one directly via its `tf`
-    // parameter - no PQ/HLG-tagged PNG exists anywhere in the already-vendored test data to load instead.
+    // CICPProfile::is_HDR() looks for PQ (transfer characteristics 16) or HLG (18). No PQ/HLG-tagged PNG
+    // exists in the vendored test data, so the fixture is written here.
     for (auto tf : {TransferFunction::BT2100_PQ, TransferFunction::BT2100_HLG})
     {
         INFO("transfer function = ", transfer_function_name(tf));
 
-        auto img              = make_test_image(int2{4, 3});
-        img->chromaticities   = gamut_chromaticities(ColorGamut_BT2020_2100); // wide gamut, as HDR content typically is
+        auto img            = make_test_image(int2{4, 3});
+        img->chromaticities = gamut_chromaticities(ColorGamut_BT2020_2100); // wide gamut, as HDR content typically is
 
         std::ostringstream out(std::ios::binary);
-        // 16-bit output: HDR transfer functions need far more than 8-bit precision to avoid banding
+        // HDR transfer functions need far more than 8-bit precision to avoid banding
         save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, tf);
 
         std::istringstream in(out.str(), std::ios::binary);
-        auto                reloaded = load_png_image(in, "test.png");
+        auto               reloaded = load_png_image(in, "test.png");
         REQUIRE(reloaded.size() == 1);
 
         auto &cicp_value = reloaded[0]->metadata["header"]["cICP"]["value"];
@@ -111,7 +107,7 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
         REQUIRE(reloaded[0]->chromaticities.has_value());
         CHECK(approx_equal(*reloaded[0]->chromaticities, gamut_chromaticities(ColorGamut_BT2020_2100)));
 
-        // pixel round-trip through the actual PQ/HLG encode+decode math, not just the abstract transfer function
+        // through the PQ/HLG encode+decode math, not just the tag
         for (int c = 0; c < 3; ++c)
             CHECK(reloaded[0]->channels[c](2, 1) == doctest::Approx(img->channels[c](2, 1)).epsilon(1e-3));
     }
@@ -121,8 +117,8 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
 
 TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in cICP")
 {
-    // cICP is recent enough that most readers ignore it, so a file tagged only that way is read correctly
-    // only by HDRView. Every curve that gAMA or the sRGB chunk can express is written through those too.
+    // cICP is recent enough that most readers ignore it, so every curve gAMA or the sRGB chunk can express
+    // is written through those too
     auto img = make_test_image(int2{4, 3});
 
     SUBCASE("linear is recorded as gAMA 1.0")
@@ -136,7 +132,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         REQUIRE(reloaded.size() == 1);
         auto &header = reloaded[0]->metadata["header"];
 
-        // The loader reports the reciprocal of the stored value, so a linear encode reads back as 1.0.
+        // gAMA stores 1e5/gamma; the loader reports gamma
         REQUIRE(header.contains("gAMA"));
         CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(1.f).epsilon(1e-3));
     }
@@ -167,18 +163,18 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         REQUIRE(reloaded.size() == 1);
         auto &header = reloaded[0]->metadata["header"];
 
-        // A valid rendering intent, i.e. the chunk is present.
+        // a valid rendering intent, i.e. the chunk is present
         REQUIRE(header.contains("sRGB"));
         CHECK(header["sRGB"]["value"].get<int>() >= 0);
-        // ...and gAMA alongside it, for readers that honor neither cICP nor sRGB.
+        // ...and gAMA alongside it, for readers that honor neither cICP nor sRGB
         REQUIRE(header.contains("gAMA"));
         CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
     }
 
     SUBCASE("an sRGB curve over a wide gamut does not claim the sRGB chunk")
     {
-        // The sRGB chunk asserts BT.709 primaries as well as the curve, so writing it here would misstate
-        // the gamut. gAMA carries the curve instead, and cHRM the primaries.
+        // the sRGB chunk asserts BT.709 primaries as well as the curve, so gAMA carries the curve here and
+        // cHRM the primaries
         auto wide            = make_test_image(int2{4, 3});
         wide->chromaticities = gamut_chromaticities(ColorGamut_BT2020_2100);
 
@@ -210,7 +206,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
 
         REQUIRE(header.contains("gAMA"));
         CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
-        // ITU is not sRGB, so the sRGB chunk must not appear even though the primaries are BT.709.
+        // ITU is not sRGB, so the sRGB chunk must not appear even though the primaries are BT.709
         CHECK(header["sRGB"]["value"].get<int>() < 0);
     }
 }
@@ -219,8 +215,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
 TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
 {
     // PQ has no power-curve equivalent, so nothing is written that would let a gAMA-only reader believe it
-    // knows the curve. The file is correct but understood only by cICP-aware readers, which save_png_image
-    // warns about.
+    // knows the curve
     auto img = make_test_image(int2{4, 3});
 
     std::ostringstream out(std::ios::binary);
@@ -240,8 +235,7 @@ TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
 #else
 TEST_CASE("saving a curve this libpng cannot record fails instead of mislabelling the file")
 {
-    // Without cICP there is nowhere to put PQ, and writing the file anyway would encode the pixels with one
-    // curve while the file names another. Only reachable on a libpng older than 1.6.46.
+    // without cICP there is nowhere to put PQ; only reachable on a libpng older than 1.6.46
     auto img = make_test_image(int2{4, 3});
 
     std::ostringstream out(std::ios::binary);
@@ -270,8 +264,8 @@ TEST_CASE("is_png_image correctly identifies real PNG bytes and rejects garbage"
 
 TEST_CASE("channel_selector drops channels in formats that don't filter during decode")
 {
-    // Only EXR and JPEG XL apply the selector while decoding; for every other format load_image()
-    // applies it centrally afterwards, so "-.A" has to work here just as it does for EXR.
+    // only EXR and JPEG XL apply the selector while decoding; every other format gets it from load_image()
+    // afterwards
     const int2 size{2, 2};
     auto       img = std::make_shared<Image>(size, 4);
     for (auto &c : img->channels)
@@ -294,8 +288,8 @@ TEST_CASE("channel_selector drops channels in formats that don't filter during d
         REQUIRE(reloaded.size() == 1);
         REQUIRE(reloaded[0]->channels.size() == 3);
         for (const auto &c : reloaded[0]->channels) CHECK(c.name != "A");
-        // save_png_image unpremultiplied on the way out, so the file holds 1.0 here; with the alpha
-        // channel filtered away there is nothing left to premultiply it back down by.
+        // save_png_image unpremultiplied on the way out, so the file holds 1.0 here and the filtered-away
+        // alpha leaves nothing to premultiply it back down by
         CHECK(reloaded[0]->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.005));
     }
 
@@ -322,11 +316,9 @@ TEST_CASE("channel_selector drops channels in formats that don't filter during d
     }
 }
 
-// The following tests need libpng's own vendored test image sets (PngSuite and testpngs), which HDRView's own
-// save_png_image can't reproduce (it doesn't write palette/indexed files, and constructing a matching
-// color-signaling matrix by hand would just be re-deriving PngSuite/testpngs badly). Only compiled in when CMake
-// found that data (see the HDRVIEW_TEST_PNG_CONTRIB_DIR check in CMakeLists.txt) - i.e. only for -cpm/-universal
-// presets, which are the only ones that fetch libpng's source (and therefore these test images) at all.
+// The tests below need libpng's own PngSuite and testpngs image sets, which save_png_image cannot reproduce
+// (it writes no palette/indexed files). Only compiled in when CMake found that data, i.e. for the -cpm and
+// -universal presets that fetch libpng from source.
 #ifdef HDRVIEW_TEST_PNG_CONTRIB_DIR
 
 namespace
@@ -335,7 +327,7 @@ namespace
 std::vector<ImagePtr> load_test_png(const std::string &subdir, const std::string &filename,
                                     const ImageLoadOptions &opts = {})
 {
-    std::string  path = std::string(HDRVIEW_TEST_PNG_CONTRIB_DIR) + "/" + subdir + "/" + filename;
+    std::string   path = std::string(HDRVIEW_TEST_PNG_CONTRIB_DIR) + "/" + subdir + "/" + filename;
     std::ifstream file(path, std::ios::binary);
     REQUIRE_MESSAGE(file.good(), "Could not open vendored test PNG: ", path);
     return load_png_image(file, filename, opts);
@@ -345,14 +337,13 @@ std::vector<ImagePtr> load_test_png(const std::string &subdir, const std::string
 
 TEST_CASE("PNG load handles the full PngSuite bit-depth/color-type matrix without crashing")
 {
-    // one representative file per PngSuite color-type code: 0g=gray, 2c=truecolor, 3p=palette (expanded to RGB),
-    // 4a=gray+alpha, 6a=truecolor+alpha; expected channel count reflects HDRView's post-expansion representation
-    // expected_bits is the file's own sample depth, which sets the histogram's bin count; palette entries are
-    // 8-bit RGB however few bits the indices took.
+    // one file per PngSuite color-type code: 0g=gray, 2c=truecolor, 3p=palette (expanded to RGB), 4a=gray+alpha,
+    // 6a=truecolor+alpha. expected_bits is the file's own sample depth, which sets the histogram's bin count;
+    // palette entries are 8-bit RGB however few bits the indices took.
     struct Case
     {
         const char *file;
-        int          expected_channels;
+        int         expected_channels;
         int         expected_bits;
     };
     static const Case cases[] = {
@@ -374,11 +365,8 @@ TEST_CASE("PNG load handles the full PngSuite bit-depth/color-type matrix withou
 
 TEST_CASE("PNG load produces identical pixels for interlaced and non-interlaced encodings of the same image")
 {
-    // PngSuite ships matched pairs: "basn..." (non-interlaced) and "ibasn..." (interlaced) encode the same
-    // underlying image data, but aren't necessarily identical in every other chunk - e.g. basn2c08.png has a gAMA
-    // chunk while ibasn2c08.png doesn't, so comparing HDRView's normally-linearized output would also be
-    // comparing two different color decodes, not just interlacing. override_profile+Linear bypasses that
-    // entirely, isolating interlacing as the only variable under test.
+    // PngSuite's "basn..."/"ibasn..." pairs hold the same pixels but not the same chunks: basn2c08.png has a
+    // gAMA chunk and ibasn2c08.png does not. override_profile+Linear leaves interlacing the only variable.
     ImageLoadOptions raw_opts;
     raw_opts.override_profile = true;
     raw_opts.tf_override      = TransferFunction::Linear;
@@ -416,11 +404,7 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
         auto &header = reloaded[0]->metadata["header"];
         REQUIRE(header.contains("gAMA"));
         REQUIRE(header["sRGB"]["value"].get<int>() < 0); // sRGB chunk absent
-        // Verified independently by parsing the file's raw gAMA chunk bytes: stores 65909 (i.e. 0.65909, PNG's
-        // gAMA convention of storing 1/gamma scaled by 100000); HDRView reports the reciprocal of that, 1.51724.
-        // The filename's "1.8" doesn't correspond directly to either of these numbers - likely a different
-        // parameter in the test image generator (contrib/testpngs/makepngs.sh) - so this pins down HDRView's
-        // actual observed, independently-verified behavior rather than a guess based on the filename.
+        // gAMA stores 1e5/gamma; the loader reports gamma
         CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(100000.f / 65909.f).epsilon(1e-3));
     }
 
@@ -433,8 +417,8 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
     }
 
 #ifdef PNG_cICP_SUPPORTED
-    // Reading the chunk is guarded on the same macro as writing it (png_get_cICP in src/imageio/png.cpp), so
-    // against an older libpng the loader never reports a cICP chunk however the file itself is tagged.
+    // png_get_cICP in src/imageio/png.cpp is guarded on the same macro, so an older libpng never reports a
+    // cICP chunk however the file is tagged
     SUBCASE("cICP chunk takes priority over everything else, with correct Display P3 primaries")
     {
         auto reloaded = load_test_png("testpngs/png-3", "cicp-display-p3_reencoded.png");
@@ -451,13 +435,10 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
 #endif // PNG_cICP_SUPPORTED
 }
 
-
 TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
 {
-    // Real files rather than a synthesized one: PngSuite's 4a set is grayscale+alpha at both sample depths,
-    // which is what takes as_interleaved()'s one-or-two-channel path. Whatever alpha the file holds has to
-    // come back unchanged -- neither gained nor transfer-function encoded -- and Y premultiplied by exactly
-    // that alpha.
+    // PngSuite's 4a set is grayscale+alpha at both sample depths, which takes as_interleaved()'s
+    // one-or-two-channel path.
     for (const char *file : {"basn4a08.png", "basn4a16.png", "ibasn4a08.png", "ibasn4a16.png"})
     {
         CAPTURE(file);
@@ -500,9 +481,8 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
 
 TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha channel")
 {
-    // A Y,A group takes as_interleaved()'s n < 3 path, which loops uniformly over every channel. Alpha is
-    // not a color: it takes neither the exposure gain nor the transfer function, and the group's other
-    // channels have to be divided back out by it, exactly as the n >= 3 path does.
+    // A Y,A group takes as_interleaved()'s n < 3 path, which loops uniformly over every channel. Alpha takes
+    // neither the exposure gain nor the transfer function, and the other channels are divided back out by it.
     constexpr int2 size{4, 4};
 
     auto img = std::make_shared<Image>(size, 2);
@@ -510,7 +490,7 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
     REQUIRE(img->channels[0].name == "Y");
     REQUIRE(img->channels[1].name == "A");
 
-    // The file's straight (unpremultiplied) values, on the 16-bit lattice so the round trip is exact.
+    // the file's straight (unpremultiplied) values, on the 16-bit lattice so the round trip is exact
     std::vector<float> straight_y(size.x * size.y), alpha(size.x * size.y);
     for (int i = 0; i < size.x * size.y; ++i)
     {
@@ -533,8 +513,8 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
     REQUIRE(img->groups[0].type == ChannelGroup::YA_Channels);
     REQUIRE(img->unpremultiplies(img->groups[0]));
 
-    // sRGB rather than Linear: a linear transfer function is the identity, so it could not distinguish an
-    // alpha that had been through the transfer function from one that had not.
+    // a linear transfer function is the identity, and could not tell an alpha that went through the transfer
+    // function from one that did not
     std::ostringstream out(std::ios::binary);
     save_png_image(*img, out, "gray_alpha.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ true, TransferFunction::sRGB);
@@ -550,9 +530,9 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
         {
             int i = y * size.x + x;
             CAPTURE(i);
-            // Alpha survives untouched: no gain, no transfer function.
+            // alpha survives untouched: no gain, no transfer function
             CHECK(reloaded[0]->channels[1](x, y) == doctest::Approx(alpha[i]).epsilon(1e-4));
-            // Y comes back premultiplied by that same alpha, i.e. exactly what finalize() produced here.
+            // Y comes back premultiplied by that same alpha, i.e. what finalize() produced here
             CHECK(reloaded[0]->channels[0](x, y) ==
                   doctest::Approx(straight_y[i] * std::max(k_small_alpha, alpha[i])).epsilon(1e-3));
         }
@@ -560,7 +540,7 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
 
 TEST_CASE("saving gray+alpha applies the exposure gain to the color channel only")
 {
-    constexpr int2 size{2, 2};
+    constexpr int2  size{2, 2};
     constexpr float straight_y = 0.4f, a = 0.5f, gain = 2.f;
 
     auto img = std::make_shared<Image>(size, 2);
@@ -584,8 +564,8 @@ TEST_CASE("saving gray+alpha applies the exposure gain to the color channel only
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x)
         {
-            // The file holds straight values, so the gain lands on the straight Y while alpha keeps the
-            // value it had. The two are chosen so that a gained alpha would instead saturate to 1.
+            // the file holds straight values, so the gain lands on the straight Y; the two are chosen so a
+            // gained alpha would saturate to 1
             CHECK(reloaded[0]->channels[0](x, y) == doctest::Approx(straight_y * gain).epsilon(1e-4));
             CHECK(reloaded[0]->channels[1](x, y) == doctest::Approx(a).epsilon(1e-4));
         }

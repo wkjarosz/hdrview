@@ -16,24 +16,15 @@ float cocoa_display_headroom(void *window)
 {
     @autoreleasepool
     {
-        // Per-window rather than per-application: an XDR laptop panel and an SDR external monitor have
-        // genuinely different ceilings, and only the screen the window is actually on says anything
-        // about what the user can see. `screen` is nil while the window is offscreen or not yet placed,
-        // hence the fall back to whichever screen currently has focus.
+        // the window's own screen; nil while it is offscreen or unplaced, so fall back to the focused one
         NSWindow *ns_window = window ? glfwGetCocoaWindow((GLFWwindow *)window) : nil;
         NSScreen *screen    = [ns_window screen] ?: [NSScreen mainScreen];
         if (!screen)
             return 0.f;
 
-        // Already a multiple of SDR white -- the same convention as the extended-sRGB colorspace the
-        // CAMetalLayer is configured with -- so it needs no conversion, unlike the nits every other
-        // platform reports. An SDR screen reports exactly 1 here, never 0, so "unknown" does not arise.
-        //
-        // Deliberately the *current* value, which is what the display will actually produce right now.
-        // It moves on its own, and by a lot: an XDR panel can fall from 5x to 1x within seconds and stay
-        // there, on mains power and with no thermal warning, while its static sibling
-        // maximumPotentialExtendedDynamicRangeColorComponentValue holds at 16. That sibling is the
-        // steadier number, but it promises range the panel may currently refuse to give.
+        // Already a multiple of SDR white, the convention the CAMetalLayer's extended-sRGB colorspace uses;
+        // an SDR screen reports 1, never 0. The current, not the potential, value: an XDR panel can fall from
+        // 5x to 1x within seconds and stay there, while its maximumPotential... sibling holds at 16.
         return (float)[screen maximumExtendedDynamicRangeColorComponentValue];
     }
 }

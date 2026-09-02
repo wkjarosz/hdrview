@@ -8,20 +8,20 @@
 
 #include <chrono>
 
-//! Simple timer with millisecond precision
-/*!
+/// Simple timer with millisecond precision
+/**
     This class is convenient for collecting performance data
 */
 class Timer
 {
 public:
-    //! Create a new timer and reset it
+    /// Create a new timer and reset it
     Timer() { reset(); }
 
-    //! Reset the timer to the current time
+    /// Reset the timer to the current time
     void reset() { start = std::chrono::system_clock::now(); }
 
-    //! Return the number of milliseconds elapsed since the timer was last reset
+    /// Return the number of milliseconds elapsed since the timer was last reset
     double elapsed() const
     {
         auto now      = std::chrono::system_clock::now();
@@ -29,7 +29,7 @@ public:
         return (double)duration.count();
     }
 
-    //! Return the number of milliseconds elapsed since the timer was last reset and then reset it
+    /// Return the number of milliseconds elapsed since the timer was last reset and then reset it
     double lap()
     {
         auto now      = std::chrono::system_clock::now();

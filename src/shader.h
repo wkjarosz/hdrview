@@ -175,10 +175,7 @@ public:
 
     /**
         A single uniform-block member value, type-erased so that members of differing types can be passed together
-        in one \ref set_uniform_block() call.
-
-        The value is stored inline **by value** (rather than as a pointer to the caller's object) so that passing
-        temporaries in a braced initializer list is safe.
+        in one \ref set_uniform_block() call. Stored inline by value, so passing temporaries is safe.
     */
     struct UniformValue
     {
@@ -189,7 +186,7 @@ public:
         size_t       ndim = 0;
         size_t       shape[3]{1, 1, 1};
 
-        // The constructors below mirror the set_uniform() overloads above.
+        // the constructors below mirror the set_uniform() overloads above
 
         template <typename T, int M>
         UniformValue(const linalg::vec<T, M> &value) : type(get_type<T>()), ndim(1), shape{M, 1, 1}
@@ -213,24 +210,20 @@ public:
     };
 
     /**
-        Upload several members of a uniform block at once, addressing each by its bare member name.
-
-        Callers name members only; block layout (offsets, padding, whether a backend represents it as a struct
-        or a flattened array) stays an implementation detail. \ref set_uniform() with a dotted `"block.member"`
-        name still works, but prefer this.
+        Upload several members of a uniform block at once, addressing each by its bare member name, so that the
+        block's layout stays an implementation detail.
 
         A member not named here is left untouched, so \ref begin()'s unbound-argument warning still catches a
-        genuinely forgotten uniform -- except members whose name starts with an underscore, which exist only to
-        control the cross-compiler's block layout (e.g. `_pad` in `vs_params`, see image-shader.sglsl) and are
-        zero-filled automatically.
+        forgotten uniform. Members whose name starts with an underscore exist only to control the
+        cross-compiler's block layout (see `_pad` in image-shader.sglsl) and are zero-filled automatically.
 
         \param block_name
-            The block's GLSL *instance* name (e.g. `"vsp"`), which is what both backends' reflection reports.
+            The block's GLSL instance name (e.g. `"vsp"`), which is what both backends' reflection reports.
         \param values
             The members to set, as `{"member_name", value}` pairs. Naming a member the block doesn't have throws.
     */
-    void set_uniform_block(const std::string                                              &block_name,
-                           std::initializer_list<std::pair<const char *, UniformValue>>    values);
+    void set_uniform_block(const std::string                                           &block_name,
+                           std::initializer_list<std::pair<const char *, UniformValue>> values);
 
     /// Return the names of \p block_name's members, without the `"block."` prefix. Backend-specific.
     std::vector<std::string> block_member_names(const std::string &block_name) const;
@@ -351,10 +344,9 @@ protected:
 #elif defined(HELLOIMGUI_HAS_METAL)
     void *m_pipeline_state = nullptr;
     // sokol-shdc compiles a named uniform block to a single Metal `constant fs_params& fsp [[buffer(N)]]`
-    // argument, not one argument per member. Maps a dotted "block.member" name to the block's name (an
-    // entry in m_buffers, pre-sized to the whole struct) and the member's byte offset, so set_buffer()
-    // can memcpy into that offset instead of replacing the whole buffer. GL needs no equivalent: dotted
-    // names already resolve directly via glGetUniformLocation() on struct-typed uniforms.
+    // argument, not one per member. Maps a dotted "block.member" name to the block's name (an entry in
+    // m_buffers, pre-sized to the whole struct) and the member's byte offset, so set_buffer() can memcpy
+    // into that offset. GL needs no equivalent, since dotted names resolve via glGetUniformLocation().
     std::unordered_map<std::string, std::pair<std::string, size_t>> m_metal_struct_members;
 #endif
 };

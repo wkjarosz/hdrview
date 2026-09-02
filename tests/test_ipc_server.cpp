@@ -4,9 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-// Exercises the listener over a real loopback socket, which is the only way to cover what the codec tests
-// cannot: that bytes split arbitrarily by the network are reassembled into the packets that were sent, and
-// that they cross from the receive thread to the caller intact.
+// Exercises the listener over a real loopback socket, covering what the codec tests cannot: bytes split
+// arbitrarily by the network reassembling into the packets that were sent, and crossing threads intact.
 
 #include <doctest/doctest.h>
 
@@ -20,7 +19,7 @@
 #include <thread>
 
 #if defined(_WIN32)
-// winsock2.h drags in windows.h, whose min/max macros would otherwise eat the std::min below.
+// winsock2.h drags in windows.h, whose min/max macros would eat the std::min below
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <winsock2.h>
@@ -37,7 +36,7 @@ using test_socket_t = int;
 namespace
 {
 
-//! Connects to a listener on loopback, as a renderer would.
+/// Connects to a listener on loopback, as a renderer would.
 class TestClient
 {
 public:
@@ -78,7 +77,7 @@ private:
     test_socket_t m_socket;
 };
 
-//! Collects packets as they arrive on the server's thread, and lets a test wait for a count of them.
+/// Collects packets as they arrive on the server's thread, and lets a test wait for a count of them.
 class Collector
 {
 public:
@@ -91,7 +90,7 @@ public:
         m_arrived.notify_all();
     }
 
-    //! Wait for at least `count` packets, or give up. Returns what arrived either way.
+    /// Wait for at least `count` packets, or give up. Returns what arrived either way.
     std::vector<std::string> wait_for(size_t count, std::chrono::milliseconds timeout = std::chrono::seconds{5})
     {
         std::unique_lock lock{m_mutex};
@@ -105,7 +104,7 @@ private:
     std::vector<std::string> m_names;
 };
 
-//! Concatenated bytes of several CloseImage packets, whose only payload is a name we can check.
+/// Concatenated bytes of several CloseImage packets, whose only payload is a name we can check.
 std::vector<char> stream_of(const std::vector<std::string> &names)
 {
     std::vector<char> bytes;
@@ -124,8 +123,7 @@ TEST_CASE("The listener receives what a client sends over loopback")
     Collector collector;
     IpcServer server;
 
-    // Port 0 lets the OS pick a free one, so the test never fights whatever else is on this machine --
-    // including a real tev on 14158.
+    // port 0 lets the OS pick a free one, so this never fights a real tev on 14158
     REQUIRE(server.start(0, [&](const IpcPacket &p) { collector.add(p.as_close_image().name); }));
     REQUIRE(server.is_listening());
     REQUIRE(server.port() != 0);
@@ -155,7 +153,7 @@ TEST_CASE("The listener receives what a client sends over loopback")
 
         auto got = collector.wait_for(2);
         REQUIRE(got.size() == 2);
-        // Two connections are serviced in whichever order they become readable, so only the set is defined.
+        // two connections are serviced in whichever order they become readable, so only the set is defined
         std::sort(got.begin(), got.end());
         CHECK(got == std::vector<std::string>{"alpha", "beta"});
     }
@@ -170,7 +168,7 @@ TEST_CASE("The listener counts what it has received, for the activity readout")
     IpcServer server;
     REQUIRE(server.start(0, [&](const IpcPacket &p) { collector.add(p.as_close_image().name); }));
 
-    // Nothing has arrived yet, so there is no "time since the last packet" to report.
+    // nothing has arrived yet, so there is no "time since the last packet" to report
     CHECK(server.activity().packets == 0);
     CHECK(server.activity().bytes == 0);
     CHECK(server.activity().seconds_since_last < 0.0);
@@ -186,11 +184,11 @@ TEST_CASE("The listener counts what it has received, for the activity readout")
 
     const auto activity = server.activity();
     CHECK(activity.packets == names.size());
-    // Bytes are counted off the wire, so they include each packet's length prefix and type byte.
+    // bytes are counted off the wire, so they include each packet's length prefix and type byte
     CHECK(activity.bytes == stream.size());
     CHECK(activity.seconds_since_last >= 0.0);
 
-    // Counting covers one listening session: restarting begins again from nothing.
+    // counting covers one listening session: restarting begins again from nothing
     server.stop();
     REQUIRE(server.start(0, [](const IpcPacket &) {}));
     CHECK(server.activity().packets == 0);
@@ -201,8 +199,8 @@ TEST_CASE("The listener counts what it has received, for the activity readout")
 
 TEST_CASE("A tile survives the trip over a socket")
 {
-    // The codec tests round-trip in memory; this is the same payload through a real connection, which is
-    // where a framing mistake would show up as silently wrong pixels rather than as a parse error.
+    // the same payload the codec tests round-trip in memory, now through a real connection, where a framing
+    // mistake shows up as silently wrong pixels instead of a parse error
     const Box2i                    bounds{int2{2, 3}, int2{6, 7}};
     const std::vector<std::string> channels{"R", "G", "B"};
     std::vector<float>             data(size_t(bounds.size().x) * bounds.size().y * 3);
@@ -224,7 +222,7 @@ TEST_CASE("A tile survives the trip over a socket")
     {
         TestClient client{server.port()};
         auto       packet = IpcPacket::update_image("render", false, channels, {0, 1, 2}, {3, 3, 3}, bounds, data);
-        // In two writes, so the receiver has to hold a partial packet across reads.
+        // in two writes, so the receiver has to hold a partial packet across reads
         std::vector<char> bytes = packet.bytes();
         client.send_all({bytes.begin(), bytes.begin() + bytes.size() / 2});
         client.send_all({bytes.begin() + bytes.size() / 2, bytes.end()});

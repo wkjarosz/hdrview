@@ -271,9 +271,8 @@ vector<string> shorten_names(const vector<string> &names)
         size_t short_begin = (size_t)begin_short_offset;
         size_t short_end   = std::max(long_name.size() - (size_t)end_short_offset, short_begin);
 
-        // Nothing unique is left: every other name contains this one whole, either because the paths are
-        // all identical or because this name is entirely their common suffix. Its own file name is
-        // complete on its own, so it needs no ellipsis on either side.
+        // Nothing unique is left: every other name contains this one whole, so fall back to its file name,
+        // which is complete on its own and needs no ellipsis.
         if (short_begin >= short_end)
         {
             short_names.emplace_back(get_filename(long_name));
@@ -301,8 +300,7 @@ vector<string> shorten_names(const vector<string> &names)
 
 bool natural_less(const string_view a, const string_view b)
 {
-    // isdigit() is only defined for values representable as unsigned char, and a byte of a multi-byte UTF-8
-    // character is negative as a plain char -- which any non-ASCII file name in a sorted folder supplies.
+    // see the is_alnum() note in shorten_names()
     auto is_digit = [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; };
 
     size_t ia = 0, ib = 0;

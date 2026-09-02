@@ -287,15 +287,12 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 // - Setting the desired JxlDecoderSetOutputColorProfile to JXL_TRANSFER_FUNCTION_SRGB does call the CMS functions.
 //
 
-//! Reconstruct \p image's alternate rendition from the gain map in a `jhgm` box, if it holds one.
-/*!
-    A JPEG XL gain map arrives as a bundle laid out as: a version byte, the ISO 21496-1 metadata
-    behind a 16-bit length, the alternate rendition's color encoding behind an 8-bit length, its ICC
-    profile behind a 32-bit length, and then the map itself as a bare JPEG XL codestream filling the
-    rest of the box. Decoding that codestream is a second trip through this same loader.
-
-    libjxl can unpack this too, but only from libjxl_extras, which distributions do not reliably
-    ship and HDRView does not link. The layout is short enough to read directly.
+/// Reconstruct \p image's alternate rendition from the gain map in a `jhgm` box, if it holds one.
+/**
+    The bundle is laid out as: a version byte, the ISO 21496-1 metadata behind a 16-bit length, the
+    alternate rendition's color encoding behind an 8-bit length, its ICC profile behind a 32-bit length,
+    then the map itself as a bare JPEG XL codestream filling the rest of the box. Unpacking it needs
+    libjxl_extras, which distributions do not reliably ship, so it is read directly here.
 
     \param jhgm   Contents of the file's `jhgm` box
     \param image  Base image, already linearized. Modified in place
@@ -327,8 +324,8 @@ static void apply_jxl_gainmap(const vector<uint8_t> &jhgm, Image &image, const I
         metadata_size      = (size_t)((len[0] << 8) | len[1]);
         metadata           = take(metadata_size);
 
-        // The alternate rendition's color encoding and ICC profile. Only needed to reconstruct that
-        // rendition's own color space, which HDRView does not do yet, so they are skipped over.
+        // skip the alternate rendition's color encoding and ICC profile; nothing reconstructs its own
+        // color space yet
         take(*take(1));
 
         const uint8_t *icc_len = take(4);
@@ -363,8 +360,7 @@ static void apply_jxl_gainmap(const vector<uint8_t> &jhgm, Image &image, const I
         return;
     }
 
-    // Decode the map as stored: its samples are coefficients that the metadata above says how to
-    // interpret, so the color management that would be right for a picture would corrupt them.
+    // decode the map as stored: its samples are coefficients, so color management would corrupt them
     ImageLoadOptions map_opts;
     map_opts.override_profile = true;
     map_opts.tf_override      = TransferFunction::Linear;
@@ -479,8 +475,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             auto stype = string{type, type + sizeof(type)};
             spdlog::debug("Box type: '{}'", string{type, type + sizeof(type)});
 
-            // Skip past any box this loader has no use for, rather than paying to buffer it: a
-            // gain map box in particular can be as large as the image itself.
+            // skip past any box this loader has no use for; a gain map box can be as large as the image
             if (stype != "Exif" && stype != "xml " && stype != "jhgm" && stype != "JHGM")
                 continue;
 
@@ -542,8 +537,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 xmp_buffer = tmp_buffer;
                 spdlog::debug("XMP data size: {}", xmp_buffer.size());
             }
-            // The spec spells this box lowercase, but accept either so a file that got the case
-            // wrong still gets its gain map read.
+            // the spec spells this box lowercase, but accept either
             else if (stype == "jhgm" || stype == "JHGM")
             {
                 jhgm_buffer = tmp_buffer;
@@ -558,12 +552,12 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec.get(), &info))
                 throw invalid_argument{"JxlDecoderGetBasicInfo failed"};
 
-            // check_image_dimensions() above already rejected a degenerate width or height.
+            check_image_dimensions(info.xsize, info.ysize, "JPEG XL");
+
             if (info.num_color_channels + info.num_extra_channels == 0)
                 throw invalid_argument{
                     fmt::format("{}x{} image has no color or extra channels", info.xsize, info.ysize)};
 
-            check_image_dimensions(info.xsize, info.ysize, "JPEG XL");
             size = int3{(int)info.xsize, (int)info.ysize, (int)info.num_color_channels + (info.alpha_bits ? 1 : 0)};
 
             spdlog::info("{}x{} image with {} color channels ({} including alpha) and {} extra channels", size.x,
@@ -690,12 +684,11 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             spdlog::info("File has {} color channels", size.z);
             format = {(uint32_t)size.z, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
 
-            image                                         = make_shared<Image>(size.xy(), size.z);
-            image->filename                               = filename;
-            image->partname                               = frame_name;
-            // JxlBasicInfo always carries alpha_premultiplied, so a file with alpha has stated its kind --
-            // though not the space it means, which is why the premultiplied case is the assumed one. See
-            // the note where it is undone below.
+            image           = make_shared<Image>(size.xy(), size.z);
+            image->filename = filename;
+            image->partname = frame_name;
+            // JxlBasicInfo always carries alpha_premultiplied, so a file with alpha has stated its kind,
+            // though not the space it means; see where this is undone below
             image->set_alpha(!info.alpha_bits
                                  ? AlphaType_None
                                  : (info.alpha_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight),
@@ -816,10 +809,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 continue;
             }
 
-            // JPEG XL says only whether the alpha is premultiplied, not in what space; this assumes the
-            // post-transfer kind, by analogy with the formats where it is established. libjxl's own
-            // JxlDecoderSetUnpremultiplyAlpha() does not act on the main alpha channel, so the samples
-            // arrive exactly as stored and this has to undo it. See imageio/alpha.h.
+            // JXL premultiplies in encoded space; JxlDecoderSetUnpremultiplyAlpha() ignores the main alpha
+            // channel, so undo it here (see alpha.h)
             unpremultiply_before_transfer(pixels.data(), size, image->alpha_type);
 
             vector<float> alpha_copy;
@@ -1003,8 +994,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
         for (auto &&i : images) { i->xmp_data = xmp_buffer; }
     }
 
-    // The gain map applies to the main image, so it waits until decoding has produced one. A file
-    // with several frames has one gain map for the whole animation, which the first frame carries.
+    // one gain map covers the whole file, and it applies to the first frame's image
     if (!jhgm_buffer.empty() && !images.empty())
         apply_jxl_gainmap(jhgm_buffer, *images.front(), opts);
 
@@ -1080,15 +1070,15 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     if (!pixels || w <= 0 || h <= 0)
         throw std::runtime_error("Empty image or invalid image dimensions");
 
-    info.xsize                 = w;
-    info.ysize                 = h;
+    info.xsize = w;
+    info.ysize = h;
     // One or two channels is a gray image, with the second channel its alpha; three or four is RGB.
-    info.num_color_channels    = n <= 2 ? 1 : 3;
-    info.num_extra_channels    = (n == 2 || n == 4) ? 1 : 0;
-    info.alpha_bits            = (n == 2 || n == 4) ? info.bits_per_sample : 0;
-    info.alpha_exponent_bits   = (n == 2 || n == 4) ? info.exponent_bits_per_sample : 0;
-    // libjxl rejects lossless encoding of an XYB-encoded frame, and XYB is what it uses whenever the
-    // original profile is not kept -- so a lossless request has to keep it.
+    info.num_color_channels  = n <= 2 ? 1 : 3;
+    info.num_extra_channels  = (n == 2 || n == 4) ? 1 : 0;
+    info.alpha_bits          = (n == 2 || n == 4) ? info.bits_per_sample : 0;
+    info.alpha_exponent_bits = (n == 2 || n == 4) ? info.exponent_bits_per_sample : 0;
+    // libjxl rejects lossless encoding of an XYB-encoded frame, and it uses XYB whenever the original
+    // profile is not kept
     info.uses_original_profile = lossless ? JXL_TRUE : JXL_FALSE;
 
     JxlEncoderPtr enc    = JxlEncoderMake(nullptr);

@@ -18,14 +18,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # A newer commit on the same branch makes an older run pointless, and it goes on holding a runner for
-  # the twenty-odd minutes the matrix takes. Grouped by head branch, so a pull_request run and any push
-  # run for that branch share a group -- ref_name rather than ref, because a push reports the fully
-  # qualified refs/heads/<name>, which never matches the bare name a pull_request puts in head_ref.
-  # master is exempt: every commit landing there is worth building. On master the group is per-commit,
-  # so nothing there ever queues behind or cancels anything else: GitHub keeps only one *pending* run
-  # per group even when cancel-in-progress is false, so a second push would otherwise cancel the first
-  # one's queued run before it started.
+  # Cancel superseded runs on a branch: head_ref for pull requests, ref_name for pushes, since a push
+  # reports refs/heads/<name> where a pull_request puts the bare name in head_ref. master is grouped per
+  # commit instead, so every commit landing there builds.
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}${{ github.ref == 'refs/heads/master' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
@@ -65,11 +60,9 @@ jobs:
               name: "macOS 15 Apple Silicon CPM",
               os: macos-15,
               preset: "macos-arm64-cpm",
-              # Only this one preset/os combo builds and runs hdrview_tests (Release only, see the Configure CMake
-              # and Run unit tests steps below) - CPM always fetches OpenEXR/PNG from source for -cpm/-universal
-              # presets, which is what the vendored-test-image-backed tests in tests/test_exr_io.cpp and
-              # tests/test_png_io.cpp conditionally compile against. Running the same suite across every preset in
-              # this ~36-combination matrix would be redundant.
+              # The one combo that builds and runs hdrview_tests (Release only). -cpm/-universal presets always
+              # fetch OpenEXR/PNG from source, which is what the vendored-test-image tests in
+              # tests/test_exr_io.cpp and tests/test_png_io.cpp compile against.
               run_tests: true,
             }
           - {
@@ -94,14 +87,11 @@ jobs:
       - name: Install dependencies
         run: brew install --quiet ninja create-dmg dylibbundler libjpeg-turbo little-cms2 zlib aom dav1d libde265 x265 openjpeg openh264
 
-      # The packages below are each also built from source by CPM for -cpm/-universal presets (which don't set
-      # CPM_USE_LOCAL_PACKAGES, so CPM always fetches regardless of what's installed system-wide). Installing them
-      # via Homebrew unconditionally is not just redundant for those presets but actively breaks the build: on
-      # Intel runners, /usr/local/include is one of AppleClang's implicit default header search locations (unlike
-      # /opt/homebrew on Apple Silicon), so the Homebrew copy's headers can silently shadow CPM's own fetched
-      # copies mid-build, causing incomplete-type/ABI-mismatch failures (seen with jpeg-xl and spdlog/fmt) that
-      # depend on what happens to be installed. -local presets, on the other hand, explicitly want these to come
-      # from Homebrew (that's the whole point of CPM_USE_LOCAL_PACKAGES=ON there), so only install them there.
+      # CPM fetches the packages below from source for -cpm/-universal presets, so installing them via Homebrew
+      # there breaks the build: on Intel runners /usr/local/include is one of AppleClang's default header search
+      # locations (unlike /opt/homebrew on Apple Silicon), and the Homebrew headers then shadow CPM's fetched
+      # copies mid-build (incomplete-type and ABI-mismatch failures, seen with jpeg-xl and spdlog/fmt). Only
+      # -local presets, which set CPM_USE_LOCAL_PACKAGES=ON, want these from Homebrew.
       - name: Install dependencies also built by CPM (local presets only)
         if: contains(matrix.config.preset, 'local')
         run: brew install --quiet jpeg-xl libultrahdr libheif libpng imath openexr cli11 spdlog fmt libexif libraw
@@ -113,9 +103,8 @@ jobs:
       # Buildtype is part of the key (ccache below already varies by buildtype) so Debug and Release don't race
       # to overwrite one shared cache entry; restore-keys stays preset-only so either buildtype can seed the other.
       #
-      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink and
-      # every installed Xcode SDK - prohibitively expensive to glob. cpm_modules is always at the workspace root
-      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
+      # path and hashFiles avoid a workspace-root "**", which would walk into build/'s CPack staging symlink
+      # and every installed Xcode SDK. cpm_modules is always at the workspace root (CPM_SOURCE_CACHE above).
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"

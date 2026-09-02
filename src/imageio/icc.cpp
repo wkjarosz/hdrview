@@ -13,8 +13,8 @@ namespace
 {
 
 // Reads the four code points of an ICC `cicp` tag (ICC.1:2022, 9.2.16) out of a profile's bytes, leaving
-// `quad` untouched when the profile has no such tag. The tag table is walked directly rather than through
-// LCMS because LCMS only gained cmsSigcicpTag in 2.16, and HDRView links whichever LCMS the build supplies.
+// `quad` untouched when the profile has no such tag. The tag table is walked directly since LCMS only
+// gained cmsSigcicpTag in 2.16.
 void parse_icc_cicp_tag(const uint8_t *data, size_t size, std::array<int, 4> &quad)
 {
     // Header is 128 bytes, followed by a 4-byte tag count and that many 12-byte tag table entries.
@@ -33,8 +33,8 @@ void parse_icc_cicp_tag(const uint8_t *data, size_t size, std::array<int, 4> &qu
         const size_t   entry  = 132 + (size_t)t * 12;
         const uint64_t offset = be32(entry + 4), tag_size = be32(entry + 8);
 
-        // The tag's own type signature repeats in its first four bytes, then four reserved bytes, then the
-        // four code points -- twelve in all, which is also the smallest a well-formed tag can be.
+        // the tag repeats its type signature in its first four bytes, then four reserved bytes, then the
+        // four code points: twelve in all, and the smallest a well-formed tag can be
         if (be32(entry) != 0x63696370u || tag_size < 12 || offset + tag_size > size)
             continue;
         if (be32((size_t)offset) != 0x63696370u)
@@ -238,13 +238,10 @@ bool ICCProfile::extract_chromaticities(Chromaticities *c) const
     }
     else if (const auto *chad = static_cast<const cmsFloat64Number *>(chromatic_adapt_tag))
     {
-        // The chad matrix carries the profile's own white to the D50 of the PCS, so inverting it
-        // carries D50 back to that white -- exactly, and out of the profile's own data.
-        //
-        // Transforming RGB white through the profile is the other way to ask, and is what this used
-        // to do, but lcms does not reliably undo the adaptation even at absolute colorimetric with
-        // an adaptation state of zero: on Apple's Display P3 it answers (0.278, 0.296), which is no
-        // illuminant at all, and every primary derived against it is then wrong too.
+        // the chad matrix carries the profile's own white to the PCS's D50, so inverting it carries D50
+        // back to that white, out of the profile's own data. Transforming RGB white through the profile
+        // instead does not reliably undo the adaptation even at absolute colorimetric with an adaptation
+        // state of zero: on Apple's Display P3 lcms answers (0.278, 0.296), which is no illuminant at all.
         const float3x3 m{{(float)chad[0], (float)chad[3], (float)chad[6]},
                          {(float)chad[1], (float)chad[4], (float)chad[7]},
                          {(float)chad[2], (float)chad[5], (float)chad[8]}};
@@ -359,10 +356,9 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
         return false;
     }
 
-    // The format has to describe the buffer's real stride, since cmsDoTransform() advances by the
-    // format's own channel count. For a buffer that carries alpha, that means a format with EXTRA_SH(1):
-    // it is what makes lcms step over the alpha, and what gives cmsFLAGS_COPY_ALPHA below an extra
-    // channel to carry across untouched.
+    // the format has to describe the buffer's real stride, since cmsDoTransform() advances by the format's
+    // own channel count; a buffer carrying alpha needs EXTRA_SH(1), which is also what gives
+    // cmsFLAGS_COPY_ALPHA below a channel to carry across untouched
     cmsUInt32Number format_in = TYPE_GRAY_FLT, format_out = TYPE_GRAY_FLT;
     if (is_rgb)
     {
@@ -375,9 +371,8 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
     }
     else if (is_gray)
     {
-        // Spelled out from lcms's format primitives rather than by its TYPE_GRAYA_FLT name, which
-        // postdates lcms2 releases still shipping on current distributions. This is TYPE_GRAY_FLT plus
-        // the one extra channel.
+        // TYPE_GRAY_FLT plus one extra channel, spelled out from lcms's format primitives since the
+        // TYPE_GRAYA_FLT name postdates lcms2 releases still shipping on current distributions
         constexpr cmsUInt32Number gray_alpha_flt =
             FLOAT_SH(1) | COLORSPACE_SH(PT_GRAY) | CHANNELS_SH(1) | BYTES_SH(4) | EXTRA_SH(1);
         format_in = format_out = size.z == 2 ? gray_alpha_flt : TYPE_GRAY_FLT;
@@ -423,10 +418,9 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
 bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, string *tf_description,
                                   Chromaticities *c) const
 {
-    // A `cicp` tag is the profile stating its encoding in CICP's own terms (ICC.1:2022), so it is taken as
-    // authoritative -- the same standing a PNG cICP chunk has over an iCCP profile. For HDR it is also the
-    // only part of the profile that *can* describe the encoding: the ICC PCS is normalized to media white,
-    // so transforming a PQ or HLG image through the profile clamps away everything above it.
+    // a `cicp` tag states the profile's encoding in CICP's own terms (ICC.1:2022) and is authoritative. For
+    // HDR it is also the only part of the profile that can describe the encoding: the ICC PCS is normalized
+    // to media white, so transforming a PQ or HLG image through the profile clamps away everything above it.
     if (auto codes = cicp(); codes.valid())
         return codes.linearize_pixels(pixels, size, keep_primaries, tf_description, c);
 

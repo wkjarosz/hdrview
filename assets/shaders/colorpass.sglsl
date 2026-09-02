@@ -1,17 +1,14 @@
-// Final HDR/EDR display color-management pass, written once and cross-compiled via sokol-shdc. See
-// SokolShaderCompiler.cmake and CMakeLists.txt for the CMake wiring, and app-colorpass.cpp's update_colorpass()/
-// end_colorpass_frame() for how the compiled output is loaded and its uniforms set.
+// Final HDR/EDR display color-management pass, cross-compiled via sokol-shdc. See app-colorpass.cpp for how
+// the compiled output is loaded and its uniforms set.
 //
-// Only ever built for the desktop OpenGL backend (glsl410) -- never Metal (macOS EDR consumes HDRView's
-// extended-sRGB shader output directly, no colorpass needed) and never Emscripten (the whole HDR-enabling
-// GLFW fork is excluded there). See CMakeLists.txt's sokol_shdc_generate() call for this file.
+// Only built for the desktop OpenGL backend (glsl410): macOS EDR consumes extended sRGB directly, and the
+// HDR-enabling GLFW fork is excluded on Emscripten.
 
 @include colorspaces.sglsl
 
 @block colorpass_constants
-// Mirrors TransferFunction::Type_ in src/colorspace.h -- the display's wanted transfer function arrives here
-// already translated out of wp_color_manager_v1's numbering by query_display_colorspace()
-// (src/display_colorspace.cpp), so no Wayland protocol code points appear in this shader.
+// Mirrors TransferFunction::Type_ in src/colorspace.h. query_display_colorspace() translates the display's
+// transfer function out of wp_color_manager_v1's numbering, so no protocol code points appear here.
 #define TF_LINEAR       1
 #define TF_GAMMA        2
 #define TF_SRGB         3
@@ -57,30 +54,29 @@ void main()
 {
     vec4 color = texture(sampler2D(color_texture, color_sampler), uv);
 
-    // Decode HDRView's extended-sRGB convention (1.0 == sdr_white_nits) to absolute nits, sign preserved
-    // (out-of-gamut colors are genuinely negative), then move to the display's primaries.
+    // decode HDRView's extended-sRGB convention (1.0 == sdr_white_nits) to absolute nits, preserving the
+    // sign of out-of-gamut colors, then move to the display's primaries
     vec3 nits = cpp.gamut_matrix * (cpp.sdr_white_nits * sRGBToLinear(color.rgb));
 
-    // Some displays perform unwanted tonemapping on out-of-range values; hard-clip to the display's own
-    // reported luminance limits instead, matching nanogui-1's ColorPass. 0.0 means "unknown", not "no
-    // limit" -- only clamp when a limit is actually reported.
+    // Some displays tonemap out-of-range values, so hard-clip to their own reported limits instead, as
+    // nanogui-1's ColorPass does. 0.0 means "unknown", not "no limit", so only clamp when one is reported.
     if (cpp.max_nits > 0.0)
         nits = clamp(nits, vec3(cpp.min_nits), vec3(cpp.max_nits));
 
     vec3 encoded;
     if (cpp.tf_type == TF_BT2100_PQ)
-        // PQ is absolute: it consumes nits directly and does its own normalization. Do not divide by
-        // tf_white_nits first -- see the note on pq_encode() in colorspaces.sglsl.
+        // PQ is absolute: it consumes nits directly and does its own normalization, so do not divide by
+        // tf_white_nits first (see pq_encode() in colorspaces.sglsl)
         encoded = pq_encode(nits);
     else
     {
-        // Everything below is defined relative to a reference white.
+        // everything below is defined relative to a reference white
         vec3 relative = nits / cpp.tf_white_nits;
         if (cpp.tf_type == TF_GAMMA)
             encoded = gamma_encode(relative, cpp.tf_gamma);
         else if (cpp.tf_type == TF_SRGB)
-            // Also covers wp_color_manager_v1's ext_srgb, which shares the curve and which our sRGB
-            // encoders sign-extend. Reachable on Windows with advanced color on but only 8 bits/channel.
+            // also covers wp_color_manager_v1's ext_srgb, which shares the curve and which our sRGB
+            // encoders sign-extend
             encoded = linearToSRGB(relative);
         else if (cpp.tf_type == TF_ITU || cpp.tf_type == TF_IEC61966_2_4)
             encoded = itu_encode(relative);

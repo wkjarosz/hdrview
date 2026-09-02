@@ -18,7 +18,7 @@
 namespace
 {
 
-//! Sample \p a at \p x, \p y with the border clamped to the nearest sample inside it.
+/// Sample \p a at \p x, \p y with the border clamped to the nearest sample inside it.
 inline float clamped(const Array2Df &a, int x, int y)
 {
     return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
@@ -26,8 +26,6 @@ inline float clamped(const Array2Df &a, int x, int y)
 
 } // namespace
 
-//! Mirroring reflects at each repeat, so the coordinate walks up and back down: the position within one
-//! period, taken from the far end on every odd one.
 int wrap_coord(int p, int extent, int mode)
 {
     if (p >= 0 && p < extent)
@@ -39,9 +37,8 @@ int wrap_coord(int p, int extent, int mode)
     case BorderMode_Repeat: return mod(p, extent);
     case BorderMode_Mirror:
     {
-        // The reflection has period twice the extent and folds in the middle of it, so -1 lands on 0 and
-        // extent lands on extent-1. Reflecting the magnitude instead would be right for positive
-        // coordinates and a whole sample off for negative ones.
+        // the reflection has period twice the extent and folds in the middle of it, so -1 lands on 0 and
+        // extent lands on extent-1
         const int period = 2 * extent;
         const int q      = mod(p, period);
         return q < extent ? q : period - 1 - q;
@@ -54,7 +51,7 @@ int wrap_coord(int p, int extent, int mode)
 namespace
 {
 
-//! One sample of \p a read through the border modes; zero where they say there is nothing.
+/// One sample of \p a read through the border modes; zero where they say there is nothing.
 inline float bordered(const Array2Df &a, int x, int y, int mx, int my)
 {
     x = wrap_coord(x, a.width(), mx);
@@ -62,12 +59,9 @@ inline float bordered(const Array2Df &a, int x, int y, int mx, int my)
     return (x < 0 || y < 0) ? 0.f : a(x, y);
 }
 
-//! One tap of the cubic with a = -0.75, which is what Photoshop's "bicubic" is.
-/*!
-    Interpolating rather than approximating, so a sample landed on exactly is returned exactly.
-
-    A function rather than a lambda over a local constant: MSVC will not read a constexpr local from inside
-    a lambda that captures nothing, where GCC and clang are happy to.
+/// One tap of the interpolating cubic with a = -0.75, as Photoshop's "bicubic".
+/**
+    A function, not a lambda: MSVC will not read a constexpr local from inside a captureless lambda.
 */
 inline float cubic_weight(float d)
 {
@@ -77,14 +71,13 @@ inline float cubic_weight(float d)
     return d <= 1.f ? ((A + 2.f) * d - (A + 3.f)) * d * d + 1.f : ((A * d - 5.f * A) * d + 8.f * A) * d - 4.f * A;
 }
 
-//! Value of \p a at the continuous position \p sx, \p sy, with samples at the centers of their cells.
+/// Value of \p a at the continuous position \p sx, \p sy, with samples at the centers of their cells.
 float sample_at(const Array2Df &a, float sx, float sy, int sampler, int mx, int my)
 {
     if (sampler == Sampler_Nearest)
         return bordered(a, int(std::floor(sx)), int(std::floor(sy)), mx, my);
 
-    // Shifted so that a sample sits at the center of its cell rather than at its corner, without which an
-    // offset of a whole number of samples would land halfway between two of them.
+    // shift so a sample sits at the center of its cell rather than at its corner
     sx -= 0.5f;
     sy -= 0.5f;
 
@@ -109,14 +102,13 @@ float sample_at(const Array2Df &a, float sx, float sy, int sampler, int mx, int 
             total += w;
         }
     }
-    // The taps sum to one analytically; dividing keeps that true against rounding.
+    // the taps sum to one analytically; dividing keeps that true against rounding
     return total != 0.f ? value / total : value;
 }
 
-//! Normalized 1D Gaussian taps out to where they stop mattering.
-/*!
-    Truncated at three standard deviations, past which the taps carry well under a thousandth of the
-    weight -- far below what a float sample can express -- so keeping them costs time and changes nothing.
+/// Normalized 1D Gaussian taps, truncated at three standard deviations.
+/**
+    Past three sigma the taps carry well under a thousandth of the weight.
 */
 std::vector<float> gaussian_taps(float sigma)
 {
@@ -130,20 +122,16 @@ std::vector<float> gaussian_taps(float sigma)
         taps[size_t(i + radius)] = t;
         sum += t;
     }
-    // Normalized rather than scaled by the analytic 1/(sigma*sqrt(2pi)): the truncated taps do not sum to
-    // that, and a filter whose weights miss one leaves the image slightly darker or brighter than it was.
+    // normalize the truncated taps so they sum to 1
     for (auto &t : taps) t /= sum;
 
     return taps;
 }
 
-/*!
-    Convolve \p region of \p src with the separable kernel \p taps_x by \p taps_y.
-
-    Only \p region is produced, and only what feeds it is read. The horizontal pass covers the region's
-    columns over rows grown by the vertical radius, because that is exactly the set the vertical pass then
-    reads: growing by more would be wasted work, by less would read samples that were never computed. An
-    empty tap list along an axis means that axis is left alone.
+/// Convolve \p region of \p src with the separable kernel \p taps_x by \p taps_y.
+/**
+    The horizontal pass covers the region's columns over rows grown by the vertical radius, which is the set
+    the vertical pass then reads. An empty tap list along an axis leaves that axis alone.
 */
 Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std::vector<float> &taps_x,
                             const std::vector<float> &taps_y, AtomicProgress progress)
@@ -152,13 +140,13 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
     const int  ry     = taps_y.empty() ? 0 : int(taps_y.size() / 2);
     const int2 extent = region.size();
 
-    // Rows the vertical pass will reach for, which is the region's own rows grown by its radius.
+    // rows the vertical pass will reach for
     const int rows = extent.y + 2 * ry;
 
     Array2Df  horizontal{int2{extent.x, rows}};
     const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
 
-    // A pass each, so each reports over half of whatever share this filter was given.
+    // a pass each, so each reports over half of this filter's share
     AtomicProgress h_progress{progress, 0.5f};
     h_progress.set_num_steps(rows);
 
@@ -206,7 +194,7 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
                                       continue;
                                   }
                                   float sum = 0.f;
-                                  // The region's row y sits at index y + ry in the taller intermediate.
+                                  // the region's row y sits at index y + ry in the taller intermediate
                                   for (int k = -ry; k <= ry; ++k)
                                       sum += taps_y[size_t(k + ry)] * horizontal(x, y + ry + k);
                                   out(x, y) = sum;
@@ -218,13 +206,10 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
     return out;
 }
 
-/*!
-    One separable box pass, costing the same per sample whatever the half-widths.
-
-    The sum over the box is carried along the row (then down the column) rather than recomputed: stepping
-    one sample adds the sample entering the box and subtracts the one leaving it. Only the first sum of
-    each line costs the half-width; every one after it costs an add and a subtract. This is the whole
-    reason to reach for boxes, and what makes repeating them cheap.
+/**
+    One separable box pass, costing the same per sample whatever the half-widths: the sum over the box is
+    carried along the row, then down the column, adding the sample entering it and subtracting the one
+    leaving.
 
     \p src holds the samples for absolute coordinates starting at \p src_origin, so passes can be chained
     over arrays that each cover a different rectangle. Reads outside \p src clamp to its edge.
@@ -262,8 +247,8 @@ Array2Df box_pass(const Array2Df &src, int2 src_origin, const Box2i &region, int
     Array2Df    out{extent};
     const float inv_y = 1.f / float(2 * ry + 1);
 
-    // The intermediate was sized to exactly what this reads, so it is indexed directly rather than clamped:
-    // the region's row y sits at index y + ry, and the box around it spans [y, y + 2*ry].
+    // the intermediate was sized to what this reads, so index it directly: the region's row y sits at
+    // index y + ry, and the box around it spans [y, y + 2*ry]
     stp::parallel_for(stp::blocked_range<int>(0, extent.x, std::max(1, 1024 * 1024 / std::max(1, extent.y))),
                       [&](int x0, int x1, int, int)
                       {
@@ -284,12 +269,10 @@ Array2Df box_pass(const Array2Df &src, int2 src_origin, const Box2i &region, int
     return out;
 }
 
-//! \p b grown by \p by on every side, then clipped to \p bounds.
-/*!
-    The clip is what keeps a chain of passes agreeing with the same chain run over the whole image. Left
-    unclipped, an intermediate would extend past the image and the pass after it would clamp against that
-    outer edge -- whose samples are a box average of clamped values, not the edge sample the whole-image
-    computation clamps to.
+/// \p b grown by \p by on every side, then clipped to \p bounds.
+/**
+    The clip keeps a chain of passes agreeing with the same chain over the whole image, which clamps against
+    the image's own edge.
 */
 Box2i dilated(const Box2i &b, int2 by, const Box2i &bounds)
 {
@@ -298,7 +281,7 @@ Box2i dilated(const Box2i &b, int2 by, const Box2i &bounds)
     return out;
 }
 
-/*!
+/**
     Widths for \p n boxes whose combined variance lands as near \p sigma as odd integers allow.
 
     Compute box blur size for desired sigma and number of iterations:
@@ -323,25 +306,24 @@ Box2i dilated(const Box2i &b, int2 by, const Box2i &bounds)
 
          w = sqrt(12/n)*sigma
 
-    Rounding that single width to an odd integer is not good enough here, though: the error does not
-    shrink as the count rises -- at sigma 6 it is 5% at six passes and 15% at twelve -- so "more
-    iterations" would visibly change how much blur there is, which is the one thing this control must not
-    do. Splitting the passes between the two adjacent odd widths and solving for how many take the smaller
-    keeps the total within a few percent everywhere, and exact once there are enough passes to choose from.
+    Rounding that single width to an odd integer is not good enough: the error does not shrink as the count
+    rises (at sigma 6 it is 5% at six passes and 15% at twelve), so raising \p n would change how much blur
+    there is. Splitting the passes between the two adjacent odd widths and solving for how many take the
+    smaller keeps the total within a few percent everywhere.
 */
 std::vector<int> box_widths_for_sigma(float sigma, int n)
 {
     const double s2 = double(sigma) * double(sigma);
 
-    // Width a single box would need if widths could be continuous. If width is odd, then we can use a
-    // centered box and are good to go; if it is even we would need a symmetric pair of off-centered boxes
-    // instead, so round down to the next odd width and let the split below make up the difference.
+    // width a single box would need if widths could be continuous. An odd width can be a centered box; an
+    // even one would need a symmetric pair of off-centered boxes, so round down and let the split below
+    // make up the difference.
     int lower = int(std::floor(std::sqrt(12.0 * s2 / n + 1.0)));
     if (lower % 2 == 0)
         --lower;
     lower = std::max(1, lower);
 
-    // How many passes take `lower`; the rest take the next odd width up.
+    // how many passes take `lower`; the rest take the next odd width up
     const double ideal = (12.0 * s2 - double(n) * lower * lower - 4.0 * n * lower - 3.0 * n) / (-4.0 * lower - 4.0);
     const int    count = std::clamp(int(std::lround(ideal)), 0, n);
 
@@ -380,9 +362,7 @@ Array2Df shifted(const Array2Df &src, const Box2i &region, float dx, float dy, i
     const int2 size = region.size();
     Array2Df   out{size};
 
-    // A whole-sample offset needs no reconstruction, and taking it as such matters: it keeps a shift of
-    // exactly one sample from quietly filtering the image, so shifting one way and back returns what was
-    // there.
+    // a whole-sample offset needs no reconstruction, so shifting one way and back returns what was there
     const bool integral = dx == std::floor(dx) && dy == std::floor(dy);
 
     const int block_size = std::max(1, 1024 * 1024 / std::max(1, size.x));
@@ -393,7 +373,7 @@ Array2Df shifted(const Array2Df &src, const Box2i &region, float dx, float dy, i
             for (int y = y0; y < y1; ++y)
                 for (int x = 0; x < size.x; ++x)
                 {
-                    // The sample that has to travel to here is the one that far back.
+                    // the sample that has to travel to here is the one that far back
                     const float sx = float(region.min.x + x) - dx;
                     const float sy = float(region.min.y + y) - dy;
 
@@ -415,11 +395,10 @@ Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_
 namespace
 {
 
-//! Run \p half_widths box passes in order, producing \p region.
-/*!
-    Each pass reads its own half-width beyond what it produces, so the first has to cover the region grown
-    by every later pass's reach. Worked out backwards from the rectangle actually wanted, and clipped to the
-    image at each step so the clamping matches what the same chain over the whole image would do.
+/// Run \p half_widths box passes in order, producing \p region.
+/**
+    Each pass reads its own half-width beyond what it produces, so the regions are worked out backwards from
+    the one wanted and clipped at each step.
 */
 Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<int2> &half_widths,
                    AtomicProgress progress)
@@ -435,7 +414,7 @@ Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<i
         cur                = dilated(cur, half_widths[size_t(i)], bounds);
     }
 
-    // Every pass costs the same, so they divide the share evenly.
+    // every pass costs the same, so they divide the share evenly
     const float    share = 1.f / float(n);
     AtomicProgress pass_progress{progress, share};
     pass_progress.set_num_steps(1);
@@ -468,9 +447,7 @@ Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float s
 {
     const int n = std::max(1, iterations);
 
-    // n boxes carry the variance of the Irwin-Hall distribution: the sum of each box's. Choosing widths so
-    // that total lands on the sigma asked for is what holds the width of the result fixed as the count
-    // changes -- iterations buy accuracy, not more blur.
+    // widths chosen so the combined variance lands on sigma; see box_widths_for_sigma()
     const std::vector<int> wx =
         sigma_x > 0.f ? box_widths_for_sigma(sigma_x, n) : std::vector<int>(static_cast<size_t>(n), 1);
     const std::vector<int> wy =
@@ -484,7 +461,7 @@ Array2Df fast_gaussian_blurred(const Array2Df &src, const Box2i &region, float s
 
 Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, float amount, AtomicProgress progress)
 {
-    // The blur is all of the cost; adding the difference back is one pass over the region.
+    // the blur is all of the cost; adding the difference back is one pass over the region
     const Array2Df blurred = gaussian_blurred(src, region, sigma, sigma, progress);
     const int2     extent  = region.size();
 
@@ -523,7 +500,7 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
     stp::parallel_for(stp::blocked_range<int>(0, extent.y, 1),
                       [&](int y0, int y1, int, int)
                       {
-                          // Reused across the whole block rather than reallocated per sample.
+                          // reused across the whole block rather than reallocated per sample
                           std::vector<float> window;
                           window.reserve(size_t((2 * r + 1) * (2 * r + 1)));
 
@@ -541,8 +518,7 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
                                               window.push_back(
                                                   clamped(src, region.min.x + x + dx, region.min.y + y + dy));
 
-                                  // nth_element is enough -- only the middle value is wanted, not a sorted
-                                  // window -- and is linear where a full sort is not.
+                                  // nth_element is linear, and only the middle value is wanted
                                   const size_t mid = window.size() / 2;
                                   std::nth_element(window.begin(), window.begin() + long(mid), window.end());
                                   out(x, y) = window[mid];
@@ -575,7 +551,7 @@ Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replace
                                       continue;
                                   }
 
-                                  // The eight around it, skipping any that are gremlins themselves.
+                                  // the eight around it, skipping any that are gremlins themselves
                                   std::array<float, 8> ring;
                                   int                  n = 0;
                                   for (int dy = -1; dy <= 1; ++dy)
@@ -590,7 +566,7 @@ Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replace
 
                                   if (n == 0)
                                   {
-                                      // In the middle of a run of them there is nothing to agree with.
+                                      // in the middle of a run of them there is nothing to agree with
                                       out(x, y) = replacement;
                                       continue;
                                   }

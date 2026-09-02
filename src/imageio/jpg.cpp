@@ -124,11 +124,10 @@ bool is_jpg_image(std::istream &is) noexcept
 namespace
 {
 
-//! Call \p visit(marker, payload, size, file_offset) for each APP or COM marker in a JPEG's header.
-/*!
-    libjpeg hands back saved markers without saying where in the file they were, and MPF offsets are
-    relative to the MPF marker's own payload, so finding it means walking the segments directly.
-    Stops at the start-of-scan, past which there are no more.
+/// Call \p visit(marker, payload, size, file_offset) for each APP or COM marker in a JPEG's header.
+/**
+    libjpeg hands back saved markers without saying where in the file they were, and MPF offsets count from
+    the MPF marker's own payload, so walk the segments directly. Stops at the start-of-scan.
 
     \param data  The whole JPEG file
     \param size  Its length in bytes
@@ -145,7 +144,7 @@ void for_each_jpeg_marker(const uint8_t *data, size_t size, F &&visit)
     {
         const uint8_t marker = data[pos + 1];
 
-        // Standalone markers carry no length field.
+        // standalone markers carry no length field
         if (marker == 0xD8 || marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7))
         {
             pos += 2;
@@ -164,7 +163,7 @@ void for_each_jpeg_marker(const uint8_t *data, size_t size, F &&visit)
     }
 }
 
-//! Payload of the first marker whose data starts with \p signature, and where in the file it began.
+/// Payload of the first marker whose data starts with \p signature, and where in the file it began.
 struct MarkerPayload
 {
     const uint8_t *data        = nullptr;
@@ -188,23 +187,22 @@ MarkerPayload find_marker(const uint8_t *file, size_t file_size, uint8_t app, co
     return found;
 }
 
-//! One image listed in a JPEG multi-picture (MPF) index.
+/// One image listed in a JPEG multi-picture (MPF) index.
 struct MPImage
 {
-    uint32_t type   = 0; //!< MP type code: 0x030000 primary, 0x050000 gain map, 0x01xxxx thumbnail
-    uint32_t offset = 0; //!< Offset in the file, already made absolute
-    uint32_t size   = 0; //!< Length in bytes
+    uint32_t type   = 0; ///< MP type code: 0x030000 primary, 0x050000 gain map, 0x01xxxx thumbnail
+    uint32_t offset = 0; ///< Offset in the file, already made absolute
+    uint32_t size   = 0; ///< Length in bytes
 
     bool is_primary() const { return type == 0x030000u; }
     bool is_thumbnail() const { return (type & 0xFF0000u) == 0x010000u; }
     bool is_gainmap() const { return type == 0x050000u; }
 };
 
-//! Read the multi-picture index out of a JPEG's MPF marker.
-/*!
-    MPF (CIPA DC-007) hangs a TIFF-structured index off an APP2 marker, listing every image packed
-    into the file. A gain map is one of those, either declared as such or left Undefined for the
-    reader to work out from the image's own metadata.
+/// Read the multi-picture index out of a JPEG's MPF marker.
+/**
+    MPF (CIPA DC-007) hangs a TIFF-structured index off an APP2 marker, listing every image packed into the
+    file. A gain map is one of those, either declared as such or left Undefined.
 
     \param file       The whole JPEG file
     \param file_size  Its length in bytes
@@ -218,7 +216,7 @@ vector<MPImage> parse_mpf_index(const uint8_t *file, size_t file_size)
     if (!mpf || mpf.size < 8)
         return {};
 
-    // Offsets inside the index count from the start of this TIFF header, not from the file.
+    // offsets inside the index count from the start of this TIFF header, not from the file
     const uint8_t *tiff      = mpf.data;
     const size_t   tiff_size = mpf.size;
     const size_t   tiff_base = mpf.file_offset;
@@ -270,8 +268,8 @@ vector<MPImage> parse_mpf_index(const uint8_t *file, size_t file_size)
         img.size   = read_as<uint32_t>(e + 4, endian);
         img.offset = read_as<uint32_t>(e + 8, endian);
 
-        // The first image's offset is stored as zero and means the start of the file; every other
-        // one counts from the MPF TIFF header.
+        // the first image's offset is stored as zero and means the start of the file; the rest count
+        // from the MPF TIFF header
         if (img.offset != 0)
             img.offset += (uint32_t)tiff_base;
 
@@ -287,16 +285,16 @@ vector<MPImage> parse_mpf_index(const uint8_t *file, size_t file_size)
     return images;
 }
 
-//! Gain-map metadata carried by one image inside an MPF file, in whichever form it uses.
+/// Gain-map metadata carried by one image inside an MPF file, in whichever form it uses.
 struct SecondaryGainmap
 {
-    std::optional<IsoGainmapParams> iso;           //!< ISO 21496-1, from an APP2 block or hdrgm XMP
-    bool                            apple = false; //!< Apple's vendor format, from its XMP aux type
+    std::optional<IsoGainmapParams> iso;           ///< ISO 21496-1, from an APP2 block or hdrgm XMP
+    bool                            apple = false; ///< Apple's vendor format, from its XMP aux type
 
     explicit operator bool() const { return iso.has_value() || apple; }
 };
 
-//! Work out whether \p image is a gain map, and read whatever parameters say how to apply it.
+/// Work out whether \p image is a gain map, and read whatever parameters say how to apply it.
 SecondaryGainmap read_secondary_gainmap(const uint8_t *image, size_t size)
 {
     static constexpr char k_iso_sig[] = "urn:iso:std:iso:ts:21496:-1";
@@ -304,10 +302,10 @@ SecondaryGainmap read_secondary_gainmap(const uint8_t *image, size_t size)
 
     SecondaryGainmap out;
 
-    // The binary ISO block is the most direct statement, so it wins when both are present.
+    // the binary ISO block wins when both are present
     if (const auto iso = find_marker(image, size, 0xE2, k_iso_sig, sizeof(k_iso_sig)))
     {
-        // A block this short is the version-only marker the primary image carries, not parameters.
+        // a block this short is the version-only marker the primary image carries, not parameters
         if (iso.size > 4)
         {
             try
@@ -337,8 +335,7 @@ SecondaryGainmap read_secondary_gainmap(const uint8_t *image, size_t size)
             }
         }
 
-        // Apple marks its gain maps by auxiliary image type rather than with any parameters; the
-        // strength lives in the primary image's maker note instead.
+        // Apple marks its gain maps by auxiliary image type; the strength is in the primary's maker note
         out.apple = is_apple_gainmap_type(string_view{text, xmp.size});
     }
 
@@ -350,15 +347,12 @@ SecondaryGainmap read_secondary_gainmap(const uint8_t *image, size_t size)
 static std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts,
                                             bool find_gainmap);
 
-//! Reconstruct \p image's HDR rendition from a gain map packed alongside it, if the file has one.
-/*!
-    A JPEG carries a gain map as a second image inside the same file, indexed by an MPF marker. Which
-    kind it is depends on who wrote it: Android and Adobe describe theirs with ISO 21496-1 or the
-    equivalent `hdrgm:` XMP on the map itself, while Apple marks the map by auxiliary image type and
-    puts the strength in the *primary* image's maker note.
-
-    Well-formed UltraHDR files are claimed by the libultrahdr loader before they reach here; this is
-    the path for everything else that packs a map the same way.
+/// Reconstruct \p image's HDR rendition from a gain map packed alongside it, if the file has one.
+/**
+    A JPEG carries a gain map as a second image inside the same file, indexed by an MPF marker. Android and
+    Adobe describe theirs with ISO 21496-1 or the equivalent `hdrgm:` XMP on the map itself; Apple marks the
+    map by auxiliary image type and puts the strength in the primary image's maker note. Well-formed
+    UltraHDR files are claimed by the libultrahdr loader before they reach here.
 
     \param is     The file, which gets re-read to slice the second image out of it
     \param image  Base image, already linearized. Modified in place
@@ -390,8 +384,8 @@ static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOpt
 
         const uint8_t *bytes = file.data() + mp.offset;
 
-        // A map may declare itself in the index, or leave the type Undefined and say so in its own
-        // metadata. Google and Apple both do the latter.
+        // a map may declare itself in the index, or leave the type Undefined and say so in its own
+        // metadata, as Google and Apple both do
         const auto found = read_secondary_gainmap(bytes, mp.size);
         if (!mp.is_gainmap() && !found)
             continue;
@@ -407,8 +401,7 @@ static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOpt
         spdlog::info("Found {} gain map as MPF image {} ({} bytes).", found.iso ? "a standardized" : "an Apple", i,
                      mp.size);
 
-        // Decode the map as stored: its samples are coefficients, so the color management that would
-        // be right for a picture would corrupt them.
+        // decode the map as stored: its samples are coefficients, so color management would corrupt them
         ImageLoadOptions map_opts;
         map_opts.override_profile = true;
         map_opts.tf_override      = TransferFunction::Linear;
@@ -444,10 +437,10 @@ static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOpt
     }
 }
 
-//! Body of load_jpg_image(), with a switch for the one caller that must not recurse.
-/*!
-    \param find_gainmap  Whether to look for a gain map packed alongside this image. False when this
-                        *is* the gain map: a malformed file could otherwise nest them without end.
+/// Body of load_jpg_image(), with a switch for the one caller that must not recurse.
+/**
+    \param find_gainmap  Whether to look for a gain map packed alongside this image. False when this is
+                        the gain map, since a malformed file could otherwise nest them without end.
 */
 static std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts,
                                             bool find_gainmap)
@@ -724,7 +717,7 @@ static std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view f
             image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
                                                      [](float v) { return v; });
 
-        // After the pixels and the EXIF above, since an Apple gain map is sized by the maker note.
+        // after the pixels and the EXIF above, since an Apple gain map is parameterized by the maker note
         if (find_gainmap)
             apply_jpg_gainmap(is, *image, opts);
 
@@ -753,8 +746,8 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
     if (!pixels || w <= 0 || h <= 0)
         throw runtime_error("JPEG: empty image or invalid image dimensions");
 
-    // JPEG stores one or three components, so repack anything else: drop the alpha a group carries,
-    // and pad a two-channel U,V pair out to RGB with a zero third channel, as the viewport shows it.
+    // JPEG stores one or three components, so drop a group's alpha and pad a two-channel U,V pair out to
+    // RGB with a zero third channel, as the viewport shows it
     const int n_out = group_has_alpha(img.groups[img.selected_group].type) ? n - 1 : (n == 2 ? 3 : n);
     if (n_out != n)
     {
@@ -771,7 +764,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
     jpeg_compress_struct cinfo;
     jpeg_error_mgr       jerr;
     cinfo.err = jpeg_std_error(&jerr);
-    // libjpeg's default error_exit calls exit(); throw instead, as the loader above does.
+    // libjpeg's default error_exit calls exit(); throw instead, as the loader above does
     jerr.error_exit = [](j_common_ptr cinfo)
     {
         char buffer[JMSG_LENGTH_MAX];
@@ -818,8 +811,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
     cinfo.image_width      = w;
     cinfo.image_height     = h;
     cinfo.input_components = n;
-    // Chosen from the channel count actually being written, not from the image's total channel count:
-    // the group selected for export can be narrower than the image it came from.
+    // from the channel count being written, since the exported group can be narrower than the image
     cinfo.in_color_space = (n == 1) ? JCS_GRAYSCALE : JCS_RGB;
     jpeg_set_defaults(&cinfo);
     jpeg_set_quality(&cinfo, quality, TRUE);

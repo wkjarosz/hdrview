@@ -12,9 +12,7 @@
 
 TEST_CASE("read_partial_as assembles a value narrower than its destination")
 {
-    // A DDS bitmasked pixel is 1 to 4 bytes wide, so the stored value is narrower than the uint32_t it
-    // is assembled into. read_as<uint32_t> reads four bytes whatever the width, which is the distinction
-    // between the two.
+    // a DDS bitmasked pixel is 1 to 4 bytes wide; read_as<uint32_t> would read four bytes whatever the width
     const unsigned char bytes[] = {0x78, 0x56, 0x34, 0x12};
 
     CHECK(read_partial_as<uint32_t>(bytes, 1, Endian::Little) == 0x78u);
@@ -27,23 +25,21 @@ TEST_CASE("read_partial_as assembles a value narrower than its destination")
     CHECK(read_partial_as<uint32_t>(bytes, 3, Endian::Big) == 0x785634u);
     CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Big) == 0x78563412u);
 
-    // At the full width the two are the same read, so they have to agree.
+    // at the full width the two are the same read
     CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Little) == read_as<uint32_t>(bytes, Endian::Little));
     CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Big) == read_as<uint32_t>(bytes, Endian::Big));
 
-    // Reading nothing yields nothing rather than touching the pointer.
+    // a zero width reads nothing and does not touch the pointer
     CHECK(read_partial_as<uint32_t>(bytes, 0, Endian::Little) == 0u);
 
-    // Assembling into a wider destination zero-extends rather than sign-extends.
+    // assembling into a wider destination zero-extends
     const unsigned char high[] = {0xff, 0xff};
     CHECK(read_partial_as<uint64_t>(high, 2, Endian::Little) == 0xffffu);
 }
 
 TEST_CASE("read_partial_as agrees with a direct assembly at every width and byte order")
 {
-    // The point of assembling arithmetically is that the result does not depend on the host's own
-    // endianness, so the reference here is spelled out per byte rather than by reading through the
-    // same helper.
+    // the reference is spelled out per byte, so it does not depend on the host's own endianness
     const unsigned char bytes[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef};
 
     for (size_t width = 0; width <= sizeof(bytes); ++width)
@@ -60,7 +56,7 @@ TEST_CASE("read_partial_as agrees with a direct assembly at every width and byte
         CHECK(read_partial_as<uint64_t>(bytes, width, Endian::Little) == little);
         CHECK(read_partial_as<uint64_t>(bytes, width, Endian::Big) == big);
 
-        // Reading from every offset the array allows, so no width is only ever tried at offset zero.
+        // every offset the array allows, so no width is only ever tried at offset zero
         for (size_t offset = 0; offset + width <= sizeof(bytes); ++offset)
         {
             CAPTURE(offset);
@@ -75,7 +71,7 @@ TEST_CASE("read_partial_as agrees with a direct assembly at every width and byte
         }
     }
 
-    // A single byte reads the same either way, whatever its value -- the one width with no byte order.
+    // a single byte is the one width with no byte order
     for (int v = 0; v <= 0xff; ++v)
     {
         const unsigned char one = (unsigned char)v;
@@ -86,8 +82,7 @@ TEST_CASE("read_partial_as agrees with a direct assembly at every width and byte
 
 TEST_CASE("read_partial_as at full width matches read_as for every type it supports")
 {
-    // At sizeof(T) the two are the same read, so they have to agree -- for both byte orders and for
-    // each width read_as handles.
+    // at sizeof(T) the two are the same read, for both byte orders and every width read_as handles
     const unsigned char bytes[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef};
 
     for (auto e : {Endian::Little, Endian::Big})
@@ -106,6 +101,6 @@ TEST_CASE("swap_bytes is its own inverse for every supported width")
     for (uint32_t v : {0u, 1u, 0x12345678u, 0xffffffffu}) CHECK(swap_bytes(swap_bytes(v)) == v);
     for (uint64_t v : {0ull, 1ull, 0x0123456789abcdefull, ~0ull}) CHECK(swap_bytes(swap_bytes(v)) == v);
 
-    // A one-byte value has nothing to swap.
+    // a one-byte value has nothing to swap
     for (int v = 0; v <= 0xff; ++v) CHECK(swap_bytes((uint8_t)v) == (uint8_t)v);
 }

@@ -18,14 +18,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # A newer commit on the same branch makes an older run pointless, and it goes on holding a runner for
-  # the twenty-odd minutes the matrix takes. Grouped by head branch, so a pull_request run and any push
-  # run for that branch share a group -- ref_name rather than ref, because a push reports the fully
-  # qualified refs/heads/<name>, which never matches the bare name a pull_request puts in head_ref.
-  # master is exempt: every commit landing there is worth building. On master the group is per-commit,
-  # so nothing there ever queues behind or cancels anything else: GitHub keeps only one *pending* run
-  # per group even when cancel-in-progress is false, so a second push would otherwise cancel the first
-  # one's queued run before it started.
+  # Cancel superseded runs on a branch: head_ref for pull requests, ref_name for pushes, since a push
+  # reports refs/heads/<name> where a pull_request puts the bare name in head_ref. master is grouped per
+  # commit instead, so every commit landing there builds.
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}${{ github.ref == 'refs/heads/master' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
@@ -38,16 +33,13 @@ jobs:
       matrix:
         buildtype: [Release, Debug]
         config:
-          # Only this preset builds and runs hdrview_tests (Release only, see the Configure CMake and Run unit
-          # tests steps below) - windows-msvc/windows-ninja have no CPM_USE_LOCAL_PACKAGES option, so they always
-          # fetch OpenEXR/PNG from source via CPM, which is what the vendored-test-image-backed tests in
-          # tests/test_exr_io.cpp and tests/test_png_io.cpp conditionally compile against. Running the same suite
-          # on both Windows presets would be redundant.
+          # The one preset that builds and runs hdrview_tests (Release only). windows-msvc/windows-ninja have
+          # no CPM_USE_LOCAL_PACKAGES option, so they always fetch OpenEXR/PNG from source, which is what the
+          # vendored-test-image tests in tests/test_exr_io.cpp and tests/test_png_io.cpp compile against.
           - { name: "Windows MSVC", os: windows-latest, preset: "windows-msvc", run_tests: true }
           - { name: "Windows Ninja", os: windows-latest, preset: "windows-ninja" }
-          # Native ARM64 build on GitHub's hosted windows-11-arm runner (see issue #166). HEIC/AVCI are
-          # disabled to match the x64 release build (build_windows in release.yml) until libheif's
-          # AOM/dav1d dependencies are confirmed to build cleanly for Windows ARM64.
+          # Native ARM64 build on GitHub's hosted windows-11-arm runner (see issue #166). HEIC/AVCI are off to
+          # match the x64 release build until libheif's AOM/dav1d dependencies build cleanly for Windows ARM64.
           - {
               name: "Windows ARM64 MSVC",
               os: windows-11-arm,

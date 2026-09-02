@@ -152,8 +152,8 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
     auto demux_guard = ScopeGuard{[demux] { WebPDemuxDelete(demux); }};
 
     // Get canvas size (for animations, this may differ from first frame size)
-    const int      canvas_width  = (int)WebPDemuxGetI(demux, WEBP_FF_CANVAS_WIDTH);
-    const int      canvas_height = (int)WebPDemuxGetI(demux, WEBP_FF_CANVAS_HEIGHT);
+    const int canvas_width  = (int)WebPDemuxGetI(demux, WEBP_FF_CANVAS_WIDTH);
+    const int canvas_height = (int)WebPDemuxGetI(demux, WEBP_FF_CANVAS_HEIGHT);
     check_image_dimensions(canvas_width, canvas_height, "WebP");
 
     const uint32_t flags         = WebPDemuxGetI(demux, WEBP_FF_FORMAT_FLAGS);
@@ -290,8 +290,8 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
         int              frame_idx = 0;
         const ScopeGuard iter_guard{[&iter] { WebPDemuxReleaseIterator(&iter); }};
         do {
-            // Select whole frames by name here; load_image() applies the selector per channel afterwards,
-            // so a still image has no name to match against and must not be filtered out on that basis.
+            // select whole frames by name here; load_image() applies the selector per channel afterwards,
+            // and a still image has no name to match against
             string partname = has_animation ? fmt::format("frame {:04}", frame_idx) : "";
             if (has_animation && !filter.PassFilter(partname.c_str()))
             {
@@ -324,13 +324,13 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
 
             // If background is transparent and we're not compositing over previous frame,
             // we can use frame size as data window, otherwise have to form an image for the full canvas
-            const bool use_full_canvas  = !transparent_bg || !use_bg;
-            const int  img_width        = use_full_canvas ? canvas_width : frame_width;
-            const int  img_height       = use_full_canvas ? canvas_height : frame_height;
-            auto       frame_image      = make_shared<Image>(int2{img_width, img_height}, num_channels);
-            frame_image->filename       = filename;
-            frame_image->partname       = partname;
-            // WebP's spec makes alpha unassociated.
+            const bool use_full_canvas = !transparent_bg || !use_bg;
+            const int  img_width       = use_full_canvas ? canvas_width : frame_width;
+            const int  img_height      = use_full_canvas ? canvas_height : frame_height;
+            auto       frame_image     = make_shared<Image>(int2{img_width, img_height}, num_channels);
+            frame_image->filename      = filename;
+            frame_image->partname      = partname;
+            // WebP's spec makes alpha unassociated
             frame_image->set_alpha(has_alpha ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
                                    alpha_override_of(opts));
             frame_image->icc_data       = icc_data;
@@ -393,8 +393,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             // Apply color profile transformations to fragment
             int3 frame_size{frame_width, frame_height, num_channels};
 
-            // Inverting the transfer function does not commute with multiplication by alpha; see
-            // imageio/alpha.h.
+            // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
             unpremultiply_before_transfer(frame_pixels.data(), frame_size, frame_image->alpha_type);
 
             if (opts.override_profile)
@@ -516,8 +515,7 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
         &w, &h, &n, opts->gain,
         opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, true);
 
-    // libwebp encodes only YUV420(A) and its API takes only RGB/RGBA, so a narrower group is widened
-    // rather than refused: the file then holds what the viewport shows, at three times the samples.
+    // libwebp's API takes only RGB/RGBA, so widen a narrower group to what the viewport shows
     if (n < 3)
     {
         const bool gray = n == 1 || group_has_alpha(img.groups[img.selected_group].type);

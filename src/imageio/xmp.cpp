@@ -75,13 +75,10 @@ static std::string_view extract_XMP_content(const string &xmp_blob)
     return sv.substr(first, last - first + 1);
 }
 
-//! Stores `value` under `prefix`.`local`, without assuming what may already be at `prefix`.
-/*!
-    Both loops below group a prefixed name into a nested object. Nothing guarantees the prefix is free:
-    an unprefixed attribute of the same name may already have put a plain string there, and indexing into
-    that throws -- out of Image::finalize(), which parses XMP with nothing catching around the call, so a
-    packet HDRView disliked cost the whole image. Fall back to the flat "prefix:local" key, which collides
-    with nothing and keeps both values.
+/// Stores `value` under `prefix`.`local`, without assuming what may already be at `prefix`.
+/**
+    An unprefixed attribute of the same name may already have put a plain string there, and indexing into
+    that throws, so fall back to the flat "prefix:local" key, which collides with nothing.
 */
 static void assign_prefixed(json &result, const std::string &prefix, const std::string &local, json value)
 {
@@ -116,10 +113,8 @@ json parse_xml_element(const XMLElement *element, const std::string &parent_ns =
     {
         std::string attr_name  = attr->Name();
         std::string attr_value = attr->Value();
-        // Namespace declarations describe the document, not the image. add_xmlns_entries() collects them
-        // into their own table; storing them here as well duplicated that, and a default declaration
-        // (plain "xmlns", no colon) landed as a string under the same key that "xmlns:dc" then wanted to
-        // index into as an object.
+        // namespace declarations describe the document, not the image, and add_xmlns_entries() already
+        // collects them into their own table
         if (attr_name == "xmlns" || attr_name.rfind("xmlns:", 0) == 0)
         {
             attr = attr->Next();

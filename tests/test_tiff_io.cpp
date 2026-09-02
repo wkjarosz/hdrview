@@ -11,8 +11,8 @@
 #include "imageio/image_loader.h"
 #include "imageio/tiff.h"
 
-#include <initializer_list>
 #include <cstring>
+#include <initializer_list>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -36,9 +36,8 @@ const unsigned char k_rgba_tiff[] = {
 constexpr uint16_t k_extra_samples_tag = 338;
 constexpr float    k_half              = 128.f / 255.f;
 
-// Returns k_rgba_tiff with its EXTRASAMPLES tag rewritten, so the fixtures under test differ in
-// nothing but how the file describes its fourth sample. Walks the little-endian IFD rather than
-// hardcoding a byte offset.
+// k_rgba_tiff with its EXTRASAMPLES tag rewritten, so the fixtures differ in nothing but how the file
+// describes its fourth sample. Walks the little-endian IFD instead of hardcoding a byte offset.
 std::string tiff_with_extra_samples(uint16_t value)
 {
     std::string bytes(reinterpret_cast<const char *>(k_rgba_tiff), sizeof(k_rgba_tiff));
@@ -63,23 +62,21 @@ std::string tiff_with_extra_samples(uint16_t value)
     return bytes;
 }
 
-// The same fixture with pixel 1's color samples replaced. Associated alpha stores a*OETF(C), which can
-// never exceed alpha, so the unmodified fixture's opaque-white-under-half-coverage cannot describe a
-// genuinely associated file -- it is straight-alpha data, and reading it as associated says the straight
-// color was brighter than white.
+// The same fixture with pixel 1's color samples replaced. Associated alpha stores a*OETF(C), which can never
+// exceed alpha, so the unmodified fixture's opaque white under half coverage is straight-alpha data.
 std::string tiff_with_second_pixel_color(uint16_t extra_samples, unsigned char value)
 {
     std::string bytes = tiff_with_extra_samples(extra_samples);
-    // Pixel 1's RGB, immediately before its alpha at the end of the single strip.
+    // pixel 1's RGB, immediately before its alpha at the end of the single strip
     bytes[bytes.size() - 4] = char(value);
     bytes[bytes.size() - 3] = char(value);
     bytes[bytes.size() - 2] = char(value);
     return bytes;
 }
 
-// Reads the samples of an uncompressed, single-strip TIFF straight out of its strip, so a written file
-// can be checked against what other applications produce rather than against HDRView's own reader. A
-// save/load round trip cannot do that: writer and reader share a convention and agree either way.
+// Reads the samples of an uncompressed, single-strip TIFF out of its strip, so a written file can be checked
+// against what other applications produce. A save/load round trip cannot: writer and reader share a convention
+// and agree either way.
 std::vector<unsigned char> tiff_raw_samples(const std::string &bytes)
 {
     auto read_u16 = [&](size_t o) { return uint16_t(uint8_t(bytes[o]) | (uint8_t(bytes[o + 1]) << 8)); };
@@ -109,10 +106,9 @@ std::vector<unsigned char> tiff_raw_samples(const std::string &bytes)
     return {bytes.begin() + offset, bytes.begin() + offset + count};
 }
 
-// The fixture with nothing left saying what its fourth sample is, which is how most RGBA TIFFs in the wild
-// look. The entry is renumbered to a private tag rather than erased: removing it would shift every
-// out-of-line value in the file without shifting the offsets that point at them. EXTRASAMPLES is the
-// highest tag here, so the IFD stays sorted.
+// The fixture with nothing left saying what its fourth sample is, as most RGBA TIFFs in the wild look. The
+// entry is renumbered to a private tag, not erased: removing it would shift every out-of-line value without
+// shifting the offsets pointing at them. EXTRASAMPLES is the highest tag here, so the IFD stays sorted.
 std::string tiff_without_extra_samples()
 {
     std::string bytes = tiff_with_extra_samples(2);
@@ -163,15 +159,14 @@ TEST_CASE("TIFF with unassociated alpha is premultiplied exactly once")
     CHECK(img->alpha_type == AlphaType_Straight);
     CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
-    // Premultiplying twice would leave k_half*k_half here instead.
+    // premultiplying twice would leave k_half*k_half here
     CHECK(img->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.001));
     CHECK(img->channels[0](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 }
 
 TEST_CASE("TIFF tagged EXTRASAMPLE_UNSPECIFIED keeps its fourth sample as data")
 {
-    // EXTRASAMPLE_UNSPECIFIED == 0: the file states the extra sample is not alpha, so nothing is
-    // premultiplied and the color channels keep their stored values.
+    // EXTRASAMPLE_UNSPECIFIED == 0: the file states the extra sample is not alpha
     auto img = load_tiff(tiff_with_extra_samples(0));
 
     REQUIRE(img->channels.size() == 4);
@@ -180,7 +175,7 @@ TEST_CASE("TIFF tagged EXTRASAMPLE_UNSPECIFIED keeps its fourth sample as data")
     CHECK(img->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
     CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
-    // The extra sample stands on its own rather than joining an RGBA group that would composite it.
+    // the extra sample stands on its own, outside any RGBA group that would composite it
     REQUIRE(img->groups.size() == 2);
     CHECK(img->groups[0].type == ChannelGroup::RGB_Channels);
     CHECK(img->groups[1].type == ChannelGroup::Single_Channel);
@@ -188,30 +183,27 @@ TEST_CASE("TIFF tagged EXTRASAMPLE_UNSPECIFIED keeps its fourth sample as data")
 
 TEST_CASE("TIFF associated alpha is read as multiplied into the encoded samples")
 {
-    // EXTRASAMPLE_ASSOCALPHA == 1, with pixel 1 holding 128/255 under alpha 128/255: the encoded form
-    // of a fully bright color at half coverage, which is what every writer of associated alpha produces
-    // (Photoshop, OpenImageIO, ImageMagick, vips all store a*OETF(C)).
+    // EXTRASAMPLE_ASSOCALPHA == 1, with pixel 1 holding 128/255 under alpha 128/255: a fully bright color at
+    // half coverage, as Photoshop, OpenImageIO, ImageMagick and vips all store it (a*OETF(C))
     auto img = load_tiff(tiff_with_second_pixel_color(1, 0x80));
 
     REQUIRE(img->channels.size() == 4);
     CHECK(img->alpha_type == AlphaType_PremultipliedNonLinear);
     CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
-    // Dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back leaves
-    // HDRView's working form: linear 1.0 times alpha. Applying the transfer to the stored value instead
-    // would give EOTF(0.502) = 0.214, markedly darker.
+    // dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back gives
+    // linear 1.0 times alpha; the transfer applied to the stored value would give EOTF(0.502) = 0.214
     CHECK(img->channels[0](1, 0) == doctest::Approx(k_half).epsilon(0.005));
     CHECK(img->channels[0](1, 0) != doctest::Approx(0.214f).epsilon(0.01));
 
-    // The opaque pixel is unaffected by any of this, which is what makes it a control.
+    // the opaque pixel is the control, unaffected by any of this
     CHECK(img->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.001));
 }
 
 TEST_CASE("An alpha override replaces what the TIFF declared")
 {
-    // The file says associated; read it as straight instead, so finalize() multiplies rather than the
-    // loader dividing. This is the escape hatch for a file whose tag is wrong -- ImageMagick and vips
-    // both write premultiplied samples tagged unassociated.
+    // Read a file the tag says is associated as straight, so finalize() multiplies instead of the loader
+    // dividing. ImageMagick and vips both write premultiplied samples tagged unassociated.
     ImageLoadOptions opts;
     opts.override_alpha = true;
     opts.alpha_override = AlphaType_Straight;
@@ -221,14 +213,13 @@ TEST_CASE("An alpha override replaces what the TIFF declared")
     REQUIRE(images.size() == 1);
 
     CHECK(images[0]->alpha_type == AlphaType_Straight);
-    // Straight 128/255 linearizes to 0.216, which finalize() then multiplies by alpha.
+    // straight 128/255 linearizes to 0.216, which finalize() then multiplies by alpha
     CHECK(images[0]->channels[0](1, 0) == doctest::Approx(0.216f * k_half).epsilon(0.02));
 }
 
 TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
 {
-    // The reverse of EXTRASAMPLE_UNSPECIFIED: the file declares real alpha and the user says it is a
-    // mask. Nothing is multiplied by it and the channel stands on its own.
+    // the file declares real alpha and the user says it is a mask, so nothing is multiplied by it
     ImageLoadOptions opts;
     opts.override_alpha = true;
     opts.alpha_override = AlphaType_None;
@@ -246,7 +237,7 @@ TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
 
 TEST_CASE("A TIFF says where its alpha kind came from")
 {
-    // EXTRASAMPLES settles it, whichever value it carries -- including the one saying the sample is data.
+    // EXTRASAMPLES settles it, whichever value it carries, including the one saying the sample is data
     for (uint16_t tag : {uint16_t(0), uint16_t(1), uint16_t(2)})
     {
         CAPTURE(tag);
@@ -254,8 +245,7 @@ TEST_CASE("A TIFF says where its alpha kind came from")
         CHECK(img->alpha_source == AlphaSource_File);
     }
 
-    // With the tag gone, nothing in the file states a kind and straight is the loader's guess. This is
-    // the one case in this format where an override is answering a question rather than contradicting one.
+    // with the tag gone, nothing in the file states a kind and straight is the loader's guess
     auto guessed = load_tiff(tiff_without_extra_samples());
     CHECK(guessed->alpha_source == AlphaSource_Assumed);
     CHECK(guessed->alpha_type == AlphaType_Straight);
@@ -271,8 +261,8 @@ TEST_CASE("An override leaves what the file said intact")
     auto               images = load_image(in, "rgba.tif", opts);
     REQUIRE(images.size() == 1);
 
-    // What is used, what the file declared, and how it declared it -- all three still answerable, which
-    // is what lets the Info panel say the override is contradicting rather than filling a gap.
+    // what is used, what the file declared, and how it declared it all stay answerable, so the Info panel
+    // can say the override contradicts the file rather than fills a gap
     CHECK(images[0]->alpha_type == AlphaType_PremultipliedNonLinear);
     CHECK(images[0]->alpha_type_from_file == AlphaType_Straight);
     CHECK(images[0]->alpha_source == AlphaSource_File);
@@ -280,9 +270,8 @@ TEST_CASE("An override leaves what the file said intact")
 
 TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
 {
-    // The writer's half of the associated-alpha convention, checked on the bytes. HDRView holds
-    // premultiplied linear color, so a straight color of 1.0 under half coverage is stored linear as 0.5;
-    // the file has to hold alpha * OETF(1.0) = alpha, not OETF(0.5) = 0.735.
+    // HDRView holds premultiplied linear color, so a straight 1.0 under half coverage is linear 0.5 and the
+    // file has to hold alpha * OETF(1.0) = alpha, not OETF(0.5) = 0.735
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
     for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.5f; // premultiplied linear
     img->channels[3](0, 0) = 0.5f;
@@ -299,14 +288,13 @@ TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
     CHECK(int(alpha) == doctest::Approx(127).epsilon(0.02)); // 0.5 quantized over 8 bits
     // a*OETF(C) == 0.5 * 1.0
     CHECK(int(samples[0]) == doctest::Approx(127).epsilon(0.02));
-    // Not OETF(a*C) == 0.735, which is what leaving the premultiply in place across the transfer gives.
+    // not OETF(a*C) == 0.735, which leaving the premultiply in place across the transfer would give
     CHECK(int(samples[0]) != doctest::Approx(188).epsilon(0.02));
 
-    // The invariant that identifies the convention in a real file: a stored color can never exceed its
-    // alpha, since it is that alpha times an encoded value of at most one.
+    // a stored color can never exceed its alpha, being that alpha times an encoded value of at most one
     for (int c = 0; c < 3; ++c) CHECK(samples[c] <= alpha);
 
-    // And it reads back as what it started as.
+    // and it reads back as what it started as
     auto reloaded = load_tiff(out.str());
     CHECK(reloaded->alpha_type == AlphaType_PremultipliedNonLinear);
     CHECK(reloaded->channels[0](0, 0) == doctest::Approx(0.5f).epsilon(0.02));
@@ -316,9 +304,8 @@ TEST_CASE("TIFF save/load round-trips alpha without repeated premultiplication")
 {
     auto original = load_tiff(tiff_with_extra_samples(2));
 
-    // Saving to a std::ostringstream is the only path HDRView has -- draw_save_as_dialog() renders
-    // into one and then writes the buffer out. Float samples keep the comparison about alpha rather
-    // than about transfer-function encoding or 8-bit quantization.
+    // draw_save_as_dialog() renders into an ostringstream and writes the buffer out, so that is the only
+    // save path there is. Float samples keep the comparison about alpha, not quantization.
     std::ostringstream out(std::ios::binary);
     save_tiff_image(*original, out, "roundtrip.tif", /*gain*/ 1.f, TransferFunction::Linear,
                     /*compression*/ 0, /*data_type*/ 2);
@@ -339,12 +326,11 @@ constexpr uint16_t k_sampleformat_uint   = 1;
 constexpr uint16_t k_sampleformat_int    = 2;
 constexpr uint16_t k_sampleformat_ieeefp = 3;
 
-//! Builds a minimal single-strip grayscale TIFF: one IFD, uncompressed, one sample per pixel.
-/*!
-    `samples` holds raw sample words in the file's own bit width, written in `endian`'s byte order;
-    `bits` must be a whole number of bytes. Generating these rather than embedding byte blobs is what
-    makes the byte-order axis reachable at all -- a hand-built fixture is one endianness only, and
-    little-endian is the one where a host-order bug hides.
+/// Builds a minimal single-strip grayscale TIFF: one IFD, uncompressed, one sample per pixel.
+/**
+    `samples` holds raw sample words in the file's own bit width, written in `endian`'s byte order; `bits`
+    must be a whole number of bytes. Generated so the byte-order axis is reachable: a byte blob is one
+    endianness only, and little-endian is the one where a host-order bug hides.
 */
 std::string make_gray_tiff(Endian endian, uint16_t bits, uint16_t sample_format, const std::vector<uint64_t> &samples)
 {
@@ -368,12 +354,11 @@ std::string make_gray_tiff(Endian endian, uint16_t bits, uint16_t sample_format,
             out += {(char)((v >> 24) & 0xff), (char)((v >> 16) & 0xff), (char)((v >> 8) & 0xff), (char)(v & 0xff)};
     };
 
-    // 8-byte header + 2-byte entry count + ten 12-byte entries + 4-byte next-IFD pointer.
+    // 8-byte header + 2-byte entry count + ten 12-byte entries + 4-byte next-IFD pointer
     constexpr uint32_t k_num_entries  = 10;
     constexpr uint32_t k_strip_offset = 8 + 2 + k_num_entries * 12 + 4;
 
-    // A SHORT value occupies the first two bytes of its four-byte field in both byte orders; a LONG
-    // fills it.
+    // a SHORT value occupies the first two bytes of its four-byte field in both byte orders; a LONG fills it
     auto short_entry = [&](uint16_t tag, uint16_t value)
     {
         put_u16(tag);
@@ -431,10 +416,9 @@ const char *endian_name(Endian e) { return e == Endian::Little ? "little-endian"
 
 TEST_CASE("TIFF integer samples decode into the unit range at every supported width, sign and byte order")
 {
-    // One matrix rather than a fixture per case: the sample width, the signedness and the file's byte
-    // order are three independent axes through unpack_bits(), and a bug in any one of them (a sign bit
-    // read as a magnitude, a partial word assembled in host order) shows up as the same symptom -- a
-    // value outside [0,1] or out of order. GDAL's int16/int24/int32 and uint* samples are such files.
+    // Sample width, signedness and byte order are three independent axes through unpack_bits(), and a bug in
+    // any of them (a sign bit read as a magnitude, a partial word assembled in host order) shows up the same
+    // way: a value outside [0,1] or out of order. GDAL's int16/int24/int32 and uint* samples are such files.
     for (Endian endian : {Endian::Little, Endian::Big})
         for (uint16_t bits : {(uint16_t)8, (uint16_t)16, (uint16_t)24, (uint16_t)32})
             for (uint16_t format : {k_sampleformat_uint, k_sampleformat_int})
@@ -444,8 +428,8 @@ TEST_CASE("TIFF integer samples decode into the unit range at every supported wi
                 CAPTURE(bits);
                 CAPTURE(sign_name);
 
-                // Four well-separated samples in increasing true numeric order, so the check is on
-                // ordering and endpoints rather than on whatever curve the loader applies between them.
+                // four well-separated samples in increasing numeric order, so the check is on ordering and
+                // endpoints and not on whatever curve the loader applies between them
                 const uint64_t        one   = 1ull;
                 const uint64_t        range = bits >= 64 ? ~0ull : ((one << bits) - 1);
                 std::vector<uint64_t> samples;
@@ -479,12 +463,10 @@ TEST_CASE("TIFF integer samples decode into the unit range at every supported wi
 
 TEST_CASE("TIFF samples of a width the loader cannot represent are refused")
 {
-    // The refusal surfaces as no image rather than as an exception: load_image() catches per directory
-    // and skips it, so one bad directory of a multi-directory TIFF doesn't discard the rest.
-    //
-    // unpack_bits accumulates into a uint32_t, so an integer sample wider than that has nowhere to land;
-    // convert_to_float reads a float sample as half, float or double and has no meaning to give any other
-    // width. GDAL's int64.tif and float24.tif are such files.
+    // The refusal surfaces as no image, not an exception: load_image() catches per directory and skips it,
+    // so one bad directory of a multi-directory TIFF doesn't discard the rest. unpack_bits accumulates into a
+    // uint32_t and convert_to_float reads half, float or double, so wider samples have nowhere to land.
+    // GDAL's int64.tif and float24.tif are such files.
     for (Endian endian : {Endian::Little, Endian::Big})
     {
         CAPTURE(endian_name(endian));
@@ -512,8 +494,8 @@ TEST_CASE("TIFF samples of a width the loader cannot represent are refused")
 
 TEST_CASE("TIFF 32- and 64-bit floating point samples load")
 {
-    // The widths convert_to_float does have a meaning for, so the refusal above is about the width and
-    // not about SAMPLEFORMAT_IEEEFP itself.
+    // the widths convert_to_float does handle, so the refusal above is about the width and not about
+    // SAMPLEFORMAT_IEEEFP itself
     for (Endian endian : {Endian::Little, Endian::Big})
     {
         CAPTURE(endian_name(endian));
@@ -555,10 +537,9 @@ TEST_CASE("TIFF 32- and 64-bit floating point samples load")
 namespace
 {
 
-// A 4x4 8-bit RGB baseline TIFF carrying a TransferFunction tag (tag 301). TIFF sizes that curve at
-// 2^BitsPerSample entries -- 256 here -- so a reader that indexes it over the full 16-bit range runs
-// far off the end of it. The curve written is the identity, which makes a correct decode recover the
-// stored samples exactly.
+// A 4x4 8-bit RGB baseline TIFF carrying a TransferFunction tag (301). TIFF sizes that curve at
+// 2^BitsPerSample entries, 256 here, so a reader indexing it over the full 16-bit range runs off the end.
+// The curve written is the identity, so a correct decode recovers the stored samples.
 std::string tiff_with_transfer_function(std::array<uint8_t, 3> pixel_1_0)
 {
     std::string out;
@@ -645,10 +626,8 @@ TEST_CASE("An 8-bit TIFF's TransferFunction curve is indexed over its own length
 }
 TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples are in")
 {
-    // save_tiff_image() asks as_interleaved() not to convert to sRGB, so the samples it writes are in
-    // the image's own primaries -- and it wrote no ICC profile, no PrimaryChromaticities and no
-    // WhitePoint, leaving a file that reads back as sRGB. Of every writer HDRView has, TIFF was the
-    // only one that neither converted nor recorded.
+    // save_tiff_image() asks as_interleaved() not to convert to sRGB, so the samples it writes are in the
+    // image's own primaries and the file has to record them in WhitePoint and PrimaryChromaticities.
     const Chromaticities bt2020{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
 
     auto original            = load_tiff(tiff_with_extra_samples(2));
