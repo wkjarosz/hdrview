@@ -234,7 +234,10 @@ vec4 dither(vec4 color)
 
 float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
 {
-    return within_image ? texture(sampler2D(tex, smp), uv).r : 0.0;
+    // Sample unconditionally: a fetch reached only on some lanes has undefined implicit derivatives, and
+    // the mip level they select feeds the trilinear minification filter, which shows up at image edges.
+    float value = texture(sampler2D(tex, smp), uv).r;
+    return within_image ? value : 0.0;
 }
 
 void main()

@@ -1266,6 +1266,16 @@ spdlog::info("Saved image to '{}' in {} seconds.", filename, (timer.elapsed() / 
 catch (const std::exception &err) { throw std::runtime_error(fmt::format("HEIF error: {}", err.what())); }
 }
 
+// libaom accepts lossless coding only with chroma delta-q off, and the tuning metric libheif's aom plugin
+// picks by default for a still image ("auto", which becomes AOM_TUNE_IQ) turns delta-q on -- so the two
+// have to be set together. Under lossless coding the tuning metric has nothing to trade off, the output
+// being bit-exact either way, so pinning it costs nothing. Plugins with no "tune" parameter reject the call.
+static void set_heif_lossless(heif_encoder *enc, bool lossless)
+{
+    heif_encoder_set_lossless(enc, lossless);
+    (void)heif_encoder_set_parameter_string(enc, "tune", lossless ? "ssim" : "auto");
+}
+
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
                      bool lossless, bool use_alpha, HEIFCodec codec, TransferFunction tf)
 {
@@ -1283,7 +1293,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     params.tf        = tf;
     params.codec     = codec;
     params.encoder   = default_encoder_for(codec, use_alpha);
-    heif_encoder_set_lossless(s_encoders[params.encoder].get(), lossless);
+    set_heif_lossless(s_encoders[params.encoder].get(), lossless);
     heif_encoder_set_lossy_quality(s_encoders[params.encoder].get(), quality);
 
     save_heif_image(img, os, filename, &params);
@@ -1419,7 +1429,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
                 if (ImGui::PE::Checkbox("Lossless", &lossless, "Use lossless compression."))
                 {
                     s_opts.lossless = lossless;
-                    heif_encoder_set_lossless(enc, lossless);
+                    set_heif_lossless(enc, lossless);
                 }
                 ImGui::EndDisabled();
             }

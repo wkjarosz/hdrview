@@ -1312,7 +1312,23 @@ if(HDRVIEW_ENABLE_DAV1D AND HDRVIEW_ENABLE_AVIF AND NOT EMSCRIPTEN)
       set(HDRVIEW_DAV1D_FOUND TRUE)
     endif()
   endif()
-  if(NOT HDRVIEW_DAV1D_FOUND)
+  if(HDRVIEW_DAV1D_FOUND)
+    # libheif's dav1d plugin sets Dav1dSettings::n_threads, which arrived in dav1d 1.0.0 when it merged the
+    # separate frame- and tile-thread counts into one; against an older dav1d (Ubuntu 22.04 still ships
+    # 0.9.2) the plugin, and with it all of libheif, fails to compile. Probe the header for the member
+    # rather than compare versions, since the find_path fallback above locates a dav1d without learning
+    # which version it is.
+    include(CheckStructHasMember)
+    set(CMAKE_REQUIRED_INCLUDES ${HDRVIEW_DAV1D_INCLUDE_DIRS} ${HDRVIEW_DAV1D_INCLUDE_DIR})
+    check_struct_has_member("Dav1dSettings" n_threads "dav1d/dav1d.h" HDRVIEW_DAV1D_HAS_N_THREADS LANGUAGE C)
+    unset(CMAKE_REQUIRED_INCLUDES)
+    if(NOT HDRVIEW_DAV1D_HAS_N_THREADS)
+      message(STATUS "dav1d ${HDRVIEW_DAV1D_VERSION} is too old for libheif's dav1d plugin, which needs "
+                     "1.0.0 or newer; AVIF will be decoded with libaom."
+      )
+      set(HDRVIEW_ENABLE_DAV1D OFF)
+    endif()
+  else()
     message(STATUS "dav1d not found; AVIF will be decoded with libaom. Install dav1d's development "
                    "package for roughly twice the AVIF decoding speed."
     )
@@ -1327,7 +1343,7 @@ if(HDRVIEW_ENABLE_LIBHEIF)
     NAME Libheif
     # GITHUB_REPOSITORY strukturag/libheif
     VERSION 1.17.6 # set minimum version to the one in ubuntu 24.04
-    URL https://github.com/strukturag/libheif/archive/refs/tags/v1.20.2.zip
+    URL https://github.com/strukturag/libheif/archive/refs/tags/v1.23.3.zip
     # GIT_TAG 95428fdf22b2e0ec3ad4515c882fa0d6dd663f0a
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_TESTING OFF"
