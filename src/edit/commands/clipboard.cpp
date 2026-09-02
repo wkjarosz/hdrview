@@ -43,12 +43,8 @@ public:
     Info info() const override
     {
         Info i{{"Copy", "Copy selection"}, ICON_MY_COPY, ImGuiMod_Ctrl | ImGuiKey_C};
-        // Reading an image is not editing it, so this is offered for one whose pixels a renderer owns --
-        // taking a copy is in fact how a frame of one is kept.
-        i.needs_editable = false;
-        // One clipboard, so copying from every selected image would just be copying from the last of
-        // them. The only reason any command stays with the current image.
-        i.fans_out = false;
+        i.needs_editable = false; // copying a live image is fine
+        i.fans_out       = false; // one clipboard
         return i;
     }
 
@@ -67,7 +63,7 @@ public:
     Info info() const override
     {
         Info i{{"Cut", "Cut selection"}, ICON_MY_CUT, ImGuiMod_Ctrl | ImGuiKey_X};
-        // Cutting is a copy as much as it is an edit, and the copy is what cannot fan out; see Copy.
+        // the copy half cannot fan out; see Copy
         i.fans_out = false;
         return i;
     }
@@ -78,13 +74,11 @@ public:
         if (!img)
             return;
 
-        // Copied before it is cleared, and over exactly the rectangle that is about to be cleared, so the
-        // two cannot describe different regions.
+        // copied before it is cleared, over the same rectangle
         ctx.set_clipboard(img->duplicate(target_region(ctx)));
 
-        // Zero throughout, rather than keeping the color and clearing only the alpha: these samples are
-        // held premultiplied, where a color with no alpha is not invisible but additive, and what is left
-        // behind would glow.
+        // zero throughout: these samples are held premultiplied, where a color with no alpha is additive
+        // and not invisible
         ctx.modify_pixels("Cut", [](float, int2, int) { return 0.f; });
     }
 };
@@ -103,8 +97,7 @@ public:
         if (!clip || !img || clip->groups.empty())
             return;
 
-        // Landed at the top-left of what is being pasted into, and clipped to that rectangle, so pasting
-        // into a selection stays inside it.
+        // landed at the top-left of what is being pasted into, and clipped to it
         const int2 origin = target_region(ctx).min;
 
         const auto &group    = clip->groups[size_t(clip->selected_group)];
@@ -119,13 +112,12 @@ public:
                               if (q.x < 0 || q.y < 0 || q.x >= extent.x || q.y >= extent.y)
                                   return dst; // past the end of what was copied; leave what is there
 
-                              // Read as stored rather than through raw_pixel(), which would divide a straight-alpha
-                              // image's color back out and hand back something that is not what will be written.
+                              // read as stored, not through raw_pixel(), which would divide a straight-alpha
+                              // image's color back out
                               float4 src{0.f, 0.f, 0.f, 1.f};
                               for (int c = 0; c < n; ++c) src[c] = clip->channels[size_t(channels[c])](q);
 
-                              // Source-over on premultiplied values, which is the same expression for color and alpha
-                              // alike. A fully opaque source replaces; a transparent one changes nothing.
+                              // source-over on premultiplied values, the same expression for color and alpha
                               return src + dst * (1.f - src.w);
                           });
     }
@@ -192,19 +184,17 @@ public:
                 for (int y = 0; y < size.y; ++y)
                     for (int x = 0; x < size.x; ++x) out(x, y) = dst(region.min.x + x, region.min.y + y);
 
-                // Only the group's color channels have a counterpart to take gradients from. Alpha is the
-                // mask rather than something to solve for, and anything else the subject covers is not
-                // this clipboard's business.
+                // only the group's color channels have a counterpart to take gradients from; alpha is the
+                // mask
                 if (slot >= n || (n >= 4 && slot == 3))
                 {
-                    // Nothing to do, but the bar was promised this channel's share of the work.
+                    // nothing to do, but the bar was promised this channel's share
                     p.finish_share();
                     return out;
                 }
 
-                // The clipboard lands at the top-left of the rectangle being pasted into, which is the
-                // rectangle this filter was handed -- so the two share an origin and the solve is over
-                // whichever of them is smaller.
+                // the clipboard lands at the top-left of the rectangle this filter was handed, so the two
+                // share an origin and the solve covers whichever is smaller
                 const int2 solve{std::min(extent.x, size.x), std::min(extent.y, size.y)};
                 if (solve.x < 3 || solve.y < 3)
                     return out; // no interior to solve for
@@ -216,19 +206,15 @@ public:
                         background(x, y) = out(x, y);
                         source(x, y)     = clip->channels[size_t(ch[slot])](int2{x, y});
 
-                        // The clipboard's own alpha is the mask, which is what gives a copied selection
-                        // its shape -- and it is zeroed along the border, since that is what pins the
-                        // solve to the background. Without a boundary condition nothing holds it in place.
+                        // the clipboard's own alpha is the mask, zeroed along the border, which is what
+                        // pins the solve to the background
                         const bool border = x == 0 || y == 0 || x == solve.x - 1 || y == solve.y - 1;
                         mask(x, y)        = border ? 0.f : (n >= 4 ? clip->channels[size_t(ch[3])](int2{x, y}) : 1.f);
                     }
 
-                // Matching ratios rather than differences, which is what an HDR image wants where the two
-                // sides can be many stops apart. Through asinh rather than a logarithm: it is defined for
-                // every sample the image can hold, negative ones included, and is logarithmic only above
-                // its knee. A logarithm would have to be shifted up past the darkest sample first, which
-                // makes the transform depend on the content -- so the same patch blended into two
-                // backgrounds would come out differently.
+                // solve in asinh, so ratios are matched instead of differences where the two sides can be
+                // many stops apart. asinh, not log: it is defined for every sample the image can hold,
+                // negative ones included, so the transform does not depend on the content.
                 if (match_ratios)
                     for (int i = 0; i < background.num_elements(); ++i)
                     {
@@ -244,8 +230,7 @@ public:
                     for (int i = 0; i < solved.num_elements(); ++i)
                         solved(i) = float(axis_scale_inv(solved(i), AxisScale_Asinh));
 
-                // Everywhere the solve covered: outside the mask it returns the background it was given,
-                // so there is nothing to write around.
+                // outside the mask the solve returns the background it was given
                 for (int y = 0; y < solve.y; ++y)
                     for (int x = 0; x < solve.x; ++x) out(x, y) = solved(x, y);
 

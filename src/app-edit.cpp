@@ -27,19 +27,14 @@ namespace
 {
 
 //! HDRViewApp seen through the narrow opening edit commands are written against; see edit/command.h.
-/*!
-    Cheap enough to build on the stack wherever one is needed, which is what keeps the app from having to
-    hold one and keep it in step.
-
-    Every method here supplies the current image and the current subject, so a command names only what it
-    is doing -- which is the whole difference between the interface and the chokepoints behind it.
-*/
+//! Cheap enough to build on the stack wherever one is needed. Every method supplies the current image and
+//! subject, so a command names only what it is doing.
 struct AppEditContext final : EditContext
 {
     HDRViewApp *app;
 
-    //! The image this run of the command is against, which is the current one unless it is fanning out
-    //! over the selection; see HDRViewApp::apply_edit_command().
+    //! The image this run of the command is against: the current one unless it is fanning out over the
+    //! selection; see HDRViewApp::apply_edit_command().
     ImagePtr img;
 
     explicit AppEditContext(HDRViewApp *a) : app(a), img(a->target_image()) {}
@@ -104,8 +99,8 @@ ImagePtr HDRViewApp::target_image() { return m_target_image_override ? m_target_
 
 std::vector<int> HDRViewApp::target_groups(const ConstImagePtr &img) const
 {
-    // The override names a group of one image, and every image numbers its own groups -- so it says
-    // nothing about the others a fan-out reaches.
+    // the override names a group of one image, and every image numbers its own groups, so it says
+    // nothing about the others a fan-out reaches
     return target_groups(img, img == m_target_image_override ? m_target_group_override : -1);
 }
 
@@ -114,14 +109,13 @@ std::vector<int> HDRViewApp::target_groups(const ConstImagePtr &img, int pointed
     if (!img)
         return {};
 
-    // A group pointed at from the Images panel names itself alone -- unless it is one of the selected
-    // ones, in which case the right-click covers the selection, the same way a click inside a selection
-    // keeps it rather than replacing it.
+    // a group pointed at from the Images panel names itself alone, unless it is one of the selected
+    // ones, in which case the right-click covers the selection, the same way a click inside one does
     if (pointed_at >= 0 && !img->is_group_selected(pointed_at))
         return {pointed_at};
 
-    // The current target is always selected, so the fallback is for an image the panel has never had a
-    // say over -- one a command has just produced, or a test driving a command directly.
+    // the fallback is for an image the panel has never had a say over: one a command just produced, or
+    // a test driving a command directly
     std::vector<int> groups = img->selected_groups();
     if (groups.empty() && img->is_valid_group(img->active_group_index(Target_Primary)))
         groups.push_back(img->active_group_index(Target_Primary));
@@ -131,8 +125,8 @@ std::vector<int> HDRViewApp::target_groups(const ConstImagePtr &img, int pointed
 
 void HDRViewApp::with_target_group(int image_index, int group, const std::function<void()> &body)
 {
-    // Restored however `body` leaves things, since pointing at a group must not move the selection -- and
-    // an action that removes the group would otherwise leave the override naming one that is gone.
+    // restored however `body` leaves things: pointing at a group must not move the selection, and an
+    // action that removes the group would leave the override naming one that is gone
     auto      previous_image = m_target_image_override;
     const int previous_group = m_target_group_override;
 
@@ -150,9 +144,7 @@ void HDRViewApp::invoke_action_on_group(const string &action_name, int image_ind
 
 std::vector<ImagePtr> HDRViewApp::edit_command_images(const EditCommand &cmd)
 {
-    // A group pointed at from the Images panel names one group of one image, which need not be the
-    // current one -- every image's groups are listed. That image is what the command runs on, alone,
-    // unless the group is part of the selection, in which case the right-click covers the selection.
+    // a pointed-at group names one image, which need not be the current one; see target_groups()
     if (m_target_image_override)
     {
         if (!cmd.info().fans_out || !m_target_image_override->is_group_selected(m_target_group_override))
@@ -172,12 +164,8 @@ std::vector<ImagePtr> HDRViewApp::edit_command_images(const EditCommand &cmd)
 
 void HDRViewApp::apply_edit_command(EditCommand &cmd)
 {
-    // One context per image, and one call of apply() per image, so each lands as its own undo entry --
-    // there is no cross-image entry to reverse, and an image that refuses the edit does not take the
-    // others down with it.
-    //
-    // Each starts from the same selection: cropping clears it, having just made it the whole image, and
-    // every image after the first would otherwise find nothing to crop to.
+    // one context and one apply() per image, so each lands as its own undo entry. Each starts from the
+    // same selection, since cropping clears it and the images after the first would find nothing to crop.
     const Box2i roi = m_roi;
     for (const auto &img : edit_command_images(cmd))
     {
@@ -211,16 +199,14 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
     const auto     info = cmd.info();
     AppEditContext ctx{this};
 
-    // Before BeginModalDialog(), which consumes `open`: this is the frame the dialog was asked for, and
-    // the one where a command reads its defaults off the image.
+    // before BeginModalDialog(), which consumes `open`: this is the frame the dialog was asked for
     if (open)
         cmd.on_open(ctx);
 
     if (ImGui::BeginModalDialog(info.names.front().c_str(), open, ImGui::DialogPosition::Center))
     {
-        // A minimum width, established by an item of that width rather than by SetNextWindowSize(): these
-        // dialogs are AlwaysAutoResize, which sizes the window from its contents every frame and ignores a
-        // size set from outside. Content wider than this still widens the dialog.
+        // a minimum width, set by an item of that width: these dialogs are AlwaysAutoResize, which sizes
+        // the window from its contents and ignores a size set from outside
         ImGui::Dummy(ImVec2(info.width_em * HelloImGui::EmSize(), 0.f));
 
         cmd.draw(ctx);
@@ -228,13 +214,12 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
         if (info.draws_subject_selector)
             draw_edit_subject_selector();
 
-        // Applied on confirm rather than as the controls move: an edit per frame of a drag would fill the
-        // history with states nobody asked for, and each one would write every sample it covers.
+        // applied on confirm, not as the controls move: an edit per frame of a drag would fill the
+        // history and rewrite every sample it covers
         const auto result = ImGui::DialogButtons(info.confirm.c_str());
         if (result == ImGui::DialogResult::Confirm)
         {
-            // The dialog itself is drawn against the current image -- its defaults, its size, its
-            // preview -- but confirming applies across the selection.
+            // the dialog is drawn against the current image, but confirming applies across the selection
             apply_edit_command(cmd);
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
@@ -269,11 +254,11 @@ bool HDRViewApp::modify_image(const ImagePtr &img, const string &name, const fun
 
     spdlog::debug("Editing '{}': {}", img->filename, name);
 
-    // A statistics task reads these samples from a worker thread, so it has to be off them before the
-    // write -- and before the undo entry reads them to record what the edit is about to displace.
+    // a statistics task reads these samples from a worker thread, so it has to be off them before the
+    // write, and before the undo entry reads them
     for (auto &c : img->channels) c.cancel_stats();
 
-    // Built first: an entry that stores pixels has to see them as they were.
+    // built first: an entry that stores pixels has to see them as they were
     auto entry = make_undo(*img);
 
     op(*img);
@@ -292,8 +277,7 @@ bool HDRViewApp::modify_image_reversibly(const ImagePtr &img, const string &name
     return modify_image(img, name, forward,
                         [&name, forward, backward](const Image &) -> UndoPtr
                         {
-                            // Undoing runs the opposite operation and redoing runs the original, so
-                            // nothing has to be remembered but the two functions.
+                            // nothing to remember but the two functions
                             return std::make_unique<LambdaUndo>(name, backward, forward);
                         });
 }
@@ -319,8 +303,8 @@ bool HDRViewApp::modify_channels(const ImagePtr &img, const string &name, const 
             {
                 Channel &channel = image.channels[size_t(c)];
 
-                // The filter sees the whole channel but produces only this rectangle, reading past it
-                // just as far as its kernel reaches -- so a selection costs the selection, not the image.
+                // the filter sees the whole channel but produces only this rectangle, so a selection
+                // costs the selection and not the image
                 const Box2i    local    = Box2i{offset, offset + extent};
                 const Array2Df filtered = filter(channel, local);
 
@@ -349,8 +333,7 @@ static std::vector<int> subject_groups(const Image &img, const EditSubject &subj
 
 std::vector<int> subject_channels(const Image &img, const EditSubject &subject)
 {
-    // Every channel, rather than the union of every group's, so that a channel belonging to no group is
-    // still covered by "all channels".
+    // every channel, not the union of every group's, so one belonging to no group is still covered
     if (subject.scope == EditSubject::Scope_AllChannels)
     {
         std::vector<int> channels(img.channels.size());
@@ -379,7 +362,7 @@ std::pair<std::vector<int>, std::vector<int>> subject_color_groups(const Image &
                                 }),
                  groups.end());
 
-    // Every channel of every covered group, which is the set an undo entry has to hold.
+    // every channel of every covered group, which is the set an undo entry has to hold
     std::vector<int> channels;
     for (int g : groups)
     {
@@ -399,9 +382,7 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
     auto [groups, channels] = subject_color_groups(*img, subject);
     if (groups.empty())
     {
-        // "Apply to" can name a set of groups holding no color at all -- an ungrouped image, two depth
-        // passes -- and a color operation then has nothing to do. Said out loud, because the alternative
-        // is a menu item that appears to work and does nothing.
+        // e.g. an ungrouped image or a depth pass: nothing here is color
         spdlog::warn("'{}' covers no color channel group of '{}'.", name, img->file_and_partname());
         return false;
     }
@@ -424,8 +405,7 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
                 const auto &group = image.groups[size_t(g)];
                 const int   n     = group.num_channels;
 
-                // Read, transform, and write as a set: the whole point is that the op sees the components
-                // together, so all of them are staged before any is written back.
+                // the op sees the components together, so all of them are staged before any is written
                 std::array<Array2Df, 4> staging;
                 for (int c = 0; c < n; ++c) staging[size_t(c)] = Array2Df{extent};
 
@@ -436,8 +416,8 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
                                       for (int y = y0; y < y1; ++y)
                                           for (int x = 0; x < extent.x; ++x)
                                           {
-                                              // Opaque where the group has no alpha, so an op may read the fourth
-                                              // component without asking which kind of group it was handed.
+                                              // opaque where the group has no alpha, so an op may read the
+                                              // fourth component whatever kind of group it was handed
                                               float4 c{0.f, 0.f, 0.f, 1.f};
                                               for (int k = 0; k < n; ++k)
                                                   c[k] = image.channels[size_t(group.channels[k])](offset.x + x,
@@ -463,7 +443,7 @@ bool HDRViewApp::modify_colors(const ImagePtr &img, const string &name, const Ed
             if (!retag)
                 return pixels;
 
-            // The samples and what they mean changed together, so they are taken back together.
+            // the samples and what they mean changed together, so they are taken back together
             std::vector<UndoPtr> both;
             both.push_back(std::move(pixels));
             both.push_back(std::make_unique<ColorMetadataUndo>(image, name));
@@ -503,22 +483,21 @@ bool HDRViewApp::modify_neighborhood(const ImagePtr &img, const string &name, co
                 const auto &group = image.groups[size_t(g)];
                 const int   n     = group.num_channels;
 
-                // The whole group is staged before any of it is written, so the reader below always sees
-                // the image as it was: an op reading its neighbors must not find one it has replaced.
+                // the whole group is staged before any of it is written, so an op reading its neighbors
+                // never finds one this pass has already replaced
                 std::array<Array2Df, 4> staging;
                 for (int c = 0; c < n; ++c) staging[size_t(c)] = Array2Df{extent};
 
-                // Reads anywhere in the *channel*, not merely the selection: the samples just outside a
-                // selection are real ones and belong in the answer, and only past the image itself does
-                // the border mode decide what is there.
+                // reads anywhere in the channel, not merely the selection; only past the image itself
+                // does the border mode decide what is there
                 auto read = [&image, &group, n, border_x, border_y](int2 p)
                 {
                     const Channel &first = image.channels[size_t(group.channels[0])];
                     const int      x     = wrap_coord(p.x - image.data_window.min.x, first.size().x, border_x);
                     const int      y     = wrap_coord(p.y - image.data_window.min.y, first.size().y, border_y);
 
-                    // Opaque where the group has no alpha, and where the border mode says there is nothing
-                    // the color is black -- but transparent black, since that is what "nothing" is.
+                    // opaque where the group has no alpha; where the border mode says there is nothing,
+                    // transparent black
                     if (x < 0 || y < 0)
                         return float4{0.f, 0.f, 0.f, n >= 4 ? 0.f : 1.f};
 
@@ -555,13 +534,11 @@ bool HDRViewApp::modify_structure(const ImagePtr &img, const string &name, const
     if (!applied)
         return false;
 
-    // The channel list changed wholesale, so the layers and groups built from its names have to be built
-    // again -- but only those. finalize() would premultiply a straight-alpha image a second time.
+    // the channel list changed wholesale, so the layers and groups built from its names are rebuilt
     img->rebuild_layers();
     update_visibility();
 
-    // The view was framing an image of a different size; leaving the zoom and pan alone would put the new
-    // one partly or entirely off screen.
+    // the view was framing an image of a different size
     fit_display_window();
 
     return true;
@@ -569,7 +546,7 @@ bool HDRViewApp::modify_structure(const ImagePtr &img, const string &name, const
 
 bool HDRViewApp::step_selected_histories(bool forward)
 {
-    // One image's own history, stepped one entry. False when it had nothing to step.
+    // one image's own history, stepped one entry; false when it had nothing to step
     auto step = [this, forward](const ImagePtr &img)
     {
         if (!can_edit(img) || (forward ? !img->history.has_redo() : !img->history.has_undo()))
@@ -584,7 +561,7 @@ bool HDRViewApp::step_selected_histories(bool forward)
         return true;
     };
 
-    // Every selected image steps, but the answer is the current image's; see undo().
+    // every selected image steps, but the answer is the current image's
     auto current = current_image();
     bool stepped = false;
     for (const auto &img : selected_images())
@@ -631,8 +608,7 @@ void HDRViewApp::close_all_images()
 
 bool HDRViewApp::scope_matters(const ConstImagePtr &img)
 {
-    // With one group, every scope names the same channels -- the group on screen is the selection is the
-    // whole image -- so there is nothing for the user to decide.
+    // with one group every scope names the same channels, so there is nothing to decide
     return img && img->groups.size() > 1;
 }
 
@@ -645,8 +621,7 @@ std::pair<std::vector<int>, Box2i> HDRViewApp::resolve_subject(const ConstImageP
     std::vector<int> channels = subject_channels(*img, subject);
 
     Box2i bounds = img->data_window;
-    // An empty selection means "no selection", not "select nothing" -- leaving the box on should not make
-    // edits silently stop working once it is cleared.
+    // an empty selection means "no selection", not "select nothing"
     if (subject.selection_only && m_roi.has_volume())
         bounds.intersect(m_roi);
 
@@ -674,9 +649,7 @@ bool HDRViewApp::modify_pixels(const ImagePtr &img, const string &name, const Ed
             {
                 Channel &channel = image.channels[size_t(channels[slot])];
 
-                // Computed into its own buffer and then handed to upload_tile(), which both writes the
-                // samples and pushes just this rectangle to the GPU -- the same path a renderer streams
-                // through, rather than a full re-upload for an edit that may cover a few pixels.
+                // upload_tile() writes the samples and pushes just this rectangle to the GPU
                 Array2Df  staging{extent};
                 const int block_size = std::max(1, 1024 * 1024 / std::max(1, extent.x));
                 stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
@@ -721,8 +694,7 @@ void HDRViewApp::apply_pending_discard()
 
 void HDRViewApp::draw_confirm_discard_dialog(bool &open)
 {
-    // One prompt for all three, since what is at stake is the same in each case: edits that exist only in
-    // memory. Which of them is being asked about is in m_pending_discard.
+    // one prompt for all three cases; which is being asked about is in m_pending_discard
     const char *message = m_pending_discard == PendingDiscard::CloseImage
                               ? "This image has edits that have not been saved. Closing it will discard them."
                               : "Some open images have edits that have not been saved. Continuing will discard them.";
@@ -739,15 +711,13 @@ void HDRViewApp::draw_confirm_discard_dialog(bool &open)
 
 void HDRViewApp::draw_edit_subject_selector()
 {
-    // The same setting the Edit menu shows, so a dialog and the menu can never disagree about what the
-    // next edit covers.
+    // the same setting the Edit menu shows, so the two cannot disagree about what the next edit covers
     auto       img     = current_image();
     const bool matters = scope_matters(img);
 
     ImGui::SeparatorText("Apply to");
 
-    // Always settable, even where it changes nothing today: the setting is remembered across images, and
-    // one that greys out on whichever image happens to be open cannot be set for the next one.
+    // always settable, since the setting is remembered across images
     for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
         if (ImGui::RadioButton(edit_scope_name(i), m_edit_subject.scope == i))
             m_edit_subject.scope = EditSubject::Scope(i);
@@ -784,14 +754,13 @@ void HDRViewApp::modify_channels_async(
     running->bounds   = bounds;
     running->results.resize(channels.size());
 
-    // The statistics tasks read the very samples the filter is about to, and would otherwise be running
-    // alongside it for its whole duration.
+    // the statistics tasks read the very samples the filter is about to
     for (auto &c : img->channels) c.cancel_stats();
 
     RunningFilter *raw = running.get();
     m_running_filter   = std::move(running);
 
-    // Filters every channel into raw->results. Runs on a worker where there is one; see below.
+    // filters every channel into raw->results; runs on a worker where there is one, see below
     auto do_the_work = [raw, filter]
     {
         const Box2i local{raw->bounds.min - raw->image->data_window.min,
@@ -800,9 +769,8 @@ void HDRViewApp::modify_channels_async(
         const float share = 1.f / float(raw->channels.size());
         for (size_t i = 0; i < raw->channels.size() && !raw->progress.canceled(); ++i)
         {
-            // A share of the same total rather than a copy: the filter's own reporting reaches the bar, and
-            // -- what a copy got wrong -- Cancel reaches the filter partway through a channel instead of
-            // only between channels.
+            // a share of the same total, not a copy, so Cancel reaches the filter partway through a
+            // channel and not only between channels
             raw->results[i] = filter(raw->image->channels[size_t(raw->channels[i])], local, int(i),
                                      AtomicProgress{raw->progress, share});
         }
@@ -814,26 +782,21 @@ void HDRViewApp::modify_channels_async(
     };
 
 #if defined(__EMSCRIPTEN__)
-    // The web build is built without pthreads, so there is no worker to run this on and nothing that could
-    // draw a progress bar while it ran. It happens inline instead: the page stops responding for the
-    // duration, as it would for any other synchronous work, and there is nothing to cancel.
-    //
-    // Making this cooperative would mean filters that can stop and resume rather than ones that return a
-    // finished array, which is a different shape of filter than any of these are.
+    // the web build has no pthreads, so this runs inline: the page stops responding for the duration and
+    // there is nothing to cancel
     do_the_work();
     drain_running_filter();
 #else
     dialog("Applying filter...").open = true;
 
-    // Reading the channels is safe for as long as this runs: the chokepoint refuses a second edit while a
-    // filter is in flight, and the image cannot be closed without cancelling it first.
-    // Kept rather than detached, so that closing the window can stop it and wait; see ~RunningFilter().
+    // reading the channels is safe for as long as this runs: a second edit is refused while a filter is
+    // in flight, and the image cannot be closed without canceling it. Kept rather than detached, so
+    // closing the window can stop it and wait; see ~RunningFilter().
     raw->worker = std::thread(
         [this, do_the_work]
         {
             do_the_work();
-            // Nothing on screen changes until the frame loop notices, and it may be idle waiting on window
-            // events rather than spinning.
+            // the frame loop may be idle waiting on window events rather than spinning
             wake_event_loop();
         });
 #endif
@@ -900,20 +863,20 @@ void HDRViewApp::drain_running_filter()
     auto running     = std::move(m_running_filter);
     m_running_filter = nullptr;
 
-    // A partial result is not a shorter filter, it is a wrong one, so an abandoned run changes nothing.
+    // a partial result is a wrong one, so an abandoned run changes nothing
     if (running->progress.canceled())
     {
         spdlog::debug("Filter '{}' was canceled.", running->name);
         m_running_filter_resizes = false;
-        // Cancel means the whole run, not just the image it happened to have reached.
+        // cancel means the whole run, not just the image it had reached
         m_filter_queue.clear();
         return;
     }
 
     if (m_running_filter_resizes)
     {
-        // The results are a different size than what they were computed from, so there is no rectangle to
-        // write back: the channels are replaced outright and the windows moved to match.
+        // the results are a different size than what they were computed from, so the channels are
+        // replaced outright and the windows moved to match
         const int2 size          = m_running_filter_size;
         m_running_filter_resizes = false;
         auto &results            = running->results;
@@ -981,21 +944,20 @@ void HDRViewApp::draw_filter_progress_dialog(bool &open)
             return;
         }
 
-        // As above: the window is sized from its contents, so a bar told to fill the available width has
-        // none to fill and the dialog shrinks to the Cancel button beneath it.
+        // as above: the window is sized from its contents, so a bar filling the available width has none
+        // to fill and the dialog shrinks to the Cancel button
         ImGui::Dummy(ImVec2(24.f * HelloImGui::EmSize(), 0.f));
 
         ImGui::TextUnformatted(m_running_filter->name.c_str());
         if (!m_filter_queue.empty())
         {
-            // The bar measures one image; an edit over a multi-selection runs them one after another.
+            // the bar measures one image; a multi-selection runs them one after another
             ImGui::SameLine();
             ImGui::TextDisabled("(%d more image%s)", int(m_filter_queue.size()), m_filter_queue.size() == 1 ? "" : "s");
         }
         ImGui::ProgressBar(m_running_filter->progress.progress(), ImVec2(-FLT_MIN, 0.f));
 
-        // Only asks the filter to stop; the work unwinds on its own thread and drain_running_filter()
-        // throws the partial result away when it does.
+        // only asks the filter to stop; drain_running_filter() throws the partial result away
         if (ImGui::Button("Cancel") || ImGui::Shortcut(ImGuiKey_Escape))
             m_running_filter->progress.cancel();
 

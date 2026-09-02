@@ -23,7 +23,7 @@
 namespace
 {
 
-//! The border-mode pair the resampling commands offer, which is the same control in both of them.
+//! The border-mode pair the resampling commands offer.
 void border_fields(int *border_x, int *border_y, bool *linked, const char *tooltip)
 {
     auto combo = [](const char *label, int *value)
@@ -54,8 +54,7 @@ public:
 
     void draw(EditContext &) override
     {
-        // Addressed by the enum rather than by literal, which is how "Box" came to select the fast
-        // Gaussian sitting between them.
+        // addressed by the enum, not by literal
         ImGui::RadioButton("Gaussian", &m_kind, Kind_Gaussian);
         ImGui::SameLine();
         ImGui::RadioButton("Fast Gaussian", &m_kind, Kind_FastGaussian);
@@ -69,8 +68,7 @@ public:
             if (!m_link_axes)
                 ImGui::SliderInt("Half width (vertical)", &m_half_width_y, 0, 64);
 
-            // Repeating widens the result here, which is the point: this is the box blur as an effect, and
-            // n passes of a stated width is the thing being asked for.
+            // here repeating widens the result, this being the box blur as an effect in its own right
             ImGui::SliderInt("Passes", &m_iterations, 1, 16);
             ImGui::Tooltip("Each pass widens the blur. For a Gaussian of a given width, use Fast Gaussian.");
         }
@@ -83,8 +81,8 @@ public:
 
             if (m_kind == Kind_FastGaussian)
             {
-                // Accuracy alone: the box width is solved for from sigma and the count, so the result stays
-                // the width asked for however many passes it takes to get there.
+                // accuracy alone: the box width is solved for from sigma and the count, so the result
+                // stays the width asked for
                 ImGui::SliderInt("Quality", &m_iterations, 1, 12);
                 ImGui::Tooltip("Box blur passes. More is closer to a true Gaussian and costs proportionally "
                                "more; the amount of blur does not change. Three is already hard to tell "
@@ -214,8 +212,7 @@ public:
                       "What is read where the shift reaches past the edge. Repeat is the wrapping shift: "
                       "what leaves one side comes back in on the other, so a tiling texture stays tiling.");
 
-        // Only asked for when it is consulted: a whole-sample offset reads samples exactly, whichever this
-        // says.
+        // only asked for when it is consulted: a whole-sample offset reads samples exactly
         ImGui::BeginDisabled(m_offset.x == std::floor(m_offset.x) && m_offset.y == std::floor(m_offset.y));
         if (ImGui::BeginCombo("Sampler", sampler_name(m_sampler)))
         {
@@ -270,8 +267,7 @@ public:
                     ImGui::TextFmt("{} NaN and {} infinite samples in this channel.", stats->summary.nan_pixels,
                                    stats->summary.inf_pixels);
 
-        // Two ways to fill a sample: take what the neighbors say, or write something chosen. The first is
-        // almost always what is wanted; the second is there for when a run of them has no good neighbor to ask.
+        // the second is for when a run of gremlins leaves no good neighbor to ask
         ImGui::RadioButton("Median of neighbors", &m_mode, Mode_Median);
         ImGui::Tooltip("Puts back something the surrounding samples agree with, so a firefly in a smooth "
                        "region leaves no trace.");
@@ -291,7 +287,7 @@ public:
                                 [](const Array2Df &src, const Box2i &r) { return zapped_gremlins(src, r); });
         else
         {
-            // Per channel, so the chosen color reaches the component it belongs to.
+            // per channel, so the chosen color reaches the component it belongs to
             const float4 v = m_value;
             ctx.modify_pixels("Zap gremlins",
                               [v](float s, int2, int slot) { return std::isfinite(s) ? s : v[slot % 4]; });
@@ -348,9 +344,8 @@ public:
         if (!img)
             return;
 
-        // Slopes in the image's own coordinates, which is why the size enters: height is measured per unit
-        // of the whole image rather than per sample, so the same bump map gives the same normals whatever
-        // resolution it is stored at.
+        // slopes in the image's own coordinates, so height is per unit of the whole image and the same
+        // bump map gives the same normals whatever resolution it is stored at
         const float2 size{float(img->size().x), float(img->size().y)};
         const float  s      = m_scale;
         const float  y_sign = m_flip_y ? -1.f : 1.f;
@@ -365,17 +360,15 @@ public:
                     return (c.x + c.y + c.z) / 3.f;
                 };
 
-                // Forward differences: one sample along each axis is the finest slope the samples can
-                // express.
+                // forward differences: the finest slope the samples can express
                 const float h00 = height(p);
                 const float dx  = height(p + int2{1, 0}) - h00;
                 const float dy  = height(p + int2{0, 1}) - h00;
 
-                // The surface z = h(x,y) has normal (-dh/dx, -dh/dy, 1); the sign is folded into the scale
-                // so that a slope rising to the right leans the normal to the right.
+                // the surface z = h(x,y) has normal (-dh/dx, -dh/dy, 1), the sign folded into the scale
                 float3 n = la::normalize(float3{s * dx * size.x, y_sign * s * dy * size.y, 1.f});
 
-                // Into the [0,1] range a normal map is stored in, where flat is (0.5, 0.5, 1).
+                // into the [0,1] range a normal map is stored in, where flat is (0.5, 0.5, 1)
                 n = n * 0.5f + 0.5f;
                 return float4{n, 1.f};
             },

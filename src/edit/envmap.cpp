@@ -46,8 +46,7 @@ float3 mirror_ball_to_xyz(float2 uv)
     // with center of image being (0,0)
     const float2 xy = 2.f * uv - float2{1.f};
 
-    // sin(phi) varies linearly with the radius from center, which is what a photograph of a mirrored
-    // sphere records
+    // sin(phi) varies linearly with the radius from center
     const float phi   = 2.f * std::asin(std::clamp(la::length(xy), 0.f, 1.f));
     const float theta = std::atan2(xy.y, xy.x);
 
@@ -69,8 +68,7 @@ float3 lat_long_to_xyz(float2 uv)
 float3 cylindrical_to_xyz(float2 uv)
 {
     // theta varies linearly with U,
-    // and y=cosPhi varies linearly with V -- so every row covers the same solid angle, which lat-long
-    // does not
+    // and y=cosPhi varies linearly with V, so every row covers the same solid angle
     const float theta   = lerp(1.5f * k_pi, -k_half_pi, uv.x);
     const float cos_phi = lerp(1.f, -1.f, uv.y);
 
@@ -79,7 +77,7 @@ float3 cylindrical_to_xyz(float2 uv)
 }
 
 //! The cube face vector for \p uv before normalizing: one component is +-1 and the other two are the
-//! face coordinates. Its length is what the Jacobian needs, so the two share this.
+//! face coordinates. Its length is what the Jacobian needs.
 float3 cube_map_face_vector(float2 uv)
 {
     // This is assuming that the Cubemap is a vertical cross: the upright column of four down the middle
@@ -131,11 +129,9 @@ float3 cube_map_to_xyz(float2 uv) { return la::normalize(cube_map_face_vector(uv
 /*!
     The cube face vector for \p uv in the single-column layout, before normalizing.
 
-    Six faces stacked top to bottom in the order +X, -X, +Y, -Y, +Z, -Z, each turned the way OpenEXR
-    turns it -- so a file written as an OpenEXR cube map is read the right way up and the right way round.
-
-    OpenEXR also puts its outermost samples exactly on the face edges, where this puts them half a texel
-    inside as a GPU does; see CubeLevel. The layout is the same, the sample grid is offset by half a texel.
+    Six faces stacked top to bottom as +X, -X, +Y, -Y, +Z, -Z, each turned the way OpenEXR turns it.
+    OpenEXR puts its outermost samples exactly on the face edges, where this puts them half a texel inside
+    as a GPU does; see CubeLevel. Same layout, sample grid offset by half a texel.
 */
 float3 cube_column_face_vector(float2 uv)
 {
@@ -389,22 +385,10 @@ namespace
 {
 
 //! Whether \p mapping's u covers a full turn, so that one edge of the image continues at the other.
-/*!
-    True of the two that lay longitude out along u. A disc has no such edge -- what lies outside it is not
-    sphere at all -- and neither the equal-area square nor the cube cross joins up so simply.
-*/
 bool wraps_in_u(EnvMapping mapping) { return mapping == EnvMapping_LatLong || mapping == EnvMapping_Cylindrical; }
 
-//! One texel of \p a, addressed the way \p mapping's own topology says.
-/*!
-    Reading past the edge of an image is reading somewhere else on the sphere, and where that is depends
-    on the parameterization. Clamping is right only where the edge really is the end of the data.
-
-    For the two that wrap: a step past the left edge arrives at the right, and a step past a pole carries
-    on down the *far* side -- the row reflects and the longitude turns half way round, which is what the
-    sphere does there. Clamping instead extends the pole row outward, which smears whatever sits at the
-    top of the image along a band beneath it.
-*/
+//! Texel of \p a with out-of-range coordinates wrapped as the sphere does.
+//! Lat-long and cylindrical wrap in u; past a pole the row reflects and u shifts by half a turn. Others clamp.
 float texel(const Array2Df &a, int x, int y, EnvMapping mapping)
 {
     if (wraps_in_u(mapping))
@@ -461,7 +445,7 @@ float envmap_jacobian(EnvMapping mapping, float2 uv)
         return k_four_pi;
 
     case EnvMapping_EqualArea:
-        // What the mapping exists for.
+        // equal-area by construction
         return k_four_pi;
 
     case EnvMapping_MirrorBall:
@@ -523,9 +507,7 @@ float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv)
     case EnvMapping_Angular:
     case EnvMapping_MirrorBall:
     {
-        // Straight out from the middle onto the circle, which is the nearest point of a disc to anything
-        // outside it. Landing a hair inside keeps it on the sphere rather than exactly on the rim, where
-        // the mapping is at its most singular.
+        // straight out onto the circle, landing a hair inside it, where the mapping is less singular
         const float2 d = 2.f * uv - float2{1.f};
         const float  r = la::length(d);
         if (r <= 0.f)
@@ -535,8 +517,7 @@ float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv)
 
     case EnvMapping_CubeMap:
     {
-        // The cross is two arms: the upright column of four, and the row of three across its second cell.
-        // An empty corner is nearer one or the other, and snapping to it lands on that arm's edge.
+        // the cross is two arms: the column of four, and the row of three across its second cell
         const float2 to_column{std::clamp(uv.x, 1.f / 3.f, 2.f / 3.f), uv.y};
         const float2 to_row{uv.x, std::clamp(uv.y, 0.25f, 0.5f)};
 
@@ -550,12 +531,8 @@ float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv)
 namespace
 {
 
-/*!
-    A mip pyramid, each level half the size of the one before and averaged from it.
-
-    Built once per remap rather than per sample. Level 0 is the source itself, so the pyramid owns a copy
-    of it and every level can be addressed the same way.
-*/
+//! A mip pyramid, each level half the size of the one before and averaged from it. Level 0 is a copy of
+//! the source, so every level is addressed the same way.
 std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
 {
     std::vector<Array2Df> levels;
@@ -570,8 +547,7 @@ std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
         for (int y = 0; y < size.y; ++y)
             for (int x = 0; x < size.x; ++x)
             {
-                // The four the new sample sits between, so it lands halfway rather than on one of them.
-                // The guards matter on an odd dimension, where the last row or column has no partner.
+                // the guards matter on an odd dimension, where the last row or column has no partner
                 const int x0 = std::min(2 * x, prev.width() - 1), x1 = std::min(2 * x + 1, prev.width() - 1);
                 const int y0 = std::min(2 * y, prev.height() - 1), y1 = std::min(2 * y + 1, prev.height() - 1);
                 next(x, y) = 0.25f * (prev(x0, y0) + prev(x1, y0) + prev(x0, y1) + prev(x1, y1));
@@ -587,14 +563,7 @@ std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
 // A cube map's six faces, each in its own coordinates
 // -------------------------------------------------------------------------------------------------
 
-/*!
-    The six faces of the cube, in the order everything below indexes them.
-
-    A vertical cross packs these into one image, but filtering wants them apart. Two texels side by side
-    in the cross are neighboring directions only when they happen to share a face, four of its twelve
-    cells stand for nothing at all, and a mip pyramid built over the whole image averages all of that
-    together -- so by its third level a face is largely made of the empty cells beside it.
-*/
+//! The six faces of the cube, in the order everything below indexes them.
 enum CubeFace : int
 {
     Face_PosX = 0,
@@ -607,14 +576,8 @@ enum CubeFace : int
     Face_COUNT
 };
 
-/*!
-    Direction for \p st on \p face, in that face's own [0,1]^2; not normalized.
-
-    The same six faces xyz_to_cube_map() addresses, in each face's own coordinates rather than the
-    cross's. Linear in \p st and deliberately not clamped: an \p st outside [0,1]^2 names a direction
-    past that edge of the cube, which is how a face reaches into its neighbors without any of them
-    having to say who they are.
-*/
+//! Direction for \p st on \p face, in that face's own [0,1]^2; not normalized. Not clamped: an \p st
+//! outside [0,1]^2 names a direction past that edge of the cube, which is how a face reaches its neighbors.
 float3 cube_face_vector(int face, float2 st)
 {
     const float a = 2.f * st.x - 1.f, b = 2.f * st.y - 1.f;
@@ -640,13 +603,9 @@ int cube_face_of(float3 d)
     return d.z >= 0.f ? Face_PosZ : Face_NegZ;
 }
 
-/*!
-    Where \p d falls on \p face's plane, in that face's own [0,1]^2; the inverse of cube_face_vector().
-
-    \p face need not be the face \p d is really on. One off to the side lands outside [0,1]^2 rather
-    than being clamped into it, which is what lets a footprint reaching past an edge still be described
-    in a single face's coordinates.
-*/
+//! Where \p d falls on \p face's plane, in that face's own [0,1]^2; the inverse of cube_face_vector().
+//! \p face need not be the one \p d is really on: a direction off to the side lands outside [0,1]^2, so a
+//! footprint reaching past an edge is still described in one face's coordinates.
 float2 cube_face_st(int face, float3 d)
 {
     float axis;
@@ -660,9 +619,8 @@ float2 cube_face_st(int face, float3 d)
     default: axis = -d.z; break;
     }
 
-    // A direction at or behind this face's horizon has no place on its plane at all. The smallest
-    // positive divisor puts it far outside the face rather than at infinity, and whatever asked rejects
-    // it for being that far away.
+    // a direction at or behind this face's horizon has no place on its plane; the floor on the divisor
+    // puts it far outside the face rather than at infinity
     const float3 t = d / std::max(axis, 1e-6f);
 
     float a, b;
@@ -699,11 +657,9 @@ float2 cube_face_st(int face, float3 d)
 
 //! One mip level of a cube map: six faces, each ringed by a texel of whatever lies past its edges.
 /*!
-    A ring is needed because these faces are cell-centered, as a GPU's are: the outermost sample sits half
-    a texel *inside* the cube's edge, so two faces meeting there share an edge but no sample along it, and
-    interpolating out to it needs something from the other side. OpenEXR's cube maps take the opposite
-    convention, putting samples exactly on the edges so that neighbors hold a row in common -- which needs
-    no ring, at the cost of a grid that no longer halves cleanly into a pyramid.
+    These faces are cell-centered, as a GPU's are, so the outermost sample sits half a texel inside the
+    cube's edge and two faces meeting there share no sample; the ring is what interpolating out to the edge
+    reads. (OpenEXR instead puts samples on the edges, which needs no ring but does not halve cleanly.)
 */
 using CubeLevel = std::array<Array2Df, Face_COUNT>;
 
@@ -720,8 +676,8 @@ int face_size_for(EnvMapping mapping, int2 size)
                                                : std::max(1, std::min(size.x / 3, size.y / 4));
 }
 
-//! Bilinear read of \p face at \p st in face coordinates, over its interior alone.
-/*! What the ring is filled from, and so unable to look at it. */
+//! Bilinear read of \p face at \p st in face coordinates, over its interior alone: what the ring is
+//! filled from, and so unable to look at it.
 float sample_face_interior(const Array2Df &face, float2 st)
 {
     const int   n = face.width() - 2;
@@ -751,15 +707,8 @@ float sample_face(const Array2Df &face, float2 st)
            ty * ((1.f - tx) * at(x0, y0 + 1) + tx * at(x0 + 1, y0 + 1));
 }
 
-//! Fill every face's ring from whichever face the direction just past that edge belongs to.
-/*!
-    A face's parameterization is linear in its own plane and defined beyond its edges, so extrapolating
-    half a texel past one already names a direction on the next face over. Converting that direction
-    back says which face that is and where on it -- so no table of who borders whom is needed, and the
-    orientations fall out of the two parameterizations rather than being written down and gotten wrong.
-
-    Read from the interiors alone, so the order the faces are filled in cannot matter.
-*/
+//! Fill every face's ring from whichever face the direction just past that edge belongs to, so no table
+//! of who borders whom is needed. Reads from the interiors alone, so the fill order cannot matter.
 void fill_face_padding(CubeLevel &level)
 {
     const int n = face_size(level);
@@ -788,11 +737,8 @@ void fill_face_padding(CubeLevel &level)
     }
 }
 
-//! The six faces of the cube map in \p src, \p n texels a side.
-/*!
-    Addressed by direction rather than by where each face sits in the picture, so the arrangement enters
-    only through \p mapping's own projection -- a cross and a column are read by the same code.
-*/
+//! The six faces of the cube map in \p src, \p n texels a side. Addressed by direction, so the layout
+//! enters only through \p mapping's projection and a cross and a column are read by the same code.
 CubeLevel faces_from_source(const Array2Df &src, int n, EnvMapping mapping)
 {
     CubeLevel level;
@@ -805,8 +751,8 @@ CubeLevel faces_from_source(const Array2Df &src, int n, EnvMapping mapping)
             {
                 const float2 st{(float(i) + 0.5f) / float(n), (float(j) + 0.5f) / float(n)};
 
-                // Exactly one source texel whenever the faces divide the image evenly, since the two
-                // grids then have the same centers; any other shape is resampled onto this one instead.
+                // one source texel whenever the faces divide the image evenly, since the two grids then
+                // share centers; any other shape is resampled onto this one
                 level[size_t(f)](i + 1, j + 1) =
                     sample_bilinear(src, envmap_xyz_to_uv(mapping, cube_face_vector(f, st)), mapping);
             }
@@ -816,11 +762,8 @@ CubeLevel faces_from_source(const Array2Df &src, int n, EnvMapping mapping)
     return level;
 }
 
-//! \p prev at half its resolution, averaged 2x2 and ringed again.
-/*!
-    Built from the interiors alone and padded afresh rather than decimating the ring along with them: a
-    coarser level's reads want a ring of what its *own* neighbors hold.
-*/
+//! \p prev at half its resolution, averaged 2x2 over the interiors alone and ringed afresh, since a
+//! coarser level's reads want a ring of what its own neighbors hold.
 CubeLevel decimated(const CubeLevel &prev)
 {
     const int pn = face_size(prev);
@@ -834,7 +777,7 @@ CubeLevel decimated(const CubeLevel &prev)
         for (int j = 0; j < n; ++j)
             for (int i = 0; i < n; ++i)
             {
-                // The guards matter on an odd face size, where the last row or column has no partner.
+                // the guards matter on an odd face size, where the last row or column has no partner
                 const int i0 = std::min(2 * i, pn - 1) + 1, i1 = std::min(2 * i + 1, pn - 1) + 1;
                 const int j0 = std::min(2 * j, pn - 1) + 1, j1 = std::min(2 * j + 1, pn - 1) + 1;
 
@@ -850,27 +793,21 @@ CubeLevel decimated(const CubeLevel &prev)
 /*!
     Gather through the ellipse with axes \p d0 and \p d1, centered at \p uv, over a grid of \p res texels.
 
-    Every texel the ellipse encloses contributes, weighted by a Gaussian in the ellipse's own space, so
-    the filter takes the whole of the footprint's shape. The quadratic \f$A s^2 + B s t + C t^2\f$ is one
-    exactly on the ellipse's boundary, which makes the test for "inside" a comparison against one and the
-    weight a function of that same number.
+    Every texel the ellipse encloses contributes, weighted by a Gaussian in the ellipse's own space. The
+    quadratic \f$A s^2 + B s t + C t^2\f$ is one on the ellipse's boundary, so "inside" is a comparison
+    against one and the weight is a function of the same number. The `+ 1` on \f$A\f$ and \f$C\f$
+    convolves the ellipse with a one-texel reconstruction filter, without which magnification aliases.
 
-    The `+ 1` on \f$A\f$ and \f$C\f$ is the part that is easy to leave out and expensive to: it convolves
-    the ellipse with a reconstruction filter one texel across, so a footprint smaller than a texel widens
-    into one instead of collapsing onto a point sample. Without it, magnification aliases.
-
-    \p tap supplies one texel by integer coordinate, and is where the two source layouts differ: a whole
-    image reads through its mapping's wrap rules, a cube face through its own ring and, past that, by
-    direction. False when the ellipse was narrow enough to enclose no texel at all, which only a bilinear
-    read can answer.
+    \p tap supplies one texel by integer coordinate: a whole image reads through its mapping's wrap rules,
+    a cube face through its own ring and, past that, by direction. False when the ellipse enclosed no texel
+    at all, which only a bilinear read can answer.
 
     Follows PBRT's `MIPMap::EWA`.
 */
 template <typename Tap>
 bool ewa_gather(float2 uv, float2 d0, float2 d1, float2 res, Tap &&tap, float &result)
 {
-    // Continuous texel coordinates, with the axes in the same units, so the level's own resolution enters
-    // in one place and nowhere else.
+    // continuous texel coordinates, with the axes in the same units
     const float2 st = uv * res - 0.5f;
     const float2 a = d0 * res, b = d1 * res;
 
@@ -883,7 +820,7 @@ bool ewa_gather(float2 uv, float2 d0, float2 d1, float2 res, Tap &&tap, float &r
     B *= inv_f;
     C *= inv_f;
 
-    // The axis-aligned box that just contains the ellipse, which is where the scan runs.
+    // the axis-aligned box that just contains the ellipse, which is where the scan runs
     const float det     = std::max(1e-20f, 4.f * A * C - sqr(B));
     const float inv_det = 1.f / det;
     const float ext_s   = 2.f * inv_det * std::sqrt(std::max(0.f, det * C));
@@ -903,8 +840,8 @@ bool ewa_gather(float2 uv, float2 d0, float2 d1, float2 res, Tap &&tap, float &r
             if (r2 >= 1.f)
                 continue;
 
-            // Subtracting the value at the boundary lands the Gaussian on zero there rather than stepping
-            // off its tail, which would show up as a ring where the ellipse ends.
+            // subtracting the boundary value lands the Gaussian on zero there, so no ring appears at
+            // the ellipse's edge
             const float w = std::exp(-2.f * r2) - std::exp(-2.f);
 
             sum += w * tap(s, t);
@@ -931,15 +868,10 @@ struct EWAFootprint
 /*!
     Pick the levels for a footprint \p du by \p dv over a base level of \p base texels.
 
-    The level comes from the ellipse's *shorter* axis, so a texel of that level spans the narrow
-    direction and the gather itself covers the long one. That split is what a mip level alone cannot do:
-    a lat-long's pole is stretched hundreds of times more across than down, and a level chosen to cover
-    the wide direction erases the narrow one.
-
-    Walking a long axis costs a texel per step, so \p max_aniso is where that stops. Past it the
-    *shorter* axis is lengthened until the ratio is affordable -- widening the ellipse rather than
-    raising the level, since the level would blur both directions when only one of them cannot be
-    afforded.
+    The level comes from the ellipse's shorter axis, so a texel of that level spans the narrow direction
+    and the gather covers the long one; a level chosen for the wide direction would erase the narrow one.
+    Walking a long axis costs a texel per step, so past \p max_aniso the shorter axis is lengthened until
+    the ratio is affordable.
 
     Follows PBRT's `MIPMap::Filter`.
 */
@@ -947,9 +879,8 @@ EWAFootprint choose_ewa_levels(float2 du, float2 dv, float2 base, int num_levels
 {
     EWAFootprint fp;
 
-    // Longer axis first, measured in base-level texels: du and dv are the step from one destination pixel
-    // to the next, so their lengths are how far across the source a destination pixel reaches, and the
-    // level follows directly from that.
+    // longer axis first, measured in base-level texels: du and dv are the step from one destination
+    // pixel to the next, so their lengths are how far across the source that pixel reaches
     fp.d0 = du;
     fp.d1 = dv;
     if (la::length2(fp.d0 * base) < la::length2(fp.d1 * base))
@@ -974,13 +905,9 @@ EWAFootprint choose_ewa_levels(float2 du, float2 dv, float2 base, int num_levels
         return fp;
     }
 
-    // Blended across the two levels either side rather than snapped to one: a snapped level is up to a
-    // factor of two too sharp, which aliases in bands wherever the scale crosses a power of two.
-    // Clamped before the level is taken from it, not after. Clamping the level while taking the fraction
-    // from the unclamped one puts a whole level's worth of blend on a sample that is being magnified: at a
-    // lod of -0.01 the fraction is 0.99, and at +0.01 it is 0.01, so the two sides of the boundary between
-    // magnifying and minifying come out from opposite ends of the pyramid. In a remap that boundary is a
-    // curve across the image, and it showed up as a seam along it.
+    // blend across the two levels either side, since a snapped level aliases in bands wherever the scale
+    // crosses a power of two. Clamp the lod before splitting it into level and fraction, or a lod just
+    // below 0 blends toward level 1.
     const float lod = std::clamp(std::log2(shorter) + mip_bias, 0.f, float(num_levels - 1));
     fp.lo           = int(std::floor(lod));
     fp.hi           = std::min(fp.lo + 1, num_levels - 1);
@@ -989,14 +916,12 @@ EWAFootprint choose_ewa_levels(float2 du, float2 dv, float2 base, int num_levels
 }
 
 /*!
-    A source image prepared to be read as a sphere: by direction, rather than by image coordinate.
+    A source image prepared to be read by direction rather than by image coordinate.
 
-    Which matters because a cube map cannot be read the way the others are. Its cross is six charts in
-    one image: two texels either side of a face join are not neighboring directions, four of its cells
-    stand for no direction at all, and a pyramid built over the whole picture averages both of those into
-    the faces. So a cube map is taken apart into its six faces, each with its own pyramid and its own
-    ring of what lies past its edges, while every other mapping keeps the single image it already is and
-    the wrap rules texel() applies to it.
+    A cube map's layout is six charts in one image: texels either side of a face join are not neighboring
+    directions, some cells stand for no direction, and a pyramid over the whole picture averages both into
+    the faces. So a cube map is taken apart into six faces, each with its own pyramid and ring; every other
+    mapping keeps the single image it is, read through texel()'s wrap rules.
 */
 class EnvSource
 {
@@ -1022,12 +947,8 @@ public:
         return sample_bilinear(level(0), envmap_xyz_to_uv(m_mapping, d), m_mapping);
     }
 
-    /*!
-        Elliptically filtered over the footprint one destination pixel covers.
-
-        \p uv is that pixel's center in \p dst's parameterization, and \p delta_u and \p delta_v the step
-        from it to the next pixel along each axis.
-    */
+    //! Elliptically filtered over the footprint one destination pixel covers. \p uv is that pixel's
+    //! center in \p dst's parameterization, \p delta_u and \p delta_v the step to the next pixel.
     float ewa(EnvMapping dst, float2 uv, float2 delta_u, float2 delta_v, int max_aniso, float mip_bias) const
     {
         const float3 d = envmap_uv_to_xyz(dst, uv);
@@ -1035,12 +956,9 @@ public:
         if (!m_faces.empty())
             return ewa_on_face(dst, uv, d, delta_u, delta_v, max_aniso, mip_bias);
 
-        // The footprint is the step to a *neighboring destination pixel*, taken in source coordinates,
-        // which composes both mappings in one step -- no derivative of either is needed. Both neighbors
-        // are tried and the nearer kept: these mappings are discontinuous -- a lat-long's wrap, a disc's
-        // rim -- and a difference taken across one of those jumps is enormous and meaningless, which
-        // sends the level to the top of the pyramid and returns the average of the whole image. One side
-        // of a sample is always on the near side of any single seam.
+        // footprint = source-space step to the neighboring destination pixel, which composes both
+        // mappings at once. Use the smaller of the forward and backward differences so a seam (lat-long
+        // wrap, disc rim) on one side doesn't blow it up.
         const float2 c    = envmap_xyz_to_uv(m_mapping, d);
         auto         step = [&](float2 delta)
         {
@@ -1065,8 +983,7 @@ public:
 private:
     int num_levels() const { return std::max(1, int(m_levels.size())); }
 
-    //! Level \p i of the whole-image pyramid; the source itself when there is none, since it is level 0
-    //! and a point-sampling instance would otherwise hold a second copy of it for nothing.
+    //! Level \p i of the whole-image pyramid; the source itself when there is none, it being level 0.
     const Array2Df &level(int i) const { return m_levels.empty() ? m_src : m_levels[size_t(i)]; }
 
     float sample_face_at(int lvl, float3 d) const
@@ -1084,7 +1001,7 @@ private:
         if (ewa_gather(uv, d0, d1, float2{float(a.width()), float(a.height())}, tap, value))
             return value;
 
-        // An ellipse narrow enough to fall between texels encloses none of them; read the level instead.
+        // an ellipse narrow enough to fall between texels encloses none of them
         return sample_bilinear(a, uv, m_mapping);
     }
 
@@ -1093,14 +1010,9 @@ private:
         const Array2Df &f = m_faces[size_t(lvl)][size_t(face)];
         const int       n = f.width() - 2;
 
-        // A tap is a direction. The face's coordinates run on past its edges, so one landing outside
-        // still says where it is in space, and converting it finds which face that turns out to be --
-        // the ellipse living on the sphere rather than in any one image.
-        //
-        // The ring answers that same question for the first texel out, which is as far as anything but
-        // the widest ellipse reaches; and since the Gaussian is pinned to zero at the boundary, what
-        // lies beyond it is weighted at almost nothing. So the ring carries this in practice and the
-        // conversion is what keeps the rule true where it does not.
+        // the ring covers the first texel past an edge, which is as far as all but the widest ellipse
+        // reaches; beyond it the face coordinates still name a direction, so look up whichever face that
+        // direction lands on
         auto tap = [&f, n, face, lvl, this](int s, int t)
         {
             if (s >= -1 && s <= n && t >= -1 && t <= n)
@@ -1123,10 +1035,8 @@ private:
         const int    face = cube_face_of(d);
         const float2 st   = cube_face_st(face, d);
 
-        // The footprint in this face's own coordinates rather than the cross's, where a step across a
-        // face join is a jump to somewhere else in the image and says nothing about how far the direction
-        // moved. Both neighbors are tried and the nearer kept, as above: a destination mapping has seams
-        // of its own, and a neighbor past this face's horizon lands arbitrarily far outside it.
+        // the footprint in this face's own coordinates, since a step across a face join is a jump to
+        // somewhere else in the image. Smaller of the two differences, as above.
         auto step = [&](float2 delta)
         {
             const float2 fwd = cube_face_st(face, envmap_uv_to_xyz(dst, uv + delta)) - st;
@@ -1159,13 +1069,12 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 {
     Array2Df out{size};
 
-    // The same control means different things to the two samplers: how eccentric the ellipse may be before
-    // it is widened for EWA, samples per axis within the pixel for point sampling.
+    // supersample means max anisotropy to EWA and samples per axis to point sampling
     const int   ss  = std::max(1, supersample);
     const float inv = 1.f / float(ss * ss);
 
-    // Prepared once for the whole remap: the levels EWA reads, and, for a cube map, the six faces both
-    // samplers read instead of the cross.
+    // prepared once for the whole remap: the levels EWA reads, and, for a cube map, the six faces both
+    // samplers read instead of the cross
     const EnvSource source{src, src_mapping, sampling == EnvMapSampling_EWA};
 
     progress.set_num_steps(size.y);
@@ -1181,10 +1090,8 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 
                 for (int x = 0; x < size.x; ++x)
                 {
-                    // Parts of a disc or a cube cross are not sphere. Rather than leaving them empty, each
-                    // is given the nearest direction that is -- so the values just outside the sphere
-                    // agree with those just inside, and a later bilinear read near that edge finds what it
-                    // expects instead of pulling the emptiness inward.
+                    // parts of a disc or a cube cross are not sphere; fill them from the nearest
+                    // direction that is, so a later bilinear read at the rim doesn't pull in zeros
                     const float2 uv = nearest_valid_envmap_uv(
                         dst_mapping, float2{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)});
 
@@ -1199,9 +1106,8 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                     for (int sy = 0; sy < ss; ++sy)
                         for (int sx = 0; sx < ss; ++sx)
                         {
-                            // Snapped like the pixel's own center: a sub-sample may land outside the
-                            // sphere even where the center did not, and one that did would be reading
-                            // from whatever direction a coordinate with no direction produces.
+                            // snapped like the pixel's center, since a sub-sample can land off the
+                            // sphere even where the center did not
                             const float2 s_uv = nearest_valid_envmap_uv(
                                 dst_mapping, float2{(float(x) + (float(sx) + 0.5f) / float(ss)) / float(size.x),
                                                     (float(y) + (float(sy) + 0.5f) / float(ss)) / float(size.y)});
@@ -1221,13 +1127,10 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, AtomicProgress progress)
 {
     // Ramamoorthi and Hanrahan: the cosine kernel falls off fast enough in frequency that nine spherical
-    // harmonic coefficients reproduce the irradiance to about a percent. Projecting onto them and then
-    // evaluating costs the two resolutions added rather than multiplied.
+    // harmonic coefficients reproduce the irradiance to about a percent.
     //
-    // Integrated over the image's own samples, each weighted by the solid angle it covers, so every
-    // sample contributes exactly once and none is missed or read twice. That weight is what
-    // envmap_jacobian() is: measuring it from how far the direction moves per sample instead is what went
-    // wrong at the cube cross's seams.
+    // Integrated over the image's own samples, each weighted by the solid angle it covers
+    // (envmap_jacobian()), so every sample contributes once.
     const int2   in_size = src.size();
     const double dA      = 1.0 / (double(in_size.x) * double(in_size.y));
 
@@ -1264,7 +1167,7 @@ Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, A
         ++progress;
     }
 
-    // The constants that turn those coefficients into irradiance, from the same paper.
+    // the constants that turn those coefficients into irradiance, from the same paper
     constexpr double c1 = 0.429043, c2 = 0.511664, c3 = 0.743125, c4 = 0.886227, c5 = 0.247708;
 
     Array2Df out{size};
@@ -1279,8 +1182,8 @@ Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, A
                              2.0 * c1 * (sh[4] * nx * ny + sh[7] * nx * nz + sh[5] * ny * nz) +
                              2.0 * c2 * (sh[3] * nx + sh[1] * ny + sh[2] * nz);
 
-            // Divided by pi, so this is what a white lambertian surface facing this way reflects rather
-            // than the irradiance arriving at it -- which is the number an environment lookup wants.
+            // divided by pi: what a white lambertian surface facing this way reflects, which is what an
+            // environment lookup wants
             out(x, y) = float(e / 3.14159265358979323846);
         }
 

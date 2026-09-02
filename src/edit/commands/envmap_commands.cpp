@@ -7,9 +7,7 @@
 /** \file envmap_commands.cpp
     \author Wojciech Jarosz
 
-    The edits that read an image as a parameterization of the sphere. Both replace the image with something
-    of a different size, so neither carries the "Apply to" controls: there is no such thing as remapping
-    part of an environment map.
+    The edits that read an image as a parameterization of the sphere.
 */
 
 #include "edit/commands.h"
@@ -46,12 +44,12 @@ public:
                ImGuiInputFlags_None,
                "Remap",
                27.f};
-        // Reparameterizes the whole image, so there is no subject to narrow.
+        // reparameterizes the whole image, so there is no subject to narrow
         i.draws_subject_selector = false;
         return i;
     }
 
-    //! Opens at the current image's size, then follows the target's own aspect from there.
+    //! Opens at the current image's size, then follows the target mapping's aspect.
     void on_open(EditContext &ctx) override
     {
         if (auto img = ctx.image())
@@ -81,9 +79,7 @@ public:
         mapping_combo("Target", &m_dst_mapping);
         mappings.take();
 
-        // Between the two it exchanges, bracketed like the chain that ties a width to a height. Turning a
-        // remap around is the common second step -- having converted one way to look at it, the way back
-        // should not mean setting both again.
+        // between the two it exchanges, bracketed like the chain that ties a width to a height
         if (ImGui::RowBracketButton(ICON_MY_SWAP, mappings, true, "Exchange source and target."))
             std::swap(m_src_mapping, m_dst_mapping);
 
@@ -95,8 +91,8 @@ public:
         ImGui::Tooltip("Keep the width and height in the proportion the target parameterization wants: 2:1 "
                        "for a lat-long, square for a disc, 3:4 for a cube cross.");
 
-        // Follow whichever was just changed. Picking a new target re-derives the width, since the aspect it
-        // wants has changed; editing one field drives the other.
+        // follow whichever was just changed: a new target re-derives the width from its aspect, and
+        // editing one field drives the other
         if (m_auto_aspect)
         {
             const float aspect = envmapping_aspect(m_dst_mapping);
@@ -141,8 +137,7 @@ public:
         if (out_size.x <= 0 || out_size.y <= 0)
             return;
 
-        // No bias: the level the footprint asks for is the right one, and the control that shifted it was
-        // there to show that the level was being chosen at all.
+        // no bias: the level the footprint asks for is the right one
         ctx.modify_image_async("Remap envmap", out_size,
                                [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
                                { return remapped_envmap(src, out_size, d, s, mode, ss, 0.f, p); });
@@ -172,7 +167,7 @@ public:
         return i;
     }
 
-    //! The current image's size, rather than a fixed small one: the result is usually looked at beside it.
+    //! The current image's size, since the result is usually looked at beside it.
     void on_open(EditContext &ctx) override
     {
         if (auto img = ctx.image())

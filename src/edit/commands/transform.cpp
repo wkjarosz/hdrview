@@ -22,19 +22,15 @@
 namespace
 {
 
-//! A flip or a quarter turn: its own inverse, or paired with the opposite one.
-/*!
-    Reversed by performing the opposite rather than by storing pixels, since every sample survives -- so a
-    full-image geometric change costs a few bytes of history.
-*/
+//! A flip or a quarter turn: its own inverse, or paired with the opposite one. Every sample survives, so
+//! this is reversed by performing the opposite and costs a few bytes of history.
 class Geometric final : public EditCommand
 {
 public:
     Geometric(Info info, std::function<void(Image &)> forward, std::function<void(Image &)> backward) :
         m_info(std::move(info)), m_forward(std::move(forward)), m_backward(std::move(backward))
     {
-        // A flip or a quarter turn moves every sample of every channel by definition, so there is
-        // nothing for a scope to narrow.
+        // moves every sample of every channel, so there is nothing for a scope to narrow
         m_info.draws_subject_selector = false;
     }
 
@@ -53,8 +49,7 @@ public:
     Info info() const override
     {
         Info i{{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C};
-        // Reshapes the image rather than writing into it, as the other two size commands do, so the
-        // subject has nothing to say about it.
+        // reshapes the image rather than writing into it, so the subject has nothing to say about it
         i.draws_subject_selector = false;
         return i;
     }
@@ -62,7 +57,7 @@ public:
     //! Only when there is something to crop to, and it is not already the whole image.
     bool enabled(const EditContext &ctx) const override
     {
-        // Needs something to crop to, and cropping to the whole image would do nothing.
+        // cropping to the whole image would do nothing
         auto img = ctx.image();
         if (!img || !ctx.selection().has_volume())
             return false;
@@ -78,9 +73,8 @@ public:
         if (!img)
             return;
 
-        // The same two conditions enabled() asks about, asked again per image: running over a selection
-        // reaches images the rectangle misses entirely, or already is, and neither is a crop -- an entry
-        // for one would sit in the history changing nothing.
+        // enabled()'s conditions again, per image: a fan-out reaches images the rectangle misses, or
+        // already is, and neither is a crop
         Box2i box = ctx.selection();
         box.intersect(img->data_window);
         if (!box.has_volume() || box == img->data_window)
@@ -88,7 +82,7 @@ public:
 
         ctx.modify_structure("Crop to selection", [box](Image &i) { i.crop(box); });
 
-        // What was selected is now the whole image, so the selection has nothing left to say.
+        // what was selected is now the whole image
         ctx.set_selection(Box2i{});
     }
 };
@@ -101,22 +95,17 @@ enum SizeUnits : int
 };
 
 /*!
-    Width and height, one to a row, with the chain that ties them drawn between the two.
+    Width and height, one to a row, with the chain that ties them drawn between the two (Photoshop's).
 
     \p size is always in pixels; the fields convert. Editing one row with the chain closed drives the other
-    from \p original's ratio rather than from the current values, so a run of edits cannot drift away from
-    the ratio a rounding at a time.
+    from \p original's ratio, so a run of edits cannot drift away from it a rounding at a time.
 
-    The bracket reaching from row to row is Photoshop's, and says what the button means better than the
-    button can: these two are joined, and this is where.
-
-    \p lower is the smallest value a field may take. One, ordinarily -- an image cannot be zero samples
-    across -- but a size given as a change to the current one may be negative, which is how a canvas is
-    trimmed rather than padded.
+    \p lower is the smallest value a field may take: one ordinarily, but a size given as a change to the
+    current one may be negative, which is how a canvas is trimmed.
 */
 void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
 {
-    // One width for every control in the column, so that the label beside each sits at the same place.
+    // one width for every control in the column, so the labels line up
     const float field  = 9.f * HelloImGui::EmSize();
     const int2  before = *size;
 
@@ -124,7 +113,7 @@ void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
     ImGui::Combo("Units", units, "Pixels\0Percent\0");
     ImGui::Tooltip("Drag either field to sweep the size; ctrl-click one to type an exact value.");
 
-    // Where the two rows reach, so the bracket can be hung off the wider of them.
+    // where the two rows reach, so the bracket can be hung off the wider of them
     ImGui::RowSpan rows;
 
     auto row = [&](const char *label, auto &&draw_field)
@@ -147,9 +136,8 @@ void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
         row("Width", [&] { ImGui::DragFloat("##width", &pct.x, 0.5f, pct_lower, 1000.f, "%.1f %%"); });
         row("Height", [&] { ImGui::DragFloat("##height", &pct.y, 0.5f, pct_lower, 1000.f, "%.1f %%"); });
 
-        // Bounded by the same floor as the fields themselves, which for a relative size is below zero: a
-        // percentage given as a change trims when it is negative, and clamping it to one instead turned
-        // every trim into a canvas a single sample across.
+        // the same floor as the fields, which for a relative size is below zero: a percentage given as a
+        // change trims when it is negative
         size->x = std::max(lower, int(std::lround(double(pct.x) * 0.01 * double(original.x))));
         size->y = std::max(lower, int(std::lround(double(pct.y) * 0.01 * double(original.y))));
     }
@@ -166,7 +154,7 @@ void size_fields(int2 *size, int *units, bool *locked, int2 original, int lower)
                                         : "Width and height are set independently. Click to link."))
         *locked = !*locked;
 
-    // Follow whichever row was just edited, from the original ratio rather than the current one.
+    // follow whichever row was just edited, from the original ratio and not the current one
     if (*locked && original.x > 0 && original.y > 0)
     {
         if (size->x != before.x)
@@ -187,7 +175,7 @@ public:
                ImGuiInputFlags_None,
                "Resize",
                30.f};
-        // Replaces the image rather than writing into it, so the subject has nothing to say about it.
+        // replaces the image rather than writing into it, so the subject has nothing to say about it
         i.draws_subject_selector = false;
         return i;
     }
@@ -219,8 +207,8 @@ public:
 
         size_fields(&m_size, &m_units, &m_locked, original, 1);
 
-        // Which way the resampling will go, since the two directions do different things: shrinking
-        // averages over the samples each output covers, growing interpolates between them.
+        // which way the resampling will go: shrinking averages over the samples each output covers,
+        // growing interpolates between them
         if (m_size.x < original.x || m_size.y < original.y)
             ImGui::TextUnformatted("Reducing: samples are averaged.");
         else if (m_size.x > original.x || m_size.y > original.y)
@@ -256,11 +244,8 @@ public:
         return i;
     }
 
-    //! Opens describing the canvas as it is: its own size, or -- given relatively -- no change at all.
-    /*!
-        A flag rather than reading zero as "not set yet", which a relative size cannot spare: nothing is
-        exactly what zero means there.
-    */
+    //! Opens describing the canvas as it is: its own size, or, given relatively, no change at all. The
+    //! flag is needed because zero is a meaningful relative size.
     void on_open(EditContext &ctx) override
     {
         if (auto img = ctx.image())
@@ -285,19 +270,16 @@ public:
         ImGui::TextFmt("Current: {} x {} pixels", original.x, original.y);
         ImGui::Separator();
 
-        // A relative size counts down as well as up, so it is not bounded below by one the way an
-        // absolute one is.
+        // a relative size counts down as well as up, so it is not bounded below by one
         size_fields(&m_size, &m_units, &m_locked, original, m_relative ? -65536 : 1);
 
         if (ImGui::Checkbox("Relative", &m_relative))
-            // Read the other way rather than reset: the fields described a canvas, and after the switch
-            // they describe the same one. Turning it on subtracts what is already there; turning it off
-            // adds it back.
+            // re-read rather than reset, so the fields describe the same canvas after the switch
             m_size = m_relative ? m_size - original : original + m_size;
         ImGui::Tooltip("Add the amounts above to the current size instead of replacing it. Negative "
                        "values trim.");
 
-        // What it will produce, which a size given as a change does not say by itself.
+        // what it will produce, which a size given as a change does not say by itself
         if (m_relative)
         {
             const int2 target = la::max(original + m_size, int2{1});

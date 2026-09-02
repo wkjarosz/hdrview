@@ -20,12 +20,8 @@ inline float clamped(const Array2Df &a, int x, int y)
     return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
 }
 
-//! Sum over every sample of \p a times \p b, which is the inner product the iteration is built on.
-/*!
-    In double, because it is a sum over as many terms as there are samples and the iteration's step
-    lengths are ratios of two of them: accumulated in float, a large region loses enough of the tail to
-    move the step and stall the descent.
-*/
+//! Inner product of \p a and \p b. In double: the step lengths are ratios of two of these, and a float
+//! sum over a large region loses enough of the tail to stall the descent.
 double dot(const Array2Df &a, const Array2Df &b)
 {
     double sum = 0.0;
@@ -66,8 +62,7 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
 
     const int n = x.num_elements();
 
-    // Which samples are being solved for. Anything else keeps the background's value throughout, and is
-    // what the solution is pinned to at the border.
+    // which samples are being solved for; everything else keeps the background's value throughout
     std::vector<uint8_t> inside(static_cast<size_t>(n), 0);
     for (int i = 0; i < n; ++i) inside[size_t(i)] = mask(i) > 1e-5f ? 1 : 0;
 
@@ -78,11 +73,10 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
                 a(i) = 0.f;
     };
 
-    // What the interior's Laplacian should come out as: the source's own.
+    // what the interior's Laplacian should come out as
     const Array2Df b = laplacian(source);
 
-    // r = (b - A x) inside the mask. Starting from the background rather than from zero, which is already
-    // the answer everywhere outside and not far off just inside it.
+    // r = (b - A x) inside the mask, starting from the background, which is already the answer outside
     Array2Df r = laplacian(x);
     for (int i = 0; i < n; ++i) r(i) = b(i) - r(i);
     restrict_to_mask(r);
@@ -92,13 +86,12 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
     double rTr = dot(r, r);
     if (rTr <= 0.0)
     {
-        // Nothing to solve: the background already has the gradients asked for. Still owes its share, or
-        // a bar with a channel like this among several would never reach the end.
+        // already solved; still report this channel's share of the progress
         progress.finish_share();
         return x;
     }
 
-    // Relative to where it started, so the bound means the same thing whatever the region's scale.
+    // relative to where the residual started, so the bound is scale-independent
     const double target = tolerance * tolerance * rTr;
 
     progress.set_num_steps(iterations);
@@ -108,7 +101,7 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
         if (progress.canceled())
             return x;
 
-        // d is zero outside the mask, so this is the system's operator applied to it.
+        // d is zero outside the mask, so this is the system's operator applied to it
         Array2Df Ad = laplacian(d);
         restrict_to_mask(Ad);
 
@@ -128,8 +121,7 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
         const double rTr_next = dot(r, r);
         ++progress;
 
-        // Stop once the residual has fallen far enough, rather than running out the iteration count long
-        // after the picture has stopped changing.
+        // stop once the residual has fallen far enough
         if (rTr_next <= target)
             break;
 
@@ -140,8 +132,7 @@ Array2Df poisson_blended(const Array2Df &background, const Array2Df &source, con
         rTr = rTr_next;
     }
 
-    // Only this solve's share: it is one of several channels reporting into the same bar, and it has
-    // very likely converged well inside the iteration bound.
+    // only this channel's share of the bar, since the solve likely stopped inside the iteration bound
     progress.finish_share();
     return x;
 }

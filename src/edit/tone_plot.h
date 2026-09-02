@@ -14,15 +14,9 @@
 #include <algorithm>
 
 /*!
-    The square plot of a tone curve that the tonal dialogs draw above their sliders.
-
-    Two commands want the same picture -- what a level goes in as against what it comes out as, over
-    [0,1] -- and the fiddly parts are the same for both: matching the sliders' width, keeping the plot
-    area square rather than the widget, and reading a drag in the plot's coordinates instead of the
-    widget's. It keeps a little state between frames for the first and last of those, so it is a member
-    of the command rather than a free function.
-
-    Used between begin() and end(), like ImPlot itself:
+    The square plot of a tone curve that the tonal dialogs draw above their sliders: what a level goes in
+    as against what it comes out as, over [0,1]. Keeps state between frames, so it is a member of the
+    command. Used between begin() and end(), like ImPlot itself:
 
         if (m_plot.begin("##Curve"))
         {
@@ -33,19 +27,17 @@
 class ToneCurvePlot
 {
 public:
-    //! Samples along the horizontal axis. Enough that the steepest curve here still reads as a curve.
+    //! Samples along the horizontal axis.
     static constexpr int N = 129;
 
-    //! The input level at sample \p i, which is what every curve drawn here is evaluated at.
+    //! The input level at sample \p i, where every curve drawn here is evaluated.
     static float x(int i) { return float(i) / float(N - 1); }
 
     //! Open the plot. False when ImPlot declined it, in which case nothing else may be called.
     bool begin(const char *id)
     {
-        // As wide as the sliders beneath it. The widget also holds the tick labels, which are wider down
-        // the left side than they are tall along the bottom, so a square widget leaves a plot area that is
-        // not square -- the height carries a correction measured from the last frame, which settles after
-        // one and then stays put.
+        // as wide as the sliders beneath it. The tick labels take more width at the left than height at
+        // the bottom, so the height carries a correction measured from the last frame; see end().
         m_width = ImGui::CalcItemWidth();
 
         if (!ImPlot::BeginPlot(id, ImVec2(m_width, m_width + m_extra_height),
@@ -56,13 +48,11 @@ public:
         const ImPlotAxisFlags axes = ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_Lock;
         ImPlot::SetupAxes(nullptr, nullptr, axes, axes);
 
-        // The same ticks both ways, since the two axes carry the same quantity: a level in and the level
-        // it maps to.
+        // the same ticks both ways, since both axes carry a level
         ImPlot::SetupAxisTicks(ImAxis_X1, 0.0, 1.0, 5);
         ImPlot::SetupAxisTicks(ImAxis_Y1, 0.0, 1.0, 5);
 
-        // Fixed, so the curve moves against the frame instead of the frame following the curve. A steep
-        // curve leaves the top and bottom, and seeing it leave is the point of drawing it.
+        // fixed, so a steep curve is seen leaving the top and bottom instead of the frame following it
         ImPlot::SetupAxesLimits(0.0, 1.0, 0.0, 1.0, ImPlotCond_Always);
         return true;
     }
@@ -105,18 +95,9 @@ public:
         ImPlot::PlotScatter("handle", xs, ys, 1, spec);
     }
 
-    //! While the left button is dragging inside the plot, where it is, in plot coordinates.
-    /*!
-        In the plot's coordinates rather than the widget's: the widget rectangle includes the frame and the
-        tick labels around the plot, so a fraction taken across it is not the fraction across the axes --
-        whatever the drag sets lands beside the cursor and drifts further the nearer the edge it gets.
-
-        A drag that began inside goes on being followed after it leaves, so a slide to an extreme does not
-        stop short of one.
-
-        \p pressed_at receives where it began, which is what tells a caller which part of its picture is
-        being dragged rather than only where the cursor is now.
-    */
+    //! While the left button is dragging inside the plot, where it is, in plot coordinates (not the
+    //! widget's, which include the frame and tick labels). A drag that began inside is followed after it
+    //! leaves. \p pressed_at receives where it began, which says what is being dragged.
     bool drag(float2 &position, float2 *pressed_at = nullptr)
     {
         auto here = []
@@ -148,7 +129,7 @@ public:
 
     void end()
     {
-        // Measured before the plot closes, and applied to the next frame's height; see begin().
+        // measured before the plot closes, and applied to the next frame's height; see begin()
         const ImVec2 area = ImPlot::GetPlotSize();
         if (area.x > 0.f && area.y > 0.f)
             m_extra_height = std::clamp(m_extra_height + (area.x - area.y), 0.f, m_width);
@@ -160,5 +141,5 @@ private:
     float  m_width        = 0.f;
     float  m_extra_height = 0.f; //!< What the widget needs above its width for the plot area to be square
     bool   m_dragging     = false;
-    float2 m_press{0.f, 0.f}; //!< Where the drag began, which is what says what it is a drag *of*
+    float2 m_press{0.f, 0.f}; //!< Where the drag began
 };

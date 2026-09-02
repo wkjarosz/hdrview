@@ -69,11 +69,8 @@ public:
                        "sample keeps its sign.");
     }
 
-    //! The curve the three sliders make, over [0,1].
-    /*!
-        Only the part of it that lands in the unit square is drawn, which is where a display-referred
-        sample lives; the operation itself is unbounded and applies just as well outside.
-    */
+    //! The curve the three sliders make, over [0,1]. Only the part landing in the unit square is drawn;
+    //! the operation itself is unbounded.
     void draw_curve()
     {
         const float scale = std::pow(2.f, m_exposure);
@@ -87,7 +84,7 @@ public:
 
         m_plot.curve("exposure/gamma", ys, ImVec4(1.f, 1.f, 1.f, 0.85f));
 
-        // Where a mid-gray input lands, which is the quickest read on what the three together are doing.
+        // where a mid-gray input lands
         m_plot.marker_x("mid", 0.5f, ImVec4(1.f, 1.f, 1.f, 0.25f));
 
         m_plot.end();
@@ -102,8 +99,8 @@ public:
         ctx.modify_pixels("Exposure/gamma",
                           [scale, off, inv_g](float v, int2, int)
                           {
-                              // Signed, since a negative sample is meaningful in an HDR image and pow() of
-                              // one is not: the curve is mirrored through the origin rather than NaN.
+                              // signed: a negative sample is meaningful in an HDR image and pow() of one
+                              // is not, so the curve is mirrored through the origin
                               return spow(scale * v + off, inv_g);
                           });
     }
@@ -147,7 +144,7 @@ public:
     {
         const float4 c = m_color;
 
-        // Whether the samples in memory are premultiplied, which finalize() makes them whenever alpha
+        // whether the samples in memory are premultiplied, which finalize() makes them whenever alpha
         // means transparency. Both modes have to match that or the result is out by a factor of alpha.
         bool premultiplied = false;
         int  alpha_slot    = -1;
@@ -163,17 +160,16 @@ public:
 
         if (m_mode == Mode_Replace)
         {
-            // Premultiplied storage wants the color scaled by its own alpha; the alpha channel itself is
-            // stored as given.
+            // premultiplied storage wants the color scaled by its own alpha; the alpha channel itself is
+            // stored as given
             const float4 v = premultiplied ? float4{c.x * c.w, c.y * c.w, c.z * c.w, c.w} : c;
 
             ctx.modify_pixels("Fill", [v](float, int2, int slot) { return v[slot % 4]; });
         }
         else
         {
-            // Source-over. With premultiplied storage the color contributes a*c and what was there keeps
-            // (1-a) of itself, which is the same expression for color and alpha alike -- the alpha
-            // channel's own "color" being 1.
+            // source-over: with premultiplied storage the color contributes a*c and what was there keeps
+            // (1-a) of itself, the same expression for color and alpha alike
             const float a = c.w;
             ctx.modify_pixels("Fill",
                               [c, a, alpha_slot](float old, int2, int slot)
@@ -185,7 +181,7 @@ public:
     }
 
 private:
-    //! What the color's alpha is taken to mean, which is genuinely two different operations.
+    //! What the color's alpha is taken to mean.
     enum Mode : int
     {
         Mode_Blend = 0, //!< Coverage: lay the color over what is there
