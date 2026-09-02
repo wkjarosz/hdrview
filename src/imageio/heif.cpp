@@ -5,6 +5,7 @@
 //
 
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include <cstring>
 #include <iostream>
@@ -362,7 +363,8 @@ static auto chroma_name(heif_chroma ch)
 static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_profile_nclx *handle_level_nclx,
                                            const std::vector<uint8_t> &handle_level_icc_profile,
                                            const ImageLoadOptions &opts, int3 &size, int cpp, int num_planes,
-                                           const heif_channel out_planes[], const string &partname)
+                                           const heif_channel out_planes[], const string &partname,
+                                           AlphaType_ alpha_type)
 {
     int img_w = heif_image_get_width(himage, out_planes[0]);
     int img_h = heif_image_get_height(himage, out_planes[0]);
@@ -493,6 +495,10 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         // interleaved paths hand alpha to linearize_pixels(), which already leaves the last channel alone.
         if (out_planes[p] != heif_channel_Alpha)
         {
+            // Inverting the transfer function does not commute with multiplication by alpha; see
+            // imageio/alpha.h.
+            unpremultiply_before_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
+
             if (opts.override_profile)
             {
                 spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
@@ -535,6 +541,8 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
 
                 image->metadata["color profile"] = profile_desc;
             }
+
+            repremultiply_after_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
         }
 
         // copy the interleaved float pixels into the channels
@@ -859,17 +867,25 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         return raw_img;
                     }(),
                     heif_image_release);
+                // MIAF settles this by the presence of a 'prem' reference from the master image to the alpha
+                // one: absent means not premultiplied, for every conforming file, so only its presence is
+                // something this file said.
+                const bool       premultiplied = heif_image_handle_is_premultiplied_alpha(ihandle.get());
+                const AlphaType_ from_file =
+                    !has_alpha ? AlphaType_None : (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
+
+                // Resolved before decoding: the color management inside brackets itself with it.
+                const AlphaType_ alpha_type = alpha_override_of(opts).value_or(from_file);
+
                 // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
                 ImagePtr image =
                     process_decoded_heif_image(himage.get(), handle_level_nclx.get(), handle_level_icc_profile, opts,
-                                               size, cpp, num_planes, out_planes, fmt::format("{:d}", id));
+                                               size, cpp, num_planes, out_planes, fmt::format("{:d}", id), alpha_type);
 
                 // preserve file-level metadata that comes from the handle/context
-                image->filename                         = filename;
-                image->alpha_type                       = !has_alpha ? AlphaType_None
-                                                                     : (heif_image_handle_is_premultiplied_alpha(ihandle.get())
-                                                                            ? AlphaType_PremultipliedLinear
-                                                                            : AlphaType_Straight);
+                image->filename = filename;
+                image->set_alpha(from_file, premultiplied ? AlphaSource_File : AlphaSource_Format,
+                                 alpha_override_of(opts));
                 image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                 image->metadata["header"]["Main brand"] = {
                     {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
@@ -934,11 +950,25 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         }
                     }
 
+                    // An EXIF item begins with a four-byte big-endian offset to the TIFF header that
+                    // follows it (ISO/IEC 23008-12 Annex A.2.1). Most writers put an "Exif\0\0" marker in
+                    // between and set the offset to 6; the rest set it to zero. Honoring the offset finds
+                    // the header in either case, rather than relying on libexif recognizing and skipping a
+                    // marker it was given by accident.
                     if (exif_data.size() > 4)
                     {
+                        const size_t tiff_header_offset = (size_t(exif_data[0]) << 24) | (size_t(exif_data[1]) << 16) |
+                                                          (size_t(exif_data[2]) << 8) | size_t(exif_data[3]);
+                        const size_t tiff_start = 4 + tiff_header_offset;
+
                         try
                         {
-                            image->exif                = Exif{exif_data.data() + 4, exif_data.size() - 4};
+                            if (tiff_start >= exif_data.size())
+                                throw std::runtime_error{
+                                    fmt::format("EXIF item says its TIFF header is at {}, past the {} bytes it holds",
+                                                tiff_start, exif_data.size())};
+
+                            image->exif = Exif{exif_data.data() + tiff_start, exif_data.size() - tiff_start};
                             image->metadata["exif"]    = image->exif.to_json();
                             image->orientation_applied = true;
                             spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
@@ -1032,8 +1062,8 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     HeifImagePtr himage(raw_img, heif_image_release);
 
                     heif_channel out_planes[2] = {heif_channel_interleaved, heif_channel_Alpha};
-                    ImagePtr     image =
-                        process_decoded_heif_image(himage.get(), nullptr, {}, opts, size, 3, 1, out_planes, partname);
+                    ImagePtr image = process_decoded_heif_image(himage.get(), nullptr, {}, opts, size, 3, 1, out_planes,
+                                                                partname, AlphaType_None);
                     image->filename                         = filename;
                     image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                     image->metadata["header"]["Main brand"] = {

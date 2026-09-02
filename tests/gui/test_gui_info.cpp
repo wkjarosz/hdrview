@@ -43,57 +43,7 @@ static void load_fixture_and_show_info(ImGuiTestContext *ctx)
 
 void RegisterTests_Info(ImGuiTestEngine *engine)
 {
-    ImGuiTest *t = IM_REGISTER_TEST(engine, "info", "transparency_row_is_as_tall_as_its_neighbors");
-    t->TestFunc  = [](ImGuiTestContext *ctx)
-    {
-        load_fixture_and_show_info(ctx);
-
-        // The fixture is an RGBA PNG carrying both an ICC profile and EXIF, so the General table holds the
-        // "Is transparency" checkbox with text rows on either side of it -- what this test measures against.
-        auto img = hdrview()->current_image();
-        IM_CHECK(img != nullptr);
-        IM_CHECK(img->alpha_type != AlphaType_None);
-        IM_CHECK(img->exif.valid());
-        IM_CHECK(!img->icc_data.empty());
-
-        // Every row is drawn into the scrolling child window PE::Begin("Image info") opens; the items in it
-        // are the checkbox and one child window per text row (PE::WrappedText's "ResizableChild"). Only the
-        // checkbox reports a label, so that is what tells the two apart.
-        ctx->SetRef("");
-        ImGuiTestItemList items;
-        ctx->GatherItems(&items, "//Info", -1);
-
-        struct Row
-        {
-            float y;
-            bool  is_checkbox;
-        };
-        std::vector<Row> rows;
-        for (const ImGuiTestItemInfo &item : items)
-            if (item.Window && strstr(item.Window->Name, "Image info") != nullptr)
-                rows.push_back({item.RectFull.Min.y, strcmp(item.DebugLabel, "##Alpha is transparency") == 0});
-
-        std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.y < b.y; });
-
-        int checkbox_row = -1;
-        for (int i = 0; i < (int)rows.size(); ++i)
-            if (rows[i].is_checkbox)
-            {
-                IM_CHECK_EQ(checkbox_row, -1); // exactly one
-                checkbox_row = i;
-            }
-        IM_CHECK(checkbox_row >= 1);
-        // "EXIF data" and "ICC data" follow it, both single-line text rows
-        IM_CHECK(checkbox_row + 2 < (int)rows.size());
-
-        // A row's height is the distance to the top of the next one. Nothing makes a widget row as tall as a
-        // text row on its own -- the frame padding a checkbox carries and a line of text does not is enough
-        // to set them apart -- so measure it rather than assume.
-        const float checkbox_height = rows[checkbox_row + 1].y - rows[checkbox_row].y;
-        const float text_height     = rows[checkbox_row + 2].y - rows[checkbox_row + 1].y;
-        IM_CHECK(text_height > 0.f);
-        IM_CHECK_LE(std::fabs(checkbox_height - text_height), 0.5f);
-    };
+    ImGuiTest *t;
 
     t           = IM_REGISTER_TEST(engine, "info", "reload_actions_track_what_can_be_reloaded");
     t->TestFunc = [](ImGuiTestContext *ctx)

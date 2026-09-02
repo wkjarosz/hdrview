@@ -8,6 +8,7 @@
 #include "app.h"
 #include "common.h"
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 
 #include <cmath>
@@ -374,22 +375,25 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 
         // Only guess when the file said nothing. An EXTRASAMPLES tag naming something other than alpha
         // (EXTRASAMPLE_UNSPECIFIED) is the file stating the extra sample is arbitrary data, so honor it.
+        AlphaSource_ alpha_source = AlphaSource_File;
         if (!has_alpha && !has_extra_samples && num_channels == 4)
         {
             has_alpha = true;
-            // Default to straight alpha if not specified
+            // Straight is the likelier reading for an unlabeled RGBA TIFF, but it is a guess, and this is
+            // the one place in this loader where nothing in the file settles the question.
             is_premultiplied = false;
+            alpha_source     = AlphaSource_Assumed;
             spdlog::debug("Inferred alpha channel from channel count (assuming straight alpha)");
         }
 
         auto image = make_shared<Image>(int2{(int)width, (int)height}, num_channels);
-        // Track what type of alpha the file contained (not what we convert it to internally)
-        image->alpha_type =
-            has_alpha ? (is_premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight) : AlphaType_None;
-        // An EXTRASAMPLES tag that names something other than alpha states the extra sample is arbitrary
-        // data, so keep it out of an alpha-bearing group entirely.
-        if (has_extra_samples && !has_alpha)
-            image->alpha_is_transparency = false;
+        // What the file holds, not what it is converted to internally. An EXTRASAMPLES tag naming something
+        // other than alpha leaves has_alpha false, and AlphaType_None then keeps that sample out of an
+        // alpha-bearing group. Associated alpha is multiplied into the encoded samples, which is what every
+        // writer that produces one -- Photoshop, OpenImageIO, ImageMagick, vips -- does.
+        image->set_alpha(has_alpha ? (is_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight)
+                                   : AlphaType_None,
+                         alpha_source, alpha_override_of(opts));
         image->metadata["loader"] = "libtiff";
         image->partname           = partname;
 
@@ -878,6 +882,10 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         string         profile_desc;
         Chromaticities chr;
 
+        // The color management below inverts the file's transfer function, which does not commute with
+        // multiplication by alpha; see imageio/alpha.h.
+        unpremultiply_before_transfer(float_pixels.data(), size, image->alpha_type);
+
         if (opts.override_profile)
         {
             // Priority 1: User override (highest priority) - use gamut_override and tf_override
@@ -979,6 +987,8 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                     image->chromaticities = chr;
             }
         }
+
+        repremultiply_after_transfer(float_pixels.data(), size, image->alpha_type);
 
         image->metadata["color profile"] = profile_desc;
 
@@ -1336,8 +1346,9 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, n);
     TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 
-    // The pixels below are written premultiplied (as_interleaved is asked not to undo it), which is
-    // what EXTRASAMPLE_ASSOCALPHA describes.
+    // EXTRASAMPLE_ASSOCALPHA describes color multiplied into the encoded samples, so as_interleaved() is
+    // asked to divide alpha out before the transfer function and multiply it back after -- not to leave the
+    // linear premultiplication in place, which would encode a different image. See imageio/alpha.h.
     if (n == 2 || n == 4)
     {
         uint16_t extra_samples[] = {EXTRASAMPLE_ASSOCALPHA};
@@ -1381,7 +1392,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, opts->gain, opts->tf, false, false, false);
+        auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, opts->gain, opts->tf, false, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1395,7 +1406,8 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<uint16_t>(&w_out, &h_out, &n_out, opts->gain, opts->tf, true, false, false);
+        auto pixels =
+            img.as_interleaved<uint16_t>(&w_out, &h_out, &n_out, opts->gain, opts->tf, true, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1409,7 +1421,8 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<uint8_t>(&w_out, &h_out, &n_out, opts->gain, opts->tf, true, false, false);
+        auto pixels =
+            img.as_interleaved<uint8_t>(&w_out, &h_out, &n_out, opts->gain, opts->tf, true, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {

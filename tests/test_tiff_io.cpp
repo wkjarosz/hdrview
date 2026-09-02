@@ -8,6 +8,7 @@
 
 #include "endian-utils.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 #include "imageio/tiff.h"
 
 #include <initializer_list>
@@ -62,6 +63,80 @@ std::string tiff_with_extra_samples(uint16_t value)
     return bytes;
 }
 
+// The same fixture with pixel 1's color samples replaced. Associated alpha stores a*OETF(C), which can
+// never exceed alpha, so the unmodified fixture's opaque-white-under-half-coverage cannot describe a
+// genuinely associated file -- it is straight-alpha data, and reading it as associated says the straight
+// color was brighter than white.
+std::string tiff_with_second_pixel_color(uint16_t extra_samples, unsigned char value)
+{
+    std::string bytes = tiff_with_extra_samples(extra_samples);
+    // Pixel 1's RGB, immediately before its alpha at the end of the single strip.
+    bytes[bytes.size() - 4] = char(value);
+    bytes[bytes.size() - 3] = char(value);
+    bytes[bytes.size() - 2] = char(value);
+    return bytes;
+}
+
+// Reads the samples of an uncompressed, single-strip TIFF straight out of its strip, so a written file
+// can be checked against what other applications produce rather than against HDRView's own reader. A
+// save/load round trip cannot do that: writer and reader share a convention and agree either way.
+std::vector<unsigned char> tiff_raw_samples(const std::string &bytes)
+{
+    auto read_u16 = [&](size_t o) { return uint16_t(uint8_t(bytes[o]) | (uint8_t(bytes[o + 1]) << 8)); };
+    auto read_u32 = [&](size_t o) { return uint32_t(read_u16(o)) | (uint32_t(read_u16(o + 2)) << 16); };
+
+    REQUIRE(bytes.compare(0, 2, "II") == 0);
+    const uint32_t ifd     = read_u32(4);
+    const uint16_t entries = read_u16(ifd);
+
+    uint32_t offset = 0, count = 0, compression = 1;
+    for (uint16_t i = 0; i < entries; ++i)
+    {
+        const size_t   entry = ifd + 2 + size_t(i) * 12;
+        const uint16_t tag   = read_u16(entry);
+        const uint32_t value = read_u16(entry + 8); // every tag read here is a single SHORT or LONG
+        if (tag == 273)
+            offset = read_u32(entry + 8);
+        else if (tag == 279)
+            count = read_u32(entry + 8);
+        else if (tag == 259)
+            compression = value;
+    }
+
+    REQUIRE(compression == 1); // the fixtures below ask for none
+    REQUIRE(offset != 0);
+    REQUIRE(count != 0);
+    return {bytes.begin() + offset, bytes.begin() + offset + count};
+}
+
+// The fixture with nothing left saying what its fourth sample is, which is how most RGBA TIFFs in the wild
+// look. The entry is renumbered to a private tag rather than erased: removing it would shift every
+// out-of-line value in the file without shifting the offsets that point at them. EXTRASAMPLES is the
+// highest tag here, so the IFD stays sorted.
+std::string tiff_without_extra_samples()
+{
+    std::string bytes = tiff_with_extra_samples(2);
+
+    auto read_u16 = [&](size_t o) { return uint16_t(uint8_t(bytes[o]) | (uint8_t(bytes[o + 1]) << 8)); };
+    auto read_u32 = [&](size_t o) { return uint32_t(read_u16(o)) | (uint32_t(read_u16(o + 2)) << 16); };
+
+    const uint32_t ifd     = read_u32(4);
+    const uint16_t entries = read_u16(ifd);
+    for (uint16_t i = 0; i < entries; ++i)
+    {
+        const size_t entry = ifd + 2 + size_t(i) * 12;
+        if (read_u16(entry) != k_extra_samples_tag)
+            continue;
+
+        constexpr uint16_t k_private_tag = 65000;
+        bytes[entry]                     = char(k_private_tag & 0xff);
+        bytes[entry + 1]                 = char(k_private_tag >> 8);
+        return bytes;
+    }
+    FAIL("fixture has no EXTRASAMPLES tag");
+    return bytes;
+}
+
 ImagePtr load_tiff(const std::string &bytes)
 {
     std::istringstream in(bytes, std::ios::binary);
@@ -101,7 +176,7 @@ TEST_CASE("TIFF tagged EXTRASAMPLE_UNSPECIFIED keeps its fourth sample as data")
 
     REQUIRE(img->channels.size() == 4);
     CHECK(img->alpha_type == AlphaType_None);
-    CHECK_FALSE(img->alpha_is_transparency);
+    CHECK_FALSE(img->alpha_is_transparency());
     CHECK(img->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
     CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
@@ -109,6 +184,132 @@ TEST_CASE("TIFF tagged EXTRASAMPLE_UNSPECIFIED keeps its fourth sample as data")
     REQUIRE(img->groups.size() == 2);
     CHECK(img->groups[0].type == ChannelGroup::RGB_Channels);
     CHECK(img->groups[1].type == ChannelGroup::Single_Channel);
+}
+
+TEST_CASE("TIFF associated alpha is read as multiplied into the encoded samples")
+{
+    // EXTRASAMPLE_ASSOCALPHA == 1, with pixel 1 holding 128/255 under alpha 128/255: the encoded form
+    // of a fully bright color at half coverage, which is what every writer of associated alpha produces
+    // (Photoshop, OpenImageIO, ImageMagick, vips all store a*OETF(C)).
+    auto img = load_tiff(tiff_with_second_pixel_color(1, 0x80));
+
+    REQUIRE(img->channels.size() == 4);
+    CHECK(img->alpha_type == AlphaType_PremultipliedNonLinear);
+    CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
+
+    // Dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back leaves
+    // HDRView's working form: linear 1.0 times alpha. Applying the transfer to the stored value instead
+    // would give EOTF(0.502) = 0.214, markedly darker.
+    CHECK(img->channels[0](1, 0) == doctest::Approx(k_half).epsilon(0.005));
+    CHECK(img->channels[0](1, 0) != doctest::Approx(0.214f).epsilon(0.01));
+
+    // The opaque pixel is unaffected by any of this, which is what makes it a control.
+    CHECK(img->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.001));
+}
+
+TEST_CASE("An alpha override replaces what the TIFF declared")
+{
+    // The file says associated; read it as straight instead, so finalize() multiplies rather than the
+    // loader dividing. This is the escape hatch for a file whose tag is wrong -- ImageMagick and vips
+    // both write premultiplied samples tagged unassociated.
+    ImageLoadOptions opts;
+    opts.override_alpha = true;
+    opts.alpha_override = AlphaType_Straight;
+
+    std::istringstream in(tiff_with_second_pixel_color(1, 0x80), std::ios::binary);
+    auto               images = load_image(in, "rgba.tif", opts);
+    REQUIRE(images.size() == 1);
+
+    CHECK(images[0]->alpha_type == AlphaType_Straight);
+    // Straight 128/255 linearizes to 0.216, which finalize() then multiplies by alpha.
+    CHECK(images[0]->channels[0](1, 0) == doctest::Approx(0.216f * k_half).epsilon(0.02));
+}
+
+TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
+{
+    // The reverse of EXTRASAMPLE_UNSPECIFIED: the file declares real alpha and the user says it is a
+    // mask. Nothing is multiplied by it and the channel stands on its own.
+    ImageLoadOptions opts;
+    opts.override_alpha = true;
+    opts.alpha_override = AlphaType_None;
+
+    std::istringstream in(tiff_with_extra_samples(2), std::ios::binary);
+    auto               images = load_image(in, "rgba.tif", opts);
+    REQUIRE(images.size() == 1);
+
+    CHECK(images[0]->alpha_type == AlphaType_None);
+    CHECK_FALSE(images[0]->alpha_is_transparency());
+    CHECK(images[0]->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
+    REQUIRE(images[0]->groups.size() == 2);
+    CHECK(images[0]->groups[1].type == ChannelGroup::Single_Channel);
+}
+
+TEST_CASE("A TIFF says where its alpha kind came from")
+{
+    // EXTRASAMPLES settles it, whichever value it carries -- including the one saying the sample is data.
+    for (uint16_t tag : {uint16_t(0), uint16_t(1), uint16_t(2)})
+    {
+        CAPTURE(tag);
+        auto img = load_tiff(tiff_with_extra_samples(tag));
+        CHECK(img->alpha_source == AlphaSource_File);
+    }
+
+    // With the tag gone, nothing in the file states a kind and straight is the loader's guess. This is
+    // the one case in this format where an override is answering a question rather than contradicting one.
+    auto guessed = load_tiff(tiff_without_extra_samples());
+    CHECK(guessed->alpha_source == AlphaSource_Assumed);
+    CHECK(guessed->alpha_type == AlphaType_Straight);
+}
+
+TEST_CASE("An override leaves what the file said intact")
+{
+    ImageLoadOptions opts;
+    opts.override_alpha = true;
+    opts.alpha_override = AlphaType_PremultipliedNonLinear;
+
+    std::istringstream in(tiff_with_extra_samples(2), std::ios::binary); // unassociated
+    auto               images = load_image(in, "rgba.tif", opts);
+    REQUIRE(images.size() == 1);
+
+    // What is used, what the file declared, and how it declared it -- all three still answerable, which
+    // is what lets the Info panel say the override is contradicting rather than filling a gap.
+    CHECK(images[0]->alpha_type == AlphaType_PremultipliedNonLinear);
+    CHECK(images[0]->alpha_type_from_file == AlphaType_Straight);
+    CHECK(images[0]->alpha_source == AlphaSource_File);
+}
+
+TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
+{
+    // The writer's half of the associated-alpha convention, checked on the bytes. HDRView holds
+    // premultiplied linear color, so a straight color of 1.0 under half coverage is stored linear as 0.5;
+    // the file has to hold alpha * OETF(1.0) = alpha, not OETF(0.5) = 0.735.
+    auto img = std::make_shared<Image>(int2{1, 1}, 4);
+    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.5f; // premultiplied linear
+    img->channels[3](0, 0) = 0.5f;
+    img->finalize();
+
+    std::ostringstream out(std::ios::binary);
+    save_tiff_image(*img, out, "assoc.tif", /*gain*/ 1.f, TransferFunction::sRGB, /*compression*/ 0,
+                    /*data_type*/ 0);
+
+    auto samples = tiff_raw_samples(out.str());
+    REQUIRE(samples.size() >= 4);
+
+    const unsigned char alpha = samples[3];
+    CHECK(int(alpha) == doctest::Approx(127).epsilon(0.02)); // 0.5 quantized over 8 bits
+    // a*OETF(C) == 0.5 * 1.0
+    CHECK(int(samples[0]) == doctest::Approx(127).epsilon(0.02));
+    // Not OETF(a*C) == 0.735, which is what leaving the premultiply in place across the transfer gives.
+    CHECK(int(samples[0]) != doctest::Approx(188).epsilon(0.02));
+
+    // The invariant that identifies the convention in a real file: a stored color can never exceed its
+    // alpha, since it is that alpha times an encoded value of at most one.
+    for (int c = 0; c < 3; ++c) CHECK(samples[c] <= alpha);
+
+    // And it reads back as what it started as.
+    auto reloaded = load_tiff(out.str());
+    CHECK(reloaded->alpha_type == AlphaType_PremultipliedNonLinear);
+    CHECK(reloaded->channels[0](0, 0) == doctest::Approx(0.5f).epsilon(0.02));
 }
 
 TEST_CASE("TIFF save/load round-trips alpha without repeated premultiplication")

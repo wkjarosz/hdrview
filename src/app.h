@@ -1142,10 +1142,10 @@ private:
     {
         struct Entry
         {
-            fs::path       path;
-            string         channel_selector;
-            bool           alpha_is_transparency = true;
-            int            selected_group = 0, reference_group = 0;
+            fs::path             path;
+            string               channel_selector;
+            optional<AlphaType_> alpha_override; ///< Empty when the file's own interpretation was used
+            int                  selected_group = 0, reference_group = 0;
             vector<string> selected_channels; ///< The multi-selection, by channel name; see Channel::selected
             ImagePtr       loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
         };
@@ -1158,8 +1158,8 @@ private:
         // Entries sharing that key are guaranteed content-identical (loaded with identical options), so any
         // valid one-to-one assignment among them is correct regardless of which physical async load happens to
         // finish first -- this is what makes it safe to load the same file more than once in one session (e.g.
-        // to compare two channel groups of it, or the same file with and without alpha as transparency).
-        using Key = std::tuple<fs::path, string, bool>; ///< path, channel_selector, alpha_is_transparency
+        // to compare two channel groups of it, or the same file under two alpha interpretations).
+        using Key = std::tuple<fs::path, string, optional<AlphaType_>>; ///< path, channel_selector, alpha_override
         map<Key, deque<int>> unresolved;
     };
     optional<PendingSession> m_pending_session;

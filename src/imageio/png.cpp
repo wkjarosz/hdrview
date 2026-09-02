@@ -8,6 +8,7 @@
 #include "app.h"
 #include "colorspace.h"
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 
 #include <stdexcept>
@@ -703,7 +704,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         int3 size{int(frame_width), int(frame_height), channels};
         auto image            = make_shared<Image>(size.xy(), size.z);
         image->filename       = filename;
-        image->alpha_type     = size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None;
+        // PNG's spec makes alpha unassociated; a file carries no per-file signal to read.
+        image->set_alpha(size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
+                         alpha_override_of(opts));
         image->chromaticities = chr;
         image->metadata       = metadata;
         // A palette's IHDR depth counts bits per index; png_set_palette_to_rgb() expands those to 8-bit RGB.
@@ -751,6 +754,10 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             image->icc_data = icc_profile;
 
         string profile_desc = color_profile_name(chr ? named_color_gamut(*chr) : ColorGamut_Unspecified, tf);
+
+        // Inverting the transfer function does not commute with multiplication by alpha; see imageio/alpha.h.
+        unpremultiply_before_transfer(float_pixels.data(), size, image->alpha_type);
+
         if (opts.override_profile)
         {
             spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
@@ -799,6 +806,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             else
                 spdlog::info("Image is already in linear color space.");
         }
+
+        repremultiply_after_transfer(float_pixels.data(), size, image->alpha_type);
 
         image->metadata["color profile"] = profile_desc;
 

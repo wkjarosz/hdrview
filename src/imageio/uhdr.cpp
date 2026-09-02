@@ -10,6 +10,7 @@
 #include "exif.h"
 #include "gainmap.h"
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imgui.h"
 #include "timer.h"
@@ -238,7 +239,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
 
     auto image                = make_shared<Image>(size, 4);
     image->filename           = filename;
-    image->alpha_type         = AlphaType_Straight;
+    image->set_alpha(AlphaType_Straight, AlphaSource_Format, alpha_override_of(opts));
     image->metadata["loader"] = "libuhdr";
 
     if (auto md = uhdr_dec_get_gainmap_metadata(decoder.get()))

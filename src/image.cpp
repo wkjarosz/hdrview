@@ -882,6 +882,7 @@ Image::Image(int2 size, int num_channels) : Image()
         }
     }
     display_window = data_window = Box2i{int2{0}, channels.front().size()};
+    set_default_alpha_type();
 }
 
 Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
@@ -893,6 +894,27 @@ Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
     for (const auto &name : channel_names) channels.emplace_back(name, size);
 
     display_window = data_window = Box2i{int2{0}, size};
+    set_default_alpha_type();
+}
+
+void Image::set_alpha(AlphaType_ from_file, AlphaSource_ source, const std::optional<AlphaType_> &override_with)
+{
+    alpha_type_from_file = from_file;
+    alpha_source         = source;
+    alpha_type           = override_with.value_or(from_file);
+}
+
+void Image::set_default_alpha_type()
+{
+    for (const auto &c : channels)
+        if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
+        {
+            // Assembled rather than read, so nothing declared this; see set_default_alpha_type()'s comment.
+            set_alpha(AlphaType_PremultipliedLinear, AlphaSource_Assumed, std::nullopt);
+            return;
+        }
+
+    set_alpha(AlphaType_None, AlphaSource_Assumed, std::nullopt);
 }
 
 map<string, int> Image::channels_in_layer(const string &layer) const
@@ -1023,7 +1045,7 @@ void Image::build_layers_and_groups()
                 continue;
             // Skipping the alpha-bearing patterns lets the alpha-free one match instead, leaving 'A' to
             // fall through to the single-channel groups created below.
-            if (!alpha_is_transparency && group_has_alpha(group_type))
+            if (!alpha_is_transparency() && group_has_alpha(group_type))
                 continue;
             auto found = find_group_channels(layer_channels, layer.name, group_channel_names);
 
@@ -1263,7 +1285,9 @@ ImagePtr Image::duplicate(const Box2i &region) const
     copy->color_space           = color_space;
     copy->white_point           = white_point;
     copy->alpha_type            = alpha_type;
-    copy->alpha_is_transparency = alpha_is_transparency;
+    copy->alpha_type_from_file  = alpha_type_from_file;
+    copy->alpha_source          = alpha_source;
+    copy->alpha_override        = alpha_override;
     copy->metadata              = metadata;
     copy->exif                  = exif;
     copy->xmp_data              = xmp_data;

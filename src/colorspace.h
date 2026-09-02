@@ -27,7 +27,31 @@ enum AlphaType : AlphaType_
     AlphaType_Count
 };
 
+//! Where an image's AlphaType_ came from, which is not the same question as what it is.
+/*!
+    A file can state its alpha kind, or its format can settle it for every conforming file, or nothing can
+    say and the loader has to pick. Only the last is a guess, and it is where an override is most likely
+    wanted. An explicit tag is not automatically the most trustworthy of the three -- ImageMagick and vips
+    both write premultiplied TIFF samples tagged unassociated -- so this records provenance rather than
+    confidence.
+*/
+using AlphaSource_ = int;
+enum AlphaSource : AlphaSource_
+{
+    AlphaSource_Assumed = 0, //!< Nothing stated it; the loader picked a default
+    AlphaSource_Format,      //!< The format settles it for every conforming file
+    AlphaSource_File,        //!< This file said so, in a tag or flag of its own
+    AlphaSource_Count
+};
+
 const char  *alpha_type_name(AlphaType_ at);
+//! How the alpha kind was arrived at, phrased to follow it: "Straight (from the file)".
+const char *alpha_source_suffix(AlphaSource_ as);
+//! The same, phrased to introduce a kind instead: "the file said Straight". Used where an override has
+//! displaced one and both have to appear, since the suffix form then reads as an idiom.
+const char *alpha_source_phrase(AlphaSource_ as);
+//! Name for the alpha-override combo, which needs to say more than the metadata panel's one-word label.
+const char  *alpha_override_name(AlphaType_ at);
 const char **alpha_type_names();
 
 /**

@@ -10,6 +10,7 @@
 #include "exr_save_options.h"
 #include "exr_std_streams.h"
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imgui.h"
 #include "imgui_ext.h"
@@ -521,7 +522,8 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
         for (const auto &c : img->channels)
             if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
             {
-                img->alpha_type = AlphaType_PremultipliedLinear;
+                // OpenEXR's spec makes alpha associated, and its samples are linear.
+                img->set_alpha(AlphaType_PremultipliedLinear, AlphaSource_Format, alpha_override_of(opts));
                 break;
             }
 

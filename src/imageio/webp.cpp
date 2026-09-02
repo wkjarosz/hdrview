@@ -9,6 +9,7 @@
 #include "app.h"
 #include "common.h"
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "webp.h"
 
@@ -329,7 +330,9 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             auto       frame_image      = make_shared<Image>(int2{img_width, img_height}, num_channels);
             frame_image->filename       = filename;
             frame_image->partname       = partname;
-            frame_image->alpha_type     = has_alpha ? AlphaType_Straight : AlphaType_None;
+            // WebP's spec makes alpha unassociated.
+            frame_image->set_alpha(has_alpha ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
+                                   alpha_override_of(opts));
             frame_image->icc_data       = icc_data;
             frame_image->exif           = Exif{exif_data};
             frame_image->xmp_data       = xmp_data;
@@ -389,6 +392,11 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
 
             // Apply color profile transformations to fragment
             int3 frame_size{frame_width, frame_height, num_channels};
+
+            // Inverting the transfer function does not commute with multiplication by alpha; see
+            // imageio/alpha.h.
+            unpremultiply_before_transfer(frame_pixels.data(), frame_size, frame_image->alpha_type);
+
             if (opts.override_profile)
             {
                 string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
@@ -413,6 +421,8 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
 
                 frame_image->metadata["color profile"] = profile_desc;
             }
+
+            repremultiply_after_transfer(frame_pixels.data(), frame_size, frame_image->alpha_type);
 
             float        *pixels = frame_pixels.data();
             vector<float> canvas_float;
