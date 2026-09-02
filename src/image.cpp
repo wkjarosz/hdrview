@@ -1285,7 +1285,9 @@ ImagePtr Image::duplicate(const Box2i &region) const
     copy->color_space           = color_space;
     copy->white_point           = white_point;
     copy->alpha_type            = alpha_type;
-    copy->alpha_is_transparency = alpha_is_transparency;
+    copy->alpha_type_from_file  = alpha_type_from_file;
+    copy->alpha_source          = alpha_source;
+    copy->alpha_override        = alpha_override;
     copy->metadata              = metadata;
     copy->exif                  = exif;
     copy->xmp_data              = xmp_data;
