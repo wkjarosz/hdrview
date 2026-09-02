@@ -120,8 +120,8 @@ std::vector<int> HDRViewApp::target_groups(const ConstImagePtr &img, int pointed
     if (pointed_at >= 0 && !img->is_group_selected(pointed_at))
         return {pointed_at};
 
-    // The current group is always among the selected ones, so the fallback is for an image that has not
-    // been through the panel at all -- a freshly built one, or a test driving a command directly.
+    // The current target is always selected, so the fallback is for an image the panel has never had a
+    // say over -- one a command has just produced, or a test driving a command directly.
     std::vector<int> groups = img->selected_groups();
     if (groups.empty() && img->is_valid_group(img->active_group_index(Target_Primary)))
         groups.push_back(img->active_group_index(Target_Primary));

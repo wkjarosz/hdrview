@@ -8,6 +8,10 @@
     \author Wojciech Jarosz
 
     The edits that change which channels an image has, and how they are grouped.
+
+    None of them carries a subject: the channels they cover are named by the multi-selection, or by a
+    single group right-clicked from outside it, rather than by a scope over one image's channels. They do
+    still fan out, since a selection can hold groups of more than one image.
 */
 
 #include "edit/commands.h"
@@ -53,7 +57,7 @@ std::vector<int> group_channels(const ImagePtr &img, int group)
     return out;
 }
 
-//! Every channel of every group an edit is about to act on, which is not always the one on screen.
+//! Every channel of every group an edit is about to act on, which need not include the one on screen.
 std::vector<int> target_channels(const EditContext &ctx)
 {
     std::vector<int> out;
@@ -64,10 +68,8 @@ std::vector<int> target_channels(const EditContext &ctx)
 
 //! The channel to leave the viewport on after a rebuild, or -1 to leave it where it is.
 /*!
-    A rebuild renumbers the groups, so the index that was selected can afterwards mean something else
-    entirely -- following a channel is the only way to stay on what was being shown. Only when the group
-    on screen is one of the ones being changed; one merely pointed at from the panel must leave the
-    viewport where it was.
+    Only a group being changed is worth following: one merely pointed at from the panel must leave the
+    viewport where it was. See select_channels_group() for why following it is what it takes.
 */
 int followed_channel(const ImagePtr &img, const std::vector<int> &changed)
 {
@@ -145,8 +147,6 @@ public:
                 ImGuiInputFlags_None,
                 "Ungroup",
                 24.f,
-                // No subject: the channels are named by the selection, not by a scope. It still fans
-                // out, since a selection can hold groups of more than one image.
                 /* has_subject */ false};
     }
 
@@ -223,8 +223,6 @@ public:
                 ImGuiInputFlags_None,
                 "Regroup",
                 24.f,
-                // No subject: the channels are named by the selection, not by a scope. It still fans
-                // out, since a selection can hold groups of more than one image.
                 /* has_subject */ false};
     }
 
@@ -278,8 +276,6 @@ public:
                 ImGuiInputFlags_None,
                 "Delete",
                 24.f,
-                // No subject: the channels are named by the selection, not by a scope. It still fans
-                // out, since a selection can hold groups of more than one image.
                 /* has_subject */ false};
     }
 

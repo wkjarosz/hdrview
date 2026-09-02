@@ -657,8 +657,12 @@ void Image::draw_histogram()
                     heights[c] = shown[c] ? std::max(0.f, column_height(stats[c], xa, xb)) : 0.f;
                     order[c]   = c;
                 }
-                std::sort(order.begin(), order.begin() + n_channels,
-                          [&](int a, int b) { return heights[a] < heights[b]; });
+                // Insertion sort rather than std::sort: this runs once per pixel column over at most four
+                // elements, where std::sort's machinery costs more than the sort, and its bounds stay
+                // plain enough that the optimizer does not lose them.
+                for (int i = 1; i < n_channels; ++i)
+                    for (int j = i; j > 0 && heights[order[j]] < heights[order[j - 1]]; --j)
+                        std::swap(order[j], order[j - 1]);
 
                 // Sweep bands from the baseline upward; the channels active in a band are exactly those
                 // whose height reaches into it, so their colors sum additively.
