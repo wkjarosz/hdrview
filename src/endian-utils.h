@@ -12,8 +12,8 @@
 #include <type_traits>
 
 #if defined(_MSC_VER)
-// Declares _byteswap_ushort/_byteswap_ulong/_byteswap_uint64, which the #pragma intrinsic below only
-// asks to be inlined -- it does not introduce the names.
+// declares _byteswap_ushort/_byteswap_ulong/_byteswap_uint64; the #pragma intrinsic below only asks for
+// them to be inlined
 #include <stdlib.h>
 #endif
 
@@ -125,12 +125,8 @@ T read_as(const unsigned char *ptr, Endian data_endian)
 /*!
  * @brief Read an unsigned value stored in fewer bytes than T from a byte array.
  *
- * Unlike read_as(), which copies sizeof(T) bytes whole, this assembles `num_bytes` of them and
- * zero-extends. That is what a format with a variable sample width needs -- a DDS bitmasked pixel
- * occupies 1 to 4 bytes -- and it reads only the bytes the sample actually has, at any alignment.
- *
- * Assembling arithmetically rather than swapping also makes the result independent of the host's own
- * endianness, so there is no branch on it.
+ * Assembles `num_bytes` of them and zero-extends, reading only the bytes the sample has, at any alignment,
+ * as a format with a variable sample width needs (a DDS bitmasked pixel occupies 1 to 4 bytes).
  *
  * @tparam T Unsigned type to assemble into
  * @param ptr Pointer to the byte array to read from

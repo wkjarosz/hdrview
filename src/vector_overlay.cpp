@@ -83,10 +83,9 @@ ImU32 color_from(const float *f) { return ImGui::ColorConvertFloat4ToU32(ImVec4(
 /*!
     Builds a NanoVG-style path out of ImDrawList's own path machinery.
 
-    ImDrawList has one path buffer and no notion of subpaths, so each subpath is built there -- which gets
-    ImGui's curve and arc tessellation for free -- and then moved out into `subpaths` when it ends. Stroke
-    and Fill walk those; only BeginPath discards them, matching NanoVG, where a path can be filled and then
-    stroked without rebuilding it.
+    ImDrawList has one path buffer and no notion of subpaths, so each subpath is built there, for ImGui's
+    curve and arc tessellation, then moved out into `m_subpaths` when it ends. Stroke and Fill walk those;
+    only BeginPath discards them, matching NanoVG, where a path can be filled and then stroked.
 */
 class PathBuilder
 {
@@ -135,9 +134,9 @@ public:
 
     void fill(ImU32 color) const
     {
-        // Each subpath is filled on its own. NanoVG would instead fill them together under a winding rule,
-        // which is how a subpath marked as a hole punches through the one around it; ImDrawList has no
-        // winding, so a hole comes out solid. PathWinding is refused for that reason -- see its case below.
+        // Each subpath is filled on its own. NanoVG fills them together under a winding rule, which is how
+        // a subpath marked as a hole punches through the one around it; ImDrawList has no winding, so
+        // PathWinding is refused below.
         for (const auto &sp : m_subpaths)
             if (sp.points.Size >= 3)
                 m_draw_list->AddConcavePolyFilled(sp.points.Data, sp.points.Size, color);
@@ -151,12 +150,8 @@ private:
     std::vector<SubPath> m_subpaths;
 };
 
-//! Where AddText should put the string's top-left, given NanoVG's alignment flags.
-/*!
-    ImGui positions text by its top-left corner and has no notion of a baseline, so Baseline is placed as a
-    fraction of the line height -- close enough that a label sits where the sender meant it to, but not
-    metrically exact.
-*/
+//! Where AddText should put the string's top-left, given NanoVG's alignment flags. ImGui has no notion of a
+//! baseline, so Baseline is approximated as a fraction of the line height.
 ImVec2 aligned_text_pos(ImVec2 anchor, ImVec2 size, int align)
 {
     float x = anchor.x;
@@ -199,8 +194,8 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
     state.stroke_color = default_color;
     state.font         = xform.default_font;
 
-    // Subpaths are staged through ImDrawList's own path buffer, which is scratch space between primitives
-    // and so is empty on entry and left empty on exit.
+    // subpaths are staged through ImDrawList's own path buffer, which is scratch space between primitives
+    // and so is empty on entry and left empty on exit
     PathBuilder path{draw_list};
     draw_list->_Path.Size = 0;
 
@@ -246,8 +241,7 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
             break;
 
         case VgCommand::Type::Arc:
-            // NanoVG's winding argument picks the sweep direction; PathArcTo sweeps from a_min to a_max, so
-            // ordering the angles expresses the same thing.
+            // NanoVG's winding argument picks the sweep direction; PathArcTo sweeps from a_min to a_max
             {
                 const ImVec2 c   = to_screen(f[0], f[1]);
                 const float  r   = f[2] * scale;
@@ -278,9 +272,8 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
 
         case VgCommand::Type::Circle:
         {
-            // Stopping one segment short of a full turn: the subpath is closed when it is drawn, so
-            // sweeping the whole circle would leave its first and last point on top of each other. This is
-            // what ImDrawList::AddCircle() does for the same reason.
+            // Stop one segment short of a full turn: the subpath is closed when drawn, so sweeping the
+            // whole circle would leave its first and last point on top of each other (as AddCircle() does).
             const ImVec2 c    = to_screen(f[0], f[1]);
             const float  r    = f[2] * scale;
             const int    segs = ImMax(3, draw_list->_CalcCircleAutoSegmentCount(r));
@@ -338,16 +331,14 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
 
         // -- refused ----------------------------------------------------------------------------------
         case VgCommand::Type::PathWinding:
-            // NanoVG uses this to mark a subpath as a hole in the one around it, which needs a winding
-            // rule that ImDrawList does not have. Filling anyway would produce a solid shape where a
-            // donut was asked for, so the command is reported instead.
+            // NanoVG marks a subpath as a hole in the one around it, which needs a winding rule ImDrawList
+            // does not have; filling anyway would produce a solid shape where a donut was asked for
             unsupported("PathWinding (holes in filled paths)");
             break;
 
         case VgCommand::Type::ArcTo:
-            // The tangent/fillet form: an arc of the given radius joining the current point to two others.
-            // ImDrawList only has centre-and-angles arcs, so this needs the tangent construction from
-            // NanoVG. Nothing observed sends it.
+            // the tangent/fillet form: an arc of the given radius joining the current point to two others.
+            // ImDrawList only has center-and-angles arcs, so this needs NanoVG's tangent construction.
             unsupported("ArcTo");
             break;
 

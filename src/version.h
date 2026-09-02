@@ -25,8 +25,7 @@ struct SemVer
 {
     int major = 0, minor = 0, patch = 0;
 
-    // Same combining formula as version_combined(), which is defined in terms of this so the two can't
-    // diverge.
+    // same combining formula as version_combined(), which is defined in terms of this
     int combined() const { return patch + 100 * (minor + 100 * major); }
 };
 

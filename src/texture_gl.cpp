@@ -274,23 +274,21 @@ void Texture::resize(const int2 &size)
 
 int Texture::max_size()
 {
-    // Cached once a query succeeds; afterwards this is a plain read, safe from any thread.
+    // cached once a query succeeds; afterwards this is a plain read, safe from any thread
     static GLint s_max_size = 0;
     if (s_max_size == 0)
     {
 #if defined(HELLOIMGUI_USE_GLAD)
-        // glGetIntegerv is a GLAD function pointer that stays null until gladLoadGL() has run (e.g. no window was
-        // ever created, as in headless unit tests). Report "no limit" instead of crashing.
+        // glGetIntegerv is a GLAD function pointer that stays null until gladLoadGL() has run (e.g. no window
+        // was ever created, as in headless unit tests), so report "no limit" instead of crashing
         if (!glGetIntegerv)
             return std::numeric_limits<int>::max();
 #endif
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &s_max_size);
 
-        // The query only answers on a thread with a current context, and it leaves its argument alone when it
-        // does not: images decoded on a loader thread, or before the window exists, would otherwise be measured
-        // against a limit of zero and every one of them rejected. Report "no limit" and try again next time
-        // rather than caching that. Anything genuinely too large is caught by the next call that does have a
-        // context -- Image::finalize() runs this check on every image, not just the first.
+        // Without a current context glGetIntegerv leaves s_max_size at 0; report "no limit" and retry on the
+        // next call instead of caching 0 and rejecting every image. Image::finalize() checks every image, so
+        // anything too large is still caught by the first call that does have a context.
         if (s_max_size == 0)
             return std::numeric_limits<int>::max();
     }
@@ -299,8 +297,7 @@ int Texture::max_size()
 
 void Texture::generate_mipmap()
 {
-    // Trace, not info: a streaming image regenerates its mip chain on any frame a tile landed on, which at
-    // info level buries everything else in the log window.
+    // trace, not info: a streaming image regenerates its mip chain on any frame a tile landed on
     spdlog::trace("Generating mipmap");
     GLenum tex_mode = m_samples > 1 ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
     CHK(glBindTexture(tex_mode, m_texture_handle));

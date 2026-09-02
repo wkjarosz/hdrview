@@ -23,13 +23,12 @@ static const string shader_extensions[] = {".glsl",    ".vs",      ".fs",      "
 #endif
 static const size_t num_extensions = sizeof(shader_extensions) / sizeof(shader_extensions[0]);
 
-// Assemble a report of where a shader was looked for and what is in those folders instead. A packaging
-// mistake (a shipped assets folder holding the wrong files, or none) is otherwise indistinguishable from a
-// missing folder, since both surface only as a shader that could not be found.
+// Report where a shader was looked for and what is in those folders instead, since a packaging mistake and a
+// missing folder both surface only as a shader that could not be found.
 static string describe_search_locations(string_view basename)
 {
     // The folders HelloImGui::AssetFileFullPath() consults, in the order it tries them. Its exe-relative
-    // fallback is not reachable through the public API, so it is named rather than expanded.
+    // fallback is not reachable through the public API, so it is only named below.
     std::vector<string> folders;
 #ifdef ASSETS_LOCATION
     folders.emplace_back(ASSETS_LOCATION);
@@ -147,8 +146,8 @@ void Shader::set_uniform_block(const string                                     
         written.push_back(member_name);
     }
 
-    // Zero-fill reserved/padding members the caller didn't (and shouldn't have to) name. Members not named here
-    // and not underscore-prefixed are deliberately left alone, so begin() still warns about them.
+    // zero-fill the padding members the caller shouldn't have to name; anything else left unnamed stays
+    // untouched, so begin() still warns about it
     static const uint8_t zeros[UniformValue::max_size]{};
     for (const auto &member_name : block_member_names(block_name))
     {
@@ -157,9 +156,8 @@ void Shader::set_uniform_block(const string                                     
         if (std::find(written.begin(), written.end(), member_name) != written.end())
             continue;
 
-        // Only the GL backend registers block members as individually-settable entries in m_buffers (as dotted
-        // "block.member" uniforms), and only there does an unset member trigger begin()'s warning. Metal keeps
-        // one buffer for the whole block, allocated zero-filled at construction, so its padding is already 0.
+        // Only the GL backend registers block members individually in m_buffers, and only there does an unset
+        // member trigger begin()'s warning; Metal's one buffer per block is zero-filled at construction.
         auto it = m_buffers.find(block_name + "." + member_name);
         if (it == m_buffers.end())
             continue;

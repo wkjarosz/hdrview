@@ -27,13 +27,13 @@ public:
         level::level_enum level;
         size_t            color_range_start;
         size_t            color_range_end;
-        // Monotonic id, stable across the circular buffer wrapping around, so a consumer can locate
-        // this exact item again later (e.g. to scroll to it) even after other items have been pushed.
+        // monotonic id, stable across the circular buffer wrapping, so a consumer can locate this item
+        // again after other items have been pushed
         uint64_t seq;
     };
 
-    // Severity and text of the highest-severity message pushed since the last mark_badge_seen(), plus
-    // how many messages (of any severity) arrived in that span.
+    // severity and text of the highest-severity message pushed since the last mark_badge_seen(), plus how
+    // many messages of any severity arrived in that span
     struct BadgeState
     {
         level::level_enum level;
@@ -94,9 +94,8 @@ protected:
         {
             badge_counts_[msg.level]++;
             // badge_level_ == off means nothing has been recorded since the last mark_badge_seen();
-            // otherwise only a message at least as severe as what's already showing takes over, so ties
-            // go to the most recent message at the current highest severity. Tracking every level (not
-            // just warn+) means there's always something to show once anything has been logged.
+            // otherwise only a message at least as severe as the one showing takes over, so ties go to the
+            // most recent at that severity
             if (badge_level_ == level::off || msg.level >= badge_level_)
             {
                 badge_level_   = msg.level;

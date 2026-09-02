@@ -37,11 +37,8 @@ static constexpr socket_t k_no_sock = -1;
 namespace
 {
 
-//! How long the receive thread blocks in poll() before rechecking whether it has been asked to stop.
-/*!
-    Bounds how long stop() takes; nothing else waits on it, since poll() returns as soon as a packet or a
-    connection arrives.
-*/
+//! How long the receive thread blocks in poll() before rechecking whether it has been asked to stop. This
+//! bounds how long stop() takes; poll() returns as soon as a packet or a connection arrives.
 constexpr int k_poll_timeout_ms = 100;
 
 //! Largest amount read from one connection per poll, so one busy client cannot starve the others.
@@ -131,11 +128,10 @@ bool IpcServer::start(uint16_t port, PacketHandler on_packet)
     if (listener == k_no_sock)
         return fail(fmt::format("could not create a socket ({})", socket_error_string()));
 
-    // Closed on every way out of here until the receive thread takes ownership of it at the end.
+    // closed on every way out of here until the receive thread takes ownership of it at the end
     auto listener_guard = ScopeGuard{[listener] { close_socket(listener); }};
 
-    // Without this, the port stays unbindable for a minute or two after a previous run's connections
-    // finish closing, so restarting HDRView would fail for no reason the user could act on.
+    // without this the port stays unbindable for a minute or two after a previous run's connections close
     const int reuse = 1;
     setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(reuse));
 
@@ -151,8 +147,7 @@ bool IpcServer::start(uint16_t port, PacketHandler on_packet)
     if (listen(listener, 8) != 0 || !set_non_blocking(listener))
         return fail(fmt::format("could not listen on port {} ({})", port, socket_error_string()));
 
-    // Port 0 asks the OS to choose a free one, so the port actually bound is read back rather than assumed.
-    // Only a test has reason to do that, but reporting the real port is right either way.
+    // port 0 asks the OS to choose a free one, so read back the port actually bound
     sockaddr_in bound{};
     socklen_t   bound_len = sizeof(bound);
     if (getsockname(listener, (sockaddr *)&bound, &bound_len) == 0)
@@ -165,7 +160,7 @@ bool IpcServer::start(uint16_t port, PacketHandler on_packet)
     m_stopping      = false;
     m_listening     = true;
 
-    // The readout counts one listening session, not the lifetime of the app.
+    // the readout counts one listening session, not the lifetime of the app
     m_packets_received = 0;
     m_bytes_received   = 0;
     m_last_packet_ns   = 0;
@@ -270,8 +265,8 @@ void IpcServer::run()
         if (ready == 0)
             continue;
 
-        // Existing connections first, then new ones, so that a connection accepted this round is not
-        // indexed against the fds array it does not appear in.
+        // existing connections first, so a connection accepted this round is not indexed against the fds
+        // array it does not appear in
         for (size_t i = connections.size(); i-- > 0;)
         {
             const short events = fds[i + 1].revents;
@@ -315,8 +310,7 @@ void IpcServer::run()
             }
             catch (const std::exception &e)
             {
-                // The stream carries no packet boundary to resynchronize to, so a client that sends
-                // something unreadable has to go rather than have the rest of its bytes guessed at.
+                // the stream carries no packet boundary to resynchronize to, so an unreadable client has to go
                 spdlog::warn("Dropping image update client: {}", e.what());
                 drop(i, "malformed packet");
             }
@@ -336,8 +330,7 @@ void IpcServer::run()
                     continue;
                 }
 
-                // Tiles arrive as small writes that matter immediately; waiting to coalesce them only adds
-                // latency to what is meant to be a live view.
+                // tiles arrive as small writes that matter immediately, so don't wait to coalesce them
                 const int no_delay = 1;
                 setsockopt(client, IPPROTO_TCP, TCP_NODELAY, (const char *)&no_delay, sizeof(no_delay));
 

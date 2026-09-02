@@ -17,31 +17,13 @@
 #include <string_view>
 #include <vector>
 
-/*!
-    tev's remote-control protocol: how a renderer hands a viewer its pixels while it is still producing them.
-
-    One operation per packet, framed as
-
-        [uint32 total_length_in_bytes][uint8 type][type-specific payload]
-
-    with every integer little-endian and every string NUL-terminated. The length counts its own four bytes.
-    The layout matches tev's byte for byte, so the clients that already exist for it (the C++, Python and
-    Rust `tevclient` libraries, pbrt-v4's display server) work against HDRView unchanged.
-
-    An independent reimplementation of the format tev documents, rather than a port of its code.
-
-    Everything here treats its input as hostile: a packet arrives over a socket from a process that is not
-    this one, so every count, offset and stride is checked against the bytes actually present rather than
-    trusted to describe them.
-*/
+// tev's IPC protocol: [uint32 length][uint8 type][payload], little-endian, NUL-terminated strings; the
+// length includes itself. Byte-compatible with tev, so its tevclient libraries work against HDRView
+// unchanged. See https://github.com/Tom94/tev/blob/master/include/tev/Ipc.h
+// Packets arrive from another process, so every count, offset and stride is checked against the bytes present.
 
 //! Which operation a packet carries. The numbering is the protocol's, not ours.
-/*!
-    The versioned duplicates are tev's backwards compatibility: V2 added multiple channels per packet and V3
-    added per-channel offset/stride, so a client can hand over an interleaved tile without deinterleaving it
-    first. A newer type is a superset of the older one it shadows, and all of them are still sent in
-    practice, so all of them are read.
-*/
+//! The versioned duplicates are tev's backwards compatibility; clients still send all of them.
 enum class IpcPacketType : uint8_t
 {
     OpenImage      = 0,
@@ -55,12 +37,8 @@ enum class IpcPacketType : uint8_t
     VectorGraphics = 8, //!< overlay drawing commands; see vector_overlay.h
 };
 
-//! Largest packet we are willing to hold, since the sender chooses the length.
-/*!
-    A tile is pixels times channels times four bytes, so a whole 8K RGBA frame in one packet is around
-    530 MB and legitimate. The cap exists so that a bad or hostile length field cannot ask for an
-    unbounded allocation, not because any real packet approaches it.
-*/
+//! Largest packet we are willing to hold, since the sender chooses the length. A whole 8K RGBA frame in
+//! one packet is around 530 MB and legitimate, so the cap only bounds what a bad length field can allocate.
 inline constexpr uint32_t k_max_ipc_packet_size = 1u << 30; // 1 GiB
 
 //! Most channels one packet may name, well past any real layer count and short of an allocation attack.
@@ -95,9 +73,7 @@ struct IpcCreateImage
 //! A rectangle of pixels for channels that already exist, as a renderer finishes them.
 /*!
     The samples stay in the one interleaved block the sender wrote, addressed per channel as
-    `data[offset[c] + px * stride[c]]` for `px` running row-major over `bounds`. Keeping them that way
-    rather than deinterleaving into a buffer per channel costs nothing to read -- Channel::upload_tile()
-    takes a stride for exactly this -- and avoids a second copy of every tile.
+    `data[offset[c] + px * stride[c]]` for `px` running row-major over `bounds`.
 */
 struct IpcUpdateImage
 {
@@ -116,15 +92,11 @@ struct IpcUpdateImage
 };
 
 //! Drawing commands to lay over an image, in its pixel coordinates.
-/*!
-    `append` is how a renderer accumulates an overlay as it works -- one packet per finished tile, each
-    adding to what is already there -- rather than resending the whole program every time.
-*/
 struct IpcVectorGraphics
 {
     std::string            name;
     bool                   grab_focus = false;
-    bool                   append     = false;
+    bool                   append     = false; //!< add to the existing overlay instead of replacing it
     std::vector<VgCommand> commands;
 };
 
@@ -138,11 +110,8 @@ public:
     IpcPacket() = default;
 
     /*!
-        Take ownership of one framed packet, starting at its length prefix.
-
-        Checks only the framing -- that a length is present, that it is sane, and that it matches the bytes
-        handed over. What the payload says is checked by whichever as_*() reads it, since only that knows
-        which fields should be there.
+        Take ownership of one framed packet, starting at its length prefix. Checks only the framing; the
+        payload is checked by whichever as_*() reads it.
 
         \throws std::runtime_error if the framing is not intact
     */
@@ -163,7 +132,7 @@ public:
     IpcVectorGraphics as_vector_graphics() const;
     //@}
 
-    //@{ \name Builders, which produce exactly what tev's own client would send.
+    //@{ \name Builders, producing what tev's own client would send.
     static IpcPacket open_image(std::string_view path, std::string_view channel_selector, bool grab_focus);
     static IpcPacket reload_image(std::string_view name, bool grab_focus);
     static IpcPacket close_image(std::string_view name);
@@ -184,14 +153,12 @@ private:
 /*!
     Pull whole packets off a stream of received bytes.
 
-    A TCP recv() returns whatever has arrived, which may be half a packet or several, so a connection has to
-    accumulate until a length prefix and the bytes it promises are both present. Consumed bytes are dropped
-    from the front and any partial remainder is kept for the next call.
+    A recv() returns whatever has arrived, which may be half a packet or several, so bytes accumulate until a
+    length prefix and the bytes it promises are both present; any partial remainder is kept for the next call.
 
     \param [in,out] buffer  Received bytes; whatever is left over on return is the start of the next packet
-    \param [] on_packet     Invoked for each complete packet, in arrival order
-    \throws std::runtime_error if the stream is unusable (a length no packet could have), which a caller
-            should treat as grounds to drop the connection rather than resynchronize -- there is no framing
-            marker to resynchronize to.
+    \param on_packet        Invoked for each complete packet, in arrival order
+    \throws std::runtime_error if the stream is unusable (a length no packet could have). There is no framing
+            marker to resynchronize to, so a caller should drop the connection.
 */
 void extract_ipc_packets(std::vector<char> &buffer, const std::function<void(const IpcPacket &)> &on_packet);

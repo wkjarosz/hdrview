@@ -77,9 +77,8 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
     // sokol-shdc's generated Metal vertex shaders take their `in` attributes via a [[stage_in]] struct, which
     // requires an explicit MTLVertexDescriptor or pipeline creation fails ("Vertex function has input
     // attributes but no vertex descriptor was set."). Buffer indices count down from 30 to stay clear of the
-    // low single-digit indices sokol-shdc assigns to uniform blocks/textures/samplers via `layout(binding=N)`.
-    // stage_in attributes don't appear in the MTLArgument reflection used below for ordinary buffer/texture/
-    // sampler arguments, so each is also registered in m_buffers here, keeping set_buffer("position", ...) working.
+    // low indices sokol-shdc assigns to uniform blocks/textures/samplers via `layout(binding=N)`. stage_in
+    // attributes don't appear in the MTLArgument reflection used below, so each is registered in m_buffers here.
     MTLVertexDescriptor *vertex_desc = [MTLVertexDescriptor vertexDescriptor];
     for (MTLVertexAttribute *attr in vertex_func.vertexAttributes)
     {
@@ -160,11 +159,8 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
 
     // Pre-size and zero-fill a struct-typed buffer argument (a named uniform block compiled by sokol-shdc,
     // e.g. "constant fs_params& fsp [[buffer(N)]]"), and register its members in m_metal_struct_members so
-    // set_buffer("fsp.member", ...) can later memcpy into the right byte offset (see shader.h). Uses the same
-    // small(raw array)-vs-large(id<MTLBuffer>) split as ordinary buffers (METAL_BUFFER_THRESHOLD) so
-    // set_buffer()/begin()/~Shader() upload and free a struct block like any other. Large blocks use
-    // MTLResourceStorageModeShared, not the Private+blit path used elsewhere, since members are written via
-    // CPU memcpy at arbitrary times and need a CPU-visible .contents pointer.
+    // set_buffer("fsp.member", ...) can memcpy into the right byte offset (see shader.h). Large blocks use
+    // MTLResourceStorageModeShared, since members are written by CPU memcpy and need a visible .contents.
     auto register_struct_members = [this, device](const std::string &block_name, MTLArgument *arg, Buffer &buf)
     {
         if (!arg.bufferStructType)
@@ -191,8 +187,7 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
         std::string name = [arg.name UTF8String];
 
         // Metal's pipeline reflection also reports a synthetic "vertexBuffer.<index>" entry per [[stage_in]]
-        // buffer slot, an implementation detail of stage_in binding, not a parameter the app should set.
-        // Left unfiltered it's a permanently-unbound Buffer entry that spams begin()'s warnings every frame.
+        // buffer slot, which nothing sets and which would sit in m_buffers permanently unbound.
         if (name.rfind("vertexBuffer.", 0) == 0)
             continue;
 
@@ -277,8 +272,7 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
     auto &gMetalGlobals = GetMetalGlobals();
 
     // A dotted "block.member" name addresses one member of a uniform block compiled to a single struct-typed
-    // buffer argument (see register_struct_members() above and m_metal_struct_members in shader.h). Write
-    // just that member's bytes into the block's already-sized backing buffer, not the whole buffer.
+    // buffer argument, so write just that member's bytes into the block's already-sized backing buffer.
     auto member_it = m_metal_struct_members.find(name);
     if (member_it != m_metal_struct_members.end())
     {
@@ -353,8 +347,8 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
 
 std::vector<std::string> Shader::block_member_names(const std::string &block_name) const
 {
-    // A named uniform block compiles to a single struct-typed buffer argument here, whose members were recorded
-    // as dotted "block.member" keys by register_struct_members() in the constructor above.
+    // a named uniform block compiles to one struct-typed buffer argument, whose members register_struct_members()
+    // recorded as dotted "block.member" keys
     const std::string prefix = block_name + ".";
 
     std::vector<std::string> names;

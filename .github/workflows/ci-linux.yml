@@ -18,14 +18,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # A newer commit on the same branch makes an older run pointless, and it goes on holding a runner for
-  # the twenty-odd minutes the matrix takes. Grouped by head branch, so a pull_request run and any push
-  # run for that branch share a group -- ref_name rather than ref, because a push reports the fully
-  # qualified refs/heads/<name>, which never matches the bare name a pull_request puts in head_ref.
-  # master is exempt: every commit landing there is worth building. On master the group is per-commit,
-  # so nothing there ever queues behind or cancels anything else: GitHub keeps only one *pending* run
-  # per group even when cancel-in-progress is false, so a second push would otherwise cancel the first
-  # one's queued run before it started.
+  # Cancel superseded runs on a branch: head_ref for pull requests, ref_name for pushes, since a push
+  # reports refs/heads/<name> where a pull_request puts the bare name in head_ref. master is grouped per
+  # commit instead, so every commit landing there builds.
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}${{ github.ref == 'refs/heads/master' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
@@ -40,28 +35,25 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # Only this one preset/arch combo builds and runs hdrview_tests (Release only, see the Configure CMake
-          # and Run unit tests steps below) - CPM always fetches OpenEXR/PNG from source for -cpm/-universal
-          # presets, which is what the vendored-test-image-backed tests in tests/test_exr_io.cpp and
-          # tests/test_png_io.cpp conditionally compile against. Running the same suite across every preset in
-          # this matrix would be redundant.
+          # The one combo that builds and runs hdrview_tests (Release only). -cpm/-universal presets always
+          # fetch OpenEXR/PNG from source, which is what the vendored-test-image tests in
+          # tests/test_exr_io.cpp and tests/test_png_io.cpp compile against.
           - { name: "Ubuntu 24.04 CPM", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true}
 
-          # Runs the same two suites under AddressSanitizer and UndefinedBehaviorSanitizer. A plain build
-          # can't see a use-after-free or a non-finite-to-integer cast: the tests pass and the damage is
-          # silent, which is how both shipped. Release keeps the instrumented build tolerably fast.
+          # The same two suites under AddressSanitizer and UndefinedBehaviorSanitizer, which a plain build
+          # cannot see: a use-after-free or a non-finite-to-integer cast passes the tests silently. Release
+          # keeps the instrumented build tolerably fast.
           - { name: "Ubuntu 24.04 CPM sanitizers", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true, sanitizer: "asan" }
 
-          # ThreadSanitizer, which neither of the above can stand in for: a data race that doesn't corrupt
-          # anything on a given run is invisible to ASan/UBSan, and HDRView loads images off-thread, computes
-          # stats through a thread pool, and uploads textures in tiles across frames.
+          # ThreadSanitizer, which the entry above cannot stand in for: a data race that corrupts nothing on
+          # a given run is invisible to ASan/UBSan, and HDRView loads images off-thread, computes stats
+          # through a thread pool, and uploads textures in tiles across frames.
           #
-          # Runs on linux-local rather than linux-cpm for two reasons. GCC's TSan runtime segfaults on the
-          # linux-cpm build before reaching main, recursing inside its own __cxa_atexit interceptor. And with
-          # system libraries left uninstrumented, reports come from HDRView's own code instead of arriving as
-          # a suppressions file to maintain. The cost is that races at the boundary with an uninstrumented
-          # library are invisible, and that the system libpng is too old for cICP (the tests that need it
-          # compile out; see tests/test_png_io.cpp).
+          # On linux-local, for two reasons: GCC's TSan runtime segfaults on the linux-cpm build before
+          # reaching main, recursing inside its own __cxa_atexit interceptor, and uninstrumented system
+          # libraries keep reports in HDRView's own code instead of in a suppressions file. The cost is that
+          # races at the boundary with an uninstrumented library are invisible, and that the system libpng is
+          # too old for cICP (those tests compile out; see tests/test_png_io.cpp).
           - { name: "Ubuntu 24.04 Local TSan", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64", run_tests: true, sanitizer: "tsan" }
           - { name: "Ubuntu 24.04 Local", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64"}
 
@@ -77,17 +69,16 @@ jobs:
           # - { name: "Ubuntu 22.04 Local", os: ubuntu-22.04, preset: "linux-local" }
         buildtype: [Release, Debug]
         exclude:
-          # Only the Release build of the sanitizer entry is instrumented; its Debug build would just
-          # repeat the plain CPM Debug job.
+          # only the Release build of the sanitizer entry is instrumented; its Debug build would repeat the
+          # plain CPM Debug job
           - config: { name: "Ubuntu 24.04 CPM sanitizers", os: ubuntu-24.04, preset: "linux-cpm", arch: "x86_64", run_tests: true, sanitizer: "asan" }
             buildtype: Debug
           - config: { name: "Ubuntu 24.04 Local TSan", os: ubuntu-24.04, preset: "linux-local", arch: "x86_64", run_tests: true, sanitizer: "tsan" }
             buildtype: Debug
 
     steps:
-      # Ubuntu 24.04 splits libheif's codecs into plugin packages, and libheif-dev only suggests them.
-      # Without the encoder plugins the first encoder libheif offers is its built-in JPEG one, which
-      # stores no alpha -- so a HEIF written on a -local build silently loses it.
+      # Ubuntu 24.04 splits libheif's codecs into plugin packages that libheif-dev only suggests. Without the
+      # encoder plugins libheif offers its built-in JPEG encoder first, which stores no alpha.
       - name: Install dependencies (Ubuntu 24.04)
         if: startsWith(matrix.config.os, 'ubuntu-24.04')
         run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libimath-dev libopenexr-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libheif-plugin-x265 libheif-plugin-libde265 libheif-plugin-aomenc libheif-plugin-aomdec libheif-plugin-dav1d libaom-dev libdav1d-dev libde265-dev libx265-dev libjxl-dev libcli11-dev libspdlog-dev libfmt-dev libexif-dev libwayland-dev wayland-protocols libxkbcommon-dev libdbus-1-dev libopenh264-dev libopenjp2-7-dev xvfb
@@ -113,10 +104,8 @@ jobs:
       # Buildtype is part of the key (ccache below already varies by buildtype) so Debug and Release don't race
       # to overwrite one shared cache entry; restore-keys stays preset-only so either buildtype can seed the other.
       #
-      # path and hashFiles avoid a workspace-root "**": on macOS that walks into build/'s CPack staging symlink
-      # and every installed Xcode SDK - prohibitively expensive to glob. Scoped the same way here for consistency
-      # and to stay safe if this job ever grows a similar symlink. cpm_modules is always at the workspace root
-      # (CPM_SOURCE_CACHE above), so path needs no "**" either.
+      # path and hashFiles avoid a workspace-root "**", scoped the same way as ci-mac.yml. cpm_modules is
+      # always at the workspace root (CPM_SOURCE_CACHE above).
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"
@@ -132,8 +121,7 @@ jobs:
 
       # Only the image corpora, not the libraries: linux-local links the system OpenEXR and libpng, but the
       # tests that sweep real-world files still need the data those projects vendor. Sparse and shallow, so
-      # this pulls a few MB rather than ~100. Pinned to the same revisions CPM uses for the -cpm presets, so
-      # both jobs test against identical inputs.
+      # this pulls a few MB. Pinned to the revisions CPM uses for the -cpm presets, so both test the same data.
       - name: Fetch OpenEXR test images
         if: matrix.config.sanitizer == 'tsan'
         uses: actions/checkout@v5
@@ -164,11 +152,10 @@ jobs:
                 EXTRA_FLAGS="$EXTRA_FLAGS -DUSE_SANITIZER=Address;Undefined"
                 ;;
               tsan)
-                # No GUI tests: they drive a real GL context whose driver threads are not instrumented, which
-                # is where TSan noise would come from rather than from HDRView. -g because a race report
-                # without a usable stack cannot be triaged.
-                # linux-local gets its libraries from the system, so the vendored image corpora have to be
-                # supplied explicitly (checked out above) rather than coming from CPM-fetched sources.
+                # No GUI tests: they drive a real GL context whose uninstrumented driver threads are where
+                # TSan noise would come from. -g because a race report without a usable stack cannot be
+                # triaged. linux-local gets its libraries from the system, so the vendored image corpora are
+                # supplied explicitly from the checkout above.
                 EXTRA_FLAGS="$EXTRA_FLAGS -DHDRVIEW_BUILD_GUI_TESTS=OFF -DUSE_SANITIZER=Thread -DCMAKE_CXX_FLAGS=-g"
                 EXTRA_FLAGS="$EXTRA_FLAGS -DHDRVIEW_TEST_OPENEXR_DIR=${{github.workspace}}/test-corpora/openexr/src/test/bin/test_images"
                 EXTRA_FLAGS="$EXTRA_FLAGS -DHDRVIEW_TEST_PNG_CONTRIB_DIR=${{github.workspace}}/test-corpora/libpng/contrib"
@@ -186,16 +173,15 @@ jobs:
         run: |
           ${{github.workspace}}/build/${{ matrix.config.preset }}/${{ matrix.buildtype }}/HDRView --help
 
-      # Both sanitizers have to abort, or the job goes green with the report buried in the log -- which is
-      # the whole failure mode this entry exists to catch. Third-party undefined behavior we can't fix is
-      # filtered by the suppressions file instead.
+      # Both sanitizers have to abort, or the job goes green with the report buried in the log. Third-party
+      # undefined behavior we can't fix is filtered by the suppressions file instead.
       # detect_leaks=0: the app leaks by design at exit (static GPU and font state outliving main).
       - name: Sanitizer environment
         if: matrix.config.sanitizer
         run: |
           if [ "${{ matrix.config.sanitizer }}" = "tsan" ]; then
-            # halt_on_error for the same reason as above: a race reported into a passing job is a race nobody
-            # reads. second_deadlock_stack makes lock-order-inversion reports show both acquisition sites.
+            # halt_on_error for the same reason as above; second_deadlock_stack makes lock-order-inversion
+            # reports show both acquisition sites
             echo "TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1" >> $GITHUB_ENV
           else
             echo "ASAN_OPTIONS=detect_leaks=0:abort_on_error=1" >> $GITHUB_ENV
@@ -205,16 +191,13 @@ jobs:
       - name: Run unit tests
         if: matrix.config.run_tests == true && matrix.buildtype == 'Release'
         working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}
-        # Excludes hdrview_gui_tests: it needs a real display server (see "Run GUI tests" below with
-        # xvfb-run), which this step doesn't set up.
+        # excludes hdrview_gui_tests, which needs the display server "Run GUI tests" below sets up
         run: ctest -C ${{ matrix.buildtype }} --output-on-failure -E hdrview_gui_tests
 
-      # hdrview_gui_tests drives a real (GLFW/OpenGL) HDRView window via Dear ImGui Test Engine, so it needs an
-      # actual display server; GitHub's Ubuntu runners have none by default. Kept as its own step (not folded
-      # into "Run unit tests") since it's a separate ctest-registered binary from hdrview_tests (see
-      # HDRVIEW_BUILD_GUI_TESTS in CMakeLists.txt) and its failure output shouldn't be mixed in with the
-      # logic-level doctest suite's. Linux-only for now: macOS/Windows headless GUI automation is a known,
-      # currently-unsolved gap (Hello ImGui's own CI doesn't cover it either).
+      # hdrview_gui_tests drives a real GLFW/OpenGL HDRView window via Dear ImGui Test Engine, so it needs a
+      # display server, which GitHub's Ubuntu runners lack by default. Its own step, since it is a separate
+      # ctest-registered binary whose failure output should not mix into the doctest suite's. Linux-only:
+      # macOS/Windows headless GUI automation is an unsolved gap (Hello ImGui's own CI doesn't cover it).
       - name: Run GUI tests
         if: matrix.config.run_tests == true && matrix.buildtype == 'Release' && matrix.config.sanitizer != 'tsan'
         working-directory: ${{ github.workspace }}/build/${{ matrix.config.preset }}
@@ -225,10 +208,9 @@ jobs:
         working-directory: ${{github.workspace}}/build/${{ matrix.config.preset }}
         run: cpack -C ${{ matrix.buildtype }} -G External
 
-      # Unpacks the AppImage and starts it, which is the only way to exercise the *installed* asset layout:
-      # the "Checking that HDRView runs" step above runs the build-tree binary, which finds its assets
-      # through HDRVIEW_BUILD_TREE_ASSETS_DIR and never loads a shader. xvfb-run because the runners have no
-      # display server, same as the GUI tests above.
+      # Unpacks the AppImage and starts it, the only way to exercise the installed asset layout: the
+      # "Checking that HDRView runs" step above runs the build-tree binary, which finds its assets through
+      # HDRVIEW_BUILD_TREE_ASSETS_DIR and never loads a shader. xvfb-run as with the GUI tests above.
       - name: Checking that the AppImage runs
         if: matrix.config.preset == 'linux-appimage'
         run: xvfb-run -a ${{github.workspace}}/.github/scripts/check-appimage.sh ${{github.workspace}}/build/${{ matrix.config.preset }}/*.appimage

@@ -19,9 +19,6 @@ void HDRViewApp::setup_rendering()
         m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);
         m_render_pass->set_clear_color(float4(0.15f, 0.15f, 0.15f, 1.f));
 
-        // colorspaces.sglsl's shared functions are baked directly into image-shader_frag's generated text at
-        // sokol-shdc compile time (see assets/shaders/image-shader.sglsl), so no runtime prepend_includes()
-        // is needed here anymore, unlike the old hand-maintained image-shader_frag.{glsl,metal}.
         m_shader = make_unique<Shader>(m_render_pass.get(),
                                        /* An identifying name */
                                        "ImageView", Shader::from_asset("shaders/image-shader_vert"),
@@ -50,20 +47,18 @@ void HDRViewApp::setup_rendering()
 
 bool HDRViewApp::supports_hdr() const
 {
-    // --sdr means "behave as if this were an SDR display", so it has to win over anything the hardware
-    // reports. Checked here, once, rather than being re-derived by each platform branch below: we never
-    // asked for a float buffer in this mode, so the HDR-only UI would be inert anyway.
+    // --sdr means "behave as if this were an SDR display", so it wins over anything the hardware reports
     if (m_force_sdr)
         return false;
 
 #if defined(__APPLE__)
-    // Metal's EDR path: hasEdrSupport() inspects the attached screens' EDR headroom directly, and the
-    // colorpass never runs here.
+    // Metal's EDR path: hasEdrSupport() inspects the attached screens' EDR headroom, and the colorpass
+    // never runs here
     return HelloImGui::hasEdrSupport();
 #else
-    // Mirrors tev's rule. We can exceed SDR either through a float framebuffer or through a transfer
-    // function that is itself HDR, and the display must not have told us its ceiling is merely SDR. Note
-    // that 0 means "unknown", not "no headroom" -- assume HDR in that case, as some systems never report it.
+    // Mirrors tev's rule: we can exceed SDR either through a float framebuffer or through a transfer
+    // function that is itself HDR, and the display must not have said its ceiling is SDR. A max of 0 means
+    // "unknown", not "no headroom", and some systems never report it, so assume HDR there.
     const bool extended_range = m_float_buffer || m_display_cs.tf.type == TransferFunction::BT2100_PQ ||
                                 m_display_cs.tf.type == TransferFunction::BT2100_HLG;
     return extended_range && (m_display_cs.max_nits > 80.f || m_display_cs.max_nits == 0.f);
@@ -72,16 +67,14 @@ bool HDRViewApp::supports_hdr() const
 
 float HDRViewApp::display_headroom() const
 {
-    // --sdr asks us to behave as an SDR display, and an SDR display's ceiling is exactly its white.
-    // Reported rather than left unknown, so the histogram still marks where that ceiling falls.
+    // an SDR display's ceiling is its white; reported, not left unknown, so the histogram still marks it
     if (m_force_sdr)
         return 1.f;
 
 #if defined(__APPLE__)
-    // Without the float buffer we are drawing into a plain 8-bit sRGB layer, so white is our ceiling no
-    // matter what the panel could reach. That framebuffer is decided once, at startup, from *all* the
-    // screens attached then (hasEdrSupport()); the headroom below is the current screen's alone, which is
-    // what makes moving the window between an XDR panel and an SDR monitor show up here.
+    // Without the float buffer we draw into a plain 8-bit sRGB layer, so white is the ceiling whatever the
+    // panel could reach. That framebuffer is decided once at startup from all the screens attached then
+    // (hasEdrSupport()), while the headroom below is the current screen's alone.
     if (!m_float_buffer)
         return 1.f;
 
@@ -91,24 +84,20 @@ float HDRViewApp::display_headroom() const
     if (m_display_cs.max_nits <= 0.f || m_display_cs.sdr_white_nits <= 0.f)
         return 0.f;
 
-    // A ceiling below SDR white is a display describing itself incoherently; clamp rather than report a
-    // headroom that would place the display's limit below its own reference white.
+    // a ceiling below SDR white is a display describing itself incoherently, so clamp it
     return std::max(1.f, m_display_cs.max_nits / m_display_cs.sdr_white_nits);
 #endif
 }
 
 //
-// The colorpass: when m_color_managed is true, everything HDRView draws -- the image content
-// (draw_background()) and Dear ImGui's own UI alike -- keeps emitting HDRView's usual extended-sRGB colors
-// (Dear ImGui has no notion of display color space). Both are redirected into an offscreen texture, and a
-// single full-screen pass converts that to whatever the real framebuffer needs, right before the frame is
-// presented -- mirrors nanogui-1's Screen::m_wants_color_management / ColorPass. Inert (every function
-// below no-ops) when m_color_managed is false, including on macOS EDR, which consumes HDRView's
-// extended-sRGB output directly.
+// The colorpass. When m_color_managed is true, everything HDRView draws (the image content, and Dear ImGui's
+// UI, which has no notion of display color space) is redirected into an offscreen texture, and a full-screen
+// pass converts that to whatever the real framebuffer needs just before the frame is presented.
+// Modeled on nanogui-1's Screen::m_wants_color_management / ColorPass. Every function below no-ops when
+// m_color_managed is false, including on macOS EDR, which consumes extended sRGB directly.
 //
-// The two halves run at different points in the frame -- begin_colorpass_frame() from CustomBackground,
-// end_colorpass_frame() from BeforeSwap -- so update_colorpass() decides once per frame, ahead of both, and
-// they must never re-decide independently.
+// The two halves run at different points in the frame (begin_colorpass_frame() from CustomBackground,
+// end_colorpass_frame() from BeforeSwap), so update_colorpass() decides once per frame ahead of both.
 //
 
 void HDRViewApp::update_colorpass()
@@ -149,20 +138,15 @@ void HDRViewApp::update_colorpass()
                                      Texture::TextureFlags::ShaderRead | Texture::TextureFlags::RenderTarget);
 
             // Everything the frame draws lands in m_colorpass_pass; m_resolve_pass then converts it to the
-            // window's framebuffer. The resolve pass must not clear -- it overwrites every pixel anyway --
-            // and neither writes depth.
+            // window's framebuffer. The resolve pass overwrites every pixel, so it must not clear.
             m_colorpass_pass = make_unique<RenderPass>(false, true, m_color_texture.get());
             m_resolve_pass   = make_unique<RenderPass>(false, false);
             m_colorpass_pass->set_cull_mode(RenderPass::CullMode::Disabled);
             m_resolve_pass->set_cull_mode(RenderPass::CullMode::Disabled);
-            // Opaque black, not RenderPass's transparent-black default: the colorpass passes the offscreen
-            // target's alpha straight through to the real framebuffer, and a zero alpha there can make the
-            // window itself translucent on compositors that honor it.
+            // Opaque black, not RenderPass's transparent-black default: the offscreen target's alpha passes
+            // straight through, and a zero alpha can make the window translucent on some compositors.
             m_colorpass_pass->set_clear_color(float4{0.f, 0.f, 0.f, 1.f});
 
-            // colorspaces.sglsl's shared functions are baked directly into colorpass_frag's generated text
-            // at sokol-shdc compile time (see assets/shaders/colorpass.sglsl), so no runtime
-            // prepend_includes() is needed here, matching how setup_rendering() loads the main image shader.
             m_colorpass_shader =
                 make_unique<Shader>(m_resolve_pass.get(), "ColorPass", Shader::from_asset("shaders/colorpass_vert"),
                                     Shader::from_asset("shaders/colorpass_frag"), Shader::BlendMode::None);
@@ -173,7 +157,7 @@ void HDRViewApp::update_colorpass()
             spdlog::info("Initialized the HDR colorpass (offscreen target + final display conversion).");
         }
 
-        // Resizes the attached texture and revalidates the FBO; a no-op when the size hasn't changed.
+        // resizes the attached texture and revalidates the FBO; a no-op when the size hasn't changed
         m_colorpass_pass->resize(fb_size);
         m_resolve_pass->resize(fb_size);
     }
@@ -195,8 +179,8 @@ void HDRViewApp::begin_colorpass_frame()
     if (!m_color_managed)
         return;
 
-    // Stays active across the rest of the frame -- including all of Dear ImGui's rendering, which happens
-    // outside HDRView's control -- until end_colorpass_frame() closes it just before the swap.
+    // stays active across the rest of the frame, Dear ImGui's rendering included, until
+    // end_colorpass_frame() closes it just before the swap
     m_colorpass_pass->begin();
 #endif
 }
@@ -228,8 +212,7 @@ void HDRViewApp::end_colorpass_frame()
 void HDRViewApp::cleanup_colorpass()
 {
     // Order matters: the shader and the passes reference the texture, and the target pass holds an FBO
-    // attachment to it. All of these must be released while the GL context is still alive, which is why
-    // this is called from BeforeExit rather than a destructor.
+    // attachment to it. All of these must be released while the GL context is still alive, hence BeforeExit.
     m_colorpass_shader.reset();
     m_resolve_pass.reset();
     m_colorpass_pass.reset();

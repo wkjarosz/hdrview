@@ -18,14 +18,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # A newer commit on the same branch makes an older run pointless, and it goes on holding a runner for
-  # the twenty-odd minutes the matrix takes. Grouped by head branch, so a pull_request run and any push
-  # run for that branch share a group -- ref_name rather than ref, because a push reports the fully
-  # qualified refs/heads/<name>, which never matches the bare name a pull_request puts in head_ref.
-  # master is exempt: every commit landing there is worth building. On master the group is per-commit,
-  # so nothing there ever queues behind or cancels anything else: GitHub keeps only one *pending* run
-  # per group even when cancel-in-progress is false, so a second push would otherwise cancel the first
-  # one's queued run before it started.
+  # Cancel superseded runs on a branch: head_ref for pull requests, ref_name for pushes, since a push
+  # reports refs/heads/<name> where a pull_request puts the bare name in head_ref. master is grouped per
+  # commit instead, so every commit landing there builds.
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}${{ github.ref == 'refs/heads/master' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
@@ -36,14 +31,14 @@ jobs:
   build_emscripten:
     name: Build and deploy emscripten webapp
     runs-on: ubuntu-24.04
-    # Shared with release.yml's prerelease deploy (same destination_dir: dev), to avoid two runs racing
-    # to push gh-pages.
+    # shared with release.yml's prerelease deploy (same destination_dir: dev), so the two cannot race to
+    # push gh-pages
     concurrency:
       group: gh-pages-deploy-dev
 
     steps:
-      # Everything the wasm build links is fetched by CPM and compiled by emcc, so only the host-side build
-      # tools are needed here - none of the -dev packages ci-linux.yml installs.
+      # everything the wasm build links is fetched by CPM and compiled by emcc, so only host-side build tools
+      # are needed here, none of the -dev packages ci-linux.yml installs
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
@@ -51,12 +46,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Placed after the checkout, whose default clean would otherwise wipe actions-cache-folder back out
-      # of the workspace.
-      #
-      # Pinned rather than tracking latest: this job publishes straight to gh-pages, so a toolchain
-      # regression ships a broken web app with nothing in the diff to explain it. Emscripten 4.0.13 does not
-      # build HDRView; don't pin back to it.
+      # Placed after the checkout, whose default clean would otherwise wipe actions-cache-folder back out of
+      # the workspace. Pinned, not tracking latest: this job publishes straight to gh-pages, so a toolchain
+      # regression ships a broken web app. Emscripten 4.0.13 does not build HDRView; don't pin back to it.
       - name: Install Emscripten
         uses: emscripten-core/setup-emsdk@v16
         with:
@@ -64,7 +56,7 @@ jobs:
           actions-cache-folder: emsdk-cache
 
       # cpm_modules is always at the workspace root (CPM_SOURCE_CACHE above), so neither path nor hashFiles
-      # needs a "**" that would walk into build/.
+      # needs a "**" that would walk into build/
       - uses: actions/cache@v5
         with:
           path: "cpm_modules"
@@ -73,7 +65,7 @@ jobs:
             ${{ github.workflow }}-cpm-modules-
 
       # Caching of build artifacts to reduce total build time. This action only installs ccache and restores
-      # its cache; the compiler-launcher flags on the configure step are what route emcc through it.
+      # its cache; the compiler-launcher flags on the configure step route emcc through it.
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.23
 

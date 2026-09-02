@@ -15,20 +15,12 @@
 
 struct ImDrawList;
 
+//! One command of a retained drawing program layered over an image, in that image's pixel coordinates.
 /*!
-    A little retained drawing program layered over an image, in that image's pixel coordinates.
-
-    This is the shape tev's `VectorGraphics` IPC packet carries, kept here rather than beside the protocol
-    because an overlay on an image is not inherently a network thing -- the image model stores one, and the
-    viewport draws it, neither of which should have to know a socket exists.
-
-    The model is NanoVG's, since that is what the protocol was written against: a mutable graphics state
-    (colors, widths, font) with a save/restore stack, and a path built up from subpaths that is then
-    stroked, filled, or both. Commands carry their arguments as a flat run of floats whose length is fixed
-    per type, plus a string for the two types that need one.
-
-    An independent reimplementation from the protocol's description, as in ipc_packet.h: tev draws these
-    commands through NanoVG, where the interpreter here targets Dear ImGui's draw lists.
+    This is what tev's `VectorGraphics` IPC packet carries. The model is NanoVG's: a mutable graphics state
+    (colors, widths, font) with a save/restore stack, and a path built from subpaths that is then stroked,
+    filled, or both. Arguments are a flat run of floats whose length is fixed per type, plus a string for
+    the two types that need one.
 */
 struct VgCommand
 {
@@ -87,11 +79,8 @@ struct VgCommand
     std::vector<float> data;
     std::string        text; //!< only Text and FontFace carry one
 
-    //! How many floats \p type expects in `data`, or -1 for a type that is not one of ours.
-    /*!
-        The wire format has no per-command length, so this table is what makes a command stream parseable
-        at all: each command's arguments run exactly this long and the next command starts after them.
-    */
+    //! How many floats \p type expects in `data`, or -1 for a type that is not one of ours. The wire format
+    //! has no per-command length, so this is the only thing that makes a command stream parseable.
     static int num_floats(Type type);
 
     static bool has_text(Type type) { return type == Type::Text || type == Type::FontFace; }
@@ -111,18 +100,13 @@ struct VgTransform
 };
 
 /*!
-    Execute \p commands into \p draw_list.
+    Execute \p commands into \p draw_list. Unsupported commands are skipped, not approximated.
 
-    Unsupported commands are skipped rather than approximated -- an overlay that quietly draws something
-    other than what was asked for is worse than one with a hole in it, since the whole point of it is to be
-    trusted as a diagnostic. Each distinct one is reported once via \p on_unsupported, which is expected to
-    log; it is called with a stable name so a caller can rate-limit on it.
-
-    \param [] draw_list      Where to draw; the overlay leaves its path state as it found it
-    \param [] commands       The program, executed in order
-    \param [] xform          Where the image is on screen, and how big
-    \param [] default_color  Stroke and fill color before the program sets one
-    \param [] on_unsupported Called with the name of a command that was skipped, if any
+    \param draw_list      Where to draw; the overlay leaves its path state as it found it
+    \param commands       The program, executed in order
+    \param xform          Where the image is on screen, and how big
+    \param default_color  Stroke and fill color before the program sets one
+    \param on_unsupported Called once per distinct skipped command, with a stable name to rate-limit on
 */
 void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &commands, const VgTransform &xform,
                          uint32_t default_color, const std::function<void(const char *)> &on_unsupported = {});

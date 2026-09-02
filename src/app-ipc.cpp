@@ -4,8 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-// Turning packets received from a renderer into changes to the loaded images. The socket and the wire
-// format live in src/ipc/; everything here is HDRViewApp's side of them.
+// HDRViewApp's side of the IPC protocol: turning packets received from a renderer into changes to the
+// loaded images. The socket and the wire format live in src/ipc/.
 
 #include "app.h"
 
@@ -32,8 +32,8 @@ int HDRViewApp::image_index_by_name(std::string_view name) const
 
 bool HDRViewApp::start_ipc_listening(uint16_t port)
 {
-    // Decode on the receive thread and hand the main thread only the result: parsing a tile means copying
-    // its samples, which is the bulk of the work and has no reason to happen on the frame.
+    // decode on the receive thread and hand the main thread only the result, since parsing a tile copies
+    // all of its samples
     return m_ipc_server.start(
         port,
         [this](const IpcPacket &packet)
@@ -75,13 +75,12 @@ bool HDRViewApp::start_ipc_listening(uint16_t port)
             }
             catch (const std::exception &e)
             {
-                // One unreadable packet is not grounds to drop the connection -- the framing was intact, so
-                // the stream is still in sync and the next packet may well be fine.
+                // the framing was intact, so the stream is still in sync and the connection can stay
                 spdlog::warn("Could not read an IPC packet: {}", e.what());
             }
 
-            // The frame loop idles by waiting on window events, so without a nudge a tile can sit undrawn
-            // for as long as the idle timeout. See wake_event_loop().
+            // the frame loop idles waiting on window events, so without a nudge a tile can sit undrawn for
+            // as long as the idle timeout
             wake_event_loop();
         });
 }
@@ -90,9 +89,7 @@ void HDRViewApp::stop_ipc_listening() { m_ipc_server.stop(); }
 
 void HDRViewApp::set_ipc_listening(bool listen)
 {
-    // The one place the toggle's meaning lives, so the panel's checkbox and the command palette's entry
-    // cannot drift apart. Binding can fail -- the port may be held by tev or another HDRView -- so the
-    // request is answered by what the server actually did, not by what was asked for.
+    // binding can fail (the port may be held by tev or another HDRView), so report what the server did
     if (listen)
         start_ipc_listening(m_ipc_port);
     else
@@ -108,17 +105,15 @@ void HDRViewApp::set_ipc_port(uint16_t port)
 
     m_ipc_port = port;
 
-    // Rebind straight away when already listening, so the port shown is the port in use. start() stops the
-    // old listener first, so a client connected to it is dropped -- and if the new port turns out to be
-    // taken, nothing is listening and the panel says why.
+    // rebind straight away, so the port shown is the port in use; this drops anything connected to the old
+    // one, and leaves nothing listening if the new port turns out to be taken
     if (m_ipc_server.is_listening())
         set_ipc_listening(true);
 }
 
 void HDRViewApp::IpcRates::update(const IpcActivity &now, double time)
 {
-    // Long enough that the numbers hold still and can be read, short enough that they follow a renderer
-    // starting and stopping.
+    // long enough that the numbers hold still, short enough to follow a renderer starting and stopping
     static constexpr double k_window = 0.5;
 
     if (sampled_at == 0.0)
@@ -146,15 +141,15 @@ void HDRViewApp::draw_ipc_gui()
 
     const bool listening = m_ipc_server.is_listening();
 
-    // Both this and the "Listen for image updates" command go through set_ipc_listening(); the label differs
-    // because here the sentence continues into the port field beside it.
+    // the label differs from the "Listen for image updates" command since the sentence continues into the
+    // port field beside it
     bool toggle = listening;
     if (ImGui::Checkbox("Listen for image updates on port:", &toggle))
         set_ipc_listening(toggle);
     ImGui::Tooltip("Accept images pushed in by a renderer while it works, so a render appears here tile by "
                    "tile. Nothing outside this machine can connect. Off unless you turn it on.");
 
-    // The port reads as the end of the checkbox's sentence, so it carries no label of its own.
+    // the port reads as the end of the checkbox's sentence, so it carries no label of its own
     ImGui::SameLine();
     int port = int(m_ipc_port);
     ImGui::SetNextItemWidth(HelloImGui::EmSize(4.f));
@@ -164,8 +159,7 @@ void HDRViewApp::draw_ipc_gui()
                    "if another viewer already holds that port. Changing it while listening rebinds, dropping "
                    "anything currently connected.");
 
-    // Wrapped, not clipped: this panel is usually docked narrow, and both the address and the client count
-    // are the point of the line.
+    // wrapped, not clipped: this panel is usually docked narrow
     if (listening)
     {
         const size_t clients = m_ipc_server.num_connections();
@@ -175,18 +169,14 @@ void HDRViewApp::draw_ipc_gui()
         const auto activity = m_ipc_server.activity();
         m_ipc_rates.update(activity, ImGui::GetTime());
 
-        // "Streaming" is anything still arriving; a renderer that pauses between passes should not make the
-        // readout flicker, so the threshold is well above the quarter-second pbrt leaves between updates.
+        // well above the quarter-second pbrt leaves between updates, so a renderer pausing between passes
+        // does not make the readout flicker
         static constexpr double k_idle_after = 1.5;
         const bool streaming = activity.seconds_since_last >= 0.0 && activity.seconds_since_last < k_idle_after;
 
         if (clients && streaming)
         {
-            // Indeterminate on purpose. Nothing in the protocol says how much is left, and the two ways
-            // clients stream -- painting each tile once, or resending the frame at rising sample counts --
-            // are indistinguishable from the packets, so any percentage here would be invented.
-            // No overlay text: the strip is deliberately thinner than a line of it, and the rates below say
-            // what it is doing anyway.
+            // indeterminate: the protocol carries no progress
             ImGui::ProgressBar(-1.f * float(ImGui::GetTime()), ImVec2(-FLT_MIN, ImGui::GetFrameHeight() * 0.35f), "");
             ImGui::TextWrapped("%s",
                                fmt::format("Receiving {:.1h}/s over {:.0f} updates/s.",
@@ -194,13 +184,11 @@ void HDRViewApp::draw_ipc_gui()
                                    .c_str());
         }
         else if (clients)
-            // How long a connected client has been quiet is worth watching -- it separates a renderer
-            // between passes from one that has stalled.
+            // how long a connected client has been quiet separates a renderer between passes from a stall
             ImGui::TextWrapped("Connected, but nothing received for %.0fs.", activity.seconds_since_last);
         else if (!activity.packets)
             ImGui::TextUnformatted("Waiting for a renderer to connect.");
-        // With nobody connected there is nothing left to wait for, so the time since the last update stops
-        // being information and just climbs. The totals below say what arrived; that is the whole story.
+        // with nobody connected the time since the last update says nothing, so only the totals are shown
 
         if (activity.packets)
             ImGui::TextWrapped("%s", fmt::format("{:.1h} in {} total.", human_readible{size_t(activity.bytes)},
@@ -259,21 +247,19 @@ void HDRViewApp::apply_ipc_create(const IpcCreateImage &info)
         image->short_name = info.name;
         image->is_live    = true;
 
-        // The samples a renderer sends are its own; nothing here should reinterpret them. The constructor's
-        // default alpha type is already the premultiplied one, so finalize() leaves them alone -- it would
-        // otherwise scale every tile by an alpha channel that may not have been sent yet.
+        // The constructor defaults to the premultiplied alpha type, so finalize() leaves the samples alone;
+        // any other type would scale every tile by an alpha channel that may not have been sent yet.
         image->finalize();
     }
     catch (const std::exception &e)
     {
-        // A name and a channel list chosen by another process, so this is reachable: duplicate channel
-        // names, or dimensions past what the GPU can hold, both land here.
+        // another process chose the name and channel list, so duplicate channel names or dimensions past
+        // what the GPU can hold both land here
         spdlog::error("Could not create '{}' over IPC: {}", info.name, e.what());
         return;
     }
 
-    // Recreating an existing name replaces it in place, which is what a renderer restarting a render means
-    // by it -- and matches tev, whose CreateImage is documented to overwrite.
+    // recreating an existing name replaces it in place, matching tev, whose CreateImage overwrites
     const int existing = image_index_by_name(info.name);
     if (is_valid(existing))
         m_images[size_t(existing)] = image;
@@ -320,8 +306,8 @@ void HDRViewApp::apply_ipc_update(const IpcUpdateImage &info)
 
     auto &image = *m_images[size_t(idx)];
 
-    // The packet addresses its samples in the image's pixel coordinates; a channel is indexed from its own
-    // top-left corner, which for an image with a non-zero data window is somewhere else.
+    // the packet addresses its samples in the image's pixel coordinates, while a channel is indexed from
+    // its own top-left corner
     const Box2i bounds{info.bounds.min - image.data_window.min, info.bounds.max - image.data_window.min};
 
     bool any = false;
