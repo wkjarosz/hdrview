@@ -1,9 +1,7 @@
-/** \file test_probe.cpp
+/** \file test_numeric_edge_cases.cpp
     \author Wojciech Jarosz
 
-    Edge-case coverage for the numeric paths an HDR viewer actually reaches: values outside [0,1],
-    negatives produced by gamut conversion, and the NaN/Inf that real EXRs contain. Several of these
-    currently fail; see the accompanying bug report.
+    Values outside [0,1], negatives from gamut conversion, and the NaN/Inf real EXRs contain.
 */
 
 #include <doctest/doctest.h>

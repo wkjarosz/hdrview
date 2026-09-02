@@ -558,12 +558,12 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec.get(), &info))
                 throw invalid_argument{"JxlDecoderGetBasicInfo failed"};
 
-            // check_image_dimensions() above already rejected a degenerate width or height.
+            check_image_dimensions(info.xsize, info.ysize, "JPEG XL");
+
             if (info.num_color_channels + info.num_extra_channels == 0)
                 throw invalid_argument{
                     fmt::format("{}x{} image has no color or extra channels", info.xsize, info.ysize)};
 
-            check_image_dimensions(info.xsize, info.ysize, "JPEG XL");
             size = int3{(int)info.xsize, (int)info.ysize, (int)info.num_color_channels + (info.alpha_bits ? 1 : 0)};
 
             spdlog::info("{}x{} image with {} color channels ({} including alpha) and {} extra channels", size.x,

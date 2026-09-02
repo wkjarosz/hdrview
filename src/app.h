@@ -409,9 +409,6 @@ public:
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
 
-    // The parameterized point edits. Each applies on confirm rather than as its controls move; see
-    // draw_exposure_gamma_dialog().
-
     /// The subject the menu's edits use, shown and changed under Edit > Apply to.
     EditSubject &edit_subject() { return m_edit_subject; }
 

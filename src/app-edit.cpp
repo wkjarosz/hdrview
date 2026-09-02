@@ -251,18 +251,10 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
 
 void HDRViewApp::after_modify(const ImagePtr &img)
 {
-    // Statistics and histograms are cached against this; see Image::content_version.
-    ++img->content_version;
+    ++img->content_version; // invalidates the cached statistics and histograms
 
-    // Deliberately not finalize(): it does far more than rebuild the layer tree. It would premultiply a
-    // straight-alpha image a second time, silently darkening it, and re-derive metadata that has not
-    // changed. An edit that adds or removes channels needs the tree rebuilt and will have to ask for that
-    // specifically; none of the edits so far touches the channel set.
-
-    // Recomputes each group's visibility and the layer tree's per-node counts of visible and hidden
-    // descendants, then rebinds the textures. Both the edit and the undo of it come through here, which is
-    // what keeps them from invalidating different things -- a structural undo rebuilds the layer tree just
-    // as the edit did, and the Images panel walks the result of both.
+    // not finalize(): that would premultiply a straight-alpha image a second time. An edit that changes
+    // the channel set rebuilds the layer tree itself; see modify_structure().
     update_visibility();
 }
 

@@ -442,13 +442,6 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
         int2         size          = {dataWindow.max.x - dataWindow.min.x + 1, dataWindow.max.y - dataWindow.min.y + 1};
         check_image_dimensions(size.x, size.y, "EXR");
 
-        if (size.x <= 0 || size.y <= 0)
-        {
-            spdlog::warn("EXR part {}: '{}' has zero pixels, skipping...", p,
-                         part.header().hasName() ? part.header().name() : "unnamed");
-            continue;
-        }
-
         auto img = make_shared<Image>();
         if (auto a = part.header().findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
             img->chromaticities = {{a->value().red.x, a->value().red.y},
