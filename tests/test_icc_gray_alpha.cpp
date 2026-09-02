@@ -17,9 +17,8 @@ namespace
 {
 
 // A minimal grayscale ICC profile with a gamma 2.2 tone curve, as lcms serializes one
-// (cmsCreateGrayProfile with cmsD50_xyY, saved with cmsSaveProfileToMem). Embedded rather than built
-// at run time because lcms2's headers are not on this target's include path -- HDRView reaches them
-// through libjxl's, and lcms2 itself is deliberately not in HDRVIEW_DEPENDENCIES.
+// (cmsCreateGrayProfile with cmsD50_xyY, saved with cmsSaveProfileToMem). Embedded because lcms2's headers
+// are not on this target's include path; HDRView reaches them through libjxl's.
 const uint8_t k_gray_gamma22_icc[] = {
     0x00, 0x00, 0x01, 0x5c, 0x6c, 0x63, 0x6d, 0x73, 0x04, 0x40, 0x00, 0x00, 
     0x6d, 0x6e, 0x74, 0x72, 0x47, 0x52, 0x41, 0x59, 0x58, 0x59, 0x5a, 0x20, 
@@ -60,15 +59,14 @@ std::vector<uint8_t> gray_profile()
 
 TEST_CASE("a gray ICC profile linearizes every pixel of a gray+alpha buffer")
 {
-    // Two floats per pixel, so the transform has to advance two floats per pixel as well. A format
-    // advancing one would cover only the first half of the buffer, reading alternating luminance and
-    // alpha values as consecutive gray pixels.
+    // a transform advancing one float per pixel would cover only the first half of the buffer, reading
+    // alternating luminance and alpha values as consecutive gray pixels
     constexpr int num_pixels = 64;
 
     ICCProfile profile{gray_profile()};
     REQUIRE(profile.valid());
 
-    // A constant, distinctly non-linear luminance, and an alpha ramp that must survive untouched.
+    // a constant non-linear luminance, and an alpha ramp that must survive untouched
     constexpr float    encoded_y = 0.5f;
     std::vector<float> pixels(num_pixels * 2);
     std::vector<float> alphas(num_pixels);
@@ -79,12 +77,10 @@ TEST_CASE("a gray ICC profile linearizes every pixel of a gray+alpha buffer")
         pixels[i * 2 + 1] = alphas[i];
     }
 
-    // keep_primaries=false takes the linear_Gray() output profile directly. The keep_primaries=true path
-    // first asks for the profile's chromaticities, which a gray profile need not carry.
+    // keep_primaries=true would ask for chromaticities, which a gray profile need not carry
     REQUIRE(profile.linearize_pixels(pixels.data(), int3{num_pixels, 1, 2}, /*keep_primaries*/ false));
 
-    // Every luminance sample took the same input, so every one has to come out the same -- and different
-    // from what went in, since gamma 2.2 is not the identity at 0.5.
+    // every luminance sample took the same input, and gamma 2.2 is not the identity at 0.5
     const float linearized = pixels[0];
     CHECK(linearized != doctest::Approx(encoded_y).epsilon(1e-4));
     for (int i = 0; i < num_pixels; ++i)
@@ -97,7 +93,6 @@ TEST_CASE("a gray ICC profile linearizes every pixel of a gray+alpha buffer")
 
 TEST_CASE("a gray ICC profile still linearizes a single-channel buffer")
 {
-    // The one-channel case shares the code path and must keep working.
     constexpr int num_pixels = 16;
 
     ICCProfile profile{gray_profile()};

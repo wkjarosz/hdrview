@@ -16,12 +16,12 @@
 namespace
 {
 
-// Directions spread over the sphere, deliberately off the axes and off the cube's face boundaries, where
-// several of these mappings are discontinuous and a round trip is allowed to land on either side.
+// Directions spread over the sphere, off the axes and off the cube's face boundaries, where several of these
+// mappings are discontinuous and a round trip may land on either side.
 std::vector<float3> sample_directions()
 {
     std::vector<float3> dirs;
-    // A spiral, which covers the sphere without clustering at the poles the way a lat-long grid does.
+    // a spiral, which covers the sphere without clustering at the poles as a lat-long grid does
     const int n = 64;
     for (int i = 0; i < n; ++i)
     {
@@ -56,14 +56,13 @@ TEST_CASE("Every mapping turns an image point into a unit direction")
 
 TEST_CASE("A direction survives the trip through every mapping and back")
 {
-    // The property that catches a transcription error: the two halves of a mapping must be inverses, and
-    // nothing else about them has to be known to check it.
+    // the two halves of a mapping have to be inverses, whatever else they are
     for (int m = 0; m < EnvMapping_COUNT; ++m)
     {
         CAPTURE(std::string(name_of(m)));
 
-        // Equal area goes through a polynomial approximation of atan, so it does not round-trip to the
-        // last bit; the others are closed-form.
+        // equal area goes through a polynomial approximation of atan, so it does not round-trip to the last
+        // bit; the others are closed-form
         const double tol = m == EnvMapping_EqualArea ? 1e-3 : 1e-4;
 
         for (const float3 &d : sample_directions())
@@ -84,7 +83,7 @@ TEST_CASE("A direction survives the trip through every mapping and back")
 
 TEST_CASE("An image point lands inside the image it came from")
 {
-    // A mapping that returned coordinates outside [0,1] would sample nothing when remapping.
+    // a mapping returning coordinates outside [0,1] would sample nothing when remapping
     for (int m = 0; m < EnvMapping_COUNT; ++m)
     {
         CAPTURE(std::string(name_of(m)));
@@ -101,8 +100,7 @@ TEST_CASE("An image point lands inside the image it came from")
 
 TEST_CASE("Converting between two mappings is the same as going through a direction")
 {
-    // What convert_envmap_uv() is: unproject through one, project through the other. Stated as a test so
-    // that it cannot quietly become something else.
+    // convert_envmap_uv() is an unprojection through one followed by a projection through the other
     for (int src = 0; src < EnvMapping_COUNT; ++src)
         for (int dst = 0; dst < EnvMapping_COUNT; ++dst)
         {
@@ -125,7 +123,7 @@ TEST_CASE("Converting a mapping to itself leaves the point where it was")
         CAPTURE(std::string(name_of(m)));
         const double tol = m == EnvMapping_EqualArea ? 1e-3 : 1e-4;
 
-        // Away from the edges, where the disc mappings run out of sphere and the cross has empty corners.
+        // away from the edges, where the disc mappings run out of sphere and the cross has empty corners
         for (float v = 0.35f; v < 0.7f; v += 0.1f)
             for (float u = 0.35f; u < 0.7f; u += 0.1f)
             {
@@ -140,8 +138,8 @@ TEST_CASE("Converting a mapping to itself leaves the point where it was")
 
 TEST_CASE("Longitude-latitude puts the poles on the top and bottom edges")
 {
-    // An anchor on the one mapping whose convention everything else is compared against: v is latitude, so
-    // the top row is one pole and the bottom row the other.
+    // an anchor on the mapping everything else is compared against: v is latitude, so the top row is one pole
+    // and the bottom row the other
     const float3 top    = envmap_uv_to_xyz(EnvMapping_LatLong, float2{0.5f, 0.f});
     const float3 bottom = envmap_uv_to_xyz(EnvMapping_LatLong, float2{0.5f, 1.f});
 
@@ -155,7 +153,7 @@ TEST_CASE("The angular map and the mirror ball put the forward direction at the 
     {
         CAPTURE(std::string(name_of(m)));
         const float3 center = envmap_uv_to_xyz(EnvMapping(m), float2{0.5f, 0.5f});
-        // Both are discs about the axis they look down, so the middle of the image is that axis.
+        // both are discs about the axis they look down, so the middle of the image is that axis
         CHECK(center.z == doctest::Approx(1.f).epsilon(1e-4));
     }
 }
@@ -163,11 +161,8 @@ TEST_CASE("The angular map and the mirror ball put the forward direction at the 
 namespace
 {
 
-//! A size in \p mapping's own proportions, so that whatever it packs divides the image evenly.
-/*!
-    A cube layout carves the image into faces, and a square image gives it faces of a fractional number of
-    texels, which no amount of resampling recovers. Every mapping already says the shape it wants.
-*/
+//! A size in \p mapping's own proportions, so whatever it packs divides the image evenly. A square image
+//! gives a cube layout faces of a fractional number of texels, which no resampling recovers.
 inline int2 size_for(int mapping, int height = 96)
 {
     return int2{std::max(1, int(std::lround(float(height) * envmapping_aspect(mapping)))), height};
@@ -189,8 +184,7 @@ Array2Df make_envmap(int2 size, EnvMapping mapping, F &&f)
 
 TEST_CASE("Each mapping's Jacobian integrates to the whole sphere")
 {
-    // Every one of these was derived by hand, so each is checked globally here and pointwise below. A
-    // factor or an exponent wrong in any of them shows up as a total that is not 4*pi.
+    // each Jacobian was derived by hand, so a wrong factor or exponent shows up as a total that is not 4*pi
     for (int m = 0; m < EnvMapping_COUNT; ++m)
     {
         CAPTURE(std::string(name_of(m)));
@@ -209,9 +203,9 @@ TEST_CASE("Each mapping's Jacobian integrates to the whole sphere")
 
 TEST_CASE("The Jacobian agrees with how far the direction actually moves")
 {
-    // The global check above would pass for a Jacobian that is wrong in compensating ways, so this pins it
-    // pointwise: the area a step of one sample sweeps out on the sphere, measured, against the analytic
-    // value. Away from seams and rims, where a difference straddles two faces and means nothing.
+    // The global check above would pass for a Jacobian wrong in compensating ways, so this measures the area
+    // a step of one sample sweeps out on the sphere against the analytic value. Away from seams and rims,
+    // where a difference straddles two faces and means nothing.
     const int n = 256;
 
     for (int m = 0; m < EnvMapping_COUNT; ++m)
@@ -229,7 +223,7 @@ TEST_CASE("The Jacobian agrees with how far the direction actually moves")
                 const float3 du = envmap_uv_to_xyz(EnvMapping(m), uv + hx) - envmap_uv_to_xyz(EnvMapping(m), uv - hx);
                 const float3 dv = envmap_uv_to_xyz(EnvMapping(m), uv + hy) - envmap_uv_to_xyz(EnvMapping(m), uv - hy);
 
-                // The measured patch covers one sample of an n-by-n image; the Jacobian is per unit area.
+                // the measured patch covers one sample of an n-by-n image; the Jacobian is per unit area
                 const double measured = double(la::length(la::cross(du, dv))) * double(n) * double(n);
 
                 CAPTURE(u);
@@ -241,16 +235,15 @@ TEST_CASE("The Jacobian agrees with how far the direction actually moves")
 
 TEST_CASE("Remapping carries a value with the direction it belongs to")
 {
-    // The property that says remap composes the mappings correctly, and the one thing resampling cannot
-    // fake: if the source holds a smooth function of direction, every destination sample must hold that
-    // same function of *its* direction, whatever the two parameterizations were.
+    // if the source holds a smooth function of direction, every destination sample holds that same function
+    // of its own direction, whatever the two parameterizations were
     for (int src_m = 0; src_m < EnvMapping_COUNT; ++src_m)
         for (int dst_m = 0; dst_m < EnvMapping_COUNT; ++dst_m)
         {
             CAPTURE(std::string(name_of(src_m)));
             CAPTURE(std::string(name_of(dst_m)));
 
-            // Smooth and low-frequency, so that resampling blur cannot account for a mismatch.
+            // smooth and low-frequency, so resampling blur cannot account for a mismatch
             auto f = [](float3 d) { return 0.5f + 0.25f * d.y + 0.15f * d.x; };
 
             const Array2Df src = make_envmap(size_for(src_m), EnvMapping(src_m), f);
@@ -262,14 +255,12 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
                 const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m),
                                                      EnvMapSampling(sampler), 4);
 
-                // Away from the edges: the disc mappings run out of sphere at their corners and the cube cross
-                // has empty ones, where there is no direction to be right about.
+                // away from the edges, where the disc mappings run out of sphere and the cube cross is empty
                 for (int y = 12; y < 36; ++y)
                     for (int x = 12; x < 36; ++x)
                     {
                         const float2 uv{(x + 0.5f) / 48.f, (y + 0.5f) / 48.f};
-                        // Only where the destination has a direction at all: a disc's corners and a cube
-                        // cross's are left empty rather than filled, so there is nothing to be right about.
+                        // only where the destination has a direction at all
                         if (!envmap_uv_is_valid(EnvMapping(dst_m), uv))
                             continue;
 
@@ -283,13 +274,10 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
 
 TEST_CASE("A cube map is read as six faces, so what is not a face never reaches the result")
 {
-    // A vertical cross is three quarters faces and one quarter nothing: the four cells outside its two
-    // arms stand for no direction. Read as one image they are texels like any other -- a filter wide
-    // enough to reach them averages them in, and a mip pyramid built over the whole cross has folded them
-    // deep into every face by its third level. Read as six faces they are never addressed at all.
-    //
-    // So the empty cells are given a value nothing else could be confused with. Anything that touches
-    // them lands far outside the range the faces span, however little of one it picked up.
+    // A vertical cross is three quarters faces and one quarter nothing: the four cells outside its arms stand
+    // for no direction. Read as one image they are texels like any other, and a mip pyramid built over the
+    // whole cross has folded them deep into every face by its third level; read as six faces they are never
+    // addressed. So they are given a value nothing else could be confused with.
     const int2 src_size{96, 128};
     Array2Df   src = make_envmap(src_size, EnvMapping_CubeMap, [](float3 d) { return 0.5f + 0.25f * d.y; });
 
@@ -305,9 +293,8 @@ TEST_CASE("A cube map is read as six faces, so what is not a face never reaches 
     {
         CAPTURE(sampler);
 
-        // Minified hard, which is what puts the coarse levels of the pyramid in play: at 16 across, one
-        // destination pixel covers dozens of source texels, and every level from the middle of the
-        // pyramid up would be contaminated if the levels were built over the cross.
+        // minified hard, which puts the coarse levels of the pyramid in play: at 16 across, one destination
+        // pixel covers dozens of source texels
         for (int dst_size : {16, 64})
         {
             CAPTURE(dst_size);
@@ -319,7 +306,7 @@ TEST_CASE("A cube map is read as six faces, so what is not a face never reaches 
                 {
                     CAPTURE(x);
                     CAPTURE(y);
-                    // The faces span [0.25, 0.75], so anything at all from an empty cell shows here.
+                    // the faces span [0.25, 0.75], so anything from an empty cell shows here
                     CHECK(out(x, y) > 0.2f);
                     CHECK(out(x, y) < 0.8f);
                 }
@@ -329,12 +316,9 @@ TEST_CASE("A cube map is read as six faces, so what is not a face never reaches 
 
 TEST_CASE("A cube map's faces join up, so a read at a face edge continues onto the next face")
 {
-    // Two texels either side of a face join are neighboring directions but are nowhere near each other in
-    // the cross -- and for eight of the twelve joins, what actually lies beside the edge in the image is
-    // one of the empty cells. A read that reaches half a texel past an edge has to find the next face.
-    //
-    // Checked against a function of direction alone: right across a join means agreeing with it there, and
-    // a filter that clamped at the edge or reached into an empty cell would not.
+    // Two texels either side of a face join are neighboring directions but nowhere near each other in the
+    // cross, and for eight of the twelve joins what lies beside the edge in the image is an empty cell. So a
+    // read half a texel past an edge has to find the next face, checked against a function of direction alone.
     auto f = [](float3 d) { return 0.5f + 0.2f * d.x + 0.15f * d.y - 0.1f * d.z; };
 
     const int2 src_size{96, 128};
@@ -352,8 +336,7 @@ TEST_CASE("A cube map's faces join up, so a read at a face edge continues onto t
     {
         CAPTURE(sampler);
 
-        // Magnified, so each destination sample reads a texel or two rather than averaging a face's worth
-        // and hiding the edges in the average.
+        // magnified, so each destination sample reads a texel or two instead of averaging a face's worth
         const int2     size{192, 96};
         const Array2Df out =
             remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_CubeMap, EnvMapSampling(sampler), 2);
@@ -371,20 +354,15 @@ TEST_CASE("A cube map's faces join up, so a read at a face edge continues onto t
 
 TEST_CASE("Crossing a cube map's face join is as smooth as staying on one face")
 {
-    // The visible failure is not an error against the truth but a discontinuity: a bright or dark line
-    // along a face's edge, which is what makes a badly filtered cube map recognizable at a glance. Since
-    // the source is a smooth function of direction, a step between neighboring destination samples should
-    // not care whether a face edge happens to lie between them.
-    //
-    // So the two are measured separately -- the largest step between samples on the same face, and the
-    // largest between samples on different ones -- and compared to each other. Nothing here depends on
-    // the resolution or on how steep the function is, only on the joins being no worse than the interior.
+    // The visible failure is a discontinuity, not an error against the truth: a bright or dark line along a
+    // face's edge. The source is a smooth function of direction, so the largest step between samples on one
+    // face and the largest between samples on two are measured separately and compared, which depends on
+    // neither the resolution nor how steep the function is.
     auto f = [](float3 d) { return 0.5f + 0.2f * d.x + 0.15f * d.y - 0.1f * d.z; };
 
     const Array2Df src = make_envmap(int2{96, 128}, EnvMapping_CubeMap, f);
 
-    // Which face a direction is on: the axis it points most steeply along, which is all the test needs to
-    // know about the layout.
+    // which face a direction is on: the axis it points most steeply along
     auto face_of = [](float3 d)
     {
         const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
@@ -400,8 +378,7 @@ TEST_CASE("Crossing a cube map's face join is as smooth as staying on one face")
         const Array2Df out =
             remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_CubeMap, EnvMapSampling(sampler), 2);
 
-        // Every row, so this covers all twelve joins rather than only the four a ring around the equator
-        // meets -- including the ones at the poles, where the cross's arms end.
+        // every row, so all twelve joins are covered and not only the four a ring around the equator meets
         float within = 0.f, across = 0.f;
         int   crossings = 0;
         for (int y = 0; y < size.y; ++y)
@@ -423,7 +400,7 @@ TEST_CASE("Crossing a cube map's face join is as smooth as staying on one face")
                 }
             }
 
-        // The comparison is only worth anything if the sweep actually met some joins.
+        // the comparison is worth nothing unless the sweep met some joins
         CHECK(crossings > 100);
 
         CAPTURE(within);
@@ -434,13 +411,10 @@ TEST_CASE("Crossing a cube map's face join is as smooth as staying on one face")
 
 TEST_CASE("A face's ring carries its neighbors, so a read at an edge blends across the join")
 {
-    // Each face is stored with a one-texel ring of what lies just past its edges, taken from whichever
-    // face that turns out to be. Without it a read at an edge has only its own face to interpolate
-    // against, and two faces meet as a hard step however smooth the sphere is across that join.
-    //
-    // Giving every face a value of its own makes the difference impossible to miss. Reconstructed with
-    // the ring, the step at a join is spread over about a texel and the samples in between hold values
-    // that are on neither face; clamped at the edge instead, every sample holds exactly one face's value.
+    // Each face is stored with a one-texel ring of what lies past its edges, taken from whichever face that
+    // is. Given every face a value of its own, a join reconstructed with the ring spreads the step over about
+    // a texel, with samples in between on neither face; clamped at the edge, every sample holds one face's
+    // value.
     auto face_of = [](float3 d)
     {
         const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
@@ -457,9 +431,8 @@ TEST_CASE("A face's ring carries its neighbors, so a read at an edge blends acro
         CAPTURE(sampler);
 
         // Four destination samples per source texel around the equator, so a step spread over one texel is
-        // several samples wide and cannot be confused with one that is not spread at all. One sample per
-        // pixel, since averaging several within the pixel would soften the step by itself and prove
-        // nothing about the reconstruction.
+        // several samples wide. One sample per pixel, since averaging several within it would soften the
+        // step by itself.
         const int2     size{512, 256};
         const Array2Df out =
             remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_CubeMap, EnvMapSampling(sampler), 1);
@@ -483,8 +456,7 @@ TEST_CASE("A face's ring carries its neighbors, so a read at an edge blends acro
 
             ++joins;
 
-            // Somewhere within a texel of the join, the reconstruction should be partway between the two
-            // faces rather than committed to either.
+            // within a texel of the join the reconstruction is partway between the two faces
             const float a = face_value(face_at(x - 1)), b = face_value(face_at(x));
             const float lo = std::min(a, b) + 0.15f * std::abs(a - b);
             const float hi = std::max(a, b) - 0.15f * std::abs(a - b);
@@ -500,8 +472,8 @@ TEST_CASE("A face's ring carries its neighbors, so a read at an edge blends acro
         CHECK(joins == 4);
         CHECK(blended == joins);
 
-        // And no step anywhere is the whole contrast at once, which is what an unblended join would be:
-        // the largest difference between two faces here is 0.8.
+        // and no step is the whole contrast at once, which an unblended join would be; the largest
+        // difference between two faces here is 0.8
         CAPTURE(largest);
         CHECK(largest < 0.5f);
     }
@@ -509,14 +481,10 @@ TEST_CASE("A face's ring carries its neighbors, so a read at an edge blends acro
 
 TEST_CASE("Filtering a cube map elliptically agrees with averaging it by brute force")
 {
-    // The two samplers reach a cube map's faces by different routes -- one takes a single bilinear tap per
-    // sub-sample, the other an ellipse over a level of the pyramid -- so agreeing is evidence about the
-    // parts they share: the faces themselves, their rings, and the pyramid over them. Enough sub-samples
-    // and point sampling is simply the average over the destination pixel, which is the answer EWA is
-    // approximating, so one stands as a reference for the other without either being ground truth.
-    //
-    // The source is constant on each face and jumps between them, which is the least forgiving thing to
-    // filter here: every disagreement about where a face ends shows up at full contrast.
+    // The two samplers reach a cube map's faces by different routes: a bilinear tap per sub-sample, or an
+    // ellipse over a level of the pyramid. With enough sub-samples, point sampling is the average over the
+    // destination pixel, which is what EWA approximates, so it stands as a reference. The source is constant
+    // on each face and jumps between them, so every disagreement about where a face ends shows at full contrast.
     auto face_of = [](float3 d)
     {
         const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
@@ -526,8 +494,8 @@ TEST_CASE("Filtering a cube map elliptically agrees with averaging it by brute f
     const Array2Df src =
         make_envmap(int2{96, 128}, EnvMapping_CubeMap, [&](float3 d) { return 0.1f + 0.16f * float(face_of(d)); });
 
-    // Reductions of different kinds: nearly isotropic, and lopsided each way, since the anisotropic ones
-    // are what send the ellipse along a face and off the end of it.
+    // nearly isotropic, and lopsided each way: the anisotropic ones send the ellipse along a face and off
+    // the end of it
     for (int2 size : {int2{16, 8}, int2{64, 32}, int2{128, 8}, int2{8, 64}})
     {
         CAPTURE(size.x);
@@ -549,9 +517,9 @@ TEST_CASE("Filtering a cube map elliptically agrees with averaging it by brute f
         CAPTURE(mean);
         CAPTURE(worst);
 
-        // Room for the two filters genuinely differing in shape -- a Gaussian over the footprint against a
-        // box over the pixel -- but not for either of them reading the wrong face. The values here span
-        // 0.8, and a tap landing on the wrong side of a join is worth a good part of that.
+        // Room for the two filters differing in shape (a Gaussian over the footprint against a box over the
+        // pixel) but not for either reading the wrong face: the values span 0.8, and a tap on the wrong side
+        // of a join is worth much of that.
         CHECK(mean < 0.05);
         CHECK(worst < 0.15);
     }
@@ -572,9 +540,8 @@ TEST_CASE("Remapping a mapping to itself returns the image it was given")
             CAPTURE(sampler);
             const Array2Df out = remapped_envmap(src, size, EnvMapping(m), EnvMapping(m), EnvMapSampling(sampler), 4);
 
-            // Inside a single face of the cube cross, which is the tightest constraint of the six: across one
-            // of its seams supersampling genuinely averages two faces, so identity is not what should happen
-            // there. The window is interior for every other mapping too.
+            // inside a single face of the cube cross, the tightest of the six: across one of its seams
+            // supersampling averages two faces, so identity is not what should happen there
             for (int y = 18; y < 30; ++y)
                 for (int x = 26; x < 38; ++x)
                 {
@@ -588,9 +555,8 @@ TEST_CASE("Remapping a mapping to itself returns the image it was given")
 
 TEST_CASE("A uniform environment reflects back exactly what it emits")
 {
-    // The sharpest check on the solid-angle weighting there is. For constant incident radiance L the
-    // irradiance is pi*L, so dividing by pi gives L back -- but only if the weights over the whole image
-    // sum to the 4*pi steradians of the sphere. Get the stretch of the mapping wrong and this misses.
+    // For constant incident radiance L the irradiance is pi*L, so dividing by pi gives L back, but only if
+    // the weights over the whole image sum to the sphere's 4*pi steradians.
     for (int m = 0; m < EnvMapping_COUNT; ++m)
     {
         CAPTURE(std::string(name_of(m)));
@@ -610,8 +576,8 @@ TEST_CASE("A uniform environment reflects back exactly what it emits")
 
 TEST_CASE("A lit upper hemisphere gives the cosine-weighted answer")
 {
-    // Analytic, and unlike the uniform case it depends on more than the total: a surface facing the lit
-    // half sees all of it, one facing away sees none, and one edge-on sees exactly half.
+    // analytic, and unlike the uniform case it depends on more than the total: a surface facing the lit half
+    // sees all of it, one facing away sees none, and one edge-on sees half
     const Array2Df src =
         make_envmap(int2{128, 128}, EnvMapping_LatLong, [](float3 d) { return d.y > 0.f ? 1.f : 0.f; });
     const Array2Df out = irradiance_envmap(src, int2{64, 32}, EnvMapping_LatLong);
@@ -622,8 +588,7 @@ TEST_CASE("A lit upper hemisphere gives the cosine-weighted answer")
         return out(std::min(63, int(uv.x * 64.f)), std::min(31, int(uv.y * 32.f)));
     };
 
-    // Nine coefficients cannot represent a hard edge exactly, so these carry the truncation error the
-    // approximation is known for rather than being tight.
+    // nine coefficients cannot represent a hard edge, so these carry the approximation's truncation error
     CHECK(at(float3{0.f, 1.f, 0.f}) == doctest::Approx(1.f).epsilon(0.05));
     CHECK(at(float3{1.f, 0.f, 0.f}) == doctest::Approx(0.5f).epsilon(0.1));
     CHECK(at(float3{0.f, -1.f, 0.f}) == doctest::Approx(0.f).epsilon(0.05).scale(1.f));
@@ -631,14 +596,13 @@ TEST_CASE("A lit upper hemisphere gives the cosine-weighted answer")
 
 TEST_CASE("Irradiance is smoother than what it was computed from")
 {
-    // What the convolution is for: a single bright direction spreads into a broad falloff rather than
-    // staying a point.
+    // a single bright direction spreads into a broad falloff instead of staying a point
     Array2Df src{int2{64, 64}};
     src(32, 16) = 100.f;
 
     const Array2Df out = irradiance_envmap(src, int2{32, 32}, EnvMapping_LatLong);
 
-    // Nowhere near as peaked as the input, and non-negative over most of the sphere.
+    // nowhere near as peaked as the input, and non-negative over most of the sphere
     float peak = 0.f;
     for (int i = 0; i < out.num_elements(); ++i) peak = std::max(peak, out(i));
     CHECK(peak < 100.f);
@@ -647,14 +611,11 @@ TEST_CASE("Irradiance is smoother than what it was computed from")
 
 TEST_CASE("EWA lands on the mean whatever shape the reduction is")
 {
-    // One sweep rather than a test per shape. Reductions differ in kind, not only degree: an isotropic one
-    // exercises the mip level, a lopsided one exercises the probes along the long axis, and a filter can
-    // be right about one and wrong about the other -- which is exactly how this arrived, as two separate
-    // tests written after two separate failures.
+    // Reductions differ in kind, not only degree: an isotropic one exercises the mip level and a lopsided one
+    // the probes along the long axis, and a filter can be right about one and wrong about the other.
     //
-    // Period sixteen, so an output pixel covering sixteen source columns covers exactly one period.
-    // Deliberately not eight: a level one step too sharp averages over eight texels, which for a
-    // period-eight pattern is still a whole period and so gives the right answer for the wrong reason.
+    // Period sixteen, so an output pixel covering sixteen source columns covers one period. Not eight: a level
+    // one step too sharp averages over eight texels, still a whole period, and is right for the wrong reason.
     Array2Df src{int2{512, 512}};
     for (int y = 0; y < 512; ++y)
         for (int x = 0; x < 512; ++x) src(x, y) = (x % 16 < 4) ? 1.f : 0.f;
@@ -665,10 +626,8 @@ TEST_CASE("EWA lands on the mean whatever shape the reduction is")
         const char *what;
         int2        size;
     };
-    // Only shapes that actually reduce along x, the axis the pattern varies on: a destination that keeps x
-    // at full resolution covers one source column per pixel and should show the stripes, not their mean.
-    // Asking for the mean there asks the filter to lose detail it was handed, which the first version of
-    // this test did.
+    // only shapes that reduce along x, the axis the pattern varies on: a destination keeping x at full
+    // resolution covers one source column per pixel and shows the stripes, not their mean
     const Shape shapes[] = {{"isotropic", int2{32, 32}},
                             {"reduced in x only", int2{32, 512}},
                             {"reduced further in x than in y", int2{16, 128}}};
@@ -684,13 +643,12 @@ TEST_CASE("EWA lands on the mean whatever shape the reduction is")
         for (int i = 0; i < ewa.num_elements(); ++i) err += std::abs(double(ewa(i)) - true_mean);
         err /= double(ewa.num_elements());
 
-        // The bound separates a filtered result from an unfiltered one rather than asserting the box mean:
-        // a Gaussian weights the middle of its footprint more heavily, so over exactly one period of a
-        // pattern its answer depends on the phase. Stripes surviving intact would score about 0.375 here,
-        // so this leaves no room for them while allowing the weighting.
+        // The bound separates a filtered result from an unfiltered one instead of asserting the box mean: a
+        // Gaussian weights the middle of its footprint more heavily, so over one period its answer depends on
+        // the phase. Stripes surviving intact would score about 0.375.
         CHECK(err < 0.15);
 
-        // And better than the cheap setting it exists to improve on, wherever that setting is stressed.
+        // and better than the cheap setting it exists to improve on, wherever that setting is stressed
         const Array2Df point =
             remapped_envmap(src, shape.size, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_Point, 1);
         double point_err = 0.0;
@@ -717,8 +675,7 @@ TEST_CASE("Snapping to the sphere lands on it, and leaves alone what is already 
 
                 const float2 snapped = nearest_valid_envmap_uv(EnvMapping(m), uv);
 
-                // Wherever there is already a direction, nothing moves -- this must not perturb the
-                // sphere itself, only fill in around it.
+                // wherever there is already a direction nothing moves; this fills in around the sphere
                 if (envmap_uv_is_valid(EnvMapping(m), uv))
                 {
                     CHECK(snapped.x == doctest::Approx(uv.x));
@@ -726,12 +683,11 @@ TEST_CASE("Snapping to the sphere lands on it, and leaves alone what is already 
                 }
                 else
                 {
-                    // And wherever there is not, what comes back is somewhere there is.
+                    // and wherever there is not, what comes back is somewhere there is
                     CHECK(envmap_uv_is_valid(EnvMapping(m), snapped));
 
-                    // It is also the *nearest* such place, checked against a search over the whole
-                    // square -- but only every eighth point, since that search is quadratic in the grid
-                    // and the property does not vary quickly enough to need every one.
+                    // and the nearest such place, checked against a search over the whole square; every
+                    // eighth point only, since that search is quadratic in the grid
                     if ((x % 8) == 0 && (y % 8) == 0)
                     {
                         const float taken = la::length(snapped - uv);
@@ -750,9 +706,9 @@ TEST_CASE("Snapping to the sphere lands on it, and leaves alone what is already 
 
 TEST_CASE("What is not sphere is filled from the sphere's edge rather than left empty")
 {
-    // An image's empty corners sit right against the edge of the sphere, so a later bilinear read near
-    // that edge -- displaying it, filtering it, remapping it again -- reaches into them. Left at zero
-    // they darken the rim; carrying the nearest direction outward means they agree with their neighbors.
+    // An image's empty corners sit against the edge of the sphere, so a later bilinear read near that edge
+    // reaches into them. Left at zero they darken the rim; carrying the nearest direction outward makes them
+    // agree with their neighbors.
     auto f = [](float3 d) { return 0.5f + 0.4f * d.y; }; // always well away from zero
 
     const Array2Df src = make_envmap(int2{128, 128}, EnvMapping_LatLong, f);
@@ -774,13 +730,13 @@ TEST_CASE("What is not sphere is filled from the sphere's edge rather than left 
                 CAPTURE(x);
                 CAPTURE(y);
 
-                // What the nearest real direction holds, which is what was written there.
+                // what the nearest real direction holds, which is what was written there
                 const float2 snapped  = nearest_valid_envmap_uv(EnvMapping(dst_m), uv);
                 const float  expected = f(envmap_uv_to_xyz(EnvMapping(dst_m), snapped));
 
                 CHECK(out(x, y) == doctest::Approx(expected).epsilon(0.05));
 
-                // Which is emphatically not the zero it used to be.
+                // and not zero
                 CHECK(out(x, y) > 0.05f);
             }
     }
@@ -789,11 +745,8 @@ TEST_CASE("What is not sphere is filled from the sphere's edge rather than left 
 TEST_CASE("A lat-long source is read as a sphere, not as a rectangle")
 {
     // Reading past the left edge of a lat-long image is reading the right edge: the two are the same
-    // meridian. Clamping instead puts a wall there, and a sample just inside the edge sees its own column
-    // twice rather than its neighbor across the seam.
-    //
-    // Magnified, so that the reach past the edge is a single texel and what comes back is unambiguous:
-    // the first column of the source is dark, the last is bright, and everything between is mid gray.
+    // meridian. Magnified, so the reach past the edge is a single texel: the first column of the source is
+    // dark, the last bright, and everything between mid gray.
     const int2 src_size{8, 4};
     Array2Df   src{src_size};
     for (int y = 0; y < src_size.y; ++y)
@@ -805,9 +758,8 @@ TEST_CASE("A lat-long source is read as a sphere, not as a rectangle")
         const Array2Df out =
             remapped_envmap(src, int2{64, 32}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling(sampler), 4);
 
-        // The leftmost output column sits half a source texel in from the seam, so its reconstruction
-        // reaches across it and picks up the bright column on the far side. Clamped, it would see only the
-        // dark column it sits on and stay at zero.
+        // the leftmost output column sits half a source texel in from the seam, so its reconstruction reaches
+        // across and picks up the bright column; clamped, it would see only the dark column and stay at zero
         for (int y = 4; y < 28; ++y)
         {
             CAPTURE(y);
@@ -818,20 +770,19 @@ TEST_CASE("A lat-long source is read as a sphere, not as a rectangle")
 
 TEST_CASE("A lat-long pole is crossed rather than smeared")
 {
-    // Past the top row the sphere continues down the far side, half a turn round. An image whose two
-    // halves differ tells the two apart: clamping extends the near half upward, while crossing brings the
-    // far half in.
+    // Past the top row the sphere continues down the far side, half a turn round. An image whose two halves
+    // differ tells the two apart: clamping extends the near half upward, crossing brings the far half in.
     const int2 src_size{64, 32};
     Array2Df   src{src_size};
     for (int y = 0; y < src_size.y; ++y)
         for (int x = 0; x < src_size.x; ++x) src(x, y) = x < src_size.x / 2 ? 0.f : 1.f;
 
-    // A footprint at the very top row reaches past the pole, where the other half of the image lies.
+    // a footprint at the top row reaches past the pole, where the other half of the image lies
     const Array2Df out =
         remapped_envmap(src, int2{32, 16}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 8);
 
-    // Along the top row, a sample from the dark half now sees some of the bright half across the pole, and
-    // the other way about -- so neither is still exactly 0 or 1 the way clamping would leave them.
+    // along the top row a sample from the dark half sees some of the bright half across the pole, and the
+    // other way about, so neither is still 0 or 1 as clamping would leave them
     float darkest = 1.f, brightest = 0.f;
     for (int x = 0; x < out.width(); ++x)
     {
@@ -839,25 +790,21 @@ TEST_CASE("A lat-long pole is crossed rather than smeared")
         brightest = std::max(brightest, out(x, 0));
     }
 
-    // Still mostly its own half -- the pole is one direction, so this is a nudge and not a blend to gray.
+    // still mostly its own half: the pole is one direction, so this is a nudge and not a blend to gray
     CHECK(darkest < 0.5f);
     CHECK(brightest > 0.5f);
 
-    // ...but no longer pinned at the extremes, which is what tells crossing from clamping.
+    // ...but not pinned at the extremes, which is what tells crossing from clamping
     CHECK(darkest > 0.f);
     CHECK(brightest < 1.f);
 }
 
 TEST_CASE("Magnifying reconstructs rather than repeating source texels")
 {
-    // The complement of the reduction sweep: what happens when the footprint is *smaller* than a texel.
-    // It has to be widened to one anyway -- an ellipse allowed to shrink below a texel gathers whichever
-    // one it happens to land on, which repeats each source texel across all the output pixels that
-    // magnify it, and staircases.
-    //
-    // The anisotropic case is the one that matters and the one that is easy to miss: a footprint can be
-    // well under a texel across while spanning many along, which is every lat-long pole, and there the
-    // ellipse is a sliver rather than a point.
+    // A footprint smaller than a texel has to be widened to one: an ellipse allowed to shrink below a texel
+    // gathers whichever one it lands on, repeating each source texel across the output pixels that magnify it.
+    // The anisotropic case is easy to miss: a footprint can be well under a texel across while spanning many
+    // along, which is every lat-long pole, and there the ellipse is a sliver.
     struct Case
     {
         const char *what;
@@ -870,8 +817,8 @@ TEST_CASE("Magnifying reconstructs rather than repeating source texels")
     {
         CAPTURE(c.what);
 
-        // A ramp down, so a reconstruction of any width steps by about the same amount everywhere, and
-        // stripes across for the minified axis to average away.
+        // a ramp down, so a reconstruction of any width steps by about the same amount everywhere, and
+        // stripes across for the minified axis to average away
         Array2Df src{c.src_size};
         for (int y = 0; y < c.src_size.y; ++y)
             for (int x = 0; x < c.src_size.x; ++x)
@@ -880,12 +827,11 @@ TEST_CASE("Magnifying reconstructs rather than repeating source texels")
         const Array2Df out =
             remapped_envmap(src, c.dst_size, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 32);
 
-        // An ellipse that encloses no texel at all divides by no weight; the values say so before the
-        // shape of them is measured.
+        // an ellipse enclosing no texel at all divides by no weight
         for (int i = 0; i < out.num_elements(); ++i) REQUIRE(std::isfinite(out(i)));
 
-        // Plateaus, as the fraction of vertical neighbors that barely differ. A repeated texel is flat
-        // between its jumps, and at these scales that is most of the image.
+        // plateaus, as the fraction of vertical neighbors that barely differ: a repeated texel is flat
+        // between its jumps, and at these scales that is most of the image
         const float step = 1.f / float(c.dst_size.y);
         int         flat = 0, n = 0;
         for (int y = 2; y + 3 < c.dst_size.y; ++y)
@@ -902,9 +848,9 @@ TEST_CASE("Magnifying reconstructs rather than repeating source texels")
 
 TEST_CASE("A footprint too eccentric to afford blurs rather than aliases")
 {
-    // At an anisotropy cap of one the ellipse is widened until it is round, which raises the level, so the
-    // failure mode of a cap the footprint exceeds is a soft result and not a broken one. Worth pinning:
-    // the alternative -- keeping the level and gathering only part of the footprint -- is what aliases.
+    // At an anisotropy cap of one the ellipse is widened until round, which raises the level, so exceeding
+    // the cap gives a soft result and not a broken one. Keeping the level and gathering only part of the
+    // footprint is what aliases.
     Array2Df src{int2{512, 64}};
     for (int y = 0; y < 64; ++y)
         for (int x = 0; x < 512; ++x) src(x, y) = (x % 8 < 2) ? 1.f : 0.f;
@@ -912,7 +858,7 @@ TEST_CASE("A footprint too eccentric to afford blurs rather than aliases")
     const Array2Df few =
         remapped_envmap(src, int2{32, 64}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 1);
 
-    // Still near the mean rather than swinging between the stripe's extremes.
+    // still near the mean, not swinging between the stripe's extremes
     for (int i = 0; i < few.num_elements(); ++i)
     {
         CHECK(few(i) > 0.05f);
@@ -922,8 +868,7 @@ TEST_CASE("A footprint too eccentric to afford blurs rather than aliases")
 
 TEST_CASE("Each parameterization asks for the proportions it can fill")
 {
-    // A remap to a size that ignores these either stretches the result or throws away resolution along one
-    // axis, which is why the dialog follows them rather than keeping whatever the source happened to be.
+    // a remap to a size that ignores these stretches the result or throws away resolution along one axis
     CHECK(envmapping_aspect(EnvMapping_LatLong) == doctest::Approx(2.f));
     CHECK(envmapping_aspect(EnvMapping_Cylindrical) == doctest::Approx(2.f));
     CHECK(envmapping_aspect(EnvMapping_CubeMap) == doctest::Approx(0.75f));
@@ -934,13 +879,13 @@ TEST_CASE("Each parameterization asks for the proportions it can fill")
 
 TEST_CASE("A mapping's aspect matches the area its image actually covers")
 {
-    // Not merely the numbers above repeated: the proportion each wants is the one under which its valid
-    // region fills the image, which is measurable from the mapping itself.
+    // the proportion each wants is the one under which its valid region fills the image, measured here from
+    // the mapping itself rather than repeating the numbers above
     for (int m = 0; m < EnvMapping_COUNT; ++m)
     {
         CAPTURE(std::string(name_of(m)));
 
-        // A tall, thin sampling grid so both axes are resolved; count where the mapping has a direction.
+        // a tall, thin sampling grid so both axes are resolved; count where the mapping has a direction
         const int n       = 240;
         int       covered = 0;
         for (int y = 0; y < n; ++y)
@@ -948,8 +893,8 @@ TEST_CASE("A mapping's aspect matches the area its image actually covers")
                 if (envmap_uv_is_valid(EnvMapping(m), float2{(x + 0.5f) / n, (y + 0.5f) / n}))
                     ++covered;
 
-        // The discs cover pi/4 of their square; the cross uses six of the twelve cells of its 3-by-4
-        // grid -- the column of four plus the two side faces -- and the rest fill their image.
+        // the discs cover pi/4 of their square; the cross uses six of the twelve cells of its 3-by-4 grid,
+        // the column of four plus the two side faces, and the rest fill their image
         const double fraction = double(covered) / double(n) * (1.0 / double(n));
         const bool   is_disc  = m == EnvMapping_Angular || m == EnvMapping_MirrorBall;
         if (is_disc)
@@ -963,8 +908,8 @@ TEST_CASE("A mapping's aspect matches the area its image actually covers")
 
 TEST_CASE("The mip level is reached, moves with the bias, and is blended across")
 {
-    // Proof that the pyramid is reached at all, which the quality tests cannot give: they only show that
-    // the result is close to the mean, and a sharp enough filter over the top level would be too.
+    // the quality tests only show the result is close to the mean, which a sharp enough filter over the top
+    // level would also be
     Array2Df src{int2{256, 256}};
     for (int y = 0; y < 256; ++y)
         for (int x = 0; x < 256; ++x) src(x, y) = (x % 16 < 4) ? 1.f : 0.f;
@@ -972,7 +917,7 @@ TEST_CASE("The mip level is reached, moves with the bias, and is blended across"
     auto remap = [&](float bias)
     { return remapped_envmap(src, int2{32, 32}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 8, bias); };
 
-    // Spread of the output, as a stand-in for how much detail survives.
+    // spread of the output, as a stand-in for how much detail survives
     auto spread = [](const Array2Df &a)
     {
         float lo = a(0), hi = a(0);
@@ -988,21 +933,18 @@ TEST_CASE("The mip level is reached, moves with the bias, and is blended across"
     const float neutral = spread(remap(0.f));
     const float soft    = spread(remap(+4.f));
 
-    // Biasing down reaches levels that still hold the stripes; biasing up reaches ones that do not. If the
-    // level were ignored, all three would be identical.
+    // biasing down reaches levels that still hold the stripes and biasing up ones that do not; if the level
+    // were ignored, all three would be identical
     CHECK(sharp > neutral);
     CHECK(soft <= neutral);
 
-    // And the response to the level is continuous, which is what says the two levels either side are
-    // blended rather than one of them snapped to. A snapped level puts a whole level's worth of difference
-    // into the step that crosses an integer and almost nothing into the others -- as bands, in an image,
-    // wherever the scale crosses a power of two.
+    // A continuous response to the level says the two levels either side are blended rather than one snapped
+    // to: a snapped level puts a whole level's worth of difference into the step crossing an integer and
+    // almost nothing into the others, which shows as bands wherever the scale crosses a power of two.
     //
-    // Swept at two scales, because the two ends of the pyramid are reached differently. The reduction
-    // above lands in the middle of it; a remap at its own size sits at level zero, where the lod goes
-    // negative as soon as the bias does, and clamping the level while taking the blend from the unclamped
-    // lod put the two sides of that boundary at opposite ends of the pyramid. In an image that boundary is
-    // the curve along which the remap stops shrinking and starts enlarging, and the seam lay along it.
+    // Swept at two scales, since the two ends of the pyramid are reached differently: the reduction above
+    // lands in the middle, and a remap at its own size sits at level zero, where the lod goes negative as
+    // soon as the bias does.
     auto sweep = [](const std::function<Array2Df(float)> &at_bias)
     {
         Array2Df prev  = at_bias(-1.f);
@@ -1022,20 +964,15 @@ TEST_CASE("The mip level is reached, moves with the bias, and is blended across"
             prev = cur;
         }
 
-        // No step much larger than the steps either side of it.
+        // no step much larger than the steps either side of it
         CHECK(worst < 4.0 * (total / double(n)));
     };
 
     sweep(remap);
 
-    // The boundary between magnifying and minifying, which the sweep above is too coarse to see: a step
-    // either side of it is a fortieth of a level, and must change the result by far less than moving a
-    // whole level does. Clamping the level while taking the blend from the unclamped lod put those two
-    // steps at opposite ends of the pyramid instead, and in an image that boundary is a curve across it,
-    // so the mismatch lay along the curve as a seam.
-    //
-    // A remap at the source's own size sits exactly on it: one destination pixel covers one source pixel,
-    // so the lod is the bias.
+    // The boundary between magnifying and minifying, too fine for the sweep above to see: a step either side
+    // is a fortieth of a level and must change the result by far less than a whole level does. A remap at the
+    // source's own size sits on it, one destination pixel per source pixel, so the lod is the bias.
     auto at_own_size = [&](float bias) {
         return remapped_envmap(src, int2{256, 256}, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_EWA, 8,
                                bias);

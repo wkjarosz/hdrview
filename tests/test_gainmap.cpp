@@ -70,8 +70,8 @@ int channel_index(const Image &img, const std::string &name)
 
 TEST_CASE("Apple gain-map strength follows the published piecewise fit")
 {
-    // The two branches of the fit are selected by whether the headroom field reaches 1.0, and within
-    // each branch by whether the gain field is past the 0.01 knee.
+    // the branch is chosen by whether the headroom field reaches 1.0, and within it by whether the gain
+    // field is past the 0.01 knee
     SUBCASE("low headroom, gain below the knee")
     {
         AppleGainmapParams p{0.5f, 0.f};
@@ -101,7 +101,7 @@ TEST_CASE("Apple gain-map strength follows the published piecewise fit")
 
     SUBCASE("what an iPhone 12 Pro actually writes")
     {
-        // Maker note 0x21 = 0.8432090282, 0x30 = 0, which several captures in the test corpus share.
+        // maker note 0x21 = 0.8432090282, 0x30 = 0, which several captures in the test corpus share
         AppleGainmapParams p{0.8432090282f, 0.f};
         CHECK(p.stops() == doctest::Approx(1.8f));
     }
@@ -114,11 +114,11 @@ TEST_CASE("Applying an Apple gain map scales the base image by the reconstructed
     SUBCASE("a fully-on map brightens by the full headroom")
     {
         auto img = make_flat_image(size, 0.25f);
-        // 1.0 encodes to 1.0 under any sane transfer function, so the gain here is exactly 1.
+        // 1.0 encodes to 1.0 under any transfer function, so the gain here is 1
         apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom,
                             true);
 
-        // stops = 1.8, so headroom = 2^1.8, and gain 1 means the base is scaled by the whole of it.
+        // stops = 1.8, so headroom = 2^1.8, and gain 1 scales the base by the whole of it
         const float expected = 0.25f * std::exp2(1.8f);
         CHECK(img->channels[0](0, 0) == doctest::Approx(expected));
         CHECK(img->channels[2](7, 3) == doctest::Approx(expected));
@@ -187,7 +187,7 @@ TEST_CASE("What the file stores is kept alongside what is built from it")
         REQUIRE(g >= 0);
         REQUIRE(b >= 0);
 
-        // The color channels were brightened; base.* still reads what the file held.
+        // the color channels were brightened; base.* still reads what the file held
         CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * std::exp2(1.8f)));
         CHECK(img->channels[r](0, 0) == doctest::Approx(0.25f));
         CHECK(img->channels[g](3, 2) == doctest::Approx(0.25f));
@@ -247,14 +247,14 @@ TEST_CASE("A gain map is appended as its own channel group, resized to the base 
     const int2 size{16, 8};
     auto       img = make_flat_image(size, 0.5f);
 
-    // Quarter resolution in each axis, as gain maps are usually stored.
+    // quarter resolution in each axis, as gain maps are usually stored
     apply_apple_gainmap(*img, make_flat_gainmap(int2{4, 2}, 1.f), AppleGainmapParams{0.5f, 0.f}, 0.f, true);
 
     const int gm = channel_index(*img, "gainmap.Y");
     REQUIRE(gm >= 0);
     CHECK(img->channels[gm].size() == size);
 
-    // The map was uniform, so every resampled value should still be the linearized 1.0.
+    // the map was uniform, so every resampled value is still the linearized 1.0
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x) CHECK(img->channels[gm](x, y) == doctest::Approx(1.f));
 }
@@ -287,9 +287,8 @@ TEST_CASE("A malformed gain map is ignored rather than corrupting the base image
 #if HDRVIEW_ENABLE_LIBHEIF
 TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false))
 {
-    // Apple gain maps need a real capture to exercise: the aux-image plumbing, the maker-note read,
-    // and the map itself all have to line up, and none of that is reachable from a synthetic file
-    // this suite could build.
+    // The aux-image plumbing, the maker-note read and the map itself all have to line up, which no
+    // synthetic file this suite could build reaches.
     const char *path = std::getenv("HDRVIEW_TEST_APPLE_HEIC");
     if (!path)
     {
@@ -301,7 +300,7 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
     REQUIRE_MESSAGE(is.good(), "cannot open HDRVIEW_TEST_APPLE_HEIC");
 
     // HEIC decoding needs an HEVC plugin, which some presets leave out on patent grounds
-    // (HDRVIEW_ENABLE_HEIC=OFF). Nothing about the gain map is testable then.
+    // (HDRVIEW_ENABLE_HEIC=OFF)
     if (!heif_have_decoder_for_format(heif_compression_HEVC))
     {
         MESSAGE("this build has no HEVC decoder; skipping the real-capture gain-map test.");
@@ -319,7 +318,7 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
     CHECK(img.metadata["header"].contains("Gain map"));
     CHECK(img.channels[channel_index(img, "gainmap.Y")].size() == img.channels[0].size());
 
-    // Reloading with the map suppressed must give strictly darker (or equal) color pixels.
+    // reloading with the map suppressed gives darker or equal color pixels
     is.clear();
     is.seekg(0);
     ImageLoadOptions base_opts;
@@ -330,9 +329,8 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
     auto &base = *base_images.front();
     REQUIRE(base.channels[0].size() == img.channels[0].size());
 
-    // The gain is a scalar >= 1, so it scales every sample away from zero. Comparing magnitudes
-    // rather than signed values matters: a wide-gamut capture carries some slightly negative
-    // samples, and scaling those up makes them more negative, not larger.
+    // The gain is a scalar >= 1, so it scales every sample away from zero. Compared as magnitudes: a
+    // wide-gamut capture carries slightly negative samples, and scaling those up makes them more negative.
     const int2 size      = img.channels[0].size();
     bool       amplified = false;
     bool       shrank    = false;
@@ -346,13 +344,11 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
                 amplified = true;
         }
 
-    // One CHECK apiece rather than one per pixel: twelve million assertions take longer to report
-    // than the decode takes to run.
+    // one CHECK apiece: twelve million assertions take longer to report than the decode takes to run
     CHECK_MESSAGE(!shrank, "applying the gain map darkened part of the image");
     CHECK_MESSAGE(amplified, "applying the gain map changed nothing");
 
-    // No pixel may gain more than the map asks for: the gain is 1 + (2^stops - 1) * g with g in
-    // [0,1], so 2^stops is the ceiling however bright the scene is.
+    // the gain is 1 + (2^stops - 1) * g with g in [0,1], so 2^stops is the ceiling however bright the scene
     const float stops = img.metadata["header"]["Gain map headroom"]["value"].get<float>();
     float       peak  = 0.f;
     for (int y = 0; y < size.y; ++y)
@@ -372,11 +368,9 @@ TEST_CASE("An Apple HEIC's gain map is found and applied" * doctest::skip(false)
 #if HDRVIEW_ENABLE_LIBUHDR
 TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
 {
-    // libuhdr hands the gain map back at the reduced resolution the file stores it at, so HDRView has
-    // to expand it. These dimensions are chosen so the reduction rounds: 100x60 at a scale of 8 comes
-    // back as 12x7, whose ratios to the base are not whole numbers. Expanding by an integer ratio
-    // runs off the end of the decoded map, leaving the last rows and columns of the channel at zero
-    // -- which reads as "this part of the image needs no brightening at all".
+    // libuhdr hands the gain map back at the reduced resolution the file stores it at. These dimensions make
+    // the reduction round: 100x60 at a scale of 8 comes back as 12x7, whose ratios to the base are not whole
+    // numbers, so expanding by an integer ratio runs off the end of the decoded map.
     const int2 size{100, 60};
     const int  scale = 8;
 
@@ -384,7 +378,7 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x)
         {
-            // A bright wedge on the left, so the map has something to encode everywhere down the frame.
+            // a bright wedge on the left, so the map has something to encode everywhere down the frame
             const float v = x < size.x / 2 ? 8.f : 0.25f;
             for (int c = 0; c < 3; ++c) img->channels[c](x, y) = v;
         }
@@ -406,8 +400,8 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
 
     CHECK(out.channels[gm].size() == out.channels[0].size());
 
-    // Every row has to have been written, including the last. A partial expansion leaves the bottom
-    // of the channel at zero, which reads as "this part of the image needs no brightening at all".
+    // every row has to have been written; a partial expansion leaves the bottom of the channel at zero,
+    // which reads as "this part of the image needs no brightening"
     int empty_rows = 0;
     for (int y = 0; y < size.y; ++y)
     {
@@ -418,7 +412,7 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
     }
     CHECK_MESSAGE(empty_rows == 0, "the expanded gain map has ", empty_rows, " unwritten row(s) of ", size.y);
 
-    // The wedge should still be visible after the expansion.
+    // the wedge is still visible after the expansion
     float left = 0.f, right = 0.f;
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x) (x < size.x / 2 ? left : right) += out.channels[gm](x, y);
@@ -434,8 +428,8 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
 namespace
 {
 
-// The gain map's ISO 21496-1 APP2 block from Gain_Map_Sample_Photos/samples_jpeg/01.jpg: the
-// multi-channel, per-field-denominator encoding, which is what Adobe's exporter writes.
+// The gain map's ISO 21496-1 APP2 block from Gain_Map_Sample_Photos/samples_jpeg/01.jpg: the multi-channel,
+// per-field-denominator encoding Adobe's exporter writes.
 constexpr char k_iso_multichannel[] =
     "\x00\x00\x00\x00\xc0\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01\x45\x3e\x00\x00\x80\x00\xfc\x23\x05\x14\x40\x00\x00"
     "\x00\x00\x01\x1f\xe1\x00\x00\x80\x00\x10\x4b\x9f\x0a\x40\x00\x00\x00\x01\x00\x00\x00\x40\x00\x00\x00\x01\x00\x00"
@@ -444,8 +438,8 @@ constexpr char k_iso_multichannel[] =
     "\x9a\x00\x00\x80\x00\x12\x95\xa8\x3f\x40\x00\x00\x00\x01\x00\x00\x00\x40\x00\x00\x00\x01\x00\x00\x00\x40\x00\x00"
     "\x00";
 
-// A three-channel hdrgm packet, from greg benz photography/DSC0529-Edit...benz8GainMap.jpg. Note the
-// mixture of attributes for the scalars and rdf:Seq elements for the per-channel values.
+// A three-channel hdrgm packet, from greg benz photography/DSC0529-Edit...benz8GainMap.jpg, mixing
+// attributes for the scalars with rdf:Seq elements for the per-channel values.
 constexpr char k_hdrgm_xmp[] = R"(<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -475,14 +469,14 @@ constexpr char k_hdrgm_xmp[] = R"(<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9
 
 TEST_CASE("The ISO 21496-1 binary metadata parses to the values the file declares")
 {
-    // sizeof - 1 drops the literal's terminating NUL, which is not part of the block.
+    // sizeof - 1 drops the literal's terminating NUL, which is not part of the block
     const auto p = parse_iso_gainmap((const uint8_t *)k_iso_multichannel, sizeof(k_iso_multichannel) - 1);
 
     CHECK(p.base_headroom == doctest::Approx(0.f));
     CHECK(p.alternate_headroom == doctest::Approx(2.54095459f));
     CHECK(p.use_base_color_space);
 
-    // Three distinct channels, which is the point of this particular file.
+    // three distinct channels, which is what this file is here for
     CHECK(p.min[0] == doctest::Approx(-0.06036256f));
     CHECK(p.min[1] == doctest::Approx(-0.03348350f));
     CHECK(p.min[2] == doctest::Approx(-0.13925277f));
@@ -504,14 +498,13 @@ TEST_CASE("The ISO 21496-1 binary metadata parses to the values the file declare
 
 TEST_CASE("The ISO metadata's other encodings parse too")
 {
-    // Every sample file to hand writes a denominator per field and forward-direction headrooms, so
-    // these two blobs are built by hand. libultrahdr emits the shared-denominator form whenever the
-    // denominators happen to agree, and the backward-direction flag whenever the base rendition is
-    // the HDR one, so both are shapes a real file can arrive in.
+    // Every sample file to hand writes a denominator per field and forward-direction headrooms, so these two
+    // blobs are built by hand. libultrahdr emits the shared-denominator form whenever the denominators agree,
+    // and the backward-direction flag whenever the base rendition is the HDR one.
 
     SUBCASE("one denominator shared by every field")
     {
-        // flags 0xC8: multi-channel, shared denominator, gain applies in the base color space.
+        // flags 0xC8: multi-channel, shared denominator, gain applies in the base color space
         constexpr char blob[] =
             "\x00\x00\x00\x00\xc8\x00\x0f\x42\x40\x00\x00\x00\x00\x00\x26\x25\xa0\xff\xfe\x79\x60\x00\x21\x91\xc0\x00"
             "\x03\xd0\x90\x00\x00\x3d\x09\x00\x00\x3d\x09\xff\xff\x3c\xb0\x00\x20\x0b\x20\x00\x03\xf7\xa0\x00\x00\x3d"
@@ -534,22 +527,22 @@ TEST_CASE("The ISO metadata's other encodings parse too")
 
     SUBCASE("backward direction, where the base rendition is the HDR one")
     {
-        // flags 0x4C: single channel, shared denominator, backward direction. The file stores the
-        // headrooms and offsets the other way round, and the parser swaps them back.
+        // flags 0x4C: single channel, shared denominator, backward direction; the file stores the headrooms
+        // and offsets the other way round and the parser swaps them back
         constexpr char blob[] = "\x00\x00\x00\x00\x4c\x00\x0f\x42\x40\x00\x26\x25\xa0\x00\x00\x00\x00\xff\xfe\x79\x60"
                                 "\x00\x21\x91\xc0\x00\x03\xd0\x90\x00\x00\x7a\x12\x00\x00\x3d\x09";
 
         const auto p = parse_iso_gainmap((const uint8_t *)blob, sizeof(blob) - 1);
 
-        // Stored as base 2.5 / alternate 0, so after the swap the base is the darker rendition.
+        // stored as base 2.5 / alternate 0, so after the swap the base is the darker rendition
         CHECK(p.base_headroom == doctest::Approx(0.f));
         CHECK(p.alternate_headroom == doctest::Approx(2.5f));
 
-        // The offsets swap with them: stored base 0.03125 / alternate 0.015625.
+        // the offsets swap with them: stored base 0.03125 / alternate 0.015625
         CHECK(p.base_offset[0] == doctest::Approx(0.015625f));
         CHECK(p.alternate_offset[0] == doctest::Approx(0.03125f));
 
-        // A single-channel map drives all three the same way.
+        // a single-channel map drives all three the same way
         CHECK(p.min[2] == doctest::Approx(p.min[0]));
         CHECK(p.max[2] == doctest::Approx(2.2f));
         CHECK(p.gamma[1] == doctest::Approx(0.25f));
@@ -558,10 +551,9 @@ TEST_CASE("The ISO metadata's other encodings parse too")
 
 TEST_CASE("A HEIF tmap item's leading version byte is the caller's to strip, not this parser's")
 {
-    // ISO/IEC 23008-12:2024 defines a tmap item's payload as ToneMapImage: a one-byte version,
-    // then the ISO 21496-1 metadata. The 62 bytes below are the tmap item of an iPhone capture from
-    // ISO's own Adaptive HDR test set, and show why the split matters -- 62 bytes is a legal length
-    // for metadata alone, so a parser that guessed by length would corrupt one form or the other.
+    // ISO/IEC 23008-12:2024 defines a tmap item's payload as ToneMapImage: a one-byte version, then the ISO
+    // 21496-1 metadata. The 62 bytes below are the tmap item of an iPhone capture from ISO's Adaptive HDR
+    // test set; 62 is also a legal length for metadata alone, so a parser guessing by length corrupts one form.
     constexpr char tmap[] =
         "\x00\x00\x00\x00\x00\x40\x00\x00\x00\x00\x00\x00\x00\x01\x00\xb2\x6b\xb5\x00\x40\x00\x00\x00\x00\x00\x00"
         "\x00\x00\x00\x01\x00\xb2\x6b\xb5\x00\x40\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\xd1\xb7\x20\x00"
@@ -586,8 +578,8 @@ TEST_CASE("A HEIF tmap item's leading version byte is the caller's to strip, not
 
     SUBCASE("handing the whole item over instead is rejected, not silently misread")
     {
-        // Reading the version byte as the first half of minimum_version shifts every field, and the
-        // denominators land on zero. Better to fail than to return plausible-looking nonsense.
+        // reading the version byte as the first half of minimum_version shifts every field and lands the
+        // denominators on zero
         CHECK_THROWS_AS(parse_iso_gainmap(bytes, 62), std::invalid_argument);
     }
 }
@@ -618,7 +610,7 @@ TEST_CASE("Adobe's hdrgm XMP parses to the same struct as the binary form")
     CHECK(p.base_headroom == doctest::Approx(0.f));
     CHECK(p.alternate_headroom == doctest::Approx(2.6f));
 
-    // Values that arrived as rdf:Seq elements rather than attributes.
+    // values that arrived as rdf:Seq elements
     CHECK(p.min[0] == doctest::Approx(-0.356199f));
     CHECK(p.min[1] == doctest::Approx(-0.293477f));
     CHECK(p.min[2] == doctest::Approx(-0.161647f));
@@ -626,7 +618,7 @@ TEST_CASE("Adobe's hdrgm XMP parses to the same struct as the binary form")
     CHECK(p.max[2] == doctest::Approx(1.965616f));
     CHECK(p.gamma[1] == doctest::Approx(0.322233f));
 
-    // And ones that arrived as attributes.
+    // and ones that arrived as attributes
     CHECK(p.base_offset[0] == doctest::Approx(0.015625f));
     CHECK(p.alternate_offset[0] == doctest::Approx(0.015625f));
 
@@ -660,8 +652,7 @@ TEST_CASE("Gain-map weight follows the target headroom, in both directions")
 
     SUBCASE("base is the HDR rendition, as in a base-HDR JPEG XL")
     {
-        // The map then derives a *darker* rendition, so an unbounded target must leave the base
-        // alone rather than applying the map in full.
+        // the map then derives a darker rendition, so an unbounded target leaves the base alone
         IsoGainmapParams p;
         p.base_headroom      = 2.5f;
         p.alternate_headroom = 0.f;
@@ -684,7 +675,7 @@ TEST_CASE("Applying an ISO gain map moves the base image towards the alternate r
 {
     const int2 size{8, 8};
 
-    // A map that is 1.0 everywhere, with min 0 and max 2, encodes a uniform 2-stop brightening.
+    // a map that is 1.0 everywhere, with min 0 and max 2, encodes a uniform 2-stop brightening
     IsoGainmapParams p;
     p.min                = float3{0.f};
     p.max                = float3{2.f};
@@ -715,7 +706,7 @@ TEST_CASE("Applying an ISO gain map moves the base image towards the alternate r
 
         CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f));
 
-        // The appended group holds log2 gains, so a map that decodes to "2 stops" reads as 2.
+        // the appended group holds log2 gains, so a map decoding to "2 stops" reads as 2
         const int gm = channel_index(*img, "gainmap.Y");
         REQUIRE(gm >= 0);
         CHECK(img->channels[gm](0, 0) == doctest::Approx(2.f));
@@ -751,8 +742,8 @@ TEST_CASE("Applying an ISO gain map moves the base image towards the alternate r
 TEST_CASE("A JPEG XL gain map is read out of the jhgm box and applied")
 {
     // Point this at Adobe's Gain_Map_Sample_Photos, which carries the same scene encoded both ways:
-    // samples_jxl_base_sdr stores the SDR rendition and brightens towards HDR, samples_jxl_base_hdr
-    // stores the HDR one and darkens towards SDR. A viewer has to land on the HDR rendition in both.
+    // samples_jxl_base_sdr stores the SDR rendition and brightens towards HDR, samples_jxl_base_hdr stores
+    // the HDR one and darkens towards SDR. A viewer lands on the HDR rendition in both.
     const char *dir = std::getenv("HDRVIEW_TEST_JXL_GAINMAP_DIR");
     if (!dir)
     {
@@ -794,8 +785,8 @@ TEST_CASE("A JPEG XL gain map is read out of the jhgm box and applied")
         MESSAGE("base-SDR peak ", peak_sdr, " -> reconstructed ", peak_hdr);
         CHECK(peak_hdr > peak_sdr * 1.5f);
 
-        // The map cannot ask for more brightening than its own maximum, whatever the codec's
-        // reconstruction of the map overshoots to.
+        // the map cannot ask for more brightening than its own maximum, whatever the codec's reconstruction
+        // of it overshoots to
         const float ceiling = std::exp2(hdr->metadata["header"]["Gain map headroom"]["value"].get<float>());
         CHECK(peak_hdr <= doctest::Approx(peak_sdr * ceiling).epsilon(0.01));
     }
@@ -817,9 +808,8 @@ TEST_CASE("A JPEG XL gain map is read out of the jhgm box and applied")
 #if HDRVIEW_ENABLE_LIBUHDR
 TEST_CASE("The target headroom reaches an UltraHDR JPEG, which libultrahdr reconstructs itself")
 {
-    // libultrahdr applies the map inside its own decoder, so the target has to be handed to it
-    // rather than applied afterwards. Without that, this control would silently do nothing for the
-    // one JPEG flavor that does not come through HDRView's own gain-map path.
+    // libultrahdr applies the map inside its own decoder, so the target has to be handed to it and not
+    // applied afterwards
     const char *path = std::getenv("HDRVIEW_TEST_GAINMAP_JPEG");
     if (!path)
     {
@@ -854,11 +844,9 @@ TEST_CASE("The target headroom reaches an UltraHDR JPEG, which libultrahdr recon
     const float base = peak_at(0.f);
     const float full = peak_at(k_full_gainmap_headroom);
 
-    // A target of N stops caps the reconstruction at 2^N: no pixel may be brightened past it. The
-    // brightest pixel only lands exactly on the cap when the map saturates there, which is common
-    // for a single-channel map and not for a per-channel one, where the channel being measured may
-    // never reach its own maximum at that pixel. So the invariant is the ceiling, plus the fact
-    // that raising the target never darkens anything.
+    // A target of N stops caps the reconstruction at 2^N. The brightest pixel lands on the cap only where
+    // the map saturates, which a per-channel map need not do at the channel being measured, so what is
+    // checked is the ceiling plus the fact that raising the target never darkens anything.
     float previous = base;
     for (float stops : {0.5f, 1.f, 1.5f, 2.f, 3.f})
     {
@@ -879,8 +867,7 @@ TEST_CASE("The target headroom reaches an UltraHDR JPEG, which libultrahdr recon
 TEST_CASE("A gain map packed into a JPEG is found through the MPF index and applied")
 {
     // Point this at a directory of gain-mapped JPEGs. Well-formed UltraHDR files are claimed by the
-    // libultrahdr loader before this path sees them, so what this exercises is everything else that
-    // packs a map the same way.
+    // libultrahdr loader first, so this exercises everything else that packs a map the same way.
     const char *path = std::getenv("HDRVIEW_TEST_GAINMAP_JPEG");
     if (!path)
     {
@@ -920,9 +907,8 @@ TEST_CASE("A gain map packed into a JPEG is found through the MPF index and appl
     CHECK(peak_hdr > peak_base * 1.2f);
 
 #if HDRVIEW_ENABLE_LIBUHDR
-    // When the file is also a well-formed UltraHDR JPEG, libultrahdr will decode it too -- through
-    // an entirely separate implementation of the same standard. Agreeing with it is a much stronger
-    // statement than any self-consistency check this suite can make on its own.
+    // when the file is also a well-formed UltraHDR JPEG, libultrahdr decodes it too, through a separate
+    // implementation of the same standard
     std::ifstream probe{path, std::ios_base::binary};
     if (is_uhdr_image(probe))
     {
@@ -949,14 +935,11 @@ TEST_CASE("A gain map packed into a JPEG is found through the MPF index and appl
                 sum_hdr += hdr->channels[0](x, y);
             }
 
-        // Compare what the map *does*, not the pixels it lands on. The two loaders linearize a
-        // wide-gamut base image differently -- libultrahdr labels Display P3 with the canonical
-        // primaries where this path derives them from the embedded ICC matrix -- which shifts the
-        // channels by a fixed matrix whether or not a gain map is involved. Dividing each loader's
-        // reconstruction by its own base rendition cancels that and leaves only the gain map.
-        //
-        // Means rather than peaks: the two resample the reduced-resolution map slightly
-        // differently, so pixels near an edge differ by more than the image as a whole does.
+        // Compares what the map does, not the pixels it lands on. The two loaders linearize a wide-gamut base
+        // differently (libultrahdr labels Display P3 with the canonical primaries where this path derives them
+        // from the embedded ICC matrix), which shifts the channels by a fixed matrix whether or not a map is
+        // involved; dividing each loader's reconstruction by its own base cancels that. Means, not peaks: the
+        // two resample the reduced-resolution map slightly differently, so edge pixels differ more.
         const double mine   = sum_hdr / sum_base;
         const double theirs = sum_via_uhdr(k_full_gainmap_headroom) / sum_via_uhdr(0.f);
 

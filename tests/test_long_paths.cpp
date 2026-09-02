@@ -20,12 +20,9 @@ namespace
 
 namespace fs = std::filesystem;
 
-// Builds a path under the system temp directory whose full length exceeds the classic Win32 MAX_PATH
-// (260 chars), by nesting many subdirectories. On Windows this only succeeds end-to-end if the process is
-// long-path aware (see resources/windows/HDRView.manifest) *and* the system-wide "Enable Win32 long paths"
-// policy is on. The test below treats a failure to create this directory as a hard failure rather than
-// silently skipping, so that running on a system/CI runner without the policy enabled is a visible signal
-// to go enable it, not a silent no-op.
+// Nested subdirectories under the temp directory adding up to more than Win32's MAX_PATH of 260. On Windows
+// this needs both a long-path-aware manifest (resources/windows/HDRView.manifest) and the system-wide
+// "Enable Win32 long paths" policy; failing to create it is a hard failure so a runner missing the policy says so.
 fs::path make_long_test_dir()
 {
     fs::path dir = fs::temp_directory_path() / "hdrview_long_path_test";
@@ -57,10 +54,8 @@ TEST_CASE("BackgroundImageLoader opens an image at a path longer than 260 charac
         REQUIRE_NOTHROW(write_pfm_image(os, file.u8string(), width, height, channels, pixels));
     }
 
-    // Deliberately goes through BackgroundImageLoader (rather than the lower-level, synchronous load_image(),
-    // which only ever receives an already-open istream and never touches fs:: itself) since that's the actual
-    // production code path that used to crash: PendingImages' async task and get_loaded_images()'s
-    // computation.wait() both perform fs:: operations against the long path.
+    // BackgroundImageLoader is the path that touches fs:: with the long path; load_image() only ever sees an
+    // already-open istream.
     BackgroundImageLoader loader;
     REQUIRE_NOTHROW(loader.background_load(file.u8string()));
 

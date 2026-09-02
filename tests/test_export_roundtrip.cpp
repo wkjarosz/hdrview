@@ -8,14 +8,9 @@
 
     Every writer against every channel-group layout HDRView can select for export.
 
-    The layout axis is the one that finds things: a writer is normally built and tested against RGB or
-    RGBA, and the narrower groups -- a lone luma channel, luma plus alpha, a U,V pair, and OpenEXR's
-    luminance-chroma triples -- reach the same code with a channel count it never expected. Each cell
-    here saves an image, reads it back, and compares against what Image::rgba_pixel() shows for it,
-    which is the definition of what the file should have held.
-
-    The comparison is on straight (unpremultiplied) color, so a format that cannot store alpha is
-    judged on the same footing as one that can, and alpha itself is checked only where it survives.
+    Each cell saves an image, reads it back, and compares against what Image::rgba_pixel() shows for it.
+    The comparison is on straight (unpremultiplied) color, so a format that cannot store alpha is judged on
+    the same footing as one that can, and alpha itself is checked only where it survives.
 */
 
 #include <doctest/doctest.h>
@@ -43,14 +38,10 @@
 #include <jxl/types.h>
 #endif
 
-// AddressSanitizer reports a stack-use-after-scope inside libjxl's own JxlEncoderSetBasicInfo, in
-// SizeHeader::Set -> FixedAspectRatios (lib/jxl/headers.cc). The read is kRatios[ratio - 1] with
-// 0 < ratio < 8, in bounds of a 56-byte array, and ASan names the address as a *global* while
-// classifying its shadow as stack -- the signature of use-after-scope instrumentation applied to a
-// function-local constexpr array the optimizer emitted into .rodata. It depends only on the image's
-// dimensions, so nothing of HDRView's reaches it, and stack-use-after-scope is not something an ASan
-// suppressions file can filter. So the JPEG-XL row drops out of the table under ASan alone; every
-// uninstrumented job still runs it.
+// AddressSanitizer reports a spurious stack-use-after-scope inside libjxl's SizeHeader::Set ->
+// FixedAspectRatios (lib/jxl/headers.cc): the in-bounds read kRatios[ratio - 1] of a function-local
+// constexpr array the optimizer emitted into .rodata. No suppressions file can filter that class, so the
+// JPEG-XL row drops out of the table under ASan alone.
 #if defined(__SANITIZE_ADDRESS__)
 #define HDRVIEW_TEST_ASAN 1
 #elif defined(__has_feature)
@@ -80,8 +71,7 @@ struct Writer
 // clang-format off
 const Writer k_writers[] = {
     {"exr", ".exr", Cap_Float | Cap_Alpha,
-     // deliberately the default-argument form: without options of its own it has to fall back to
-     // something sized for this image, not to the empty set the GUI leaves behind
+     // the default-argument form, which has to fall back to something sized for this image
      [](const Image &i, std::ostream &o, TransferFunction) { save_exr_image(i, o, "a.exr"); }},
     {"pfm", ".pfm", Cap_Float,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_pfm_image(i, o, "a.pfm", 1.f, t); }},
@@ -123,7 +113,7 @@ const Writer k_writers[] = {
      { save_jxl_image(i, o, "a.jxl", 1.f, /*lossless*/ true, 100.f, t, JXL_TYPE_UINT16); }},
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
-    // both codecs the dialog can now choose between, since they take different paths through libheif
+    // both codecs the dialog offers, since they take different paths through libheif
     {"heif", ".heif", Cap_Alpha | Cap_Lossy,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_heif_image(i, o, "a.heif", 1.f, 100, true, true, HEIFCodec::HEVC, t); }},
@@ -139,7 +129,7 @@ struct Layout
     std::vector<const char *> channels;
 };
 
-// The narrow groups are the point: only RGB and RGBA are what a writer is usually built against.
+// The narrow groups are the point: a writer is normally built against only RGB and RGBA.
 const Layout k_layouts[] = {
     {"Y", {"Y"}},                     // a lone luma channel
     {"YA", {"Y", "A"}},               // luma plus alpha
@@ -154,7 +144,7 @@ const Layout k_layouts[] = {
 //! Values low enough that unpremultiplying on the way out cannot clamp, and distinct per channel.
 ImagePtr make_image(const Layout &layout, float alpha)
 {
-    // deliberately not square: a transposed stride is invisible in a square image
+    // not square: a transposed stride is invisible in a square image
     const int2 size{8, 6};
     auto       img = std::make_shared<Image>();
     for (auto name : layout.channels) img->channels.emplace_back(name, size);
@@ -171,7 +161,7 @@ ImagePtr make_image(const Layout &layout, float alpha)
             v += 0.13f;
     }
     // as every loader does for a straight-alpha file, so finalize() premultiplies and the writers'
-    // unpremultiply step has something correct to undo
+    // unpremultiply step has something to undo
     img->alpha_type = AlphaType_Straight;
     img->finalize();
     return img;
@@ -202,8 +192,8 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
 
             auto img = make_image(layout, /*alpha*/ 0.75f);
 
-            // a float format records no transfer function, so it has to be written linear; the integer
-            // ones round-trip theirs and are written sRGB, as the save dialog defaults them
+            // a float format records no transfer function and is written linear; the integer ones
+            // round-trip theirs and are written sRGB, as the save dialog defaults them
             const TransferFunction tf = (writer.caps & Cap_Float) ? TransferFunction{TransferFunction::Linear}
                                                                   : TransferFunction{TransferFunction::sRGB};
 
@@ -215,8 +205,7 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
                 continue;
             }
 
-            // Every cell is judged on its own: one writer refusing a layout must not stop the table, or
-            // the first failure hides every cell after it.
+            // every cell is judged on its own, or the first failure hides every cell after it
             std::string save_error;
             try
             {
@@ -226,9 +215,8 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
             {
                 save_error = e.what();
             }
-            // Which codecs libheif can encode depends on the plugins the build has: the Windows CPM build
-            // has no HEVC encoder at all, and a distribution one may have neither. That is a statement
-            // about the build, not a defect, so the row steps aside instead of failing.
+            // which codecs libheif can encode depends on the plugins the build found; the Windows CPM
+            // build has no HEVC encoder at all
             if (save_error.find("no encoder available") != std::string::npos)
                 continue;
             CHECK_MESSAGE(save_error.empty(), "save threw: ", save_error);
@@ -253,17 +241,14 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
             if (reloaded.size() != 1)
                 continue;
 
-            // Two cells do not yet agree with the viewport, for reasons that are open questions about
-            // what the file should hold rather than defects with an obvious fix. They still run this far,
-            // so a crash or a failed decode would be caught; only the color comparison is skipped.
+            // Two cells are open questions about what the file should hold. They still run this far, so a
+            // crash or failed decode is caught; only the color comparison is skipped.
             //
-            //  - Any writer storing two channels natively puts a U,V pair in a gray+alpha container, so V
-            //    becomes transparency and the reload displays gray. The writers that cannot store two
-            //    channels pad to RGB instead, which is what the viewport shows. The two behaviors
-            //    disagree and neither is obviously right for a pair that is chroma, not coverage.
-            //  - PFM's own spec has no four-channel form. HDRView writes one as an extension, with alpha
-            //    divided back out, but load_pfm_image() does not read the fourth channel back as alpha --
-            //    so the values return straight where they left premultiplied.
+            //  - A writer storing two channels natively puts a U,V pair in a gray+alpha container, so V
+            //    becomes transparency and the reload displays gray. Writers that cannot store two channels
+            //    pad to RGB, which is what the viewport shows.
+            //  - PFM has no four-channel form. HDRView writes one as an extension with alpha divided back
+            //    out, but load_pfm_image() does not read the fourth channel back as alpha.
             const bool open_question =
                 std::string{layout.label} == "UV" || (std::string{writer.name} == "pfm" && layout.channels.size() == 4);
             if (open_question)
@@ -285,10 +270,8 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
 
 TEST_CASE("every writer either converts a wide-gamut image to sRGB or records the gamut it kept")
 {
-    // as_interleaved() converts to sRGB unless a writer opts out, and a writer that opts out has to say
-    // which primaries its samples are in. Doing neither leaves a file that reads back as sRGB and shows
-    // the wrong colors, which is what TIFF did until it started writing WhitePoint and
-    // PrimaryChromaticities.
+    // as_interleaved() converts to sRGB unless a writer opts out, and one that opts out has to record the
+    // primaries its samples are in; doing neither leaves a file that reads back as sRGB
     const Chromaticities bt2020{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
 
     for (const auto &writer : k_writers)

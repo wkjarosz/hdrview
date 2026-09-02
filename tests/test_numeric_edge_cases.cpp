@@ -13,10 +13,8 @@
 
 TEST_CASE("Transfer functions mirror around the origin for negative input")
 {
-    // A wide-gamut color converted to a narrower gamut lands outside it, which is carried as negative
-    // components. The convention -- OpenColorIO's LIN_TO_PQ, colour-science's signed power, and this file's
-    // own linear_to_sRGB -- is to mirror the curve around the origin rather than clamp, so that the sign
-    // survives and the round trip stays exact.
+    // Gamut conversion produces negatives, and the convention (OpenColorIO's LIN_TO_PQ, colour-science's
+    // signed power, our own linear_to_sRGB) is to mirror the curve around the origin so the sign survives.
     for (int t = TransferFunction::Unspecified; t < TransferFunction::Count; ++t)
     {
         TransferFunction tf{static_cast<TransferFunction::Type_>(t)};
@@ -26,8 +24,7 @@ TEST_CASE("Transfer functions mirror around the origin for negative input")
             float encoded = from_linear(x, tf);
             REQUIRE(std::isfinite(encoded));
 
-            // Log100 and its sqrt10 variant are defined on a bounded domain and clamp by specification,
-            // so they are the one family that legitimately loses the sign.
+            // Log100 and its sqrt10 variant are specified on a bounded domain and clamp, losing the sign
             if (tf.type == TransferFunction::Log100 || tf.type == TransferFunction::Log100_Sqrt10)
                 continue;
 

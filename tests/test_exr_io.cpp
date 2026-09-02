@@ -31,9 +31,8 @@
 namespace
 {
 
-// Builds an RGB image of the given size with a value per pixel/channel that uniquely identifies it, so a mixup
-// between channels/pixels during save+load is immediately visible. data_window/display_window default to the
-// whole image at the origin if left empty (matching Image::finalize()'s own default).
+// An RGB image with a value per pixel/channel that uniquely identifies it. data_window/display_window default
+// to the whole image at the origin if left empty, as Image::finalize() does.
 ImagePtr make_test_image(int2 size, Box2i data_window = {}, Box2i display_window = {})
 {
     auto img = std::make_shared<Image>();
@@ -121,8 +120,8 @@ TEST_CASE("EXR load respects channel_selector, including selectors matching noth
 
     SUBCASE("excluding an unqualified channel name")
     {
-        // "-.A" is a substring search for ".A", which a bare "A" doesn't contain -- load_image()
-        // normalizes each channel to a dot-prefixed name so the documented example works either way.
+        // "-.A" is a substring search for ".A", which a bare "A" doesn't contain; load_image() normalizes
+        // each channel to a dot-prefixed name so the documented example works either way
         const int2 size{2, 2};
         auto       rgba = std::make_shared<Image>(size, 4);
         for (auto &c : rgba->channels)
@@ -161,8 +160,8 @@ TEST_CASE("EXR load respects channel_selector, including selectors matching noth
 
 TEST_CASE("EXR load reports the format's premultiplied alpha convention")
 {
-    // EXR color channels are premultiplied by convention, so an alpha-bearing part must not be
-    // reported as straight -- Image::finalize() would premultiply values that already are.
+    // EXR color channels are premultiplied by convention, and finalize() would premultiply a part reported
+    // as straight a second time
     SUBCASE("a part with an alpha channel")
     {
         const int2 size{2, 2};
@@ -187,8 +186,7 @@ TEST_CASE("EXR load reports the format's premultiplied alpha convention")
 
 TEST_CASE("EXR save/load precision depends on the chosen pixel type")
 {
-    // 0.1f has no exact half-precision representation, so it should survive HALF encoding only approximately, but
-    // FLOAT encoding exactly (well within float epsilon).
+    // 0.1f has no exact half-precision representation, so it survives HALF only approximately and FLOAT exactly
     auto img = std::make_shared<Image>();
     img->channels.emplace_back("Y", int2{1, 1});
     img->channels.back()(0, 0) = 0.1f;
@@ -218,8 +216,8 @@ TEST_CASE("EXR save/load precision depends on the chosen pixel type")
 
 TEST_CASE("EXR channels report their own sample depths independently")
 {
-    // A part can mix pixel types, which is why the depth that sets the histogram's bin count lives on the
-    // channel rather than the image. Only UINT is quantized; half and float report 0.
+    // A part can mix pixel types, so the depth that sets the histogram's bin count lives on the channel, not
+    // the image. Only UINT is quantized; half and float report 0.
     const int2 size{4, 4};
 
     Imf::Header header(size.x, size.y);
@@ -276,11 +274,9 @@ TEST_CASE("is_exr_image correctly identifies real EXR bytes and rejects garbage"
     CHECK_FALSE(is_exr_image(empty, "empty.exr"));
 }
 
-// The following tests need real-world EXR files that HDRView's own save_exr_image can't produce (it never writes
-// multi-part files or subsampled channels), so they use OpenEXR's own vendored test image set instead. Only
-// compiled in when CMake found that data (see the HDRVIEW_TEST_OPENEXR_DIR check in CMakeLists.txt) - i.e. only
-// for -cpm/-universal presets, which are the only ones that fetch OpenEXR's source (and therefore its test
-// images) at all.
+// The tests below need real-world EXR files save_exr_image cannot produce (it writes neither multi-part files
+// nor subsampled channels), so they use OpenEXR's own test image set. Only compiled in when CMake found that
+// data, i.e. for the -cpm and -universal presets that fetch OpenEXR from source.
 #ifdef HDRVIEW_TEST_OPENEXR_DIR
 
 namespace
@@ -337,14 +333,13 @@ TEST_CASE("EXR load up-samples subsampled channels to full resolution with block
     Channel &ry = find_channel("RY"); // subsampled 2x2 in the file
     Channel &by = find_channel("BY"); // subsampled 2x2 in the file
 
-    // all channels end up at the same, full data-window resolution regardless of native EXR sampling rate
+    // every channel ends up at the full data-window resolution whatever its sampling rate in the file
     CHECK(y.size().x == ry.size().x);
     CHECK(y.size().y == ry.size().y);
     CHECK(y.size().x == by.size().x);
     CHECK(y.size().y == by.size().y);
 
-    // nearest-neighbor up-res of a 2x2-subsampled channel means each 2x2 block of output pixels shares one source
-    // value; check a couple of blocks well inside the image bounds
+    // nearest-neighbor up-res gives each 2x2 block of output pixels one source value
     for (int2 block_origin : {int2{10, 10}, int2{40, 60}})
     {
         INFO("block_origin = ", block_origin.x, ",", block_origin.y);
@@ -364,9 +359,8 @@ TEST_CASE("EXR load doesn't crash across the full vendored real-world test image
     {
         if (entry.path().extension() != ".exr")
             continue;
-        // deep images (multi-sample-per-pixel) are a fundamentally different EXR image type that HDRView doesn't
-        // support loading (it only handles scanline/tiled images via the regular FrameBuffer API); skip them
-        // rather than asserting HDRView can do something it never claimed to.
+        // deep (multi-sample-per-pixel) images are a different EXR image type; HDRView reads only scanline
+        // and tiled images, through the regular FrameBuffer API
         if (entry.path().filename().string().find(".deep.") != std::string::npos)
             continue;
 
@@ -387,10 +381,8 @@ TEST_CASE("EXR load doesn't crash across the full vendored real-world test image
 
 TEST_CASE("save_exr_image() with default options writes every group, not an empty channel list")
 {
-    // The GUI sizes EXRSaveOptions::group_enabled per image through exr_parameters_gui(); the static
-    // default it otherwise falls back to is empty, which enables no groups at all and leaves OpenEXR
-    // with a header whose channel list is empty -- a file it refuses to open. This is the documented
-    // default-argument call, so it has to work without the GUI having run.
+    // The GUI sizes EXRSaveOptions::group_enabled per image through exr_parameters_gui(); the static default
+    // it otherwise falls back to is empty, which would leave OpenEXR a header with no channels at all.
     auto               img = make_test_image(int2{2, 2});
     std::ostringstream out(std::ios::binary);
     REQUIRE_NOTHROW(save_exr_image(*img, out, "test.exr"));
@@ -400,8 +392,8 @@ TEST_CASE("save_exr_image() with default options writes every group, not an empt
     REQUIRE(reloaded.size() == 1);
     REQUIRE(reloaded[0]->channels.size() == 3);
 
-    // through the group, since OpenEXR stores channels in alphabetical order, and to half precision,
-    // which is what EXRSaveOptions defaults to
+    // through the group, since OpenEXR stores channels alphabetically, and at the half precision
+    // EXRSaveOptions defaults to
     reloaded[0]->finalize(); // the per-format loaders leave this to load_image()
     float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
     float4 got  = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
@@ -410,9 +402,8 @@ TEST_CASE("save_exr_image() with default options writes every group, not an empt
 
 TEST_CASE("An EXR rational attribute with a zero denominator does not divide by it")
 {
-    // Imf::Rational is two numbers read out of the file -- an int over an unsigned int -- and nothing in
-    // the format stops the denominator being zero. Framing rates and capture intervals are written this
-    // way, and 0/0 is how some writers spell "not set".
+    // Imf::Rational is an int over an unsigned int read straight out of the file, and nothing in the format
+    // stops the denominator being zero; 0/0 is how some writers spell "not set".
     const std::string path = (std::filesystem::temp_directory_path() / "hdrview_rational.exr").string();
 
     {
@@ -428,8 +419,7 @@ TEST_CASE("An EXR rational attribute with a zero denominator does not divide by 
         out.writePixels(4);
     }
 
-    // Scoped like the writer above: Windows refuses to delete a file that is still open, so the stream
-    // has to be closed before the remove() at the end of the test.
+    // scoped like the writer above: Windows refuses to delete a file that is still open
     std::vector<ImagePtr> images;
     {
         std::ifstream is{path, std::ios::binary};
@@ -438,7 +428,7 @@ TEST_CASE("An EXR rational attribute with a zero denominator does not divide by 
     }
     REQUIRE(images.size() == 1);
 
-    // And the attribute is still reported, with both halves intact rather than a quotient.
+    // and the attribute is still reported, with both halves intact
     const json &header_json = images[0]->metadata["header"];
     REQUIRE(header_json.contains("framesPerSecond"));
     const json &fps = header_json["framesPerSecond"]["value"];

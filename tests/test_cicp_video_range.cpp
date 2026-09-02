@@ -27,8 +27,8 @@ void put_be32(std::vector<uint8_t> &v, size_t o, uint32_t x)
     v[o + 3] = uint8_t(x);
 }
 
-// An ICC profile carrying nothing but a `cicp` tag (ICC.1:2022). Only the tag is read here, so the rest of
-// the profile is left as a bare header -- TIFF stores the blob opaquely and never parses it.
+// An ICC profile carrying nothing but a `cicp` tag (ICC.1:2022); TIFF stores the blob opaquely and never
+// parses the rest of it.
 std::vector<uint8_t> icc_with_cicp(uint8_t cp, uint8_t tc, uint8_t mc, uint8_t fr)
 {
     std::vector<uint8_t> v(128 + 4 + 12 + 12, 0);
@@ -50,8 +50,7 @@ constexpr uint16_t k_narrow_black = 16 * 256;  // 4096
 constexpr uint16_t k_narrow_white = 235 * 256; // 60160
 constexpr uint16_t k_mid          = 128 * 256; // 32768
 
-// Builds a 3x1, 16-bit, single-sample uncompressed little-endian TIFF holding `codes`, with an embedded
-// ICC profile. Hand-assembled in the style of tests/test_tiff_io.cpp so the tags under test are explicit.
+// A 3x1, 16-bit, single-sample uncompressed little-endian TIFF holding `codes`, with an embedded ICC profile.
 std::string make_gray16_tiff(const std::vector<uint16_t> &codes, const std::vector<uint8_t> &icc)
 {
     struct Entry
@@ -132,9 +131,8 @@ ImagePtr load(const std::string &bytes, const char *name)
 
 } // namespace
 
-// The range flag lives only in the cicp tag: TIFF has no field of its own for it, and a PNG carrying its
-// code points this way has no cICP chunk either. Transfer characteristic 8 is Linear, so what these
-// assertions see is the dequantization alone, with no curve on top of it.
+// The range flag lives only in the cicp tag; TIFF has no field of its own for it. Transfer characteristic 8
+// is Linear, so these assertions see the dequantization alone.
 TEST_CASE("A cicp tag declaring narrow video range is dequantized 16..235")
 {
     const std::vector<uint16_t> codes{k_narrow_black, k_narrow_white, k_mid};
@@ -158,8 +156,7 @@ TEST_CASE("A cicp tag declaring narrow video range is dequantized 16..235")
         const auto &ch = img->channels[0];
         REQUIRE(ch.size().x == 3);
 
-        // Black and white sit inside the full range rather than at its ends, which is exactly the error
-        // the narrow flag exists to prevent.
+        // without the flag, black and white would sit at the ends of the full range
         CHECK(ch(0, 0) == doctest::Approx(k_narrow_black / 65535.f).epsilon(1e-5));
         CHECK(ch(1, 0) == doctest::Approx(k_narrow_white / 65535.f).epsilon(1e-5));
         CHECK(ch(2, 0) == doctest::Approx(k_mid / 65535.f).epsilon(1e-5));
@@ -167,8 +164,8 @@ TEST_CASE("A cicp tag declaring narrow video range is dequantized 16..235")
 
     SUBCASE("narrow range keeps excursions beyond black and white")
     {
-        // A narrow-range image may carry codes outside 16..235; those must survive as values outside
-        // [0,1] rather than being clamped, since HDR test patterns rely on the headroom.
+        // codes outside 16..235 are legal and must survive as values outside [0,1]; HDR test patterns use
+        // that headroom
         auto        img = load(make_gray16_tiff({0, 65535}, icc_with_cicp(1, 8, 0, 0)), "excursions.tif");
         const auto &ch  = img->channels[0];
         CHECK(ch(0, 0) < 0.f);
@@ -176,7 +173,6 @@ TEST_CASE("A cicp tag declaring narrow video range is dequantized 16..235")
     }
 }
 
-// The flag has to survive the trip through the tag reader, since that is what both loaders consult.
 TEST_CASE("icc_cicp_tag reports the video range flag")
 {
     auto narrow = icc_with_cicp(9, 18, 0, 0);

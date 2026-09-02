@@ -11,21 +11,16 @@
 
 #include <algorithm>
 
-// PixelStats::calculate() (exercised by the tests below) lazily spins up stp::ThreadPool::singleton()'s
-// worker threads. If we let them be torn down via the pool's own static destructor, their exit-time
-// ordering relative to other statics (e.g. spdlog's logger registry, which the workers touch on startup)
-// is unspecified, and a still-shutting-down worker can end up racing the destruction of globals it
-// depends on. Stopping the pool explicitly here, before any static destructors run, sidesteps that
-// entirely.
+// PixelStats::calculate() lazily spins up stp::ThreadPool::singleton()'s workers. Their static destructor's
+// order against other statics the workers touch (spdlog's logger registry) is unspecified, so the pool is
+// stopped here, before any static destructor runs.
 int main(int argc, char **argv)
 {
     doctest::Context ctx;
     ctx.applyCommandLine(argc, argv);
     int res = ctx.run();
 
-    // try_singleton() (unlike singleton()) never creates the pool as a side effect, so tests that never
-    // touched PixelStats::calculate() (and thus never spun up any worker threads) don't pay for spinning
-    // up a pool here just to immediately tear it down.
+    // try_singleton(), unlike singleton(), never creates the pool as a side effect
     if (auto *pool = stp::ThreadPool::try_singleton())
         pool->stop();
 
@@ -35,8 +30,8 @@ int main(int argc, char **argv)
 namespace
 {
 
-// Fills a WxH channel with a value that uniquely identifies each pixel, so any mixup between which region of the
-// channel was actually sampled is immediately visible in the resulting statistics.
+// A WxH channel whose value uniquely identifies each pixel, so which region was sampled is visible in the
+// statistics.
 Channel make_identifiable_channel(int w, int h)
 {
     Channel c("test", int2{w, h});
@@ -54,7 +49,7 @@ Channel make_8bit_sRGB_ramp()
     return c;
 }
 
-// Number of bins holding no samples at all, which is what the "comb" artifact looks like in the data.
+// Number of bins holding no samples at all, which is the "comb" artifact in the data.
 int count_empty_bins(const PixelStats &stats, AxisScale x_scale)
 {
     int empty = 0;
@@ -83,8 +78,8 @@ PixelStats compute(const Channel &c, PixelStats::Settings settings = {})
 
 TEST_CASE("PixelStats::calculate bins every axis scale in a single pass")
 {
-    // Binning follows the axis the histogram is drawn in, and all of them are computed up front so that
-    // switching the x-axis combo never has to rescan the image.
+    // binning follows the axis the histogram is drawn in, and all of them are computed up front so
+    // switching the x-axis combo never rescans the image
     auto stats = compute(make_8bit_sRGB_ramp());
 
     REQUIRE(stats.computed);
@@ -95,7 +90,7 @@ TEST_CASE("PixelStats::calculate bins every axis scale in a single pass")
         CHECK(stats.hist_normalization[s][1] > 0.f);
     }
 
-    // The scales agree at the ends of the range but place the bins in between differently.
+    // the scales agree at the ends of the range and place the bins in between differently
     CHECK(stats.hist_xs[AxisScale_SRGB][128] != stats.hist_xs[AxisScale_Linear][128]);
     CHECK(stats.hist_xs[AxisScale_Asinh][128] != stats.hist_xs[AxisScale_Linear][128]);
 }
@@ -140,8 +135,7 @@ TEST_CASE("PixelStats::Settings::match ignores settings that only affect drawing
 
 TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else")
 {
-    // A tile carries only its own rows; everything outside it has to survive untouched, which is what makes
-    // streaming a render bucket-by-bucket meaningful in the first place.
+    // a tile carries only its own rows, and everything outside it has to survive untouched
     const int w = 8, h = 6;
 
     SUBCASE("tightly packed rows")
@@ -160,7 +154,7 @@ TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else"
             {
                 CAPTURE(x);
                 CAPTURE(y);
-                // Half-open, as upload_tile() treats it; Box::contains() would include the max edge.
+                // half-open, as upload_tile() treats it; Box::contains() would include the max edge
                 const bool inside = x >= tile.min.x && x < tile.max.x && y >= tile.min.y && y < tile.max.y;
                 if (inside)
                     CHECK(c(x, y) == data[size_t(y - tile.min.y) * tile.size().x + (x - tile.min.x)]);
@@ -173,7 +167,7 @@ TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else"
     {
         Channel c = make_identifiable_channel(w, h);
 
-        // Three channels interleaved, as a renderer would hand over an RGB tile; we want the middle one.
+        // three channels interleaved, as a renderer hands over an RGB tile; the middle one is wanted here
         const Box2i        tile{int2{0, 0}, int2{4, 3}};
         const int          n = 3, want = 1;
         std::vector<float> interleaved(size_t(tile.size().x) * tile.size().y * n);
@@ -195,7 +189,7 @@ TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else"
         Channel c        = make_identifiable_channel(w, h);
         Channel expected = make_identifiable_channel(w, h);
 
-        // Straddles the right and bottom edges; rows are as wide as the *requested* tile, not the clipped one.
+        // straddles the right and bottom edges; rows are as wide as the requested tile, not the clipped one
         const Box2i        tile{int2{w - 2, h - 2}, int2{w + 2, h + 2}};
         std::vector<float> data(size_t(tile.size().x) * tile.size().y);
         for (size_t i = 0; i < data.size(); ++i) data[i] = -1.f - float(i);
@@ -229,9 +223,8 @@ TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else"
 
 TEST_CASE("statistics computed after a tile lands reflect the new pixels")
 {
-    // Why content has to be versioned at all: measurements taken before a tile arrived describe pixels
-    // that are gone. This measures the channel directly, so it covers the pixels moving, not the cache
-    // invalidation that Settings::match() above is responsible for.
+    // measured off the channel directly, so this covers the pixels moving and not the cache invalidation
+    // Settings::match() above is responsible for
     const int w = 16, h = 16;
     Channel   c("streamed", int2{w, h});
     for (int y = 0; y < h; ++y)
@@ -241,7 +234,7 @@ TEST_CASE("statistics computed after a tile lands reflect the new pixels")
     REQUIRE(before.computed);
     CHECK(before.summary.maximum == 0.f);
 
-    // One bucket finishes, well above everything around it.
+    // one bucket finishes, well above everything around it
     const Box2i        tile{int2{4, 4}, int2{8, 8}};
     std::vector<float> data(size_t(tile.size().x) * tile.size().y, 5.f);
     c.upload_tile(tile, data.data());
@@ -273,7 +266,7 @@ TEST_CASE("PixelStats::calculate takes its bin count from the channel's bit dept
 
 TEST_CASE("Channels in one image can carry different bit depths")
 {
-    // EXR records a pixel type per channel, so the bin count has to be a per-channel property.
+    // EXR records a pixel type per channel, so the bin count is a per-channel property
     Channel eight("eight", int2{8, 8});
     Channel floating("floating", int2{8, 8});
     eight.bits_per_sample    = 8;
@@ -308,7 +301,7 @@ TEST_CASE("Each x scale's bins are uniform in that scale's own space")
     {
         CAPTURE(s);
         CHECK(edges_uniform_in((AxisScale)s));
-        // The bins span the channel's own range, so the outer edges land on its extremes.
+        // the bins span the channel's own range, so the outer edges land on its extremes
         CHECK(stats.hist_xs[s][0] == doctest::Approx(stats.summary.minimum));
         CHECK(stats.hist_xs[s][stats.num_bins] == doctest::Approx(stats.summary.maximum));
     }
@@ -316,15 +309,15 @@ TEST_CASE("Each x scale's bins are uniform in that scale's own space")
 
 TEST_CASE("Every 8-bit level gets its own bin on the sRGB axis")
 {
-    // The comb artifact: 8-bit content has at most 256 distinct levels, so binning it any finer leaves
-    // gaps that read as a row of detached spikes.
+    // 8-bit content has at most 256 distinct levels, so binning it finer leaves gaps that read as a row of
+    // detached spikes
     auto ramp = make_8bit_sRGB_ramp();
 
     SUBCASE("at a bin count matched to the source's depth")
     {
         auto stats = compute(ramp);
         REQUIRE(stats.num_bins == 256);
-        // The 1/255 lattice and the 1/256 bin grid drift by up to a bin, leaving at most one gap.
+        // the 1/255 lattice and the 1/256 bin grid drift by up to a bin, leaving at most one gap
         CHECK(count_empty_bins(stats, AxisScale_SRGB) <= 1);
     }
 
@@ -340,7 +333,7 @@ TEST_CASE("Every 8-bit level gets its own bin on the sRGB axis")
 TEST_CASE("The asinh axis keeps 8-bit levels within a bin or two of each other")
 {
     // asinh's knee has to sit well above the darkest 8-bit level, or the curve is logarithmic across the
-    // whole of [0,1] and flings consecutive dark levels tens of bins apart.
+    // whole of [0,1] and flings consecutive dark levels tens of bins apart
     auto stats = compute(make_8bit_sRGB_ramp());
     REQUIRE(stats.num_bins == 256);
 
@@ -355,7 +348,7 @@ TEST_CASE("The asinh axis keeps 8-bit levels within a bin or two of each other")
 
 TEST_CASE("Histogram bins hold plain counts of the valid pixels")
 {
-    // Bins are equally wide on screen, so their heights are counts rather than densities.
+    // bins are equally wide on screen, so their heights are counts and not densities
     Channel c("test", int2{20, 20});
     c.apply([](float, int x, int y) { return (x * 20 + y) / 400.f; });
 
@@ -385,7 +378,7 @@ TEST_CASE("NaN and Inf pixels are left out of the histogram")
 
 TEST_CASE("A constant-valued channel produces a finite histogram")
 {
-    // min == max transforms to a zero-width range, which would divide by zero when indexing bins.
+    // min == max transforms to a zero-width range, which would divide by zero when indexing bins
     Channel c("test", int2{4, 4});
     c.apply([](float, int, int) { return 0.5f; });
 
@@ -409,7 +402,7 @@ TEST_CASE("An all-NaN channel produces an empty but valid histogram")
     auto stats = compute(c);
     CHECK(stats.computed);
     CHECK(stats.summary.valid_pixels == 0);
-    // NaN compares false against either clip bound, so it leaves the clip extremes unset as well.
+    // NaN compares false against either clip bound, so it leaves the clip extremes unset as well
     CHECK(!std::isfinite(stats.summary.extreme_minimum));
     CHECK(!std::isfinite(stats.summary.extreme_maximum));
     for (int s = 0; s < AxisScale_COUNT; ++s)
@@ -423,7 +416,7 @@ TEST_CASE("An all-NaN channel produces an empty but valid histogram")
 
 TEST_CASE("The upper y limit ignores the tallest few bins")
 {
-    // One flat region -- a black background, a blown highlight -- would otherwise squash the rest flat.
+    // one flat region (a black background, a blown highlight) would otherwise squash the rest flat
     Channel c("test", int2{100, 10});
     c.apply([](float, int x, int y) { return x < 90 ? 0.f : (x - 90 + y * 10) / 100.f; });
 
@@ -454,7 +447,7 @@ TEST_CASE("value_to_bin and bin_to_value round-trip")
         CHECK(stats.value_to_bin(stats.summary.minimum, x_scale) == 0);
         CHECK(stats.clamp_idx(stats.value_to_bin(stats.summary.maximum, x_scale)) == stats.num_bins - 1);
 
-        // Non-finite input has no bin, and must not be cast to int unclamped.
+        // non-finite input has no bin, and must not be cast to int unclamped
         CHECK(stats.value_to_bin(std::numeric_limits<double>::quiet_NaN(), x_scale) < 0);
         CHECK(stats.value_to_bin(-std::numeric_limits<double>::infinity(), x_scale) < 0);
         CHECK(stats.value_to_bin(std::numeric_limits<double>::infinity(), x_scale) >= stats.num_bins);
@@ -478,8 +471,7 @@ TEST_CASE("PixelStats::calculate uses the selected sub-region, not the image ori
     CHECK(stats.summary.maximum == doctest::Approx(44.f));
     CHECK(stats.summary.average == doctest::Approx(38.5));
 
-    // Before the fix, this would incorrectly report the image's own top-left corner (values 0,1,10,11:
-    // min=0, max=11, avg=5.5) regardless of where the selection actually was.
+    // the image's own top-left corner would be values 0,1,10,11
     CHECK(stats.summary.minimum != doctest::Approx(0.f));
     CHECK(stats.summary.maximum != doctest::Approx(11.f));
 }
@@ -502,9 +494,8 @@ TEST_CASE("PixelStats::calculate covers the whole image when no selection is act
 
 TEST_CASE("PixelStats::calculate offsets a non-zero image data origin correctly")
 {
-    // Simulates an image (e.g. an EXR) whose data window doesn't start at (0,0): the channel's own local array is
-    // still 0-indexed, but img_data_origin records where that local origin sits in the shared/global coordinate
-    // space that the selection ROI is expressed in.
+    // An image whose data window doesn't start at (0,0), as an EXR's may not: the channel's own array is still
+    // 0-indexed, and img_data_origin says where that origin sits in the global space the ROI is in.
     auto img = make_identifiable_channel(10, 10);
 
     PixelStats::Settings settings;
@@ -522,8 +513,8 @@ TEST_CASE("PixelStats::calculate offsets a non-zero image data origin correctly"
 
 TEST_CASE("PixelStats::calculate counts NaN/Inf pixels separately and excludes them from min/max/average")
 {
-    // 4x4 channel, values 0..15 (x + 4*y), except three pixels replaced with NaN/+Inf/-Inf. Pixels (0,0)=0 and
-    // (3,3)=15 are left untouched, so min/max staying exactly 0/15 confirms NaN/Inf didn't corrupt them.
+    // 4x4, values 0..15 (x + 4*y), with three pixels replaced by NaN/+Inf/-Inf; (0,0)=0 and (3,3)=15 are left
+    // alone, so min/max staying at 0/15 says the non-finite ones did not reach them
     Channel img("test", int2{4, 4});
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x) img(x, y) = float(x + 4 * y);
@@ -546,10 +537,9 @@ TEST_CASE("PixelStats::calculate counts NaN/Inf pixels separately and excludes t
 
 TEST_CASE("PixelStats::calculate counts FLT_MAX markers apart from the measurements")
 {
-    // The shape of a depth channel out of a renderer: real depths over most of the image, and FLT_MAX
-    // wherever the ray hit nothing (OpenEXR's own Blobbies.exr is a third such pixels). Left in the range,
-    // one of these fixes the maximum at 3.4e38, which no exposure can fit -- and which is not a depth
-    // anyone measured.
+    // The shape of a renderer's depth channel: real depths over most of the image and FLT_MAX wherever the
+    // ray hit nothing (OpenEXR's Blobbies.exr is a third such pixels). One of those in the range fixes the
+    // maximum at 3.4e38, which no exposure can fit.
     Channel c("Z", int2{4, 4});
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x) c(x, y) = 7.f + float(x + 4 * y);
@@ -563,13 +553,13 @@ TEST_CASE("PixelStats::calculate counts FLT_MAX markers apart from the measureme
     CHECK(stats.summary.nan_pixels == 0);
     CHECK(stats.summary.inf_pixels == 0);
     CHECK(stats.summary.valid_pixels == 13);
-    // The surviving measurements are 7+1 .. 7+14, skipping the three replaced pixels.
+    // the surviving measurements are 7+1 .. 7+14, skipping the three replaced pixels
     CHECK(stats.summary.minimum == doctest::Approx(8.f));
     CHECK(stats.summary.maximum == doctest::Approx(21.f));
     CHECK(stats.summary.average == doctest::Approx(14.6923f).epsilon(1e-4));
 
-    // Binned like the NaNs and infinities are: left out entirely, rather than piled into the end bin the
-    // narrowed range now stops at.
+    // binned like the NaNs and infinities: left out entirely, not piled into the end bin the narrowed range
+    // now stops at
     for (int s = 0; s < AxisScale_COUNT; ++s)
     {
         CAPTURE(s);
@@ -579,8 +569,8 @@ TEST_CASE("PixelStats::calculate counts FLT_MAX markers apart from the measureme
 
 TEST_CASE("The clip warnings see the samples the measurement range leaves out")
 {
-    // The extremes the histogram's warning triangles test against take in everything the shader stripes,
-    // so a channel whose only content past a bound is an infinity or a marker still reports crossing it.
+    // The extremes the histogram's warning triangles test against take in everything the shader stripes, so a
+    // channel whose only content past a bound is an infinity or a marker still reports crossing it.
     Channel c("test", int2{4, 4});
     c.apply([](float, int, int) { return 0.5f; });
     c(0, 0) = std::numeric_limits<float>::max();
@@ -589,17 +579,17 @@ TEST_CASE("The clip warnings see the samples the measurement range leaves out")
 
     auto stats = compute(c);
 
-    // The measurement range is the flat 0.5 that is left.
+    // the measurement range is the flat 0.5 that is left
     CHECK(stats.summary.minimum == doctest::Approx(0.5f));
     CHECK(stats.summary.maximum == doctest::Approx(0.5f));
-    // The clip range reaches past both bounds, and NaN moves neither end.
+    // the clip range reaches past both bounds, and NaN moves neither end
     CHECK(stats.summary.extreme_maximum == std::numeric_limits<float>::max());
     CHECK(stats.summary.extreme_minimum == -std::numeric_limits<float>::infinity());
 }
 
 TEST_CASE("A channel holding only markers produces an empty but valid histogram")
 {
-    // Same contract an all-NaN channel has: no range to bin over, and nothing that pretends otherwise.
+    // same as an all-NaN channel: no range to bin over
     Channel c("Z", int2{4, 4});
     c.apply([](float, int, int) { return std::numeric_limits<float>::max(); });
 
@@ -618,8 +608,7 @@ TEST_CASE("A channel holding only markers produces an empty but valid histogram"
 
 TEST_CASE("Values just short of FLT_MAX are measurements, not markers")
 {
-    // The line is at the top of the float range itself. A merely enormous sample is still something the
-    // image records, and stays in the range.
+    // the line is at the top of the float range itself; an enormous sample is still a measurement
     Channel c("test", int2{2, 2});
     c.apply([](float, int, int) { return 1.f; });
     c(0, 0) = std::nextafterf(std::numeric_limits<float>::max(), 0.f);
@@ -632,7 +621,7 @@ TEST_CASE("Values just short of FLT_MAX are measurements, not markers")
 
 TEST_CASE("PixelStats::calculate applies each blend mode against a reference image")
 {
-    // Both channels are constant-valued, so every pixel's blended result is identical and known exactly.
+    // both channels are constant-valued, so every pixel's blended result is identical and known
     Channel img("img", int2{2, 2});
     Channel ref("ref", int2{2, 2});
     img.apply([](float, int, int) { return 10.f; });
@@ -664,9 +653,8 @@ TEST_CASE("PixelStats::calculate applies each blend mode against a reference ima
 
 TEST_CASE("PixelStats::calculate tolerates a reference channel smaller than the image under BlendMode_Normal")
 {
-    // BlendMode_Normal ignores the reference sample entirely (blend() just returns the image's own value), but
-    // a reference image/channel of a different size than the current one is a completely ordinary thing to
-    // select (e.g. comparing two unrelated photos) -- it must not crash just because Normal is the active mode.
+    // BlendMode_Normal ignores the reference sample (blend() returns the image's own value), but a reference
+    // channel of a different size is an ordinary thing to have selected.
     auto img = make_identifiable_channel(10, 10);
     auto ref = make_identifiable_channel(2, 2);
 
@@ -699,8 +687,8 @@ TEST_CASE("PixelStats::calculate resets to the default, uncomputed state when ca
 
 TEST_CASE("PixelStats::calculate reports straight values when given an alpha channel")
 {
-    // A channel premultiplied on load (see Image::finalize()) has to be divided back out so the histogram
-    // and summary describe what the file holds rather than HDRView's internal representation.
+    // a channel premultiplied on load (Image::finalize()) is divided back out, so the histogram and summary
+    // describe what the file holds
     Channel img("img", int2{2, 2});
     Channel alpha("alpha", int2{2, 2});
     alpha.apply([](float, int, int) { return 0.5f; });
@@ -731,7 +719,7 @@ TEST_CASE("PixelStats::calculate reports straight values when given an alpha cha
 TEST_CASE("Unpremultiplying puts 8-bit samples back on the source's lattice")
 {
     // finalize() multiplies by max(k_small_alpha, alpha) and calculate() divides by the same clamped
-    // denominator, so the file's levels survive the round trip and still bin one-to-one.
+    // denominator, so the file's levels survive and still bin one-to-one
     auto    ramp = make_8bit_sRGB_ramp();
     Channel alpha("alpha", int2{256, 1});
     for (int k = 0; k < 256; ++k) alpha(k, 0) = std::max(k_small_alpha, (k % 255 + 1) / 255.f);
@@ -751,8 +739,8 @@ TEST_CASE("Unpremultiplying puts 8-bit samples back on the source's lattice")
 
 TEST_CASE("Bin count never exceeds the histogram's storage")
 {
-    // hist_xs/hist_ys are sized MAX_BINS, so bins_for_bit_depth() must never return more than that.
-    // Depths of 9..15 bits are ordinary: 10- and 12-bit HEIF/AVIF, 12- and 14-bit camera raw, 12-bit TIFF.
+    // hist_xs/hist_ys are sized MAX_BINS. Depths of 9..15 bits are ordinary: 10- and 12-bit HEIF/AVIF, 12- and
+    // 14-bit camera raw, 12-bit TIFF.
     for (int bits = -1; bits <= 64; ++bits)
     {
         CAPTURE(bits);
@@ -763,7 +751,7 @@ TEST_CASE("Bin count never exceeds the histogram's storage")
 
 TEST_CASE("A 10-bit channel bins without running off the end of its storage")
 {
-    // Reaches the out-of-bounds write directly: calculate() fills hist_xs[0..num_bins] inclusive.
+    // calculate() fills hist_xs[0..num_bins] inclusive
     Channel c("test", int2{16, 16});
     c.bits_per_sample = 10; // e.g. a 10-bit AVIF
     c.apply([](float, int x, int y) { return (x + y) / 30.f; });
@@ -774,10 +762,9 @@ TEST_CASE("A 10-bit channel bins without running off the end of its storage")
 
 TEST_CASE("A selection that misses the channel leaves the statistics empty")
 {
-    // Box::intersect() does not keep min <= max, so a selection that misses the channel in one axis leaves
-    // an inverted box whose volume() is negative -- as the size_t length of a parallel work range, a count
-    // near 2^64. The channel has to be large enough that |volume()| exceeds one block (1 << 20); below
-    // that the same conversion lands on a block count of zero and nothing would run either way.
+    // Box::intersect() does not keep min <= max, so a selection missing the channel in one axis leaves an
+    // inverted box whose negative volume() becomes a size_t work range near 2^64. The channel has to be large
+    // enough that |volume()| exceeds one block (1 << 20), or the block count rounds to zero and nothing runs.
     Channel c = make_identifiable_channel(2048, 1024);
 
     SUBCASE("missing in y only")
@@ -803,8 +790,7 @@ TEST_CASE("A selection that misses the channel leaves the statistics empty")
 
     SUBCASE("missing in both axes")
     {
-        // Both axes inverted multiply back to a positive volume(): a plausible-looking count over a
-        // region that does not exist.
+        // both axes inverted multiply back to a positive volume() over a region that does not exist
         PixelStats::Settings settings;
         settings.roi = Box2i{int2{4000, 2000}, int2{5000, 3000}};
 
@@ -826,19 +812,13 @@ TEST_CASE("A selection that misses the channel leaves the statistics empty")
 
 TEST_CASE("Statistics over an arbitrary selection count exactly the pixels it overlaps")
 {
-    // A selection is not clamped to the image anywhere, so calculate() has to cope with any box: one
-    // that misses in either axis or both, one that straddles an edge, one that swallows the channel,
-    // and the degenerate empty one. This states the property those all share -- the count equals the
-    // true overlap -- over a sweep of placements.
-    //
-    // The channel is small so the sweep stays quick, which does mean an inverted box here yields a work
-    // range that rounds down to no blocks at all. Reaching the out-of-bounds read itself needs a
-    // channel large enough to keep a block: that is what the case above is sized for, and it is the one
-    // that fails if the guard goes.
+    // A selection is never clamped to the image, so calculate() has to cope with any box. The channel is kept
+    // small so the sweep stays quick, which means an inverted box here rounds down to no blocks at all;
+    // reaching the out-of-bounds read needs the larger channel the case above is sized for.
     constexpr int w = 128, h = 64;
     Channel       c = make_identifiable_channel(w, h);
 
-    // Well outside, just outside, straddling each edge, inside, and containing the whole channel.
+    // well outside, just outside, straddling each edge, inside, and containing the whole channel
     const int xs[] = {-500, -1, 0, 10, w - 10, w, 500};
     const int ys[] = {-300, -1, 0, 20, h - 20, h, 300};
 
@@ -850,9 +830,8 @@ TEST_CASE("Statistics over an arbitrary selection count exactly the pixels it ov
                     PixelStats::Settings settings;
                     settings.roi = Box2i{int2{x0, y0}, int2{x1, y1}};
 
-                    // A selection with no volume means "no selection", and the whole channel is
-                    // measured. Otherwise the count is the plain rectangle overlap -- what it has to
-                    // come to however the box is shaped.
+                    // a selection with no volume means "no selection" and measures the whole channel;
+                    // otherwise the count is the plain rectangle overlap
                     const int ox       = std::max(0, std::min(x1, w) - std::max(x0, 0));
                     const int oy       = std::max(0, std::min(y1, h) - std::max(y0, 0));
                     const int expected = settings.roi.has_volume() ? ox * oy : w * h;

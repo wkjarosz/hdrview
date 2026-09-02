@@ -15,9 +15,7 @@ namespace
 {
 
 //! Frame arbitrary payload bytes as a packet, filling in the length prefix the way a sender would.
-/*!
-    Lets a test state a malformed payload directly, which the builders deliberately cannot produce.
-*/
+//! Lets a test state a malformed payload the builders cannot produce.
 std::vector<char> framed(IpcPacketType type, const std::vector<char> &payload)
 {
     std::vector<char> bytes(sizeof(uint32_t));
@@ -83,7 +81,7 @@ TEST_CASE("IPC packets round-trip through the wire format")
 
     SUBCASE("UpdateImage preserves the interleaved payload and how to address it")
     {
-        // Three channels interleaved, exactly as a renderer would hand over an RGB bucket.
+        // three channels interleaved, as a renderer hands over an RGB bucket
         const Box2i                    bounds{int2{4, 8}, int2{8, 12}};
         const std::vector<std::string> names{"R", "G", "B"};
         const std::vector<int64_t>     offsets{0, 1, 2};
@@ -103,22 +101,22 @@ TEST_CASE("IPC packets round-trip through the wire format")
         REQUIRE(info.data.size() == data.size());
         CHECK(info.data == data);
 
-        // The addressing the struct documents has to actually land on the right samples.
+        // the addressing the struct documents has to land on the right samples
         const int n_pixels = bounds.size().x * bounds.size().y;
         for (int c = 0; c < info.num_channels(); ++c)
             for (int px = 0; px < n_pixels; ++px)
                 CHECK(info.data[size_t(info.channel_offsets[c] + px * info.channel_strides[c])] ==
                       data[size_t(px * 3 + c)]);
 
-        // ...and row_stride() has to agree with it, since upload_tile() is driven by that pair.
+        // ...and row_stride() has to agree with it, since upload_tile() is driven by that pair
         CHECK(info.row_stride(0) == int64_t(bounds.size().x) * 3);
     }
 }
 
 TEST_CASE("VectorGraphics packets round-trip, including the per-type argument counts")
 {
-    // The stream carries no per-command length, so a command's type is the only thing that says where the
-    // next one starts. Round-tripping a mix of every argument-count shape is what checks that table.
+    // the stream carries no per-command length, so a command's type is the only thing that says where the
+    // next one starts
     std::vector<VgCommand> commands{
         {VgCommand::Type::BeginPath, {}},
         {VgCommand::Type::StrokeColor, {1.f, 0.5f, 0.f, 1.f}},
@@ -161,7 +159,7 @@ TEST_CASE("A VectorGraphics packet with an unreadable command stream is refused"
 
     SUBCASE("an unknown command type, whose length is therefore unknown")
     {
-        // The whole rest of the packet becomes unparseable, so this cannot be skipped past.
+        // the whole rest of the packet becomes unparseable, so this cannot be skipped past
         std::vector<char> tail;
         append<int32_t>(tail, 1);
         tail.push_back(99); // not a command we know
@@ -207,8 +205,8 @@ TEST_CASE("A VectorGraphics packet with an unreadable command stream is refused"
 
 TEST_CASE("Older UpdateImage versions are read as the newer one's equivalent")
 {
-    // V1 had no channel count and exactly one channel; V2 added the count but kept the planes contiguous.
-    // Both have to arrive as offsets/strides, since that is all the rest of the code knows how to read.
+    // V1 had no channel count and one channel; V2 added the count but kept the planes contiguous. Both have
+    // to arrive as offsets/strides, which is all the rest of the code reads.
     const int32_t      w = 2, h = 2;
     std::vector<float> plane_a{1.f, 2.f, 3.f, 4.f};
     std::vector<float> plane_b{5.f, 6.f, 7.f, 8.f};
@@ -249,7 +247,7 @@ TEST_CASE("Older UpdateImage versions are read as the newer one's equivalent")
 
         auto info = parse(framed(IpcPacketType::UpdateImageV2, payload)).as_update_image();
         CHECK(info.num_channels() == 2);
-        // Plane per channel, so the second one starts a whole tile in and both step by one.
+        // a plane per channel, so the second starts a whole tile in and both step by one
         CHECK(info.channel_offsets == std::vector<int64_t>{0, w * h});
         CHECK(info.channel_strides == std::vector<int64_t>{1, 1});
         CHECK(info.data.size() == plane_a.size() + plane_b.size());
@@ -259,8 +257,7 @@ TEST_CASE("Older UpdateImage versions are read as the newer one's equivalent")
 
 TEST_CASE("Malformed IPC packets are refused rather than believed")
 {
-    // Everything here arrives over a socket from another process, so each of these is an input the parser
-    // must survive, not a case that cannot happen.
+    // everything here arrives over a socket from another process
 
     SUBCASE("a length that disagrees with the bytes present")
     {
@@ -353,13 +350,13 @@ TEST_CASE("Malformed IPC packets are refused rather than believed")
             return framed(IpcPacketType::UpdateImageV3, payload);
         };
 
-        // Reaches past the four samples that follow.
+        // reaches past the four samples that follow
         CHECK_THROWS_AS(parse(with(0, 1000)).as_update_image(), std::runtime_error);
         CHECK_THROWS_AS(parse(with(1000, 1)).as_update_image(), std::runtime_error);
-        // Negative addressing would index before the buffer.
+        // negative addressing would index before the buffer
         CHECK_THROWS_AS(parse(with(-1, 1)).as_update_image(), std::runtime_error);
         CHECK_THROWS_AS(parse(with(0, -1)).as_update_image(), std::runtime_error);
-        // Multiplying these would overflow int64 rather than exceed the payload.
+        // multiplying these overflows int64 instead of exceeding the payload
         CHECK_THROWS_AS(parse(with(0, std::numeric_limits<int64_t>::max())).as_update_image(), std::runtime_error);
     }
 
@@ -381,7 +378,7 @@ TEST_CASE("Malformed IPC packets are refused rather than believed")
 
 TEST_CASE("A byte stream is split back into the packets that were written into it")
 {
-    // What a socket actually delivers: whatever has arrived, split wherever the network chose.
+    // what a socket delivers: whatever has arrived, split wherever the network chose
     std::vector<char> stream;
     for (const auto &p : {IpcPacket::close_image("a"), IpcPacket::close_image("bb"), IpcPacket::close_image("ccc")})
         stream.insert(stream.end(), p.bytes().begin(), p.bytes().end());

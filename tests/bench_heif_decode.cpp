@@ -3,9 +3,9 @@
 // Use of this source code is governed by a BSD-style license that can
 // be found in the LICENSE.txt file.
 //
-// Times libheif's AV1 decoder plugins against each other on real files. libheif picks a decoder by
-// priority unless heif_decoding_options::decoder_id names one, so a single build with both plugins
-// compiled in can decode the same bitstream through each of them and report the difference.
+// Times libheif's AV1 decoder plugins against each other on real files. libheif picks a decoder by priority
+// unless heif_decoding_options::decoder_id names one, so one build with both plugins can decode the same
+// bitstream through each.
 //
 // Usage: hdrview_bench_heif [-n iterations] [-y] [-v] [-c] <file-or-directory>...
 //   -n  timed repetitions per file per decoder (default 5); the fastest is reported
@@ -13,11 +13,9 @@
 //   -v  compare the decoders' pixels instead of timing them; exits nonzero on any mismatch
 //   -c  CSV instead of a table
 //
-// By default the decode is set up exactly as src/imageio/heif.cpp sets it up, so the numbers include
-// the YCbCr->RGB conversion HDRView actually pays. That conversion is libheif's own and runs
-// identically whichever plugin decoded the frame, so it dilutes the difference between them; -y
-// leaves it out and measures the codecs alone. The gap between the two runs is what the conversion
-// costs.
+// By default the decode is set up as src/imageio/heif.cpp sets it up, so the numbers include the YCbCr->RGB
+// conversion HDRView pays. That conversion is libheif's own and runs the same whichever plugin decoded the
+// frame, so -y leaves it out and measures the codecs alone.
 //
 
 #include <algorithm>
@@ -40,8 +38,8 @@ using namespace std::chrono;
 namespace
 {
 
-// Thrown for a file whose primary item is some other codec (HEVC in a .heic, say), which says nothing
-// about the AV1 decoders and so is passed over rather than counted as a failure.
+// Thrown for a file whose primary item is some other codec (HEVC in a .heic, say), which is passed over
+// instead of counted as a failure.
 struct NotAV1
 {
 };
@@ -96,10 +94,9 @@ const char *chroma_name(heif_chroma c)
     }
 }
 
-// One open+decode of an in-memory file through the named decoder. Unless `native` asks for whatever
-// the codec produces, the request mirrors heif.cpp's: interleaved little-endian 16-bit RGB(A) with
-// bilinear chroma upsampling. `pixels`, when given, receives the decoded interleaved plane so two
-// decoders' output can be compared.
+// One open+decode of an in-memory file through the named decoder. Unless `native` asks for whatever the codec
+// produces, the request mirrors heif.cpp's: interleaved little-endian 16-bit RGB(A) with bilinear chroma
+// upsampling. `pixels`, when given, receives the decoded interleaved plane.
 double decode_once(const std::vector<uint8_t> &data, const char *decoder_id, bool native, Result *info,
                    std::vector<uint8_t> *pixels = nullptr)
 {
@@ -125,7 +122,7 @@ double decode_once(const std::vector<uint8_t> &data, const char *decoder_id, boo
         ~HandleGuard() { heif_image_handle_release(h); }
     } handle_guard{handle};
 
-    // These plugins only decode AV1, so anything else in a .heif/.heic container is not theirs to compare.
+    // these plugins only decode AV1, so anything else in the container is not theirs
     if (heif_item_get_item_type(ctx, heif_image_handle_get_item_id(handle)) != heif_fourcc('a', 'v', '0', '1'))
         throw NotAV1{};
 
@@ -174,7 +171,7 @@ double decode_once(const std::vector<uint8_t> &data, const char *decoder_id, boo
 
     if (pixels)
     {
-        // Rows are padded to the decoder's stride, so copy the meaningful bytes of each one.
+        // rows are padded to the decoder's stride, so copy the meaningful bytes of each one
         const heif_channel channel = mono ? heif_channel_Y : heif_channel_interleaved;
         int                stride  = 0;
         const uint8_t     *plane   = heif_image_get_plane_readonly(img, channel, &stride);
@@ -265,8 +262,7 @@ int main(int argc, char **argv)
     for (auto &p : inputs) collect_files(p, files);
     std::sort(files.begin(), files.end());
 
-    // Comparison mode: every decoder has to reproduce the first one's pixels exactly. AV1 decoding is
-    // specified bit-exactly, so anything else is a bug in one of them rather than a quality tradeoff.
+    // AV1 decoding is specified bit-exactly, so every decoder has to reproduce the first one's pixels
     if (verify)
     {
         int identical = 0, differing = 0, unreadable = 0, skipped = 0;
@@ -283,9 +279,8 @@ int main(int argc, char **argv)
                 continue;
             }
 
-            // Every decoder gets its turn even after one of them fails, because which of them failed is
-            // the whole question: a file the container layer rejects fails identically for all of them
-            // and says nothing, while one decoder failing alone is a real difference between them.
+            // every decoder gets its turn even after one fails: a file the container layer rejects fails
+            // for all of them and says nothing, while one decoder failing alone is a real difference
             std::vector<uint8_t> reference, other;
             std::vector<bool>    decoded(decoders.size(), false);
             bool                 mismatch = false, skip = false;
@@ -398,7 +393,7 @@ int main(int argc, char **argv)
             }
             catch (const std::exception &e)
             {
-                // Off to the side so the table stays a table; the cell itself just reads "fail".
+                // off to the side so the table stays a table; the cell reads "fail"
                 fprintf(stderr, "%s: %s: %s\n", r.name.c_str(), id.c_str(), e.what());
             }
             r.timings[id] = t;
@@ -407,7 +402,7 @@ int main(int argc, char **argv)
             results.push_back(std::move(r));
     }
 
-    // Report. The last decoder in priority order is the baseline every other one is measured against.
+    // the last decoder in priority order is the baseline every other one is measured against
     const std::string &baseline = decoders.back();
 
     if (csv)

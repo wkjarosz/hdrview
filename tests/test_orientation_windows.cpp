@@ -14,14 +14,13 @@
 namespace
 {
 
-// Marks the samples that lie outside the display window, so that after an orientation is applied the
-// question "did the window follow the pixels?" can be asked of the pixels themselves.
+// Marks the samples outside the display window, so whether the window followed the pixels can be asked
+// of the pixels themselves.
 constexpr float k_outside = 999.f;
 constexpr float k_inside  = 1.f;
 
-// A 6x4 image whose display window covers only the left 4 columns; the two columns beyond it hold the
-// sentinel. This is the shape a raw CFA part has: the whole sensor frame as data, the part LibRaw
-// decodes as the display window.
+// A 6x4 image whose display window covers only the left 4 columns; the two beyond hold the sentinel. This
+// is the shape of a raw CFA part: the whole sensor frame as data, what LibRaw decodes as the display window.
 ImagePtr make_marked_image(int orientation)
 {
     const int2 size{6, 4};
@@ -68,9 +67,6 @@ void check_partition(const ImagePtr &img, int orientation)
 
 } // namespace
 
-// An EXIF orientation moves the samples, so both windows have to move with them. While the display window
-// is the whole frame this is unobservable; once it is a sub-rectangle -- as it is for a raw CFA part, whose
-// display window marks the region LibRaw actually decodes -- a flip leaves it on the wrong edge.
 TEST_CASE("EXIF orientation carries the display window with the pixels")
 {
     // 1 is a no-op; 2-8 are the reflections and rotations, and 4, 7 and 8 are the ones a flip moves.
@@ -82,7 +78,6 @@ TEST_CASE("EXIF orientation carries the display window with the pixels")
     }
 }
 
-// The transposing orientations must also swap the frame's extent, not just reflect within it.
 TEST_CASE("EXIF orientation transposes both windows")
 {
     for (int orientation : {5, 6, 7, 8})
