@@ -1342,16 +1342,16 @@ void Image::draw_info()
 
                 ImGui::BeginDisabled(!reloadable);
                 ImGui::PE::Entry(
-                    "Override",
+                    "Alpha override",
                     [this]
                     {
-                        static constexpr const char *k_from_file = "From file";
+                        static constexpr const char *k_not_overridden = "Not overridden";
 
                         bool changed = false;
                         if (ImGui::BeginCombo("##Alpha override",
-                                              alpha_override ? alpha_override_name(*alpha_override) : k_from_file))
+                                              alpha_override ? alpha_override_name(*alpha_override) : k_not_overridden))
                         {
-                            if (ImGui::Selectable(k_from_file, !alpha_override))
+                            if (ImGui::Selectable(k_not_overridden, !alpha_override))
                             {
                                 alpha_override.reset();
                                 changed = true;
