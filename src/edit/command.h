@@ -140,10 +140,9 @@ public:
 
         //! With several images selected, whether this runs on all of them or only the current one.
         /*!
-            Each selected image gets its own invocation and its own undo entry. Copy and Cut cannot: there
-            is one clipboard, so running them per image would leave only the last one's copy in it. The
-            edits that reshape an image stay with the current one by choice rather than necessity -- a
-            shape change is a blunter thing to spread over a selection than a tonal edit is.
+            Each selected image gets its own invocation and its own undo entry, and each starts from the
+            same selection. False only for Copy and Cut: there is one clipboard, so running them per image
+            would leave only the last one's copy in it.
         */
         bool fans_out = true;
 

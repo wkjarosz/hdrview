@@ -175,8 +175,13 @@ void HDRViewApp::apply_edit_command(EditCommand &cmd)
     // One context per image, and one call of apply() per image, so each lands as its own undo entry --
     // there is no cross-image entry to reverse, and an image that refuses the edit does not take the
     // others down with it.
+    //
+    // Each starts from the same selection: cropping clears it, having just made it the whole image, and
+    // every image after the first would otherwise find nothing to crop to.
+    const Box2i roi = m_roi;
     for (const auto &img : edit_command_images(cmd))
     {
+        m_roi = roi;
         AppEditContext ctx{this, img};
         cmd.apply(ctx);
     }

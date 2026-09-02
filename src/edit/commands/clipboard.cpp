@@ -46,8 +46,8 @@ public:
         // Reading an image is not editing it, so this is offered for one whose pixels a renderer owns --
         // taking a copy is in fact how a frame of one is kept.
         i.needs_editable = false;
-        // One clipboard, so copying from every selected image at once would just be copying from the last
-        // of them.
+        // One clipboard, so copying from every selected image would just be copying from the last of
+        // them. The only reason any command stays with the current image.
         i.fans_out = false;
         return i;
     }
