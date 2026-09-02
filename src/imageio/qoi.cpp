@@ -12,6 +12,7 @@
 
 #include <qoi.h>
 
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 
 #include "colorspace.h"
@@ -100,7 +101,7 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
 
     auto image                      = make_shared<Image>(size.xy(), size.z);
     image->filename                 = filename;
-    image->alpha_type               = size.z > 3 ? AlphaType_Straight : AlphaType_None;
+    image->alpha_type               = effective_alpha_type(opts, size.z > 3 ? AlphaType_Straight : AlphaType_None);
     image->metadata["loader"]       = "qoi";
     image->metadata["pixel format"] = fmt::format("{}-bit (8 bpc)", size.z * 8);
     image->set_bits_per_sample(8);

@@ -27,9 +27,16 @@ struct ImageLoadOptions
     //! Comma-separated list of channel names to include or exclude from the image. If empty, all channels are selected.
     string channel_selector;
 
-    //! When false, an alpha channel is loaded as ordinary data instead of transparency: it is grouped on its own
-    //! and the color channels are not premultiplied by it. See Image::alpha_is_transparency.
-    bool alpha_is_transparency = true;
+    bool override_alpha = false;
+    //! Override what the file says about its alpha and interpret it this way instead.
+    /*!
+        A format states, or its spec implies, whether the color channels are multiplied by alpha and in what
+        space, and files routinely disagree with that: PNG is unassociated by spec but is sometimes written
+        premultiplied, EXR is premultiplied by spec but is sometimes written straight. AlphaType_None loads a
+        fourth channel as ordinary data rather than transparency, so nothing is multiplied by it and it is
+        grouped on its own. See Image::alpha_type.
+    */
+    AlphaType_ alpha_override = AlphaType_Straight;
 
     bool override_profile = false;
     //! Override any metadata in the file and decode pixel values using this color gamut.

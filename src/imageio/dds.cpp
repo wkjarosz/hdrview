@@ -25,6 +25,7 @@
 
 #include <smalldds.h>
 
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 
 #if defined(__clang__)
@@ -658,7 +659,7 @@ bool is_dds_image(std::istream &is) noexcept
     }
 }
 
-vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLoadOptions & /*opts*/)
+vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "DDS"};
     DDSFile   dds;
@@ -730,12 +731,38 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
         {
             ImagePtr image = new_images[i];
 
+            // DXT2 and DXT4 are the premultiplied-alpha spellings of DXT3 and DXT5, and a DX9 file carries
+            // that only in its FourCC -- there is no misc_flags2 to read it from. Without this the values,
+            // which arrive already multiplied by alpha, would be premultiplied a second time by finalize().
+            const bool premultiplied = dds.alpha_mode == DDSFile::ALPHA_MODE_PREMULTIPLIED ||
+                                       dds.compression == DDSFile::Compression::BC2_DXT2 ||
+                                       dds.compression == DDSFile::Compression::BC3_DXT4;
+            const int num_ch  = (int)image->channels.size();
+            image->alpha_type = effective_alpha_type(
+                opts, num_ch >= 4 || num_ch == 2 ? (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight)
+                                                 : AlphaType_None);
+
             // sRGB to linear for uncompressed sRGB formats
             if (dds.is_sRGB())
             {
                 spdlog::info("Converting sRGB to linear for uncompressed image.");
+
+                // Color premultiplied after encoding has to be divided out across the conversion, which the
+                // channels are laid out for here rather than interleaved; see imageio/alpha.h.
+                const Channel *alpha =
+                    image->alpha_type == AlphaType_PremultipliedNonLinear && (num_ch >= 4 || num_ch == 2)
+                        ? &image->channels[num_ch - 1]
+                        : nullptr;
                 for (int c = 0; c < std::min(3, dds.num_channels); ++c)
-                    image->channels[c].apply([](float v, int, int) { return sRGB_to_linear(v); });
+                    image->channels[c].apply(
+                        [alpha](float v, int x, int y)
+                        {
+                            if (!alpha)
+                                return sRGB_to_linear(v);
+
+                            const float a = (*alpha)(x, y);
+                            return a == 0.f ? sRGB_to_linear(v) : a * sRGB_to_linear(v / a);
+                        });
             }
 
             // rename the channels according to the format type
@@ -745,15 +772,6 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
             image->filename = filename;
             if (image->partname.empty())
                 image->partname = dds.array_size() > 1 ? cubemap_face_names[p % 6] : "";
-            // DXT2 and DXT4 are the premultiplied-alpha spellings of DXT3 and DXT5, and a DX9 file carries
-            // that only in its FourCC -- there is no misc_flags2 to read it from. Without this the values,
-            // which arrive already multiplied by alpha, would be premultiplied a second time by finalize().
-            const bool premultiplied = dds.alpha_mode == DDSFile::ALPHA_MODE_PREMULTIPLIED ||
-                                       dds.compression == DDSFile::Compression::BC2_DXT2 ||
-                                       dds.compression == DDSFile::Compression::BC3_DXT4;
-            image->alpha_type         = image->channels.size() >= 4 || image->channels.size() == 2
-                                            ? (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight)
-                                            : AlphaType_None;
             image->metadata["loader"] = "smalldds";
             image->metadata["pixel format"] =
                 dds.bitmasked ? header["bitmask_string"]["string"].get<string>()

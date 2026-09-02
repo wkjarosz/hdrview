@@ -9,6 +9,7 @@
 #include "endian-utils.h"
 #include "exif.h"
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include <cstdint>
 #include <cstdio>
@@ -692,9 +693,10 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             image                                         = make_shared<Image>(size.xy(), size.z);
             image->filename                               = filename;
             image->partname                               = frame_name;
-            image->alpha_type                             = !info.alpha_bits
-                                                                ? AlphaType_None
-                                                                : (info.alpha_premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
+            image->alpha_type                             = effective_alpha_type(
+                opts, !info.alpha_bits
+                                                      ? AlphaType_None
+                                                      : (info.alpha_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight));
             image->metadata["loader"]                     = "libjxl";
             image->metadata["header"]["original profile"] = {
                 {"value", (bool)info.uses_original_profile},
@@ -811,26 +813,11 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 continue;
             }
 
-            // for premultiplied files, JPEGL-XL premultiplies by the non-linear alpha value, so we must unpremultiply
-            // before applying the inverse transfer function, then premultiply again
-            if (info.alpha_premultiplied)
-            {
-                int block_size = std::max(1, 1024 * 1024 / size.x);
-                parallel_for(blocked_range<int>(0, size.y, block_size),
-                             [&pixels, &size](int begin_y, int end_y, int, int)
-                             {
-                                 for (int y = begin_y; y < end_y; ++y)
-                                 {
-                                     for (int x = 0; x < size.x; ++x)
-                                     {
-                                         const size_t scanline = (x + y * size.x) * size.z;
-                                         const float  alpha    = pixels[scanline + size.z - 1];
-                                         const float  factor   = alpha == 0.0f ? 1.0f : 1.0f / alpha;
-                                         for (int c = 0; c < size.z - 1; ++c) pixels[scanline + c] *= factor;
-                                     }
-                                 }
-                             });
-            }
+            // JPEG XL says only whether the alpha is premultiplied, not in what space; this assumes the
+            // post-transfer kind, by analogy with the formats where it is established. libjxl's own
+            // JxlDecoderSetUnpremultiplyAlpha() does not act on the main alpha channel, so the samples
+            // arrive exactly as stored and this has to undo it. See imageio/alpha.h.
+            unpremultiply_before_transfer(pixels.data(), size, image->alpha_type);
 
             vector<float> alpha_copy;
 
@@ -919,25 +906,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 spdlog::info("Swapped alpha channel in interleaved array back with black channel data.");
             }
 
-            // premultiply again
-            if (info.alpha_premultiplied)
-            {
-                int block_size = std::max(1, 1024 * 1024 / size.x);
-                parallel_for(blocked_range<int>(0, size.y, block_size),
-                             [&pixels, &size](int begin_y, int end_y, int, int)
-                             {
-                                 for (int y = begin_y; y < end_y; ++y)
-                                 {
-                                     for (int x = 0; x < size.x; ++x)
-                                     {
-                                         const size_t scanline = (x + y * size.x) * size.z;
-                                         const float  alpha    = pixels[scanline + size.z - 1];
-                                         const float  factor   = alpha == 0.0f ? 1.0f : alpha;
-                                         for (int c = 0; c < size.z - 1; ++c) pixels[scanline + c] *= factor;
-                                     }
-                                 }
-                             });
-            }
+            repremultiply_after_transfer(pixels.data(), size, image->alpha_type);
 
             // copy the interleaved float pixels into the channels
             for (int c = 0; c < size.z; ++c)

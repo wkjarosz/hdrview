@@ -14,7 +14,7 @@ namespace
 {
 
 // A 1x1 RGBA image whose color channels are 1 and whose alpha is 0.5, so a premultiply is visible.
-ImagePtr make_rgba_image(AlphaType alpha_type, bool alpha_is_transparency)
+ImagePtr make_rgba_image(AlphaType_ alpha_type, bool alpha_is_transparency = true)
 {
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
     for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
@@ -37,7 +37,7 @@ const ChannelGroup *find_group(const ImagePtr &img, const std::string &name)
 
 TEST_CASE("straight alpha is premultiplied into one RGBA group by default")
 {
-    auto img = make_rgba_image(AlphaType_Straight, /*alpha_is_transparency*/ true);
+    auto img = make_rgba_image(AlphaType_Straight);
 
     REQUIRE(img->groups.size() == 1);
     auto *rgba = find_group(img, "R,G,B,A");
@@ -73,7 +73,7 @@ TEST_CASE("raw_pixel reports the file's values for a straight-alpha image")
 {
     SUBCASE("straight alpha is divided back out")
     {
-        auto img = make_rgba_image(AlphaType_Straight, /*alpha_is_transparency*/ true);
+        auto img = make_rgba_image(AlphaType_Straight);
 
         // Stored premultiplied as 0.5; the file held 1.0.
         CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
@@ -85,7 +85,7 @@ TEST_CASE("raw_pixel reports the file's values for a straight-alpha image")
     SUBCASE("a premultiplied file is reported as stored")
     {
         // Its alpha=0 pixels have no straight form, so its values are what the author intended.
-        auto img = make_rgba_image(AlphaType_PremultipliedLinear, /*alpha_is_transparency*/ true);
+        auto img = make_rgba_image(AlphaType_PremultipliedLinear);
 
         auto p = img->raw_pixel(int2{0, 0});
         CHECK(p.x == doctest::Approx(1.f));

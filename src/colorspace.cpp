@@ -479,7 +479,15 @@ static const char *s_transfer_function_names[TransferFunction::Count + 1] = {
 static const char *s_alpha_type_names[] = {"None", "Premultiplied Linear", "Premultiplied Non-Linear", "Straight",
                                            nullptr};
 
+// Spelled out rather than reusing s_alpha_type_names: the metadata panel reports what the file turned out
+// to hold, where one word is enough, while the combo asks the user to choose between kinds they may not
+// have had to think about before.
+static const char *s_alpha_override_names[] = {"None (channel is data)", "Premultiplied, in linear light",
+                                               "Premultiplied, after transfer", "Straight", nullptr};
+
 const char *alpha_type_name(AlphaType_ at) { return s_alpha_type_names[at]; }
+
+const char *alpha_override_name(AlphaType_ at) { return s_alpha_override_names[at]; }
 
 const char **alpha_type_names() { return s_alpha_type_names; }
 

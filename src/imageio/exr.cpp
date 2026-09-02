@@ -10,6 +10,7 @@
 #include "exr_save_options.h"
 #include "exr_std_streams.h"
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imgui.h"
 #include "imgui_ext.h"
@@ -521,7 +522,7 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
         for (const auto &c : img->channels)
             if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
             {
-                img->alpha_type = AlphaType_PremultipliedLinear;
+                img->alpha_type = effective_alpha_type(opts, AlphaType_PremultipliedLinear);
                 break;
             }
 

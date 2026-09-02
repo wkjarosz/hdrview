@@ -5,6 +5,7 @@
 //
 
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include <cstring>
 #include <iostream>
@@ -362,7 +363,8 @@ static auto chroma_name(heif_chroma ch)
 static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_profile_nclx *handle_level_nclx,
                                            const std::vector<uint8_t> &handle_level_icc_profile,
                                            const ImageLoadOptions &opts, int3 &size, int cpp, int num_planes,
-                                           const heif_channel out_planes[], const string &partname)
+                                           const heif_channel out_planes[], const string &partname,
+                                           AlphaType_ alpha_type)
 {
     int img_w = heif_image_get_width(himage, out_planes[0]);
     int img_h = heif_image_get_height(himage, out_planes[0]);
@@ -493,6 +495,10 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         // interleaved paths hand alpha to linearize_pixels(), which already leaves the last channel alone.
         if (out_planes[p] != heif_channel_Alpha)
         {
+            // Inverting the transfer function does not commute with multiplication by alpha; see
+            // imageio/alpha.h.
+            unpremultiply_before_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
+
             if (opts.override_profile)
             {
                 spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
@@ -535,6 +541,8 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
 
                 image->metadata["color profile"] = profile_desc;
             }
+
+            repremultiply_after_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
         }
 
         // copy the interleaved float pixels into the channels
@@ -859,17 +867,21 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         return raw_img;
                     }(),
                     heif_image_release);
+                // Resolved before decoding: the color management inside brackets itself with it.
+                const AlphaType_ alpha_type =
+                    effective_alpha_type(opts, !has_alpha ? AlphaType_None
+                                                          : (heif_image_handle_is_premultiplied_alpha(ihandle.get())
+                                                                 ? AlphaType_PremultipliedLinear
+                                                                 : AlphaType_Straight));
+
                 // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
                 ImagePtr image =
                     process_decoded_heif_image(himage.get(), handle_level_nclx.get(), handle_level_icc_profile, opts,
-                                               size, cpp, num_planes, out_planes, fmt::format("{:d}", id));
+                                               size, cpp, num_planes, out_planes, fmt::format("{:d}", id), alpha_type);
 
                 // preserve file-level metadata that comes from the handle/context
                 image->filename                         = filename;
-                image->alpha_type                       = !has_alpha ? AlphaType_None
-                                                                     : (heif_image_handle_is_premultiplied_alpha(ihandle.get())
-                                                                            ? AlphaType_PremultipliedLinear
-                                                                            : AlphaType_Straight);
+                image->alpha_type                       = alpha_type;
                 image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                 image->metadata["header"]["Main brand"] = {
                     {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
@@ -1032,8 +1044,8 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     HeifImagePtr himage(raw_img, heif_image_release);
 
                     heif_channel out_planes[2] = {heif_channel_interleaved, heif_channel_Alpha};
-                    ImagePtr     image =
-                        process_decoded_heif_image(himage.get(), nullptr, {}, opts, size, 3, 1, out_planes, partname);
+                    ImagePtr image = process_decoded_heif_image(himage.get(), nullptr, {}, opts, size, 3, 1, out_planes,
+                                                                partname, AlphaType_None);
                     image->filename                         = filename;
                     image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                     image->metadata["header"]["Main brand"] = {

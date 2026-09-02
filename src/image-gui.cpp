@@ -1316,50 +1316,59 @@ void Image::draw_info()
                               fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
             filtered_property("Alpha", alpha_type_name(alpha_type),
-                              "Type of alpha channel stored in the file. When treated as transparency, HDRView "
-                              "converts it to premultiplied alpha upon load.");
-            // Only offered when the file declares an alpha channel: a file that states its extra channel
-            // is data (e.g. TIFF's EXTRASAMPLE_UNSPECIFIED) isn't overridden from here.
-            if (alpha_type != AlphaType_None)
-            {
-                if (filter.PassFilter("Alpha is transparency"))
-                {
-                    // draw_info() is only ever drawn for the current image (see the Info window)
-                    const bool reloadable = hdrview()->can_reload(hdrview()->current_image());
-                    string     tooltip =
-                        "Whether the alpha channel means transparency. Turn this off for files whose alpha is "
-                        "really a mask or other data: it is then shown as an ordinary channel of its own and "
-                        "nothing is premultiplied by it.\n\nChanging this re-reads the image from its source.";
-                    if (!reloadable)
-                        tooltip += "\n\nUnavailable for this image: HDRView has nothing left to read it from.";
+                              "How this image's alpha is being read: whether the color channels are multiplied "
+                              "by it, and in what space. Reflects the override below when one is set.");
 
-                    // Drop the vertical frame padding across the whole row, as PE::WrappedText does for the
-                    // text rows: a checkbox is square, so the padding would both make this row taller than
-                    // its neighbors and push the property name below the box.
-                    ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-                    ImGui::BeginDisabled(!reloadable);
-                    ImGui::PE::Entry(
-                        "Is transparency",
-                        [this]
+            if (filter.PassFilter("Alpha override"))
+            {
+                // draw_info() is only ever drawn for the current image (see the Info window)
+                const bool reloadable = hdrview()->can_reload(hdrview()->current_image());
+                string     tooltip =
+                    "Read the alpha as something other than what the file says. \"None\" treats a fourth channel "
+                    "as ordinary data rather than transparency, so nothing is multiplied by it.\n\nThe two "
+                    "premultiplied kinds differ in where the multiply happened; pick the other one for an image "
+                    "whose semi-transparent areas read too dark or too bright.\n\nChanging this re-reads the "
+                    "image from its source.";
+                if (!reloadable)
+                    tooltip += "\n\nUnavailable for this image: HDRView has nothing left to read it from.";
+
+                ImGui::BeginDisabled(!reloadable);
+                ImGui::PE::Entry(
+                    "Override",
+                    [this]
+                    {
+                        static constexpr const char *k_from_file = "From file";
+
+                        bool changed = false;
+                        if (ImGui::BeginCombo("##Alpha override",
+                                              alpha_override ? alpha_override_name(*alpha_override) : k_from_file))
                         {
-                            bool       value   = alpha_is_transparency;
-                            const bool toggled = ImGui::Checkbox("##Alpha is transparency", &value);
-                            // A text row is as tall as the smallest child window PE::WrappedText will make,
-                            // one line plus its spacing; reserve the same so the row pitch stays even.
-                            ImGui::SameLine();
-                            ImGui::Dummy(ImVec2(0.f, ImGui::GetTextLineHeightWithSpacing()));
-                            if (!toggled)
-                                return false;
-                            // The premultiply happens in-place on load, so switching interpretation means
-                            // reading the image again; reload_image() carries the new setting through.
-                            alpha_is_transparency = value;
-                            hdrview()->reload_image(hdrview()->current_image());
-                            return true;
-                        },
-                        tooltip);
-                    ImGui::EndDisabled();
-                    ImGui::PopStyleVar();
-                }
+                            if (ImGui::Selectable(k_from_file, !alpha_override))
+                            {
+                                alpha_override.reset();
+                                changed = true;
+                            }
+
+                            for (AlphaType_ a = 0; a < AlphaType_Count; ++a)
+                                if (ImGui::Selectable(alpha_override_name(a), alpha_override && *alpha_override == a))
+                                {
+                                    alpha_override = a;
+                                    changed        = true;
+                                }
+
+                            ImGui::EndCombo();
+                        }
+
+                        if (!changed)
+                            return false;
+
+                        // The premultiply happens in-place on load, so switching interpretation means reading
+                        // the image again; reload_image() carries the new setting through.
+                        hdrview()->reload_image(hdrview()->current_image());
+                        return true;
+                    },
+                    tooltip);
+                ImGui::EndDisabled();
             }
             if (exif.valid())
                 filtered_property("EXIF data", fmt::format("{:.0h}", human_readible{exif.size()}),

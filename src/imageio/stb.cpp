@@ -7,6 +7,7 @@
 #include "stb.h"
 #include "colorspace.h"
 #include "image.h"
+#include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "timer.h"
 #include <cstdint>
@@ -293,7 +294,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
 
         image             = make_shared<Image>(size.xy(), size.z);
         image->filename   = filename;
-        image->alpha_type = size.z > 3 || size.z == 2 ? AlphaType_Straight : AlphaType_None;
+        image->alpha_type = effective_alpha_type(opts, size.z > 3 || size.z == 2 ? AlphaType_Straight : AlphaType_None);
         if (size.w > 1)
             image->partname = fmt::format("frame {:04}", frame);
         image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());
@@ -355,6 +356,10 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
             image->icc_data = psd_metadata.icc_profile;
 
         string profile_desc = color_profile_name(cg, tf);
+
+        // Inverting the transfer function does not commute with multiplication by alpha; see imageio/alpha.h.
+        unpremultiply_before_transfer(float_pixels.data(), size.xyz(), image->alpha_type);
+
         if (opts.override_profile)
         {
             Chromaticities c;
@@ -386,6 +391,8 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
             else
                 spdlog::info("Image is already in linear color space.");
         }
+
+        repremultiply_after_transfer(float_pixels.data(), size.xyz(), image->alpha_type);
 
         image->metadata["color profile"] = profile_desc;
 

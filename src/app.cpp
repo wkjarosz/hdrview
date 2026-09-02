@@ -705,8 +705,8 @@ void HDRViewApp::setup_frame_callbacks()
                     // -- see PendingSession's comment in app.h for why matching by that key (rather than
                     // by request order) is correct even when the same file is loaded more than once in
                     // one session.
-                    auto key = PendingSession::Key{new_image->path, new_image->channel_selector,
-                                                   new_image->alpha_is_transparency};
+                    auto key =
+                        PendingSession::Key{new_image->path, new_image->channel_selector, new_image->alpha_override};
                     if (auto it = m_pending_session->unresolved.find(key); it != m_pending_session->unresolved.end())
                     {
                         if (!it->second.empty())

@@ -28,6 +28,8 @@ enum AlphaType : AlphaType_
 };
 
 const char  *alpha_type_name(AlphaType_ at);
+//! Name for the alpha-override combo, which needs to say more than the metadata panel's one-word label.
+const char  *alpha_override_name(AlphaType_ at);
 const char **alpha_type_names();
 
 /**

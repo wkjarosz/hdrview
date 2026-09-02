@@ -465,6 +465,9 @@ public:
     std::string                   filename;
     std::string                   partname;
     std::string                   channel_selector;
+    //! The alpha override this image was loaded under, so a reload or a saved session can repeat it.
+    //! Empty when the file's own interpretation was used, which is then re-derived on reload.
+    std::optional<AlphaType_>     alpha_override;
     Box2i                         data_window;
     Box2i                         display_window;
     std::vector<Channel>          channels;
@@ -476,10 +479,17 @@ public:
     AdaptationMethod              adaptation_method = AdaptationMethod_Bradford;
     ColorGamut_                   color_space       = ColorGamut_Unspecified;
     WhitePoint_                   white_point       = WhitePoint_Unspecified;
-    AlphaType alpha_type            = AlphaType_None; //!< Does the image have straight (unpremultiplied) alpha?
-    bool      alpha_is_transparency = true; //!< When false, an 'A' channel is grouped on its own as ordinary data
-                                            //!< instead of joining an RGBA/YA/YCA/XYZA group, so nothing is
-                                            //!< premultiplied by it. Read by finalize(), so set it before calling.
+    //! How the file's alpha is to be read: whether the color channels are multiplied by it, and in what
+    //! space. Read by finalize(), so set it before calling.
+    AlphaType_ alpha_type = AlphaType_None;
+    //! Whether an 'A' channel is transparency at all.
+    /*!
+        Orthogonal to alpha_type, which says what a *transparency* alpha means: an image can carry alpha
+        whose kind is simply unstated, which is the default and still groups as RGBA. When false the channel
+        is grouped on its own instead of joining an RGBA/YA/YCA/XYZA group, which is also what keeps
+        finalize() from premultiplying anything by it. Read by finalize(), so set it before calling.
+    */
+    bool                 alpha_is_transparency = true;
     json                 metadata = json::object();
     Exif                 exif;     //!< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any
@@ -768,10 +778,18 @@ public:
         return alpha_type == AlphaType_Straight && group.num_channels > 1 && group_has_alpha(group.type);
     }
 
+    //! Flatten the selected group into an interleaved buffer, applying gain and a transfer function.
+    /*!
+        `unpremultiply` divides the color channels by alpha before the transfer function, yielding straight
+        samples. `premultiply_encoded` then multiplies them back once the transfer has been applied, which
+        is the associated-alpha convention every TIFF writer uses -- and is not the same as leaving
+        `unpremultiply` off, which would multiply in linear light instead. See imageio/alpha.h.
+    */
     template <typename T>
     std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain = 1.f,
                                         TransferFunction tf = {TransferFunction::Linear, 1.f}, bool dither = true,
-                                        bool unpremultiply = true, bool convert_to_sRGB = true) const;
+                                        bool unpremultiply = true, bool convert_to_sRGB = true,
+                                        bool premultiply_encoded = false) const;
 
     void draw_histogram();
     void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
@@ -825,7 +843,7 @@ std::unique_ptr<uint8_t[]> widen_to_rgb(const uint8_t *src, int w, int h, int n,
 
 template <typename T>
 std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, bool dither,
-                                           bool unpremultiply, bool convert_to_sRGB) const
+                                           bool unpremultiply, bool convert_to_sRGB, bool premultiply_encoded) const
 {
     const ChannelGroup &group = groups[selected_group];
 
@@ -849,7 +867,7 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
         // process RGB channels together
         parallel_for(blocked_range<int>(0, *h, block_size),
                      [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither, unpremultiply,
-                      convert_to_sRGB, luminance_chroma](int begin_y, int end_y, int, int)
+                      convert_to_sRGB, luminance_chroma, premultiply_encoded](int begin_y, int end_y, int, int)
                      {
                          int y_stride = w * n;
                          for (int y = begin_y; y < end_y; ++y)
@@ -876,6 +894,11 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
                                  // Apply transfer function to RGB triple
                                  float3 rgb_out = from_linear(rgb, tf);
 
+                                 // Associated alpha multiplies the encoded samples, so this follows the
+                                 // transfer function and precedes quantization.
+                                 if (alpha && premultiply_encoded)
+                                     rgb_out *= (*alpha)(x, y);
+
                                  auto rgba_pixel = data + y * y_stride + n * x;
                                  for (int c = 0; c < 3; ++c)
                                      rgba_pixel[c] = (std::is_integral_v<T>)
@@ -894,8 +917,8 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     {
         // A one- or two-channel group: a lone channel, a U,V pair, or gray plus alpha.
         parallel_for(blocked_range<int>(0, *h, block_size),
-                     [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither,
-                      unpremultiply](int begin_y, int end_y, int, int)
+                     [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither, unpremultiply,
+                      premultiply_encoded](int begin_y, int end_y, int, int)
                      {
                          int y_stride  = w * n;
                          int num_color = alpha ? n - 1 : n;
@@ -912,7 +935,10 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
                                      if (alpha && unpremultiply)
                                          v /= std::max(k_small_alpha, (*alpha)(x, y));
 
-                                     v      = from_linear(v, tf);
+                                     v = from_linear(v, tf);
+                                     if (alpha && premultiply_encoded)
+                                         v *= (*alpha)(x, y);
+
                                      out[c] = std::is_integral_v<T> ? quantize_full<T>(v, x, y, dither) : T(v);
                                  }
 

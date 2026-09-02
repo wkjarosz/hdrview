@@ -67,6 +67,39 @@ Enum id_to_enum(const json &j, const char *key, const char *const (&ids)[N], Enu
     return default_value;
 }
 
+// A session records the alpha override the user chose, not the interpretation it produced: with no override
+// the file is read afresh, so a corrected loader or an edited file is picked up rather than frozen in.
+// Spelled out rather than stored as the enum's ordinal, which would silently reinterpret every session if a
+// value were ever inserted.
+static const char *alpha_override_token(AlphaType_ at)
+{
+    switch (at)
+    {
+    case AlphaType_None: return "none";
+    case AlphaType_PremultipliedLinear: return "premultiplied-linear";
+    case AlphaType_PremultipliedNonLinear: return "premultiplied-nonlinear";
+    default: return "straight";
+    }
+}
+
+static optional<AlphaType_> alpha_override_from_token(const json &j)
+{
+    auto token = j.value<string>("alpha_override", "");
+    if (token.empty())
+        return nullopt;
+    if (token == "none")
+        return AlphaType_None;
+    if (token == "premultiplied-linear")
+        return AlphaType_PremultipliedLinear;
+    if (token == "premultiplied-nonlinear")
+        return AlphaType_PremultipliedNonLinear;
+    if (token == "straight")
+        return AlphaType_Straight;
+
+    spdlog::warn("Unrecognized alpha override '{}'; reading the file's own interpretation instead.", token);
+    return nullopt;
+}
+
 // Checks "type"/"version" on a parsed session manifest, logging as needed (`source_name` is a filename or
 // zip archive name, for the log message only). Returns false if `j` doesn't look like a session at all --
 // callers should treat that as "not a session", not a hard failure.
@@ -690,7 +723,9 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     spdlog::info("Reloading file '{}' with channel selector '{}'...", image->filename, image->channel_selector);
     auto opts                  = load_image_options();
     opts.channel_selector      = image->channel_selector;
-    opts.alpha_is_transparency = image->alpha_is_transparency;
+    opts.override_alpha        = image->alpha_override.has_value();
+    if (image->alpha_override)
+        opts.alpha_override = *image->alpha_override;
 
 #if defined(__EMSCRIPTEN__)
     // A URL was never on a filesystem to be re-read from; fetch it again instead.
@@ -889,7 +924,8 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
         json entry;
         entry["path"]                  = path_of(img);
         entry["channel_selector"]      = img->channel_selector;
-        entry["alpha_is_transparency"] = img->alpha_is_transparency;
+        if (img->alpha_override)
+            entry["alpha_override"] = alpha_override_token(*img->alpha_override);
         entry["selected_group"]        = img->selected_group;
         entry["reference_group"]       = img->reference_group;
 
@@ -1191,18 +1227,20 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
         PendingSession::Entry e;
         e.path                  = resolve(rel);
         e.channel_selector      = entry.value<string>("channel_selector", "");
-        e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
+        e.alpha_override        = alpha_override_from_token(entry);
         e.selected_group        = entry.value<int>("selected_group", 0);
         e.reference_group       = entry.value<int>("reference_group", 0);
         e.selected_channels     = entry.value<vector<string>>("selected_channels", {});
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
-        pending.unresolved[{e.path, e.channel_selector, e.alpha_is_transparency}].push_back(idx);
+        pending.unresolved[{e.path, e.channel_selector, e.alpha_override}].push_back(idx);
 
         ImageLoadOptions opts;
-        opts.channel_selector      = e.channel_selector;
-        opts.alpha_is_transparency = e.alpha_is_transparency;
+        opts.channel_selector = e.channel_selector;
+        opts.override_alpha   = e.alpha_override.has_value();
+        if (e.alpha_override)
+            opts.alpha_override = *e.alpha_override;
         load_image(e.path.string(), {}, false, opts);
     }
 
@@ -1236,7 +1274,7 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         PendingSession::Entry e;
         e.path                  = fs::path(zip_name) / fs::u8path(rel);
         e.channel_selector      = entry.value<string>("channel_selector", "");
-        e.alpha_is_transparency = entry.value<bool>("alpha_is_transparency", true);
+        e.alpha_override        = alpha_override_from_token(entry);
         e.selected_group        = entry.value<int>("selected_group", 0);
         e.reference_group       = entry.value<int>("reference_group", 0);
         e.selected_channels     = entry.value<vector<string>>("selected_channels", {});
@@ -1254,11 +1292,13 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
             continue;
         }
 
-        pending.unresolved[{e.path, e.channel_selector, e.alpha_is_transparency}].push_back(idx);
+        pending.unresolved[{e.path, e.channel_selector, e.alpha_override}].push_back(idx);
 
         ImageLoadOptions opts;
-        opts.channel_selector      = e.channel_selector;
-        opts.alpha_is_transparency = e.alpha_is_transparency;
+        opts.channel_selector = e.channel_selector;
+        opts.override_alpha   = e.alpha_override.has_value();
+        if (e.alpha_override)
+            opts.alpha_override = *e.alpha_override;
         m_image_loader.background_load(e.path.string(), *bytes, false, nullptr, opts);
     }
 

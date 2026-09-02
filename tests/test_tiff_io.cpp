@@ -8,6 +8,7 @@
 
 #include "endian-utils.h"
 #include "image.h"
+#include "imageio/image_loader.h"
 #include "imageio/tiff.h"
 
 #include <initializer_list>
@@ -62,6 +63,20 @@ std::string tiff_with_extra_samples(uint16_t value)
     return bytes;
 }
 
+// The same fixture with pixel 1's color samples replaced. Associated alpha stores a*OETF(C), which can
+// never exceed alpha, so the unmodified fixture's opaque-white-under-half-coverage cannot describe a
+// genuinely associated file -- it is straight-alpha data, and reading it as associated says the straight
+// color was brighter than white.
+std::string tiff_with_second_pixel_color(uint16_t extra_samples, unsigned char value)
+{
+    std::string bytes = tiff_with_extra_samples(extra_samples);
+    // Pixel 1's RGB, immediately before its alpha at the end of the single strip.
+    bytes[bytes.size() - 4] = char(value);
+    bytes[bytes.size() - 3] = char(value);
+    bytes[bytes.size() - 2] = char(value);
+    return bytes;
+}
+
 ImagePtr load_tiff(const std::string &bytes)
 {
     std::istringstream in(bytes, std::ios::binary);
@@ -109,6 +124,64 @@ TEST_CASE("TIFF tagged EXTRASAMPLE_UNSPECIFIED keeps its fourth sample as data")
     REQUIRE(img->groups.size() == 2);
     CHECK(img->groups[0].type == ChannelGroup::RGB_Channels);
     CHECK(img->groups[1].type == ChannelGroup::Single_Channel);
+}
+
+TEST_CASE("TIFF associated alpha is read as multiplied into the encoded samples")
+{
+    // EXTRASAMPLE_ASSOCALPHA == 1, with pixel 1 holding 128/255 under alpha 128/255: the encoded form
+    // of a fully bright color at half coverage, which is what every writer of associated alpha produces
+    // (Photoshop, OpenImageIO, ImageMagick, vips all store a*OETF(C)).
+    auto img = load_tiff(tiff_with_second_pixel_color(1, 0x80));
+
+    REQUIRE(img->channels.size() == 4);
+    CHECK(img->alpha_type == AlphaType_PremultipliedNonLinear);
+    CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
+
+    // Dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back leaves
+    // HDRView's working form: linear 1.0 times alpha. Applying the transfer to the stored value instead
+    // would give EOTF(0.502) = 0.214, markedly darker.
+    CHECK(img->channels[0](1, 0) == doctest::Approx(k_half).epsilon(0.005));
+    CHECK(img->channels[0](1, 0) != doctest::Approx(0.214f).epsilon(0.01));
+
+    // The opaque pixel is unaffected by any of this, which is what makes it a control.
+    CHECK(img->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.001));
+}
+
+TEST_CASE("An alpha override replaces what the TIFF declared")
+{
+    // The file says associated; read it as straight instead, so finalize() multiplies rather than the
+    // loader dividing. This is the escape hatch for a file whose tag is wrong -- ImageMagick and vips
+    // both write premultiplied samples tagged unassociated.
+    ImageLoadOptions opts;
+    opts.override_alpha = true;
+    opts.alpha_override = AlphaType_Straight;
+
+    std::istringstream in(tiff_with_second_pixel_color(1, 0x80), std::ios::binary);
+    auto               images = load_image(in, "rgba.tif", opts);
+    REQUIRE(images.size() == 1);
+
+    CHECK(images[0]->alpha_type == AlphaType_Straight);
+    // Straight 128/255 linearizes to 0.216, which finalize() then multiplies by alpha.
+    CHECK(images[0]->channels[0](1, 0) == doctest::Approx(0.216f * k_half).epsilon(0.02));
+}
+
+TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
+{
+    // The reverse of EXTRASAMPLE_UNSPECIFIED: the file declares real alpha and the user says it is a
+    // mask. Nothing is multiplied by it and the channel stands on its own.
+    ImageLoadOptions opts;
+    opts.override_alpha = true;
+    opts.alpha_override = AlphaType_None;
+
+    std::istringstream in(tiff_with_extra_samples(2), std::ios::binary);
+    auto               images = load_image(in, "rgba.tif", opts);
+    REQUIRE(images.size() == 1);
+
+    CHECK(images[0]->alpha_type == AlphaType_None);
+    CHECK_FALSE(images[0]->alpha_is_transparency);
+    CHECK(images[0]->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
+    REQUIRE(images[0]->groups.size() == 2);
+    CHECK(images[0]->groups[1].type == ChannelGroup::Single_Channel);
 }
 
 TEST_CASE("TIFF save/load round-trips alpha without repeated premultiplication")
