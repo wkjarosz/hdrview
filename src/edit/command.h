@@ -129,26 +129,21 @@ public:
             contents; see HDRViewApp::draw_edit_command_dialog().
         */
         float width_em = 24.f;
-        //! Whether the edit is narrowed by the subject at all, which is what puts the "Apply to" controls
-        //! on its dialog. False for the ones that cover the whole image whatever the subject says -- a
-        //! crop, a resize, a quarter turn.
-        bool has_subject = true;
-
-        //! Whether invoking this with several images selected runs it on all of them, or only the current
-        //! one.
+        //! Whether the "Apply to" settings -- the channel scope and "selection only" -- mean anything for
+        //! this edit, and so whether its dialog shows them.
         /*!
-            Each selected image gets its own invocation and its own undo entry; one that refuses the edit
-            sits it out rather than stopping the rest. True for the edits that write samples, and for the
-            three the selection itself names -- ungrouping, regrouping, deleting a group.
+            False for the edits that replace or reshape the image: there is no rotating only the green
+            channel, or only the marquee. Independent of fans_out below -- ungrouping shows no controls
+            but does run over the selection.
+        */
+        bool draws_subject_selector = true;
 
-            False for Copy and Cut, where it is forced: there is one clipboard, so running them once per
-            image would leave only the last image's copy in it.
-
-            Also false for the edits that reshape or replace an image -- a crop, a resize, a quarter turn,
-            a mip pyramid -- and that one is a choice rather than a constraint. Cropping every selected
-            image to the same rectangle would be perfectly meaningful; a shape change is just a blunter
-            thing to spread over a selection from one keystroke than a tonal edit is, so these stay with
-            the image being looked at.
+        //! With several images selected, whether this runs on all of them or only the current one.
+        /*!
+            Each selected image gets its own invocation and its own undo entry. Copy and Cut cannot: there
+            is one clipboard, so running them per image would leave only the last one's copy in it. The
+            edits that reshape an image stay with the current one by choice rather than necessity -- a
+            shape change is a blunter thing to spread over a selection than a tonal edit is.
         */
         bool fans_out = true;
 

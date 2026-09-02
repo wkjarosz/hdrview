@@ -93,7 +93,7 @@ public:
 
     //! Whether the last edit went through a chokepoint that takes the subject at all.
     /*!
-        Info::has_subject says only whether the dialog draws the "Apply to" controls. A flip has no dialog
+        Info::draws_subject_selector says only whether the dialog draws the "Apply to" controls. A flip has no dialog
         and no subject either way, and asking it to respect a selection would be asking for something it
         does not offer.
     */
@@ -564,10 +564,9 @@ TEST_CASE("An edit covers the subject it was given and nothing else")
                 CHECK_FALSE(cmd->info().fans_out);
 
             // An edit that changed the image without going through a chokepoint that takes the subject
-            // covers the image entire, and has to say so: has_subject is also what decides whether the
-            // edit runs once per selected image or only on the one being looked at.
+            // is not narrowed by it, and so must not offer controls that would change nothing.
             if (img->history.size() != steps && !ctx.last_edit_used_subject())
-                CHECK_FALSE(cmd->info().has_subject);
+                CHECK_FALSE(cmd->info().draws_subject_selector);
 
             // Nothing more to check unless the edit both happened and went through a chokepoint that takes
             // the subject: a flip moves every sample by definition, and a resize has no rectangle to stay

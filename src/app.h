@@ -421,15 +421,11 @@ public:
     /// Whether any open image has edits that are not in its file.
     bool any_image_modified() const;
 
-    //! Reverse the most recent edit of every selected image. False if the current image had none.
+    //! Reverse the most recent edit of every selected image. False if the *current* image had none.
     /*!
-        Offered and labeled from the current image alone -- the button says what undoing the image being
-        looked at would do -- but applied across the selection, each image stepping its own history. One
-        that cannot, because a renderer owns it or because it has nothing left to undo, sits it out rather
-        than stopping the rest.
-
-        The result is the current image's, not "any image undid", because that is what
-        draw_history_window()'s walk to a clicked entry terminates on.
+        Offered and labeled from the current image, applied across the selection, each image stepping its
+        own history; one with nothing to undo sits it out. The result is the current image's rather than
+        "any image undid", which is what draw_history_window()'s walk to a clicked entry terminates on.
     */
     bool undo();
     //! Reapply the edit undo() last reversed, across the selection. False if the current image had none.
@@ -852,11 +848,10 @@ private:
 
     std::unique_ptr<RunningFilter> m_running_filter;
 
-    //! The filters still waiting for the one in flight, one per image a fan-out has yet to reach.
+    //! Filters waiting for the one in flight, one per image a fan-out has yet to reach.
     /*!
-        Only one filter can run at a time -- there is one progress dialog and one Cancel -- but an edit
-        over a multi-selection arrives as one call per image within a single frame. The rest wait here
-        rather than being dropped, and each is started as the one before it lands.
+        Only one can run at a time -- one progress dialog, one Cancel -- but an edit over a multi-selection
+        arrives as one call per image in a single frame. Each is started as the one before it lands.
     */
     std::vector<std::function<void()>> m_filter_queue;
 

@@ -260,14 +260,12 @@ struct Channel : public Array2Df
     */
     bool ungrouped = false;
 
-    //! Whether this channel is part of the multi-selection that the Images panel shows and edits act on.
+    //! Whether this channel is part of the multi-selection the Images panel shows and edits act on.
     /*!
         Per channel rather than per group, for the same reason as `ungrouped`: build_layers_and_groups()
-        clears and rebuilds the whole group vector, so a flag kept on a group would not survive a rebuild
-        -- including one caused by an edit that never touched the channels.
-
-        Read and written through Image::is_group_selected() and the helpers beside it, which treat a group
-        as selected when all of its channels are.
+        rebuilds the whole group vector, so a flag kept on a group would not survive a rebuild -- including
+        one caused by an edit that never touched the channels. Read through Image::is_group_selected(),
+        which counts a group selected when all its channels are.
     */
     bool selected = false;
 

@@ -147,7 +147,7 @@ public:
                 ImGuiInputFlags_None,
                 "Ungroup",
                 24.f,
-                /* has_subject */ false};
+                /* draws_subject_selector */ false};
     }
 
     //! Only worth offering while one of the groups it would take apart is more than one channel.
@@ -223,7 +223,7 @@ public:
                 ImGuiInputFlags_None,
                 "Regroup",
                 24.f,
-                /* has_subject */ false};
+                /* draws_subject_selector */ false};
     }
 
     bool enabled(const EditContext &ctx) const override { return !regroup_channels(ctx).empty(); }
@@ -276,7 +276,7 @@ public:
                 ImGuiInputFlags_None,
                 "Delete",
                 24.f,
-                /* has_subject */ false};
+                /* draws_subject_selector */ false};
     }
 
     //! Never every group: an image with no channels is not an image.

@@ -36,8 +36,8 @@ public:
         // A flip or a quarter turn moves every sample of every channel by definition, so there is no
         // subject for it to carry and nothing for a scope to narrow -- and nothing in it that names one
         // selected image over another either.
-        m_info.has_subject = false;
-        m_info.fans_out    = false;
+        m_info.draws_subject_selector = false;
+        m_info.fans_out               = false;
     }
 
     Info info() const override { return m_info; }
@@ -57,8 +57,8 @@ public:
         Info i{{"Crop to selection"}, ICON_MY_CROP, ImGuiMod_Alt | ImGuiKey_C};
         // Reshapes the image rather than writing into it, as the other two size commands do, so the
         // subject has nothing to say about it, and it stays with the image being looked at.
-        i.has_subject = false;
-        i.fans_out    = false;
+        i.draws_subject_selector = false;
+        i.fans_out               = false;
         return i;
     }
 
@@ -181,8 +181,8 @@ public:
                30.f};
         // Replaces the image rather than writing into it, so the subject has nothing to say about it, and
         // it stays with the image being looked at.
-        i.has_subject = false;
-        i.fans_out    = false;
+        i.draws_subject_selector = false;
+        i.fans_out               = false;
         return i;
     }
 
@@ -246,8 +246,8 @@ public:
                ImGuiInputFlags_None,
                "Resize",
                30.f};
-        i.has_subject = false;
-        i.fans_out    = false;
+        i.draws_subject_selector = false;
+        i.fans_out               = false;
         return i;
     }
 

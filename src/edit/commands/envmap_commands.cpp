@@ -48,8 +48,8 @@ public:
                27.f};
         // Reparameterizes the whole image, so there is no subject to narrow and nothing in it that names
         // one selected image over another.
-        i.has_subject = false;
-        i.fans_out    = false;
+        i.draws_subject_selector = false;
+        i.fans_out               = false;
         return i;
     }
 
@@ -170,8 +170,8 @@ public:
                ImGuiInputFlags_None,
                "Convolve",
                27.f};
-        i.has_subject = false;
-        i.fans_out    = false;
+        i.draws_subject_selector = false;
+        i.fans_out               = false;
         return i;
     }
 

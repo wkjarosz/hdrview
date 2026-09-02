@@ -220,7 +220,7 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
 
         cmd.draw(ctx);
 
-        if (info.has_subject)
+        if (info.draws_subject_selector)
             draw_edit_subject_selector();
 
         // Applied on confirm rather than as the controls move: an edit per frame of a drag would fill the
