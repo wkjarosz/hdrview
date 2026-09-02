@@ -882,6 +882,7 @@ Image::Image(int2 size, int num_channels) : Image()
         }
     }
     display_window = data_window = Box2i{int2{0}, channels.front().size()};
+    set_default_alpha_type();
 }
 
 Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
@@ -893,6 +894,19 @@ Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
     for (const auto &name : channel_names) channels.emplace_back(name, size);
 
     display_window = data_window = Box2i{int2{0}, size};
+    set_default_alpha_type();
+}
+
+void Image::set_default_alpha_type()
+{
+    for (const auto &c : channels)
+        if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
+        {
+            alpha_type = AlphaType_PremultipliedLinear;
+            return;
+        }
+
+    alpha_type = AlphaType_None;
 }
 
 map<string, int> Image::channels_in_layer(const string &layer) const
@@ -1023,7 +1037,7 @@ void Image::build_layers_and_groups()
                 continue;
             // Skipping the alpha-bearing patterns lets the alpha-free one match instead, leaving 'A' to
             // fall through to the single-channel groups created below.
-            if (!alpha_is_transparency && group_has_alpha(group_type))
+            if (!alpha_is_transparency() && group_has_alpha(group_type))
                 continue;
             auto found = find_group_channels(layer_channels, layer.name, group_channel_names);
 

@@ -479,18 +479,11 @@ public:
     AdaptationMethod              adaptation_method = AdaptationMethod_Bradford;
     ColorGamut_                   color_space       = ColorGamut_Unspecified;
     WhitePoint_                   white_point       = WhitePoint_Unspecified;
-    //! How the file's alpha is to be read: whether the color channels are multiplied by it, and in what
-    //! space. Read by finalize(), so set it before calling.
+    //! How an 'A' channel is to be read: whether it is coverage at all, and if so whether the color
+    //! channels are multiplied by it and in what space. AlphaType_None keeps the channel out of an
+    //! alpha-bearing group, so nothing is multiplied by it. Read by finalize(), so set it before calling.
     AlphaType_ alpha_type = AlphaType_None;
-    //! Whether an 'A' channel is transparency at all.
-    /*!
-        Orthogonal to alpha_type, which says what a *transparency* alpha means: an image can carry alpha
-        whose kind is simply unstated, which is the default and still groups as RGBA. When false the channel
-        is grouped on its own instead of joining an RGBA/YA/YCA/XYZA group, which is also what keeps
-        finalize() from premultiplying anything by it. Read by finalize(), so set it before calling.
-    */
-    bool                 alpha_is_transparency = true;
-    json                 metadata = json::object();
+    json                 metadata   = json::object();
     Exif                 exif;     //!< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any
     std::vector<uint8_t> icc_data; //!< The raw ICC profile data from the file, if any
@@ -564,6 +557,14 @@ public:
         machinery build themselves out of those names in finalize().
     */
     Image(int2 size, const std::vector<std::string> &channel_names);
+
+    //! Set alpha_type from the channel names alone, for an image not built from a file.
+    /*!
+        An image assembled in memory -- over IPC, by an edit, by a test -- already holds samples in
+        HDRView's working representation, which is premultiplied and linear, so that is what its alpha
+        says. A loader overwrites this the moment it knows what the file declared.
+    */
+    void set_default_alpha_type();
     Image();
     Image(const Image &) = delete;
     Image(Image &&)      = default;
@@ -773,6 +774,9 @@ public:
     //! True when `group`'s values were premultiplied by finalize() and so must be divided back out to
     //! report what the file holds. Straight-alpha files only: a file that stored premultiplied values has
     //! no straight form for its alpha=0 pixels.
+    //! An 'A' channel is coverage rather than ordinary data.
+    bool alpha_is_transparency() const { return alpha_type != AlphaType_None; }
+
     bool unpremultiplies(const ChannelGroup &group) const
     {
         return alpha_type == AlphaType_Straight && group.num_channels > 1 && group_has_alpha(group.type);

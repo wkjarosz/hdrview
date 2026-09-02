@@ -384,16 +384,13 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         }
 
         auto image = make_shared<Image>(int2{(int)width, (int)height}, num_channels);
-        // What the file holds, not what it is converted to internally. Associated alpha is multiplied into
-        // the encoded samples, which is what every writer that produces one -- Photoshop, OpenImageIO,
-        // ImageMagick, vips -- does.
+        // What the file holds, not what it is converted to internally. An EXTRASAMPLES tag naming something
+        // other than alpha leaves has_alpha false, and AlphaType_None then keeps that sample out of an
+        // alpha-bearing group. Associated alpha is multiplied into the encoded samples, which is what every
+        // writer that produces one -- Photoshop, OpenImageIO, ImageMagick, vips -- does.
         image->alpha_type = effective_alpha_type(
             opts,
             has_alpha ? (is_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight) : AlphaType_None);
-        // An EXTRASAMPLES tag that names something other than alpha states the extra sample is arbitrary
-        // data, so keep it out of an alpha-bearing group entirely.
-        if (has_extra_samples && !has_alpha)
-            image->alpha_is_transparency = false;
         image->metadata["loader"] = "libtiff";
         image->partname           = partname;
 

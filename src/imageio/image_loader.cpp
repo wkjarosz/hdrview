@@ -1229,17 +1229,10 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
 
                 i->filename   = filename;
                 i->size_bytes = static_cast<size_t>(size);
+                // The loaders have already applied the override to alpha_type, via effective_alpha_type();
+                // recording the option itself is what lets a reload or a saved session repeat it.
                 if (opts.override_alpha)
-                {
-                    // The loaders have already applied the override to alpha_type, via
-                    // effective_alpha_type(), because they needed it while the samples were still encoded.
-                    // Grouping is the half that can only be settled here: AlphaType_None says the channel
-                    // is not transparency at all, which finalize() below reads to keep it out of an
-                    // alpha-bearing group. Recording the option itself lets a reload or a saved session
-                    // repeat it.
-                    i->alpha_override        = opts.alpha_override;
-                    i->alpha_is_transparency = opts.alpha_override != AlphaType_None;
-                }
+                    i->alpha_override = opts.alpha_override;
                 // If multiple image "parts" were loaded and they have names, store these names in the image's
                 // channel selector. This is useful if we later want to reload a specific image part from the
                 // original file.

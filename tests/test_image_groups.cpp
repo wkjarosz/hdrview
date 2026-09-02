@@ -14,13 +14,12 @@ namespace
 {
 
 // A 1x1 RGBA image whose color channels are 1 and whose alpha is 0.5, so a premultiply is visible.
-ImagePtr make_rgba_image(AlphaType_ alpha_type, bool alpha_is_transparency = true)
+ImagePtr make_rgba_image(AlphaType_ alpha_type)
 {
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
     for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
     img->channels[3](0, 0)      = 0.5f;
     img->alpha_type             = alpha_type;
-    img->alpha_is_transparency  = alpha_is_transparency;
     img->finalize();
     return img;
 }
@@ -48,9 +47,9 @@ TEST_CASE("straight alpha is premultiplied into one RGBA group by default")
     CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
 }
 
-TEST_CASE("alpha_is_transparency=false splits alpha off and skips the premultiply")
+TEST_CASE("AlphaType_None splits alpha off and skips the premultiply")
 {
-    auto img = make_rgba_image(AlphaType_Straight, /*alpha_is_transparency*/ false);
+    auto img = make_rgba_image(AlphaType_None);
 
     // R,G,B group next in the table, with A left over as its own single-channel group.
     REQUIRE(img->groups.size() == 2);
@@ -93,12 +92,17 @@ TEST_CASE("raw_pixel reports the file's values for a straight-alpha image")
     }
 }
 
-TEST_CASE("alpha_is_transparency=false leaves premultiplied files untouched too")
+TEST_CASE("An image whose default alpha type is left alone keeps its samples")
 {
-    auto img = make_rgba_image(AlphaType_PremultipliedLinear, /*alpha_is_transparency*/ false);
+    // The constructor's default for an image with an 'A' channel: already in HDRView's working form.
+    auto img = std::make_shared<Image>(int2{1, 1}, 4);
+    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
+    img->channels[3](0, 0) = 0.5f;
+    REQUIRE(img->alpha_type == AlphaType_PremultipliedLinear);
+    img->finalize();
 
-    REQUIRE(img->groups.size() == 2);
-    CHECK(find_group(img, "R,G,B") != nullptr);
-    CHECK(find_group(img, "A") != nullptr);
+    // Coverage, so it groups as RGBA -- but already multiplied, so finalize() does not do it again.
+    REQUIRE(img->groups.size() == 1);
+    CHECK(find_group(img, "R,G,B,A") != nullptr);
     CHECK(img->channels[0](0, 0) == doctest::Approx(1.f));
 }

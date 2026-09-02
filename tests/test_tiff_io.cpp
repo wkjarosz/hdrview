@@ -116,7 +116,7 @@ TEST_CASE("TIFF tagged EXTRASAMPLE_UNSPECIFIED keeps its fourth sample as data")
 
     REQUIRE(img->channels.size() == 4);
     CHECK(img->alpha_type == AlphaType_None);
-    CHECK_FALSE(img->alpha_is_transparency);
+    CHECK_FALSE(img->alpha_is_transparency());
     CHECK(img->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
     CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
@@ -178,7 +178,7 @@ TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
     REQUIRE(images.size() == 1);
 
     CHECK(images[0]->alpha_type == AlphaType_None);
-    CHECK_FALSE(images[0]->alpha_is_transparency);
+    CHECK_FALSE(images[0]->alpha_is_transparency());
     CHECK(images[0]->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
     REQUIRE(images[0]->groups.size() == 2);
     CHECK(images[0]->groups[1].type == ChannelGroup::Single_Channel);

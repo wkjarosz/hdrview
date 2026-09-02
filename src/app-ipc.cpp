@@ -259,9 +259,9 @@ void HDRViewApp::apply_ipc_create(const IpcCreateImage &info)
         image->short_name = info.name;
         image->is_live    = true;
 
-        // The samples a renderer sends are its own; nothing here should reinterpret them. Leaving alpha_type
-        // at AlphaType_None keeps finalize() from premultiplying, which would otherwise scale every tile by
-        // an alpha channel that may not have been sent yet.
+        // The samples a renderer sends are its own; nothing here should reinterpret them. The constructor's
+        // default alpha type is already the premultiplied one, so finalize() leaves them alone -- it would
+        // otherwise scale every tile by an alpha channel that may not have been sent yet.
         image->finalize();
     }
     catch (const std::exception &e)
