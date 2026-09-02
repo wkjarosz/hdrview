@@ -950,11 +950,25 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         }
                     }
 
+                    // An EXIF item begins with a four-byte big-endian offset to the TIFF header that
+                    // follows it (ISO/IEC 23008-12 Annex A.2.1). Most writers put an "Exif\0\0" marker in
+                    // between and set the offset to 6; the rest set it to zero. Honoring the offset finds
+                    // the header in either case, rather than relying on libexif recognizing and skipping a
+                    // marker it was given by accident.
                     if (exif_data.size() > 4)
                     {
+                        const size_t tiff_header_offset = (size_t(exif_data[0]) << 24) | (size_t(exif_data[1]) << 16) |
+                                                          (size_t(exif_data[2]) << 8) | size_t(exif_data[3]);
+                        const size_t tiff_start = 4 + tiff_header_offset;
+
                         try
                         {
-                            image->exif                = Exif{exif_data.data() + 4, exif_data.size() - 4};
+                            if (tiff_start >= exif_data.size())
+                                throw std::runtime_error{
+                                    fmt::format("EXIF item says its TIFF header is at {}, past the {} bytes it holds",
+                                                tiff_start, exif_data.size())};
+
+                            image->exif = Exif{exif_data.data() + tiff_start, exif_data.size() - tiff_start};
                             image->metadata["exif"]    = image->exif.to_json();
                             image->orientation_applied = true;
                             spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
