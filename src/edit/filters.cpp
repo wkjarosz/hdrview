@@ -18,7 +18,7 @@
 namespace
 {
 
-//! Sample \p a at \p x, \p y with the border clamped to the nearest sample inside it.
+/// Sample \p a at \p x, \p y with the border clamped to the nearest sample inside it.
 inline float clamped(const Array2Df &a, int x, int y)
 {
     return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
@@ -51,7 +51,7 @@ int wrap_coord(int p, int extent, int mode)
 namespace
 {
 
-//! One sample of \p a read through the border modes; zero where they say there is nothing.
+/// One sample of \p a read through the border modes; zero where they say there is nothing.
 inline float bordered(const Array2Df &a, int x, int y, int mx, int my)
 {
     x = wrap_coord(x, a.width(), mx);
@@ -59,8 +59,10 @@ inline float bordered(const Array2Df &a, int x, int y, int mx, int my)
     return (x < 0 || y < 0) ? 0.f : a(x, y);
 }
 
-//! One tap of the interpolating cubic with a = -0.75, as Photoshop's "bicubic".
-//! A function, not a lambda: MSVC will not read a constexpr local from inside a captureless lambda.
+/// One tap of the interpolating cubic with a = -0.75, as Photoshop's "bicubic".
+/**
+    A function, not a lambda: MSVC will not read a constexpr local from inside a captureless lambda.
+*/
 inline float cubic_weight(float d)
 {
     constexpr float A = -0.75f;
@@ -69,7 +71,7 @@ inline float cubic_weight(float d)
     return d <= 1.f ? ((A + 2.f) * d - (A + 3.f)) * d * d + 1.f : ((A * d - 5.f * A) * d + 8.f * A) * d - 4.f * A;
 }
 
-//! Value of \p a at the continuous position \p sx, \p sy, with samples at the centers of their cells.
+/// Value of \p a at the continuous position \p sx, \p sy, with samples at the centers of their cells.
 float sample_at(const Array2Df &a, float sx, float sy, int sampler, int mx, int my)
 {
     if (sampler == Sampler_Nearest)
@@ -104,8 +106,10 @@ float sample_at(const Array2Df &a, float sx, float sy, int sampler, int mx, int 
     return total != 0.f ? value / total : value;
 }
 
-//! Normalized 1D Gaussian taps, truncated at three standard deviations, past which they carry well under
-//! a thousandth of the weight.
+/// Normalized 1D Gaussian taps, truncated at three standard deviations.
+/**
+    Past three sigma the taps carry well under a thousandth of the weight.
+*/
 std::vector<float> gaussian_taps(float sigma)
 {
     const int          radius = std::max(1, int(std::ceil(3.f * sigma)));
@@ -124,9 +128,11 @@ std::vector<float> gaussian_taps(float sigma)
     return taps;
 }
 
-//! Convolve \p region of \p src with the separable kernel \p taps_x by \p taps_y. The horizontal pass
-//! covers the region's columns over rows grown by the vertical radius, which is the set the vertical pass
-//! then reads. An empty tap list along an axis leaves that axis alone.
+/// Convolve \p region of \p src with the separable kernel \p taps_x by \p taps_y.
+/**
+    The horizontal pass covers the region's columns over rows grown by the vertical radius, which is the set
+    the vertical pass then reads. An empty tap list along an axis leaves that axis alone.
+*/
 Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std::vector<float> &taps_x,
                             const std::vector<float> &taps_y, AtomicProgress progress)
 {
@@ -200,7 +206,7 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
     return out;
 }
 
-/*!
+/**
     One separable box pass, costing the same per sample whatever the half-widths: the sum over the box is
     carried along the row, then down the column, adding the sample entering it and subtracting the one
     leaving.
@@ -263,8 +269,11 @@ Array2Df box_pass(const Array2Df &src, int2 src_origin, const Box2i &region, int
     return out;
 }
 
-//! \p b grown by \p by on every side, then clipped to \p bounds. The clip keeps a chain of passes
-//! agreeing with the same chain over the whole image, which clamps against the image's own edge.
+/// \p b grown by \p by on every side, then clipped to \p bounds.
+/**
+    The clip keeps a chain of passes agreeing with the same chain over the whole image, which clamps against
+    the image's own edge.
+*/
 Box2i dilated(const Box2i &b, int2 by, const Box2i &bounds)
 {
     Box2i out{b.min - by, b.max + by};
@@ -272,7 +281,7 @@ Box2i dilated(const Box2i &b, int2 by, const Box2i &bounds)
     return out;
 }
 
-/*!
+/**
     Widths for \p n boxes whose combined variance lands as near \p sigma as odd integers allow.
 
     Compute box blur size for desired sigma and number of iterations:
@@ -386,8 +395,11 @@ Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_
 namespace
 {
 
-//! Run \p half_widths box passes in order, producing \p region. Each pass reads its own half-width beyond
-//! what it produces, so the regions are worked out backwards from the one wanted and clipped at each step.
+/// Run \p half_widths box passes in order, producing \p region.
+/**
+    Each pass reads its own half-width beyond what it produces, so the regions are worked out backwards from
+    the one wanted and clipped at each step.
+*/
 Array2Df box_chain(const Array2Df &src, const Box2i &region, const std::vector<int2> &half_widths,
                    AtomicProgress progress)
 {

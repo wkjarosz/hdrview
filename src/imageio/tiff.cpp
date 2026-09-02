@@ -1000,8 +1000,9 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 }
 
 /// Extract EXIF data from TIFF file as a blob suitable for libexif parsing.
-/// Returns a vector with "Exif\0\0" header followed by minimal TIFF structure.
-/// Returns empty vector if extraction fails or is not possible.
+/**
+    An "Exif\0\0" header followed by a minimal TIFF structure, or empty if extraction is not possible.
+*/
 vector<uint8_t> extract_tiff_exif_blob(const vector<uint8_t> &data, bool reverse_endian)
 {
     if (data.size() < 8)

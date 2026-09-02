@@ -38,7 +38,7 @@
 namespace
 {
 
-//! A flat RGB image, so that any variation after applying a gain map came from the map.
+/// A flat RGB image, so that any variation after applying a gain map came from the map.
 ImagePtr make_flat_image(int2 size, float value)
 {
     auto img = std::make_shared<Image>(size, 3);
@@ -48,7 +48,7 @@ ImagePtr make_flat_image(int2 size, float value)
     return img;
 }
 
-//! A monochrome gain map holding one constant sRGB-encoded value.
+/// A monochrome gain map holding one constant sRGB-encoded value.
 GainmapImage make_flat_gainmap(int2 size, float encoded)
 {
     GainmapImage gm;

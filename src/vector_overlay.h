@@ -15,8 +15,8 @@
 
 struct ImDrawList;
 
-//! One command of a retained drawing program layered over an image, in that image's pixel coordinates.
-/*!
+/// One command of a retained drawing program layered over an image, in that image's pixel coordinates.
+/**
     This is what tev's `VectorGraphics` IPC packet carries. The model is NanoVG's: a mutable graphics state
     (colors, widths, font) with a save/restore stack, and a path built from subpaths that is then stroked,
     filled, or both. Arguments are a flat run of floats whose length is fixed per type, plus a string for
@@ -24,7 +24,7 @@ struct ImDrawList;
 */
 struct VgCommand
 {
-    //! Command numbering is the wire protocol's; see tev's VectorGraphics.h.
+    /// Command numbering is the wire protocol's; see tev's VectorGraphics.h.
     enum class Type : int8_t
     {
         Invalid            = 127,
@@ -56,14 +56,14 @@ struct VgCommand
         StrokeWidth        = 25,
     };
 
-    //! Whether a size is in image pixels (and so scales with zoom) or in screen pixels.
+    /// Whether a size is in image pixels (and so scales with zoom) or in screen pixels.
     enum ScaleKind : int
     {
         Relative = 0,
         Absolute = 1,
     };
 
-    //! Bit flags, matching NanoVG's NVG_ALIGN_*.
+    /// Bit flags, matching NanoVG's NVG_ALIGN_*.
     enum TextAlign : int
     {
         AlignLeft     = 1 << 0,
@@ -77,29 +77,32 @@ struct VgCommand
 
     Type               type = Type::Invalid;
     std::vector<float> data;
-    std::string        text; //!< only Text and FontFace carry one
+    std::string        text; ///< only Text and FontFace carry one
 
-    //! How many floats \p type expects in `data`, or -1 for a type that is not one of ours. The wire format
-    //! has no per-command length, so this is the only thing that makes a command stream parseable.
+    /// How many floats \p type expects in `data`, or -1 for a type that is not one of ours.
+    /**
+        The wire format has no per-command length, so this is the only thing that makes a command stream
+        parseable.
+    */
     static int num_floats(Type type);
 
     static bool has_text(Type type) { return type == Type::Text || type == Type::FontFace; }
 };
 
-//! What draw_vector_overlay() needs to know about where the image is on screen.
+/// What draw_vector_overlay() needs to know about where the image is on screen.
 struct VgTransform
 {
-    //! Image pixel coordinates to ImGui screen coordinates. Usually HDRViewApp::app_pos_at_pixel().
+    /// Image pixel coordinates to ImGui screen coordinates. Usually HDRViewApp::app_pos_at_pixel().
     std::function<float2(float2)> to_screen;
-    //! Screen pixels per image pixel, for sizes flagged Relative. Always positive, even when flipped.
+    /// Screen pixels per image pixel, for sizes flagged Relative. Always positive, even when flipped.
     float scale = 1.f;
-    //! Resolves a NanoVG font-face name ("sans", "sans-bold", "mono") to a font; may return nullptr.
+    /// Resolves a NanoVG font-face name ("sans", "sans-bold", "mono") to a font; may return nullptr.
     std::function<void *(const std::string &)> font_for;
-    //! Font the overlay starts with, and falls back to when a face name is unknown.
+    /// Font the overlay starts with, and falls back to when a face name is unknown.
     void *default_font = nullptr;
 };
 
-/*!
+/**
     Execute \p commands into \p draw_list. Unsupported commands are skipped, not approximated.
 
     \param draw_list      Where to draw; the overlay leaves its path state as it found it

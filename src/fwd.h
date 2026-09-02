@@ -132,8 +132,7 @@ inline const char *target_name(Target_ t)
 }
 
 using MouseMode = int;
-/// The tools the mouse can be in, in the order the Tools menu and the floating tool palette present them;
-/// both iterate the enum.
+/// The tools the mouse can be in, in the order the Tools menu and the tool palette iterate them.
 enum MouseMode_ : MouseMode
 {
     MouseMode_PanZoom = 0,

@@ -14,8 +14,7 @@
 namespace
 {
 
-//! Frame arbitrary payload bytes as a packet, filling in the length prefix the way a sender would.
-//! Lets a test state a malformed payload the builders cannot produce.
+/// Frame arbitrary payload bytes as a packet, filling in the length prefix the way a sender would.
 std::vector<char> framed(IpcPacketType type, const std::vector<char> &payload)
 {
     std::vector<char> bytes(sizeof(uint32_t));

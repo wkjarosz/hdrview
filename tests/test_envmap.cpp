@@ -161,14 +161,13 @@ TEST_CASE("The angular map and the mirror ball put the forward direction at the 
 namespace
 {
 
-//! A size in \p mapping's own proportions, so whatever it packs divides the image evenly. A square image
-//! gives a cube layout faces of a fractional number of texels, which no resampling recovers.
+/// A size in \p mapping's own proportions, so whatever it packs divides the image evenly.
 inline int2 size_for(int mapping, int height = 96)
 {
     return int2{std::max(1, int(std::lround(float(height) * envmapping_aspect(mapping)))), height};
 }
 
-//! An environment whose sample at each point is \p f of the direction that point stands for.
+/// An environment whose sample at each point is \p f of the direction that point stands for.
 template <typename F>
 Array2Df make_envmap(int2 size, EnvMapping mapping, F &&f)
 {

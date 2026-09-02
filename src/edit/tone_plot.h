@@ -13,7 +13,7 @@
 
 #include <algorithm>
 
-/*!
+/**
     The square plot of a tone curve that the tonal dialogs draw above their sliders: what a level goes in
     as against what it comes out as, over [0,1]. Keeps state between frames, so it is a member of the
     command. Used between begin() and end(), like ImPlot itself:
@@ -27,13 +27,13 @@
 class ToneCurvePlot
 {
 public:
-    //! Samples along the horizontal axis.
+    /// Samples along the horizontal axis.
     static constexpr int N = 129;
 
-    //! The input level at sample \p i, where every curve drawn here is evaluated.
+    /// The input level at sample \p i, where every curve drawn here is evaluated.
     static float x(int i) { return float(i) / float(N - 1); }
 
-    //! Open the plot. False when ImPlot declined it, in which case nothing else may be called.
+    /// Open the plot. False when ImPlot declined it, in which case nothing else may be called.
     bool begin(const char *id)
     {
         // as wide as the sliders beneath it. The tick labels take more width at the left than height at
@@ -57,7 +57,7 @@ public:
         return true;
     }
 
-    //! One curve, \p ys being N outputs for the inputs x(0)..x(N-1).
+    /// One curve, \p ys being N outputs for the inputs x(0)..x(N-1).
     void curve(const char *name, const float *ys, ImVec4 color, float weight = 2.f)
     {
         float xs[N];
@@ -69,7 +69,7 @@ public:
         ImPlot::PlotLine(name, xs, ys, N, spec);
     }
 
-    //! A vertical line, for marking the input level a curve pivots about.
+    /// A vertical line, for marking the input level a curve pivots about.
     void marker_x(const char *name, float value, ImVec4 color)
     {
         const float xs[2] = {value, value};
@@ -81,7 +81,7 @@ public:
         ImPlot::PlotLine(name, xs, ys, 2, spec);
     }
 
-    //! A small marker at \p at, for a point of the curve that can be taken hold of.
+    /// A small marker at \p at, for a point of the curve that can be taken hold of.
     void handle(float2 at, ImVec4 color)
     {
         const float xs[1] = {at.x};
@@ -95,9 +95,12 @@ public:
         ImPlot::PlotScatter("handle", xs, ys, 1, spec);
     }
 
-    //! While the left button is dragging inside the plot, where it is, in plot coordinates (not the
-    //! widget's, which include the frame and tick labels). A drag that began inside is followed after it
-    //! leaves. \p pressed_at receives where it began, which says what is being dragged.
+    /// While the left button is dragging inside the plot, where it is, in plot coordinates.
+    /**
+        Not the widget's coordinates, which include the frame and tick labels. A drag that began inside is
+        followed after it leaves, and \p pressed_at receives where it began, which says what is being
+        dragged.
+    */
     bool drag(float2 &position, float2 *pressed_at = nullptr)
     {
         auto here = []
@@ -139,7 +142,7 @@ public:
 
 private:
     float  m_width        = 0.f;
-    float  m_extra_height = 0.f; //!< What the widget needs above its width for the plot area to be square
+    float  m_extra_height = 0.f; ///< What the widget needs above its width for the plot area to be square
     bool   m_dragging     = false;
-    float2 m_press{0.f, 0.f}; //!< Where the drag began
+    float2 m_press{0.f, 0.f}; ///< Where the drag began
 };

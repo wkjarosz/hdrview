@@ -19,14 +19,14 @@
 namespace
 {
 
-//! Builds a little-endian TIFF header with one IFD0, which is what an EXIF block is.
+/// Builds a little-endian TIFF header with one IFD0, which is what an EXIF block is.
 struct TiffBuilder
 {
     struct Entry
     {
         uint16_t             tag, format;
         uint32_t             components;
-        std::vector<uint8_t> inline_or_external; //!< the 4 inline bytes, or the payload to place after the IFD
+        std::vector<uint8_t> inline_or_external; ///< the 4 inline bytes, or the payload to place after the IFD
         bool                 external = false;
     };
 
@@ -88,7 +88,7 @@ constexpr uint16_t k_fmt_ascii = 2, k_fmt_short = 3;
 
 json parse(const std::vector<uint8_t> &blob) { return exif_to_json(blob.data(), blob.size()); }
 
-//! Whether any IFD in the result holds a tag with this title.
+/// Whether any IFD in the result holds a tag with this title.
 bool has_tag_named(const json &j, const std::string &title)
 {
     for (auto &[ifd, tags] : j.items())

@@ -287,8 +287,8 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 // - Setting the desired JxlDecoderSetOutputColorProfile to JXL_TRANSFER_FUNCTION_SRGB does call the CMS functions.
 //
 
-//! Reconstruct \p image's alternate rendition from the gain map in a `jhgm` box, if it holds one.
-/*!
+/// Reconstruct \p image's alternate rendition from the gain map in a `jhgm` box, if it holds one.
+/**
     The bundle is laid out as: a version byte, the ISO 21496-1 metadata behind a 16-bit length, the
     alternate rendition's color encoding behind an 8-bit length, its ICC profile behind a 32-bit length,
     then the map itself as a bare JPEG XL codestream filling the rest of the box. Unpacking it needs

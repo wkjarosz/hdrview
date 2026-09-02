@@ -24,7 +24,7 @@
 namespace
 {
 
-//! The rectangle these operate on: the selection when the subject asks for it, else the whole image.
+/// The rectangle these operate on: the selection when the subject asks for it, else the whole image.
 Box2i target_region(const EditContext &ctx)
 {
     auto img = ctx.image();

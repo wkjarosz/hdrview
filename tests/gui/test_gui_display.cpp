@@ -21,12 +21,13 @@ namespace
 bool approx(float a, float b, float eps = 2e-3f) { return std::fabs(a - b) < eps; }
 bool approx(float3 a, float3 b, float eps = 2e-3f) { return la::maxelem(la::abs(a - b)) < eps; }
 
-//! Colormap::initialize()'s rule for which colormaps get a filtered texture; the qualitative ones are
-//! sampled Nearest.
+/// Colormap::initialize()'s rule for which colormaps get a filtered texture; the qualitative ones are Nearest.
 bool is_continuous(Colormap_ cmap) { return cmap > ImPlotColormap_Paired; }
 
-//! The colormap fetch as the fragment shader performs it: tonemap()'s texel-center remap of \p t, then a
-//! bilinear lookup into the N-texel ClampToEdge texture. Returns the stored, sRGB-encoded color.
+/// The colormap fetch as the fragment shader performs it, returning the stored, sRGB-encoded color.
+/**
+    tonemap()'s texel-center remap of \p t, then a bilinear lookup into the N-texel ClampToEdge texture.
+*/
 float3 glsl_colormap_fetch(Colormap_ cmap, float t, bool reverse)
 {
     if (reverse)
@@ -47,7 +48,7 @@ float3 glsl_colormap_fetch(Colormap_ cmap, float t, bool reverse)
     return la::lerp(texel(i0), texel(i1), coord - (float)i0);
 }
 
-//! Restores the tonemap controls the tests below drive directly, whatever the rest of the suite left set.
+/// Restores the tonemap controls the tests below drive directly, whatever the rest of the suite left set.
 struct TonemapState
 {
     Tonemap_ tonemap  = hdrview()->tonemap();

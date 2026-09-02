@@ -48,8 +48,8 @@ inline constexpr double axis_scale_log_eps = -4; // std::log10(axis_scale_eps)
 // which spreads consecutive dark levels tens of bins apart and combs the histogram.
 inline constexpr double axis_scale_a_0 = 0.01;
 
-//! Warp \p value into the space the histogram's x axis is drawn in.
-/*!
+/// Warp \p value into the space the histogram's x axis is drawn in.
+/**
     Histogram bins are laid out uniformly in this space, and ImPlot positions the axis linearly in it as
     well, so the bins come out uniformly wide on screen too.
 */
@@ -66,7 +66,7 @@ inline double axis_scale_fwd(double value, AxisScale x_scale)
         return value;
 }
 
-//! Inverse of axis_scale_fwd().
+/// Inverse of axis_scale_fwd().
 inline double axis_scale_inv(double value, AxisScale x_scale)
 {
     if (x_scale == AxisScale_SRGB)
@@ -99,8 +99,8 @@ struct PixelStats
     static constexpr int MAX_BINS = 512;
     using Ptr                     = std::shared_ptr<PixelStats>;
 
-    //! Number of histogram bins appropriate for a source with \p bits bits per sample.
-    /*!
+    /// Number of histogram bins appropriate for a source with \p bits bits per sample.
+    /**
         An n-bit source holds at most 2^n distinct levels, so binning any finer than that leaves bins empty
         by construction. \p bits is 0 when the samples are floating point or their depth is unknown, which
         gets the full resolution.
@@ -124,8 +124,8 @@ struct PixelStats
         int        ref_id     = -1;
         int        ref_group  = -1;
 
-        //! Image::content_version of the measured image, and of the reference when one is blended in.
-        /*!
+        /// Image::content_version of the measured image, and of the reference when one is blended in.
+        /**
             Everything else here describes how the image is being looked at; these two describe the pixels
             themselves. A statistic computed from pixels that have since been overwritten is stale no matter
             how well the rest of the settings match, which is what these catch.
@@ -138,8 +138,8 @@ struct PixelStats
 
     Settings settings;
 
-    //! Whether \p v is a marker rather than a measurement.
-    /*!
+    /// Whether \p v is a marker rather than a measurement.
+    /**
         OpenEXR's own sample images store FLT_MAX in a depth channel wherever the ray hit nothing, and
         such a value says only "no sample here" -- at the top of the float range the gap to the next
         representable value is itself larger than any radiance ever recorded. Left in the minimum and
@@ -162,9 +162,12 @@ struct PixelStats
         int    huge_pixels  = 0; ///< Finite, but a marker rather than a measurement; see is_marker()
         int    valid_pixels = 0;
 
-        //! Extremes over every sample, markers and infinities included, unlike minimum/maximum, which cover
-        //! the measurements alone. What the clip warnings ask about, so that the histogram's warning
-        //! triangles see the same samples the viewport stripes. NaN is left out of both, as in the shader.
+        /// Extremes over every sample, markers and infinities included.
+        /**
+            Unlike minimum/maximum, which cover the measurements alone. These are what the clip warnings
+            ask about, so the histogram's warning triangles see the same samples the viewport stripes. NaN
+            is left out of both, as in the shader.
+        */
         float extreme_minimum = std::numeric_limits<float>::infinity();
         float extreme_maximum = -std::numeric_limits<float>::infinity();
     };
@@ -186,8 +189,10 @@ struct PixelStats
     /// Number of samples in each bin
     std::array<std::array<float, MAX_BINS>, AxisScale_COUNT> hist_ys{};
 
-    //! Leaves every histogram empty but with usable ranges, since the GUI draws stats objects that have not
-    //! been computed yet.
+    /// Leaves every histogram empty but with usable ranges.
+    /**
+        The GUI draws stats objects that have not been computed yet.
+    */
     PixelStats()
     {
         hist_y_limits.fill(float2{0.f, 1.f});
@@ -202,8 +207,8 @@ struct PixelStats
     int    clamp_idx(int i) const { return std::clamp(i, 0, num_bins - 1); }
     float &bin_y(int i, AxisScale x_scale) { return hist_ys[x_scale][clamp_idx(i)]; }
 
-    //! Index of the bin containing \p value under \p x_scale.
-    /*!
+    /// Index of the bin containing \p value under \p x_scale.
+    /**
         Returns a negative index for a value below the binned range or for one with no bin at all (NaN), and
         num_bins for one above it. The clamp keeps the result representable: casting a non-finite double to
         int is undefined, and the GUI does ask about values far outside the range.
@@ -216,15 +221,15 @@ struct PixelStats
         return int(std::floor(std::clamp(t * num_bins, -1.0, double(num_bins))));
     }
 
-    //! Value at bin edge \p bin under \p x_scale; bin == num_bins gives the last bin's right edge.
+    /// Value at bin edge \p bin under \p x_scale; bin == num_bins gives the last bin's right edge.
     double bin_to_value(double bin, AxisScale x_scale) const
     {
         return axis_scale_inv(hist_normalization[x_scale][1] * bin / num_bins + hist_normalization[x_scale][0],
                               x_scale);
     }
 
-    //! Plot-space range the histogram's x axis should cover at \p exposure.
-    /*!
+    /// Plot-space range the histogram's x axis should cover at \p exposure.
+    /**
         \param exposure  The live exposure; display white sits at 2^-exposure
         \param x_scale   Which axis scale is active, since each shows a different amount past white
         \param headroom  The display's headroom, as a multiple of SDR white, or 0 when unknown. Widens
@@ -236,18 +241,25 @@ struct PixelStats
 
 struct Channel : public Array2Df
 {
-    //! Bits per sample in the file, or 0 when the file stores them as floating point or their depth is
-    //! unknown. Sets the histogram's bin count, via bins_for_bit_depth().
+    /// Bits per sample in the file, or 0 when it stores them as floating point or their depth is unknown.
+    /**
+        Sets the histogram's bin count, via bins_for_bit_depth().
+    */
     int bits_per_sample = 0;
 
-    //! Exclude from multi-channel groups on the next build_layers_and_groups(), which then leaves this
-    //! channel in a group of its own. Per channel, so marking an RGBA image's alpha still leaves R, G and B
-    //! grouped. Not saved and not carried into a duplicate.
+    /// Exclude from multi-channel groups on the next build_layers_and_groups(), leaving it on its own.
+    /**
+        Per channel, so marking an RGBA image's alpha still leaves R, G and B grouped. Not saved and not
+        carried into a duplicate.
+    */
     bool ungrouped = false;
 
-    //! Whether this channel is part of the multi-selection the Images panel shows and edits act on. Per
-    //! channel, like `ungrouped`, so it survives build_layers_and_groups() rebuilding the group vector.
-    //! Read through Image::is_group_selected(), which counts a group selected when all its channels are.
+    /// Whether this channel is part of the multi-selection the Images panel shows and edits act on.
+    /**
+        Per channel, like `ungrouped`, so it survives build_layers_and_groups() rebuilding the group
+        vector. Read through Image::is_group_selected(), which counts a group selected when all its
+        channels are.
+    */
     bool selected = false;
 
 private:
@@ -258,10 +270,10 @@ private:
     PixelStats::Ptr      async_stats;
     PixelStats::Settings async_settings{};
 
-    //! When cached_stats last became a finished computation, for update_stats()'s streaming throttle.
+    /// When cached_stats last became a finished computation, for update_stats()'s streaming throttle.
     std::chrono::steady_clock::time_point stats_ready_at{};
 
-    //! Take the finished async statistics as the cache and start a fresh slot for the next computation.
+    /// Take the finished async statistics as the cache and start a fresh slot for the next computation.
     void adopt_async_stats()
     {
         cached_stats   = async_stats;
@@ -275,14 +287,16 @@ public:
     static std::string                         tail(const std::string &full_name) { return split(full_name).second; }
     static std::string                         head(const std::string &full_name) { return split(full_name).first; }
 
-    std::string name; //!< The full channel name, including the layer path including periods
+    std::string name; ///< The full channel name, including the layer path including periods
 
     std::unique_ptr<Texture> texture;
     bool                     texture_is_dirty = true;
 
-    //! Set when the texture's level 0 has changed but its mip chain has not been rebuilt from it yet.
-    //! Channel textures use manual mipmapping so streaming a tile costs one glTexSubImage2D; get_texture()
-    //! does the rebuild, folding every tile that landed since the last draw into one.
+    /// Set when the texture's level 0 has changed but its mip chain has not been rebuilt from it yet.
+    /**
+        Channel textures use manual mipmapping so streaming a tile costs one glTexSubImage2D; get_texture()
+        does the rebuild, folding every tile that landed since the last draw into one.
+    */
     bool mipmap_is_dirty = true;
 
     Channel() = delete;
@@ -296,7 +310,7 @@ public:
     Channel(Channel &&other) noexcept            = default;
     Channel &operator=(Channel &&other) noexcept = default;
 
-    //! Stop any in-flight statistics computation for this channel and wait for it to unwind.
+    /// Stop any in-flight statistics computation for this channel and wait for it to unwind.
     void cancel_stats()
     {
         if (async_canceled)
@@ -319,7 +333,7 @@ public:
                      });
     }
 
-    /*!
+    /**
         Copy the data from the provided float array into this channel.
 
         \tparam         T The type of the data array
@@ -344,7 +358,7 @@ public:
                      });
     }
 
-    /*!
+    /**
         Overwrite a rectangle of this channel's pixels and push just that rectangle to the GPU, for pixels
         arriving a tile at a time as a renderer produces them.
 
@@ -385,16 +399,16 @@ public:
         Single_Channel  = 9
     };
 
-    std::string name;                 //!< One of the comma-separated recognized channel group names (e.g. 'R,G,B,A')
-    int4        channels{0};          //!< Indices into Image::channels
-    int         num_channels{0};      //!< Number of channels that are grouped together
-    Type        type{Single_Channel}; //!< Which of the predefined types of channel group
-    bool        visible{true};        //!< Whether this group is visible in the GUI
+    std::string name;                 ///< One of the comma-separated recognized channel group names (e.g. 'R,G,B,A')
+    int4        channels{0};          ///< Indices into Image::channels
+    int         num_channels{0};      ///< Number of channels that are grouped together
+    Type        type{Single_Channel}; ///< Which of the predefined types of channel group
+    bool        visible{true};        ///< Whether this group is visible in the GUI
 
     float4x4 colors() const;
 };
 
-//! True for the group types whose last channel is an alpha channel.
+/// True for the group types whose last channel is an alpha channel.
 inline bool group_has_alpha(ChannelGroup::Type type)
 {
     return type == ChannelGroup::RGBA_Channels || type == ChannelGroup::YA_Channels ||
@@ -404,18 +418,18 @@ inline bool group_has_alpha(ChannelGroup::Type type)
 struct Layer
 {
 public:
-    std::string      name; //!< The full layer 'path', including trailing period if any, but excluding channel
+    std::string      name; ///< The full layer 'path', including trailing period if any, but excluding channel
     std::vector<int> channels;
     std::vector<int> groups;
 };
 
 struct LayerTreeNode
 {
-    std::string                          name; //!< Name of just this level of the layer path (without '.')
+    std::string                          name; ///< Name of just this level of the layer path (without '.')
     std::map<std::string, LayerTreeNode> children;
-    int                                  leaf_layer     = -1; //!< Index into Image::layers, or -1 if
-    int                                  visible_groups = 0;  //!< Number of visible descendant groups
-    int                                  hidden_groups  = 0;  //!< Number of hidden descendant groups
+    int                                  leaf_layer     = -1; ///< Index into Image::layers, or -1 if
+    int                                  visible_groups = 0;  ///< Number of visible descendant groups
+    int                                  hidden_groups  = 0;  ///< Number of hidden descendant groups
 
     void calculate_visibility(const Image *img);
 };
@@ -437,55 +451,71 @@ public:
     std::string filename;
     std::string partname;
     std::string channel_selector;
-    //! The alpha override this image was loaded under, so a reload or a saved session can repeat it.
-    //! Empty when the file's own interpretation was used, which is then re-derived on reload.
+    /// The alpha override this image was loaded under, so a reload or a saved session can repeat it.
+    /**
+        Empty when the file's own interpretation was used, which is then re-derived on reload.
+    */
     std::optional<AlphaType_>     alpha_override;
     Box2i                         data_window;
     Box2i                         display_window;
     std::vector<Channel>          channels;
-    std::optional<Chromaticities> chromaticities;             //!< The chromaticities of the file
-    std::optional<float2>         adopted_neutral;            //!< The adopted neutral of the file, if any
-    float3x3                      M_RGB_to_XYZ, M_XYZ_to_RGB; //!< The RGB to XYZ and XYZ to RGB conversion matrices
+    std::optional<Chromaticities> chromaticities;             ///< The chromaticities of the file
+    std::optional<float2>         adopted_neutral;            ///< The adopted neutral of the file, if any
+    float3x3                      M_RGB_to_XYZ, M_XYZ_to_RGB; ///< The RGB to XYZ and XYZ to RGB conversion matrices
     float3x3                      M_to_sRGB         = la::identity;
     float3                        luminance_weights = sRGB_Yw();
     AdaptationMethod              adaptation_method = AdaptationMethod_Bradford;
     ColorGamut_                   color_space       = ColorGamut_Unspecified;
     WhitePoint_                   white_point       = WhitePoint_Unspecified;
-    //! How an 'A' channel is to be read: whether it is coverage at all, and if so whether the color
-    //! channels are multiplied by it and in what space. AlphaType_None keeps the channel out of an
-    //! alpha-bearing group, so nothing is multiplied by it. Read by finalize(), so set it before calling.
-    //! Equal to alpha_type_from_file unless alpha_override replaced it.
+    /// How an 'A' channel is to be read: whether it is coverage at all, and if so how it is applied.
+    /**
+        Whether the color channels are multiplied by it, and in what space. AlphaType_None keeps the
+        channel out of an alpha-bearing group, so nothing is multiplied by it. Read by finalize(), so set
+        it before calling. Equal to alpha_type_from_file unless alpha_override replaced it.
+    */
     AlphaType_ alpha_type = AlphaType_None;
-    //! What the loader concluded before any override, and how it got there, so an override can say what it
-    //! displaced. set_alpha() maintains these together with alpha_type.
+    /// What the loader concluded before any override, and how it got there.
+    /**
+        Kept so an override can say what it displaced. set_alpha() maintains these together with
+        alpha_type.
+    */
     AlphaType_           alpha_type_from_file = AlphaType_None;
     AlphaSource_         alpha_source         = AlphaSource_Assumed;
     json                 metadata             = json::object();
-    Exif                 exif;     //!< The raw EXIF data from the file, if any
-    std::vector<uint8_t> xmp_data; //!< The raw XMP data from the file, if any
-    std::vector<uint8_t> icc_data; //!< The raw ICC profile data from the file, if any
+    Exif                 exif;     ///< The raw EXIF data from the file, if any
+    std::vector<uint8_t> xmp_data; ///< The raw XMP data from the file, if any
+    std::vector<uint8_t> icc_data; ///< The raw ICC profile data from the file, if any
     bool                 orientation_applied = false;
 
     fs::path           path;
     fs::file_time_type last_modified;
     size_t             size_bytes = 0;
 
-    //! True for an image whose pixels arrive from a running process rather than from a file.
-    //! Pixels are pushed in by another process: nothing on disk backs it, so it cannot be reloaded and is
-    //! left out of a saved session. Otherwise an ordinary image.
+    /// True for an image whose pixels arrive from a running process rather than from a file.
+    /**
+        Nothing on disk backs it, so it cannot be reloaded and is left out of a saved session. Otherwise an
+        ordinary image.
+    */
     bool is_live = false;
 
-    //! Drawing commands laid over this image, in its pixel coordinates; set only by a renderer streaming
-    //! over IPC, and drawn by the viewport after the image itself. See vector_overlay.h.
+    /// Drawing commands laid over this image, in its pixel coordinates.
+    /**
+        Set only by a renderer streaming over IPC, and drawn by the viewport after the image itself. See
+        vector_overlay.h.
+    */
     std::vector<VgCommand> vector_overlay;
 
-    //! This image's undo history; each image is its own document, so closing one takes its history with it.
-    //! Only HDRViewApp::modify_image() adds to it, which is what keeps every edit paired with its reverse.
+    /// This image's undo history; each image is its own document, so closing one takes its history with it.
+    /**
+        Only HDRViewApp::modify_image() adds to it, which is what keeps every edit paired with its reverse.
+    */
     CommandHistory history;
 
-    //! Bumped whenever any of this image's pixels change after loading.
-    //! Statistics and histograms are cached against it (see PixelStats::Settings), so anything that writes
-    //! pixels must bump it.
+    /// Bumped whenever any of this image's pixels change after loading.
+    /**
+        Statistics and histograms are cached against it (see PixelStats::Settings), so anything that writes
+        pixels must bump it.
+    */
     int content_version = 0;
 
     //
@@ -501,9 +531,9 @@ public:
     // All the leaf layers of the layer hierarchy are stored as a flat list in Image::layers.
     // The hierarchical structure of all layers and channels is represented by the Image::root.
     //
-    std::vector<Layer>        layers; //!< All the leaf layers
+    std::vector<Layer>        layers; ///< All the leaf layers
     std::vector<ChannelGroup> groups;
-    LayerTreeNode             root; //!< The root of the layer "folder" hierarchy
+    LayerTreeNode             root; ///< The root of the layer "folder" hierarchy
 
     // The following are used for drawing the image in the GUI
     bool        visible            = true;
@@ -513,24 +543,24 @@ public:
     int         reference_group = 0;
 
     Image(int2 size, int num_channels);
-    //! An image with exactly these channels, in this order, named as given.
-    /*!
+    /// An image with exactly these channels, in this order, named as given.
+    /**
         The channel-count constructor names channels itself, which only suits an image whose channels are a
         plain R,G,B,A or Y,A. A renderer names its own -- `albedo.R`, `variance` -- and the layer and group
         machinery build themselves out of those names in finalize().
     */
     Image(int2 size, const std::vector<std::string> &channel_names);
 
-    //! Record what a loader concluded about the file's alpha, and apply any override to it.
-    /*!
+    /// Record what a loader concluded about the file's alpha, and apply any override to it.
+    /**
         The one place alpha_type, alpha_type_from_file and alpha_source are written, so they cannot drift
         apart. Loaders call this instead of assigning alpha_type, then read back alpha_type for the
         premultiplication decisions they have to make while the samples are still encoded.
     */
     void set_alpha(AlphaType_ from_file, AlphaSource_ source, const std::optional<AlphaType_> &override_with);
 
-    //! Set alpha_type from the channel names alone, for an image not built from a file.
-    /*!
+    /// Set alpha_type from the channel names alone, for an image not built from a file.
+    /**
         An image assembled in memory -- over IPC, by an edit, by a test -- already holds samples in
         HDRView's working representation, which is premultiplied and linear, so that is what its alpha
         says. A loader overwrites this the moment it knows what the file declared.
@@ -540,8 +570,8 @@ public:
     Image(const Image &) = delete;
     Image(Image &&)      = default;
 
-    //! Stops every channel's statistics computation before any channel is destroyed.
-    /*!
+    /// Stops every channel's statistics computation before any channel is destroyed.
+    /**
         A task computing one channel's statistics also reads its group's alpha channel, and the channel
         vector destroys its elements back to front -- so the alpha channel, being last, would be freed while
         an earlier channel's task was still reading it. Each Channel destructor only cancels its own task,
@@ -564,7 +594,7 @@ public:
 
     bool is_valid_group(int index) const { return index >= 0 && index < (int)groups.size(); }
 
-    /*!
+    /**
         \name Multi-selection
 
         Which of this image's channel groups the user has selected. Stored on the channels (see
@@ -572,7 +602,7 @@ public:
         it. HDRViewApp owns the rules relating the selection to the current and reference images.
     */
     ///@{
-    //! Whether every channel of group \p index is selected.
+    /// Whether every channel of group \p index is selected.
     bool is_group_selected(int index) const
     {
         if (!is_valid_group(index))
@@ -585,7 +615,7 @@ public:
         return true;
     }
 
-    //! Whether any of this image's channels is selected.
+    /// Whether any of this image's channels is selected.
     bool is_selected() const
     {
         for (const auto &c : channels)
@@ -594,7 +624,7 @@ public:
         return false;
     }
 
-    //! Mark or unmark every channel of group \p index.
+    /// Mark or unmark every channel of group \p index.
     void select_group(int index, bool select = true)
     {
         if (!is_valid_group(index))
@@ -604,19 +634,22 @@ public:
         for (int c = 0; c < g.num_channels; ++c) channels[size_t(g.channels[c])].selected = select;
     }
 
-    //! Unmark every channel.
+    /// Unmark every channel.
     void deselect_all()
     {
         for (auto &c : channels) c.selected = false;
     }
 
-    //! The selected groups, in group order.
+    /// The selected groups, in group order.
     std::vector<int> selected_groups() const;
     ///@}
 
-    //! The group index to use for `target`: `selected_group` for Target_Primary, `reference_group` for
-    //! Target_Secondary, falling back to `selected_group` when that is invalid -- update_visibility()
-    //! leaves it at -1 when a channel filter hides the group an image is the reference for.
+    /// The group index `target` names: `selected_group` for Target_Primary, `reference_group` for Target_Secondary.
+    /**
+        Target_Secondary falls back to `selected_group` when `reference_group` is invalid:
+        update_visibility() leaves it at -1 when a channel filter hides the group an image is the reference
+        for.
+    */
     int active_group_index(Target_ target) const
     {
         return (target == Target_Secondary && is_valid_group(reference_group)) ? reference_group : selected_group;
@@ -628,7 +661,7 @@ public:
     static void set_null_texture(Target_ target = Target_Primary);
     void        set_as_texture(Target_ target = Target_Primary);
 
-    /*!
+    /**
         \name Geometric operations
 
         The edits that change an image's shape. These are methods here because each rewrites the channel
@@ -636,8 +669,8 @@ public:
         through EditContext, which cannot restructure anything, so they are thin wrappers around these.
         duplicate() is the odd one out: it is not an edit, but builds a second image.
     */
-    //! @{
-    /*!
+    /// @{
+    /**
         Move this image's samples, carrying the data and display windows along with them.
 
         Each is exact -- every sample survives, none is resampled -- so each is its own inverse, which lets
@@ -653,12 +686,18 @@ public:
     void rotate_90_cw();
     void rotate_90_ccw();
 
-    //! Reduce the image to \p box, in image coordinates, discarding everything outside it. Both windows
-    //! become the box, so what is left is the whole image afterwards. Samples are moved, never resampled.
+    /// Reduce the image to \p box, in image coordinates, discarding everything outside it.
+    /**
+        Both windows become the box, so what is left is the whole image afterwards. Samples are moved,
+        never resampled.
+    */
     void crop(const Box2i &box);
 
-    //! Change the canvas to \p size, keeping the samples and placing them per \p anchor. Nothing is
-    //! resampled: the image gains empty margins or loses what falls outside. New samples are zero.
+    /// Change the canvas to \p size, keeping the samples and placing them per \p anchor.
+    /**
+        Nothing is resampled: the image gains empty margins or loses what falls outside. New samples are
+        zero.
+    */
     enum CanvasAnchor : int
     {
         Anchor_TopLeft = 0,
@@ -675,16 +714,21 @@ public:
     };
     void resize_canvas(int2 size, CanvasAnchor anchor);
 
-    //! Rescale the image to \p size: the same picture at a different number of samples, unlike
-    //! resize_canvas(), which changes the frame. Reducing averages over the source samples each
-    //! destination one covers; enlarging interpolates bilinearly between them.
+    /// Rescale the image to \p size: the same picture at a different number of samples.
+    /**
+        resize_canvas() changes the frame instead. Reducing averages over the source samples each
+        destination one covers; enlarging interpolates bilinearly between them.
+    */
     void resample(int2 size);
 
-    //! Rebuild the layers, groups, and tree from the channels, and nothing else -- what a structural edit
-    //! needs after changing the channel list. Not finalize(), which would premultiply a second time.
+    /// Rebuild the layers, groups, and tree from the channels, and nothing else.
+    /**
+        What a structural edit needs after changing the channel list. Not finalize(), which would
+        premultiply a second time.
+    */
     void rebuild_layers();
 
-    /*!
+    /**
         A separate image holding a copy of \p region of this one, or of all of it when \p region is empty.
 
         Deep: the samples are copied, not shared, and everything describing how to read them comes along.
@@ -694,12 +738,12 @@ public:
     ImagePtr duplicate(const Box2i &region = Box2i{}) const;
 
 private:
-    //! Move the windows the way the samples just moved, so the two stay in the same frame.
+    /// Move the windows the way the samples just moved, so the two stay in the same frame.
     void reflect_windows(bool horizontal);
     void transpose_windows();
 
 public:
-    //! @}
+    /// @}
 
     float4      raw_pixel(int2 p, Target_ target = Target_Primary) const;
     float4      rgba_pixel(int2 p, Target_ target = Target_Primary) const;
@@ -708,24 +752,23 @@ public:
     void        compute_color_transform();
     std::string to_string() const;
 
-    //! Record the file's sample depth on every channel; see Channel::bits_per_sample.
+    /// Record the file's sample depth on every channel; see Channel::bits_per_sample.
     void set_bits_per_sample(int bits)
     {
         for (auto &c : channels) c.bits_per_sample = bits;
     }
 
-    //! True when `group`'s values were premultiplied by finalize() and so must be divided back out to
-    //! report what the file holds. Straight-alpha files only.
-    //! An 'A' channel is coverage rather than ordinary data.
+    /// An 'A' channel is coverage rather than ordinary data.
     bool alpha_is_transparency() const { return alpha_type != AlphaType_None; }
 
+    /// True when finalize() premultiplied `group`, so it must be divided back out; straight-alpha only.
     bool unpremultiplies(const ChannelGroup &group) const
     {
         return alpha_type == AlphaType_Straight && group.num_channels > 1 && group_has_alpha(group.type);
     }
 
-    //! Flatten the selected group into an interleaved buffer, applying gain and a transfer function.
-    /*!
+    /// Flatten the selected group into an interleaved buffer, applying gain and a transfer function.
+    /**
         `unpremultiply` divides the color channels by alpha before the transfer function, yielding straight
         samples. `premultiply_encoded` then multiplies them back once the transfer has been applied, which
         is the associated-alpha convention every TIFF writer uses -- and is not the same as leaving
@@ -749,7 +792,7 @@ public:
         return visible_group;
     }
 
-    /*!
+    /**
         For each visible channel in the image, draw a row into an imgui table.
 
         \param img_idx The index of the image in HDRViewApp's list of images (or -1). If non-negative, will be used to
@@ -763,9 +806,11 @@ public:
     void draw_info();
     void draw_chromaticity_diagram(float width);
     void draw_colorspace();
-    //! Draws the channel-statistics rows (Minimum/Average/Maximum/Std. Dev./# NaNs/# Infs) as PropertyEditor
-    //! (PE) entries. Must be called between ImGui::PE::Begin()/End(); the caller owns the table, which also
-    //! hosts entries that aren't Image state.
+    /// Draws the channel-statistics rows (Minimum/Average/Maximum/Std. Dev./# NaNs/# Infs) as PropertyEditor entries.
+    /**
+        Must be called between ImGui::PE::Begin()/End(); the caller owns the table, which also hosts
+        entries that aren't Image state.
+    */
     void draw_channel_stats();
 
 private:

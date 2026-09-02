@@ -29,7 +29,7 @@ namespace fs = std::filesystem;
 namespace
 {
 
-//! Copies the fixture into `dir` under `name`, returning its path.
+/// Copies the fixture into `dir` under `name`, returning its path.
 fs::path place_fixture(const fs::path &dir, const char *name)
 {
     std::error_code ec;
@@ -40,9 +40,12 @@ fs::path place_fixture(const fs::path &dir, const char *name)
 
 bool is_watched(const fs::path &dir) { return hdrview()->image_loader().watched_directories().count(dir) != 0; }
 
-//! Writes a zip holding `contents` under "inside.png". A non-zero `declared` overwrites the entry's
-//! uncompressed size in both of its headers, so the archive claims more than it stores; zero leaves it
-//! alone. The header offsets are the same as in tests/test_loader_limits.cpp.
+/// Writes a zip holding `contents` under "inside.png".
+/**
+    A non-zero `declared` overwrites the entry's uncompressed size in both of its headers, so the archive
+    claims more than it stores; zero leaves it alone. The header offsets are the same as in
+    tests/test_loader_limits.cpp.
+*/
 fs::path write_zip(const fs::path &dir, const char *name, uint32_t declared, const std::string &contents)
 {
     mz_zip_archive zip;

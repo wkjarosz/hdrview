@@ -7,7 +7,7 @@
 using namespace std;
 using namespace HelloImGui;
 
-/*!
+/**
     Mirrors a pixel coordinate about the current image's display window, along whichever axes are flipped.
 
     Pixel coordinates are continuous, with pixel \c i covering <tt>[i, i+1)</tt>, so the mirror of the
@@ -97,8 +97,8 @@ void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
     reposition_pixel_to_vp_pos(focus_vp_pos, focused_pixel);
 }
 
-//! Keeps a zoom already sitting on a power of two from being rounded to the wrong side of it by float error
-//! in log2(), while being far too small to reach the neighboring stop.
+/// Nudge that keeps float error in log2() from rounding a power-of-two zoom to the wrong side of itself.
+/** Far too small to reach the neighboring stop. */
 static constexpr float k_zoom_step_epsilon = 1e-4f;
 
 void HDRViewApp::zoom_in()
@@ -230,14 +230,14 @@ void HDRViewApp::calculate_viewport()
         }
 }
 
-//! One notch of a discrete mouse wheel, in the units a precise scrolling device reports.
+/// One notch of a discrete mouse wheel, in the units a precise scrolling device reports.
 static constexpr float k_units_per_notch = 10.f;
 
-//! Frames without any wheel input after which the next event is taken to start a fresh gesture.
+/// Frames without any wheel input after which the next event is taken to start a fresh gesture.
 static constexpr int k_scroll_gesture_gap = 10;
 
-//! Puts a wheel delta on one scale, whichever kind of device produced it.
-/*!
+/// Puts a wheel delta on one scale, whichever kind of device produced it.
+/**
     Every backend HDRView builds against reports a discrete wheel as one whole unit per notch, and a precise
     device (a trackpad) as a stream of small fractions adding up to many units over a gesture. Nothing but
     the magnitude tells the two apart, so a whole-numbered delta is taken for notches and brought up to the

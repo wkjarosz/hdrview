@@ -35,8 +35,8 @@ void HDRViewApp::run()
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
 
 #if defined(HELLOIMGUI_HAS_OPENGL)
-//! Screen capture that reads the colorpass's offscreen target instead of the window's framebuffer.
-/*!
+/// Screen capture that reads the colorpass's offscreen target instead of the window's framebuffer.
+/**
     Hello ImGui's default capture reads the window, which is display-referred: whenever the colorpass runs,
     that holds whatever transfer function the display asked for (linear light, PQ, ...), and a PNG of linear
     light is read back as sRGB and comes out markedly too dark.

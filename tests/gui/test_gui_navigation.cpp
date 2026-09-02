@@ -42,8 +42,8 @@ static void load_both_fixtures(ImGuiTestContext *ctx)
     IM_CHECK_EQ(hdrview()->num_visible_images(), 2);
 }
 
-//! The Images window's image rows, in list order.
-/*!
+/// The Images window's image rows, in list order.
+/**
     The rows live in a BeginTable("ImageList", ...) that ImGui hosts in a child window named
     "Images/ImageList_<hex ID>", whose suffix is a runtime ID hash and cannot be hardcoded. Each image row
     is an unlabeled TreeNodeEx at depth 2 there (depth 3 is its nested content), so gather broadly and filter.
@@ -62,16 +62,14 @@ static std::vector<ImGuiID> gather_image_rows(ImGuiTestContext *ctx)
     return row_ids;
 }
 
-//! Whether image \p i has any channel group in the multi-selection.
+/// Whether image \p i has any channel group in the multi-selection.
 static bool image_is_selected(int i)
 {
     ConstImagePtr img = hdrview()->image(i);
     return img && img->is_selected();
 }
 
-//! Switches the Images window to its flat channel-group list, the only mode with group rows.
-//! The mode persists in the app settings, so drive the combo. Its entries are icon-prefixed, so address
-//! them by position in the popup: 1 = flat list.
+/// Switches the Images window to its flat channel-group list (combo entry 1), the only mode with group rows.
 static void use_flat_list_mode(ImGuiTestContext *ctx)
 {
     ctx->SetRef("");
@@ -83,9 +81,7 @@ static void use_flat_list_mode(ImGuiTestContext *ctx)
     ctx->Yield(2);
 }
 
-//! The channel-group rows named "(R,G,B,A)", one per fixture.
-//! Group rows and the table's header cells are both depth-3 items drawn with a leading icon glyph, so
-//! neither depth nor an empty-label test separates them; match the group name instead.
+/// The channel-group rows named "(R,G,B,A)", one per fixture, matched by name rather than by depth.
 static std::vector<ImGuiID> gather_rgba_group_rows(ImGuiTestContext *ctx)
 {
     ImGuiTestItemList all_items;

@@ -22,8 +22,10 @@
 namespace
 {
 
-//! A flip or a quarter turn: its own inverse, or paired with the opposite one. Every sample survives, so
-//! this is reversed by performing the opposite and costs a few bytes of history.
+/// A flip or a quarter turn: its own inverse, or paired with the opposite one.
+/**
+    Every sample survives, so this is reversed by performing the opposite and costs a few bytes of history.
+*/
 class Geometric final : public EditCommand
 {
 public:
@@ -54,7 +56,7 @@ public:
         return i;
     }
 
-    //! Only when there is something to crop to, and it is not already the whole image.
+    /// Only when there is something to crop to, and it is not already the whole image.
     bool enabled(const EditContext &ctx) const override
     {
         // cropping to the whole image would do nothing
@@ -87,14 +89,14 @@ public:
     }
 };
 
-//! Units a size can be given in.
+/// Units a size can be given in.
 enum SizeUnits : int
 {
     Units_Pixels = 0,
     Units_Percent
 };
 
-/*!
+/**
     Width and height, one to a row, with the chain that ties them drawn between the two (Photoshop's).
 
     \p size is always in pixels; the fields convert. Editing one row with the chain closed drives the other
@@ -180,7 +182,7 @@ public:
         return i;
     }
 
-    //! Opens on the image's own size, and does not carry it to the next one.
+    /// Opens on the image's own size, and does not carry it to the next one.
     void on_open(EditContext &ctx) override
     {
         if (auto img = ctx.image())
@@ -244,8 +246,10 @@ public:
         return i;
     }
 
-    //! Opens describing the canvas as it is: its own size, or, given relatively, no change at all. The
-    //! flag is needed because zero is a meaningful relative size.
+    /// Opens describing the canvas as it is: its own size, or, given relatively, no change at all.
+    /**
+        The flag is needed because zero is a meaningful relative size.
+    */
     void on_open(EditContext &ctx) override
     {
         if (auto img = ctx.image())

@@ -29,7 +29,7 @@ using std::vector;
 namespace
 {
 
-//! Loads the single-layer fixture and leaves it as the current image.
+/// Loads the single-layer fixture and leaves it as the current image.
 bool load_fixture(ImGuiTestContext *ctx)
 {
     reset_images(ctx);
@@ -41,7 +41,7 @@ bool load_fixture(ImGuiTestContext *ctx)
     return true;
 }
 
-//! Every sample of every channel, in channel order, so two states can be compared.
+/// Every sample of every channel, in channel order, so two states can be compared.
 vector<float> snapshot(const ConstImagePtr &img)
 {
     vector<float> out;
@@ -1766,7 +1766,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         {
             const char *what;
             Box2i       selection;
-            int2        expected; //!< Where the top-left of the patch should end up
+            int2        expected; ///< Where the top-left of the patch should end up
         };
         const int2   at{size.x / 2, size.y / 2};
         const Config configs[] = {

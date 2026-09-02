@@ -19,7 +19,7 @@
 namespace
 {
 
-//! A draw list with just enough shared state to tessellate and emit geometry.
+/// A draw list with just enough shared state to tessellate and emit geometry.
 struct TestDrawList
 {
     ImDrawListSharedData shared;
@@ -39,7 +39,7 @@ struct TestDrawList
     }
 };
 
-//! Identity image-to-screen mapping, so expected coordinates are the ones the commands name.
+/// Identity image-to-screen mapping, so expected coordinates are the ones the commands name.
 VgTransform identity_transform()
 {
     VgTransform x;
@@ -48,7 +48,7 @@ VgTransform identity_transform()
     return x;
 }
 
-//! Axis-aligned bounds of everything written into the vertex buffer.
+/// Axis-aligned bounds of everything written into the vertex buffer.
 struct Bounds
 {
     float min_x = FLT_MAX, min_y = FLT_MAX, max_x = -FLT_MAX, max_y = -FLT_MAX;

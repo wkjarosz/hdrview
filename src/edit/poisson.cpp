@@ -20,8 +20,11 @@ inline float clamped(const Array2Df &a, int x, int y)
     return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
 }
 
-//! Inner product of \p a and \p b. In double: the step lengths are ratios of two of these, and a float
-//! sum over a large region loses enough of the tail to stall the descent.
+/// Inner product of \p a and \p b.
+/**
+    In double: the step lengths are ratios of two of these, and a float sum over a large region loses enough
+    of the tail to stall the descent.
+*/
 double dot(const Array2Df &a, const Array2Df &b)
 {
     double sum = 0.0;

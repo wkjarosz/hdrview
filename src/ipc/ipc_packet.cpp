@@ -17,8 +17,10 @@
 namespace
 {
 
-//! Reads fields out of a packet's bytes, refusing to run off the end of them. Every read is checked, since
-//! the payload's own contents decide how much follows it.
+/// Reads fields out of a packet's bytes, refusing to run off the end of them.
+/**
+    Every read is checked, since the payload's own contents decide how much follows it.
+*/
 class PacketReader
 {
 public:
@@ -53,10 +55,10 @@ public:
         return value;
     }
 
-    //! Number of bytes not yet read.
+    /// Number of bytes not yet read.
     size_t remaining() const { return m_data.size() - m_index; }
 
-    //! Read `count` floats, which must be the whole of what is left.
+    /// Read `count` floats, which must be the whole of what is left.
     std::vector<float> read_floats(size_t count)
     {
         require(count * sizeof(float), "sample data");
@@ -84,7 +86,7 @@ private:
     size_t                   m_index = 0;
 };
 
-//! Builds a packet's bytes, keeping the length prefix up to date as it grows.
+/// Builds a packet's bytes, keeping the length prefix up to date as it grows.
 class PacketWriter
 {
 public:
@@ -132,7 +134,7 @@ private:
     std::vector<char> m_bytes;
 };
 
-//! Reads a channel-name list preceded by its count, bounded so a count cannot become an allocation.
+/// Reads a channel-name list preceded by its count, bounded so a count cannot become an allocation.
 std::vector<std::string> read_channel_names(PacketReader &r, int32_t count)
 {
     if (count <= 0 || count > k_max_ipc_channels)
@@ -145,7 +147,7 @@ std::vector<std::string> read_channel_names(PacketReader &r, int32_t count)
     return names;
 }
 
-//! The half-open rectangle an update packet covers, rejecting dimensions no tile has.
+/// The half-open rectangle an update packet covers, rejecting dimensions no tile has.
 Box2i read_bounds(PacketReader &r)
 {
     const int32_t x = r.read<int32_t>();
@@ -161,7 +163,7 @@ Box2i read_bounds(PacketReader &r)
     return Box2i{int2{x, y}, int2{x + w, y + h}};
 }
 
-/*!
+/**
     Highest index into the sample payload that `offsets`/`strides` can reach, or none if they overflow.
 
     Every access is `offset[c] + px * stride[c]` for px in [0, n_pixels), so the largest bounds all the

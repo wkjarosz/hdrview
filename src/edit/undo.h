@@ -16,8 +16,8 @@
 
 struct Channel;
 
-//! One reversible change to an Image.
-/*!
+/// One reversible change to an Image.
+/**
     An entry restores principal data only: the samples and the windows they sit in. Derived data
     (textures, mip chains, statistics, the layer tree) is flagged for recomputation by whoever applies it.
 */
@@ -38,8 +38,10 @@ public:
 
 using UndoPtr = std::unique_ptr<UndoEntry>;
 
-//! Specify the undo and redo commands using lambda expressions, storing no pixels at all. For operations
-//! that re-derive their inverse: a flip, or a quarter turn the other way.
+/// Specify the undo and redo commands using lambda expressions, storing no pixels at all.
+/**
+    For operations that re-derive their inverse: a flip, or a quarter turn the other way.
+*/
 class LambdaUndo : public UndoEntry
 {
 public:
@@ -60,12 +62,15 @@ private:
     std::function<void(Image &)> m_undo, m_redo;
 };
 
-//! A rectangle of some channels, saved before an edit overwrote it. Construct from the pre-edit image;
-//! undo and redo both swap the stored pixels with the image's, so only that rectangle reaches the GPU.
+/// A rectangle of some channels, saved before an edit overwrote it.
+/**
+    Construct from the pre-edit image; undo and redo both swap the stored pixels with the image's, so only
+    that rectangle reaches the GPU.
+*/
 class ChannelRectUndo : public UndoEntry
 {
 public:
-    /*!
+    /**
         Snapshot \p bounds of the given channels of \p img.
 
         \param img      Image to read from; must be in its pre-edit state
@@ -81,23 +86,22 @@ public:
     size_t      memory_usage() const override;
 
 private:
-    //! Exchange the stored pixels with the image's, leaving this entry holding what it just replaced.
+    /// Exchange the stored pixels with the image's, leaving this entry holding what it just replaced.
     void swap(Image &img);
 
     std::string           m_name;
-    Box2i                 m_bounds; //!< In image coordinates
+    Box2i                 m_bounds; ///< In image coordinates
     std::vector<int>      m_channels;
-    std::vector<Array2Df> m_pixels; //!< One per entry of m_channels, sized to m_bounds
+    std::vector<Array2Df> m_pixels; ///< One per entry of m_channels, sized to m_bounds
 };
 
-//! An image's whole channel list and windows, for cropping, resizing, and anything that adds or removes
-//! a channel. Putting one back swaps the vectors, so the sample buffers move rather than copy.
+/// An image's whole channel list and windows, for cropping, resizing, and anything that adds or removes one.
 class StructureUndo : public UndoEntry
 {
 public:
     /// Snapshot the channels and windows of \p img, which must be in its pre-edit state.
     StructureUndo(const Image &img, std::string name);
-    //! Out of line because Channel is incomplete here and the vector has to destroy them.
+    /// Out of line because Channel is incomplete here and the vector has to destroy them.
     ~StructureUndo() override;
 
     void        undo(Image &img) override { swap(img); }
@@ -113,13 +117,15 @@ private:
     Box2i                m_data_window, m_display_window;
 };
 
-//! Every field compute_color_transform() reads or writes, plus the profile name, saved before a color
-//! conversion changed them. Rides alongside the pixels in a CompositeUndo, since the two must undo together.
+/// Every field compute_color_transform() reads or writes, plus the profile name, as a color conversion found them.
+/**
+    Rides alongside the pixels in a CompositeUndo, since the two must undo together.
+*/
 class ColorMetadataUndo : public UndoEntry
 {
 public:
     ColorMetadataUndo(const Image &img, std::string name);
-    //! Out of line because State is incomplete here and the pointer has to destroy it.
+    /// Out of line because State is incomplete here and the pointer has to destroy it.
     ~ColorMetadataUndo() override;
 
     void        undo(Image &img) override { swap(img); }
@@ -130,11 +136,11 @@ private:
     void swap(Image &img);
 
     struct State;
-    std::unique_ptr<State> m_state; //!< Out of line, since its members need image.h
+    std::unique_ptr<State> m_state; ///< Out of line, since its members need image.h
     std::string            m_name;
 };
 
-//! Several entries applied as one, undone in the opposite order to how they were built.
+/// Several entries applied as one, undone in the opposite order to how they were built.
 class CompositeUndo : public UndoEntry
 {
 public:
@@ -164,8 +170,11 @@ private:
     std::vector<UndoPtr> m_entries;
 };
 
-//! An image's undo history: the entries applied so far, and a cursor into them. Bounded by total bytes,
-//! since what threatens memory is one large structural edit and not many small ones.
+/// An image's undo history: the entries applied so far, and a cursor into them.
+/**
+    Bounded by total bytes, since what threatens memory is one large structural edit and not many small
+    ones.
+*/
 class CommandHistory
 {
 public:
@@ -204,12 +213,14 @@ public:
     /// Total bytes held by the entries.
     size_t memory_usage() const;
 
-    //! Largest total the entries may occupy before the oldest are dropped. Generous, since dropping one
-    //! silently shortens how far back the user can go.
+    /// Largest total the entries may occupy before the oldest are dropped.
+    /**
+        Generous, since dropping one silently shortens how far back the user can go.
+    */
     static constexpr size_t k_max_memory = size_t(1) << 30; // 1 GiB
 
 private:
-    //! Drop the oldest entries until the total fits in k_max_memory.
+    /// Drop the oldest entries until the total fits in k_max_memory.
     void trim();
 
     std::vector<UndoPtr> m_entries;

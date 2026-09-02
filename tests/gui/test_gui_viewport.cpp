@@ -30,9 +30,11 @@ namespace
 
 bool approx(float2 a, float2 b, float eps = 1e-2f) { return la::maxelem(la::abs(a - b)) < eps; }
 
-//! Gives an image, for as long as it is in scope, the sort of display window an OpenEXR file carries:
-//! offset from the origin and a different size from the data window. The PNG fixtures' two windows
-//! coincide at the origin, which hides every place the two are confused for one another.
+/// Gives an image, while in scope, an OpenEXR-style display window: offset, and sized unlike the data window.
+/**
+    The PNG fixtures' two windows coincide at the origin, which hides every place the two are confused for
+    one another.
+*/
 struct ScopedDisplayWindow
 {
     ImagePtr img;
@@ -45,7 +47,7 @@ struct ScopedDisplayWindow
     ~ScopedDisplayWindow() { img->display_window = saved; }
 };
 
-//! Every combination of the two flip axes, so no test below checks only the unflipped case.
+/// Every combination of the two flip axes, so no test below checks only the unflipped case.
 struct FlipState
 {
     bool &h       = *hdrview()->action("Flip horizontally").p_selected;

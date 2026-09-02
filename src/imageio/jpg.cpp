@@ -124,8 +124,8 @@ bool is_jpg_image(std::istream &is) noexcept
 namespace
 {
 
-//! Call \p visit(marker, payload, size, file_offset) for each APP or COM marker in a JPEG's header.
-/*!
+/// Call \p visit(marker, payload, size, file_offset) for each APP or COM marker in a JPEG's header.
+/**
     libjpeg hands back saved markers without saying where in the file they were, and MPF offsets count from
     the MPF marker's own payload, so walk the segments directly. Stops at the start-of-scan.
 
@@ -163,7 +163,7 @@ void for_each_jpeg_marker(const uint8_t *data, size_t size, F &&visit)
     }
 }
 
-//! Payload of the first marker whose data starts with \p signature, and where in the file it began.
+/// Payload of the first marker whose data starts with \p signature, and where in the file it began.
 struct MarkerPayload
 {
     const uint8_t *data        = nullptr;
@@ -187,20 +187,20 @@ MarkerPayload find_marker(const uint8_t *file, size_t file_size, uint8_t app, co
     return found;
 }
 
-//! One image listed in a JPEG multi-picture (MPF) index.
+/// One image listed in a JPEG multi-picture (MPF) index.
 struct MPImage
 {
-    uint32_t type   = 0; //!< MP type code: 0x030000 primary, 0x050000 gain map, 0x01xxxx thumbnail
-    uint32_t offset = 0; //!< Offset in the file, already made absolute
-    uint32_t size   = 0; //!< Length in bytes
+    uint32_t type   = 0; ///< MP type code: 0x030000 primary, 0x050000 gain map, 0x01xxxx thumbnail
+    uint32_t offset = 0; ///< Offset in the file, already made absolute
+    uint32_t size   = 0; ///< Length in bytes
 
     bool is_primary() const { return type == 0x030000u; }
     bool is_thumbnail() const { return (type & 0xFF0000u) == 0x010000u; }
     bool is_gainmap() const { return type == 0x050000u; }
 };
 
-//! Read the multi-picture index out of a JPEG's MPF marker.
-/*!
+/// Read the multi-picture index out of a JPEG's MPF marker.
+/**
     MPF (CIPA DC-007) hangs a TIFF-structured index off an APP2 marker, listing every image packed into the
     file. A gain map is one of those, either declared as such or left Undefined.
 
@@ -285,16 +285,16 @@ vector<MPImage> parse_mpf_index(const uint8_t *file, size_t file_size)
     return images;
 }
 
-//! Gain-map metadata carried by one image inside an MPF file, in whichever form it uses.
+/// Gain-map metadata carried by one image inside an MPF file, in whichever form it uses.
 struct SecondaryGainmap
 {
-    std::optional<IsoGainmapParams> iso;           //!< ISO 21496-1, from an APP2 block or hdrgm XMP
-    bool                            apple = false; //!< Apple's vendor format, from its XMP aux type
+    std::optional<IsoGainmapParams> iso;           ///< ISO 21496-1, from an APP2 block or hdrgm XMP
+    bool                            apple = false; ///< Apple's vendor format, from its XMP aux type
 
     explicit operator bool() const { return iso.has_value() || apple; }
 };
 
-//! Work out whether \p image is a gain map, and read whatever parameters say how to apply it.
+/// Work out whether \p image is a gain map, and read whatever parameters say how to apply it.
 SecondaryGainmap read_secondary_gainmap(const uint8_t *image, size_t size)
 {
     static constexpr char k_iso_sig[] = "urn:iso:std:iso:ts:21496:-1";
@@ -347,8 +347,8 @@ SecondaryGainmap read_secondary_gainmap(const uint8_t *image, size_t size)
 static std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts,
                                             bool find_gainmap);
 
-//! Reconstruct \p image's HDR rendition from a gain map packed alongside it, if the file has one.
-/*!
+/// Reconstruct \p image's HDR rendition from a gain map packed alongside it, if the file has one.
+/**
     A JPEG carries a gain map as a second image inside the same file, indexed by an MPF marker. Android and
     Adobe describe theirs with ISO 21496-1 or the equivalent `hdrgm:` XMP on the map itself; Apple marks the
     map by auxiliary image type and puts the strength in the primary image's maker note. Well-formed
@@ -437,8 +437,8 @@ static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOpt
     }
 }
 
-//! Body of load_jpg_image(), with a switch for the one caller that must not recurse.
-/*!
+/// Body of load_jpg_image(), with a switch for the one caller that must not recurse.
+/**
     \param find_gainmap  Whether to look for a gain map packed alongside this image. False when this is
                         the gain map, since a malformed file could otherwise nest them without end.
 */

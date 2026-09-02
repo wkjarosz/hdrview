@@ -75,9 +75,11 @@ static std::string_view extract_XMP_content(const string &xmp_blob)
     return sv.substr(first, last - first + 1);
 }
 
-//! Stores `value` under `prefix`.`local`, without assuming what may already be at `prefix`.
-//! An unprefixed attribute of the same name may already have put a plain string there, and indexing into
-//! that throws, so fall back to the flat "prefix:local" key, which collides with nothing.
+/// Stores `value` under `prefix`.`local`, without assuming what may already be at `prefix`.
+/**
+    An unprefixed attribute of the same name may already have put a plain string there, and indexing into
+    that throws, so fall back to the flat "prefix:local" key, which collides with nothing.
+*/
 static void assign_prefixed(json &result, const std::string &prefix, const std::string &local, json value)
 {
     if (!result.contains(prefix))

@@ -10,7 +10,7 @@ using namespace stp;
 namespace
 {
 
-//! Scale each pixel's color channels by `factor(alpha)`, leaving alpha itself alone.
+/// Scale each pixel's color channels by `factor(alpha)`, leaving alpha itself alone.
 template <typename F>
 void scale_colors_by_alpha(float *pixels, int3 size, F &&factor)
 {

@@ -26,15 +26,19 @@ bool HDRViewApp::can_edit(const ConstImagePtr &img) { return img && !img->is_liv
 namespace
 {
 
-//! HDRViewApp seen through the narrow opening edit commands are written against; see edit/command.h.
-//! Cheap enough to build on the stack wherever one is needed. Every method supplies the current image and
-//! subject, so a command names only what it is doing.
+/// HDRViewApp seen through the narrow opening edit commands are written against; see edit/command.h.
+/**
+    Cheap enough to build on the stack wherever one is needed. Every method supplies the current image and
+    subject, so a command names only what it is doing.
+*/
 struct AppEditContext final : EditContext
 {
     HDRViewApp *app;
 
-    //! The image this run of the command is against: the current one unless it is fanning out over the
-    //! selection; see HDRViewApp::apply_edit_command().
+    /// The image this run of the command is against; see HDRViewApp::apply_edit_command().
+    /**
+        The current one, unless the command is fanning out over the selection.
+    */
     ImagePtr img;
 
     explicit AppEditContext(HDRViewApp *a) : app(a), img(a->target_image()) {}
@@ -315,7 +319,7 @@ bool HDRViewApp::modify_channels(const ImagePtr &img, const string &name, const 
         { return std::make_unique<ChannelRectUndo>(image, channels, bounds, name); });
 }
 
-//! The groups \p subject's scope names, before any filtering by what they contain.
+/// The groups \p subject's scope names, before any filtering by what they contain.
 static std::vector<int> subject_groups(const Image &img, const EditSubject &subject)
 {
     std::vector<int> groups;

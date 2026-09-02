@@ -326,8 +326,8 @@ constexpr uint16_t k_sampleformat_uint   = 1;
 constexpr uint16_t k_sampleformat_int    = 2;
 constexpr uint16_t k_sampleformat_ieeefp = 3;
 
-//! Builds a minimal single-strip grayscale TIFF: one IFD, uncompressed, one sample per pixel.
-/*!
+/// Builds a minimal single-strip grayscale TIFF: one IFD, uncompressed, one sample per pixel.
+/**
     `samples` holds raw sample words in the file's own bit width, written in `endian`'s byte order; `bits`
     must be a whole number of bytes. Generated so the byte-order axis is reachable: a byte blob is one
     endianness only, and little-endian is the one where a host-order bug hides.

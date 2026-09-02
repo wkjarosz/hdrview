@@ -139,8 +139,7 @@ struct Exif::Impl
     std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data{nullptr, &exif_data_unref};
     std::unique_ptr<ExifLog, decltype(&exif_log_unref)>   exif_log{nullptr, &exif_log_unref};
 
-    //! libexif's log callback keeps firing after the constructor (e.g. from to_json()), so this can't be
-    //! a local
+    /// libexif's log callback keeps firing after the constructor (e.g. from to_json()), so this can't be local.
     bool load_error = false;
 };
 
@@ -243,8 +242,8 @@ bool maker_note_range_within(uint32_t offset, uint32_t size, uint32_t bound)
     return offset <= bound && size <= bound - offset;
 }
 
-//! Walk the entries of an Apple maker note, which libexif has no decoder for.
-/*!
+/// Walk the entries of an Apple maker note, which libexif has no decoder for.
+/**
     The note is a TIFF-style IFD preceded by a 12-byte "Apple iOS" header, with its own byte order and
     with entry offsets counted from the start of the note rather than the start of the EXIF block.
 

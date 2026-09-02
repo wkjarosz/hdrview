@@ -55,9 +55,9 @@ namespace
 
 enum Caps : unsigned
 {
-    Cap_Float = 1u << 0, //!< stores unbounded values, and is therefore written linear
-    Cap_Alpha = 1u << 1, //!< can store an alpha channel
-    Cap_Lossy = 1u << 2, //!< moves samples even at maximum quality
+    Cap_Float = 1u << 0, ///< stores unbounded values, and is therefore written linear
+    Cap_Alpha = 1u << 1, ///< can store an alpha channel
+    Cap_Lossy = 1u << 2, ///< moves samples even at maximum quality
 };
 
 struct Writer
@@ -141,7 +141,7 @@ const Layout k_layouts[] = {
 };
 // clang-format on
 
-//! Values low enough that unpremultiplying on the way out cannot clamp, and distinct per channel.
+/// Values low enough that unpremultiplying on the way out cannot clamp, and distinct per channel.
 ImagePtr make_image(const Layout &layout, float alpha)
 {
     // not square: a transposed stride is invisible in a square image
@@ -167,7 +167,7 @@ ImagePtr make_image(const Layout &layout, float alpha)
     return img;
 }
 
-//! Color with the premultiply divided back out, which is comparable whether or not alpha survived.
+/// Color with the premultiply divided back out, which is comparable whether or not alpha survived.
 float3 straight_rgb(const float4 &premultiplied)
 {
     const float a = std::max(1e-4f, premultiplied[3]);

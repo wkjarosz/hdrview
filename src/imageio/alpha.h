@@ -9,7 +9,7 @@
 #include "imageio/image_loader.h"
 #include <optional>
 
-//! The alpha override from the load options, or nullopt. Loaders need it before linearizing.
+/// The alpha override from the load options, or nullopt. Loaders need it before linearizing.
 inline std::optional<AlphaType_> alpha_override_of(const ImageLoadOptions &opts)
 {
     return opts.override_alpha ? std::optional<AlphaType_>{opts.alpha_override} : std::nullopt;

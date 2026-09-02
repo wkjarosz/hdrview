@@ -37,11 +37,13 @@ static constexpr socket_t k_no_sock = -1;
 namespace
 {
 
-//! How long the receive thread blocks in poll() before rechecking whether it has been asked to stop. This
-//! bounds how long stop() takes; poll() returns as soon as a packet or a connection arrives.
+/// How long the receive thread blocks in poll() before rechecking whether it has been asked to stop.
+/**
+    This bounds how long stop() takes; poll() returns as soon as a packet or a connection arrives.
+*/
 constexpr int k_poll_timeout_ms = 100;
 
-//! Largest amount read from one connection per poll, so one busy client cannot starve the others.
+/// Largest amount read from one connection per poll, so one busy client cannot starve the others.
 constexpr size_t k_recv_chunk = 1 << 16;
 
 std::string socket_error_string()
@@ -73,7 +75,7 @@ bool set_non_blocking(socket_t s)
 #endif
 }
 
-//! True when a non-blocking call failed only because there is nothing to do yet.
+/// True when a non-blocking call failed only because there is nothing to do yet.
 bool would_block()
 {
 #if defined(_WIN32)
@@ -83,7 +85,7 @@ bool would_block()
 #endif
 }
 
-//! Winsock needs initializing once per process; everywhere else this is nothing.
+/// Winsock needs initializing once per process; everywhere else this is nothing.
 bool init_sockets()
 {
 #if defined(_WIN32)
@@ -98,11 +100,11 @@ bool init_sockets()
 #endif
 }
 
-//! One connected client, and the bytes of it that have arrived so far.
+/// One connected client, and the bytes of it that have arrived so far.
 struct Connection
 {
     socket_t          socket = k_no_sock;
-    std::vector<char> buffer; //!< a recv() returns whatever has arrived, which is rarely a whole packet
+    std::vector<char> buffer; ///< a recv() returns whatever has arrived, which is rarely a whole packet
 };
 
 } // namespace

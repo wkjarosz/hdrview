@@ -101,9 +101,11 @@ static std::vector<const heif_encoder_descriptor *> s_encoder_descriptors;
 static std::vector<HeifEncoderPtr>                  s_encoders;
 static bool                                         s_encoders_initialized = false;
 
-//! heif_init() loads libheif's codec plugins; without it, distributions that ship those codecs as separate
-//! shared objects (Debian, Ubuntu, Fedora) offer no HEVC or AV1 encoder at all. No matching heif_deinit():
-//! the plugins stay loaded for the life of the process.
+/// heif_init() loads libheif's codec plugins, which distributions often ship as separate shared objects.
+/**
+    Without it, Debian, Ubuntu and Fedora builds offer no HEVC or AV1 encoder at all. There is no matching
+    heif_deinit(): the plugins stay loaded for the life of the process.
+*/
 static void ensure_heif_initialized()
 {
     static std::once_flag once;
@@ -116,11 +118,14 @@ static void ensure_heif_initialized()
                    });
 }
 
-//! JPEG has no alpha channel; every other codec HEIF can carry does.
+/// JPEG has no alpha channel; every other codec HEIF can carry does.
 static bool codec_stores_alpha(heif_compression_format format) { return format != heif_compression_JPEG; }
 
-//! Whether `format` may be written under `codec`. libheif makes the primary item's brand the file's major
-//! brand, and an AV1 item reports 'avif', so an AV1 payload is an AVIF whatever the file is named.
+/// Whether `format` may be written under `codec`.
+/**
+    libheif makes the primary item's brand the file's major brand, and an AV1 item reports 'avif', so an AV1
+    payload is an AVIF whatever the file is named.
+*/
 static bool codec_admits(HEIFCodec codec, heif_compression_format format)
 {
     switch (codec)
@@ -132,7 +137,7 @@ static bool codec_admits(HEIFCodec codec, heif_compression_format format)
     }
 }
 
-//! Indices into s_encoders whose codec `codec` admits, in the order libheif reports them.
+/// Indices into s_encoders whose codec `codec` admits, in the order libheif reports them.
 static std::vector<size_t> encoders_for(HEIFCodec codec)
 {
     std::vector<size_t> result;
@@ -143,8 +148,10 @@ static std::vector<size_t> encoders_for(HEIFCodec codec)
     return result;
 }
 
-//! The encoder to start on: the first that implements `codec`, preferring HEVC when anything goes and,
-//! where there is a choice, one that can store alpha.
+/// The encoder to start on: the first that implements `codec`.
+/**
+    Prefers HEVC when any codec will do and, where there is a choice, one that can store alpha.
+*/
 static size_t default_encoder_for(HEIFCodec codec, bool need_alpha)
 {
     auto candidates = encoders_for(codec);
@@ -540,8 +547,10 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     return image;
 }
 
-//! Decode auxiliary image \p aux_handle into floats normalized to [0,1], at whatever resolution and channel
-//! count the file stored it. No color management: a gain map's samples are coefficients, not colors.
+/// Decode auxiliary image \p aux_handle to floats in [0,1], at whatever resolution and channel count it has.
+/**
+    No color management: a gain map's samples are coefficients, not colors.
+*/
 static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
 {
     heif_colorspace preferred_colorspace = heif_colorspace_undefined;
@@ -604,8 +613,8 @@ static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
     return out;
 }
 
-//! Reconstruct \p image's HDR rendition from an Apple gain map, when the file carries one.
-/*!
+/// Reconstruct \p image's HDR rendition from an Apple gain map, when the file carries one.
+/**
     Apple stores its gain maps as auxiliary images typed urn:com:apple:photo:<year>:aux:hdrgainmap, with the
     reconstruction strength in the primary image's maker note. HEIC's ISO 21496-1 gain maps are 'tmap'
     derived items, which libheif has no API for yet, so files carrying only those load as their base.

@@ -30,7 +30,7 @@ ImagePtr make_rgb(int2 size = int2{16, 12})
     return img;
 }
 
-//! The major brand out of the file's ftyp box: 4 bytes of size, 'ftyp', then the brand.
+/// The major brand out of the file's ftyp box: 4 bytes of size, 'ftyp', then the brand.
 std::string major_brand(const std::string &bytes)
 {
     REQUIRE(bytes.size() >= 12);

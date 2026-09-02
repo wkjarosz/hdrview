@@ -94,8 +94,8 @@ void show_in_file_manager(const char *filename)
 //------------------------------------------------------------------------------
 //  Javascript interface functions
 //
-//! Two-finger pan and pinch-to-zoom, read straight from the browser's touch events.
-/*!
+/// Two-finger pan and pinch-to-zoom, read straight from the browser's touch events.
+/**
     GLFW has no gesture API, and the Emscripten port hello_imgui uses tracks a single touch point,
     synthesizing mouse events from it and discarding the rest. Registering alongside the port's own
     listeners leaves that synthesis intact, so one finger still pans through the ordinary mouse path.

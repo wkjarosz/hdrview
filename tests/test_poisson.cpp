@@ -14,7 +14,7 @@
 namespace
 {
 
-//! A mask covering everything but a border \p margin samples wide, which is what the solve requires.
+/// A mask covering everything but a border \p margin samples wide, which is what the solve requires.
 Array2Df interior_mask(int2 size, int margin = 1)
 {
     Array2Df m{size};
@@ -31,7 +31,7 @@ Array2Df filled(int2 size, float v)
     return a;
 }
 
-//! Values varying in both directions, whose Laplacian is not trivially zero.
+/// Values varying in both directions, whose Laplacian is not trivially zero.
 Array2Df bumpy(int2 size, float scale = 1.f)
 {
     Array2Df a{size};

@@ -66,7 +66,7 @@ size_t ChannelRectUndo::memory_usage() const
     return total;
 }
 
-//! Everything about an image that says what its samples mean as color.
+/// Everything about an image that says what its samples mean as color.
 struct ColorMetadataUndo::State
 {
     std::optional<Chromaticities> chromaticities;
@@ -76,7 +76,7 @@ struct ColorMetadataUndo::State
     AdaptationMethod              adaptation_method;
     ColorGamut_                   color_space;
     WhitePoint_                   white_point;
-    std::string                   color_profile; //!< metadata["color profile"], the panel's "Profile name"
+    std::string                   color_profile; ///< metadata["color profile"], the panel's "Profile name"
 };
 
 ColorMetadataUndo::ColorMetadataUndo(const Image &img, std::string name) :

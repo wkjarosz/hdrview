@@ -54,7 +54,7 @@ static int alpha_channel_index(const ChannelGroup &group)
     }
 }
 
-/*!
+/**
     Hit-tests the two clip-warning toggles in the histogram's top corners -- shadows on the left, highlights
     on the right -- flipping \p warnings when one is clicked, and reports where they landed so
     paint_clip_warning_toggles() can render them later. \p ui_font_size is the app's normal text size,
@@ -105,7 +105,7 @@ static ClipWarningToggles place_clip_warning_toggles(bool2 &warnings, float ui_f
     return toggles;
 }
 
-/*!
+/**
     Paints the clip-warning toggles placed by place_clip_warning_toggles(): a rounded square button holding
     an upward isosceles triangle, i.e. an inverted take on a combo box's dropdown arrow button.
 
@@ -146,10 +146,10 @@ static void paint_clip_warning_toggles(const ClipWarningToggles &toggles, const 
     }
 }
 
-//! Fraction of its usual alpha a display-range mark keeps while the range it describes is out of reach.
+/// Fraction of its usual alpha a display-range mark keeps while the range it describes is out of reach.
 static constexpr float unreachable_alpha = 0.5f;
 
-/*!
+/**
     Names the two halves of what the display can show, the way Lightroom does, as tick labels on a second
     x axis along the top of the plot.
 
@@ -264,7 +264,7 @@ static optional<double> setup_display_range_axis(const Box1d &sdr_x, double ceil
     return dimmed_hdr_name;
 }
 
-/*!
+/**
     Draws each display range's extent into the top axis as a square bracket over the band: a run out from
     either side of the band's name, each turning back toward the axis at the boundary it reaches.
 
@@ -372,7 +372,7 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
     }
 }
 
-/*!
+/**
     Draws the vertical line marking the ceiling of what the display can currently show.
 
     The ceiling is only ever as good as the peak the display reports, which on Wayland is whatever the
@@ -397,7 +397,7 @@ static void draw_display_ceiling_line(double ceiling_x, bool dimmed)
     ImPlot::PopPlotClipRect();
 }
 
-/*!
+/**
     Draws the drag-to-resize grip below the histogram, modeled on the column-resize divider of a PE table:
     ImGui's TableUpdateBorders()/TableGetColumnBorderCol() rotated 90 degrees, reusing its 4px hit band, its
     delayed hover feedback, its Separator colors, and its double-click-to-restore gesture.
@@ -943,7 +943,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id_, bool is
     }
 }
 
-/*!
+/**
 
 */
 void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id_, bool is_current, bool is_reference,

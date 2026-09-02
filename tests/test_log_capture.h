@@ -24,7 +24,7 @@ public:
         sinks.erase(std::remove(sinks.begin(), sinks.end(), m_sink), sinks.end());
     }
 
-    //! Whether anything logged so far contains `substring`.
+    /// Whether anything logged so far contains `substring`.
     bool saw(const std::string &substring) const
     {
         std::lock_guard<std::mutex> lock(m_sink->mutex_);

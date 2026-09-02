@@ -27,8 +27,8 @@ enum AlphaType : AlphaType_
     AlphaType_Count
 };
 
-//! Where an image's AlphaType_ came from, which is not the same question as what it is.
-/*!
+/// Where an image's AlphaType_ came from, which is not the same question as what it is.
+/**
     A file can state its alpha kind, or its format can settle it for every conforming file, or nothing can
     say and the loader has to pick. Only the last is a guess, and it is where an override is most likely
     wanted. An explicit tag is not automatically the most trustworthy of the three -- ImageMagick and vips
@@ -38,19 +38,21 @@ enum AlphaType : AlphaType_
 using AlphaSource_ = int;
 enum AlphaSource : AlphaSource_
 {
-    AlphaSource_Assumed = 0, //!< Nothing stated it; the loader picked a default
-    AlphaSource_Format,      //!< The format settles it for every conforming file
-    AlphaSource_File,        //!< This file said so, in a tag or flag of its own
+    AlphaSource_Assumed = 0, ///< Nothing stated it; the loader picked a default
+    AlphaSource_Format,      ///< The format settles it for every conforming file
+    AlphaSource_File,        ///< This file said so, in a tag or flag of its own
     AlphaSource_Count
 };
 
 const char *alpha_type_name(AlphaType_ at);
-//! How the alpha kind was arrived at, phrased to follow it: "Straight (from the file)".
+/// How the alpha kind was arrived at, phrased to follow it: "Straight (from the file)".
 const char *alpha_source_suffix(AlphaSource_ as);
-//! The same, phrased to introduce a kind instead: "the file said Straight", for where an override has
-//! displaced one and both have to appear.
+/// The same, phrased to introduce a kind instead: "the file said Straight".
+/**
+    For where an override has displaced a kind and both have to appear.
+*/
 const char *alpha_source_phrase(AlphaSource_ as);
-//! Name for the alpha-override combo, which needs to say more than the metadata panel's one-word label.
+/// Name for the alpha-override combo, which needs to say more than the metadata panel's one-word label.
 const char  *alpha_override_name(AlphaType_ at);
 const char **alpha_type_names();
 
@@ -148,7 +150,7 @@ enum WhitePoint_ : WhitePoint
     WhitePoint_C,                                  // obsolete, average / North sky daylight
     WhitePoint_E,                                  // equal energy
     WhitePoint_LastNamed = WhitePoint_E,
-    WhitePoint_Unspecified, //!< unspecified, assuming D65
+    WhitePoint_Unspecified, ///< unspecified, assuming D65
     WhitePoint_Custom,
     WhitePoint_Count
 };
@@ -183,20 +185,19 @@ enum ColorGamut_ : ColorGamut
     ColorGamut_Count
 };
 
-//! Returns a description of the ColorGamut enum value.
+/// Returns a description of the ColorGamut enum value.
 const char  *color_gamut_name(const ColorGamut_ primaries);
 const char **color_gamut_names();
 
-//! Returns the Chromaticities corresponding to one of the predefined color primaries, or throws if the primaries
-//! are not recognized.
+/// The Chromaticities of one of the predefined color primaries; throws if the primaries are not recognized.
 Chromaticities gamut_chromaticities(ColorGamut_ primaries);
 Chromaticities chromaticities_from_CICP(int cp);
 // Returns -1 if the chromaticities do not match one of the predefined CICP values
 int         chromaticities_to_CICP(const Chromaticities &chr);
 ColorGamut_ named_color_gamut(const Chromaticities &chr);
 
-//! Smallest gamma that still describes a power curve.
-/*!
+/// Smallest gamma that still describes a power curve.
+/**
     It is inverted before use, so zero divides by zero and a negative value sends a black pixel to
     infinity; nothing above this needs a bound.
 */
@@ -211,7 +212,7 @@ struct TransferFunction
         Linear,
         Gamma,
         sRGB,
-        ITU, //!< ITU-T BT.601, BT.709 and BT.2020 specifications, and SMPTE 170M
+        ITU, ///< ITU-T BT.601, BT.709 and BT.2020 specifications, and SMPTE 170M
         BT2100_PQ,
         BT2100_HLG,
         ST240,
@@ -240,10 +241,10 @@ std::string color_profile_name(const Chromaticities &chroma, TransferFunction tf
 using AdaptationMethod_ = int;
 enum AdaptationMethod : AdaptationMethod_
 {
-    AdaptationMethod_Identity = 0, //!< Identity CAT
-    AdaptationMethod_XYZScaling,   //!< XYZ scaling CAT
-    AdaptationMethod_Bradford,     //!< Bradford CAT
-    AdaptationMethod_VonKries,     //!< Von Kries CAT
+    AdaptationMethod_Identity = 0, ///< Identity CAT
+    AdaptationMethod_XYZScaling,   ///< XYZ scaling CAT
+    AdaptationMethod_Bradford,     ///< Bradford CAT
+    AdaptationMethod_VonKries,     ///< Von Kries CAT
     AdaptationMethod_Count
 };
 
@@ -265,10 +266,10 @@ template <typename T>
 struct TabulatedSpectrum
 {
     std::vector<T> values;
-    float          min_wavelength = 380.f; //!< minimum wavelength in nm
-    float          max_wavelength = 830.f; //!< maximum wavelength in nm
+    float          min_wavelength = 380.f; ///< minimum wavelength in nm
+    float          max_wavelength = 830.f; ///< maximum wavelength in nm
 
-    //! Return the location of the spanning bins (x,y components), and the lerp factor between them (z)
+    /// Return the location of the spanning bins (x,y components), and the lerp factor between them (z)
     float3 find_interval(float wavelength) const
     {
         float t = saturate(lerp_factor(min_wavelength, max_wavelength, wavelength));
@@ -295,14 +296,14 @@ struct TabulatedSpectrum
     }
 };
 
-/*! Compute Planckian locus from correlated color temperature (CCT) in Kelvin.
+/** Compute Planckian locus from correlated color temperature (CCT) in Kelvin.
 
     Based on Kim et al. (2002), valid for 1667K <= T <= 25000K.
 
     See https://en.wikipedia.org/wiki/Planckian_locus#Approximation
 */
 float2 Kelvin_to_xy(float T);
-/*! Compute CIE daylight chromaticity coordinates (xD, yD) from correlated color temperature (CCT) in Kelvin
+/** Compute CIE daylight chromaticity coordinates (xD, yD) from correlated color temperature (CCT) in Kelvin
 
     See https://en.wikipedia.org/wiki/Standard_illuminant#Computation
 */
@@ -310,7 +311,7 @@ float2                           daylight_to_xy(float T);
 const TabulatedSpectrum<float>  &white_point_spectrum(WhitePoint_ wp = WhitePoint_D65);
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra();
 
-/*! Convert a wavelength in nanometers to a CIE 1931 chromaticity value.
+/** Convert a wavelength in nanometers to a CIE 1931 chromaticity value.
 
     \param wavelength
         Wavelength in nanometers, must be in the range [380, 830].
@@ -324,7 +325,7 @@ inline float2 wavelength_to_xy(float wavelength)
     return xy;
 }
 
-/*!
+/**
     Build a combined color space conversion matrix from the chromaticities defined in src to those of dst.
 
     Adapted from AcesInputFile::Data::initColorConversion.
@@ -358,7 +359,7 @@ Real linear_to_sRGB_positive(Real linear)
         return Real(1.055) * std::pow(linear, inv_gamma) - Real(0.055);
 }
 
-/*! Apply \p f to the magnitude of \p v and restore v's sign -- the odd extension of \p f.
+/** Apply \p f to the magnitude of \p v and restore v's sign -- the odd extension of \p f.
 
     Out-of-gamut color is carried as negative components, so a transfer function has to be mirrored around
     the origin rather than clamped: clamping would silently collapse whichever channels a gamut conversion
@@ -372,7 +373,7 @@ inline Real mirrored(Real v, F &&f)
     return std::copysign(f(std::abs(v)), v);
 }
 
-//! Signed power: |v| raised to \p p, carrying v's sign. colour-science calls this spow.
+/// Signed power: |v| raised to \p p, carrying v's sign. colour-science calls this spow.
 template <typename Real>
 inline Real spow(Real v, Real p)
 {
@@ -426,7 +427,7 @@ Real inverse_OETF_ITU(Real bt2020)
         return std::pow((bt2020 + alpham1) / alpha, Real(1.0 / 0.45));
 }
 
-/*! Defines The ITU-T BT.601, BT.709 and BT.2020 optical-electro transfer function (OETF).
+/** Defines The ITU-T BT.601, BT.709 and BT.2020 optical-electro transfer function (OETF).
 
     The opto-electrical transfer function (OETF) in ITU-T BT.601, BT.709 and BT.2020 specifications (for standard
    definition television, HDTV and UHDTV respectively), and SMPTE 170M, which defines NTSC broadcasts.
@@ -449,7 +450,7 @@ Real OETF_ITU(Real linear)
         return alpha * std::pow(linear, Real(0.45)) - Real(alpha - 1.0);
 }
 
-/*! HDR reference (diffuse) white luminance in cd/m^2, per Recommendation ITU-R BT.2408.
+/** HDR reference (diffuse) white luminance in cd/m^2, per Recommendation ITU-R BT.2408.
 
     The PQ and HLG EOTFs produce absolute luminance in cd/m^2, whereas HDRView works in values relative to
     diffuse white. Dividing EOTF output by this constant (and multiplying before the inverse EOTF) maps
@@ -459,7 +460,7 @@ Real OETF_ITU(Real linear)
 */
 inline constexpr float HDR_REFERENCE_WHITE_NITS = 203.f;
 
-/*! Defines Recommendation ITU-R BT.2100-2 Reference PQ electro-optical transfer function (EOTF).
+/** Defines Recommendation ITU-R BT.2100-2 Reference PQ electro-optical transfer function (EOTF).
 
     \param E_p Denotes a non-linear color value R', G', B' in PQ space.
 
@@ -488,7 +489,7 @@ inline Real EOTF_BT2100_PQ(Real E_p)
                     });
 }
 
-/*! Defines Recommendation ITU-R BT.2100-2 Reference PQ inverse electro-optical transfer function (EOTF^-1).
+/** Defines Recommendation ITU-R BT.2100-2 Reference PQ inverse electro-optical transfer function (EOTF^-1).
 
     \param F_D Luminance of a displayed linear component R_D, G_D, B_D in cd/m^2/
 
@@ -515,7 +516,7 @@ inline Real inverse_EOTF_BT2100_PQ(Real F_D)
                     });
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse optical-electro transfer function (OETF^-1).
+/** Recommendation ITU-R BT.2100-2 Reference HLG inverse optical-electro transfer function (OETF^-1).
 
     \param x A non-linear color value R', G', B' in HLG space in the range of [0,1]
 
@@ -539,7 +540,7 @@ inline Real inverse_OETF_BT2100_HLG(Real x)
                     { return (v < Real(0.5)) ? (v * v) / Real(3) : (std::exp((v - c) / a) + b) / Real(12); });
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG optical-electro transfer function (OETF).
+/** Recommendation ITU-R BT.2100-2 Reference HLG optical-electro transfer function (OETF).
 
     \param E The R_S, G_S, B_S color component of linear scene light, normalized to [0,1]
 
@@ -561,7 +562,7 @@ inline Real OETF_BT2100_HLG(Real E)
                     { return (v <= Real(1) / Real(12)) ? std::sqrt(Real(3) * v) : (a * std::log(12 * v - b) + c); });
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG opto-optical transfer function (OOTF^-1).
+/** Recommendation ITU-R BT.2100-2 Reference HLG opto-optical transfer function (OOTF^-1).
 
     \param E_S   Signal for a color component R_S, G_S, B_S proportional to scene linear light normalized to the range
                  [0,1].
@@ -584,7 +585,7 @@ inline Real OOTF_BT2100_HLG(Real E_S, Real Y_S, Real alpha, Real gamma = Real(1.
     return (alpha * std::pow(std::abs(Y_S), gamma - Real(1)) * E_S);
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse opto-optical transfer function (OOTF^-1).
+/** Recommendation ITU-R BT.2100-2 Reference HLG inverse opto-optical transfer function (OOTF^-1).
 
     Computes the inverse of the HLG OOTF, mapping displayed linear values {R_D, G_D, B_D} in cd/m^2
     back to scene-referred linear values {R_S, G_S, B_S} normalized to [0,1].
@@ -610,7 +611,7 @@ inline Real inverse_OOTF_BT2100_HLG(Real E_D, Real Y_D, Real alpha = Real(1.0), 
     return (E_D / alpha) * std::pow(Y_abs / alpha, Real(1.0) / gamma - Real(1.0));
 }
 
-/*! Recommendation ITU-R BT.2100-2 HLG reference system gamma for a given display peak luminance.
+/** Recommendation ITU-R BT.2100-2 HLG reference system gamma for a given display peak luminance.
 
     \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
 
@@ -624,7 +625,7 @@ inline Real HLG_system_gamma(Real L_W)
     return Real(1.2) + Real(0.42) * std::log10(L_W / Real(1000));
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
+/** Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
 
     \param E_p Denotes a non-linear color value R', G', B' in HLG space.
     \param L_B Display luminance for black in cd/m^2.
@@ -649,7 +650,7 @@ inline Real EOTF_BT2100_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000))
     return OOTF_BT2100_HLG(E_s, E_s, alpha, gamma);
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
+/** Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
 
     \param E_p A non-linear color value {R', G', B'} in HLG space.
     \param L_B Display luminance for black in cd/m^2.
@@ -677,7 +678,7 @@ inline la::vec<Real, 3> EOTF_BT2100_HLG(const la::vec<Real, 3> &E_p, Real L_B = 
             OOTF_BT2100_HLG(E_s[2], Y_s, alpha, gamma)};
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse electro-optical transfer function (EOTF^-1).
+/** Recommendation ITU-R BT.2100-2 Reference HLG inverse electro-optical transfer function (EOTF^-1).
 
     Computes the inverse of the HLG EOTF, mapping displayed linear values {R'_D, G'_D, B'_D} in cd/m^2
     back to non-linear HLG signal values {R'_S, G'_S, B'_S} in [0,1].
@@ -716,7 +717,7 @@ inline la::vec<Real, 3> inverse_EOTF_BT2100_HLG(const la::vec<Real, 3> &E_D, Rea
     return (E_p - beta) / (Real(1) - beta);
 }
 
-/*! ST240/SMPTE240M OETF (Opto-Electronic Transfer Function).
+/** ST240/SMPTE240M OETF (Opto-Electronic Transfer Function).
 
     Since the OOTF is linear, this function also implements EOTF^-1.
 */
@@ -731,7 +732,7 @@ inline Real OETF_ST240(Real linear)
         return alpha * std::pow(linear, Real(0.45)) - (alpha - Real(1.0));
 }
 
-/*! ST240/SMPTE240M EOTF (Electro-Optical Transfer Function).
+/** ST240/SMPTE240M EOTF (Electro-Optical Transfer Function).
 
     Since the OOTF is linear, this function also implements OETF^-1.
 */
@@ -770,7 +771,7 @@ inline Real OETF_log100_sqrt10(Real linear)
     return linear > 0.0f ? (std::log(linear) / (2.5f * std::log(10.0f)) + 1.0f) : 0.0f;
 }
 
-/*! IEC 61966-2-4 OETF (Opto-Electronic Transfer Function).
+/** IEC 61966-2-4 OETF (Opto-Electronic Transfer Function).
 
     Implements the transfer function as specified in IEC 61966-2-4.
 
@@ -785,7 +786,7 @@ inline Real OETF_IEC61966_2_4(Real linear)
     return mirrored(linear, [](Real a) { return OETF_ITU(a); });
 }
 
-/*! IEC 61966-2-4 EOTF (Electro-Optical Transfer Function).
+/** IEC 61966-2-4 EOTF (Electro-Optical Transfer Function).
 
     Implements the inverse transfer function as specified in IEC 61966-2-4.
 
@@ -800,7 +801,7 @@ inline Real EOTF_IEC61966_2_4(Real nonlinear)
     return mirrored(nonlinear, [](Real a) { return inverse_OETF_ITU(a); });
 }
 
-/*! DCI-P3 EOTF (Electro-Optical Transfer Function).
+/** DCI-P3 EOTF (Electro-Optical Transfer Function).
 
     Applies the DCI-P3 EOTF as specified in SMPTE ST 428-1 (DCI):
     X = X'^2.6 * 52.37
@@ -817,7 +818,7 @@ inline Real EOTF_DCI_P3(Real nonlinear)
     return spow(nonlinear, Real(2.6)) * Real(52.37);
 }
 
-/*! DCI-P3 inverse EOTF (EOTF^-1).
+/** DCI-P3 inverse EOTF (EOTF^-1).
 
     Applies the inverse DCI-P3 EOTF as specified in SMPTE ST 428-1 (DCI):
     X' = (X / 52.37)^(1/2.6)
@@ -836,8 +837,8 @@ inline Real inverse_EOTF_DCI_P3(Real linear)
 float3 YC_to_RGB(float3 input, float3 Yw);
 float3 RGB_to_YC(float3 input, float3 Yw);
 
-//! Hue, saturation and lightness, in the double-hexcone form, extended to values outside [0,1].
-/*!
+/// Hue, saturation and lightness, in the double-hexcone form, extended to values outside [0,1].
+/**
     Derived from the sample code in Foley et al., *Computer Graphics: Principles and Practice*, second
     edition in C, 592-596 -- but a high-dynamic-range image is full of values the textbook version has no
     answer for. Lightness is the midpoint of the smallest and largest component and is left unclamped;
@@ -850,8 +851,8 @@ float3 RGB_to_YC(float3 input, float3 Yw);
 float3 RGB_to_HSL(float3 rgb);
 float3 HSL_to_RGB(float3 hsl);
 
-//! Rotate the hue by \p hue_turns, scale the saturation by \p saturation, and mix toward black or white.
-/*!
+/// Rotate the hue by \p hue_turns, scale the saturation by \p saturation, and mix toward black or white.
+/**
     \p lightness runs over [-1,1] and mixes toward black below zero and toward white above it, which is
     what Photoshop's slider of that name does.
 
@@ -864,10 +865,10 @@ float3 HSL_to_RGB(float3 hsl);
     is by far the most common use and the trip is where an achromatic color loses its hue.
 */
 float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness);
-//! @}
+/// @}
 
-//! CIE 1976 L*a*b*, the space in which equal steps are meant to look equally different.
-/*!
+/// CIE 1976 L*a*b*, the space in which equal steps are meant to look equally different.
+/**
     L* is lightness on a scale where 100 is the reference white and 0 is black; a* and b* are the two
     opponent axes, green-red and blue-yellow, and carry no lightness. That split is why an edit meant to
     change how light something is, without changing its color, is done here.
@@ -877,19 +878,19 @@ float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness
     @{
 */
 
-//! XYZ for a chromaticity, scaled so Y is one: the form the conversions below want a white in.
+/// XYZ for a chromaticity, scaled so Y is one: the form the conversions below want a white in.
 inline float3 XYZ_from_xy(float2 xy)
 {
     return xy.y > 0.f ? float3{xy.x / xy.y, 1.f, (1.f - xy.x - xy.y) / xy.y} : float3{1.f, 1.f, 1.f};
 }
 
-//! The white used when none is given.
+/// The white used when none is given.
 inline float3 Lab_reference_white() { return XYZ_from_xy(white_point(WhitePoint_D65)); }
 
 float3 XYZ_to_Lab(float3 XYZ, float3 white = Lab_reference_white());
 float3 Lab_to_XYZ(float3 Lab, float3 white = Lab_reference_white());
 
-/*!
+/**
     Slide and scale L*a*b* into [0,1]^3, and back.
 
     L* runs to 100 and the two opponent axes are signed, so a control that expects its input somewhere
@@ -898,9 +899,9 @@ float3 Lab_to_XYZ(float3 Lab, float3 white = Lab_reference_white());
     survives the trip rather than being clipped.
 */
 float3 normalize_Lab(float3 Lab);
-//! Inverse of normalize_Lab().
+/// Inverse of normalize_Lab().
 float3 unnormalize_Lab(float3 Lab);
-//! @}
+/// @}
 Color3 sRGB_to_linear(const Color3 &c);
 Color4 sRGB_to_linear(const Color4 &c);
 Color3 linear_to_sRGB(const Color3 &c);
@@ -964,7 +965,7 @@ inline float blend(float top, float bottom, BlendMode_ blend_mode)
 
 float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode);
 
-//! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
+/// see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
 template <typename T>
 inline float dequantize_full(T v)
 {
@@ -985,7 +986,7 @@ inline float dequantize_full<float>(float v)
     return v;
 }
 
-//! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
+/// see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
 template <typename T>
 T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
 {
@@ -1015,7 +1016,7 @@ T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
     }
 }
 
-//! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW
+/// see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW
 template <typename T>
 inline float dequantize_narrow(T v)
 {
@@ -1029,7 +1030,7 @@ inline float dequantize_narrow<float>(float v)
     return v;
 }
 
-//! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW
+/// see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW
 template <typename T>
 T quantize_narrow(float v, int x = 0, int y = 0, bool dither = true)
 {
@@ -1060,7 +1061,7 @@ inline uint32_t color_f128_to_u32(const float4 &in)
     return out;
 }
 
-// /*!\brief Applies the transfer function as defined in Table 3 of ITU-T H.273 for the given TransferCharacteristics
+// /**\brief Applies the transfer function as defined in Table 3 of ITU-T H.273 for the given TransferCharacteristics
 //  * value.
 //  *
 //  * See Table 3 – Interpretation of transfer characteristics (TransferCharacteristics) value.

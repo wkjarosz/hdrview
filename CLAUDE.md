@@ -216,6 +216,12 @@ short note on a non-obvious constraint, invariant, or the reason a surprising ap
 Comments accumulate cruft across multi-step edits, so at the end of a multi-iteration editing session re-read
 every touched file as a whole, not just the diffs, and revise for concise, logically ordered comments.
 
+Doxygen markers are JavaDoc style throughout: `///` before a declaration, `///<` after a member on the same
+line, `/** ... */` for a block. Do not use the Qt-style `//!` and `/*! ... */`. **A `///` comment is one line
+and one sentence**; when more is needed, the `///` line states what the thing is and a `/** ... */` block
+below it carries the detail. This is not only style: `JAVADOC_AUTOBRIEF` defaults to off, so a multi-line
+`///` produces no brief at all and the whole block becomes the detailed description.
+
 ### Spelling
 Use American English: **color** not colour, **behavior** not behaviour, **normalize**/**initialize**/
 **recognize** not `-ise`, **honor**, **gray**, **center**, **analyze**. This applies to comments and commit

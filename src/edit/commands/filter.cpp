@@ -23,7 +23,7 @@
 namespace
 {
 
-//! The border-mode pair the resampling commands offer.
+/// The border-mode pair the resampling commands offer.
 void border_fields(int *border_x, int *border_y, bool *linked, const char *tooltip)
 {
     auto combo = [](const char *label, int *value)
@@ -118,12 +118,12 @@ public:
     }
 
 private:
-    //! What kernel is wanted, which decides what the controls above mean.
+    /// What kernel is wanted, which decides what the controls above mean.
     enum Kind : int
     {
-        Kind_Gaussian = 0, //!< The real thing, at a cost that grows with sigma
-        Kind_FastGaussian, //!< Repeated boxes converging on it, at a cost independent of sigma
-        Kind_Box           //!< Boxes as an effect in their own right
+        Kind_Gaussian = 0, ///< The real thing, at a cost that grows with sigma
+        Kind_FastGaussian, ///< Repeated boxes converging on it, at a cost independent of sigma
+        Kind_Box           ///< Boxes as an effect in their own right
     };
 
     int   m_kind         = Kind_Gaussian;

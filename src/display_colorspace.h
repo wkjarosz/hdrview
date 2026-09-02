@@ -25,19 +25,20 @@ struct DisplayColorSpace
     TransferFunction tf{TransferFunction::Gamma, 2.2f};
     /// The display's primaries. Rendering is done in Rec.709, so a conversion is needed when these differ.
     Chromaticities chroma = gamut_chromaticities(ColorGamut_sRGB_BT709);
-    /// The display's configured SDR reference white, in nits. scRGB fixes this at 80, but Windows' "SDR
-    /// content brightness" slider and Wayland compositors' reference luminance routinely raise it.
+    /// The display's configured SDR reference white, in nits.
+    /** scRGB fixes this at 80, but Windows' "SDR content brightness" slider and Wayland compositors'
+        reference luminance routinely raise it. */
     float sdr_white_nits = 80.f;
-    /// The display's reported luminance limits, in nits. 0 means "unknown", not "no limit": only clamp to
-    /// max_nits when it is greater than zero.
+    /// The display's reported luminance limits, in nits.
+    /** 0 means "unknown", not "no limit": only clamp to max_nits when it is greater than zero. */
     float min_nits = 0.f, max_nits = 0.f;
 
     /// The reference white of `tf` itself, in nits, for the transfer functions defined relative to one.
-    /// Absolute transfer functions (PQ) return 0: they map nits directly to code values.
+    /** Absolute transfer functions (PQ) return 0: they map nits directly to code values. */
     float transfer_white_nits() const;
 
-    /// True when the display wants something other than extended sRGB, i.e. when the colorpass has to run.
-    /// False for the plain-SDR combination {gamma 2.2, sRGB, 80 nits}.
+    /// True when the display wants something other than extended sRGB, so the colorpass has to run.
+    /** False for the plain-SDR combination {gamma 2.2, sRGB, 80 nits}. */
     bool needs_color_management() const;
 
     bool operator==(const DisplayColorSpace &o) const;

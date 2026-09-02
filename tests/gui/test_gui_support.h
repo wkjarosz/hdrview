@@ -29,7 +29,7 @@ namespace hdrview_test
 
 namespace fs = std::filesystem;
 
-//! Counts the warnings and errors logged while it is alive.
+/// Counts the warnings and errors logged while it is alive.
 class LogWatcher
 {
 public:
@@ -61,8 +61,10 @@ private:
     std::shared_ptr<Sink> m_sink;
 };
 
-//! Yields until `done` holds, or `timeout` passes. Returns whether it held.
-//! The budget is a duration, not a frame count: vsync is off, so a frame costs microseconds.
+/// Yields until `done` holds, or `timeout` passes. Returns whether it held.
+/**
+    The budget is a duration, not a frame count: vsync is off, so a frame costs microseconds.
+*/
 template <typename F>
 bool wait_until(ImGuiTestContext *ctx, F &&done, std::chrono::milliseconds timeout = std::chrono::seconds(20))
 {
@@ -76,15 +78,13 @@ bool wait_until(ImGuiTestContext *ctx, F &&done, std::chrono::milliseconds timeo
     return true;
 }
 
-//! Waits for every queued background load to be drained into the image list.
-//! BackgroundImageLoader hands finished images to the app and drops them from its queue in the same pass,
-//! so an empty queue means every image that is going to arrive has.
+/// Waits for every queued background load to be drained into the image list.
 inline bool wait_for_loads(ImGuiTestContext *ctx)
 {
     return wait_until(ctx, [] { return hdrview()->image_loader().num_pending_images() == 0; });
 }
 
-//! Loads `paths` and waits for all of them, returning the resulting image count.
+/// Loads `paths` and waits for all of them, returning the resulting image count.
 inline int load_and_wait(ImGuiTestContext *ctx, const std::vector<std::string> &paths)
 {
     hdrview()->load_images(paths);
@@ -92,16 +92,14 @@ inline int load_and_wait(ImGuiTestContext *ctx, const std::vector<std::string> &
     return hdrview()->num_images();
 }
 
-//! Closes everything and waits for the list to empty, so a test starts from a known state.
-//! The unguarded close: close_all_images() would prompt about unsaved edits and hang the test.
+/// Closes everything without prompting and waits for the list to empty, so a test starts from a known state.
 inline void reset_images(ImGuiTestContext *ctx)
 {
     hdrview()->close_all_images_immediately();
     wait_until(ctx, [] { return hdrview()->num_images() == 0; });
 }
 
-//! Put the view controls back where a person would leave them.
-//! Nothing else resets them between tests, and several tests set extreme values on purpose.
+/// Put the view controls back where a person would leave them, since nothing else resets them between tests.
 inline void reset_view_controls(ImGuiTestContext *ctx)
 {
     hdrview()->exposure() = hdrview()->exposure_live() = 0.f;
@@ -115,17 +113,14 @@ inline void reset_view_controls(ImGuiTestContext *ctx)
     ctx->Yield();
 }
 
-//! Keeps the frame loop running for `duration`, whatever happens.
-//! For giving a thread that should no longer be running a window in which to prove that it is; what
-//! catches the misbehavior is the sanitizer, so the window has to stay a duration.
+/// Keeps the frame loop running for `duration`, giving a thread that should not still be running time to act.
 inline void soak(ImGuiTestContext *ctx, std::chrono::milliseconds duration)
 {
     const auto deadline = std::chrono::steady_clock::now() + duration;
     while (std::chrono::steady_clock::now() < deadline) ctx->Yield();
 }
 
-//! Waits for a channel's statistics to finish, and returns them.
-//! get_stats() hands back a different object as the off-thread work lands, so re-read it each time round.
+/// Waits for a channel's statistics to finish, and returns them.
 inline PixelStats *wait_for_stats(ImGuiTestContext *ctx, Channel &channel,
                                   const std::function<bool(const PixelStats *)> &also = {})
 {
@@ -139,7 +134,7 @@ inline PixelStats *wait_for_stats(ImGuiTestContext *ctx, Channel &channel,
     return stats;
 }
 
-//! A fresh, empty directory under the system temp dir, canonicalized the way the loader stores paths.
+/// A fresh, empty directory under the system temp dir, canonicalized the way the loader stores paths.
 inline fs::path make_temp_dir(const char *stem)
 {
     std::error_code ec;

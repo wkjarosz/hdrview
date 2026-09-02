@@ -74,7 +74,7 @@ float AppleGainmapParams::stops() const
         return hdr_gain <= 0.01f ? -70.f * hdr_gain + 3.f : -0.303f * hdr_gain + 2.303f;
 }
 
-//! Sample \p src bilinearly at the location destination pixel (\p x, \p y) of a \p dst_size grid maps to.
+/// Sample \p src bilinearly at the location destination pixel (\p x, \p y) of a \p dst_size grid maps to.
 static float sample_bilinear(const vector<float> &src, int2 src_size, int channels, int c, int2 dst_size, int x, int y)
 {
     // align pixel centers, so upsampling doesn't shift the map half a destination pixel against the base
@@ -130,7 +130,7 @@ GainmapImage resample_gainmap(const GainmapImage &gainmap, int2 size, bool linea
     return out;
 }
 
-//! Copy \p count channels of \p src into \p image under \p prefix, as their own group.
+/// Copy \p count channels of \p src into \p image under \p prefix, as their own group.
 static void append_group(Image &image, const GainmapImage &src, const char *prefix, int count)
 {
     static const char *mono[] = {"Y", "A"};
@@ -295,7 +295,7 @@ void apply_apple_gainmap(Image &image, const GainmapImage &gainmap, const AppleG
 namespace
 {
 
-//! Reads the big-endian fields of an ISO 21496-1 metadata blob, refusing to run off its end.
+/// Reads the big-endian fields of an ISO 21496-1 metadata blob, refusing to run off its end.
 class IsoReader
 {
 public:
@@ -306,11 +306,11 @@ public:
     uint32_t u32() { return read<uint32_t>(); }
     int32_t  i32() { return (int32_t)read<uint32_t>(); }
 
-    //! A rational whose numerator and denominator are stored as a pair, per the spec.
+    /// A rational whose numerator and denominator are stored as a pair, per the spec.
     float rational_u() { return ratio((float)u32()); }
     float rational_i() { return ratio((float)i32()); }
 
-    //! The same value where a single denominator, read once, is shared by every field.
+    /// The same value where a single denominator, read once, is shared by every field.
     float over(float denominator, bool is_signed)
     {
         const float n = is_signed ? (float)i32() : (float)u32();

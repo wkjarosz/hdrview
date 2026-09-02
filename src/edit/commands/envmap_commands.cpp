@@ -49,7 +49,7 @@ public:
         return i;
     }
 
-    //! Opens at the current image's size, then follows the target mapping's aspect.
+    /// Opens at the current image's size, then follows the target mapping's aspect.
     void on_open(EditContext &ctx) override
     {
         if (auto img = ctx.image())
@@ -167,7 +167,7 @@ public:
         return i;
     }
 
-    //! The current image's size, since the result is usually looked at beside it.
+    /// The current image's size, since the result is usually looked at beside it.
     void on_open(EditContext &ctx) override
     {
         if (auto img = ctx.image())

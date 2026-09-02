@@ -11,8 +11,8 @@
 #include <iostream>
 #include <limits> // for numeric_limits
 
-//! Represents a bounded interval in higher dimensions.
-/*!
+/// Represents a bounded interval in higher dimensions.
+/**
     Box is an N-D interval.
 */
 template <typename Vec_, typename Value_, int Dims_>
@@ -24,8 +24,8 @@ public:
     using Vec                 = Vec_;
     using BoxT                = Box<Vec, Value, Dims>;
 
-    Vec min; //!< The lower-bound of the interval
-    Vec max; //!< The upper-bound of the interval
+    Vec min; ///< The lower-bound of the interval
+    Vec max; ///< The upper-bound of the interval
 
     //-----------------------------------------------------------------------
     //@{ \name Constructors

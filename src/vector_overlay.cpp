@@ -58,7 +58,7 @@ int VgCommand::num_floats(Type type)
 namespace
 {
 
-//! The mutable drawing state, as NanoVG defines it. Save/Restore push and pop this whole struct.
+/// The mutable drawing state, as NanoVG defines it. Save/Restore push and pop this whole struct.
 struct VgState
 {
     ImU32 fill_color;
@@ -71,7 +71,7 @@ struct VgState
     void *font                  = nullptr;
 };
 
-//! One run of points; a path is a list of these, as NanoVG accumulates them between MoveTo calls.
+/// One run of points; a path is a list of these, as NanoVG accumulates them between MoveTo calls.
 struct SubPath
 {
     ImVector<ImVec2> points;
@@ -80,7 +80,7 @@ struct SubPath
 
 ImU32 color_from(const float *f) { return ImGui::ColorConvertFloat4ToU32(ImVec4(f[0], f[1], f[2], f[3])); }
 
-/*!
+/**
     Builds a NanoVG-style path out of ImDrawList's own path machinery.
 
     ImDrawList has one path buffer and no notion of subpaths, so each subpath is built there, for ImGui's
@@ -98,17 +98,17 @@ public:
         m_draw_list->_Path.Size = 0;
     }
 
-    //! Start a new subpath at \p p.
+    /// Start a new subpath at \p p.
     void move_to(ImVec2 p)
     {
         flush(false);
         m_draw_list->PathLineTo(p);
     }
 
-    //! ImDrawList's Path* helpers append to the subpath under construction; use them via this.
+    /// ImDrawList's Path* helpers append to the subpath under construction; use them via this.
     ImDrawList *path() { return m_draw_list; }
 
-    //! Finish the subpath under construction, if it has enough points to draw.
+    /// Finish the subpath under construction, if it has enough points to draw.
     void flush(bool closed)
     {
         if (m_draw_list->_Path.Size >= 2)
@@ -120,7 +120,7 @@ public:
         m_draw_list->_Path.Size = 0;
     }
 
-    //! A shape that is a closed subpath all by itself (a rect, a circle): ends whatever preceded it too.
+    /// A shape that is a closed subpath all by itself (a rect, a circle): ends whatever preceded it too.
     void add_closed_shape() { flush(true); }
 
     void close() { flush(true); }
@@ -142,7 +142,7 @@ public:
                 m_draw_list->AddConcavePolyFilled(sp.points.Data, sp.points.Size, color);
     }
 
-    //! Whether anything has been built but not yet ended.
+    /// Whether anything has been built but not yet ended.
     bool building() const { return m_draw_list->_Path.Size > 0; }
 
 private:
@@ -150,8 +150,10 @@ private:
     std::vector<SubPath> m_subpaths;
 };
 
-//! Where AddText should put the string's top-left, given NanoVG's alignment flags. ImGui has no notion of a
-//! baseline, so Baseline is approximated as a fraction of the line height.
+/// Where AddText should put the string's top-left, given NanoVG's alignment flags.
+/**
+    ImGui has no notion of a baseline, so Baseline is approximated as a fraction of the line height.
+*/
 ImVec2 aligned_text_pos(ImVec2 anchor, ImVec2 size, int align)
 {
     float x = anchor.x;

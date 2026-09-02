@@ -76,8 +76,10 @@ float3 cylindrical_to_xyz(float2 uv)
     return float3{sin_phi * std::cos(theta), cos_phi, sin_phi * std::sin(theta)};
 }
 
-//! The cube face vector for \p uv before normalizing: one component is +-1 and the other two are the
-//! face coordinates. Its length is what the Jacobian needs.
+/// The cube face vector for \p uv before normalizing: one component is +-1, the other two face coordinates.
+/**
+    Its length is what the Jacobian needs.
+*/
 float3 cube_map_face_vector(float2 uv)
 {
     // This is assuming that the Cubemap is a vertical cross: the upright column of four down the middle
@@ -126,7 +128,7 @@ float3 cube_map_face_vector(float2 uv)
 
 float3 cube_map_to_xyz(float2 uv) { return la::normalize(cube_map_face_vector(uv)); }
 
-/*!
+/**
     The cube face vector for \p uv in the single-column layout, before normalizing.
 
     Six faces stacked top to bottom as +X, -X, +Y, -Y, +Z, -Z, each turned the way OpenEXR turns it.
@@ -152,7 +154,7 @@ float3 cube_column_face_vector(float2 uv)
 
 float3 cube_column_to_xyz(float2 uv) { return la::normalize(cube_column_face_vector(uv)); }
 
-//! Where \p xyz falls in the single-column layout; the inverse of cube_column_face_vector().
+/// Where \p xyz falls in the single-column layout; the inverse of cube_column_face_vector().
 float2 xyz_to_cube_column(float3 xyz)
 {
     const float ax = std::abs(xyz.x), ay = std::abs(xyz.y), az = std::abs(xyz.z);
@@ -384,11 +386,14 @@ float2 envmap_xyz_to_uv(EnvMapping mapping, float3 xyz)
 namespace
 {
 
-//! Whether \p mapping's u covers a full turn, so that one edge of the image continues at the other.
+/// Whether \p mapping's u covers a full turn, so that one edge of the image continues at the other.
 bool wraps_in_u(EnvMapping mapping) { return mapping == EnvMapping_LatLong || mapping == EnvMapping_Cylindrical; }
 
-//! Texel of \p a with out-of-range coordinates wrapped as the sphere does.
-//! Lat-long and cylindrical wrap in u; past a pole the row reflects and u shifts by half a turn. Others clamp.
+/// Texel of \p a with out-of-range coordinates wrapped as the sphere does.
+/**
+    Lat-long and cylindrical wrap in u; past a pole the row reflects and u shifts by half a turn. Every
+    other mapping clamps.
+*/
 float texel(const Array2Df &a, int x, int y, EnvMapping mapping)
 {
     if (wraps_in_u(mapping))
@@ -410,7 +415,7 @@ float texel(const Array2Df &a, int x, int y, EnvMapping mapping)
     return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
 }
 
-//! Bilinear read in [0,1]^2 image coordinates, reading past the edges as \p mapping says.
+/// Bilinear read in [0,1]^2 image coordinates, reading past the edges as \p mapping says.
 float sample_bilinear(const Array2Df &a, float2 uv, EnvMapping mapping)
 {
     const float x = uv.x * float(a.width()) - 0.5f;
@@ -531,8 +536,10 @@ float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv)
 namespace
 {
 
-//! A mip pyramid, each level half the size of the one before and averaged from it. Level 0 is a copy of
-//! the source, so every level is addressed the same way.
+/// A mip pyramid, each level half the size of the one before and averaged from it.
+/**
+    Level 0 is a copy of the source, so every level is addressed the same way.
+*/
 std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
 {
     std::vector<Array2Df> levels;
@@ -563,7 +570,7 @@ std::vector<Array2Df> build_mip_pyramid(const Array2Df &src)
 // A cube map's six faces, each in its own coordinates
 // -------------------------------------------------------------------------------------------------
 
-//! The six faces of the cube, in the order everything below indexes them.
+/// The six faces of the cube, in the order everything below indexes them.
 enum CubeFace : int
 {
     Face_PosX = 0,
@@ -576,8 +583,11 @@ enum CubeFace : int
     Face_COUNT
 };
 
-//! Direction for \p st on \p face, in that face's own [0,1]^2; not normalized. Not clamped: an \p st
-//! outside [0,1]^2 names a direction past that edge of the cube, which is how a face reaches its neighbors.
+/// Direction for \p st on \p face, in that face's own [0,1]^2; not normalized.
+/**
+    Not clamped: an \p st outside [0,1]^2 names a direction past that edge of the cube, which is how a face
+    reaches its neighbors.
+*/
 float3 cube_face_vector(int face, float2 st)
 {
     const float a = 2.f * st.x - 1.f, b = 2.f * st.y - 1.f;
@@ -592,7 +602,7 @@ float3 cube_face_vector(int face, float2 st)
     }
 }
 
-//! Which face \p d falls on: the axis it points most steeply along, ties going to x and then y.
+/// Which face \p d falls on: the axis it points most steeply along, ties going to x and then y.
 int cube_face_of(float3 d)
 {
     const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
@@ -603,9 +613,11 @@ int cube_face_of(float3 d)
     return d.z >= 0.f ? Face_PosZ : Face_NegZ;
 }
 
-//! Where \p d falls on \p face's plane, in that face's own [0,1]^2; the inverse of cube_face_vector().
-//! \p face need not be the one \p d is really on: a direction off to the side lands outside [0,1]^2, so a
-//! footprint reaching past an edge is still described in one face's coordinates.
+/// Where \p d falls on \p face's plane, in that face's own [0,1]^2; the inverse of cube_face_vector().
+/**
+    \p face need not be the one \p d is really on: a direction off to the side lands outside [0,1]^2, so a
+    footprint reaching past an edge is still described in one face's coordinates.
+*/
 float2 cube_face_st(int face, float3 d)
 {
     float axis;
@@ -655,29 +667,31 @@ float2 cube_face_st(int face, float3 d)
     return float2{0.5f * (a + 1.f), 0.5f * (b + 1.f)};
 }
 
-//! One mip level of a cube map: six faces, each ringed by a texel of whatever lies past its edges.
-/*!
+/// One mip level of a cube map: six faces, each ringed by a texel of whatever lies past its edges.
+/**
     These faces are cell-centered, as a GPU's are, so the outermost sample sits half a texel inside the
     cube's edge and two faces meeting there share no sample; the ring is what interpolating out to the edge
     reads. (OpenEXR instead puts samples on the edges, which needs no ring but does not halve cleanly.)
 */
 using CubeLevel = std::array<Array2Df, Face_COUNT>;
 
-//! Texels along one side of a face, not counting its ring.
+/// Texels along one side of a face, not counting its ring.
 int face_size(const CubeLevel &level) { return level[0].width() - 2; }
 
-//! Whether \p mapping lays the sphere out as six flat faces, whichever arrangement it uses for them.
+/// Whether \p mapping lays the sphere out as six flat faces, whichever arrangement it uses for them.
 bool is_cube(EnvMapping mapping) { return mapping == EnvMapping_CubeMap || mapping == EnvMapping_CubeMapColumn; }
 
-//! Side of the finest face \p mapping can carve out of an image of \p size.
+/// Side of the finest face \p mapping can carve out of an image of \p size.
 int face_size_for(EnvMapping mapping, int2 size)
 {
     return mapping == EnvMapping_CubeMapColumn ? std::max(1, std::min(size.x, size.y / 6))
                                                : std::max(1, std::min(size.x / 3, size.y / 4));
 }
 
-//! Bilinear read of \p face at \p st in face coordinates, over its interior alone: what the ring is
-//! filled from, and so unable to look at it.
+/// Bilinear read of \p face at \p st in face coordinates, over its interior alone.
+/**
+    This is what the ring is filled from, so it must not look at the ring itself.
+*/
 float sample_face_interior(const Array2Df &face, float2 st)
 {
     const int   n = face.width() - 2;
@@ -692,7 +706,7 @@ float sample_face_interior(const Array2Df &face, float2 st)
            ty * ((1.f - tx) * at(x0, y0 + 1) + tx * at(x0 + 1, y0 + 1));
 }
 
-//! Bilinear read of \p face at \p st in face coordinates, the ring standing in past its edges.
+/// Bilinear read of \p face at \p st in face coordinates, the ring standing in past its edges.
 float sample_face(const Array2Df &face, float2 st)
 {
     const int   n = face.width() - 2;
@@ -707,8 +721,11 @@ float sample_face(const Array2Df &face, float2 st)
            ty * ((1.f - tx) * at(x0, y0 + 1) + tx * at(x0 + 1, y0 + 1));
 }
 
-//! Fill every face's ring from whichever face the direction just past that edge belongs to, so no table
-//! of who borders whom is needed. Reads from the interiors alone, so the fill order cannot matter.
+/// Fill every face's ring from whichever face the direction just past that edge belongs to.
+/**
+    No table of who borders whom is needed, and reading from the interiors alone makes the fill order
+    irrelevant.
+*/
 void fill_face_padding(CubeLevel &level)
 {
     const int n = face_size(level);
@@ -737,8 +754,7 @@ void fill_face_padding(CubeLevel &level)
     }
 }
 
-//! The six faces of the cube map in \p src, \p n texels a side. Addressed by direction, so the layout
-//! enters only through \p mapping's projection and a cross and a column are read by the same code.
+/// The six faces of the cube map in \p src, \p n texels a side.
 CubeLevel faces_from_source(const Array2Df &src, int n, EnvMapping mapping)
 {
     CubeLevel level;
@@ -762,8 +778,11 @@ CubeLevel faces_from_source(const Array2Df &src, int n, EnvMapping mapping)
     return level;
 }
 
-//! \p prev at half its resolution, averaged 2x2 over the interiors alone and ringed afresh, since a
-//! coarser level's reads want a ring of what its own neighbors hold.
+/// \p prev at half its resolution, averaged 2x2 over the interiors alone and ringed afresh.
+/**
+    The ring is rebuilt rather than decimated because a coarser level's reads want a ring of what its own
+    neighbors hold at that level.
+*/
 CubeLevel decimated(const CubeLevel &prev)
 {
     const int pn = face_size(prev);
@@ -790,7 +809,7 @@ CubeLevel decimated(const CubeLevel &prev)
     return next;
 }
 
-/*!
+/**
     Gather through the ellipse with axes \p d0 and \p d1, centered at \p uv, over a grid of \p res texels.
 
     Every texel the ellipse encloses contributes, weighted by a Gaussian in the ellipse's own space. The
@@ -856,16 +875,16 @@ bool ewa_gather(float2 uv, float2 d0, float2 d1, float2 res, Tap &&tap, float &r
     return true;
 }
 
-//! Which levels an elliptical footprint reads, and the ellipse it reads them through.
+/// Which levels an elliptical footprint reads, and the ellipse it reads them through.
 struct EWAFootprint
 {
-    float2 d0, d1;     //!< Ellipse axes, longer first, after the anisotropy clamp
-    int    lo, hi;     //!< The levels either side of the one the footprint asks for
-    float  blend;      //!< How much of hi
-    bool   degenerate; //!< A footprint of no extent, which only a bilinear read can answer
+    float2 d0, d1;     ///< Ellipse axes, longer first, after the anisotropy clamp
+    int    lo, hi;     ///< The levels either side of the one the footprint asks for
+    float  blend;      ///< How much of hi
+    bool   degenerate; ///< A footprint of no extent, which only a bilinear read can answer
 };
 
-/*!
+/**
     Pick the levels for a footprint \p du by \p dv over a base level of \p base texels.
 
     The level comes from the ellipse's shorter axis, so a texel of that level spans the narrow direction
@@ -915,7 +934,7 @@ EWAFootprint choose_ewa_levels(float2 du, float2 dv, float2 base, int num_levels
     return fp;
 }
 
-/*!
+/**
     A source image prepared to be read by direction rather than by image coordinate.
 
     A cube map's layout is six charts in one image: texels either side of a face join are not neighboring
@@ -938,7 +957,7 @@ public:
             m_levels = build_mip_pyramid(src);
     }
 
-    //! Bilinear at the finest level, in the direction \p d.
+    /// Bilinear at the finest level, in the direction \p d.
     float point(float3 d) const
     {
         if (!m_faces.empty())
@@ -947,8 +966,11 @@ public:
         return sample_bilinear(level(0), envmap_xyz_to_uv(m_mapping, d), m_mapping);
     }
 
-    //! Elliptically filtered over the footprint one destination pixel covers. \p uv is that pixel's
-    //! center in \p dst's parameterization, \p delta_u and \p delta_v the step to the next pixel.
+    /// Elliptically filtered over the footprint one destination pixel covers.
+    /**
+        \p uv is that pixel's center in \p dst's parameterization, \p delta_u and \p delta_v the step to
+        the next pixel.
+    */
     float ewa(EnvMapping dst, float2 uv, float2 delta_u, float2 delta_v, int max_aniso, float mip_bias) const
     {
         const float3 d = envmap_uv_to_xyz(dst, uv);
@@ -983,7 +1005,7 @@ public:
 private:
     int num_levels() const { return std::max(1, int(m_levels.size())); }
 
-    //! Level \p i of the whole-image pyramid; the source itself when there is none, it being level 0.
+    /// Level \p i of the whole-image pyramid; the source itself when there is none, it being level 0.
     const Array2Df &level(int i) const { return m_levels.empty() ? m_src : m_levels[size_t(i)]; }
 
     float sample_face_at(int lvl, float3 d) const
@@ -1059,8 +1081,8 @@ private:
 
     const Array2Df        &m_src;
     EnvMapping             m_mapping;
-    std::vector<Array2Df>  m_levels; //!< The whole image, for every mapping but a cube map
-    std::vector<CubeLevel> m_faces;  //!< Six ringed faces per level, for a cube map
+    std::vector<Array2Df>  m_levels; ///< The whole image, for every mapping but a cube map
+    std::vector<CubeLevel> m_faces;  ///< Six ringed faces per level, for a cube map
 };
 } // namespace
 

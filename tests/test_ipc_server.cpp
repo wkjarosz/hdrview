@@ -36,7 +36,7 @@ using test_socket_t = int;
 namespace
 {
 
-//! Connects to a listener on loopback, as a renderer would.
+/// Connects to a listener on loopback, as a renderer would.
 class TestClient
 {
 public:
@@ -77,7 +77,7 @@ private:
     test_socket_t m_socket;
 };
 
-//! Collects packets as they arrive on the server's thread, and lets a test wait for a count of them.
+/// Collects packets as they arrive on the server's thread, and lets a test wait for a count of them.
 class Collector
 {
 public:
@@ -90,7 +90,7 @@ public:
         m_arrived.notify_all();
     }
 
-    //! Wait for at least `count` packets, or give up. Returns what arrived either way.
+    /// Wait for at least `count` packets, or give up. Returns what arrived either way.
     std::vector<std::string> wait_for(size_t count, std::chrono::milliseconds timeout = std::chrono::seconds{5})
     {
         std::unique_lock lock{m_mutex};
@@ -104,7 +104,7 @@ private:
     std::vector<std::string> m_names;
 };
 
-//! Concatenated bytes of several CloseImage packets, whose only payload is a name we can check.
+/// Concatenated bytes of several CloseImage packets, whose only payload is a name we can check.
 std::vector<char> stream_of(const std::vector<std::string> &names)
 {
     std::vector<char> bytes;

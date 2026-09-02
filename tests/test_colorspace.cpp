@@ -303,7 +303,7 @@ TEST_CASE("blend() keeps fractional results in the difference modes")
 namespace
 {
 
-//! Colors spanning what an HSL adjustment has to handle, including values outside [0,1].
+/// Colors spanning what an HSL adjustment has to handle, including values outside [0,1].
 const float3 k_hsl_colors[] = {
     {0.5f, 0.25f, 0.125f}, {1.f, 0.f, 0.f},    {0.f, 1.f, 0.f},       {0.f, 0.f, 1.f}, {0.2f, 0.7f, 0.9f},
     {0.f, 0.f, 0.f},       {1.f, 1.f, 1.f},    {0.35f, 0.35f, 0.35f}, // achromatic, where hue is undefined

@@ -948,7 +948,7 @@ void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const string &subs
 //     return value_changed;
 // }
 
-//! Shared by both MenuItem() overloads; `name` is what the item is labelled and tooltipped with.
+/// Shared by both MenuItem() overloads; `name` is what the item is labelled and tooltipped with.
 static void menu_item(const Action &a, const std::string &name, bool include_name)
 {
     if (a.needs_menu)

@@ -12,13 +12,13 @@
 #include <cmath>
 #include <limits>
 
-//! The whole of \p a, for the cases that are about the filter and not the region.
+/// The whole of \p a, for the cases that are about the filter and not the region.
 static Box2i whole(const Array2Df &a) { return Box2i{int2{0}, a.size()}; }
 
 namespace
 {
 
-//! Sum of every sample, which a normalized blur must preserve away from the edges.
+/// Sum of every sample, which a normalized blur must preserve away from the edges.
 double total(const Array2Df &a)
 {
     double sum = 0.0;
@@ -181,7 +181,7 @@ TEST_CASE("A region against the image's edge still clamps rather than reading pa
 namespace
 {
 
-//! A direct box average, for the sliding window to be checked against.
+/// A direct box average, for the sliding window to be checked against.
 float box_reference(const Array2Df &a, int x, int y, int rx, int ry)
 {
     float sum = 0.f;
@@ -191,7 +191,7 @@ float box_reference(const Array2Df &a, int x, int y, int rx, int ry)
     return sum / float((2 * rx + 1) * (2 * ry + 1));
 }
 
-//! Variance of a kernel about its center, which is what the Gaussian approximations are matched on.
+/// Variance of a kernel about its center, which is what the Gaussian approximations are matched on.
 double kernel_variance(const Array2Df &k, int2 center)
 {
     double total = 0.0, moment = 0.0;
@@ -314,7 +314,7 @@ TEST_CASE("An iterated box over a region agrees with the same over the whole ima
 namespace
 {
 
-//! Where a coordinate lands under one border mode, written independently of the filter's own version.
+/// Where a coordinate lands under one border mode, written independently of the filter's own version.
 int expected_wrap(int p, int extent, int mode)
 {
     if (p >= 0 && p < extent)

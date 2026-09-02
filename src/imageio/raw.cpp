@@ -691,7 +691,7 @@ Box2i get_display_window(const libraw_data_t &idata)
 // Kodak KDC storing JPEG-compressed sensor data), while that PNG wants 40,310.
 static constexpr double k_max_raw_pixels_per_byte = 512.0;
 
-//! Whether \p width by \p height is plausible for a raw file of \p bytes.
+/// Whether \p width by \p height is plausible for a raw file of \p bytes.
 static bool plausible_raw_size(int64_t width, int64_t height, std::streamoff bytes)
 {
     if (width <= 0 || height <= 0 || bytes <= 0)
@@ -699,7 +699,7 @@ static bool plausible_raw_size(int64_t width, int64_t height, std::streamoff byt
     return double(width) * double(height) <= k_max_raw_pixels_per_byte * double(bytes);
 }
 
-//! Size of \p is in bytes, restoring the stream position.
+/// Size of \p is in bytes, restoring the stream position.
 static std::streamoff stream_size(std::istream &is)
 {
     auto pos = is.tellg();

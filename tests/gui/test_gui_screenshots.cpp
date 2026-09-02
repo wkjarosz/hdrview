@@ -39,8 +39,7 @@ namespace
 
 fs::path output_dir() { return fs::path(getenv("HDRVIEW_SCREENSHOT_DIR")); }
 
-//! Everything one entry of a `:`-separated path list refers to: a file as itself, a directory as its
-//! loadable contents in filename order.
+/// Everything a `:`-separated path entry names: a file itself, a directory's loadable contents in filename order.
 void expand_into(const fs::path &p, std::vector<std::string> &out)
 {
     std::error_code ec;
@@ -57,7 +56,7 @@ void expand_into(const fs::path &p, std::vector<std::string> &out)
         out.push_back(p.string());
 }
 
-//! Splits a `:`-separated list of paths, in the order given.
+/// Splits a `:`-separated list of paths, in the order given.
 std::vector<std::string> path_list(const char *value)
 {
     std::vector<std::string> v;
@@ -72,8 +71,8 @@ std::vector<std::string> path_list(const char *value)
     return v;
 }
 
-//! Every image the shots load, hero subject first.
-/*!
+/// Every image the shots load, hero subject first.
+/**
     HDRVIEW_SCREENSHOT_IMAGES is a `:`-separated list of files and directories in the order given: the first
     entry is what most shots show in the viewport, and the rest fill the Images panel. Failing that, what is
     in the tree: the multi-part Beachball if this build fetched OpenEXR's test images, since eight parts
@@ -97,23 +96,24 @@ const std::vector<std::string> &subjects()
     return paths;
 }
 
-//! The file whose two views the comparison shot differences, or empty to look among the subjects.
+/// The file whose two views the comparison shot differences, or empty to look among the subjects.
 std::string diff_subject()
 {
     auto v = path_list(getenv("HDRVIEW_SCREENSHOT_DIFF_IMAGE"));
     return v.empty() ? std::string{} : v.front();
 }
 
-//! The image the command-palette shot sits over, or empty to use the same subject as everything else.
+/// The image the command-palette shot sits over, or empty to use the same subject as everything else.
 std::string palette_subject()
 {
     auto v = path_list(getenv("HDRVIEW_SCREENSHOT_PALETTE_IMAGE"));
     return v.empty() ? std::string{} : v.front();
 }
 
-//! Saves the whole frame to `<HDRVIEW_SCREENSHOT_DIR>/<name>.png`.
-//! Adds no capture windows: with none, the capture tool takes the main viewport's rect as-is, where naming
-//! windows would hide every window not named and shuffle the rest together.
+/// Saves the whole frame to `<HDRVIEW_SCREENSHOT_DIR>/<name>.png`.
+/**
+    Names no capture windows: with none, the capture tool takes the main viewport's rect as-is.
+*/
 void capture(ImGuiTestContext *ctx, const char *name)
 {
     // the statistics panel is in every one of these pictures, and its numbers are computed off the main
@@ -137,10 +137,12 @@ void capture(ImGuiTestContext *ctx, const char *name)
     IM_CHECK(ctx->CaptureScreenshot(ImGuiCaptureFlags_HideMouseCursor));
 }
 
-//! Starts routing log messages to the Log window, which one of the shots is of.
-//! hdrview.cpp's main() normally installs this sink and the GUI suite has its own main(), so without it the
-//! panel photographs empty. Installed this late because the tests ahead of these shots open damaged and
-//! missing files, and their errors are not what a screenshot of the Log window should show.
+/// Starts routing log messages to the Log window, which one of the shots is of.
+/**
+    hdrview.cpp's main() normally installs this sink and the GUI suite has its own main(), so without it the
+    panel photographs empty. Installed this late because the tests ahead of these shots open damaged and
+    missing files, and their errors are not what a screenshot of the Log window should show.
+*/
 void install_log_sink()
 {
     static bool installed = false;
@@ -155,9 +157,7 @@ void install_log_sink()
     ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %l %&]: %$%v");
 }
 
-//! Loads every subject, including the other shots' own, once for the whole run.
-//! Reloading per shot is the expensive thing this harness does: a photograph large enough to be worth
-//! photographing takes a second or so to decode, and its statistics longer.
+/// Loads every subject, including the other shots' own, once for the whole run.
 void load_subjects(ImGuiTestContext *ctx)
 {
     install_log_sink();
@@ -180,8 +180,7 @@ void load_subjects(ImGuiTestContext *ctx)
     loaded_count = hdrview()->num_images();
 }
 
-//! Selects the loaded image whose filename contains `needle`; returns whether one was found.
-//! By name, since load_images() makes no promise about the order background loads land in.
+/// Selects the loaded image whose filename contains `needle`; returns whether one was found.
 bool select_image_containing(const std::string &needle)
 {
     for (int i = 0; i < hdrview()->num_images(); ++i)
@@ -193,7 +192,7 @@ bool select_image_containing(const std::string &needle)
     return false;
 }
 
-//! The pixel the zoomed-in shot centers on, when HDRVIEW_SCREENSHOT_ZOOM_PIXEL names one as "x,y".
+/// The pixel the zoomed-in shot centers on, when HDRVIEW_SCREENSHOT_ZOOM_PIXEL names one as "x,y".
 std::optional<int2> chosen_zoom_pixel()
 {
     const char *value = getenv("HDRVIEW_SCREENSHOT_ZOOM_PIXEL");
@@ -203,8 +202,8 @@ std::optional<int2> chosen_zoom_pixel()
     return std::nullopt;
 }
 
-//! The busiest place in the image: the strongest edge inside the tile with the largest mean gradient.
-/*!
+/// The busiest place in the image: the strongest edge inside the tile with the largest mean gradient.
+/**
     A zoomed-in shot has to land on an edge or a texture, or it is a picture of a flat color with numbers
     written on it. Two stages, since either alone picks badly: the tile survey finds a region that is
     textured and not a lone noisy pixel, and the search within it puts the edge through the middle of the
@@ -260,8 +259,8 @@ int2 busiest_pixel(const ConstImagePtr &img)
     return img->data_window.min + edge;
 }
 
-//! Puts the app back into the state every shot starts from.
-/*!
+/// Puts the app back into the state every shot starts from.
+/**
     Mostly undoing whatever the previous shots and the rest of the suite left set: they run in one process
     against one app, and a leftover selection or tonemap is how a screenshot ends up showing statistics over
     an empty region. Three are not resets: short names, because the full ones are absolute paths that say
@@ -308,7 +307,7 @@ void reset_view(ImGuiTestContext *ctx)
     ctx->MouseMoveToPos(hdrview()->app_pos_at_vp_pos(hdrview()->viewport_size() / 2.f));
 }
 
-//! Centers the view on `pixel` at the given zoom.
+/// Centers the view on `pixel` at the given zoom.
 void zoom_to_pixel(float zoom, int2 pixel)
 {
     hdrview()->set_zoom(zoom);

@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #endif
 
-//! Endianness indicator
+/// Endianness indicator
 enum class Endian
 {
     Little   = 0,
@@ -26,7 +26,7 @@ enum class Endian
     Motorola = Big
 };
 
-//! Returns 1 if architecture is little endian, 0 in case of big endian.
+/// Returns 1 if architecture is little endian, 0 in case of big endian.
 inline bool is_little_endian()
 {
     unsigned int x = 1;
@@ -98,7 +98,7 @@ inline T swap_bytes(T value)
 #undef byte_swap_32
 #undef byte_swap_64
 
-/*!
+/**
  * @brief Read a value of type T from a byte array and convert to host endianness.
  *
  * Reads sizeof(T) bytes from the given pointer and interprets them as type T,
@@ -122,7 +122,7 @@ T read_as(const unsigned char *ptr, Endian data_endian)
     return value;
 }
 
-/*!
+/**
  * @brief Read an unsigned value stored in fewer bytes than T from a byte array.
  *
  * Assembles `num_bytes` of them and zero-extends, reading only the bytes the sample has, at any alignment,
@@ -146,7 +146,7 @@ T read_partial_as(const unsigned char *ptr, size_t num_bytes, Endian data_endian
     return value;
 }
 
-/*!
+/**
  * @brief Read an array of values of type T from a byte array and convert to host endianness.
  *
  * Reads count * sizeof(T) bytes from the input pointer and interprets them as an array of type T,
@@ -169,7 +169,7 @@ void read_array(T *output, const unsigned char *input, size_t count, Endian data
         for (size_t i = 0; i < count; i++) output[i] = swap_bytes(output[i]);
 }
 
-/*!
+/**
  * @brief Write a value of type T to a byte array with specified endianness.
  *
  * Writes sizeof(T) bytes to the given pointer, performing byte swapping if the target
@@ -190,7 +190,7 @@ void write_as(unsigned char *ptr, T value, Endian target_endian)
     memcpy(ptr, &value, sizeof(T));
 }
 
-/*!
+/**
  * @brief Write an array of values of type T to a byte array with specified endianness.
  *
  * Writes count * sizeof(T) bytes to the output pointer, performing byte swapping on each

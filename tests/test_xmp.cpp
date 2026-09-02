@@ -21,7 +21,7 @@
 namespace
 {
 
-//! Wraps `body` in the packet framing a writer normally emits.
+/// Wraps `body` in the packet framing a writer normally emits.
 std::string packet(const std::string &body)
 {
     return "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
@@ -102,7 +102,7 @@ TEST_CASE("A packet that cannot be parsed yields nothing rather than throwing")
 namespace
 {
 
-//! A 1x1 PNG carrying `xmp` in the iTXt chunk the XMP spec assigns it, which png.cpp reads.
+/// A 1x1 PNG carrying `xmp` in the iTXt chunk the XMP spec assigns it, which png.cpp reads.
 std::string png_with_xmp(const std::string &xmp)
 {
     auto be32 = [](uint32_t v)

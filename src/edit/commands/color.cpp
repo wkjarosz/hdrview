@@ -40,7 +40,7 @@ public:
                 27.f};
     }
 
-    //! The file's own tag, so a conversion starts from what the pixels are.
+    /// The file's own tag, so a conversion starts from what the pixels are.
     void on_open(EditContext &ctx) override
     {
         auto img = ctx.image();
@@ -232,7 +232,7 @@ public:
     }
 
 private:
-    //! Which channel the weights are written to.
+    /// Which channel the weights are written to.
     enum Output : int
     {
         Out_Red = 0,
@@ -272,7 +272,7 @@ public:
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
 
         // The wheel as it is and as the settings would leave it.
-        /*!
+        /**
             Drawn as shaded quads between the points where the sweep bends, which is not an approximation:
             the hue hexcone is piecewise linear in hue, and the three settings each either move those
             bends or are affine in every component.
@@ -448,18 +448,24 @@ public:
     }
 
 private:
-    //! The slope the contrast slider asks for, as the tangent of an angle, so the slider's ends are the
-    //! two extremes: -1 horizontal and flat, 0 the 45-degree diagonal, +1 vertical and black-or-white.
+    /// The slope the contrast slider asks for, as the tangent of an angle.
+    /**
+        The slider's ends are then the two extremes: -1 horizontal and flat, 0 the 45-degree diagonal, +1
+        vertical and black-or-white.
+    */
     static float slope_of(float contrast) { return float(std::tan(lerp(0.0, M_PI_2, contrast / 2.0 + 0.5))); }
 
-    //! The inverse of slope_of(): what the slider must read for the curve to have this slope.
+    /// The inverse of slope_of(): what the slider must read for the curve to have this slope.
     static float contrast_of(float slope)
     {
         return std::clamp(float(4.0 * std::atan(std::max(0.f, slope)) / M_PI) - 1.f, -1.f, 1.f);
     }
 
-    //! The slope that puts the straight line through (\p x, \p y); negative when nothing can. The line is
-    //! fixed through its pivot, so one more point determines it, unless that point is the pivot itself.
+    /// The slope that puts the straight line through (\p x, \p y); negative when nothing can.
+    /**
+        The line is fixed through its pivot, so one more point determines it, unless that point is the pivot
+        itself.
+    */
     static float line_slope_through(float x, float y, float midpoint)
     {
         if (std::fabs(x - midpoint) < 1e-4f)
@@ -467,8 +473,10 @@ private:
         return (y - 0.5f) / (x - midpoint);
     }
 
-    //! The gain exponent that puts the s-curve through (\p x, \p y); negative when nothing can.
-    //! gain_Perlin is a power on each half of its range, so this is one logarithm; the bias stays put.
+    /// The gain exponent that puts the s-curve through (\p x, \p y); negative when nothing can.
+    /**
+        gain_Perlin is a power on each half of its range, so this is one logarithm; the bias stays put.
+    */
     static float curve_gain_through(float x, float y, float bias)
     {
         const float u = bias_Schlick(std::clamp(x, 0.f, 1.f), bias);
@@ -483,7 +491,7 @@ private:
         return u > 0.5f ? std::log(2.f * (1.f - y)) / std::log(2.f - 2.f * u) : std::log(2.f * y) / std::log(2.f * u);
     }
 
-    //! Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
+    /// Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
     void draw_curve()
     {
         const float slope    = slope_of(m_contrast);
@@ -547,12 +555,12 @@ private:
         m_plot.end();
     }
 
-    //! Which of the image's qualities the curve is applied to.
+    /// Which of the image's qualities the curve is applied to.
     enum Channel : int
     {
-        Channel_RGB = 0,      //!< The three channels alike, saturation moving with everything else
-        Channel_Lightness,    //!< L* alone, so the colors stay where they are
-        Channel_Chromaticity, //!< a* and b*, so how light the image is does not change
+        Channel_RGB = 0,      ///< The three channels alike, saturation moving with everything else
+        Channel_Lightness,    ///< L* alone, so the colors stay where they are
+        Channel_Chromaticity, ///< a* and b*, so how light the image is does not change
 
         Channel_COUNT
     };
@@ -561,7 +569,7 @@ private:
     bool          m_linear  = false;
     int           m_channel = Channel_RGB;
     ToneCurvePlot m_plot;
-    //! Which of the two things the drag in progress is doing; unset between drags.
+    /// Which of the two things the drag in progress is doing; unset between drags.
     std::optional<bool> m_dragging_pivot;
 };
 

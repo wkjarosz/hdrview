@@ -27,8 +27,7 @@
 namespace
 {
 
-//! EditContext over a bare Image: same undo/subject rules as HDRViewApp, no textures or worker thread.
-//! The async ops run inline.
+/// EditContext over a bare Image: HDRViewApp's undo/subject rules, no textures, async ops running inline.
 class TestEditContext : public EditContext
 {
 public:
@@ -37,8 +36,11 @@ public:
     ImagePtr           image() const override { return m_image; }
     const EditSubject &subject() const override { return m_subject; }
 
-    //! Mirrors HDRViewApp::target_groups(): a group pointed at from outside the selection names itself alone,
-    //! one inside it covers the selection, and an image the panel never saw falls back to the group on screen.
+    /// Mirrors HDRViewApp::target_groups().
+    /**
+        A group pointed at from outside the selection names itself alone, one inside it covers the selection,
+        and an image the panel never saw falls back to the group on screen.
+    */
     std::vector<int> target_groups() const override
     {
         if (!m_image)
@@ -54,7 +56,7 @@ public:
         return groups;
     }
 
-    //! Point at a group without selecting it, the way the Images panel's context menu does.
+    /// Point at a group without selecting it, the way the Images panel's context menu does.
     void          set_target_group(int group) { m_target_group = group; }
     Box2i         selection() const override { return m_selection; }
     void          set_selection(const Box2i &box) override { m_selection = box; }
@@ -63,7 +65,7 @@ public:
     void          set_clipboard(ImagePtr img) override { m_clipboard = std::move(img); }
     void          draw_subject_selector() override {}
 
-    //! Collected, so a command that produces images can be checked for what it made.
+    /// Collected, so a command that produces images can be checked for what it made.
     void add_image(ImagePtr img, const std::string &partname) override
     {
         if (!img)
@@ -77,8 +79,11 @@ public:
     EditSubject &mutable_subject() { return m_subject; }
     void         set_background(float4 c) { m_background = c; }
 
-    //! Whether the last edit went through a chokepoint that takes the subject at all. Not the same question as
-    //! Info::draws_subject_selector, which says only whether the dialog draws the "Apply to" controls.
+    /// Whether the last edit went through a chokepoint that takes the subject at all.
+    /**
+        Not the same question as Info::draws_subject_selector, which says only whether the dialog draws the
+        "Apply to" controls.
+    */
     bool last_edit_used_subject() const { return m_used_subject; }
 
     bool modify_pixels(const std::string &name, const std::function<float(float, int2, int)> &op) override
@@ -258,7 +263,7 @@ public:
     }
 
 private:
-    //! Which channels and which rectangle the subject names; mirrors HDRViewApp::resolve_subject().
+    /// Which channels and which rectangle the subject names; mirrors HDRViewApp::resolve_subject().
     std::pair<std::vector<int>, Box2i> resolve() const
     {
         std::vector<int> channels;
@@ -283,7 +288,7 @@ private:
         return {channels, bounds};
     }
 
-    //! The undo entry is built before the edit, so it records what the edit is about to displace.
+    /// The undo entry is built before the edit, so it records what the edit is about to displace.
     bool edit(const std::string &name, const std::vector<int> &channels, const Box2i &bounds,
               const std::function<void(Image &)> &op)
     {
@@ -295,7 +300,7 @@ private:
         return true;
     }
 
-    //! A copy of the samples alone, for the ops that must read the image as it was.
+    /// A copy of the samples alone, for the ops that must read the image as it was.
     Image snapshot() const
     {
         Image copy{m_image->size(), int(m_image->channels.size())};
@@ -317,7 +322,7 @@ private:
 
 constexpr int2 k_size{7, 5};
 
-//! An image whose every sample is distinct, so any misplacement shows as a mismatch.
+/// An image whose every sample is distinct, so any misplacement shows as a mismatch.
 ImagePtr make_image(int num_channels = 4)
 {
     auto img = std::make_shared<Image>(k_size, num_channels);
@@ -335,8 +340,11 @@ ImagePtr make_image(int num_channels = 4)
     return img;
 }
 
-//! An image with three channel groups: two color groups and a depth channel, so "the group on screen", "the
-//! selected groups" and "every channel" are three different sets and the color-only filter has one to drop.
+/// An image with three channel groups: two color groups and a depth channel.
+/**
+    "The group on screen", "the selected groups" and "every channel" are then three different sets, and the
+    color-only filter has one group to drop.
+*/
 ImagePtr make_layered_image()
 {
     auto img = std::make_shared<Image>(
@@ -351,7 +359,7 @@ ImagePtr make_layered_image()
     return img;
 }
 
-//! The index of the group holding the channel named \p name, or -1.
+/// The index of the group holding the channel named \p name, or -1.
 int group_of_channel(const ImagePtr &img, const std::string &name)
 {
     for (size_t g = 0; g < img->groups.size(); ++g)
@@ -361,7 +369,7 @@ int group_of_channel(const ImagePtr &img, const std::string &name)
     return -1;
 }
 
-//! The index of the channel named \p name, or -1.
+/// The index of the channel named \p name, or -1.
 int channel_index(const ImagePtr &img, const std::string &name)
 {
     for (size_t c = 0; c < img->channels.size(); ++c)
@@ -370,7 +378,7 @@ int channel_index(const ImagePtr &img, const std::string &name)
     return -1;
 }
 
-//! Every sample of every channel, as one comparable value.
+/// Every sample of every channel, as one comparable value.
 std::vector<float> samples(const ImagePtr &img)
 {
     std::vector<float> out;
@@ -381,7 +389,7 @@ std::vector<float> samples(const ImagePtr &img)
 
 std::string first_name(const EditCommandPtr &cmd) { return cmd->info().names.front(); }
 
-//! The registered command whose first name is \p name.
+/// The registered command whose first name is \p name.
 EditCommandPtr find_command(const std::string &name)
 {
     for (auto &cmd : all_edit_commands())

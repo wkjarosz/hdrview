@@ -22,11 +22,14 @@
 namespace
 {
 
-//! How many levels an image of \p size has, counting the image itself, down to a single sample.
+/// How many levels an image of \p size has, counting the image itself, down to a single sample.
 int level_count(int2 size) { return 1 + int(std::floor(std::log2(float(std::max(1, std::max(size.x, size.y)))))); }
 
-//! Halve the image repeatedly, adding each level as a separate Image (all channels of an Image share one
-//! data window). Unrelated to OpenEXR's own mip levels, which are not read.
+/// Halve the image repeatedly, adding each level as a separate Image.
+/**
+    Separate Images because all the channels of one Image share a data window. Unrelated to OpenEXR's own
+    mip levels, which are not read.
+*/
 class GenerateMipmaps final : public EditCommand
 {
 public:
@@ -110,7 +113,7 @@ public:
     }
 
 private:
-    int m_levels = 32; //!< Clamped to what the image has when the dialog opens
+    int m_levels = 32; ///< Clamped to what the image has when the dialog opens
 };
 
 } // namespace

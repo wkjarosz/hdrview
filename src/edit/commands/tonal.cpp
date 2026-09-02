@@ -69,8 +69,10 @@ public:
                        "sample keeps its sign.");
     }
 
-    //! The curve the three sliders make, over [0,1]. Only the part landing in the unit square is drawn;
-    //! the operation itself is unbounded.
+    /// The curve the three sliders make, over [0,1].
+    /**
+        Only the part landing in the unit square is drawn; the operation itself is unbounded.
+    */
     void draw_curve()
     {
         const float scale = std::pow(2.f, m_exposure);
@@ -181,11 +183,11 @@ public:
     }
 
 private:
-    //! What the color's alpha is taken to mean.
+    /// What the color's alpha is taken to mean.
     enum Mode : int
     {
-        Mode_Blend = 0, //!< Coverage: lay the color over what is there
-        Mode_Replace    //!< Write it outright, alpha channel included
+        Mode_Blend = 0, ///< Coverage: lay the color over what is there
+        Mode_Replace    ///< Write it outright, alpha channel included
     };
 
     float4 m_color{0.f, 0.f, 0.f, 1.f};

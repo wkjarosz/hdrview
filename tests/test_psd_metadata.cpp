@@ -42,8 +42,11 @@ void be32(std::string &o, uint32_t v)
     for (int i = 3; i >= 0; --i) o += char((v >> (8 * i)) & 0xff);
 }
 
-//! A PSD holding one image resource. `declared` is the size the resource block claims, `payload` what the
-//! section holds; a truncated or hand-edited file has them disagree.
+/// A PSD holding one image resource.
+/**
+    `declared` is the size the resource block claims, `payload` what the section holds; a truncated or
+    hand-edited file has them disagree.
+*/
 std::string psd_with_resource(uint16_t resource_id, uint32_t declared, const std::string &payload,
                               const std::string &trailing)
 {

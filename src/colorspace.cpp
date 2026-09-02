@@ -509,10 +509,10 @@ constexpr float k_Lab_kappa = 24389.f / 27.f;
 constexpr float3 k_Lab_min{0.f, -128.f, -128.f};
 constexpr float3 k_Lab_max{100.f, 128.f, 128.f};
 
-//! The cube root with the CIE's linear segment near zero, which keeps the slope finite at black.
+/// The cube root with the CIE's linear segment near zero, which keeps the slope finite at black.
 float Lab_f(float t) { return t > k_Lab_eps ? std::cbrt(t) : (k_Lab_kappa * t + 16.f) / 116.f; }
 
-//! Inverse of Lab_f().
+/// Inverse of Lab_f().
 float Lab_f_inv(float t)
 {
     const float t3 = t * t * t;
@@ -943,7 +943,7 @@ float3 RGB_to_HSL(float3 rgb)
 namespace
 {
 
-//! One component back out of the hexcone, given the two extremes it runs between.
+/// One component back out of the hexcone, given the two extremes it runs between.
 float hue_to_RGB(float x, float y, float hue)
 {
     if (hue < 0.f || hue > 1.f)
@@ -978,7 +978,7 @@ float3 HSL_to_RGB(float3 hsl)
 namespace
 {
 
-//! Scale the saturation without naming the hue, which the round trip would lose on an achromatic color.
+/// Scale the saturation without naming the hue, which the round trip would lose on an achromatic color.
 float3 adjust_saturation(float3 rgb, float s)
 {
     const float mn = std::min({rgb.x, rgb.y, rgb.z});

@@ -30,9 +30,7 @@ static void assert_only(const char *active_name)
 
 static const char *palette_window_ref = PALETTE;
 
-//! Test-engine ref of one of the palette's tool buttons, whose label ImGui::IconButton() builds as
-//! "<icon>##<action name>". A literal '/' in the name has to be escaped, or the engine reads it as a
-//! path separator.
+/// Test-engine ref of a palette tool button, whose label ImGui::IconButton() builds as "<icon>##<action>".
 static string palette_tool_ref(const char *action_name)
 {
     string escaped = action_name;
@@ -40,13 +38,13 @@ static string palette_tool_ref(const char *action_name)
     return PALETTE "/" + hdrview()->action(action_name).icon + "##" + escaped;
 }
 
-//! True when the palette is expanded; collapsed, ImGui submits its title bar and nothing else.
+/// True when the palette is expanded; collapsed, ImGui submits its title bar and nothing else.
 static bool palette_expanded(ImGuiTestContext *ctx)
 {
     return ctx->ItemExists(palette_tool_ref("Rectangular select").c_str());
 }
 
-//! Puts the palette in a known state: its visibility and collapsed state come from the user's settings.
+/// Puts the palette in a known state: its visibility and collapsed state come from the user's settings.
 static void show_and_expand_palette(ImGuiTestContext *ctx)
 {
     ctx->SetRef("##MainMenuBar");
@@ -59,8 +57,7 @@ static void show_and_expand_palette(ImGuiTestContext *ctx)
     IM_CHECK(palette_expanded(ctx));
 }
 
-//! A point on the palette's title bar clear of its collapse arrow. GetWindowTitlebarPoint() returns the
-//! bar's center, which on a palette only as wide as its buttons is the arrow itself.
+/// A point on the palette's title bar clear of its collapse arrow, which sits at the bar's center here.
 static float2 palette_grab_point(ImGuiTestContext *ctx)
 {
     ImGuiWindow *w = ctx->WindowInfo(palette_window_ref).Window;
@@ -70,9 +67,11 @@ static float2 palette_grab_point(ImGuiTestContext *ctx)
     return float2{w->Pos} + float2{0.5f * (arrow_right + w->Size.x), 0.5f * w->TitleBarHeight};
 }
 
-//! Drag the palette by its title bar to \p target, where the snapping logic then takes over.
-//! Not ImGuiTestContext::WindowMove(), which force-expands the window and skips the drag when the target
-//! is where the window already sits.
+/// Drag the palette by its title bar to \p target, where the snapping logic then takes over.
+/**
+    Not ImGuiTestContext::WindowMove(), which force-expands the window and skips the drag entirely when the
+    target is where the window already sits.
+*/
 static void drag_palette_to(ImGuiTestContext *ctx, float2 target)
 {
     ctx->MouseMoveToPos(palette_grab_point(ctx));

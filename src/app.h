@@ -64,14 +64,18 @@ public:
     void run();
 
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
-    /// Turn on Dear ImGui Test Engine for this app instance; must be called before run(). `register_tests` is
-    /// invoked once the engine is ready and should IM_REGISTER_TEST(engine, ...) every test; all of them are
-    /// then queued, and run() returns once the queue is empty.
+    /// Turn on Dear ImGui Test Engine for this app instance; must be called before run().
+    /**
+        `register_tests` is invoked once the engine is ready and should IM_REGISTER_TEST(engine, ...) every
+        test; all of them are then queued, and run() returns once the queue is empty.
+    */
     void enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *));
     /// Valid only after run() returns; {tested, succeeded} counts from the Test Engine queue.
     std::pair<int, int> test_engine_result() const { return {m_test_engine_tested, m_test_engine_succeeded}; }
     /// The buffer a screenshot must be read back from, or nullptr when the window's own framebuffer will do.
-    /// Only the colorpass's offscreen target still holds extended sRGB; the window is display-referred.
+    /**
+        Only the colorpass's offscreen target still holds extended sRGB; the window is display-referred.
+    */
     const RenderPass *capture_source() const { return m_color_managed ? m_colorpass_pass.get() : nullptr; }
 #endif
 
@@ -86,7 +90,7 @@ public:
     void load_images(const vector<string> &filenames);
     void load_image(const string filename, std::optional<string_view> buffer = std::nullopt, bool should_select = true,
                     const ImageLoadOptions &opts = {}, ImagePtr to_replace = nullptr);
-    //! Download `url` and load it as an image (Emscripten only). `to_replace` reloads in place, as reload_image() does.
+    /// Download `url` and load it as an image (Emscripten only). `to_replace` reloads in place, as reload_image() does.
     void load_url(string_view url, bool should_select = true, ImagePtr to_replace = nullptr,
                   const ImageLoadOptions &opts = load_image_options());
     /// Ask about unsaved edits, then close via close_image_immediately() once the prompt is answered
@@ -95,27 +99,39 @@ public:
     void close_image_immediately(int index = -1);
     void close_all_images_immediately();
     void reload_image(ImagePtr image, bool shall_select = false);
-    //! Put a copy of the current image -- or of the selection, if there is one -- beside it, and select it.
-    //! Not an undoable edit: the history belongs to an image, so closing the copy is what takes it back.
+    /// Put a copy of the current image -- or of the selection, if there is one -- beside it, and select it.
+    /**
+        Not an undoable edit: the history belongs to an image, so closing the copy is what takes it back.
+    */
     void duplicate_image();
 
-    //! Run \p action_name with \p group standing in for the selected one, then put the selection back.
-    //! Pointing at a group is not selecting it: only the operation is told which group was meant.
+    /// Run \p action_name with \p group standing in for the selected one, then put the selection back.
+    /**
+        Pointing at a group is not selecting it: only the operation is told which group was meant.
+    */
     void invoke_action_on_group(const std::string &action_name, int image_index, int group);
-    //! Point at \p group of image \p image_index for the duration of \p body; while this is in force, the
-    //! commands and the menu that offers them address that group instead of the current one.
+    /// Point at \p group of image \p image_index for the duration of \p body.
+    /**
+        While this is in force, the commands and the menu that offers them address that group instead of
+        the current one.
+    */
     void with_target_group(int image_index, int group, const std::function<void()> &body);
-    //! The image an edit acts on: the one being pointed at, or the current one.
+    /// The image an edit acts on: the one being pointed at, or the current one.
     ImagePtr target_image();
-    //! The groups of \p img an edit acts on: the selected ones, or a group pointed at from outside them.
-    //! Falls back to the group on screen for an image with nothing selected.
+    /// The groups of \p img an edit acts on: the selected ones, or a group pointed at from outside them.
+    /**
+        Falls back to the group on screen for an image with nothing selected.
+    */
     std::vector<int> target_groups(const ConstImagePtr &img) const;
-    //! The same, for a group named by the caller rather than by what is currently pointed at.
+    /// The same, for a group named by the caller rather than by what is currently pointed at.
     std::vector<int> target_groups(const ConstImagePtr &img, int pointed_at) const;
-    //! Put \p img into the list just after the current image, named \p partname, and select it.
+    /// Put \p img into the list just after the current image, named \p partname, and select it.
     void add_image_beside_current(ImagePtr img, const std::string &partname);
-    //! Whether `image` came from somewhere reload_image() could read it again. Answers from how the image
-    //! was loaded, never from the filesystem: it gates a shortcut, so it is evaluated every frame.
+    /// Whether `image` came from somewhere reload_image() could read it again.
+    /**
+        Answers from how the image was loaded, never from the filesystem: it gates a shortcut, so it is
+        evaluated every frame.
+    */
     bool can_reload(const ConstImagePtr &image) const;
     /// The background loader, which also owns the watched-directory and recent-file lists.
     BackgroundImageLoader       &image_loader() { return m_image_loader; }
@@ -128,8 +144,11 @@ public:
     void save_session();
     void load_session();
     void load_session(const string &filename);
-    //! The "HDRView session" manifest for the images and view settings as they stand. \p path_of supplies
-    //! each image's "path": filesystem-relative for a plain .hsess, an in-bundle location for a zip export.
+    /// The "HDRView session" manifest for the images and view settings as they stand.
+    /**
+        \p path_of supplies each image's "path": filesystem-relative for a plain .hsess, an in-bundle
+        location for a zip export.
+    */
     json build_session_manifest(const std::function<string(ConstImagePtr)> &path_of) const;
     void export_session_bundle();
     // Emscripten's "Load session..." entry point: uploads a .zip and loads it strictly as a session bundle,
@@ -144,12 +163,16 @@ public:
     //-----------------------------------------------------------------------------
     // running work on the main thread
     //-----------------------------------------------------------------------------
-    /// Run \p f on the main thread at the start of the next frame, before the GUI is drawn. Safe to call
-    /// from any thread; keep \p f short, since it runs inline in the frame.
+    /// Run \p f on the main thread at the start of the next frame, before the GUI is drawn.
+    /**
+        Safe to call from any thread; keep \p f short, since it runs inline in the frame.
+    */
     void post_to_main_thread(std::function<void()> f);
 
-    /// Nudge the frame loop into drawing, from any thread. The runner otherwise idles on window events, which
-    /// work arriving over a socket does not produce.
+    /// Nudge the frame loop into drawing, from any thread.
+    /**
+        The runner otherwise idles on window events, which work arriving over a socket does not produce.
+    */
     void wake_event_loop();
     //-----------------------------------------------------------------------------
 
@@ -178,7 +201,7 @@ public:
     //-----------------------------------------------------------------------------
     // editing images (see src/app-edit.cpp)
     //-----------------------------------------------------------------------------
-    /*!
+    /**
         Apply one edit to \p img and record how to reverse it. The only thing that writes image pixels: it
         also refuses images that cannot be edited, stops the statistics tasks reading the samples,
         invalidates the caches keyed on them, and pushes the undo entry.
@@ -193,21 +216,28 @@ public:
     bool modify_image(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op,
                       const std::function<UndoPtr(const Image &)> &make_undo);
 
-    //! A geometric edit, reversed by performing its opposite instead of storing pixels. \p forward and
-    //! \p backward must be inverses of each other, as flips and quarter turns are.
+    /// A geometric edit, reversed by performing its opposite instead of storing pixels.
+    /**
+        \p forward and \p backward must be inverses of each other, as flips and quarter turns are.
+    */
     bool modify_image_reversibly(const ImagePtr &img, const std::string &name,
                                  const std::function<void(Image &)> &forward,
                                  const std::function<void(Image &)> &backward);
 
-    //! Whether \p img accepts edits at all. False while a renderer is streaming into it, since the next
-    //! tile would overwrite the edit.
+    /// Whether \p img accepts edits at all.
+    /**
+        False while a renderer is streaming into it, since the next tile would overwrite the edit.
+    */
     static bool can_edit(const ConstImagePtr &img);
 
-    //! The channels \p subject names, and the rectangle of them it covers, in image coordinates: the data
-    //! window, narrowed to the selection when the subject asks for it. Empty means there is nothing to edit.
+    /// The channels \p subject names, and the rectangle of them it covers, in image coordinates.
+    /**
+        The rectangle is the data window, narrowed to the selection when the subject asks for it. Empty
+        means there is nothing to edit.
+    */
     std::pair<std::vector<int>, Box2i> resolve_subject(const ConstImagePtr &img, const EditSubject &subject) const;
 
-    /*!
+    /**
         Apply \p op to every sample the subject covers, as one undoable edit.
 
         \p op is handed a sample, its position in image coordinates, and which of the subject's channels it
@@ -220,7 +250,7 @@ public:
     bool modify_pixels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
                        const std::function<float(float, int2, int)> &op);
 
-    /*!
+    /**
         Apply \p op to each covered group's channels together -- its value and its position in image
         coordinates -- as one undoable edit. Unlike modify_pixels(), which sees one sample at a time, this
         can mix channels into each other, as a color-space conversion or a channel mixer does.
@@ -237,19 +267,23 @@ public:
                        const std::function<float4(const float4 &, int2)> &op,
                        const std::function<void(Image &)>                &retag = {});
 
-    //! As modify_colors(), but \p op is handed a reader instead of a value: `read(p)` gives the group's
-    //! components at any position, with \p border_x and \p border_y deciding what lies outside the image.
-    //! The reader sees the image as it was before the edit.
+    /// As modify_colors(), but \p op is handed a reader instead of a value.
+    /**
+        `read(p)` gives the group's components at any position, with \p border_x and \p border_y deciding
+        what lies outside the image. The reader sees the image as it was before the edit.
+    */
     bool modify_neighborhood(const ImagePtr &img, const std::string &name, const EditSubject &subject,
                              const std::function<float4(const std::function<float4(int2)> &, int2)> &op,
                              int border_x = BorderMode_Edge, int border_y = BorderMode_Edge);
 
-    //! Apply an edit that changes the image's shape -- crop, canvas resize, a change to the channel list --
-    //! as one undoable step. The whole channel list is saved for undo, and the layer tree is rebuilt and the
-    //! view refit afterwards.
+    /// Apply an edit that changes the image's shape, as one undoable step.
+    /**
+        For crop, canvas resize, or a change to the channel list. The whole channel list is saved for undo,
+        and the layer tree is rebuilt and the view refit afterwards.
+    */
     bool modify_structure(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op);
 
-    /*!
+    /**
         Apply a neighborhood filter to the subject's channels, as one undoable edit.
 
         \p filter is handed a whole channel and the rectangle of it to produce, in channel-local
@@ -259,13 +293,16 @@ public:
     bool modify_channels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
                          const std::function<Array2Df(const Array2Df &, const Box2i &)> &filter);
 
-    //! Replace the image wholesale with something computed from it, off the main thread; for the
-    //! environment-map operations, which resample every channel into a new \p size. \p op produces one
-    //! channel's new samples; the results are swapped in together on the main thread, as one undoable step.
+    /// Replace the image wholesale with something computed from it, off the main thread.
+    /**
+        For the environment-map operations, which resample every channel into a new \p size. \p op produces
+        one channel's new samples; the results are swapped in together on the main thread, as one undoable
+        step.
+    */
     void modify_image_async(const ImagePtr &img, const std::string &name, int2 size,
                             const std::function<Array2Df(const Array2Df &, AtomicProgress)> &op);
 
-    /*!
+    /**
         As modify_channels(), but computed on a worker, with a progress bar that can cancel it. The image is
         only touched once every channel is done, back on the main thread and through the same chokepoint, so
         the edit still lands as one undoable step.
@@ -280,18 +317,18 @@ public:
         const ImagePtr &img, const std::string &name, const EditSubject &subject,
         const std::function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &filter);
 
-    //! Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
+    /// Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
     void draw_filter_progress_dialog(bool &open);
 
-    //! Run \p cmd, or open its dialog when it has one. The single path by which an edit command is invoked.
+    /// Run \p cmd, or open its dialog when it has one. The single path by which an edit command is invoked.
     void invoke_edit_command(EditCommand &cmd);
-    //! Run \p cmd once per image it covers, each with its own undo entry; see edit_command_images().
+    /// Run \p cmd once per image it covers, each with its own undo entry; see edit_command_images().
     void apply_edit_command(EditCommand &cmd);
-    //! The images one invocation of \p cmd covers.
+    /// The images one invocation of \p cmd covers.
     std::vector<ImagePtr> edit_command_images(const EditCommand &cmd);
-    //! Whether \p cmd could run now: the image accepts edits, and the command itself is satisfied.
+    /// Whether \p cmd could run now: the image accepts edits, and the command itself is satisfied.
     bool edit_command_enabled(const EditCommand &cmd);
-    //! The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
+    /// The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
     void draw_edit_command_dialog(EditCommand &cmd, bool &open);
 
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
@@ -306,14 +343,20 @@ public:
     /// Whether any open image has edits that are not in its file.
     bool any_image_modified() const;
 
-    //! Reverse the most recent edit of every selected image, each stepping its own history. False if the
-    //! current image had none, which is what draw_history_window()'s walk to a clicked entry terminates on.
+    /// Reverse the most recent edit of every selected image, each stepping its own history.
+    /**
+        False if the current image had none, which is what draw_history_window()'s walk to a clicked entry
+        terminates on.
+    */
     bool undo();
-    //! Reapply the edit undo() last reversed, across the selection. False if the current image had none.
+    /// Reapply the edit undo() last reversed, across the selection. False if the current image had none.
     bool redo();
 
-    //! Everything a completed edit invalidates, applied to \p img: the statistics cache, the GPU textures,
-    //! and, when the channels themselves changed, the layer and group tree built from them.
+    /// Everything a completed edit invalidates, applied to \p img.
+    /**
+        The statistics cache, the GPU textures, and, when the channels themselves changed, the layer and
+        group tree built from them.
+    */
     void after_modify(const ImagePtr &img);
     //-----------------------------------------------------------------------------
 
@@ -344,24 +387,27 @@ public:
     //-----------------------------------------------------------------------------
     // the multi-selection
     //-----------------------------------------------------------------------------
-    /*!
+    /**
         A target is an (image, channel group) pair. Any number of them can be selected, but only one is
         current and only one is reference, and the current one is always also selected; an image counts as
         selected when any of its groups is. The flags live on Channel, read through
         Image::is_group_selected(). Every entry point below maintains that.
     */
-    //! Every selected target, as (image index, group index) pairs, in the order the panel lists them.
+    /// Every selected target, as (image index, group index) pairs, in the order the panel lists them.
     std::vector<std::pair<int, int>> selected_targets() const;
-    //! Make group \p group of image \p index the current target. One that was already selected becomes the
-    //! selection's current member; one that was not replaces the whole selection.
+    /// Make group \p group of image \p index the current target.
+    /**
+        One that was already selected becomes the selection's current member; one that was not replaces the
+        whole selection.
+    */
     void set_current_group(int index, int group);
-    //! Add group \p group of image \p index to the selection, or take it out.
+    /// Add group \p group of image \p index to the selection, or take it out.
     void toggle_group_selected(int index, int group);
-    //! Select every image between the current one and \p index, each by the group it is showing.
+    /// Select every image between the current one and \p index, each by the group it is showing.
     void select_image_range_to(int index);
-    //! Select every target between the current one and (\p index, \p group), inclusive.
+    /// Select every target between the current one and (\p index, \p group), inclusive.
     void select_group_range_to(int index, int group);
-    //! Every selected image, in list order; the current one alone when nothing is selected.
+    /// Every selected image, in list order; the current one alone when nothing is selected.
     std::vector<ImagePtr> selected_images();
     //-----------------------------------------------------------------------------
 
@@ -389,12 +435,16 @@ public:
     /// Reposition the image so that the specified image pixel coordinate lies under the provided viewport position
     void reposition_pixel_to_vp_pos(float2 vp_pos, float2 pixel);
 
-    /// Mirrors a pixel coordinate about the current image's display window along the flipped axes; an
-    /// involution, and the only place the flip enters the pixel <-> viewport transforms.
+    /// Mirrors a pixel coordinate about the current image's display window along the flipped axes.
+    /**
+        An involution, and the only place the flip enters the pixel <-> viewport transforms.
+    */
     float2 flip_pixel(float2 pixel) const;
 
-    /// Where the quad the image shader samples \p img over starts, as a fraction of the viewport: the
-    /// viewport position of the image's data-window min corner. Derived from vp_pos_at_pixel().
+    /// Where the quad the image shader samples \p img over starts, as a fraction of the viewport.
+    /**
+        The viewport position of the image's data-window min corner, derived from vp_pos_at_pixel().
+    */
     float2 image_position(ConstImagePtr img) const;
     /// The extent of that same quad, as a fraction of the viewport. Negative along a flipped axis.
     float2 image_scale(ConstImagePtr img) const;
@@ -408,16 +458,20 @@ public:
     bool app_pos_in_viewport(float2 app_pos) const { return vp_pos_in_viewport(vp_pos_at_app_pos(app_pos)); }
     bool pixel_in_viewport(float2 pixel) const { return vp_pos_in_viewport(vp_pos_at_pixel(pixel)); }
 
-    /// True when the mouse is over the image viewport and nothing else (a panel, a popup, ...) is claiming
-    /// it. The geometric *_in_viewport() checks above don't account for occlusion by other windows.
+    /// True when the mouse is over the image viewport and nothing else (a panel, a popup, ...) claims it.
+    /**
+        The geometric *_in_viewport() checks above don't account for occlusion by other windows.
+    */
     bool mouse_over_viewport() const
     {
         return app_pos_in_viewport(ImGui::GetIO().MousePos) && !ImGui::GetIO().WantCaptureMouse;
     }
 
-    /// The most recently hovered image pixel while the mouse was over the viewport, held once the mouse
-    /// moves elsewhere so hover-driven widgets stay interactable while it travels to them. nullopt only if
-    /// the viewport has never been hovered this session.
+    /// The most recently hovered image pixel while the mouse was over the viewport.
+    /**
+        Held once the mouse moves elsewhere so hover-driven widgets stay interactable while it travels to
+        them. nullopt only if the viewport has never been hovered this session.
+    */
     optional<int2> last_hovered_pixel()
     {
         if (mouse_over_viewport())
@@ -446,8 +500,8 @@ public:
     */
     void zoom_at_vp_pos(float amount, float2 focus_vp_pos);
 
-    //! Respond to a touch gesture the browser reported. \see install_touch_handlers() in platform_utils
-    /*!
+    /// Respond to a touch gesture the browser reported. \see install_touch_handlers() in platform_utils
+    /**
         Scales the view by \p scale about the fingers while moving whatever was under \p from_app_pos to
         \p to_app_pos, so the image follows the fingers.
 
@@ -466,25 +520,31 @@ public:
     float zoom_level() const;
     void  set_zoom_level(float l);
 
-    /// The range m_zoom is kept within, outside of which the viewport transforms stop being invertible: a
-    /// zoom of zero divides by zero in pixel_at_vp_pos(), and the non-finite pixel coordinate that results
-    /// is undefined behavior to convert to int2.
+    /// The range m_zoom is kept within, outside of which the viewport transforms stop being invertible.
+    /**
+        A zoom of zero divides by zero in pixel_at_vp_pos(), and the non-finite pixel coordinate that
+        results is undefined behavior to convert to int2.
+    */
     static constexpr float MIN_ZOOM = 0.01f, MAX_ZOOM = 512.f;
     /// Sets the zoom factor, clamped to [MIN_ZOOM, MAX_ZOOM]. Every path that changes the zoom goes here.
     void set_zoom(float zoom);
     /// The zoom factor: image pixel size / logical pixel size. Always within [MIN_ZOOM, MAX_ZOOM].
     float zoom() const { return m_zoom; }
 
-    /// The ranges the exposure/offset/gamma sliders offer. These bound the sliders' drag travel only:
-    /// Ctrl+click text entry (no ImGuiSliderFlags_ClampOnInput) and the keyboard shortcuts step past them,
-    /// and values outside them are kept as given.
+    /// The ranges the exposure/offset/gamma sliders offer.
+    /**
+        These bound the sliders' drag travel only: Ctrl+click text entry (no ImGuiSliderFlags_ClampOnInput)
+        and the keyboard shortcuts step past them, and values outside them are kept as given.
+    */
     static constexpr float2 EXPOSURE_RANGE{-9.f, 9.f}, OFFSET_RANGE{-1.f, 1.f}, GAMMA_RANGE{0.02f, 9.f};
     //-----------------------------------------------------------------------------
 
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;
 
-    //! Applies the same exposure/tonemap/gamma pipeline as pixel_value(..., raw=false, ...), for an
-    //! arbitrary linear value rather than a pixel lookup (e.g. to preview a computed statistic).
+    /// Applies the same exposure/tonemap/gamma pipeline as pixel_value(..., raw=false, ...).
+    /**
+        Takes an arbitrary linear value rather than a pixel lookup, e.g. to preview a computed statistic.
+    */
     float4 tonemap_value(float4 value) const;
 
     // load font with the specified name at the specified size
@@ -494,8 +554,11 @@ public:
 
     /// The tool the mouse is currently in.
     MouseMode mouse_mode() const { return m_mouse_mode; }
-    /// Switch to the given tool. The only way to set the mode: it also updates the m_mouse_mode_enabled
-    /// array the tool actions expose as their selected state.
+    /// Switch to the given tool.
+    /**
+        The only way to set the mode: it also updates the m_mouse_mode_enabled array the tool actions
+        expose as their selected state.
+    */
     void set_mouse_mode(MouseMode m);
 
     float      &gamma_live() { return m_gamma_live; }
@@ -511,7 +574,7 @@ public:
     bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
     bool       &dithering_on() { return m_dither; }
     bool       &draw_grid_on() { return m_draw_grid; }
-    //! Whether the image list shows only the unique portion of each file name.
+    /// Whether the image list shows only the unique portion of each file name.
     bool      &short_names() { return m_short_names; }
     bool      &draw_pixel_info_on() { return m_draw_pixel_info; }
     AxisScale &histogram_x_scale() { return m_x_scale; }
@@ -519,15 +582,17 @@ public:
     float     &histogram_height() { return m_histogram_height; }
     Box2i     &roi_live() { return m_roi_live; }
     Box2i     &roi() { return m_roi; }
-    //! The color the viewport draws behind the image, for the edits that composite against it.
+    /// The color the viewport draws behind the image, for the edits that composite against it.
     float4 background_color() const { return m_bg_color; }
 
-    //! What cut or copy last took; null until one of them has run. Paste writes it back.
+    /// What cut or copy last took; null until one of them has run. Paste writes it back.
     ConstImagePtr clipboard() const { return m_clipboard; }
     void          set_clipboard(ImagePtr img) { m_clipboard = std::move(img); }
 
-    //! Set the selection, both the committed rectangle and the one drawn over the viewport. The two exist
-    //! apart only so a drag can update what is drawn each frame and commit once on release.
+    /// Set the selection, both the committed rectangle and the one drawn over the viewport.
+    /**
+        The two exist apart only so a drag can update what is drawn each frame and commit once on release.
+    */
     void    set_selection(const Box2i &box) { m_roi = m_roi_live = box; }
     bool2  &clip_warnings() { return m_clip_warnings; }
     float2 &clip_range() { return m_clip_range; }
@@ -535,9 +600,11 @@ public:
     /// Height of the Pixel statistics histogram plot, in em, when it has never been resized
     static constexpr float default_histogram_height = 9.f;
 
-    /// Display peak as a multiple of SDR white (1 = no headroom, 8 = three stops of it). Re-read per frame:
-    /// dimming the display lowers SDR white and so raises this, and on Wayland the real value arrives a
-    /// moment after startup. 0 means the display has not told us, not "no headroom".
+    /// Display peak as a multiple of SDR white (1 = no headroom, 8 = three stops of it).
+    /**
+        Re-read per frame: dimming the display lowers SDR white and so raises this, and on Wayland the real
+        value arrives a moment after startup. 0 means the display has not told us, not "no headroom".
+    */
     float display_headroom() const;
 
 private:
@@ -586,16 +653,20 @@ private:
     void update_visibility();
 
     void setup_rendering();
-    /// Re-query the display's color space and (re)create colorpass resources if it now needs them. Called
-    /// once per frame, before either colorpass half runs.
+    /// Re-query the display's color space and (re)create colorpass resources if it now needs them.
+    /**
+        Called once per frame, before either colorpass half runs.
+    */
     void update_colorpass();
     void begin_colorpass_frame();
     void end_colorpass_frame();
     void cleanup_colorpass();
 
-    /// True when this display can show more than standard dynamic range, i.e. when the HDR-only UI (the
-    /// "Clamp to LDR" control) is meaningful. Combines the framebuffer we were granted with what the display
-    /// reports about itself.
+    /// True when this display can show more than standard dynamic range.
+    /**
+        That is, when the HDR-only UI (the "Clamp to LDR" control) is meaningful. Combines the framebuffer
+        we were granted with what the display reports about itself.
+    */
     bool supports_hdr() const;
 
     void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
@@ -635,8 +706,10 @@ private:
     set<fs::path>    m_active_directories; ///< Set of directories containing the currently loaded images
     int              m_current = -1, m_reference = -1;
 
-    //! What a "Discard unsaved changes?" prompt should do once the user says yes. The modal answers a frame
-    //! or more later, so what was being asked about has to be remembered.
+    /// What a "Discard unsaved changes?" prompt should do once the user says yes.
+    /**
+        The modal answers a frame or more later, so what was being asked about has to be remembered.
+    */
     enum class PendingDiscard
     {
         None,
@@ -647,11 +720,14 @@ private:
     PendingDiscard m_pending_discard     = PendingDiscard::None;
     int            m_pending_close_index = -1;
     void           draw_confirm_discard_dialog(bool &open);
-    //! Do the thing the prompt was asking about, now that it has been confirmed.
+    /// Do the thing the prompt was asking about, now that it has been confirmed.
     void apply_pending_discard();
 
-    //! A filter running off the main thread, with what is needed to finish or abandon it. The worker writes
-    //! only `results` and `progress`; the main thread reads `done` once a frame and applies the results.
+    /// A filter running off the main thread, with what is needed to finish or abandon it.
+    /**
+        The worker writes only `results` and `progress`; the main thread reads `done` once a frame and
+        applies the results.
+    */
     struct RunningFilter
     {
         ImagePtr              image;
@@ -663,8 +739,10 @@ private:
         std::atomic<bool>     done{false};
         std::thread           worker;
 
-        //! Cancel and join: the worker reads this object and the thread pool, and both go away with the
-        //! application.
+        /// Cancel and join the worker.
+        /**
+            It reads this object and the thread pool, and both go away with the application.
+        */
         ~RunningFilter()
         {
             progress.cancel();
@@ -672,43 +750,51 @@ private:
                 worker.join();
         }
     };
-    //! Set when the running work replaces the image rather than a rectangle of it; see
-    //! modify_image_async(). drain_running_filter() then swaps the channels instead of uploading tiles.
+    /// Set when the running work replaces the image rather than a rectangle of it; see modify_image_async().
+    /**
+        drain_running_filter() then swaps the channels instead of uploading tiles.
+    */
     bool m_running_filter_resizes = false;
     int2 m_running_filter_size{0};
 
     std::unique_ptr<RunningFilter> m_running_filter;
 
-    //! Filters waiting for the one in flight: only one runs at a time (one progress dialog, one Cancel), but
-    //! an edit over a multi-selection arrives as one call per image in a single frame.
+    /// Filters waiting for the one in flight; only one runs at a time (one progress dialog, one Cancel).
+    /**
+        An edit over a multi-selection arrives as one call per image in a single frame.
+    */
     std::vector<std::function<void()>> m_filter_queue;
 
-    //! Applies a finished filter's results, or clears an abandoned one. Called once a frame.
+    /// Applies a finished filter's results, or clears an abandoned one. Called once a frame.
     void drain_running_filter();
-    //! Starts the next queued filter, if a fan-out left any waiting.
+    /// Starts the next queued filter, if a fan-out left any waiting.
     void start_next_filter();
 
-    //! The shared body of undo() and redo().
+    /// The shared body of undo() and redo().
     bool step_selected_histories(bool forward);
 
-    //! What the menu's edits apply to; see Edit > Apply to.
+    /// What the menu's edits apply to; see Edit > Apply to.
     EditSubject m_edit_subject;
 
-    //! What cut or copy last took, and paste writes back. One for the application, as a clipboard is.
+    /// What cut or copy last took, and paste writes back. One for the application, as a clipboard is.
     ImagePtr m_clipboard;
 
-    //! Every edit command, built once at startup; see edit/commands.h. Owns each command's parameters, so a
-    //! dialog reopens with the settings it was left with.
+    /// Every edit command, built once at startup; see edit/commands.h.
+    /**
+        Owns each command's parameters, so a dialog reopens with the settings it was left with.
+    */
     vector<EditCommandPtr> m_edit_commands;
 
     BackgroundImageLoader m_image_loader;
 
-    //! Work posted from other threads by post_to_main_thread(), drained once per frame.
+    /// Work posted from other threads by post_to_main_thread(), drained once per frame.
     std::mutex                         m_main_thread_mutex;
     std::vector<std::function<void()>> m_main_thread_queue;
 
-    //! The group the Images panel's context menu is pointing at (-1 when none) and the image whose group it
-    //! is. A group index means nothing on its own, so the two are only ever set and read together.
+    /// The group the Images panel's context menu is pointing at (-1 when none), and the image it belongs to.
+    /**
+        A group index means nothing on its own, so the two are only ever set and read together.
+    */
     ImagePtr m_target_image_override;
     int      m_target_group_override = -1;
     void     drain_main_thread_queue();
@@ -717,15 +803,20 @@ private:
     IpcServer m_ipc_server;
     uint16_t  m_ipc_port = k_default_ipc_port;
 
-    //! p_selected for the "Listen for image updates" toggle; refreshed from is_listening() every frame, since
-    //! binding can fail and --listen can turn it on at startup.
+    /// p_selected for the "Listen for image updates" toggle; the truth is whether the socket is bound.
+    /**
+        Refreshed from is_listening() every frame, since binding can fail and --listen can turn it on at
+        startup.
+    */
     bool m_ipc_listen_requested = false;
 
-    //! Turns the listener's running totals into the rates the activity readout shows, sampled over a window:
-    //! at 60 fps the per-frame deltas are one or two packets.
+    /// Turns the listener's running totals into the rates the activity readout shows.
+    /**
+        Sampled over a window rather than per frame: at 60 fps the per-frame deltas are one or two packets.
+    */
     struct IpcRates
     {
-        double   sampled_at    = 0.0; //!< ImGui::GetTime() of the last sample
+        double   sampled_at    = 0.0; ///< ImGui::GetTime() of the last sample
         uint64_t last_packets  = 0;
         uint64_t last_bytes    = 0;
         double   packets_per_s = 0.0;
@@ -747,9 +838,12 @@ private:
 
     int m_remaining_download = 0;
 
-    //! Number of fingers on the screen, tracked only under Emscripten. The GLFW port synthesizes mouse events
-    //! from the first touch and drops the rest ("we don't handle multitouch", Context.cpp), so during a pinch
-    //! it still reports a left-drag; panning is suppressed while this exceeds one.
+    /// Number of fingers on the screen, tracked only under Emscripten.
+    /**
+        The GLFW port synthesizes mouse events from the first touch and drops the rest ("we don't handle
+        multitouch", Context.cpp), so during a pinch it still reports a left-drag; panning is suppressed
+        while this exceeds one.
+    */
     int m_active_touches = 0;
 
     ImGuiTextFilter m_file_filter, m_channel_filter;
@@ -771,21 +865,30 @@ private:
     std::unique_ptr<RenderPass> m_colorpass_pass;
     std::unique_ptr<RenderPass> m_resolve_pass;
     std::unique_ptr<Shader>     m_colorpass_shader;
-    /// The color space the display currently wants, re-queried once per frame by update_colorpass(), so that
-    /// moving the window between monitors or toggling the OS's HDR mode takes effect live.
+    /// The color space the display currently wants, re-queried once per frame by update_colorpass().
+    /**
+        Moving the window between monitors or toggling the OS's HDR mode then takes effect live.
+    */
     DisplayColorSpace m_display_cs;
     /// Rec.709 -> m_display_cs.chroma, recomputed only when m_display_cs changes.
     float3x3 m_gamut_matrix{la::identity};
-    /// True when the display needs the colorpass to convert away from HDRView's extended-sRGB working
-    /// convention (e.g. Windows/Linux scRGB or Linux/Wayland PQ). Only ever true on the OpenGL/GLFW backend.
+    /// True when the display needs the colorpass to convert away from HDRView's extended-sRGB convention.
+    /**
+        E.g. Windows/Linux scRGB or Linux/Wayland PQ. Only ever true on the OpenGL/GLFW backend.
+    */
     bool m_color_managed = false;
     /// True once we've given up on the colorpass (shader or FBO creation failed), so we don't retry forever.
     bool m_colorpass_failed = false;
-    /// True when the float framebuffer we asked for was granted (hello_imgui clears the request when it
-    /// can't be satisfied). Drives the HDR-related UI, replacing hasEdrSupport() off of macOS.
+    /// True when the float framebuffer we asked for was granted.
+    /**
+        hello_imgui clears the request when it can't be satisfied. Drives the HDR-related UI, replacing
+        hasEdrSupport() off of macOS.
+    */
     bool m_float_buffer = false;
-    /// The --sdr command-line flag: behave as if the display were plain SDR. Checked by supports_hdr(), so
-    /// it also hides the HDR-only UI.
+    /// The --sdr command-line flag: behave as if the display were plain SDR.
+    /**
+        Checked by supports_hdr(), so it also hides the HDR-only UI.
+    */
     bool m_force_sdr = false;
 
     //-----------------------------------------------------------------------------
@@ -834,8 +937,10 @@ private:
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
     MouseMode m_mouse_mode = MouseMode_PanZoom;
-    /// Selected state of each tool action, kept in sync with m_mouse_mode by set_mouse_mode(). The tool
-    /// actions point their Action::p_selected at these.
+    /// Selected state of each tool action, kept in sync with m_mouse_mode by set_mouse_mode().
+    /**
+        The tool actions point their Action::p_selected at these.
+    */
     bool m_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
 
     HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
@@ -862,12 +967,14 @@ private:
     struct WatchedPixel
     {
         int2 pixel;
-        int3 color_mode{0, 0, 0}; //!< Color mode for current, reference, and composite pixels
+        int3 color_mode{0, 0, 0}; ///< Color mode for current, reference, and composite pixels
     };
     vector<WatchedPixel> m_watched_pixels;
     int                  m_status_color_mode = 0;
-    //! Which pixel the status bar reports: 0 current, 1 reference, 2 composite -- the `which_image` argument
-    //! pixel_color_widget() takes. Persisted, unlike the value format beside it.
+    /// Which pixel the status bar reports: 0 current, 1 reference, 2 composite.
+    /**
+        The `which_image` argument pixel_color_widget() takes. Persisted, unlike the value format beside it.
+    */
     int m_status_pixel_target = 2;
 
     //-----------------------------------------------------------------------------

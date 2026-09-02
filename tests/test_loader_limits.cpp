@@ -43,7 +43,7 @@ void append_be32(std::vector<uint8_t> &v, uint32_t x)
     v.insert(v.end(), {uint8_t(x >> 24), uint8_t(x >> 16), uint8_t(x >> 8), uint8_t(x)});
 }
 
-//! A QOI header declaring \p w by \p h. Big-endian dimensions at bytes 4..12, then channels and colorspace.
+/// A QOI header declaring \p w by \p h. Big-endian dimensions at bytes 4..12, then channels and colorspace.
 std::string qoi_header(uint32_t w, uint32_t h)
 {
     std::vector<uint8_t> v{'q', 'o', 'i', 'f'};
@@ -55,8 +55,10 @@ std::string qoi_header(uint32_t w, uint32_t h)
     return as_stream_contents(v);
 }
 
-//! A DDS header declaring \p w by \p h, complete enough that the parse reaches the dimensions.
-//! DDS_HEADER layout: size, flags, height, width at 4..20, and the 32-byte DDS_PIXELFORMAT at 76.
+/// A DDS header declaring \p w by \p h, complete enough that the parse reaches the dimensions.
+/**
+    DDS_HEADER layout: size, flags, height, width at 4..20, and the 32-byte DDS_PIXELFORMAT at 76.
+*/
 std::string dds_header(uint32_t w, uint32_t h)
 {
     std::vector<uint8_t> v(128, 0);
@@ -89,7 +91,7 @@ std::string dds_header(uint32_t w, uint32_t h)
     return as_stream_contents(v);
 }
 
-//! A GIF87a header declaring \p w by \p h. Little-endian 16-bit dimensions at bytes 6..10.
+/// A GIF87a header declaring \p w by \p h. Little-endian 16-bit dimensions at bytes 6..10.
 std::string gif_header(uint16_t w, uint16_t h)
 {
     std::vector<uint8_t> v{'G', 'I', 'F', '8', '7', 'a'};
@@ -99,8 +101,11 @@ std::string gif_header(uint16_t w, uint16_t h)
     return as_stream_contents(v);
 }
 
-//! Why \p loader refused \p bytes, or an empty string if it didn't refuse. These headers are truncated, so
-//! a loader skipping the dimension check still fails, just later and for a different reason.
+/// Why \p loader refused \p bytes, or an empty string if it didn't refuse.
+/**
+    These headers are truncated, so a loader skipping the dimension check still fails, just later and for a
+    different reason.
+*/
 template <typename Loader>
 std::string rejection_reason(Loader &&loader, const std::string &bytes, const char *filename)
 {
@@ -116,7 +121,7 @@ std::string rejection_reason(Loader &&loader, const std::string &bytes, const ch
     }
 }
 
-//! Whether \p reason is the dimension check's complaint and not a later decode failure.
+/// Whether \p reason is the dimension check's complaint and not a later decode failure.
 bool blames_dimensions(const std::string &reason) { return reason.find("implausibly large") != std::string::npos; }
 
 } // namespace
@@ -124,7 +129,7 @@ bool blames_dimensions(const std::string &reason) { return reason.find("implausi
 namespace
 {
 
-//! A one-entry deflated zip holding `contents` under `name`.
+/// A one-entry deflated zip holding `contents` under `name`.
 std::string make_zip(const std::string &name, const std::string &contents)
 {
     mz_zip_archive zip;
@@ -139,7 +144,7 @@ std::string make_zip(const std::string &name, const std::string &contents)
     return out;
 }
 
-/*!
+/**
     Overwrites the uncompressed-size field in both of an entry's headers, leaving the stored bytes alone;
     a zip whose directory claims far more than the archive is holding. Real-world equivalents are a
     truncated or hand-edited archive and a deliberate decompression bomb; both reach the same code.

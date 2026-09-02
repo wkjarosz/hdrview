@@ -10,7 +10,7 @@
 
 #include <vector>
 
-//! Every edit command. Menu order is set in app-gui.cpp, not here.
+/// Every edit command. Menu order is set in app-gui.cpp, not here.
 std::vector<EditCommandPtr> all_edit_commands();
 
 //
@@ -22,8 +22,10 @@ void add_transform_commands(std::vector<EditCommandPtr> &out);
 void add_color_commands(std::vector<EditCommandPtr> &out);
 void add_channel_commands(std::vector<EditCommandPtr> &out);
 
-//! Menu label for deleting \p groups of \p img: one channel, one group or several. The action's name
-//! stays fixed, since that is what addresses it.
+/// Menu label for deleting \p groups of \p img: one channel, one group or several.
+/**
+    The action's name stays fixed, since that is what addresses it.
+*/
 std::string delete_channels_label(const ImagePtr &img, const std::vector<int> &groups);
 void        add_mipmap_commands(std::vector<EditCommandPtr> &out);
 void        add_filter_commands(std::vector<EditCommandPtr> &out);
