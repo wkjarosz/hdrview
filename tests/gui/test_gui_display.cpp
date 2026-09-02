@@ -1,14 +1,9 @@
 /** \file test_gui_display.cpp
     \author Wojciech Jarosz
 
-    The display pipeline as the readouts reproduce it. HDRViewApp::tonemap_value() and the colormap lookup
-    under it are a CPU re-implementation of what assets/shaders/image-shader.sglsl puts on screen; the pixel
-    inspector, the pixel-value overlay and the statistics swatches are all built on them. Where the two
-    drift, HDRView reports a color it is not showing.
-
-    Both tests below transcribe the shader's own arithmetic and compare against it across a sweep, the same
-    way "colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_PQ" does in
-    tests/test_colorspace.cpp. If you edit either side, edit both.
+    The display pipeline as the readouts reproduce it: HDRViewApp::tonemap_value() and the colormap lookup
+    under it are a CPU re-implementation of assets/shaders/image-shader.sglsl. Both tests transcribe the
+    shader's arithmetic and sweep it against theirs; if you edit either side, edit both.
 */
 
 #include "app.h"
@@ -27,14 +22,11 @@ bool approx(float a, float b, float eps = 2e-3f) { return std::fabs(a - b) < eps
 bool approx(float3 a, float3 b, float eps = 2e-3f) { return la::maxelem(la::abs(a - b)) < eps; }
 
 //! Colormap::initialize()'s rule for which colormaps get a filtered texture; the qualitative ones are
-//! sampled Nearest, and none of them is offered as a false-color map.
+//! sampled Nearest.
 bool is_continuous(Colormap_ cmap) { return cmap > ImPlotColormap_Paired; }
 
-/*!
-    The colormap fetch as the fragment shader performs it: tonemap()'s texel-center remap of \p t, followed
-    by a bilinear lookup into the N-texel, ClampToEdge texture Colormap::initialize() uploads. Returns the
-    stored (sRGB-encoded) color, exactly what the shader hands to sRGBToLinear().
-*/
+//! The colormap fetch as the fragment shader performs it: tonemap()'s texel-center remap of \p t, then a
+//! bilinear lookup into the N-texel ClampToEdge texture. Returns the stored, sRGB-encoded color.
 float3 glsl_colormap_fetch(Colormap_ cmap, float t, bool reverse)
 {
     if (reverse)
@@ -42,8 +34,7 @@ float3 glsl_colormap_fetch(Colormap_ cmap, float t, bool reverse)
 
     const auto &values = Colormap::values(cmap);
     const float n      = (float)values.size();
-    // mix(0.5 / n, (n - 0.5) / n, t), converted from a uv to a texel coordinate, is just t * (n - 1); the
-    // sampler's ClampToEdge is what bounds it once t leaves [0, 1].
+    // mix(0.5 / n, (n - 0.5) / n, t) in texel coordinates is t * (n - 1); ClampToEdge bounds it outside [0, 1]
     const float coord = std::min(std::max(t * (n - 1.f), 0.f), n - 1.f);
     const int   i0    = (int)std::floor(coord);
     const int   i1    = std::min(i0 + 1, (int)values.size() - 1);
@@ -79,8 +70,6 @@ struct TonemapState
 
 void RegisterTests_Display(ImGuiTestEngine *engine)
 {
-    // Colormap::sample() is the readouts' half of the shader's colormap texture fetch. It has to agree with
-    // it over the whole of t, not just where the two parameterizations happen to cross.
     ImGuiTest *t = IM_REGISTER_TEST(engine, "display", "colormap_sample_matches_the_shaders_texture_fetch");
     t->TestFunc  = [](ImGuiTestContext *)
     {
@@ -89,8 +78,7 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
             const auto &values = Colormap::values(cmap);
             IM_CHECK(!values.empty());
 
-            // Both ends, for every colormap: t 0 is its first color and t 1 its last. This much holds
-            // whether the texture is filtered or not, so the qualitative maps are included.
+            // both ends, for every colormap: this holds whether or not the texture is filtered
             const ImVec4 first = ImGui::ColorConvertU32ToFloat4(values.front());
             const ImVec4 last  = ImGui::ColorConvertU32ToFloat4(values.back());
             const ImVec4 lo    = Colormap::sample(cmap, 0.f);
@@ -101,15 +89,14 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
             if (!is_continuous(cmap))
                 continue;
 
-            // And the interior, against the filtered fetch itself. ImPlot's table quantizes each step
-            // between two colors into 255 of its own, so allow a couple of those.
+            // the interior, against the filtered fetch; ImPlot quantizes each step into 255 of its own
             for (float x : {0.f, 0.01f, 0.1f, 0.25f, 1.f / 3.f, 0.5f, 0.625f, 0.75f, 0.9f, 0.99f, 1.f})
             {
                 const ImVec4 got = Colormap::sample(cmap, x);
                 IM_CHECK(approx(float3{got.x, got.y, got.z}, glsl_colormap_fetch(cmap, x, false), 3.f / 255.f));
             }
 
-            // Out of range clamps rather than wrapping or extrapolating, as ClampToEdge does.
+            // out of range clamps, as ClampToEdge does
             const ImVec4 under = Colormap::sample(cmap, -0.5f);
             const ImVec4 over  = Colormap::sample(cmap, 1.5f);
             IM_CHECK(approx(float3{under.x, under.y, under.z}, float3{first.x, first.y, first.z}, 1.f / 255.f));
@@ -117,15 +104,14 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
         }
     };
 
-    // tonemap_value() is the readouts' half of the shader's exposure/offset step and tonemap(). Swept over
-    // both, every tonemap mode, and the translucent pixels where the premultiplied convention is the only
-    // thing that distinguishes a right answer from a plausible one.
+    // swept over exposure, offset, every tonemap mode, and the translucent pixels where only the
+    // premultiplied convention distinguishes a right answer from a plausible one
     t           = IM_REGISTER_TEST(engine, "display", "tonemap_value_matches_the_shader");
     t->TestFunc = [](ImGuiTestContext *)
     {
         TonemapState restore;
 
-        // Transcribed from main() and tonemap() in assets/shaders/image-shader.sglsl.
+        // transcribed from main() and tonemap() in assets/shaders/image-shader.sglsl
         auto glsl_tonemap =
             [](float4 value, float exposure, float offset, float gamma, Tonemap_ mode, Colormap_ cmap, bool reverse)
         {

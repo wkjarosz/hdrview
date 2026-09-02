@@ -1,10 +1,9 @@
 /** \file test_gui_lifetime.cpp
     \author Wojciech Jarosz
 
-    Closes the reference image while a comparison against it is being computed. Channel::update_stats()
-    hands the async task raw Channel pointers into the reference image but retains a shared_ptr only to
-    the current one, so closing the reference frees channels the worker is still reading. Run under
-    AddressSanitizer, where the read shows up as heap-use-after-free.
+    Closes the reference image while a comparison against it is being computed: Channel::update_stats()
+    hands the async task raw Channel pointers into the reference but retains a shared_ptr only to the
+    current image. Run under AddressSanitizer, where a stale read shows up as heap-use-after-free.
 */
 
 #include "app.h"
@@ -34,14 +33,14 @@ void RegisterTests_Lifetime(ImGuiTestEngine *engine)
 
         IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2}), 2);
 
-        // Compare image 0 against image 1: only a blend mode other than Normal makes calculate() sample
-        // the reference, which is what puts the reference's channels behind the raw pointers.
+        // only a blend mode other than Normal makes calculate() sample the reference, putting its channels
+        // behind the raw pointers
         hdrview()->set_current_image_index(0);
         hdrview()->set_reference_image_index(1);
         hdrview()->blend_mode() = BlendMode_Difference;
         ctx->Yield();
 
-        // Kick off the comparison, then close the reference before it can finish.
+        // kick off the comparison, then close the reference before it can finish
         auto img = hdrview()->current_image();
         IM_CHECK(img != nullptr);
         auto &group = img->groups[img->selected_group];
@@ -50,10 +49,8 @@ void RegisterTests_Lifetime(ImGuiTestEngine *engine)
 
         hdrview()->close_image(1);
 
-        // Deliberately a soak rather than a wait for some condition: there is no state to wait for, and
-        // the point is to give the worker a window in which to touch the channels it no longer owns. What
-        // catches that is the sanitizer job, so the window has to exist even though nothing observable
-        // changes -- and it is a duration, since frames are no longer paced by anything.
+        // a soak, not a wait: there is no state to wait for, only a window in which the worker may touch
+        // channels it no longer owns, and the sanitizer job is what catches that
         soak(ctx, std::chrono::milliseconds(250));
 
         IM_CHECK(hdrview()->num_images() == 1);

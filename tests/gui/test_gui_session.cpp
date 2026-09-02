@@ -1,22 +1,10 @@
 /** \file test_gui_session.cpp
     \author Wojciech Jarosz
 
-    Coverage for three properties of session save/load (see
-    HDRViewApp::save_session()/load_session()/begin_session_load()/finish_pending_session() in
-    src/app-file-io.cpp):
-
-    1. A `.hsess` session file arriving through the same code path as an image (drag-and-drop, CLI args,
-       Finder "Open With", the "Open image..." dialog - all of which funnel through
-       HDRViewApp::load_images()) is routed to session loading rather than treated as an unsupported image.
-    2. A `.hsess` picked from the "Open recent" menu is routed to session loading too - that menu opens
-       whatever path it holds, and its entries can be sessions as readily as images.
-    3. Listing the same image path more than once in one session (e.g. to compare two channel groups of it
-       side by side) resolves each occurrence to its own distinct pending load, since identity isn't
-       tracked by path alone; current/reference don't collapse onto the same image.
-
-    None of these drive the "Save session..."/"Load session..." menu items (which open native file dialogs
-    that can't be automated here) - instead they write a hand-crafted .hsess file directly and exercise
-    load_images()/load_session()/"Open recent" exactly as those entry points do.
+    Session save/load (HDRViewApp::save_session()/load_session()/begin_session_load()/
+    finish_pending_session() in src/app-file-io.cpp), driven by writing a .hsess file and calling
+    load_images()/load_session()/"Open recent": the menu items themselves open native file dialogs that
+    cannot be automated here.
 */
 
 #include "app.h"
@@ -75,9 +63,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         fs::path session_path = write_temp_session(j, "hdrview_test_dnd.hsess");
 
         hdrview()->close_all_images();
-        // This is the exact call the GLFW drop callback, CLI args, and macOS Finder "Open With" all funnel
-        // through (see load_images() in src/app-file-io.cpp) - calling it directly with a .hsess path is a
-        // faithful stand-in for dragging one onto the app.
+        // the call the GLFW drop callback, CLI args and Finder "Open With" all funnel through
         hdrview()->load_images({session_path.string()});
         wait_for_loads(ctx);
 
@@ -100,14 +86,12 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         j["view"]             = json::object();
         fs::path session_path = write_temp_session(j, "hdrview_test_recent.hsess");
 
-        // Other tests leave their own entries in the recent list, and an entry is addressed below by the
-        // path prefix its (32-char-truncated) label exposes - start from an empty list so only this
-        // session's temp-directory path can match.
+        // an entry is addressed below by the path prefix its truncated label exposes, so start from an
+        // empty list and let only this session's temp-directory path match
         ctx->SetRef("##MainMenuBar"); // the menu bar is its own top-level window (see test_gui_dialogs.cpp)
         ctx->MenuClick("File/Open recent/Clear recently opened");
 
-        // Loading the session once is what puts it in the recent list; the "Load session..." menu item
-        // itself opens a native file dialog that can't be driven here.
+        // loading the session once is what puts it in the recent list
         hdrview()->close_all_images();
         hdrview()->load_session(session_path.string());
         wait_for_loads(ctx);
@@ -117,9 +101,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         ctx->Yield();
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
-        // Entries are labeled with the (middle-elided) path, so their IDs aren't predictable. Match on the
-        // leading part of the path that survives ImGuiTestItemInfo::DebugLabel's 32-char truncation, which
-        // is enough to pick out the one entry under the temp directory.
+        // entries are labeled with the middle-elided path, so their IDs are unpredictable: match on the
+        // leading part that survives ImGuiTestItemInfo::DebugLabel's 32-char truncation
         ctx->SetRef("##MainMenuBar");
         ctx->MenuAction(ImGuiTestAction_Open, "File/Open recent");
         ImGuiTestItemList entries;
@@ -127,9 +110,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         ImGuiID recent_id = 0;
         for (const ImGuiTestItemInfo &item : entries)
         {
-            // Each label is "<path>##File<n>", and where the path is short enough part of that ID suffix
-            // survives the truncation - possibly just one of its two '#', so cut at the first. Nothing
-            // matches without this on a platform whose temp directory is briefly named, like Linux's /tmp.
+            // each label is "<path>##File<n>", and a short path leaves part of that suffix inside the
+            // truncation, possibly just one of its two '#': cut at the first. Linux's /tmp is short enough.
             string label{item.DebugLabel};
             label = label.substr(0, label.find('#'));
             if (!label.empty() && session_path.string().rfind(label, 0) == 0)
@@ -149,9 +131,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session", "duplicate_image_current_and_reference_stay_distinct");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // The same fixture listed twice, with different selected_group/reference_group per entry - mirrors
-        // the reported repro (same image loaded twice, one channel group picked for current, a different
-        // one for reference).
+        // the same fixture listed twice, with a different selected_group/reference_group per entry
         json entry0, entry1;
         entry0["path"]            = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
         entry0["selected_group"]  = 0;
@@ -169,16 +149,14 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         fs::path session_path = write_temp_session(j, "hdrview_test_duplicate.hsess");
 
         hdrview()->close_all_images();
-        // load_session(const string&) is the non-dialog overload load_images() dispatches .hsess paths to;
-        // calling it directly here skips the native file-picker, which can't be driven by the test engine.
+        // load_session(const string&) is the non-dialog overload load_images() dispatches .hsess paths to
         hdrview()->load_session(session_path.string());
         wait_for_loads(ctx);
 
         IM_CHECK_EQ(hdrview()->num_images(), 2);
-        // The core of the bug: both occurrences of the same path must resolve to distinct Image instances,
-        // and current/reference must each point at their own intended occurrence, not collapse to one.
-        // IM_CHECK returns from this lambda on failure, so a null current/reference below is never
-        // dereferenced.
+        // both occurrences of the same path must resolve to distinct Image instances, with current and
+        // reference each pointing at their own. IM_CHECK returns from this lambda on failure, so a null
+        // current/reference below is never dereferenced.
         IM_CHECK(hdrview()->current_image_index() != hdrview()->reference_image_index());
         IM_CHECK(hdrview()->current_image() != nullptr);
         IM_CHECK(hdrview()->reference_image() != nullptr);
@@ -187,8 +165,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->reference_image()->reference_group, 1);
     };
 
-    // Written by build_session_manifest() rather than by hand, so a name it writes and a name the loader
-    // reads that had drifted apart would show up as a selection that did not come back.
+    // written by build_session_manifest(), so a name it writes that the loader does not read shows up here
+    // as a selection that did not come back
     t           = IM_REGISTER_TEST(engine, "session", "multi_selection_survives_a_round_trip");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -200,7 +178,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->image(0)->is_selected());
         IM_CHECK(hdrview()->image(1)->is_selected());
 
-        // Absolute paths, so the file can sit in the temp directory and still find its images.
+        // absolute paths, so the file can sit in the temp directory and still find its images
         json     j = hdrview()->build_session_manifest([](ConstImagePtr img) { return img->path.generic_u8string(); });
         fs::path session_path = write_temp_session(j, "hdrview_test_selection.hsess");
 
@@ -211,8 +189,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
 
         IM_CHECK_EQ(hdrview()->num_images(), 2);
 
-        // Both come back selected. Without the selection in the file, update_visibility() would collapse
-        // it onto the group the current image is showing, leaving the other one out.
+        // both come back selected: without the selection in the file, update_visibility() collapses it onto
+        // the group the current image is showing
         for (int i = 0; i < 2; ++i) IM_CHECK(hdrview()->image(i)->is_selected());
 
         fs::remove(session_path);
@@ -221,9 +199,9 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session", "missing_file_entry_logs_warning_and_loads_rest");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // One entry points at a file that doesn't exist alongside one that does - exercises
-        // finish_pending_session()'s partial-failure path (BackgroundImageLoader never reports failures
-        // directly; num_pending_images() reaching 0 with an unresolved entry left is how it's detected).
+        // one entry points at a file that does not exist, alongside one that does: BackgroundImageLoader
+        // never reports failures, so finish_pending_session() detects one as num_pending_images() reaching
+        // 0 with an entry still unresolved
         json good, missing;
         good["path"]    = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
         missing["path"] = (fs::temp_directory_path() / "hdrview_test_does_not_exist.png").generic_u8string();
@@ -242,8 +220,7 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         hdrview()->load_session(session_path.string());
         wait_for_loads(ctx);
 
-        // The missing entry never arrives; only the good one should load, and reference (entry 1) should
-        // stay unset rather than the modal hanging or the app crashing.
+        // the missing entry never arrives: only the good one loads, and reference (entry 1) stays unset
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK_EQ(hdrview()->current_image_index(), 0);
         IM_CHECK_EQ(hdrview()->reference_image_index(), -1);
@@ -252,9 +229,8 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "session", "out_of_range_values_are_clamped");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // A session file is ordinary user data, and several of its fields are used as array indices or as
-        // divisors. None of these values is reachable through the GUI; they stand in for a hand-edited,
-        // truncated, or version-skewed file.
+        // a session file is ordinary user data, and several of its fields are used as array indices or
+        // divisors; none of these values is reachable through the GUI
         json entry;
         entry["path"]           = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
         entry["selected_group"] = 9999; // indexed unchecked by raw_pixel() via active_group_index()
@@ -287,34 +263,32 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         auto img = hdrview()->current_image();
         IM_CHECK(img->is_valid_group(img->selected_group));
 
-        // colormap() indexes m_colormaps with the restored value, so an out-of-range one is only visible
-        // from outside as the colormap it returns.
+        // colormap() indexes m_colormaps with the restored value, so an out-of-range one is visible from
+        // outside only as the colormap it returns
         IM_CHECK(hdrview()->colormap() >= 0);
         IM_CHECK(hdrview()->colormap() < Colormap_COUNT);
 
-        // Zoom stays invertible, so pixel_at_vp_pos() keeps returning a finite coordinate -- the selection
-        // and pixel inspector convert that to an int2, which is undefined for a non-finite float.
+        // zoom stays invertible, so pixel_at_vp_pos() returns a finite coordinate: the selection and pixel
+        // inspector convert that to an int2, which is undefined for a non-finite float
         IM_CHECK(hdrview()->zoom() >= HDRViewApp::MIN_ZOOM);
         IM_CHECK(hdrview()->zoom() <= HDRViewApp::MAX_ZOOM);
 
-        // An inverted selection intersects the data window into an inverted box, whose negative volume()
-        // is a near-2^64 pixel count where PixelStats::calculate() takes it as a size_t.
+        // an inverted selection intersects the data window into an inverted box, whose negative volume() is
+        // a near-2^64 pixel count where PixelStats::calculate() takes it as a size_t
         IM_CHECK(hdrview()->roi().min.x <= hdrview()->roi().max.x);
         IM_CHECK(hdrview()->roi().min.y <= hdrview()->roi().max.y);
 
-        // Gamma keeps only its floor -- it is inverted before use. Exposure and offset are carried back
-        // as written, since Ctrl+click entry and the keyboard shortcuts can set values outside the
-        // sliders' travel and a session has to round-trip those.
+        // gamma keeps only its floor, since it is inverted before use; exposure and offset come back as
+        // written, because Ctrl+click entry and the shortcuts can set values outside the sliders' travel
         IM_CHECK(hdrview()->gamma() >= MIN_GAMMA);
         IM_CHECK_EQ(hdrview()->exposure(), 1e30f);
         IM_CHECK_EQ(hdrview()->offset(), -1e30f);
 
-        // Let a few frames run so anything reading these (the pixel inspector, the statistics window)
-        // actually touches them.
+        // let a few frames run so the pixel inspector and the statistics window touch these
         ctx->Yield(5);
 
-        // The hostile values are what this test is about, but they must not outlive it: the zoom of zero
-        // is clamped to the smallest there is, which leaves every later test looking at a speck.
+        // the hostile values must not outlive this test: the zoom of zero is clamped to the smallest there
+        // is, which leaves every later test looking at a speck
         reset_view_controls(ctx);
     };
 }

@@ -1,10 +1,8 @@
 /** \file test_gui_main.cpp
     \author Wojciech Jarosz
 
-    Entry point for hdrview_gui_tests: a real HDRView instance, built with Dear ImGui Test Engine wired in via
-    HDRViewApp::enable_gui_test_engine() (see src/app-windows.cpp). Unlike hdrview_tests (doctest), this binary
-    owns the full HelloImGui frame loop for its lifetime, so it gets its own main() rather than sharing
-    doctest's.
+    Entry point for hdrview_gui_tests: a real HDRView instance, with Dear ImGui Test Engine wired in via
+    HDRViewApp::enable_gui_test_engine() (see src/app-windows.cpp).
 */
 
 #include "app.h"
@@ -20,8 +18,7 @@
 
 int main(int, char **)
 {
-    // Keep console output focused on Test Engine's own pass/fail logging rather than the app's usual info-level
-    // startup chatter.
+    // keep the console to Test Engine's pass/fail logging
     spdlog::set_level(spdlog::level::warn);
 
 #if defined(HDRVIEW_BUILD_TREE_ASSETS_DIR)
@@ -29,9 +26,8 @@ int main(int, char **)
 #endif
 
     init_hdrview({}, {}, {}, {}, {});
-    // The About dialog auto-opens on startup whenever no files were passed on the command line (see its
-    // construction in app.cpp), which is always true for this harness; suppress that once, up front, so it
-    // doesn't sit on top of the menu bar/toolbar and confound every other test.
+    // the About dialog auto-opens when no files were passed on the command line, always the case here, and
+    // would sit on top of the menu bar and toolbar
     *hdrview()->action("Show help").p_selected = false;
     hdrview()->enable_gui_test_engine(&RegisterAllGuiTests);
     hdrview()->run();

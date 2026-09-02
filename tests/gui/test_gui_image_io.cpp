@@ -1,9 +1,8 @@
 /** \file test_gui_image_io.cpp
     \author Wojciech Jarosz
 
-    Loads a small fixture image and drives the exposure slider, exercising the path from image loading through
-    to viewport/toolbar state. Loads directly via HDRViewApp::load_images() rather than through the File > Open
-    menu, since that dialog is a native OS file picker Test Engine can't drive.
+    Loads a small fixture image and drives the exposure slider. Loads via HDRViewApp::load_images(), since
+    File > Open is a native OS file picker Test Engine cannot drive.
 */
 
 #include "app.h"
@@ -32,17 +31,14 @@ void RegisterTests_ImageIO(ImGuiTestEngine *engine)
     {
         hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
 
-        // Loading happens on a background thread and is drained into m_images from ShowGui() one frame at a
-        // time, so give it a bounded number of frames to land rather than assuming it's ready immediately.
+        // loading happens on a background thread and is drained into m_images from ShowGui()
         wait_for_loads(ctx);
         IM_CHECK(hdrview()->num_images() > 0);
 
         const float target_exposure = 2.5f;
-        // The exposure slider lives in the top edge toolbar, a separate floating window from
-        // "MainDockSpace" with a fixed internal name baked into Hello ImGui itself
-        // (see docking_details.cpp: "##" + EdgeToolbarTypeName(Top) + "_2123243"). Addressing it directly
-        // (rather than via a "**/" wildcard search across all windows) lets Test Engine bring it to front
-        // before hovering/interacting with the item.
+        // the exposure slider lives in the top edge toolbar, its own floating window whose internal name is
+        // baked into Hello ImGui (docking_details.cpp: "##" + EdgeToolbarTypeName(Top) + "_2123243").
+        // Addressing it directly lets Test Engine bring it to front before interacting with the item.
         ctx->SetRef("##Top_2123243");
         ctx->ItemInputValue("##ExposureSlider", target_exposure);
         IM_CHECK_EQ(hdrview()->exposure(), target_exposure);
@@ -51,7 +47,7 @@ void RegisterTests_ImageIO(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "image_io", "multi_image_load_switch_close");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        // Don't assume a pristine start: an earlier test in this binary may have already loaded an image.
+        // an earlier test in this binary may have left an image loaded
         hdrview()->close_all_images();
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
@@ -82,10 +78,9 @@ void RegisterTests_ImageIO(ImGuiTestEngine *engine)
         hdrview()->close_all_images();
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
-        // Build a path over 260 characters, the classic Win32 MAX_PATH limit that HDRView's application
-        // manifest (resources/windows/HDRView.manifest) opts out of. Requires the system-wide "Enable Win32
-        // long paths" policy to actually succeed, which is outside HDRView's control -- tolerate failure here
-        // rather than treat it as a test failure.
+        // a path over the Win32 MAX_PATH limit of 260 that HDRView's manifest
+        // (resources/windows/HDRView.manifest) opts out of. Succeeding also needs the system-wide "Enable
+        // Win32 long paths" policy, so failure here is tolerated.
         fs::path          dir = fs::temp_directory_path() / "hdrview_gui_long_path_test";
         const std::string segment(50, 'a');
         while (dir.u8string().size() < 300) dir /= segment;

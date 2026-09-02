@@ -1,22 +1,15 @@
 /** \file test_gui_screenshots.cpp
     \author Wojciech Jarosz
 
-    Authoring tool, not a regression test: drives the app into each state the README illustrates and saves a
-    PNG of the frame. It lives in the GUI suite because that is where a real HDRViewApp already runs under
-    something that can capture it -- hello_imgui's test-engine integration installs
-    ImGuiApp_ImplGL_CaptureFramebuffer as the engine's ScreenCaptureFunc, so ctx->CaptureScreenshot() reads
-    back the app's own OpenGL framebuffer with no further plumbing. That assignment sits inside an
-    `#ifdef HELLOIMGUI_HAS_OPENGL`, so this works on the OpenGL backends (Linux, Windows) and not on macOS's
-    Metal one.
-
-    Nothing here runs during an ordinary ctest run: without HDRVIEW_SCREENSHOT_DIR in the environment the
-    registration below adds zero tests, the same way test_gui_multipart.cpp registers none without its
-    OpenEXR fixtures. Run it through resources/regenerate-screenshots.sh.
+    Authoring tool, not a regression test: drives the app into each state the README illustrates and saves
+    a PNG of the frame. Registers nothing without HDRVIEW_SCREENSHOT_DIR, so an ordinary ctest run never
+    sees it; resources/regenerate-screenshots.sh is the entry point. Capture goes through hello_imgui's
+    test-engine ScreenCaptureFunc, which it installs only under `#ifdef HELLOIMGUI_HAS_OPENGL`, so this
+    works on the OpenGL backends (Linux, Windows) and not on macOS's Metal one.
 
     The subjects come from HDRVIEW_SCREENSHOT_IMAGES (a `:`-separated list of files and directories, first
     entry the one the shots are of) and HDRVIEW_SCREENSHOT_DIFF_IMAGE (the multi-view file the comparison
-    shot differences), falling back to what is in the tree. The in-tree fixtures keep the harness runnable
-    by anyone; pointing it at real photographs is what makes the pictures worth looking at.
+    shot differences), falling back to what is in the tree.
 */
 
 #include "app.h"
@@ -81,11 +74,10 @@ std::vector<std::string> path_list(const char *value)
 
 //! Every image the shots load, hero subject first.
 /*!
-    HDRVIEW_SCREENSHOT_IMAGES is a `:`-separated list of files and/or directories, kept in the order given:
-    the first entry is what most shots show in the viewport, and the rest are there so the Images panel has
-    something to be a picture of. Falling back, in the absence of that, to what is in the tree: the
-    multi-part Beachball if this build fetched OpenEXR's test images, since eight parts fill the panel, then
-    the gamma chart and the app icon, which are always present.
+    HDRVIEW_SCREENSHOT_IMAGES is a `:`-separated list of files and directories in the order given: the first
+    entry is what most shots show in the viewport, and the rest fill the Images panel. Failing that, what is
+    in the tree: the multi-part Beachball if this build fetched OpenEXR's test images, since eight parts
+    fill the panel, then the gamma chart and the app icon, which are always present.
 */
 const std::vector<std::string> &subjects()
 {
@@ -120,16 +112,12 @@ std::string palette_subject()
 }
 
 //! Saves the whole frame to `<HDRVIEW_SCREENSHOT_DIR>/<name>.png`.
-/*!
-    Deliberately adds no capture windows: with none, the capture tool takes the main viewport's rect as-is
-    and neither hides nor moves anything, which is what a screenshot of an application should be. Naming
-    windows would instead hide every window not named and shuffle the rest together.
-*/
+//! Adds no capture windows: with none, the capture tool takes the main viewport's rect as-is, where naming
+//! windows would hide every window not named and shuffle the rest together.
 void capture(ImGuiTestContext *ctx, const char *name)
 {
-    // The statistics panel is in every one of these pictures, and its numbers are computed off the main
-    // thread: without waiting for the selection in force to be the one they were computed for, the panel
-    // is photographed mid-recompute, showing the inf/-inf it holds before any pixel has been counted.
+    // the statistics panel is in every one of these pictures, and its numbers are computed off the main
+    // thread: photographed mid-recompute it shows the inf/-inf it holds before any pixel has been counted
     if (auto img = hdrview()->current_image())
     {
         auto &group = img->groups[img->selected_group];
@@ -138,24 +126,21 @@ void capture(ImGuiTestContext *ctx, const char *name)
                            [](const PixelStats *s) { return s->settings.roi == hdrview()->roi(); });
     }
 
-    // Let the frame settle -- a texture uploaded this frame, a panel that resized, a popup still opening --
-    // before the framebuffer is read back.
+    // let the frame settle before the framebuffer is read back: a texture uploaded this frame, a panel that
+    // resized, a popup still opening
     ctx->Yield(4);
 
     const std::string file = (output_dir() / (std::string(name) + ".png")).string();
     ctx->CaptureReset();
-    // CaptureSetFilename() is compiled only for the Python bindings, so the path goes into the args directly.
+    // CaptureSetFilename() is compiled only for the Python bindings, so the path goes into the args
     ImStrncpy(ctx->CaptureArgs->InOutputFile, file.c_str(), IM_ARRAYSIZE(ctx->CaptureArgs->InOutputFile));
     IM_CHECK(ctx->CaptureScreenshot(ImGuiCaptureFlags_HideMouseCursor));
 }
 
 //! Starts routing log messages to the Log window, which one of the shots is of.
-/*!
-    hdrview.cpp's main() is what normally installs this sink, and the GUI suite has its own main(), so
-    without it the panel photographs empty. Installed here rather than there, and so late: the suite ahead
-    of these shots deliberately opens damaged and missing files, and a log full of those errors -- with the
-    status bar's badge counting them -- is not what a screenshot of the Log window should show.
-*/
+//! hdrview.cpp's main() normally installs this sink and the GUI suite has its own main(), so without it the
+//! panel photographs empty. Installed this late because the tests ahead of these shots open damaged and
+//! missing files, and their errors are not what a screenshot of the Log window should show.
 void install_log_sink()
 {
     static bool installed = false;
@@ -171,12 +156,8 @@ void install_log_sink()
 }
 
 //! Loads every subject, including the other shots' own, once for the whole run.
-/*!
-    Every shot wants the same populated Images panel, and reloading per shot is the expensive thing this
-    harness does -- a photograph large enough to be worth photographing takes a second or so to decode, and
-    its statistics rather longer. Loading once keeps the window on screen for a few seconds rather than a
-    minute, and keeps the panel identical from shot to shot.
-*/
+//! Reloading per shot is the expensive thing this harness does: a photograph large enough to be worth
+//! photographing takes a second or so to decode, and its statistics longer.
 void load_subjects(ImGuiTestContext *ctx)
 {
     install_log_sink();
@@ -186,8 +167,8 @@ void load_subjects(ImGuiTestContext *ctx)
         if (!extra.empty())
             paths.push_back(extra);
 
-    // A multi-part or multi-view file becomes several images, so what is remembered is the count that
-    // loading these paths produced, not how many paths there were.
+    // a multi-part or multi-view file becomes several images, so remember the count loading these paths
+    // produced, not how many paths there were
     static std::vector<std::string> loaded;
     static int                      loaded_count = 0;
     if (loaded == paths && hdrview()->num_images() == loaded_count)
@@ -200,10 +181,7 @@ void load_subjects(ImGuiTestContext *ctx)
 }
 
 //! Selects the loaded image whose filename contains `needle`; returns whether one was found.
-/*!
-    By name rather than by index because load_images() makes no promise about the order background loads
-    land in -- the same reason find_image_index_containing() exists in test_gui_filtering.cpp.
-*/
+//! By name, since load_images() makes no promise about the order background loads land in.
 bool select_image_containing(const std::string &needle)
 {
     for (int i = 0; i < hdrview()->num_images(); ++i)
@@ -227,13 +205,11 @@ std::optional<int2> chosen_zoom_pixel()
 
 //! The busiest place in the image: the strongest edge inside the tile with the largest mean gradient.
 /*!
-    A zoomed-in shot has to land on something -- an edge, a texture -- or it is a screenshot of a flat color
-    with numbers written on it. Two stages, because either alone picks badly: the tile survey finds a region
-    that is genuinely textured rather than a lone noisy pixel, and the search within it puts the edge through
-    the middle of the frame rather than somewhere off in a corner of the tile.
-
-    Measured rather than hardcoded so that pointing the harness at a different photograph still produces a
-    picture worth looking at; HDRVIEW_SCREENSHOT_ZOOM_PIXEL overrides it when a specific spot is wanted.
+    A zoomed-in shot has to land on an edge or a texture, or it is a picture of a flat color with numbers
+    written on it. Two stages, since either alone picks badly: the tile survey finds a region that is
+    textured and not a lone noisy pixel, and the search within it puts the edge through the middle of the
+    frame. Measured, so that pointing the harness at a different photograph still produces a picture worth
+    looking at; HDRVIEW_SCREENSHOT_ZOOM_PIXEL overrides it.
 */
 int2 busiest_pixel(const ConstImagePtr &img)
 {
@@ -248,7 +224,7 @@ int2 busiest_pixel(const ConstImagePtr &img)
     for (int ty = 0; ty + tile.y <= size.y; ty += tile.y)
         for (int tx = 0; tx + tile.x <= size.x; tx += tile.x)
         {
-            // Sparse forward differences: enough to rank tiles, and cheap over a 45-megapixel photograph.
+            // sparse forward differences: enough to rank tiles, and cheap over a 45-megapixel photograph
             constexpr int step  = 4;
             float         sum   = 0.f;
             int           count = 0;
@@ -267,8 +243,7 @@ int2 busiest_pixel(const ConstImagePtr &img)
             }
         }
 
-    // Second stage: the strongest single edge inside that tile, so the shot is centered on the edge and not
-    // merely somewhere near it.
+    // second stage: the strongest single edge inside that tile, so the shot is centered on the edge itself
     int2  edge       = best + tile / 2;
     float edge_score = -1.f;
     for (int y = best.y; y + 1 < std::min(best.y + tile.y, size.y); ++y)
@@ -287,32 +262,30 @@ int2 busiest_pixel(const ConstImagePtr &img)
 
 //! Puts the app back into the state every shot starts from.
 /*!
-    Mostly undoing whatever the previous shots and, before them, the rest of the suite left set: they all run
-    in one process against one app, and a selection or a tonemap left over from an unrelated test is how a
-    screenshot ends up showing statistics over an empty region. Three of these are not resets -- short names,
-    because the full ones are absolute paths that say more about the machine than about HDRView; raising the
-    statistics tab, the most legible thing the right-hand dock can be showing; and parking the mouse over
-    the image, so the readouts that follow it have something real to report.
+    Mostly undoing whatever the previous shots and the rest of the suite left set: they run in one process
+    against one app, and a leftover selection or tonemap is how a screenshot ends up showing statistics over
+    an empty region. Three are not resets: short names, because the full ones are absolute paths that say
+    more about the machine than about HDRView; raising the statistics tab, the most legible thing the
+    right-hand dock can show; and parking the mouse over the image, so the readouts have something to report.
 */
 void reset_view(ImGuiTestContext *ctx)
 {
     hdrview()->blend_mode()  = BlendMode_Normal;
     hdrview()->tonemap()     = Tonemap_Gamma;
     hdrview()->short_names() = true;
-    // Forced, because set_reference_image_index() validates the index unless told not to, and -1 -- the
-    // "no reference" value -- is precisely the one it rejects. Without this a shot taken after the
-    // comparison one inherits its reference, and draws that image's data and display windows over this one.
+    // forced, because set_reference_image_index() validates the index unless told not to, and -1, the
+    // "no reference" value, is the one it rejects
     hdrview()->set_reference_image_index(-1, true);
-    // Above the default: the histogram is the one panel whose content is a picture rather than text, and at
-    // its normal height it reads as a smear in a screenshot viewed scaled down.
+    // above the default: the histogram's content is a picture, and at its normal height it reads as a
+    // smear in a screenshot viewed scaled down
     hdrview()->histogram_height() = 1.6f * HDRViewApp::default_histogram_height;
-    // The degenerate box at the origin, which is how the statistics panel's own clear button spells "no
-    // selection"; a default-constructed Box2i is the inverted one, and its INT_MAX corners get displayed.
+    // the degenerate box at the origin, how the statistics panel's clear button spells "no selection"; a
+    // default-constructed Box2i is the inverted one, whose INT_MAX corners get displayed
     hdrview()->roi() = hdrview()->roi_live() = Box2i{int2{0}};
     hdrview()->set_mouse_mode(MouseMode_PanZoom);
 
-    // The first subject is the one the shots are meant to be of; which image ends up current after a load
-    // is otherwise down to the order the background loads happened to land in.
+    // the first subject is the one the shots are of; which image ends up current after a load is otherwise
+    // down to the order the background loads landed in
     if (!subjects().empty())
         select_image_containing(fs::path(subjects().front()).stem().string());
 
@@ -324,7 +297,7 @@ void reset_view(ImGuiTestContext *ctx)
         ctx->MenuClick("View/Draw pixel values");
     if (!*hdrview()->action("Show status bar").p_selected)
         ctx->MenuClick("Windows/Show status bar");
-    // Closed unless a shot asks for it: it docks under the viewport and takes height from the image.
+    // closed unless a shot asks for it: it docks under the viewport and takes height from the image
     *hdrview()->action("Show Log window").p_selected = false;
     ctx->MenuClick("View/Fit display window");
     ctx->SetRef("");
@@ -349,9 +322,8 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
     if (!getenv("HDRVIEW_SCREENSHOT_DIR"))
         return; // an ordinary test run: register nothing
 
-    // The whole app in its default layout, showing a file with enough structure to fill the Images panel, and
-    // the Log window open under the viewport -- worth showing in its own right, and the right shape for the
-    // space a landscape image leaves over.
+    // the whole app in its default layout, showing a file with enough structure to fill the Images panel,
+    // and the Log window open under the viewport
     ImGuiTest *t = IM_REGISTER_TEST(engine, "screenshots", "overview");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
@@ -361,8 +333,8 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         capture(ctx, "screenshot-overview");
     };
 
-    // The two halves of inspecting a pixel, in one frame: the grid and per-pixel readouts over the image,
-    // and the Colorspace panel saying which color space those numbers are in.
+    // the two halves of inspecting a pixel: the grid and per-pixel readouts over the image, and the
+    // Colorspace panel saying which color space those numbers are in
     t           = IM_REGISTER_TEST(engine, "screenshots", "inspect");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -373,10 +345,9 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         ctx->MenuClick("View/Draw pixel grid");
         ctx->MenuClick("View/Draw pixel values");
         ctx->SetRef("");
-        // Three image pixels top to bottom. Framed by the viewport rather than by a fixed zoom because both
-        // of the things that matter here scale with the window: how many readouts fit, and whether they are
-        // drawn at all -- draw_pixel_info() fades them in over a threshold set by the width of "A: 31.00000"
-        // at the current font size, which a smaller window makes proportionally smaller too.
+        // three image pixels top to bottom, framed by the viewport: how many readouts fit and whether they
+        // are drawn at all both scale with the window, since draw_pixel_info() fades them in over a
+        // threshold set by the width of "A: 31.00000" at the current font size
         zoom_to_pixel(hdrview()->viewport_size().y / 3.f,
                       chosen_zoom_pixel().value_or(busiest_pixel(hdrview()->current_image())));
         ctx->WindowFocus("//Colorspace");
@@ -384,7 +355,7 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         capture(ctx, "screenshot-inspect");
     };
 
-    // The command palette over the image, with a query typed far enough to have filtered the list.
+    // the command palette over the image, with a query typed far enough to have filtered the list
     t           = IM_REGISTER_TEST(engine, "screenshots", "command_palette");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -409,11 +380,9 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         wait_until(ctx, [] { return !*hdrview()->action("Command palette...").p_selected; });
     };
 
-    // The difference between two views of one scene, which is what the reference machinery exists for.
-    // A multi-view EXR is the honest subject: its views arrive as channel groups of a single image (Fog.exr
-    // is one image holding 'Y' and 'right.Y'), so this sets the reference *group* alongside the reference
-    // image rather than pairing two files. Signed differences want the positive/negative colormap -- IceFire
-    // diverges from black, so sign reads as hue and magnitude as brightness.
+    // the difference between two views of one scene. A multi-view EXR's views arrive as channel groups of a
+    // single image (Fog.exr holds 'Y' and 'right.Y'), so this sets the reference group alongside the
+    // reference image. IceFire diverges from black, so sign reads as hue and magnitude as brightness.
     t           = IM_REGISTER_TEST(engine, "screenshots", "compare");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -421,8 +390,8 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         load_subjects(ctx);
         reset_view(ctx);
 
-        // Whichever image has two or more groups to difference: the named diff subject if one was given,
-        // otherwise the first that qualifies among the subjects.
+        // whichever image has two or more groups to difference: the named diff subject if one was given,
+        // otherwise the first that qualifies among the subjects
         int index = -1;
         for (int i = 0; i < hdrview()->num_images() && index < 0; ++i)
             if (hdrview()->image(i)->groups.size() >= 2 &&
@@ -441,7 +410,7 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         img->selected_group  = 0;
         img->reference_group = 1;
         // Subtract, not Difference: the latter is an absolute value, and half of a diverging colormap would
-        // then never be reached. A signed difference is what makes IceFire say which view is brighter.
+        // never be reached
         hdrview()->blend_mode() = BlendMode_Subtract;
 
         hdrview()->tonemap()          = Tonemap_PositiveNegative;
@@ -450,9 +419,8 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
             hdrview()->action("Increase gamma/Next colormap").callback();
         IM_CHECK_EQ((int)hdrview()->colormap(), (int)Colormap_IceFire);
 
-        // The difference between two views of one scene is mostly a fraction of a percent, so at exposure 0
-        // the picture is black with a few bright fringes. Opening up several stops is what a person does to
-        // look at a difference, and the toolbar shows the exposure it was taken at.
+        // the difference is mostly a fraction of a percent, so at exposure 0 the picture is black with a few
+        // bright fringes; the toolbar shows the exposure it was opened up to
         hdrview()->exposure() = hdrview()->exposure_live() = 4.f;
 
         ctx->SetRef("##MainMenuBar");

@@ -33,9 +33,8 @@ static void ensure_image_loaded(ImGuiTestContext *ctx)
 
 void RegisterTests_View(ImGuiTestEngine *engine)
 {
-    // "Zoom in"/"Zoom out" step between adjacent powers of two, and back. Both directions are checked from
-    // fractional zooms as well as exact ones: fitting to the window and the scroll wheel both leave the zoom
-    // between two stops, and from there neither direction may skip the stop it is standing next to.
+    // "Zoom in"/"Zoom out" step between adjacent powers of two, from fractional zooms as well as exact
+    // ones: fitting to the window and the scroll wheel both leave the zoom between two stops
     ImGuiTest *t = IM_REGISTER_TEST(engine, "view", "zoom_steps_between_powers_of_two");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
@@ -46,7 +45,7 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->zoom_level(), 0.f);
         const float one_to_one = hdrview()->zoom();
 
-        // The menu round trip, driven the way a user drives it.
+        // the menu round trip, driven the way a user drives it
         ctx->MenuClick("View/Zoom in");
         IM_CHECK_EQ(hdrview()->zoom(), 2.f * one_to_one);
         ctx->MenuClick("View/Zoom out");
@@ -56,8 +55,8 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         ctx->MenuClick("View/100%");
         IM_CHECK_EQ(hdrview()->zoom_level(), 0.f);
 
-        // Every start, exact or not, lands on the stop next to it -- and one step back returns to the
-        // interval it came from.
+        // every start, exact or not, lands on the stop next to it, and one step back returns to the
+        // interval it came from
         for (float from : {0.25f, 0.5f, 1.f, 2.f, 4.f, 0.75f, 1.5f, 2.3f, 3.f, 6.9f})
         {
             IM_CHECK_SILENT(from >= HDRViewApp::MIN_ZOOM && from <= HDRViewApp::MAX_ZOOM);
@@ -80,9 +79,7 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         ctx->MenuClick("View/100%");
     };
 
-    // That the two menu items toggle the two axes. Where the image then lands is the "viewport" tests'
-    // subject: they state the placement against a specification rather than against another part of the
-    // transform, and there is only one flip state for a menu click and an action-pointer write to reach.
+    // the two menu items toggle the two axes; where the image then lands is the "viewport" tests' subject
     t           = IM_REGISTER_TEST(engine, "view", "flip_toggle");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {

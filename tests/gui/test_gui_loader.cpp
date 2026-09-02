@@ -3,9 +3,6 @@
 
     BackgroundImageLoader driven through a running app: which directories it watches and what stops it
     watching them, and what it does with an archive whose contents it has to discover for itself.
-
-    Distinct from test_gui_image_io.cpp, which loads a file the caller named. Here the loader is the one
-    deciding what to open, so the tests are about the decisions rather than the decode.
 */
 
 #include "app.h"
@@ -44,8 +41,8 @@ fs::path place_fixture(const fs::path &dir, const char *name)
 bool is_watched(const fs::path &dir) { return hdrview()->image_loader().watched_directories().count(dir) != 0; }
 
 //! Writes a zip holding `contents` under "inside.png". A non-zero `declared` overwrites the entry's
-//! uncompressed size in both of its headers, so the archive claims more than it stores; zero leaves the
-//! real archive alone. See the equivalent fixture in tests/test_loader_limits.cpp for the header offsets.
+//! uncompressed size in both of its headers, so the archive claims more than it stores; zero leaves it
+//! alone. The header offsets are the same as in tests/test_loader_limits.cpp.
 fs::path write_zip(const fs::path &dir, const char *name, uint32_t declared, const std::string &contents)
 {
     mz_zip_archive zip;
@@ -88,9 +85,9 @@ using namespace hdrview_test;
 void RegisterTests_Loader(ImGuiTestEngine *engine)
 {
     /*
-        "Add watched folder..." exists to watch a folder you have *not* opened -- its whole point is to pick
-        up files that do not exist yet. So no loaded image ever lives in it, and any rule phrased as "drop
-        the directories no loaded image came from" throws it away. Closing an unrelated image must not.
+        "Add watched folder..." watches a folder you have not opened, to pick up files that do not exist
+        yet, so no loaded image lives in it and a rule phrased as "drop the directories no loaded image
+        came from" would throw it away.
     */
     ImGuiTest *t = IM_REGISTER_TEST(engine, "loader", "explicit_watch_outlives_the_images");
     t->TestFunc  = [](ImGuiTestContext *ctx)
@@ -106,7 +103,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->image_loader().add_watched_directory(watch_dir, true));
         IM_CHECK(is_watched(watch_dir));
 
-        // An image from somewhere else entirely; the watched folder stays empty throughout.
+        // an image from somewhere else; the watched folder stays empty throughout
         load_and_wait(ctx, {image.u8string()});
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(is_watched(watch_dir));
@@ -115,17 +112,17 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->num_images(), 0);
         IM_CHECK(is_watched(watch_dir));
 
-        // Nor may closing everything, for the same reason: the folder was asked for in its own right.
+        // nor may closing everything: the folder was asked for in its own right
         load_and_wait(ctx, {image.u8string()});
         hdrview()->close_all_images();
         IM_CHECK(is_watched(watch_dir));
 
-        // The X button beside it in the watched-folders table is what removes it, and must still work.
+        // the X button beside it in the watched-folders table removes it, and must still work
         hdrview()->image_loader().remove_watched_directories([&](const fs::path &p) { return p == watch_dir; });
         IM_CHECK(!is_watched(watch_dir));
 
-        // The other half of the rule, so this does not simply pin every directory forever: a folder watched
-        // only because its images were opened is still dropped once none of them is loaded.
+        // the other half of the rule: a folder watched only because its images were opened is dropped once
+        // none of them is loaded
         reset_images(ctx);
         hdrview()->load_images({image_dir.u8string()});
         wait_for_loads(ctx);
@@ -140,21 +137,18 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
     };
 
     /*
-        Opening a zip is the path where the loader discovers the entries itself, so the sizes it allocates
-        from are whatever the archive claims. A claim its own stored bytes cannot back has to be refused
-        before the allocation, not after the extraction fails -- the buffer is value-initialized, so the
-        pages are really touched and overcommit does not soften it. tests/test_loader_limits.cpp covers the
-        same guard on the two session-manifest paths; this is the one a user reaches by opening a file.
+        Opening a zip is the path where the loader discovers the entries itself, so it allocates from
+        whatever the archive claims. A claim its stored bytes cannot back is refused before the allocation:
+        the buffer is value-initialized, so the pages are touched and overcommit does not soften it.
+        tests/test_loader_limits.cpp covers the same guard on the two session-manifest paths.
     */
     t           = IM_REGISTER_TEST(engine, "loader", "an_archive_lying_about_an_entry_is_refused_up_front");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         const fs::path dir = make_temp_dir("zip");
-        // Well past deflate's 1032:1 ceiling, but small enough that a build without the guard merely wastes
-        // the allocation rather than exhausting the machine.
-        // A small, highly compressible payload: the claim has to exceed what deflate could have expanded
-        // the *stored* bytes to, and an already-compressed entry (a PNG, say) barely shrinks, so the same
-        // declared size against one would be a ratio deflate can legitimately reach.
+        // well past deflate's 1032:1 ceiling, but small enough that a build without the guard wastes the
+        // allocation instead of exhausting the machine. The payload has to be highly compressible: against
+        // an already-compressed entry the same declared size would be a ratio deflate can reach.
         const fs::path lying = write_zip(dir, "lying.zip", 64u << 20, std::string(64, 'x'));
         IM_CHECK(!lying.empty());
 
@@ -167,8 +161,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
             IM_CHECK(log.saw("Skipping zip entry 'inside.png'"));
         }
 
-        // The same image in an honest archive still opens, so the guard is refusing the claim rather than
-        // the format.
+        // the same image in a truthful archive still opens, so the guard refuses the claim, not the format
         std::ifstream     in{HDRVIEW_GUI_TEST_IMAGE, std::ios::binary};
         const std::string fixture{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
         const fs::path    honest = write_zip(dir, "honest.zip", 0, fixture);
@@ -184,12 +177,10 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
     };
 
     /*
-        Two reloads in flight for one image. The watch loop schedules a reload whenever a file's timestamp
-        moves, and it polls four times a second, so a file being written repeatedly -- which is exactly what
-        a watched render folder is -- outruns the load. "Reload all images" pressed twice does the same.
-
-        The arrival is matched to its slot by pointer identity, so once the first reload has replaced the
-        image, the second no longer finds the object it was told to replace.
+        Two reloads in flight for one image: the watch loop polls four times a second and schedules a reload
+        on every timestamp change, so a file being written repeatedly outruns the load. The arrival is
+        matched to its slot by pointer identity, so the second reload no longer finds the object it was told
+        to replace.
     */
     t           = IM_REGISTER_TEST(engine, "loader", "overlapping_reloads_replace_rather_than_accumulate");
     t->TestFunc = [](ImGuiTestContext *ctx)
@@ -204,17 +195,17 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         auto original = hdrview()->image(0);
         IM_CHECK(original != nullptr);
 
-        // Both scheduled before either can finish, the way the watch loop schedules them.
+        // both scheduled before either can finish, the way the watch loop schedules them
         hdrview()->reload_image(original);
         hdrview()->reload_image(original);
         wait_for_loads(ctx);
 
-        // One file, one entry -- whichever reload landed last.
+        // one file, one entry: whichever reload landed last
         IM_CHECK_EQ(hdrview()->num_images(), 1);
         IM_CHECK(hdrview()->image(0) != original);
         IM_CHECK(hdrview()->image(0)->path == fs::path(file));
 
-        // However many pile up, not just two.
+        // however many pile up, not just two
         auto current = hdrview()->image(0);
         for (int i = 0; i < 4; ++i) hdrview()->reload_image(current);
         wait_for_loads(ctx);
@@ -226,12 +217,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         fs::remove_all(dir, ec);
     };
 
-    /*
-        Open Recent should list places that opened. The file path is careful about this -- it drops the name
-        first and only puts it back once a load has actually succeeded -- and so is the zip path, but a
-        folder was recorded the moment it was looked at, whether or not it turned out to hold anything or
-        could even be read. Picking it from the menu then does nothing at all.
-    */
+    // a folder joins the recent list only if loading it produced an image
     t           = IM_REGISTER_TEST(engine, "loader", "only_folders_that_opened_something_become_recent");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -240,7 +226,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         const fs::path full_dir  = make_temp_dir("recent_full");
         place_fixture(full_dir, "a.png");
         {
-            // A file no loader claims, so the folder is non-empty but yields nothing.
+            // a file no loader claims, so the folder is non-empty but yields nothing
             std::ofstream junk{junk_dir / "notes.txt"};
             junk << "not an image";
         }
@@ -264,7 +250,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->num_images(), 0);
         IM_CHECK(!is_recent(junk_dir));
 
-        // And a folder that does hold an image is still recorded.
+        // a folder that does hold an image is still recorded
         hdrview()->load_images({full_dir.u8string()});
         wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 1);
@@ -279,10 +265,9 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
     };
 
     /*
-        An entry with no bytes in it. A zip can hold one, and the loader decided where to read from by
-        asking whether the buffer it was handed was empty -- so a zero-byte entry fell through to "open
-        this path", against a name assembled for display (archive.zip/inside.png) that no filesystem has.
-        The complaint was that the file did not exist, about a file that was never supposed to.
+        A zip can hold an entry with no bytes in it. The loader decides where to read from by asking whether
+        the buffer it was handed is empty, so a zero-byte entry must not fall through to "open this path",
+        against a name assembled for display (archive.zip/inside.png) that no filesystem has.
     */
     t           = IM_REGISTER_TEST(engine, "loader", "an_empty_zip_entry_is_reported_as_empty");
     t->TestFunc = [](ImGuiTestContext *ctx)
@@ -298,8 +283,8 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
             wait_for_loads(ctx);
             IM_CHECK_EQ(hdrview()->num_images(), 0);
             IM_CHECK(log.saw("is empty"));
-            // Whatever it says, it must not claim something is missing from the filesystem: the name it
-            // would be talking about was assembled for display and was never a path.
+            // it must not claim something is missing from the filesystem: the name it would be talking
+            // about was assembled for display and was never a path
             IM_CHECK(!log.saw("doesn't exist"));
         }
 
@@ -309,9 +294,9 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
     };
 
     /*
-        The same identity matching, in the other direction: an image closed while its reload was still in
-        flight. The arrival has a slot to fill that no longer exists, and appending it puts the image the
-        user just closed back in the list.
+        The same identity matching in the other direction: an image closed while its reload was in flight.
+        The arrival has a slot to fill that no longer exists, and appending it would put the image the user
+        just closed back in the list.
     */
     t           = IM_REGISTER_TEST(engine, "loader", "closing_an_image_mid_reload_does_not_resurrect_it");
     t->TestFunc = [](ImGuiTestContext *ctx)
@@ -330,7 +315,7 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         wait_for_loads(ctx);
         IM_CHECK_EQ(hdrview()->num_images(), 0);
 
-        // An ordinary load still adds, so this is not refusing arrivals in general.
+        // an ordinary load still adds, so this is not refusing arrivals in general
         load_and_wait(ctx, {file.u8string()});
         IM_CHECK_EQ(hdrview()->num_images(), 1);
 
