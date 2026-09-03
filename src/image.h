@@ -26,6 +26,7 @@
 #include <set>
 #include <smallthreadpool.h>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <filesystem>
@@ -434,20 +435,10 @@ struct LayerTreeNode
     void calculate_visibility(const Image *img);
 };
 
-struct Image
+/// Everything describing an image except its pixel data.
+/** Split out from Image so that duplicate() can copy all of it in one assignment. */
+struct ImageMetadata
 {
-public:
-    static bool                         loadable(const std::string &extension);
-    static const std::set<std::string> &loadable_formats(); /// Set of supported formats for image loading
-    static void                         make_default_textures();
-    static void                         cleanup_default_textures();
-    static Texture                     *black_texture();
-    static Texture                     *white_texture();
-    static Texture                     *dither_texture();
-    static Texture                     *chromaticity_texture();
-
-    int id;
-
     std::string filename;
     std::string partname;
     std::string channel_selector;
@@ -458,7 +449,6 @@ public:
     std::optional<TransparencyType_> transparency_override;
     Box2i                            data_window;
     Box2i                            display_window;
-    std::vector<Channel>             channels;
     std::optional<Chromaticities>    chromaticities;             ///< The chromaticities of the file
     std::optional<float2>            adopted_neutral;            ///< The adopted neutral of the file, if any
     float3x3                         M_RGB_to_XYZ, M_XYZ_to_RGB; ///< The RGB to XYZ and XYZ to RGB conversion matrices
@@ -487,6 +477,23 @@ public:
     fs::path           path;
     fs::file_time_type last_modified;
     size_t             size_bytes = 0;
+};
+
+struct Image : ImageMetadata
+{
+public:
+    static bool                         loadable(const std::string &extension);
+    static const std::set<std::string> &loadable_formats(); /// Set of supported formats for image loading
+    static void                         make_default_textures();
+    static void                         cleanup_default_textures();
+    static Texture                     *black_texture();
+    static Texture                     *white_texture();
+    static Texture                     *dither_texture();
+    static Texture                     *chromaticity_texture();
+
+    int id;
+
+    std::vector<Channel> channels;
 
     /// True for an image whose pixels arrive from a running process rather than from a file.
     /**
@@ -819,6 +826,9 @@ private:
     void traverse_tree(const LayerTreeNode *node, std::function<void(const LayerTreeNode *, int)> callback,
                        int level = 0) const;
 };
+
+static_assert(std::is_copy_assignable_v<ImageMetadata>, "duplicate() copies the metadata base in one assignment");
+static_assert(!std::is_copy_constructible_v<Image>, "an Image owns textures and statistics tasks; move it instead");
 
 /**
     Widen an interleaved 8-bit buffer to three or four channels, for a format that stores nothing narrower.

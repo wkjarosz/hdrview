@@ -1249,36 +1249,11 @@ ImagePtr Image::duplicate(const Box2i &region) const
 
     auto copy = std::make_shared<Image>();
 
-    // Everything that says what the samples mean. A copy that lost its primaries or its alpha convention
-    // would be read differently from the image it was made of, which is not what "duplicate" means.
-    copy->filename               = filename;
-    copy->partname               = partname;
-    copy->channel_selector       = channel_selector;
-    copy->chromaticities         = chromaticities;
-    copy->adopted_neutral        = adopted_neutral;
-    copy->M_RGB_to_XYZ           = M_RGB_to_XYZ;
-    copy->M_XYZ_to_RGB           = M_XYZ_to_RGB;
-    copy->M_to_sRGB              = M_to_sRGB;
-    copy->luminance_weights      = luminance_weights;
-    copy->adaptation_method      = adaptation_method;
-    copy->color_space            = color_space;
-    copy->white_point            = white_point;
-    copy->transparency           = transparency;
-    copy->transparency_from_file = transparency_from_file;
-    copy->transparency_assumed   = transparency_assumed;
-    copy->transparency_override  = transparency_override;
-    copy->metadata               = metadata;
-    copy->exif                   = exif;
-    copy->xmp_data               = xmp_data;
-    copy->icc_data               = icc_data;
-    copy->orientation_applied    = orientation_applied;
-    copy->path                   = path;
-    copy->last_modified          = last_modified;
-    copy->size_bytes             = size_bytes;
-
-    // Not copied: `id`, which the constructor hands out; `history`, since nothing has been done to the
-    // copy; `is_live`, since these samples are a snapshot; and `vector_overlay`, which annotates what a
-    // renderer is producing.
+    // Everything that says what the samples mean: a copy that lost its primaries or its alpha convention
+    // would be read differently from the image it was made of. Left behind are `id`, which the constructor
+    // hands out; `history`, since nothing has been done to the copy; `is_live`, since these samples are a
+    // snapshot; and `vector_overlay`, which annotates what a renderer is producing.
+    static_cast<ImageMetadata &>(*copy) = *this;
 
     const int2 extent = clipped.size();
     const int2 offset = clipped.min - data_window.min;
@@ -1286,8 +1261,8 @@ ImagePtr Image::duplicate(const Box2i &region) const
     copy->channels.reserve(channels.size());
     for (const auto &channel : channels)
     {
-        // Channel cannot be copied -- the deleted copy is what stops a texture or a statistics task being
-        // duplicated by accident -- so a fresh one is filled from this one's samples.
+        // Channel cannot be copied; the deleted copy is what stops a texture or a statistics task being
+        // duplicated by accident, so a fresh one is filled from this one's samples.
         Channel out{channel.name, extent};
         out.bits_per_sample = channel.bits_per_sample;
 
@@ -1302,18 +1277,12 @@ ImagePtr Image::duplicate(const Box2i &region) const
         copy->channels.push_back(std::move(out));
     }
 
-    // A duplicated region is a whole image, not a crop sitting inside the old canvas -- but one of the
-    // whole image keeps the frame it had, display window and all.
-    if (clipped == data_window)
-    {
-        copy->data_window    = data_window;
-        copy->display_window = display_window;
-    }
-    else
+    // A duplicated region becomes a whole image of its own; a copy of the whole one keeps both windows.
+    if (clipped != data_window)
         copy->data_window = copy->display_window = clipped;
 
     // The layers and groups follow from the channel names, and finalize() would premultiply a
-    // straight-alpha image a second time -- these samples are already whatever this image's are.
+    // straight-alpha image a second time; these samples are already whatever this image's are.
     copy->rebuild_layers();
 
     return copy;
