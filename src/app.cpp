@@ -63,6 +63,7 @@ const char *mouse_mode_action_name(MouseMode m)
     case MouseMode_PanZoom: return "Pan and zoom";
     case MouseMode_RectangularSelection: return "Rectangular select";
     case MouseMode_ColorInspector: return "Pixel/color inspector";
+    case MouseMode_Annotate: return "Annotate";
     default: return "Pan and zoom";
     }
 }
@@ -1299,8 +1300,9 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
 
         // The tools are a radio group: each callback routes through set_mouse_mode(), which clears the other
         // tools' selected flags.
-        const ImGuiKeyChord tool_chords[MouseMode_COUNT] = {ImGuiKey_P, ImGuiKey_M, ImGuiKey_I};
-        const char *tool_icons[MouseMode_COUNT] = {ICON_MY_PAN_ZOOM_TOOL, ICON_MY_SELECT, ICON_MY_WATCHED_PIXEL};
+        const ImGuiKeyChord tool_chords[MouseMode_COUNT] = {ImGuiKey_P, ImGuiKey_M, ImGuiKey_I, ImGuiKey_A};
+        const char         *tool_icons[MouseMode_COUNT] = {ICON_MY_PAN_ZOOM_TOOL, ICON_MY_SELECT, ICON_MY_WATCHED_PIXEL,
+                                                           ICON_MY_ANNOTATE};
         for (int i = 0; i < MouseMode_COUNT; ++i)
             add(Action{{mouse_mode_action_name(i)},
                        tool_icons[i],
@@ -1310,6 +1312,21 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        always_enabled,
                        false,
                        &m_mouse_mode_enabled[i]});
+
+        add(Action{{"Delete annotation"},
+                   ICON_MY_DELETE,
+                   ImGuiKey_Delete,
+                   0,
+                   [this]()
+                   {
+                       if (auto img = current_image(); img && !img->annotations.empty())
+                           img->annotations.pop_back();
+                   },
+                   [this]()
+                   {
+                       auto img = current_image();
+                       return img && !img->annotations.empty();
+                   }});
 
         // below actions are only available if there is an image
 

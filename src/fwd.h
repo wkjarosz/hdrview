@@ -138,6 +138,7 @@ enum MouseMode_ : MouseMode
     MouseMode_PanZoom = 0,
     MouseMode_RectangularSelection,
     MouseMode_ColorInspector,
+    MouseMode_Annotate,
 
     MouseMode_COUNT
 };

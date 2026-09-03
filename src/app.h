@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "annotations.h"
 #include "box.h"
 #include "colormap.h"
 #include "display_colorspace.h"
@@ -802,7 +803,17 @@ private:
     /**
         The tool actions point their Action::p_selected at these.
     */
-    bool m_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
+    bool m_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false, false};
+
+    /// Which shape the annotate tool draws, and the look every new annotation starts with.
+    Annotation::Shape m_annotation_shape = Annotation::Shape::Rect;
+    Annotation        m_annotation_style;
+    /// The image an in-progress drag is drawing on, null when no annotation is being created.
+    /**
+        Held rather than a bool so a drag that outlives its image -- playback advancing a frame, or the
+        image being closed -- is abandoned instead of continued on whatever is current by then.
+    */
+    ImagePtr m_creating_annotation_on;
 
     HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
 

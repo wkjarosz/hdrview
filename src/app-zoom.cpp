@@ -298,6 +298,45 @@ void HDRViewApp::handle_mouse_interaction()
         else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
             m_roi = m_roi_live;
     }
+    else if (m_mouse_mode == MouseMode_Annotate)
+    {
+        auto img = current_image();
+
+        // A drag whose image is no longer current takes its half-drawn shape with it.
+        if (m_creating_annotation_on && m_creating_annotation_on != img)
+        {
+            if (!m_creating_annotation_on->annotations.empty())
+                m_creating_annotation_on->annotations.pop_back();
+            m_creating_annotation_on = nullptr;
+        }
+
+        if (m_creating_annotation_on && ImGui::IsKeyPressed(ImGuiKey_Escape))
+        {
+            img->annotations.pop_back();
+            m_creating_annotation_on = nullptr;
+        }
+        else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            // Appended at once and grown in place, so the drag previews itself through the drawing path
+            // that will show it afterwards.
+            Annotation a = m_annotation_style;
+            a.shape      = m_annotation_shape;
+            a.p0 = a.p1 = pixel_at_app_pos(io.MousePos);
+            img->annotations.push_back(a);
+            m_creating_annotation_on = img;
+        }
+        else if (m_creating_annotation_on && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+            img->annotations.back().p1 = pixel_at_app_pos(io.MousePos);
+        else if (m_creating_annotation_on && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            // A click that never became a drag leaves nothing behind, rather than a shape with no extent
+            // that is invisible and cannot be taken hold of again.
+            const auto &a = img->annotations.back();
+            if (a.p0 == a.p1)
+                img->annotations.pop_back();
+            m_creating_annotation_on = nullptr;
+        }
+    }
     else if (m_mouse_mode == MouseMode_ColorInspector)
     {
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))

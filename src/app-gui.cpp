@@ -816,6 +816,36 @@ void HDRViewApp::draw_top_toolbar()
 
     IconButton(action("Draw pixel values"));
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+    // What the annotate tool will draw next, shown only while it is the active tool. Temporary quarters:
+    // both of these move into the annotations panel once there is one.
+    if (m_mouse_mode == MouseMode_Annotate)
+    {
+        ImGui::SetNextItemWidth(EmSize(6));
+        if (ImGui::BeginCombo("##AnnotationShape", annotation_shape_name(m_annotation_shape)))
+        {
+            for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
+            {
+                const auto shape = Annotation::Shape(n);
+                // Text is placed by clicking and then typing, which nothing here can do yet.
+                if (shape == Annotation::Shape::Text)
+                    continue;
+
+                const bool is_selected = shape == m_annotation_shape;
+                if (ImGui::Selectable(annotation_shape_name(shape), is_selected))
+                    m_annotation_shape = shape;
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SetItemTooltip("Which shape the annotate tool draws.");
+
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::ColorEdit4("##AnnotationColor", &m_annotation_style.stroke_color.x,
+                          ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+        ImGui::SetItemTooltip("The color new annotations are drawn in.");
+    }
 }
 
 void HDRViewApp::draw_command_palette(bool &open)
