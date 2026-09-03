@@ -24,6 +24,9 @@ public:
         sinks.erase(std::remove(sinks.begin(), sinks.end(), m_sink), sinks.end());
     }
 
+    LogCapture(const LogCapture &)            = delete;
+    LogCapture &operator=(const LogCapture &) = delete;
+
     /// Whether anything logged so far contains `substring`.
     bool saw(const std::string &substring) const
     {
@@ -32,16 +35,26 @@ public:
                            [&](const std::string &m) { return m.find(substring) != std::string::npos; });
     }
 
+    /// How many warnings and errors have been logged so far.
+    int warnings() const
+    {
+        std::lock_guard<std::mutex> lock(m_sink->mutex_);
+        return m_sink->num_warnings;
+    }
+
 private:
     struct Sink : spdlog::sinks::base_sink<std::mutex>
     {
         std::vector<std::string> messages;
-        std::mutex               mutex_;
+        int                      num_warnings = 0;
+        mutable std::mutex       mutex_;
 
         void sink_it_(const spdlog::details::log_msg &msg) override
         {
             std::lock_guard<std::mutex> lock(mutex_);
             messages.emplace_back(msg.payload.data(), msg.payload.size());
+            if (msg.level >= spdlog::level::warn)
+                ++num_warnings;
         }
         void flush_() override {}
     };

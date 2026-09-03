@@ -10,17 +10,18 @@
 #include "image.h"
 #include "imageio/image_loader.h"
 
+#include "../test_log_capture.h"
+#include "../test_zip.h"
+
 #include "imgui_test_engine/imgui_te_context.h"
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <spdlog/sinks/base_sink.h>
-#include <spdlog/spdlog.h>
 #include <string>
 #include <vector>
 
@@ -28,38 +29,6 @@ namespace hdrview_test
 {
 
 namespace fs = std::filesystem;
-
-/// Counts the warnings and errors logged while it is alive.
-class LogWatcher
-{
-public:
-    LogWatcher() : m_sink(std::make_shared<Sink>()) { spdlog::default_logger()->sinks().push_back(m_sink); }
-    ~LogWatcher()
-    {
-        auto &sinks = spdlog::default_logger()->sinks();
-        sinks.erase(std::remove(sinks.begin(), sinks.end(), m_sink), sinks.end());
-    }
-
-    LogWatcher(const LogWatcher &)            = delete;
-    LogWatcher &operator=(const LogWatcher &) = delete;
-
-    int warnings() const { return m_sink->count.load(); }
-
-private:
-    struct Sink final : spdlog::sinks::base_sink<std::mutex>
-    {
-        std::atomic<int> count{0};
-
-        void sink_it_(const spdlog::details::log_msg &msg) override
-        {
-            if (msg.level >= spdlog::level::warn)
-                ++count;
-        }
-        void flush_() override {}
-    };
-
-    std::shared_ptr<Sink> m_sink;
-};
 
 /// Yields until `done` holds, or `timeout` passes. Returns whether it held.
 /**
@@ -132,6 +101,14 @@ inline PixelStats *wait_for_stats(ImGuiTestContext *ctx, Channel &channel,
                    return stats && stats->computed && (!also || also(stats));
                });
     return stats;
+}
+
+/// Writes `bytes` to `path` and returns it.
+inline fs::path write_file(const fs::path &path, const std::string &bytes)
+{
+    std::ofstream os{path, std::ios::binary};
+    os.write(bytes.data(), (std::streamsize)bytes.size());
+    return path;
 }
 
 /// A fresh, empty directory under the system temp dir, canonicalized the way the loader stores paths.

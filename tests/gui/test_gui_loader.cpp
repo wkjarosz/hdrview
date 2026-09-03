@@ -12,10 +12,7 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
-#include "../test_log_capture.h"
 #include "test_gui_support.h"
-
-#include <miniz.h>
 
 #include <filesystem>
 #include <fstream>
@@ -25,6 +22,7 @@
 #endif
 
 namespace fs = std::filesystem;
+using namespace hdrview_test;
 
 namespace
 {
@@ -40,48 +38,18 @@ fs::path place_fixture(const fs::path &dir, const char *name)
 
 bool is_watched(const fs::path &dir) { return hdrview()->image_loader().watched_directories().count(dir) != 0; }
 
-/// Writes a zip holding `contents` under "inside.png".
+/// Writes a zip holding `contents` under "inside.png", into `dir` under `name`.
 /**
     A non-zero `declared` overwrites the entry's uncompressed size in both of its headers, so the archive
-    claims more than it stores; zero leaves it alone. The header offsets are the same as in
-    tests/test_loader_limits.cpp.
+    claims more than it stores; zero leaves it alone.
 */
 fs::path write_zip(const fs::path &dir, const char *name, uint32_t declared, const std::string &contents)
 {
-    mz_zip_archive zip;
-    memset(&zip, 0, sizeof(zip));
-    void  *buf  = nullptr;
-    size_t size = 0;
-    if (!mz_zip_writer_init_heap(&zip, 0, 0) ||
-        !mz_zip_writer_add_mem(&zip, "inside.png", contents.data(), contents.size(), MZ_BEST_COMPRESSION) ||
-        !mz_zip_writer_finalize_heap_archive(&zip, &buf, &size))
-    {
-        mz_zip_writer_end(&zip);
-        return {}; // the caller checks for this
-    }
-    std::string bytes(reinterpret_cast<char *>(buf), size);
-    mz_zip_writer_end(&zip);
-
+    std::string bytes = zip_bytes({{"inside.png", contents}});
     if (declared)
-    {
-        auto patch_at = [&](const char *sig, size_t field_offset)
-        {
-            size_t pos = bytes.find(sig, 0, 4);
-            if (pos == std::string::npos)
-                return;
-            for (int b = 0; b < 4; ++b) bytes[pos + field_offset + b] = char((declared >> (8 * b)) & 0xff);
-        };
-        patch_at("PK\x03\x04", 22);
-        patch_at("PK\x01\x02", 24);
-    }
-
-    fs::path      out = dir / name;
-    std::ofstream os{out, std::ios::binary};
-    os.write(bytes.data(), (std::streamsize)bytes.size());
-    return out;
+        declare_uncompressed_size(bytes, declared);
+    return write_file(dir / name, bytes);
 }
-
-using namespace hdrview_test;
 
 } // namespace
 
@@ -153,7 +121,6 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         // allocation instead of exhausting the machine. The payload has to be highly compressible: against
         // an already-compressed entry the same declared size would be a ratio deflate can reach.
         const fs::path lying = write_zip(dir, "lying.zip", 64u << 20, std::string(64, 'x'));
-        IM_CHECK(!lying.empty());
 
         reset_images(ctx);
         {
@@ -168,7 +135,6 @@ void RegisterTests_Loader(ImGuiTestEngine *engine)
         std::ifstream     in{HDRVIEW_GUI_TEST_IMAGE, std::ios::binary};
         const std::string fixture{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
         const fs::path    honest = write_zip(dir, "honest.zip", 0, fixture);
-        IM_CHECK(!honest.empty());
         reset_images(ctx);
         hdrview()->load_images({honest.u8string()});
         wait_for_loads(ctx);

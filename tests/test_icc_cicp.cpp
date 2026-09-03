@@ -8,6 +8,11 @@
 
 #include "colorspace.h"
 #include "imageio/icc.h"
+#include "imageio/image_loader.h"
+
+#include "test_support.h"
+
+#include "image.h"
 
 #include <array>
 #include <cstdint>
@@ -15,33 +20,53 @@
 #include <string>
 #include <vector>
 
+using namespace hdrview_test;
+
 namespace
 {
-
-void put_be32(std::vector<uint8_t> &v, size_t offset, uint32_t value)
-{
-    v[offset + 0] = uint8_t(value >> 24);
-    v[offset + 1] = uint8_t(value >> 16);
-    v[offset + 2] = uint8_t(value >> 8);
-    v[offset + 3] = uint8_t(value);
-}
 
 // The smallest byte sequence carrying an ICC `cicp` tag: a 128-byte header, a one-entry tag table, and the
 // tag. LCMS refuses to open it as a profile, so the code points have to be readable from the bytes alone.
 std::vector<uint8_t> icc_bytes_with_cicp(uint8_t cp, uint8_t tc, uint8_t mc, uint8_t fr)
 {
     std::vector<uint8_t> v(128 + 4 + 12 + 12, 0);
-    put_be32(v, 0, (uint32_t)v.size()); // profile size
-    put_be32(v, 128, 1);                // one tag
-    put_be32(v, 132, 0x63696370u);      // 'cicp'
-    put_be32(v, 136, 144);              // tag offset
-    put_be32(v, 140, 12);               // tag size
-    put_be32(v, 144, 0x63696370u);      // tag type signature, repeated
+    patch<uint32_t>(v, 0, (uint32_t)v.size(), Endian::Big); // profile size
+    patch<uint32_t>(v, 128, 1, Endian::Big);                // one tag
+    patch<uint32_t>(v, 132, 0x63696370u, Endian::Big);      // 'cicp'
+    patch<uint32_t>(v, 136, 144, Endian::Big);              // tag offset
+    patch<uint32_t>(v, 140, 12, Endian::Big);               // tag size
+    patch<uint32_t>(v, 144, 0x63696370u, Endian::Big);      // tag type signature, repeated
     v[152] = cp;
     v[153] = tc;
     v[154] = mc;
     v[155] = fr;
     return v;
+}
+
+// 16-bit narrow ("video") range puts black at 16 and white at 235, scaled by the sample depth.
+constexpr uint16_t k_narrow_black = 16 * 256;  // 4096
+constexpr uint16_t k_narrow_white = 235 * 256; // 60160
+constexpr uint16_t k_mid          = 128 * 256; // 32768
+
+/// A 3x1, 16-bit, single-sample uncompressed TIFF holding `codes`, with `icc` embedded.
+std::string gray16_tiff(const std::vector<uint16_t> &codes, const std::vector<uint8_t> &icc)
+{
+    std::vector<uint8_t> strip;
+    for (uint16_t c : codes) put(strip, c);
+
+    return tiff_bytes(Endian::Little,
+                      {
+                          {256, 4, 1, uint32_t(codes.size()), {}},  // ImageWidth
+                          {257, 4, 1, 1, {}},                       // ImageLength
+                          {258, 3, 1, 16, {}},                      // BitsPerSample
+                          {259, 3, 1, 1, {}},                       // Compression: none
+                          {262, 3, 1, 1, {}},                       // Photometric: BlackIsZero
+                          {277, 3, 1, 1, {}},                       // SamplesPerPixel
+                          {278, 4, 1, 1, {}},                       // RowsPerStrip
+                          {339, 3, 1, 1, {}},                       // SampleFormat: unsigned int
+                          {34675, 7, uint32_t(icc.size()), 0, icc}, // ICCProfile
+                      },
+                      strip);
 }
 
 } // namespace
@@ -82,14 +107,14 @@ TEST_CASE("ICC cicp tag is read from the profile bytes")
     SUBCASE("a profile without the tag reports no code points")
     {
         std::vector<uint8_t> v(132, 0);
-        put_be32(v, 0, (uint32_t)v.size());
-        put_be32(v, 128, 0); // no tags
+        patch<uint32_t>(v, 0, (uint32_t)v.size(), Endian::Big);
+        patch<uint32_t>(v, 128, 0, Endian::Big); // no tags
         CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
     }
 }
 
 // The ICC PCS is normalized to media white, so transforming through the profile would clamp away everything
-// above diffuse white. PQ's 1.0 is 10000 nits, a little over 49 against a 203-nit reference white.
+// above diffuse white.
 TEST_CASE("An ICC profile whose cicp tag declares PQ keeps its HDR range")
 {
     auto       bytes = icc_bytes_with_cicp(9, 16, 0, 1);
@@ -103,7 +128,7 @@ TEST_CASE("An ICC profile whose cicp tag declares PQ keeps its HDR range")
 
     // fully-encoded PQ is far above SDR white
     CHECK(pixels[0] > 40.f);
-    CHECK(pixels[0] == doctest::Approx(49.2611f).epsilon(1e-3));
+    CHECK(pixels[0] == doctest::Approx(10000.f / 203.f).epsilon(1e-3)); // PQ 1.0 is 10000 nits over a 203-nit white
     // mid-code PQ is a much dimmer absolute level, so this is the curve and not a scale factor
     CHECK(pixels[3] < 1.f);
     CHECK(pixels[3] > 0.f);
@@ -126,34 +151,88 @@ TEST_CASE("ICC cicp parsing rejects malformed profiles")
     SUBCASE("tag count larger than the buffer can hold")
     {
         auto v = good;
-        put_be32(v, 128, 0xFFFFFFFFu);
+        patch<uint32_t>(v, 128, 0xFFFFFFFFu, Endian::Big);
         CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
     }
 
     SUBCASE("tag offset and size point past the end")
     {
         auto v = good;
-        put_be32(v, 136, 0xFFFFFF00u);
+        patch<uint32_t>(v, 136, 0xFFFFFF00u, Endian::Big);
         CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
 
         v = good;
-        put_be32(v, 140, 0xFFFFFFFFu);
+        patch<uint32_t>(v, 140, 0xFFFFFFFFu, Endian::Big);
         CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
     }
 
     SUBCASE("tag size too small to hold the code points")
     {
         auto v = good;
-        put_be32(v, 140, 11);
+        patch<uint32_t>(v, 140, 11, Endian::Big);
         CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
     }
 
     SUBCASE("tag type signature does not match the table entry")
     {
         auto v = good;
-        put_be32(v, 144, 0x64656164u);
+        patch<uint32_t>(v, 144, 0x64656164u, Endian::Big);
         CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
     }
 
     SUBCASE("a null buffer is handled") { CHECK(!ICCProfile(nullptr, 0).cicp().valid()); }
+}
+
+// The range flag lives only in the cicp tag; TIFF has no field of its own for it. Transfer characteristic 8
+// is Linear, so these assertions see the dequantization alone.
+TEST_CASE("A cicp tag declaring narrow video range is dequantized 16..235")
+{
+    const std::vector<uint16_t> codes{k_narrow_black, k_narrow_white, k_mid};
+
+    SUBCASE("narrow range")
+    {
+        auto img = load_bytes(gray16_tiff(codes, icc_bytes_with_cicp(1, 8, 0, /*full_range*/ 0)), "narrow.tif");
+        REQUIRE(img);
+        const auto &ch = img->channels[0];
+        REQUIRE(ch.size().x == 3);
+
+        CHECK(ch(0, 0) == doctest::Approx(0.f).epsilon(1e-5));
+        CHECK(ch(1, 0) == doctest::Approx(1.f).epsilon(1e-5));
+        CHECK(ch(2, 0) == doctest::Approx((128.f - 16.f) / 219.f).epsilon(1e-5));
+    }
+
+    SUBCASE("full range, same samples")
+    {
+        auto img = load_bytes(gray16_tiff(codes, icc_bytes_with_cicp(1, 8, 0, /*full_range*/ 1)), "full.tif");
+        REQUIRE(img);
+        const auto &ch = img->channels[0];
+        REQUIRE(ch.size().x == 3);
+
+        // without the flag, black and white would sit at the ends of the full range
+        CHECK(ch(0, 0) == doctest::Approx(k_narrow_black / 65535.f).epsilon(1e-5));
+        CHECK(ch(1, 0) == doctest::Approx(k_narrow_white / 65535.f).epsilon(1e-5));
+        CHECK(ch(2, 0) == doctest::Approx(k_mid / 65535.f).epsilon(1e-5));
+    }
+
+    SUBCASE("narrow range keeps excursions beyond black and white")
+    {
+        // codes outside 16..235 are legal and must survive as values outside [0,1]; HDR test patterns use
+        // that headroom
+        auto img = load_bytes(gray16_tiff({0, 65535}, icc_bytes_with_cicp(1, 8, 0, 0)), "excursions.tif");
+        REQUIRE(img);
+        const auto &ch = img->channels[0];
+        CHECK(ch(0, 0) < 0.f);
+        CHECK(ch(1, 0) > 1.f);
+    }
+}
+
+TEST_CASE("icc_cicp_tag reports the video range flag")
+{
+    auto narrow = icc_bytes_with_cicp(9, 18, 0, 0);
+    auto full   = icc_bytes_with_cicp(9, 18, 0, 1);
+
+    CHECK(icc_cicp_tag(narrow.data(), narrow.size()).fr() == 0);
+    CHECK(icc_cicp_tag(full.data(), full.size()).fr() == 1);
+    CHECK(icc_cicp_tag(narrow.data(), narrow.size()).valid());
+    CHECK(!icc_cicp_tag(nullptr, 0).valid());
 }

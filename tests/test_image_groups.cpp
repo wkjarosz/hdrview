@@ -16,6 +16,7 @@ namespace
 // A 1x1 RGBA image with color channels of 1 and alpha 0.5, so a premultiply is visible.
 ImagePtr make_rgba_image(TransparencyType_ transparency)
 {
+    // the kind has to be set before finalize(), which is what acts on it
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
     for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
     img->channels[3](0, 0) = 0.5f;

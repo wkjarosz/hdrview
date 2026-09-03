@@ -10,36 +10,10 @@
 
 #include <initializer_list>
 
-TEST_CASE("read_partial_as assembles a value narrower than its destination")
-{
-    // a DDS bitmasked pixel is 1 to 4 bytes wide; read_as<uint32_t> would read four bytes whatever the width
-    const unsigned char bytes[] = {0x78, 0x56, 0x34, 0x12};
-
-    CHECK(read_partial_as<uint32_t>(bytes, 1, Endian::Little) == 0x78u);
-    CHECK(read_partial_as<uint32_t>(bytes, 2, Endian::Little) == 0x5678u);
-    CHECK(read_partial_as<uint32_t>(bytes, 3, Endian::Little) == 0x345678u);
-    CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Little) == 0x12345678u);
-
-    CHECK(read_partial_as<uint32_t>(bytes, 1, Endian::Big) == 0x78u);
-    CHECK(read_partial_as<uint32_t>(bytes, 2, Endian::Big) == 0x7856u);
-    CHECK(read_partial_as<uint32_t>(bytes, 3, Endian::Big) == 0x785634u);
-    CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Big) == 0x78563412u);
-
-    // at the full width the two are the same read
-    CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Little) == read_as<uint32_t>(bytes, Endian::Little));
-    CHECK(read_partial_as<uint32_t>(bytes, 4, Endian::Big) == read_as<uint32_t>(bytes, Endian::Big));
-
-    // a zero width reads nothing and does not touch the pointer
-    CHECK(read_partial_as<uint32_t>(bytes, 0, Endian::Little) == 0u);
-
-    // assembling into a wider destination zero-extends
-    const unsigned char high[] = {0xff, 0xff};
-    CHECK(read_partial_as<uint64_t>(high, 2, Endian::Little) == 0xffffu);
-}
-
 TEST_CASE("read_partial_as agrees with a direct assembly at every width and byte order")
 {
-    // the reference is spelled out per byte, so it does not depend on the host's own endianness
+    // a DDS bitmasked pixel is 1 to 4 bytes wide, so read_as<uint32_t> is not what reads one; the
+    // reference is spelled out per byte, so it does not depend on the host's own endianness
     const unsigned char bytes[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef};
 
     for (size_t width = 0; width <= sizeof(bytes); ++width)

@@ -25,6 +25,10 @@
 #include "imageio/jxl.h"
 #include "imageio/uhdr.h"
 
+#include "test_support.h"
+
+using namespace hdrview_test;
+
 #if HDRVIEW_ENABLE_LIBHEIF
 #include <libheif/heif.h>
 #endif
@@ -41,11 +45,7 @@ namespace
 /// A flat RGB image, so that any variation after applying a gain map came from the map.
 ImagePtr make_flat_image(int2 size, float value)
 {
-    auto img = std::make_shared<Image>(size, 3);
-    for (int c = 0; c < 3; ++c)
-        for (int y = 0; y < size.y; ++y)
-            for (int x = 0; x < size.x; ++x) img->channels[c](x, y) = value;
-    return img;
+    return test_image(size, 3, [=](int, int, int) { return value; });
 }
 
 /// A monochrome gain map holding one constant sRGB-encoded value.

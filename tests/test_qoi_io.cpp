@@ -10,7 +10,11 @@
 #include "image.h"
 #include "imageio/qoi.h"
 
+#include "test_support.h"
+
 #include <qoi.h>
+
+using namespace hdrview_test;
 
 #include <cstdlib>
 #include <memory>
@@ -40,44 +44,30 @@ std::string encode_qoi_rgb(const std::vector<unsigned char> &values, unsigned ch
 
 } // namespace
 
-// Mid-gray 128 separates the two: 0.216 linearized, 0.502 left encoded.
-TEST_CASE("QOI tagged sRGB is linearized on load")
+TEST_CASE("A QOI's colorspace tag decides whether its samples are linearized")
 {
     const std::vector<unsigned char> values{0, 64, 128, 192, 255};
+    ImagePtr                         decoded[2];
 
-    auto               bytes = encode_qoi_rgb(values, QOI_SRGB);
-    std::istringstream in(bytes, std::ios::binary);
+    for (unsigned char colorspace : {QOI_SRGB, QOI_LINEAR})
+    {
+        CAPTURE(int(colorspace));
+        auto img = load_bytes(load_qoi_image, encode_qoi_rgb(values, colorspace), "tagged.qoi");
+        REQUIRE(img);
+        REQUIRE(img->channels.size() == 3);
 
-    auto loaded = load_qoi_image(in, "srgb.qoi");
-    REQUIRE(loaded.size() == 1);
-    const auto &img = loaded.front();
-    REQUIRE(img->channels.size() == 3);
+        for (int c = 0; c < 3; ++c)
+            for (int x = 0; x < (int)values.size(); ++x)
+            {
+                const float encoded  = values[x] / 255.f;
+                const float expected = colorspace == QOI_SRGB ? sRGB_to_linear(encoded) : encoded;
+                CHECK(img->channels[c](x, 0) == doctest::Approx(expected).epsilon(1e-5));
+            }
 
-    for (int c = 0; c < 3; ++c)
-        for (int x = 0; x < (int)values.size(); ++x)
-        {
-            const float encoded  = values[x] / 255.f;
-            const float expected = sRGB_to_linear(encoded);
-            CHECK(img->channels[c](x, 0) == doctest::Approx(expected).epsilon(1e-5));
-        }
+        decoded[colorspace] = img;
+    }
 
-    CHECK(img->channels[0](2, 0) == doctest::Approx(0.21586f).epsilon(1e-4));
-    CHECK(img->channels[0](2, 0) != doctest::Approx(128.f / 255.f).epsilon(1e-4));
-}
-
-TEST_CASE("QOI tagged linear is not linearized on load")
-{
-    const std::vector<unsigned char> values{0, 64, 128, 192, 255};
-
-    auto               bytes = encode_qoi_rgb(values, QOI_LINEAR);
-    std::istringstream in(bytes, std::ios::binary);
-
-    auto loaded = load_qoi_image(in, "linear.qoi");
-    REQUIRE(loaded.size() == 1);
-    const auto &img = loaded.front();
-    REQUIRE(img->channels.size() == 3);
-
-    for (int c = 0; c < 3; ++c)
-        for (int x = 0; x < (int)values.size(); ++x)
-            CHECK(img->channels[c](x, 0) == doctest::Approx(values[x] / 255.f).epsilon(1e-5));
+    // mid-gray 128 separates the two: 0.216 linearized against 0.502 left encoded
+    CHECK(decoded[QOI_SRGB]->channels[0](2, 0) !=
+          doctest::Approx(decoded[QOI_LINEAR]->channels[0](2, 0)).epsilon(1e-4));
 }

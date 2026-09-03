@@ -12,6 +12,10 @@
 
 #include "imageio/exif.h"
 
+#include "test_support.h"
+
+using namespace hdrview_test;
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -55,11 +59,8 @@ struct TiffBuilder
     std::vector<uint8_t> build() const
     {
         std::vector<uint8_t> out;
-        auto                 u16 = [&](uint16_t v) { out.insert(out.end(), {uint8_t(v & 0xff), uint8_t(v >> 8)}); };
-        auto                 u32 = [&](uint32_t v)
-        {
-            for (int i = 0; i < 4; ++i) out.push_back(uint8_t((v >> (8 * i)) & 0xff));
-        };
+        auto                 u16 = [&](uint16_t v) { put(out, v); };
+        auto                 u32 = [&](uint32_t v) { put(out, v); };
 
         out.insert(out.end(), {'I', 'I'});
         u16(42);
@@ -138,11 +139,8 @@ constexpr uint32_t maker_note_data_at(size_t count) { return 16 + 12 * (uint32_t
 std::vector<uint8_t> apple_maker_note(const std::vector<MakerNoteEntry> &entries, const std::vector<uint8_t> &data)
 {
     std::vector<uint8_t> n;
-    auto                 u16 = [&](uint16_t v) { n.insert(n.end(), {uint8_t(v & 0xff), uint8_t(v >> 8)}); };
-    auto                 u32 = [&](uint32_t v)
-    {
-        for (int i = 0; i < 4; ++i) n.push_back(uint8_t((v >> (8 * i)) & 0xff));
-    };
+    auto                 u16 = [&](uint16_t v) { put(n, v); };
+    auto                 u32 = [&](uint32_t v) { put(n, v); };
 
     const char *signature = "Apple iOS";
     n.insert(n.end(), signature, signature + 10);

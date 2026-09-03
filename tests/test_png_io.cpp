@@ -10,6 +10,10 @@
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
 
+#include "test_support.h"
+
+using namespace hdrview_test;
+
 // For PNG_cICP_SUPPORTED. libpng gained the cICP chunk in 1.6.46 and Ubuntu 24.04 still ships 1.6.43, so a
 // -local build can link a libpng without it; src/imageio/png.cpp guards png_set_cICP() on the same macro,
 // and without the chunk a saved PNG records no transfer function at all.
@@ -27,18 +31,10 @@
 namespace
 {
 
-// Builds an RGB image with a value per pixel/channel that uniquely identifies it.
+// An RGB image with a value per pixel/channel that uniquely identifies it.
 ImagePtr make_test_image(int2 size)
 {
-    auto img = std::make_shared<Image>(size, 3);
-    for (int c = 0; c < 3; ++c)
-    {
-        auto &ch = img->channels[c];
-        for (int y = 0; y < size.y; ++y)
-            for (int x = 0; x < size.x; ++x) ch(x, y) = (float(x + 100 * y) + c) / 1000.f;
-    }
-    img->finalize(); // populates img->groups, which as_interleaved()/save_png_image() require
-    return img;
+    return test_image(size, 3, [](int c, int x, int y) { return (float(x + 100 * y) + float(c)) / 1000.f; });
 }
 
 } // namespace
@@ -53,13 +49,12 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
         save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ false, TransferFunction::Linear);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, "test.png");
-        REQUIRE(reloaded.size() == 1);
-        REQUIRE(reloaded[0]->channels.size() == 3);
+        auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+        REQUIRE(reloaded);
+        REQUIRE(reloaded->channels.size() == 3);
         // 8-bit quantization error tolerance
         for (int c = 0; c < 3; ++c)
-            CHECK(reloaded[0]->channels[c](2, 1) == doctest::Approx(img->channels[c](2, 1)).epsilon(0.004));
+            CHECK(reloaded->channels[c](2, 1) == doctest::Approx(img->channels[c](2, 1)).epsilon(0.004));
     }
 
     SUBCASE("16-bit")
@@ -68,12 +63,11 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
         save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::Linear);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, "test.png");
-        REQUIRE(reloaded.size() == 1);
+        auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+        REQUIRE(reloaded);
         // 16-bit quantization error is far smaller than 8-bit
         for (int c = 0; c < 3; ++c)
-            CHECK(reloaded[0]->channels[c](2, 1) == doctest::Approx(img->channels[c](2, 1)).epsilon(1e-4));
+            CHECK(reloaded->channels[c](2, 1) == doctest::Approx(img->channels[c](2, 1)).epsilon(1e-4));
     }
 }
 
@@ -94,22 +88,21 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
         save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, tf);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, "test.png");
-        REQUIRE(reloaded.size() == 1);
+        auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+        REQUIRE(reloaded);
 
-        auto &cicp_value = reloaded[0]->metadata["header"]["cICP"]["value"];
+        auto &cicp_value = reloaded->metadata["header"]["cICP"]["value"];
         REQUIRE(cicp_value != "<not present>");
         int transfer_characteristics = cicp_value[1].get<int>();
         CHECK(transfer_characteristics == transfer_function_to_CICP(tf));
         CHECK((transfer_characteristics == 16 || transfer_characteristics == 18)); // CICPProfile::is_HDR()'s own check
 
-        REQUIRE(reloaded[0]->chromaticities.has_value());
-        CHECK(approx_equal(*reloaded[0]->chromaticities, gamut_chromaticities(ColorGamut_BT2020_2100)));
+        REQUIRE(reloaded->chromaticities.has_value());
+        CHECK(approx_equal(*reloaded->chromaticities, gamut_chromaticities(ColorGamut_BT2020_2100)));
 
         // through the PQ/HLG encode+decode math, not just the tag
         for (int c = 0; c < 3; ++c)
-            CHECK(reloaded[0]->channels[c](2, 1) == doctest::Approx(img->channels[c](2, 1)).epsilon(1e-3));
+            CHECK(reloaded->channels[c](2, 1) == doctest::Approx(img->channels[c](2, 1)).epsilon(1e-3));
     }
 }
 
@@ -127,10 +120,9 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::Linear);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, "test.png");
-        REQUIRE(reloaded.size() == 1);
-        auto &header = reloaded[0]->metadata["header"];
+        auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+        REQUIRE(reloaded);
+        auto &header = reloaded->metadata["header"];
 
         // gAMA stores 1e5/gamma; the loader reports gamma
         REQUIRE(header.contains("gAMA"));
@@ -143,10 +135,9 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction{TransferFunction::Gamma, 2.4f});
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, "test.png");
-        REQUIRE(reloaded.size() == 1);
-        auto &header = reloaded[0]->metadata["header"];
+        auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+        REQUIRE(reloaded);
+        auto &header = reloaded->metadata["header"];
 
         REQUIRE(header.contains("gAMA"));
         CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.4f).epsilon(1e-3));
@@ -158,10 +149,9 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ false, TransferFunction::sRGB);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, "test.png");
-        REQUIRE(reloaded.size() == 1);
-        auto &header = reloaded[0]->metadata["header"];
+        auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+        REQUIRE(reloaded);
+        auto &header = reloaded->metadata["header"];
 
         // a valid rendering intent, i.e. the chunk is present
         REQUIRE(header.contains("sRGB"));
@@ -182,10 +172,9 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         save_png_image(*wide, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::sRGB);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, "test.png");
-        REQUIRE(reloaded.size() == 1);
-        auto &header = reloaded[0]->metadata["header"];
+        auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+        REQUIRE(reloaded);
+        auto &header = reloaded->metadata["header"];
 
         REQUIRE(header.contains("sRGB"));
         CHECK(header["sRGB"]["value"].get<int>() < 0); // absent
@@ -199,10 +188,9 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::ITU);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, "test.png");
-        REQUIRE(reloaded.size() == 1);
-        auto &header = reloaded[0]->metadata["header"];
+        auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+        REQUIRE(reloaded);
+        auto &header = reloaded->metadata["header"];
 
         REQUIRE(header.contains("gAMA"));
         CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
@@ -222,10 +210,9 @@ TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
     save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ true, TransferFunction::BT2100_PQ);
 
-    std::istringstream in(out.str(), std::ios::binary);
-    auto               reloaded = load_png_image(in, "test.png");
-    REQUIRE(reloaded.size() == 1);
-    auto &header = reloaded[0]->metadata["header"];
+    auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+    REQUIRE(reloaded);
+    auto &header = reloaded->metadata["header"];
 
     CHECK(header["cICP"]["value"] != "<not present>");
     REQUIRE(header.contains("gAMA"));
@@ -282,15 +269,13 @@ TEST_CASE("channel_selector drops channels in formats that don't filter during d
         ImageLoadOptions opts;
         opts.channel_selector = "-.A";
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_image(in, "rgba.png", opts);
-
-        REQUIRE(reloaded.size() == 1);
-        REQUIRE(reloaded[0]->channels.size() == 3);
-        for (const auto &c : reloaded[0]->channels) CHECK(c.name != "A");
+        auto reloaded = load_bytes(out.str(), "rgba.png", opts);
+        REQUIRE(reloaded);
+        REQUIRE(reloaded->channels.size() == 3);
+        for (const auto &c : reloaded->channels) CHECK(c.name != "A");
         // save_png_image unpremultiplied on the way out, so the file holds 1.0 here and the filtered-away
         // alpha leaves nothing to premultiply it back down by
-        CHECK(reloaded[0]->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.005));
+        CHECK(reloaded->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.005));
     }
 
     SUBCASE("selecting a single channel by name")
@@ -298,12 +283,10 @@ TEST_CASE("channel_selector drops channels in formats that don't filter during d
         ImageLoadOptions opts;
         opts.channel_selector = "G";
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_image(in, "rgba.png", opts);
-
-        REQUIRE(reloaded.size() == 1);
-        REQUIRE(reloaded[0]->channels.size() == 1);
-        CHECK(reloaded[0]->channels[0].name == "G");
+        auto reloaded = load_bytes(out.str(), "rgba.png", opts);
+        REQUIRE(reloaded);
+        REQUIRE(reloaded->channels.size() == 1);
+        CHECK(reloaded->channels[0].name == "G");
     }
 
     SUBCASE("a selector matching nothing yields no images")
@@ -324,13 +307,15 @@ TEST_CASE("channel_selector drops channels in formats that don't filter during d
 namespace
 {
 
-std::vector<ImagePtr> load_test_png(const std::string &subdir, const std::string &filename,
-                                    const ImageLoadOptions &opts = {})
+/// The vendored test PNG at `subdir/filename`, which has to decode to exactly one image.
+ImagePtr load_test_png(const std::string &subdir, const std::string &filename, const ImageLoadOptions &opts = {})
 {
     std::string   path = std::string(HDRVIEW_TEST_PNG_CONTRIB_DIR) + "/" + subdir + "/" + filename;
     std::ifstream file(path, std::ios::binary);
     REQUIRE_MESSAGE(file.good(), "Could not open vendored test PNG: ", path);
-    return load_png_image(file, filename, opts);
+    auto images = load_png_image(file, filename, opts);
+    REQUIRE(images.size() == 1);
+    return images.front();
 }
 
 } // namespace
@@ -357,9 +342,8 @@ TEST_CASE("PNG load handles the full PngSuite bit-depth/color-type matrix withou
     {
         INFO("file = ", c.file);
         auto reloaded = load_test_png("pngsuite", c.file);
-        REQUIRE(reloaded.size() == 1);
-        CHECK(reloaded[0]->channels.size() == (size_t)c.expected_channels);
-        for (const auto &ch : reloaded[0]->channels) CHECK(ch.bits_per_sample == c.expected_bits);
+        CHECK(reloaded->channels.size() == (size_t)c.expected_channels);
+        for (const auto &ch : reloaded->channels) CHECK(ch.bits_per_sample == c.expected_bits);
     }
 }
 
@@ -379,14 +363,12 @@ TEST_CASE("PNG load produces identical pixels for interlaced and non-interlaced 
         auto plain      = load_test_png("pngsuite", std::string("basn") + base + ".png", raw_opts);
         auto interlaced = load_test_png("pngsuite", std::string("ibasn") + base + ".png", raw_opts);
 
-        REQUIRE(plain.size() == 1);
-        REQUIRE(interlaced.size() == 1);
-        REQUIRE(plain[0]->channels.size() == interlaced[0]->channels.size());
+        REQUIRE(plain->channels.size() == interlaced->channels.size());
 
-        for (size_t c = 0; c < plain[0]->channels.size(); ++c)
+        for (size_t c = 0; c < plain->channels.size(); ++c)
         {
-            auto &pc = plain[0]->channels[c];
-            auto &ic = interlaced[0]->channels[c];
+            auto &pc = plain->channels[c];
+            auto &ic = interlaced->channels[c];
             REQUIRE(pc.size().x == ic.size().x);
             REQUIRE(pc.size().y == ic.size().y);
             for (int y = 0; y < pc.size().y; ++y)
@@ -399,9 +381,8 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
 {
     SUBCASE("gAMA chunk: reported gamma matches the file's raw gAMA chunk value")
     {
-        auto reloaded = load_test_png("testpngs", "gray-8-1.8.png");
-        REQUIRE(reloaded.size() == 1);
-        auto &header = reloaded[0]->metadata["header"];
+        auto  reloaded = load_test_png("testpngs", "gray-8-1.8.png");
+        auto &header   = reloaded->metadata["header"];
         REQUIRE(header.contains("gAMA"));
         REQUIRE(header["sRGB"]["value"].get<int>() < 0); // sRGB chunk absent
         // gAMA stores 1e5/gamma; the loader reports gamma
@@ -410,9 +391,8 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
 
     SUBCASE("sRGB chunk takes priority when present")
     {
-        auto reloaded = load_test_png("testpngs", "gray-8-sRGB.png");
-        REQUIRE(reloaded.size() == 1);
-        auto &header = reloaded[0]->metadata["header"];
+        auto  reloaded = load_test_png("testpngs", "gray-8-sRGB.png");
+        auto &header   = reloaded->metadata["header"];
         CHECK(header["sRGB"]["value"].get<int>() >= 0); // sRGB chunk present with a valid rendering intent
     }
 
@@ -421,16 +401,15 @@ TEST_CASE("PNG load respects the documented color-profile chunk priority: cICP >
     // cICP chunk however the file is tagged
     SUBCASE("cICP chunk takes priority over everything else, with correct Display P3 primaries")
     {
-        auto reloaded = load_test_png("testpngs/png-3", "cicp-display-p3_reencoded.png");
-        REQUIRE(reloaded.size() == 1);
-        auto &header = reloaded[0]->metadata["header"];
+        auto  reloaded = load_test_png("testpngs/png-3", "cicp-display-p3_reencoded.png");
+        auto &header   = reloaded->metadata["header"];
         REQUIRE(header.contains("cICP"));
         CHECK(header["cICP"]["value"] != "<not present>");
 
-        REQUIRE(reloaded[0]->chromaticities.has_value());
+        REQUIRE(reloaded->chromaticities.has_value());
         // standard Display P3 primaries / D65 white point
         Chromaticities p3{{0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
-        CHECK(approx_equal(*reloaded[0]->chromaticities, p3, 1e-3f));
+        CHECK(approx_equal(*reloaded->chromaticities, p3, 1e-3f));
     }
 #endif // PNG_cICP_SUPPORTED
 }
@@ -442,10 +421,7 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
     for (const char *file : {"basn4a08.png", "basn4a16.png", "ibasn4a08.png", "ibasn4a16.png"})
     {
         CAPTURE(file);
-        auto loaded = load_test_png("pngsuite", file);
-        REQUIRE(loaded.size() == 1);
-
-        auto &original = loaded[0];
+        auto original = load_test_png("pngsuite", file);
         original->finalize();
         REQUIRE(original->channels.size() == 2);
         REQUIRE(original->groups.size() == 1);
@@ -456,12 +432,11 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
         save_png_image(*original, out, file, /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::sRGB);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               reloaded = load_png_image(in, file);
-        REQUIRE(reloaded.size() == 1);
-        reloaded[0]->finalize();
-        REQUIRE(reloaded[0]->channels.size() == 2);
-        REQUIRE(reloaded[0]->size() == original->size());
+        auto reloaded = load_bytes(load_png_image, out.str(), file);
+        REQUIRE(reloaded);
+        reloaded->finalize();
+        REQUIRE(reloaded->channels.size() == 2);
+        REQUIRE(reloaded->size() == original->size());
 
         const int2 size = original->size();
         for (int y = 0; y < size.y; ++y)
@@ -469,9 +444,9 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
             {
                 CAPTURE(x);
                 CAPTURE(y);
-                CHECK(reloaded[0]->channels[1](x, y) ==
+                CHECK(reloaded->channels[1](x, y) ==
                       doctest::Approx(original->channels[1](x, y)).epsilon(1e-3)); // alpha
-                CHECK(reloaded[0]->channels[0](x, y) ==
+                CHECK(reloaded->channels[0](x, y) ==
                       doctest::Approx(original->channels[0](x, y)).epsilon(2e-3)); // premultiplied Y
             }
     }
@@ -519,11 +494,10 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
     save_png_image(*img, out, "gray_alpha.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ true, TransferFunction::sRGB);
 
-    std::istringstream in(out.str(), std::ios::binary);
-    auto               reloaded = load_png_image(in, "gray_alpha.png");
-    REQUIRE(reloaded.size() == 1);
-    reloaded[0]->finalize();
-    REQUIRE(reloaded[0]->channels.size() == 2);
+    auto reloaded = load_bytes(load_png_image, out.str(), "gray_alpha.png");
+    REQUIRE(reloaded);
+    reloaded->finalize();
+    REQUIRE(reloaded->channels.size() == 2);
 
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x)
@@ -531,9 +505,9 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
             int i = y * size.x + x;
             CAPTURE(i);
             // alpha survives untouched: no gain, no transfer function
-            CHECK(reloaded[0]->channels[1](x, y) == doctest::Approx(alpha[i]).epsilon(1e-4));
+            CHECK(reloaded->channels[1](x, y) == doctest::Approx(alpha[i]).epsilon(1e-4));
             // Y comes back premultiplied by that same alpha, i.e. what finalize() produced here
-            CHECK(reloaded[0]->channels[0](x, y) ==
+            CHECK(reloaded->channels[0](x, y) ==
                   doctest::Approx(straight_y[i] * std::max(k_small_alpha, alpha[i])).epsilon(1e-3));
         }
 }
@@ -557,16 +531,15 @@ TEST_CASE("saving gray+alpha applies the exposure gain to the color channel only
     save_png_image(*img, out, "gray_alpha_gain.png", gain, /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ true, TransferFunction::Linear);
 
-    std::istringstream in(out.str(), std::ios::binary);
-    auto               reloaded = load_png_image(in, "gray_alpha_gain.png");
-    REQUIRE(reloaded.size() == 1);
+    auto reloaded = load_bytes(load_png_image, out.str(), "gray_alpha_gain.png");
+    REQUIRE(reloaded);
 
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x)
         {
             // the file holds straight values, so the gain lands on the straight Y; the two are chosen so a
             // gained alpha would saturate to 1
-            CHECK(reloaded[0]->channels[0](x, y) == doctest::Approx(straight_y * gain).epsilon(1e-4));
-            CHECK(reloaded[0]->channels[1](x, y) == doctest::Approx(a).epsilon(1e-4));
+            CHECK(reloaded->channels[0](x, y) == doctest::Approx(straight_y * gain).epsilon(1e-4));
+            CHECK(reloaded->channels[1](x, y) == doctest::Approx(a).epsilon(1e-4));
         }
 }

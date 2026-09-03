@@ -13,10 +13,13 @@
 
 #include <doctest/doctest.h>
 
+#include "colorspace.h"
 #include "edit/commands.h"
 #include "edit/edit_ops.h"
 #include "edit/subject.h"
 #include "image.h"
+
+#include "test_support.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,6 +27,8 @@
 #include <numeric>
 #include <string>
 #include <vector>
+
+using namespace hdrview_test;
 
 namespace
 {
@@ -165,15 +170,6 @@ int channel_index(const ImagePtr &img, const std::string &name)
         if (img->channels[c].name == name)
             return int(c);
     return -1;
-}
-
-/// Every sample of every channel, as one comparable value.
-std::vector<float> samples(const ImagePtr &img)
-{
-    std::vector<float> out;
-    for (const auto &ch : img->channels)
-        for (int i = 0; i < ch.num_elements(); ++i) out.push_back(ch(i));
-    return out;
 }
 
 std::string first_name(const EditCommandPtr &cmd) { return cmd->info().names.front(); }
@@ -329,7 +325,7 @@ TEST_CASE("An edit covers the subject it was given and nothing else")
                 CHECK_FALSE(cmd->info().fans_out);
 
             // A command offering the "Apply to" controls owes this: what it wrote lies inside the channels
-            // and the rectangle they name. The others move every sample by definition -- a flip -- or have
+            // and the rectangle they name. The others move every sample by definition, a flip does, or have
             // no rectangle to stay in, and say so by declining the controls.
             if (img->history.size() == steps || img->size() != k_size || !cmd->info().draws_subject_selector)
                 continue;
@@ -362,7 +358,7 @@ TEST_CASE("An edit reaches every channel its scope names")
     {
         CAPTURE(scope);
 
-        auto img = make_layered_image(); // R,G,B,A -- Z -- normal.R,G,B
+        auto img = make_layered_image(); // R,G,B,A | Z | normal.R,G,B
 
         // the color group on screen, and that plus the second color group selected
         img->selected_group = group_of_channel(img, "R");
@@ -478,6 +474,143 @@ TEST_CASE("A bump map becomes the normal map its slopes ask for")
     // the two are different maps, which is what says each group read its own heights
     CHECK(diffuse.x != doctest::Approx(specular.x));
     CHECK(diffuse.y != doctest::Approx(specular.y));
+}
+
+TEST_CASE("Filling writes a different value in each of a group's channels")
+{
+    // fill is the one edit whose value depends on which channel it writes, so a group's channels must not
+    // all come out the same; the slot index is what carries that
+    auto img = make_image();
+
+    TestEditContext ctx{img};
+    ctx.subject.selection_only = false;
+
+    const float4 color{0.25f, 0.5f, 0.75f, 1.f};
+    REQUIRE(modify_pixels(ctx, "Fill", [color](float, int2, int slot) { return color[slot % 4]; }));
+
+    const auto &group = img->groups[size_t(img->selected_group)];
+    for (int c = 0; c < group.num_channels; ++c)
+    {
+        CAPTURE(c);
+        const auto &ch = img->channels[size_t(group.channels[c])];
+        for (int i = 0; i < ch.num_elements(); ++i) CHECK(ch(i) == color[c % 4]);
+    }
+}
+
+TEST_CASE("A color edit is handed a group's channels together")
+{
+    // reading the sample beside it is what modify_pixels() cannot do: it is handed one sample and told
+    // which slot it is, never the others
+    auto img = make_image();
+    REQUIRE(img->groups.size() == 1);
+    REQUIRE(img->groups[0].num_channels == 4);
+
+    TestEditContext ctx{img};
+    ctx.subject.selection_only = false;
+
+    const auto before = samples(img);
+    REQUIRE(
+        modify_colors(ctx, "Swap red and blue", [](const float4 &c, int2, int) { return float4{c.z, c.y, c.x, c.w}; }));
+
+    const auto  &r           = img->channels[size_t(img->groups[0].channels[0])];
+    const auto  &b           = img->channels[size_t(img->groups[0].channels[2])];
+    const size_t per_channel = size_t(k_size.x * k_size.y);
+    for (int i = 0; i < r.num_elements(); ++i)
+    {
+        CAPTURE(i);
+        // each channel now holds what the other did, which one-sample-at-a-time editing cannot produce
+        CHECK(r(i) == before[2 * per_channel + size_t(i)]);
+        CHECK(b(i) == before[0 * per_channel + size_t(i)]);
+        CHECK(r(i) != b(i)); // a fixture whose channels were equal would prove nothing
+    }
+
+    const auto swapped = samples(img);
+    REQUIRE(img->history.undo(*img));
+    CHECK(samples(img) == before);
+    REQUIRE(img->history.redo(*img));
+    CHECK(samples(img) == swapped);
+}
+
+TEST_CASE("Converting the color space moves the samples and the tag in one step")
+{
+    auto img            = make_image();
+    img->chromaticities = gamut_chromaticities(ColorGamut_sRGB_BT709);
+    img->compute_color_transform();
+
+    const auto  before      = samples(img);
+    const auto  before_chr  = img->chromaticities;
+    const float before_wide = img->M_to_sRGB[0][0];
+
+    Chromaticities to = gamut_chromaticities(ColorGamut_BT2020_2100);
+    to.white          = white_point(WhitePoint_D65);
+
+    float3x3 M;
+    REQUIRE(color_conversion_matrix(M, *before_chr, to, AdaptationMethod_Bradford));
+
+    TestEditContext ctx{img};
+    ctx.subject.selection_only = false;
+
+    REQUIRE(modify_colors(
+        ctx, "Convert color space", [M](const float4 &c, int2, int) { return float4{la::mul(M, c.xyz()), c.w}; },
+        [to](Image &image)
+        {
+            image.chromaticities = to;
+            image.compute_color_transform();
+        }));
+
+    // both halves landed: the samples moved, and so did what is derived from the tag
+    CHECK(samples(img) != before);
+    CHECK(img->color_space == ColorGamut_BT2020_2100);
+    CHECK(std::fabs(img->M_to_sRGB[0][0] - before_wide) > 1e-4f);
+
+    // one step takes back both: a tag left behind would describe the image as something it is not
+    const auto converted = samples(img);
+    REQUIRE(img->history.undo(*img));
+    CHECK(samples(img) == before);
+    CHECK(img->color_space == ColorGamut_sRGB_BT709);
+    CHECK(std::fabs(img->M_to_sRGB[0][0] - before_wide) < 1e-4f);
+
+    // and redo puts both back, which a composite undoing in the wrong order would not
+    REQUIRE(img->history.redo(*img));
+    CHECK(samples(img) == converted);
+    CHECK(img->color_space == ColorGamut_BT2020_2100);
+}
+
+TEST_CASE("Flattening makes the image opaque and leaves the composite where it is")
+{
+    // Samples are held premultiplied, so compositing over a background is an addition and not the
+    // textbook's lerp. The command's background is its own dialog state, so what a test reaches is the
+    // default opaque black: the colors stay put and only the coverage changes.
+    auto img = make_image();
+    for (int i = 0; i < img->channels[3].num_elements(); ++i) img->channels[3](i) = 0.5f;
+
+    TestEditContext ctx{img};
+    ctx.subject.selection_only = false;
+
+    const auto before = samples(img);
+    auto       cmd    = find_command("Flatten...");
+    REQUIRE(cmd);
+    REQUIRE(cmd->enabled(ctx));
+    cmd->apply(ctx);
+
+    const size_t per_channel = size_t(k_size.x * k_size.y);
+    for (int i = 0; i < img->channels[3].num_elements(); ++i)
+    {
+        CAPTURE(i);
+        CHECK(img->channels[3](i) == doctest::Approx(1.f));
+        for (int c = 0; c < 3; ++c)
+            CHECK(img->channels[size_t(c)](i) == doctest::Approx(before[size_t(c) * per_channel + size_t(i)]));
+    }
+
+    // an opaque result has nothing left to show through, which a lerp written against straight alpha would
+    // get wrong
+    const auto once = samples(img);
+    cmd->apply(ctx);
+    CHECK(samples(img) == once);
+
+    REQUIRE(img->history.undo(*img));
+    REQUIRE(img->history.undo(*img));
+    CHECK(samples(img) == before);
 }
 
 TEST_CASE("Each scope names the channels it says it does")
@@ -1016,7 +1149,7 @@ TEST_CASE("A group command covers every group it is given, and nothing else")
     {
         CAPTURE(name);
 
-        auto img = make_layered_image(); // R,G,B,A -- Z -- normal.R,G,B
+        auto img = make_layered_image(); // R,G,B,A | Z | normal.R,G,B
         REQUIRE(img->groups.size() == 3);
 
         // two of the three groups selected, so a command reaching only the one on screen and one reaching

@@ -8,6 +8,7 @@
 
 #include "app.h"
 #include "colorspace.h"
+#include "edit/commands.h"
 #include "edit/filters.h"
 #include "fonts.h"
 #include "image.h"
@@ -17,6 +18,7 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -134,7 +136,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto original = snapshot(img);
         const int  entries  = (int)img->history.size();
 
-        LogWatcher  log;
+        LogCapture  log;
         EditSubject all_channels;
         all_channels.scope = EditSubject::Scope_AllChannels;
         IM_CHECK_EQ(
@@ -195,101 +197,85 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(img->history.undo_name(), string("Flip image horizontally"));
     };
 
-    t           = IM_REGISTER_TEST(engine, "edit", "undo and redo return the image to each state");
+    t           = IM_REGISTER_TEST(engine, "edit", "every edit without a dialog runs from its menu item and undoes");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        if (!load_fixture(ctx))
-            return;
+        // The category test for the menu: every command the Edit menu offers without a dialog, invoked the
+        // way a user invokes it. What it does to the pixels belongs to the logic-level suite; what this
+        // adds is that the item is there, reaches the command, and leaves the image and the history in a
+        // state one Undo takes back.
+        for (const auto &cmd : all_edit_commands())
+        {
+            const auto &info = cmd->info();
+            if (info.has_dialog)
+                continue;
 
-        auto       img      = hdrview()->current_image();
-        const auto original = snapshot(img);
+            const string name = info.names.front();
+            ctx->LogInfo("%s", name.c_str());
 
-        menu_click(ctx, "Edit/Rotate 90 degrees clockwise");
-        const auto rotated = snapshot(img);
-        IM_CHECK(original != rotated);
+            if (!load_fixture(ctx))
+                return;
+            auto img = hdrview()->current_image();
 
-        menu_click(ctx, "Edit/Undo");
-        IM_CHECK(snapshot(img) == original);
+            // something for the ones that need a selection or a clipboard to act on
+            hdrview()->set_selection(Box2i{img->data_window.min + int2{1, 1}, img->data_window.max - int2{1, 1}});
+            ctx->Yield();
 
-        menu_click(ctx, "Edit/Redo");
-        IM_CHECK(snapshot(img) == rotated);
+            if (!hdrview()->action(name).enabled())
+                continue;
 
-        menu_click(ctx, "Edit/Undo");
-        IM_CHECK(snapshot(img) == original);
-    };
+            const auto   before   = snapshot(img);
+            const size_t layers   = img->layers.size();
+            const size_t groups   = img->groups.size();
+            const size_t channels = img->channels.size();
+            IM_CHECK_EQ(img->history.is_modified(), false);
 
-    t           = IM_REGISTER_TEST(engine, "edit", "four quarter turns from the menu come back exactly");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
+            string path = "Edit/";
+            for (char c : name) // a slash in a name would otherwise read as a submenu separator
+            {
+                if (c == '/')
+                    path += '\\';
+                path += c;
+            }
+            menu_click(ctx, path.c_str());
 
-        auto       img      = hdrview()->current_image();
-        const auto original = snapshot(img);
-        const int2 size     = img->size();
+            // A command that does not need an editable image cannot be editing one, and Copy is the only
+            // such command: it reads the image and leaves it alone.
+            if (!info.needs_editable)
+            {
+                ctx->Yield(4);
+                IM_CHECK_EQ(img->history.has_undo(), false);
+                IM_CHECK(snapshot(img) == before);
+                continue;
+            }
 
-        for (int i = 0; i < 4; ++i) menu_click(ctx, "Edit/Rotate 90 degrees clockwise");
+            // every other one owes an undo entry, which is what says the menu item reached it
+            IM_CHECK(wait_until(ctx, [&] { return img->history.has_undo(); }, std::chrono::seconds(5)));
+            IM_CHECK_EQ((int)img->history.size(), 1); // one entry over the lot, not one per group or channel
+            IM_CHECK_STR_EQ(img->history.undo_name().c_str(), name.c_str());
+            IM_CHECK(img->history.is_modified());
+            IM_CHECK(hdrview()->any_image_modified());
+            const auto edited = snapshot(img);
 
-        IM_CHECK(img->size() == size);
-        IM_CHECK(snapshot(img) == original);
-    };
+            menu_click(ctx, "Edit/Undo");
+            IM_CHECK(snapshot(img) == before);
+            // the tree is rebuilt after an edit, not appended to
+            IM_CHECK_EQ(img->layers.size(), layers);
+            IM_CHECK_EQ(img->groups.size(), groups);
+            IM_CHECK_EQ(img->channels.size(), channels);
+            IM_CHECK_EQ(img->history.has_undo(), false);
+            IM_CHECK_EQ(img->history.is_modified(), false);
+            IM_CHECK_EQ(hdrview()->any_image_modified(), false);
 
-    t           = IM_REGISTER_TEST(engine, "edit", "a quarter turn swaps the image's axes");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
+            // and redo puts it back where undo found it
+            menu_click(ctx, "Edit/Redo");
+            IM_CHECK(snapshot(img) == edited);
+            menu_click(ctx, "Edit/Undo");
+            IM_CHECK(snapshot(img) == before);
+        }
 
-        auto       img  = hdrview()->current_image();
-        const int2 size = img->size();
-
-        menu_click(ctx, "Edit/Rotate 90 degrees clockwise");
-
-        // the channels, the data window and the texture all have to agree about the new shape
-        IM_CHECK_EQ(img->size().x, size.y);
-        IM_CHECK_EQ(img->size().y, size.x);
-        for (const auto &c : img->channels) IM_CHECK(c.size() == img->size());
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "an edit leaves the layer and group structure intact");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto         img      = hdrview()->current_image();
-        const size_t layers   = img->layers.size();
-        const size_t groups   = img->groups.size();
-        const size_t channels = img->channels.size();
-
-        // rebuilding the tree after every edit has to replace it, not append to it
-        menu_click(ctx, "Edit/Flip image vertically");
-        menu_click(ctx, "Edit/Rotate 90 degrees counter-clockwise");
-        menu_click(ctx, "Edit/Undo");
-
-        IM_CHECK_EQ(img->layers.size(), layers);
-        IM_CHECK_EQ(img->groups.size(), groups);
-        IM_CHECK_EQ(img->channels.size(), channels);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "editing marks the image modified and undoing clears it");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-        IM_CHECK_EQ(img->history.is_modified(), false);
-        IM_CHECK_EQ(hdrview()->any_image_modified(), false);
-
-        menu_click(ctx, "Edit/Flip image horizontally");
-        IM_CHECK_EQ(img->history.is_modified(), true);
-        IM_CHECK_EQ(hdrview()->any_image_modified(), true);
-
-        // back to what the file holds, so there is nothing left to warn about on close
-        menu_click(ctx, "Edit/Undo");
-        IM_CHECK_EQ(img->history.is_modified(), false);
-        IM_CHECK_EQ(hdrview()->any_image_modified(), false);
+        hdrview()->set_selection(Box2i{});
+        reset_images(ctx);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "undo and redo are only offered when there is something to do");
@@ -334,71 +320,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         menu_click(ctx, "Edit/Undo");
         IM_CHECK_EQ(img->history.is_modified(), false);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "a point op changes the samples and undo puts them back");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto       img      = hdrview()->current_image();
-        const auto original = snapshot(img);
-
-        menu_click(ctx, "Edit/Invert");
-        const auto inverted = snapshot(img);
-        IM_CHECK(original != inverted);
-        IM_CHECK_EQ(inverted.size(), original.size());
-
-        // 1-(1-v) is not exact in float, so compare with a tolerance
-        menu_click(ctx, "Edit/Invert");
-        const auto twice = snapshot(img);
-        IM_CHECK_EQ(twice.size(), original.size());
-        for (size_t i = 0; i < twice.size(); ++i) IM_CHECK_LT(std::fabs(twice[i] - original[i]), 1e-6f);
-
-        // undo puts back the samples it saved, so two undos land on the original bit-for-bit
-        menu_click(ctx, "Edit/Undo");
-        IM_CHECK(snapshot(img) == inverted);
-        menu_click(ctx, "Edit/Undo");
-        IM_CHECK(snapshot(img) == original);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "an edit restricted to the selection leaves the rest alone");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        // a box well inside the image, in image coordinates, the same space the data window uses
-        const Box2i roi{img->data_window.min + int2{2, 2}, img->data_window.min + int2{6, 5}};
-        hdrview()->set_selection(roi);
-
-        EditSubject subject;
-        subject.selection_only = true;
-
-        const auto before = snapshot(img);
-        IM_CHECK(modify_pixels(edit_context(img, subject), "Invert", [](float v, int2, int) { return 1.f - v; }));
-
-        const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
-        const int2  o  = img->data_window.min;
-        for (int y = 0; y < ch.size().y; ++y)
-            for (int x = 0; x < ch.size().x; ++x)
-            {
-                const bool inside = roi.contains(int2{x, y} + o);
-                // outside the selection nothing may have moved; inside, the samples came from 1-v
-                if (!inside)
-                    IM_CHECK_EQ(ch(x, y), before[size_t(img->groups[img->selected_group].channels[0]) *
-                                                     size_t(ch.size().x * ch.size().y) +
-                                                 size_t(y * ch.size().x + x)]);
-            }
-
-        // the entry that reverses it covers the selection, not the image
-        menu_click(ctx, "Edit/Undo");
-        IM_CHECK(snapshot(img) == before);
-
-        hdrview()->set_selection(Box2i{});
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "the scope choice is only offered when it would change anything");
@@ -453,30 +374,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(snapshot(img) == original);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "filling writes a different value per channel");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        // fill is the one edit whose value depends on which channel it writes, so a group's channels must
-        // not all come out the same
-        const float4 color{0.25f, 0.5f, 0.75f, 1.f};
-        EditSubject  subject;
-        IM_CHECK(modify_pixels(edit_context(img, subject), "Fill",
-                               [color](float, int2, int slot) { return color[slot % 4]; }));
-
-        const auto &group = img->groups[img->selected_group];
-        for (int c = 0; c < group.num_channels; ++c)
-        {
-            const auto &ch = img->channels[group.channels[c]];
-            IM_CHECK_EQ(ch(0, 0), color[c % 4]);
-            IM_CHECK_EQ(ch(ch.size().x - 1, ch.size().y - 1), color[c % 4]);
-        }
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "cropping to the selection resizes the image and undo restores it");
@@ -555,30 +452,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(crop.enabled(), true);
 
         hdrview()->set_selection(Box2i{});
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "a structural edit refits the view and rebuilds the tree");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto         img    = hdrview()->current_image();
-        const size_t layers = img->layers.size();
-        const size_t groups = img->groups.size();
-
-        IM_CHECK(modify_image(
-            hdrview()->edit_context(img), "Canvas size", [](Image &i)
-            { i.resize_canvas(i.size() + int2{4, 4}, Image::Anchor_MiddleCenter); }, structure_undo, Extent_Structure));
-
-        IM_CHECK(img->size() == int2{img->channels[0].size()});
-        // rebuilt from the new channels, not left describing the old ones
-        IM_CHECK_EQ(img->layers.size(), layers);
-        IM_CHECK_EQ(img->groups.size(), groups);
-
-        menu_click(ctx, "Edit/Undo");
-        IM_CHECK_EQ(img->layers.size(), layers);
-        IM_CHECK_EQ(img->groups.size(), groups);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "with a selection, an edit covers only the selection");
@@ -900,67 +773,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_LT(std::fabs(alpha(0, 0) - color.w), 1e-4f);
     };
 
-    t           = IM_REGISTER_TEST(engine, "edit", "converting the color space rewrites the samples and the tag");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        // stated, so the conversion below is a real one whatever the fixture is tagged as when it loads
-        img->chromaticities = gamut_chromaticities(ColorGamut_sRGB_BT709);
-        img->compute_color_transform();
-        img->metadata["color profile"] = color_profile_name(ColorGamut_sRGB_BT709, TransferFunction::Linear);
-        ctx->Yield();
-
-        const auto  original      = snapshot(img);
-        const auto  original_chr  = img->chromaticities;
-        const auto  original_name = img->metadata.value<string>("color profile", "");
-        const float original_wide = img->M_to_sRGB[0][0];
-
-        Chromaticities to = gamut_chromaticities(ColorGamut_BT2020_2100);
-        to.white          = white_point(WhitePoint_D65);
-
-        float3x3   M;
-        const bool needed = color_conversion_matrix(M, *original_chr, to, AdaptationMethod_Bradford);
-        IM_CHECK(needed);
-
-        IM_CHECK(modify_colors(
-            hdrview()->edit_context(img), "Convert color space",
-            [M](const float4 &c, int2, int) { return float4{la::mul(M, c.xyz()), c.w}; },
-            [to](Image &image)
-            {
-                image.chromaticities = to;
-                image.compute_color_transform();
-                image.metadata["color profile"] = color_profile_name(ColorGamut_BT2020_2100, TransferFunction::Linear);
-            }));
-        ctx->Yield();
-
-        // both halves landed: the samples moved, and so did what the Colorspace panel reads
-        IM_CHECK(snapshot(img) != original);
-        IM_CHECK_EQ(img->color_space, ColorGamut_BT2020_2100);
-        IM_CHECK_STR_EQ(img->metadata.value<string>("color profile", "").c_str(),
-                        color_profile_name(ColorGamut_BT2020_2100, TransferFunction::Linear).c_str());
-        // derived from the chromaticities, not stored beside them, so this says compute_color_transform()
-        // was rerun
-        IM_CHECK(std::fabs(img->M_to_sRGB[0][0] - original_wide) > 1e-4f);
-
-        // one step takes back both: a tag left behind would describe the image as something it is not
-        IM_CHECK_EQ(hdrview()->undo(), true);
-        ctx->Yield();
-        IM_CHECK(snapshot(img) == original);
-        IM_CHECK_EQ(img->color_space, ColorGamut_sRGB_BT709);
-        IM_CHECK_STR_EQ(img->metadata.value<string>("color profile", "").c_str(), original_name.c_str());
-        IM_CHECK_LT(std::fabs(img->M_to_sRGB[0][0] - original_wide), 1e-4f);
-
-        // redo puts both back, which a composite that undoes in the wrong order would not
-        IM_CHECK_EQ(hdrview()->redo(), true);
-        ctx->Yield();
-        IM_CHECK(snapshot(img) != original);
-        IM_CHECK_EQ(img->color_space, ColorGamut_BT2020_2100);
-    };
-
     t           = IM_REGISTER_TEST(engine, "edit", "every new edit dialog is wired to its edit");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -972,7 +784,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // the dialogs themselves, from the menu: everything above tests the operation, and an operation
         // wired to nothing passes all of it. Each waits for the entry, since a dialog may hand the work to
-        // a worker rather than do it in the frame that confirmed it.
+        // a worker instead of doing it in the frame that confirmed it.
         menu_click(ctx, "Edit/Shift...");
         ctx->SetRef("Shift...");
         ctx->ItemInputValue("X, Y offset/$$0", 3.0f);
@@ -1161,85 +973,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
-    t           = IM_REGISTER_TEST(engine, "edit", "a color edit sees a group's channels together");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        const int g = img->active_group_index(Target_Primary);
-        IM_CHECK(img->is_valid_group(g));
-        const auto &group = img->groups[g];
-        if (group.num_channels < 3)
-            return;
-
-        // reading the sample beside it is what modify_pixels() cannot do: it is handed one sample and told
-        // which slot it is, never the others
-        IM_CHECK(modify_colors(hdrview()->edit_context(img), "Swap red and blue",
-                               [](const float4 &c, int2, int) { return float4{c.z, c.y, c.x, c.w}; }));
-        ctx->Yield();
-
-        const auto &r = img->channels[group.channels[0]];
-        const auto &b = img->channels[group.channels[2]];
-
-        // swapped, so the two channels are each other's, and undoing restores both, not one
-        vector<float> reds, blues;
-        for (int y = 0; y < r.size().y; ++y)
-            for (int x = 0; x < r.size().x; ++x)
-            {
-                reds.push_back(r(x, y));
-                blues.push_back(b(x, y));
-            }
-        IM_CHECK(reds != blues); // a fixture whose channels were equal would prove nothing
-
-        const auto swapped = snapshot(img);
-        IM_CHECK_EQ(hdrview()->undo(), true);
-        ctx->Yield();
-        IM_CHECK_EQ(hdrview()->redo(), true);
-        ctx->Yield();
-        IM_CHECK(snapshot(img) == swapped);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "a color edit leaves channels that are not color alone");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        // a depth channel beside the color, the ordinary shape of a render: a color matrix has no meaning
-        // for it, so covering "all channels" must still not touch it. Added through modify_image() with a
-        // structural extent, which rebuilds the layer tree and the visibility the Images panel walks.
-        modify_image(
-            hdrview()->edit_context(img), "Add Z",
-            [](Image &i)
-            {
-                Channel z{"Z", i.channels[0].size()};
-                for (int k = 0; k < z.num_elements(); ++k) z(k) = 0.25f * float(k % 7);
-                i.channels.push_back(std::move(z));
-            },
-            structure_undo, Extent_Structure);
-        ctx->Yield();
-
-        const int     zi = int(img->channels.size()) - 1;
-        vector<float> before;
-        for (int i = 0; i < img->channels[zi].num_elements(); ++i) before.push_back(img->channels[zi](i));
-
-        auto subject  = hdrview()->edit_subject();
-        subject.scope = EditSubject::Scope_AllChannels;
-
-        IM_CHECK(modify_colors(edit_context(img, subject), "Halve",
-                               [](const float4 &c, int2, int) { return float4{0.5f * c.xyz(), c.w}; }));
-        ctx->Yield();
-
-        for (int i = 0; i < img->channels[zi].num_elements(); ++i) IM_CHECK_EQ(img->channels[zi](i), before[i]);
-
-        reset_images(ctx);
-    };
-
     t           = IM_REGISTER_TEST(engine, "edit", "the history panel lists every state and moves between them");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -1286,122 +1019,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->ItemClick("**/" ICON_MY_HISTORY " Rotate 90 degrees clockwise");
         ctx->Yield(2);
         IM_CHECK(snapshot(img) == rotated);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "flattening composites over a background and leaves it opaque");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        const int g = img->active_group_index(Target_Primary);
-        IM_CHECK(img->is_valid_group(g));
-        if (img->groups[g].num_channels < 4)
-            return; // nothing to flatten in a group with no alpha
-
-        // a known state to composite: half-transparent mid gray, premultiplied the way the image model
-        // holds every RGBA group
-        const float4 fg{0.25f, 0.25f, 0.25f, 0.5f};
-        IM_CHECK(
-            modify_pixels(hdrview()->edit_context(img), "Fill", [fg](float, int2, int slot) { return fg[slot % 4]; }));
-        ctx->Yield();
-
-        const float4 bg{0.5f, 0.f, 0.f, 1.f};
-        IM_CHECK(modify_colors(hdrview()->edit_context(img), "Flatten", [bg](const float4 &c, int2, int)
-                               { return float4{c.xyz() + bg.xyz() * bg.w * (1.f - c.w), c.w + bg.w * (1.f - c.w)}; }));
-        ctx->Yield();
-
-        const auto &group = img->groups[img->active_group_index(Target_Primary)];
-        const auto &r     = img->channels[group.channels[0]];
-        const auto &gch   = img->channels[group.channels[1]];
-        const auto &a     = img->channels[group.channels[group.num_channels - 1]];
-
-        // opaque afterwards, and the background has shown through by the fraction that was missing
-        IM_CHECK_LT(std::fabs(a(0, 0) - 1.f), 1e-5f);
-        IM_CHECK_LT(std::fabs(r(0, 0) - (0.25f + 0.5f * 0.5f)), 1e-5f);
-        IM_CHECK_LT(std::fabs(gch(0, 0) - 0.25f), 1e-5f);
-
-        // an opaque background makes it idempotent: there is nothing left for a second pass to show
-        // through, which a lerp written against straight alpha would get wrong
-        const auto once = snapshot(img);
-        IM_CHECK(modify_colors(hdrview()->edit_context(img), "Flatten", [bg](const float4 &c, int2, int)
-                               { return float4{c.xyz() + bg.xyz() * bg.w * (1.f - c.w), c.w + bg.w * (1.f - c.w)}; }));
-        ctx->Yield();
-        IM_CHECK(snapshot(img) == once);
-
-        reset_images(ctx);
-    };
-
-    t           = IM_REGISTER_TEST(engine, "edit", "a normal map leans away from the slope it was given");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        if (!load_fixture(ctx))
-            return;
-
-        auto img = hdrview()->current_image();
-
-        const auto &group = img->groups[img->active_group_index(Target_Primary)];
-        if (group.num_channels < 3)
-            return;
-
-        const int2 size = img->size();
-
-        // a ramp rising to the right, so the answer is known: flat down the image, sloped across it
-        IM_CHECK(modify_pixels(hdrview()->edit_context(img), "Ramp", [size](float, int2 p, int slot)
-                               { return slot >= 3 ? 1.f : float(p.x) / float(size.x); }));
-        ctx->Yield();
-
-        // the heights come from a copy, as the command's own do
-        const float2 fsize{float(size.x), float(size.y)};
-        auto         src = img->duplicate();
-        const auto   grp = img->groups;
-        IM_CHECK(modify_colors(hdrview()->edit_context(img), "Bump to normal map",
-                               [fsize, src, grp](const float4 &, int2 p, int gi)
-                               {
-                                   auto height = [&](int2 q)
-                                   {
-                                       const int4 channels = grp[size_t(gi)].channels;
-                                       const int2 extent   = src->channels[size_t(channels[0])].size();
-                                       const int  x =
-                                           wrap_coord(q.x - src->data_window.min.x, extent.x, BorderMode_Edge);
-                                       const int y =
-                                           wrap_coord(q.y - src->data_window.min.y, extent.y, BorderMode_Edge);
-                                       float sum = 0.f;
-                                       for (int k = 0; k < 3; ++k) sum += src->channels[size_t(channels[k])](x, y);
-                                       return sum / 3.f;
-                                   };
-                                   const float h00 = height(p);
-                                   const float dx = height(p + int2{1, 0}) - h00, dy = height(p + int2{0, 1}) - h00;
-                                   float3      n = la::normalize(float3{dx * fsize.x, dy * fsize.y, 1.f});
-                                   return float4{n * 0.5f + 0.5f, 1.f};
-                               }));
-        ctx->Yield();
-
-        const auto &r = img->channels[group.channels[0]];
-        const auto &g = img->channels[group.channels[1]];
-        const auto &b = img->channels[group.channels[2]];
-
-        // away from the edges, where the border mode flattens the last column's forward difference
-        const int2 mid{size.x / 2, size.y / 2};
-
-        // rising to the right leans the normal that way, so red is above the 0.5 that means flat...
-        IM_CHECK_GT(r(mid.x, mid.y), 0.55f);
-        // ...green stays at flat, since nothing changes down the image...
-        IM_CHECK_LT(std::fabs(g(mid.x, mid.y) - 0.5f), 1e-3f);
-        // ...and z still points out of the surface, so blue stays in the upper half
-        IM_CHECK_GT(b(mid.x, mid.y), 0.5f);
-
-        // encoded, so every component is inside the range a normal map is stored in
-        for (int i = 0; i < r.num_elements(); i += 53)
-        {
-            IM_CHECK(r(i) >= 0.f && r(i) <= 1.f);
-            IM_CHECK(g(i) >= 0.f && g(i) <= 1.f);
-            IM_CHECK(b(i) >= 0.f && b(i) <= 1.f);
-        }
-
-        reset_images(ctx);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "duplicating an image copies its samples, not a reference");

@@ -10,6 +10,10 @@
 #include "image.h"
 #include "imageio/heif.h"
 
+#include "test_support.h"
+
+using namespace hdrview_test;
+
 #include <algorithm>
 #include <sstream>
 #include <string>
@@ -22,12 +26,7 @@ namespace
 
 ImagePtr make_rgb(int2 size = int2{16, 12})
 {
-    auto img = std::make_shared<Image>(size, 3);
-    for (int c = 0; c < 3; ++c)
-        for (int y = 0; y < size.y; ++y)
-            for (int x = 0; x < size.x; ++x) img->channels[c](x, y) = 0.2f + 0.2f * c;
-    img->finalize();
-    return img;
+    return test_image(size, 3, [](int c, int, int) { return 0.2f + 0.2f * float(c); });
 }
 
 /// The major brand out of the file's ftyp box: 4 bytes of size, 'ftyp', then the brand.
