@@ -634,11 +634,15 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
     }
     else if (!image->icc_data.empty() &&
              ICCProfile(image->icc_data)
-                 .linearize_pixels(pixels.data(), buffer_size, opts.keep_primaries, &profile_desc, &chr))
+                 .linearize_pixels(pixels.data(), buffer_size, opts.keep_primaries, &profile_desc, &chr,
+                                   /* cmyk_is_inverted */ false))
     {
         spdlog::info("Linearizing colors using ICC profile.");
         image->chromaticities = chr;
     }
+    else if (cmyk_to_rgb)
+        // the ink has no reading as color without its profile, and an sRGB curve over it is not one
+        throw runtime_error{"Failed to convert this image's ink channels through its CMYK profile."};
     else if (linearize_pixels(pixels.data(), buffer_size, Chromaticities(), TransferFunction::sRGB, opts.keep_primaries,
                               &profile_desc, &chr))
     {

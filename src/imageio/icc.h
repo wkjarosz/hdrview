@@ -124,7 +124,8 @@ public:
             True if the pixel values were successfully linearized.
     */
     bool linearize_pixels(float *pixels, int3 size, bool keep_primaries = true,
-                          std::string *profile_description = nullptr, Chromaticities *c = nullptr) const;
+                          std::string *profile_description = nullptr, Chromaticities *c = nullptr,
+                          bool cmyk_is_inverted = true) const;
 
     /**
        \brief Transform an array of floating-point pixels between two ICC profiles in-place.
@@ -134,8 +135,8 @@ public:
        interleaved row-major with `size.z` channels per pixel.
 
        Supported conversions (when built with LCMS2) include RGB↔RGB, CMYK→RGBA, and Gray↔Gray.
-       For CMYK inputs this function internally converts values to the range expected by LCMS
-       (LCMS commonly expects CMYK in [0,100] for float formats).
+       For CMYK inputs this function internally converts values to the [0,100] range LCMS expects of a float
+       format, inverting them on the way when `cmyk_is_inverted` says the file stores ink that way.
 
        \param[in,out] pixels  Pointer to the pixel buffer. On success the buffer contains transformed
                               pixel values. For RGB/Gray values are typically in [0,1]. For CMYK
@@ -144,12 +145,16 @@ public:
                               `size.z` = number of channels (e.g., 3 for RGB, 4 for RGBA/CMYK).
        \param[in] profile_in  Source ICC profile (must be valid).
        \param[in] profile_out Destination ICC profile (must be valid).
+       \param[in] cmyk_is_inverted
+                              Whether a CMYK input stores its samples inverted, 0 meaning full ink, as Adobe's
+                              JPEGs do. JPEG 2000 stores ink directly and passes false.
        \returns               True if the transform was created and applied successfully; false otherwise.
 
        \note The function uses LCMS2 when `HDRVIEW_ENABLE_LCMS2` is enabled; without LCMS2 it just returns false.
              The function sets alpha to 1.0 for outputs produced by CMYK→RGBA conversions.
      */
-    static bool transform_pixels(float *pixels, int3 size, const ICCProfile &profile_in, const ICCProfile &profile_out);
+    static bool transform_pixels(float *pixels, int3 size, const ICCProfile &profile_in, const ICCProfile &profile_out,
+                                 bool cmyk_is_inverted = true);
 
 private:
     /// Internal constructor from raw profile pointer.

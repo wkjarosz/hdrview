@@ -338,7 +338,8 @@ ICCProfile ICCProfile::linearized_profile(Chromaticities *c) const
         return ICCProfile::linear_RGB(chr);
 }
 
-bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &profile_in, const ICCProfile &profile_out)
+bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &profile_in, const ICCProfile &profile_out,
+                                  bool cmyk_is_inverted)
 {
     if (!profile_in || !profile_out)
         return false;
@@ -388,9 +389,11 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
         }
     }
 
-    // If CMYK, lcms expects floating-point values in the range [0, 100]
+    // lcms expects CMYK in [0, 100], where 100 is full ink. Adobe's JPEGs store the inverse of that and
+    // JPEG 2000 stores it directly, and nothing in the profile says which, so the caller has to.
     if (is_cmyk)
-        for (size_t i = 0, n = (size_t)size.x * size.y * size.z; i < n; ++i) pixels[i] = (1.0f - pixels[i]) * 100.0f;
+        for (size_t i = 0, n = (size_t)size.x * size.y * size.z; i < n; ++i)
+            pixels[i] = (cmyk_is_inverted ? 1.0f - pixels[i] : pixels[i]) * 100.0f;
 
     auto flags = (((size.z == 4 || size.z == 2) && !is_cmyk) ? cmsFLAGS_COPY_ALPHA : 0) | cmsFLAGS_HIGHRESPRECALC |
                  cmsFLAGS_NOCACHE;
@@ -416,7 +419,7 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
 }
 
 bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, string *tf_description,
-                                  Chromaticities *c) const
+                                  Chromaticities *c, bool cmyk_is_inverted) const
 {
     // a `cicp` tag states the profile's encoding in CICP's own terms (ICC.1:2022) and is authoritative. For
     // HDR it is also the only part of the profile that can describe the encoding: the ICC PCS is normalized
@@ -425,8 +428,10 @@ bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries,
         return codes.linearize_pixels(pixels, size, keep_primaries, tf_description, c);
 
     ICCProfile profile_out = nullptr;
-    // create the output profile and store either the input or output primaries in c
-    if (keep_primaries)
+    // create the output profile and store either the input or output primaries in c. CMYK is the exception:
+    // it has no primaries of its own to keep, so linearized_profile() would find no colorants to read and
+    // give up, and transform_pixels() needs an RGB output profile to recognize the conversion at all.
+    if (keep_primaries && !is_CMYK())
         profile_out = linearized_profile(c);
     else
     {
@@ -435,7 +440,7 @@ bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries,
             *c = Chromaticities();
     }
 
-    if (transform_pixels(pixels, size, *this, profile_out))
+    if (transform_pixels(pixels, size, *this, profile_out, cmyk_is_inverted))
     {
         if (tf_description)
             *tf_description = description();
@@ -481,12 +486,13 @@ bool                 ICCProfile::is_RGB() const { return false; }
 bool                 ICCProfile::is_Gray() const { return false; }
 
 bool ICCProfile::transform_pixels(float * /*pixels*/, int3 /*size*/, const ICCProfile & /*profile_in*/,
-                                  const ICCProfile & /*profile_out*/)
+                                  const ICCProfile & /*profile_out*/, bool /*cmyk_is_inverted*/)
 {
     return false;
 }
 bool ICCProfile::linearize_pixels(float * /*pixels*/, int3 /*size*/, bool /*keep_primaries*/,
-                                  std::string * /*tf_description*/, Chromaticities * /*c*/) const
+                                  std::string * /*tf_description*/, Chromaticities * /*c*/,
+                                  bool /*cmyk_is_inverted*/) const
 {
     return false;
 }

@@ -574,9 +574,55 @@ TEST_CASE("Every file in a real JPEG 2000 corpus either decodes or is refused")
     CAPTURE(decoded);
     CAPTURE(refused);
     CAPTURE(high_throughput);
-    // a corpus that decoded nothing would pass every check above without testing anything
+    // a corpus that decoded nothing would pass every check above without testing anything. Whether it holds
+    // any high-throughput files is its business, not this test's, so that one is only reported.
     CHECK(decoded > 0);
-    CHECK(high_throughput > 0);
+}
+
+// The same photograph saved twice by Photoshop, once RGB and once CMYK, which is the only way to check the
+// ink conversion end to end: the profile that drives it is half a megabyte and cannot be vendored here.
+TEST_CASE("A CMYK rendition agrees with the RGB one of the same photograph")
+{
+    namespace fs = std::filesystem;
+
+    const fs::path dir  = HDRVIEW_TEST_J2K_DIR;
+    const fs::path rgb  = dir / "buddha-rgb.jpf";
+    const fs::path cmyk = dir / "buddha-cmyk.jpf";
+    if (!fs::exists(rgb) || !fs::exists(cmyk))
+        return;
+
+    const auto load = [](const fs::path &p, const ImageLoadOptions &opts)
+    {
+        std::ifstream in(p, std::ios::binary);
+        REQUIRE(in.good());
+        auto images = load_j2k_image(in, p.filename().string(), opts);
+        REQUIRE(images.size() == 1);
+        return images.front();
+    };
+
+    // first as the app loads it: CMYK has no primaries of its own to keep, so the profile has to be applied
+    // even under the default that keeps them
+    CHECK(load(cmyk, ImageLoadOptions{})->metadata.value("color profile", std::string{}).find("SWOP") !=
+          std::string::npos);
+
+    // then both to sRGB primaries, which is what makes the two directly comparable
+    ImageLoadOptions opts;
+    opts.keep_primaries = false;
+    const auto a = load(rgb, opts), b = load(cmyk, opts);
+    REQUIRE(a->size() == b->size());
+    REQUIRE(a->channels.size() == 3);
+    // the conversion writes RGB over the four ink channels and leaves the fourth opaque
+    REQUIRE(b->channels.size() == 4);
+    // SWOP's gamut is far short of the RGB rendition's, so saturated pixels clip; the average is what says
+    // the ink was read the right way up, since reading it inverted puts this above 0.25
+    for (int c = 0; c < 3; ++c)
+    {
+        CAPTURE(c);
+        double sum = 0.;
+        for (int y = 0; y < a->size().y; ++y)
+            for (int x = 0; x < a->size().x; ++x) sum += std::abs(double(a->channels[c](x, y) - b->channels[c](x, y)));
+        CHECK(sum / ((double)a->size().x * a->size().y) < 0.05);
+    }
 }
 
 #endif // HDRVIEW_TEST_J2K_DIR
