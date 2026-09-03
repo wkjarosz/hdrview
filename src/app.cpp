@@ -230,6 +230,10 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
     // already names what undo and redo would do.
     DockableWindow history_window{"History", "RightSpace", [this] { draw_history_window(); }, false};
 
+    // Hidden by default, like the history: an image with no annotations has nothing to show, and the tool
+    // palette is how the feature is reached.
+    DockableWindow annotations_window{"Annotations", "RightSpace", [this] { draw_annotations_window(); }, false};
+
     DockableWindow log_window{
         "Log", "LogSpace",
         [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
@@ -259,6 +263,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                               info_window,
                                               colorspace_window,
                                               history_window,
+                                              annotations_window,
                                               log_window
 #if !defined(__EMSCRIPTEN__)
                                               ,
@@ -276,6 +281,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                                    {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                                    {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
                                                    {ImGuiKey_F9, ICON_MY_HISTORY},
+                                                   {ImGuiKey_F10, ICON_MY_ANNOTATE},
                                                    {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
 #if !defined(__EMSCRIPTEN__)
                                                    ,

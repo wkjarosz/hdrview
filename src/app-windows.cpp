@@ -714,6 +714,155 @@ void HDRViewApp::draw_statistics_window()
     }
 }
 
+void HDRViewApp::draw_annotations_window()
+{
+    auto img = current_image();
+    if (!img)
+    {
+        ImGui::TextDisabled("No image loaded.");
+        return;
+    }
+
+    auto &list = img->annotations;
+
+    ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+    ImGui::Checkbox("Show " ICON_MY_ANNOTATE " in viewport", &m_draw_annotations);
+    ImGui::PopStyleVar();
+
+    ImGui::Separator();
+
+    // What the tool will draw next, which is the state a drawing tool wants in reach while drawing.
+    ImGui::TextUnformatted("New:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(EmSize(7));
+    if (ImGui::BeginCombo("##AnnotationShape", annotation_shape_name(m_annotation_shape)))
+    {
+        for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
+        {
+            const auto shape = Annotation::Shape(n);
+            // Text is placed by clicking and then typing, which nothing here can do yet.
+            if (shape == Annotation::Shape::Text)
+                continue;
+
+            const bool is_selected = shape == m_annotation_shape;
+            if (ImGui::Selectable(annotation_shape_name(shape), is_selected))
+                m_annotation_shape = shape;
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("Which shape the %s tool draws.", "annotate");
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::ColorEdit4("##AnnotationColor", &m_annotation_style.stroke_color.x,
+                      ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+    ImGui::SetItemTooltip("The color new annotations are drawn in.");
+
+    ImGui::Separator();
+
+    const int active = active_annotation();
+
+    // Erased after the list is drawn: removing a row mid-list renumbers the ones still to come.
+    int erase = -1;
+
+    if (ImGui::BeginChild("##Annotation list", ImVec2(0, -EmSize(9))))
+    {
+        // The renderer's own overlay, listed but never edited: it belongs to the process sending it, and
+        // this is the one place overlays are switched on and off.
+        if (!img->vector_overlay.empty())
+        {
+            ImGui::IconButton(img->vector_overlay_visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF,
+                              &img->vector_overlay_visible);
+            ImGui::SameLine();
+            ImGui::TextDisabled(ICON_MY_LIST_VIEW " Renderer overlay");
+            ImGui::Tooltip("Drawing commands streamed in by a renderer. They can be hidden here, but only "
+                           "the process sending them can change them.");
+        }
+
+        for (int i = 0; i < int(list.size()); ++i)
+        {
+            auto &a = list[size_t(i)];
+            ImGui::PushID(i);
+
+            ImGui::IconButton(a.visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF, &a.visible);
+            ImGui::SetItemTooltip("Draw this annotation.");
+            ImGui::SameLine();
+            ImGui::IconButton(a.locked ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, &a.locked);
+            ImGui::SetItemTooltip("A locked annotation cannot be picked up in the viewport.");
+            ImGui::SameLine();
+
+            const float trash_w = ImGui::IconButtonSize().x + ImGui::GetStyle().ItemInnerSpacing.x;
+            if (ImGui::Selectable(fmt::format("{} {}", ICON_MY_ANNOTATE, a.display_label()).c_str(), i == active,
+                                  ImGuiSelectableFlags_AllowOverlap,
+                                  ImVec2(ImGui::GetContentRegionAvail().x - trash_w, 0.f)))
+                set_active_annotation(i);
+
+            ImGui::SameLine();
+            if (ImGui::IconButton(ICON_MY_TRASH_CAN))
+                erase = i;
+            ImGui::SetItemTooltip("Delete this annotation.");
+
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+
+    if (erase >= 0)
+    {
+        list.erase(list.begin() + erase);
+        // The rows after it have shifted down, so what was in hand has to shift with them.
+        if (active == erase)
+            set_active_annotation(-1);
+        else if (active > erase)
+            set_active_annotation(active - 1);
+    }
+
+    // Re-read: the erase above may have taken the annotation that was in hand, or shifted its index.
+    const int selected = active_annotation();
+    if (selected < 0)
+    {
+        ImGui::TextDisabled("Nothing selected.");
+        return;
+    }
+
+    Annotation &a = list[size_t(selected)];
+
+    if (ImGui::PE::Begin("AnnotationPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    {
+        ImGui::PE::PushLabelFont(m_sans_bold);
+
+        ImGui::PE::Entry(
+            "Label",
+            [&a]
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "%s", a.label.c_str());
+                if (ImGui::InputText("##label", buf, sizeof(buf)))
+                {
+                    a.label = buf;
+                    return true;
+                }
+                return false;
+            },
+            "What this row says. Empty falls back to the shape's name.");
+
+        ImGui::PE::Entry(
+            "Stroke", [&a] { return ImGui::ColorEdit4("##stroke", &a.stroke_color.x, ImGuiColorEditFlags_NoInputs); },
+            "Outline of the shape, and the color of a text annotation.");
+
+        ImGui::PE::Entry(
+            "Fill", [&a] { return ImGui::ColorEdit4("##fill", &a.fill_color.x, ImGuiColorEditFlags_NoInputs); },
+            "Interior of a closed shape. Fully transparent leaves it unfilled.");
+
+        ImGui::PE::Entry(
+            "Width", [&a] { return ImGui::SliderFloat("##width", &a.stroke_width, 0.5f, 16.f, "%.1f px"); },
+            "Stroke width, in screen pixels, so it does not change with zoom.");
+
+        ImGui::PE::PopLabelFont();
+        ImGui::PE::End();
+    }
+}
+
 std::vector<std::pair<int, int>> HDRViewApp::selected_targets() const
 {
     std::vector<std::pair<int, int>> out;

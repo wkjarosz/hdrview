@@ -509,6 +509,8 @@ public:
         vector_overlay.h.
     */
     std::vector<VgCommand> vector_overlay;
+    /// Whether that overlay is drawn, so one can be hidden without disconnecting the renderer sending it.
+    bool vector_overlay_visible = true;
 
     /// The user's own markup over this image, in its pixel coordinates.
     /**

@@ -245,7 +245,7 @@ void HDRViewApp::draw_vector_overlays() const
         if (!img)
             continue;
 
-        if (!img->vector_overlay.empty())
+        if (img->vector_overlay_visible && !img->vector_overlay.empty())
             draw_vector_overlay(ImGui::GetBackgroundDrawList(), img->vector_overlay, xform, color, unsupported);
 
         // Flattened each frame rather than cached: an annotation being dragged changes every frame anyway,
