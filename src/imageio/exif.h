@@ -10,13 +10,6 @@
 #include <cstdint>
 #include <optional>
 
-/// Whether a maker-note tag's [offset, offset + size) lies inside a note of \p bound bytes.
-/**
-    Compared by subtraction: these are 32-bit file fields, and offset + size wraps where size_t is no wider
-    (wasm32).
-*/
-bool maker_note_range_within(uint32_t offset, uint32_t size, uint32_t bound);
-
 json        entry_to_json(void *entry, int boi, unsigned int ifd_idx_i = 0);
 json        exif_to_json(const uint8_t *data_ptr, size_t data_size);
 inline json exif_to_json(const std::vector<uint8_t> &data) { return exif_to_json(data.data(), data.size()); }
