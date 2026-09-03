@@ -72,7 +72,13 @@ public:
     //@}
 
     //@{ \name Dimension sizes
-    int  num_elements() const { return m_size.x * m_size.y; }
+    int num_elements() const { return m_size.x * m_size.y; }
+    /// Value at (\p x, \p y), with a coordinate outside the array clamped to the nearest sample inside.
+    const T &clamped(int x, int y) const
+    {
+        return operator()(std::clamp(x, 0, width() - 1), std::clamp(y, 0, height() - 1));
+    }
+
     int2 size() const { return m_size; }
     int  width() const { return m_size.x; }
     int  height() const { return m_size.y; }
@@ -107,13 +113,6 @@ template <typename T>
 inline void Array2D<T>::operator=(const T &value)
 {
     reset(value);
-}
-
-/// Value of \p a at (\p x, \p y), with a coordinate outside it clamped to the nearest sample inside.
-template <typename T>
-inline T clamped(const Array2D<T> &a, int x, int y)
-{
-    return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
 }
 
 using Array2Di = Array2D<int>;

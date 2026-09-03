@@ -39,10 +39,10 @@ Array2Df laplacian(const Array2Df &src)
                       {
                           for (int y = y0; y < y1; ++y)
                               for (int x = 0; x < src.width(); ++x)
-                                  out(x, y) = clamped(src, x - 1, y) + clamped(src, x + 1, y) + clamped(src, x, y - 1) +
-                                              clamped(src, x, y + 1) + clamped(src, x - 1, y - 1) +
-                                              clamped(src, x + 1, y + 1) + clamped(src, x + 1, y - 1) +
-                                              clamped(src, x - 1, y + 1) - 8.f * clamped(src, x, y);
+                                  out(x, y) = src.clamped(x - 1, y) + src.clamped(x + 1, y) + src.clamped(x, y - 1) +
+                                              src.clamped(x, y + 1) + src.clamped(x - 1, y - 1) +
+                                              src.clamped(x + 1, y + 1) + src.clamped(x + 1, y - 1) +
+                                              src.clamped(x - 1, y + 1) - 8.f * src.clamped(x, y);
                       });
 
     return out;

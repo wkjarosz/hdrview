@@ -152,12 +152,11 @@ Array2Df convolve_separable(const Array2Df &src, const Box2i &region, const std:
                                   const int x = region.min.x + i;
                                   if (taps_x.empty())
                                   {
-                                      horizontal(i, j) = clamped(src, x, y);
+                                      horizontal(i, j) = src.clamped(x, y);
                                       continue;
                                   }
                                   float sum = 0.f;
-                                  for (int k = -rx; k <= rx; ++k)
-                                      sum += taps_x[size_t(k + rx)] * clamped(src, x + k, y);
+                                  for (int k = -rx; k <= rx; ++k) sum += taps_x[size_t(k + rx)] * src.clamped(x + k, y);
                                   horizontal(i, j) = sum;
                               }
                               ++h_progress;
@@ -208,7 +207,7 @@ Array2Df box_pass(const Array2Df &src, int2 src_origin, const Box2i &region, int
     const int2 extent = region.size();
     const int  rows   = extent.y + 2 * ry;
 
-    auto at = [&src, src_origin](int x, int y) { return clamped(src, x - src_origin.x, y - src_origin.y); };
+    auto at = [&src, src_origin](int x, int y) { return src.clamped(x - src_origin.x, y - src_origin.y); };
 
     Array2Df    horizontal{int2{extent.x, rows}};
     const float inv_x = 1.f / float(2 * rx + 1);
@@ -462,7 +461,7 @@ Array2Df unsharp_masked(const Array2Df &src, const Box2i &region, float sigma, f
                           for (int y = y0; y < y1; ++y)
                               for (int x = 0; x < extent.x; ++x)
                               {
-                                  const float v = clamped(src, region.min.x + x, region.min.y + y);
+                                  const float v = src.clamped(region.min.x + x, region.min.y + y);
                                   out(x, y)     = v + amount * (v - blurred(x, y));
                               }
                       });
@@ -480,7 +479,7 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
     if (r == 0)
     {
         for (int y = 0; y < extent.y; ++y)
-            for (int x = 0; x < extent.x; ++x) out(x, y) = clamped(src, region.min.x + x, region.min.y + y);
+            for (int x = 0; x < extent.x; ++x) out(x, y) = src.clamped(region.min.x + x, region.min.y + y);
         return out;
     }
 
@@ -505,7 +504,7 @@ Array2Df median_filtered(const Array2Df &src, const Box2i &region, float radius,
                                       for (int dx = -r; dx <= r; ++dx)
                                           if (!disc || float(dx * dx + dy * dy) <= r2)
                                               window.push_back(
-                                                  clamped(src, region.min.x + x + dx, region.min.y + y + dy));
+                                                  src.clamped(region.min.x + x + dx, region.min.y + y + dy));
 
                                   // nth_element is linear, and only the middle value is wanted
                                   const size_t mid = window.size() / 2;
@@ -533,7 +532,7 @@ Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replace
                               for (int x = 0; x < extent.x; ++x)
                               {
                                   const int   sx = region.min.x + x, sy = region.min.y + y;
-                                  const float v = clamped(src, sx, sy);
+                                  const float v = src.clamped(sx, sy);
                                   if (std::isfinite(v))
                                   {
                                       out(x, y) = v;
@@ -548,7 +547,7 @@ Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replace
                                       {
                                           if (dx == 0 && dy == 0)
                                               continue;
-                                          const float nv = clamped(src, sx + dx, sy + dy);
+                                          const float nv = src.clamped(sx + dx, sy + dy);
                                           if (std::isfinite(nv))
                                               ring[size_t(n++)] = nv;
                                       }

@@ -59,12 +59,9 @@ float3 cube_face_vector(int face, float2 st)
 /// Which face \p d falls on: the axis it points most steeply along, ties going to x and then y.
 int cube_face_of(float3 d)
 {
-    const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
-    if (ax >= ay && ax >= az)
-        return d.x >= 0.f ? Face_PosX : Face_NegX;
-    if (ay >= az)
-        return d.y >= 0.f ? Face_PosY : Face_NegY;
-    return d.z >= 0.f ? Face_PosZ : Face_NegZ;
+    // argmax breaks ties toward the lower index, which is the x-then-y order the faces are declared in
+    const int axis = la::argmax(la::abs(d));
+    return 2 * axis + (d[axis] < 0.f);
 }
 
 /// Where \p d falls on \p face's plane, in that face's own [0,1]^2; the inverse of cube_face_vector().
@@ -485,9 +482,7 @@ float envmap_jacobian(EnvMapping mapping, float2 uv)
         // dw = sin(phi) dtheta dphi, with theta spanning 2*pi across u and phi spanning pi down v.
         return 2.f * k_pi * k_pi * std::sin(k_pi * uv.y);
 
-    case EnvMapping_Cylindrical:
-        // Archimedes: v is the height and not the angle, so every row covers the same solid angle.
-        return k_four_pi;
+    case EnvMapping_Cylindrical: return k_four_pi;
 
     case EnvMapping_EqualArea:
         // equal-area by construction
@@ -502,7 +497,6 @@ float envmap_jacobian(EnvMapping mapping, float2 uv)
     {
         // Here the polar angle itself grows linearly with the radius, so the sky compresses towards the rim.
         const float r = la::length(2.f * uv - float2{1.f});
-        // sin(pi*r)/r tends to pi at the center, where the ratio itself would divide by zero.
         return r < 1e-6f ? k_four_pi * k_pi : k_four_pi * std::sin(k_pi * r) / r;
     }
 
@@ -703,8 +697,8 @@ CubeLevel faces_from_source(const Array2Df &src, int n, EnvMapping mapping)
 
 /// \p prev at half its resolution, averaged 2x2 over the interiors alone and ringed afresh.
 /**
-    The ring is rebuilt, not decimated: a coarser level's reads want a ring of what its own neighbors hold
-    at that level.
+    The ring is built afresh from the neighboring faces at the new size, since a read at this level wants
+    what its neighbors hold here.
 */
 CubeLevel decimated(const CubeLevel &prev)
 {
