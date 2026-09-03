@@ -509,15 +509,23 @@ public:
     float display_headroom() const;
 
 private:
+    //-----------------------------------------------------------------------------
+    // Subsystem state, defined in the .cpp file that owns it
+    //-----------------------------------------------------------------------------
+    struct PendingSessionLoad; // app-file-io.cpp
+    struct PendingSession;     // app-file-io.cpp
+    struct RunningFilter;      // app-edit.cpp
+#if HDRVIEW_ENABLE_IPC
+    struct IpcRates; // app-ipc.cpp
+#endif
+
     void load_fonts();
 
-    // Begins asynchronously loading the images listed in a parsed session file `j` (paths resolved relative
-    // to `dir`), populating m_pending_session; the rest of the session is applied by finish_pending_session()
-    // once every image has arrived.
-    void begin_session_load(const json &j, const fs::path &dir);
-    // Same as begin_session_load(), but for a session bundled inside a zip: each image entry's "path" names
-    // an entry of `zip_bytes`, extracted into memory and fed to the loader as a buffer.
-    void begin_bundle_session_load(string_view zip_bytes, const string &zip_name, const json &j);
+    // Begins asynchronously loading the images `load` lists, populating m_pending_session; the rest of the
+    // session is applied by finish_pending_session() once every image has arrived.
+    void begin_session_load(const PendingSessionLoad &load);
+    // Matches an image that has just finished loading to the session entry that asked for it.
+    void resolve_pending_session_image(const ImagePtr &new_image);
     // Called once every image in m_pending_session has been resolved (successfully or not); rebuilds m_images
     // in the saved order, then applies current/reference selection, blend mode, and view settings.
     void finish_pending_session();
@@ -624,40 +632,8 @@ private:
     /// Do the thing the prompt was asking about, now that it has been confirmed.
     void apply_pending_discard();
 
-    /// A filter running off the main thread, with what is needed to finish or abandon it.
-    /**
-        The worker writes only `results` and `progress`; the main thread reads `done` once a frame and
-        applies the results.
-    */
-    struct RunningFilter
-    {
-        ImagePtr         image;
-        std::string      name;
-        std::vector<int> channels;
-        Box2i            bounds;
-
-        /// Filters one of `channels`, given its index among them and a share of the progress bar.
-        std::function<Array2Df(const Array2Df &, int, AtomicProgress)> filter;
-
-        int2                  new_size{0}; ///< The size of the results; zero keeps the image's shape.
-        std::vector<Array2Df> results;
-        AtomicProgress        progress{true};
-        std::atomic<bool>     done{false};
-        std::thread           worker;
-
-        /// Cancel and join the worker.
-        /**
-            It reads this object and the thread pool, and both go away with the application.
-        */
-        ~RunningFilter()
-        {
-            progress.cancel();
-            if (worker.joinable())
-                worker.join();
-        }
-    };
-
-    std::unique_ptr<RunningFilter> m_running_filter;
+    /// The filter running off the main thread, if any; see start_filter().
+    std::shared_ptr<RunningFilter> m_running_filter;
 
     /// Filters waiting for the one in flight; only one runs at a time (one progress dialog, one Cancel).
     /**
@@ -669,7 +645,7 @@ private:
     /**
         On a worker with a progress dialog, or inline where there are no threads.
     */
-    void start_filter(std::unique_ptr<RunningFilter> running);
+    void start_filter(std::shared_ptr<RunningFilter> running);
     /// Applies a finished filter's results, or clears an abandoned one. Called once a frame.
     void drain_running_filter();
     /// Starts the next queued filter, if a fan-out left any waiting.
@@ -715,21 +691,8 @@ private:
     */
     bool m_ipc_listen_requested = false;
 
-    /// Turns the listener's running totals into the rates the activity readout shows.
-    /**
-        Sampled over a window rather than per frame: at 60 fps the per-frame deltas are one or two packets.
-    */
-    struct IpcRates
-    {
-        double   sampled_at    = 0.0; ///< ImGui::GetTime() of the last sample
-        uint64_t last_packets  = 0;
-        uint64_t last_bytes    = 0;
-        double   packets_per_s = 0.0;
-        double   bytes_per_s   = 0.0;
-
-        void update(const IpcActivity &now, double time);
-    };
-    IpcRates m_ipc_rates;
+    /// The rates the activity readout shows; created on first use by draw_ipc_gui().
+    std::shared_ptr<IpcRates> m_ipc_rates;
 
     // Each applies one already-decoded packet, on the main thread. Decoding happens on the receive thread;
     // see start_ipc_listening().
@@ -932,50 +895,11 @@ private:
     // Linear search by title; only ever called from a user-triggered action, never per-frame.
     PopupDialog &dialog(const string &title);
 
-    // A parsed session file waiting on the user to confirm closing currently-open images before it starts loading.
-    struct PendingSessionLoad
-    {
-        json     j;
-        fs::path dir;
-    };
-    optional<PendingSessionLoad> m_pending_session_load;
+    /// A parsed session file waiting on the user to confirm closing the currently-open images.
+    std::shared_ptr<PendingSessionLoad> m_pending_session_load;
 
-    // Same as PendingSessionLoad, but for a session bundled inside a zip; the zip's bytes are owned here
-    // until the user confirms, since begin_bundle_session_load() needs them again then.
-    struct PendingZipSessionLoad
-    {
-        string zip_bytes;
-        string zip_name;
-        json   j;
-    };
-    optional<PendingZipSessionLoad> m_pending_zip_session_load;
-
-    // A session whose images have been issued to the BackgroundImageLoader and are loading asynchronously;
-    // the rest of it (selection, blend mode, view settings) is applied by finish_pending_session() once every
-    // entry here has been resolved, successfully or not.
-    struct PendingSession
-    {
-        struct Entry
-        {
-            fs::path             path;
-            string               channel_selector;
-            optional<AlphaType_> alpha_override; ///< Empty when the file's own interpretation was used
-            int                  selected_group = 0, reference_group = 0;
-            vector<string>       selected_channels; ///< The multi-selection, by channel name; see Channel::selected
-            ImagePtr loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
-        };
-        vector<Entry> entries; ///< One per saved "images" entry, in file order; the same path may repeat
-        int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset
-        BlendMode_    blend_mode;
-        json          view; ///< The session file's "view" sub-object, applied verbatim once loading completes
-
-        // An arriving image is matched to the earliest not-yet-filled entry sharing its load options. Entries
-        // sharing that key are content-identical, so any one-to-one assignment among them is correct however
-        // the async loads finish -- which is what makes it safe to load the same file twice in one session.
-        using Key = std::tuple<fs::path, string, optional<AlphaType_>>; ///< path, channel_selector, alpha_override
-        map<Key, deque<int>> unresolved;
-    };
-    optional<PendingSession> m_pending_session;
+    /// The session whose images are loading asynchronously; see begin_session_load().
+    std::shared_ptr<PendingSession> m_pending_session;
 };
 
 /// Create the global singleton HDRViewApp instance

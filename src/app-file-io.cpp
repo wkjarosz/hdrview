@@ -46,6 +46,11 @@ const char *const g_blend_mode_ids[BlendMode_COUNT] = {
 const char *const g_tonemap_ids[Tonemap_COUNT]  = {"gamma", "false_color", "positive_negative"};
 const char *const g_channel_ids[Channels_COUNT] = {"rgba", "rgb", "red", "green", "blue", "alpha", "y"};
 const char *const g_bg_mode_ids[BGMode_COUNT]   = {"black", "white", "dark_checker", "light_checker", "custom_color"};
+// A session records the alpha override the user chose, not the interpretation it produced: with no override
+// the file is read afresh, so a corrected loader or an edited file is picked up. The trailing entry is that
+// "no override" case, which is why this table is one longer than the enum.
+const char *const g_alpha_type_ids[AlphaType_Count + 1] = {"none", "premultiplied-linear", "premultiplied-nonlinear",
+                                                           "straight", ""};
 
 template <typename Enum, size_t N>
 string enum_to_id(Enum value, const char *const (&ids)[N])
@@ -67,36 +72,11 @@ Enum id_to_enum(const json &j, const char *key, const char *const (&ids)[N], Enu
     return default_value;
 }
 
-// A session records the alpha override the user chose, not the interpretation it produced: with no override
-// the file is read afresh, so a corrected loader or an edited file is picked up. Spelled out, not stored as
-// the enum's ordinal, which would reinterpret every session if a value were ever inserted.
-static const char *alpha_override_token(AlphaType_ at)
+// The alpha override an image entry asks for, empty when it uses the file's own interpretation.
+optional<AlphaType_> alpha_override_from_id(const json &j)
 {
-    switch (at)
-    {
-    case AlphaType_None: return "none";
-    case AlphaType_PremultipliedLinear: return "premultiplied-linear";
-    case AlphaType_PremultipliedNonLinear: return "premultiplied-nonlinear";
-    default: return "straight";
-    }
-}
-
-static optional<AlphaType_> alpha_override_from_token(const json &j)
-{
-    auto token = j.value<string>("alpha_override", "");
-    if (token.empty())
-        return nullopt;
-    if (token == "none")
-        return AlphaType_None;
-    if (token == "premultiplied-linear")
-        return AlphaType_PremultipliedLinear;
-    if (token == "premultiplied-nonlinear")
-        return AlphaType_PremultipliedNonLinear;
-    if (token == "straight")
-        return AlphaType_Straight;
-
-    spdlog::warn("Unrecognized alpha override '{}'; reading the file's own interpretation instead.", token);
-    return nullopt;
+    auto at = id_to_enum(j, "alpha_override", g_alpha_type_ids, (AlphaType_)AlphaType_Count);
+    return at == AlphaType_Count ? optional<AlphaType_>{} : at;
 }
 
 // Checks "type"/"version" on a parsed session manifest (`source_name` is a filename or zip archive name,
@@ -916,7 +896,7 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
         entry["path"]             = path_of(img);
         entry["channel_selector"] = img->channel_selector;
         if (img->alpha_override)
-            entry["alpha_override"] = alpha_override_token(*img->alpha_override);
+            entry["alpha_override"] = enum_to_id(*img->alpha_override, g_alpha_type_ids);
         entry["selected_group"]  = img->selected_group;
         entry["reference_group"] = img->reference_group;
 
@@ -1081,6 +1061,47 @@ void HDRViewApp::export_session_bundle()
 #endif
 }
 
+/// A parsed session file waiting on the user to confirm closing the currently-open images.
+/**
+    A bundled session carries the zip's bytes along, since begin_session_load() needs them again once the
+    user confirms; an empty `zip_bytes` is a plain .hsess, whose entries name files under `dir`.
+*/
+struct HDRViewApp::PendingSessionLoad
+{
+    json     j;
+    fs::path dir;
+    string   zip_bytes;
+    string   zip_name;
+};
+
+/// A session whose images have been issued to the loader and are loading asynchronously.
+/**
+    The rest of it (selection, blend mode, view settings) is applied by finish_pending_session() once every
+    entry here has been resolved, successfully or not.
+*/
+struct HDRViewApp::PendingSession
+{
+    struct Entry
+    {
+        fs::path             path;
+        string               channel_selector;
+        optional<AlphaType_> alpha_override; ///< Empty when the file's own interpretation was used
+        int                  selected_group = 0, reference_group = 0;
+        vector<string>       selected_channels; ///< The multi-selection, by channel name; see Channel::selected
+        ImagePtr             loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
+    };
+    vector<Entry> entries;                                  ///< One per saved "images" entry, in file order
+    int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset
+    BlendMode_    blend_mode;
+    json          view; ///< The session file's "view" sub-object, applied verbatim once loading completes
+
+    // An arriving image is matched to the earliest not-yet-filled entry sharing its load options. Entries
+    // sharing that key are content-identical, so any one-to-one assignment among them is correct however the
+    // async loads finish, which is what makes it safe to load the same file twice in one session.
+    using Key = std::tuple<fs::path, string, optional<AlphaType_>>; ///< path, channel_selector, alpha_override
+    map<Key, deque<int>> unresolved;
+};
+
 void HDRViewApp::load_session()
 {
 #if !defined(__EMSCRIPTEN__)
@@ -1130,14 +1151,16 @@ void HDRViewApp::load_session(const string &filename)
 
     fs::path dir = fs::path(filename).parent_path();
 
+    PendingSessionLoad load{j, dir, {}, {}};
+
     if (!m_images.empty())
     {
-        m_pending_session_load          = PendingSessionLoad{j, dir};
+        m_pending_session_load          = std::make_shared<PendingSessionLoad>(std::move(load));
         dialog("Replace session?").open = true;
         return;
     }
 
-    begin_session_load(j, dir);
+    begin_session_load(load);
 #endif
 }
 
@@ -1174,30 +1197,35 @@ bool HDRViewApp::try_load_zip_as_session(string_view zip_bytes, const string &zi
                  zip_name, candidates.front().first);
     m_image_loader.add_recent_file(zip_name);
 
+    PendingSessionLoad load{j, {}, string(zip_bytes), zip_name};
+
     if (!m_images.empty())
     {
-        m_pending_zip_session_load      = PendingZipSessionLoad{string(zip_bytes), zip_name, j};
+        m_pending_session_load          = std::make_shared<PendingSessionLoad>(std::move(load));
         dialog("Replace session?").open = true;
         return true;
     }
 
-    begin_bundle_session_load(zip_bytes, zip_name, j);
+    begin_session_load(load);
     return true;
 }
 
-void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
+void HDRViewApp::begin_session_load(const PendingSessionLoad &load)
 {
     // Loading a session was already confirmed, by the prompt that warned it would replace what is
     // open; asking a second time here would stall a load that is already underway.
     close_all_images_immediately();
 
-    auto resolve = [&dir](const string &rel) -> fs::path
+    const json &j        = load.j;
+    const bool  from_zip = !load.zip_bytes.empty();
+
+    auto resolve = [&load](const string &rel) -> fs::path
     {
         if (rel.empty())
             return {};
         std::error_code ec;
-        fs::path        abs = fs::weakly_canonical(dir / fs::u8path(rel), ec);
-        return ec ? (dir / fs::u8path(rel)) : abs;
+        fs::path        abs = fs::weakly_canonical(load.dir / fs::u8path(rel), ec);
+        return ec ? (load.dir / fs::u8path(rel)) : abs;
     };
 
     PendingSession pending;
@@ -1210,57 +1238,13 @@ void HDRViewApp::begin_session_load(const json &j, const fs::path &dir)
         if (rel.empty())
             continue;
 
+        // A bundled entry takes the same "zip_name/entry_path" synthetic identity regular zip-loaded images
+        // get (see extract_and_schedule() in image_loader.cpp), so "reveal in file manager" and
+        // reload_image() need no session-specific handling.
         PendingSession::Entry e;
-        e.path              = resolve(rel);
+        e.path              = from_zip ? fs::path(load.zip_name) / fs::u8path(rel) : resolve(rel);
         e.channel_selector  = entry.value<string>("channel_selector", "");
-        e.alpha_override    = alpha_override_from_token(entry);
-        e.selected_group    = entry.value<int>("selected_group", 0);
-        e.reference_group   = entry.value<int>("reference_group", 0);
-        e.selected_channels = entry.value<vector<string>>("selected_channels", {});
-
-        int idx = (int)pending.entries.size();
-        pending.entries.push_back(e);
-        pending.unresolved[{e.path, e.channel_selector, e.alpha_override}].push_back(idx);
-
-        ImageLoadOptions opts;
-        opts.channel_selector = e.channel_selector;
-        opts.override_alpha   = e.alpha_override.has_value();
-        if (e.alpha_override)
-            opts.alpha_override = *e.alpha_override;
-        load_image(e.path.string(), {}, false, opts);
-    }
-
-    int n                   = (int)pending.entries.size();
-    pending.current_index   = clamp(j.value<int>("current", -1), -1, n - 1);
-    pending.reference_index = clamp(j.value<int>("reference", -1), -1, n - 1);
-
-    m_pending_session                 = std::move(pending);
-    dialog("Loading session...").open = true;
-}
-
-void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &zip_name, const json &j)
-{
-    // Loading a session was already confirmed, by the prompt that warned it would replace what is
-    // open; asking a second time here would stall a load that is already underway.
-    close_all_images_immediately();
-
-    PendingSession pending;
-    pending.blend_mode = id_to_enum(j, "blend_mode", g_blend_mode_ids, BlendMode_Normal);
-    pending.view       = j.value("view", json::object());
-
-    for (auto &entry : j.value("images", json::array()))
-    {
-        string rel = entry.value<string>("path", "");
-        if (rel.empty())
-            continue;
-
-        // The same "zip_name/entry_path" synthetic identity regular zip-loaded images get (see
-        // extract_and_schedule() in image_loader.cpp), so "reveal in file manager" and reload_image() need
-        // no session-specific handling.
-        PendingSession::Entry e;
-        e.path              = fs::path(zip_name) / fs::u8path(rel);
-        e.channel_selector  = entry.value<string>("channel_selector", "");
-        e.alpha_override    = alpha_override_from_token(entry);
+        e.alpha_override    = alpha_override_from_id(entry);
         e.selected_group    = entry.value<int>("selected_group", 0);
         e.reference_group   = entry.value<int>("reference_group", 0);
         e.selected_channels = entry.value<vector<string>>("selected_channels", {});
@@ -1268,13 +1252,18 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
 
-        auto bytes = zip_extract_entry(zip_bytes, rel);
-        if (!bytes)
+        optional<string> bytes;
+        if (from_zip)
         {
-            // Never issued to the loader, so it stays unresolved and finish_pending_session() reports it
-            // as a load failure, as it does a missing file on disk.
-            spdlog::warn("Session bundle '{}' references '{}', but it isn't present in the zip.", zip_name, rel);
-            continue;
+            bytes = zip_extract_entry(load.zip_bytes, rel);
+            if (!bytes)
+            {
+                // Never issued to the loader, so it stays unresolved and finish_pending_session() reports it
+                // as a load failure, as it does a missing file on disk.
+                spdlog::warn("Session bundle '{}' references '{}', but it isn't present in the zip.", load.zip_name,
+                             rel);
+                continue;
+            }
         }
 
         pending.unresolved[{e.path, e.channel_selector, e.alpha_override}].push_back(idx);
@@ -1284,15 +1273,40 @@ void HDRViewApp::begin_bundle_session_load(string_view zip_bytes, const string &
         opts.override_alpha   = e.alpha_override.has_value();
         if (e.alpha_override)
             opts.alpha_override = *e.alpha_override;
-        m_image_loader.background_load(e.path.string(), *bytes, false, nullptr, opts);
+        if (from_zip)
+            m_image_loader.background_load(e.path.string(), *bytes, false, nullptr, opts);
+        else
+            load_image(e.path.string(), {}, false, opts);
     }
 
     int n                   = (int)pending.entries.size();
     pending.current_index   = clamp(j.value<int>("current", -1), -1, n - 1);
     pending.reference_index = clamp(j.value<int>("reference", -1), -1, n - 1);
 
-    m_pending_session                 = std::move(pending);
+    m_pending_session                 = std::make_shared<PendingSession>(std::move(pending));
     dialog("Loading session...").open = true;
+}
+
+void HDRViewApp::resolve_pending_session_image(const ImagePtr &new_image)
+{
+    if (!m_pending_session)
+        return;
+
+    // Resolve this arrival to the earliest not-yet-filled entry sharing its load options; see PendingSession
+    // for why that key is the right one to match on.
+    auto key = PendingSession::Key{new_image->path, new_image->channel_selector, new_image->alpha_override};
+    auto it  = m_pending_session->unresolved.find(key);
+    if (it == m_pending_session->unresolved.end())
+        return;
+
+    if (!it->second.empty())
+    {
+        int entry_idx = it->second.front();
+        it->second.pop_front();
+        m_pending_session->entries[entry_idx].loaded = new_image;
+    }
+    if (it->second.empty())
+        m_pending_session->unresolved.erase(it);
 }
 
 void HDRViewApp::finish_pending_session()
@@ -1390,19 +1404,12 @@ void HDRViewApp::draw_confirm_load_session_dialog(bool &open)
     auto result = ImGui::ConfirmDialog("Replace session?", open,
                                        "Loading this session will close all currently open images.", "Replace");
     if (result == ImGui::DialogResult::Cancel)
-    {
         m_pending_session_load.reset();
-        m_pending_zip_session_load.reset();
-    }
     else if (result == ImGui::DialogResult::Confirm)
     {
         if (m_pending_session_load)
-            begin_session_load(m_pending_session_load->j, m_pending_session_load->dir);
-        else
-            begin_bundle_session_load(m_pending_zip_session_load->zip_bytes, m_pending_zip_session_load->zip_name,
-                                      m_pending_zip_session_load->j);
+            begin_session_load(*m_pending_session_load);
         m_pending_session_load.reset();
-        m_pending_zip_session_load.reset();
     }
 }
 
