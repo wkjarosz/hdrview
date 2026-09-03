@@ -2217,6 +2217,11 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   list(APPEND CPACK_GENERATOR External)
   set(CPACK_EXTERNAL_PACKAGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/create-appimage.cmake")
   set(CPACK_EXTERNAL_ENABLE_STAGING YES)
+  # CPack reads the global COMPONENTS property, so one dependency's install(... COMPONENT ...) is enough to
+  # put it in component mode, and staging then lands each component in a subdirectory of its own:
+  # `Unspecified/usr/bin/HDRView` rather than `usr/bin/HDRView`, which linuxdeploy cannot find. Nothing here
+  # names a component, so ask for the single-pass install the AppDir layout needs.
+  set(CPACK_MONOLITHIC_INSTALL ON)
   # When packaging, instruct CPack to set DESTDIR so install uses a staging dir
   set(CPACK_SET_DESTDIR ON)
   # Place generated packages in the build directory instead of the source root
