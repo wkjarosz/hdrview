@@ -12,6 +12,7 @@
 
 #include "imageio/exr.h"
 #include "imageio/heif.h"
+#include "imageio/j2k.h"
 #include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
@@ -121,6 +122,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             Format_JPEG_STB,
             Format_JPEG_UHDR,
             Format_JPEG_XL,
+            Format_JPEG2000_JP2,
+            Format_JPEG2000_J2K,
             Format_WEBP,
             Format_EXR,
             Format_PFM,
@@ -155,6 +158,11 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #else
                                                        false,
 #endif
+#if HDRVIEW_ENABLE_J2K
+                                                       true, true,
+#else
+                                                       false, false,
+#endif
 #if HDRVIEW_ENABLE_LIBWEBP
                                                        true,
 #else
@@ -185,6 +193,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             "JPEG (stb)",
             "JPEG (UltraHDR)",
             "JPEG-XL",
+            "JPEG 2000 (JP2)",
+            "JPEG 2000 (codestream)",
             "WebP",
             "OpenEXR",
             "PFM",
@@ -207,6 +217,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             ".jpg",
             ".jpg",
             ".jxl",
+            ".jp2",
+            ".j2k",
             ".webp",
             ".exr",
             ".pfm",
@@ -294,6 +306,17 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             auto opts = jxl_parameters_gui();
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_jxl_image(img, os, filename, opts); };
+        }
+        break;
+
+        // Two entries, since the file's extension fixes which of the two syntaxes goes in it: a .jp2 carries
+        // the boxes that record the color space, a .j2k is the bare codestream.
+        case Format_JPEG2000_JP2:
+        case Format_JPEG2000_J2K:
+        {
+            auto opts = j2k_parameters_gui(save_format == Format_JPEG2000_J2K ? J2KContainer::J2K : J2KContainer::JP2);
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_j2k_image(img, os, filename, opts); };
         }
         break;
 

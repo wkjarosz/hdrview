@@ -18,6 +18,7 @@
 #include <OpenEXRConfig.h>
 
 #include "imageio/heif.h"
+#include "imageio/j2k.h"
 #include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/png.h"
@@ -1471,7 +1472,9 @@ void HDRViewApp::draw_about_dialog(bool &open)
                         ImGui::PE::Hyperlink("OpenH264", "For decoding AVC/AVCI/AVCS/H264 files.",
                                              "https://github.com/cisco/openh264");
                     if (HDRVIEW_ENABLE_J2K)
-                        ImGui::PE::Hyperlink("OpenJPEG", "For encoding/decoding J2K- and HTJ2K-compressed HEIF images.",
+                        ImGui::PE::Hyperlink("OpenJPEG",
+                                             "For loading & saving JPEG 2000 images, in their own file formats and "
+                                             "as J2K- and HTJ2K-compressed HEIF items.",
                                              "https://github.com/uclouvain/openjpeg");
                     if (HDRVIEW_ENABLE_HTJ2K)
                         ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K-compressed HEIF images.",
@@ -1512,6 +1515,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 auto build_info_text = [&]()
                 {
                     auto heif_info = get_heif_info();
+                    auto j2k_info  = get_j2k_info();
                     auto jpg_info  = get_jpg_info();
                     auto png_info  = get_png_info();
                     auto jxl_info  = get_jxl_info();
@@ -1603,6 +1607,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     info += fmt::format("{:<8} {:<15}\n", "libtiff", tiff_info.value("version", "not enabled"));
                     info += fmt::format("{:<8} {:<15}\n", "libuhdr", uhdr_info.value("version", "not enabled"));
                     info += fmt::format("{:<8} {:<15}\n", "libwebp", webp_info.value("version", "not enabled"));
+                    info += fmt::format("{:<8} {:<15}\n", "openjpeg", j2k_info.value("version", "not enabled"));
 
                     if (png_info.value("enabled", false))
                     {
