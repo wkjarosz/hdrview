@@ -837,6 +837,9 @@ private:
         Moving,
         Resizing
     };
+    /// Row the annotations panel is dragging to reorder, or -1. See draw_annotations_window().
+    int m_annotation_row_drag = -1;
+
     AnnotationDrag m_annotation_drag        = AnnotationDrag::None;
     int            m_annotation_drag_handle = -1;
     Annotation     m_annotation_drag_start; ///< As it was at mouse-down, so Escape can put it back

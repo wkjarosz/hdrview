@@ -714,40 +714,73 @@ void HDRViewApp::draw_statistics_window()
     }
 }
 
-/// Stroke and fill as one control, the way an illustration tool shows them: the stroke in front as a ring,
-/// the fill behind it. Which is which is what the overlap says, so neither needs a label of its own.
+/// A color swatch of a stated size, opening a picker when clicked.
+/**
+    ColorEdit4's own swatch is always one frame tall, which is too big to pair two of them into a control
+    that still lines up with the widgets beside it.
+*/
+static bool color_swatch(const char *id, float4 &color, float size)
+{
+    bool changed = false;
+    ImGui::PushID(id);
+    if (ImGui::ColorButton("##swatch", ImVec4(color.x, color.y, color.z, color.w), ImGuiColorEditFlags_AlphaPreviewHalf,
+                           ImVec2(size, size)))
+        ImGui::OpenPopup("##picker");
+    if (ImGui::BeginPopup("##picker"))
+    {
+        changed = ImGui::ColorPicker4("##picker4", &color.x, ImGuiColorEditFlags_AlphaBar);
+        ImGui::EndPopup();
+    }
+    ImGui::PopID();
+    return changed;
+}
+
+/// Stroke and fill as one control, the way an illustration tool shows them: the fill in front, the stroke
+/// behind it and drawn as a ring. Which is which is what the overlap says, so neither needs a label.
 static bool stroke_fill_swatches(const char *id, float4 &stroke, float4 &fill)
 {
-    constexpr ImGuiColorEditFlags flags =
-        ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf;
-
-    const float  sw   = ImGui::GetFrameHeight();
+    // Two thirds of a frame each, overlapping by half of that, so the pair is exactly one frame tall and
+    // sits on the same line as the widgets beside it.
+    const float  h    = ImGui::GetFrameHeight();
+    const float  sw   = h * 2.f / 3.f;
     const float  off  = sw * 0.5f;
     const ImVec2 base = ImGui::GetCursorScreenPos();
 
     ImGui::PushID(id);
 
-    // The fill is behind, so it is submitted first and allows the stroke to take the hover where they meet.
+    // Behind, so it is submitted first and allows the fill to take the hover where the two meet.
     ImGui::SetNextItemAllowOverlap();
     ImGui::SetCursorScreenPos(ImVec2(base.x + off, base.y + off));
-    bool changed = ImGui::ColorEdit4("##fill", &fill.x, flags);
-    ImGui::SetItemTooltip("Fill: the inside of a closed shape. Fully transparent leaves it unfilled.");
-
-    ImGui::SetCursorScreenPos(base);
-    changed |= ImGui::ColorEdit4("##stroke", &stroke.x, flags);
+    bool changed = color_swatch("stroke", stroke, sw);
     ImGui::SetItemTooltip("Stroke: the outline of a shape, and the color of a text annotation.");
 
-    // The middle punched out, so the front swatch reads as an outline rather than a second fill.
+    // Its middle punched out before the fill goes over it, so it reads as an outline, not a second fill.
     const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
     const float  t = (hi.x - lo.x) * 0.3f;
     ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(lo.x + t, lo.y + t), ImVec2(hi.x - t, hi.y - t),
                                               ImGui::GetColorU32(ImGuiCol_WindowBg));
+
+    ImGui::SetCursorScreenPos(base);
+    changed |= color_swatch("fill", fill, sw);
+    ImGui::SetItemTooltip("Fill: the inside of a closed shape. Fully transparent leaves it unfilled.");
 
     ImGui::PopID();
 
     // Both were placed by hand, so the layout has to be told how much room they took between them.
     ImGui::SetCursorScreenPos(base);
     ImGui::Dummy(ImVec2(sw + off, sw + off));
+    return changed;
+}
+
+/// The width a stroke-width drag takes in a row, so the rows that carry one agree about it.
+static float width_drag_size() { return EmSize(4.f); }
+
+/// The stroke width, as a drag rather than a slider: a few pixels either way is the usual adjustment.
+static bool stroke_width_drag(float &width)
+{
+    ImGui::SetNextItemWidth(width_drag_size());
+    const bool changed = ImGui::DragFloat("##width", &width, 0.05f, 0.5f, 32.f, "%.1f px");
+    ImGui::SetItemTooltip("Stroke width in screen pixels, so it does not change with zoom.");
     return changed;
 }
 
@@ -811,6 +844,8 @@ void HDRViewApp::draw_annotations_window()
     ImGui::SetItemTooltip("Which shape the annotate tool draws.");
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
     stroke_fill_swatches("NewAnnotation", m_annotation_style.stroke_color, m_annotation_style.fill_color);
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    stroke_width_drag(m_annotation_style.stroke_width);
 
     ImGui::Separator();
 
@@ -818,19 +853,23 @@ void HDRViewApp::draw_annotations_window()
 
     // Both applied after the list is drawn: reordering or removing a row mid-list renumbers the ones still
     // to come.
-    int erase     = -1;
-    int drag_from = -1, drag_to = -1;
+    int erase = -1;
+
+    // Where the rows are, so a drag can say which one the cursor is over.
+    float first_row_top = 0.f, row_height = 0.f;
 
     // Room kept below the list for the properties: a label row, then the swatches beside the width.
     const float properties_h = active < 0 ? ImGui::GetTextLineHeightWithSpacing()
-                                          : ImGui::GetFrameHeight() * 2.5f + ImGui::GetStyle().ItemSpacing.y * 2.f;
+                                          : ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y * 2.f;
 
     if (ImGui::BeginChild("##Annotation list", ImVec2(0, -properties_h)))
     {
         // Flat toggles and no frame padding, so a row is as tall as its text, like the Images panel's.
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
 
-        const float icon_w = ImGui::IconSize().x;
+        // The glyph plus the padding a button puts around it; the glyph width alone clips the wider icons
+        // and leaves the narrower ones adrift.
+        const float icon_w = ImGui::IconSize().x + 2.f * ImGui::GetStyle().FramePadding.x;
         // What the trash at the end of each row occupies, so the label stops short of it rather than
         // running under it. SameLine() puts ItemSpacing before the button, so that counts too.
         const float trash_w = icon_w + ImGui::GetStyle().ItemSpacing.x;
@@ -868,17 +907,16 @@ void HDRViewApp::draw_annotations_window()
                                   ImVec2(ImGui::GetContentRegionAvail().x - trash_w, 0.f)))
                 set_active_annotation(i);
 
-            // Held and dragged off its own row: swap with the neighbor it is heading for. The list is
-            // drawn in order, so this is what puts one annotation in front of another.
-            if (ImGui::IsItemActive() && !ImGui::IsItemHovered())
+            // Which row a press took hold of. Tracked here rather than read back from ImGui's active item,
+            // whose id is this row's index: reordering moves annotations between indices, so the active
+            // item would stay on the row number and the list would flicker between two orders.
+            if (ImGui::IsItemActivated())
+                m_annotation_row_drag = i;
+
+            if (i == 0)
             {
-                const int next = i + (ImGui::GetMouseDragDelta(ImGuiMouseButton_Left).y < 0.f ? -1 : 1);
-                if (next >= 0 && next < int(list.size()))
-                {
-                    drag_from = i;
-                    drag_to   = next;
-                    ImGui::ResetMouseDragDelta();
-                }
+                first_row_top = ImGui::GetItemRectMin().y;
+                row_height    = ImGui::GetItemRectSize().y + ImGui::GetStyle().ItemSpacing.y;
             }
 
             ImGui::SameLine();
@@ -893,15 +931,31 @@ void HDRViewApp::draw_annotations_window()
     }
     ImGui::EndChild();
 
-    if (erase < 0 && drag_from >= 0)
-    {
-        std::swap(list[size_t(drag_from)], list[size_t(drag_to)]);
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        m_annotation_row_drag = -1;
 
-        // What is in hand is the annotation, not the row it was in, so the index follows it.
-        if (active == drag_from)
-            set_active_annotation(drag_to);
-        else if (active == drag_to)
-            set_active_annotation(drag_from);
+    // The row the cursor is over now, which a fast drag can be several away from. The list is drawn in
+    // order, so moving a row is what puts one annotation in front of another.
+    if (erase < 0 && m_annotation_row_drag >= 0 && m_annotation_row_drag < int(list.size()) && row_height > 0.f)
+    {
+        const int to =
+            std::clamp(int((ImGui::GetIO().MousePos.y - first_row_top) / row_height), 0, int(list.size()) - 1);
+        if (to != m_annotation_row_drag)
+        {
+            Annotation moved = list[size_t(m_annotation_row_drag)];
+            list.erase(list.begin() + m_annotation_row_drag);
+            list.insert(list.begin() + to, moved);
+
+            // What is in hand is the annotation, not the row it was in, so the selection follows it.
+            if (active == m_annotation_row_drag)
+                set_active_annotation(to);
+            else if (active > m_annotation_row_drag && active <= to)
+                set_active_annotation(active - 1);
+            else if (active < m_annotation_row_drag && active >= to)
+                set_active_annotation(active + 1);
+
+            m_annotation_row_drag = to;
+        }
     }
 
     if (erase >= 0)
@@ -924,26 +978,25 @@ void HDRViewApp::draw_annotations_window()
 
     Annotation &a = list[size_t(selected)];
 
-    // Laid out by hand rather than in a property table: the two colors are one control, and what is left
-    // is small enough to sit beside them.
+    // One row, laid out by hand: label, the two colors as a single control, then the width. The swatches
+    // are a frame tall between them, so all of it sits on one line.
+    const float spacing    = ImGui::GetStyle().ItemInnerSpacing.x;
+    const float swatches_w = ImGui::GetFrameHeight();
+    const float label_w =
+        std::max(EmSize(4.f), ImGui::GetContentRegionAvail().x - swatches_w - width_drag_size() - 2.f * spacing);
+
     char buf[128];
     snprintf(buf, sizeof(buf), "%s", a.label.c_str());
-    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SetNextItemWidth(label_w);
     if (ImGui::InputTextWithHint("##label", "Label", buf, sizeof(buf)))
         a.label = buf;
     ImGui::SetItemTooltip("What this annotation's row says. Empty falls back to the shape's name.");
 
+    ImGui::SameLine(0.f, spacing);
     stroke_fill_swatches("Annotation", a.stroke_color, a.fill_color);
 
-    ImGui::SameLine();
-    ImGui::BeginGroup();
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Width");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderFloat("##width", &a.stroke_width, 0.5f, 16.f, "%.1f px");
-    ImGui::SetItemTooltip("Stroke width in screen pixels, so it does not change with zoom.");
-    ImGui::EndGroup();
+    ImGui::SameLine(0.f, spacing);
+    stroke_width_drag(a.stroke_width);
 }
 
 std::vector<std::pair<int, int>> HDRViewApp::selected_targets() const
