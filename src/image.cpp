@@ -880,10 +880,10 @@ Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
     set_default_alpha_type();
 }
 
-void Image::set_alpha(AlphaType_ from_file, AlphaSource_ source, const std::optional<AlphaType_> &override_with)
+void Image::set_alpha(AlphaType_ from_file, const std::optional<AlphaType_> &override_with, bool assumed)
 {
     alpha_type_from_file = from_file;
-    alpha_source         = source;
+    alpha_assumed        = assumed;
     alpha_type           = override_with.value_or(from_file);
 }
 
@@ -893,11 +893,11 @@ void Image::set_default_alpha_type()
         if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
         {
             // Assembled rather than read, so nothing declared this; see set_default_alpha_type()'s comment.
-            set_alpha(AlphaType_PremultipliedLinear, AlphaSource_Assumed, std::nullopt);
+            set_alpha(AlphaType_PremultipliedLinear, std::nullopt, true);
             return;
         }
 
-    set_alpha(AlphaType_None, AlphaSource_Assumed, std::nullopt);
+    set_alpha(AlphaType_None, std::nullopt, true);
 }
 
 map<string, int> Image::channels_in_layer(const string &layer) const
@@ -1264,7 +1264,7 @@ ImagePtr Image::duplicate(const Box2i &region) const
     copy->white_point          = white_point;
     copy->alpha_type           = alpha_type;
     copy->alpha_type_from_file = alpha_type_from_file;
-    copy->alpha_source         = alpha_source;
+    copy->alpha_assumed        = alpha_assumed;
     copy->alpha_override       = alpha_override;
     copy->metadata             = metadata;
     copy->exif                 = exif;

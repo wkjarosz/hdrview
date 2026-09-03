@@ -294,8 +294,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         image           = make_shared<Image>(size.xy(), size.z);
         image->filename = filename;
         // none of the stb-decoded formats carries an alpha-kind signal; all specify unassociated
-        image->set_alpha(size.z > 3 || size.z == 2 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
-                         alpha_override_of(opts));
+        image->set_alpha(size.z > 3 || size.z == 2 ? AlphaType_Straight : AlphaType_None, alpha_override_of(opts));
         if (size.w > 1)
             image->partname = fmt::format("frame {:04}", frame);
         image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());

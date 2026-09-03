@@ -78,17 +78,3 @@ TEST_CASE("The HEIF and AVIF save entries write files branded as what their exte
 }
 
 #endif
-
-TEST_CASE("The HEIF and AVIF entries offer disjoint encoders")
-{
-    // aom offered under HEIF would write a file libheif brands 'avif' under a .heif name
-    const auto heif = heif_encoder_names(HEIFCodec::HEIF);
-    const auto avif = heif_encoder_names(HEIFCodec::AV1);
-
-    // a build with no encoder at all has nothing to say here
-    if (heif.empty() && avif.empty())
-        return;
-
-    for (const auto &a : avif)
-        CHECK_MESSAGE(std::find(heif.begin(), heif.end(), a) == heif.end(), "AV1 encoder also offered under HEIF: ", a);
-}

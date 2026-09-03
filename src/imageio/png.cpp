@@ -704,8 +704,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         auto image      = make_shared<Image>(size.xy(), size.z);
         image->filename = filename;
         // PNG's spec makes alpha unassociated; a file carries no signal of its own
-        image->set_alpha(size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
-                         alpha_override_of(opts));
+        image->set_alpha(size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None, alpha_override_of(opts));
         image->chromaticities = chr;
         image->metadata       = metadata;
         // a palette's IHDR depth counts bits per index; png_set_palette_to_rgb() expands those to 8-bit RGB

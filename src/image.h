@@ -474,14 +474,11 @@ public:
         it before calling. Equal to alpha_type_from_file unless alpha_override replaced it.
     */
     AlphaType_ alpha_type = AlphaType_None;
-    /// What the loader concluded before any override, and how it got there.
-    /**
-        Kept so an override can say what it displaced. set_alpha() maintains these together with
-        alpha_type.
-    */
-    AlphaType_           alpha_type_from_file = AlphaType_None;
-    AlphaSource_         alpha_source         = AlphaSource_Assumed;
-    json                 metadata             = json::object();
+    /// What the loader concluded before any override, so the override can say what it displaced.
+    AlphaType_ alpha_type_from_file = AlphaType_None;
+    /// True when nothing in the file stated the alpha kind and the loader picked a default.
+    bool                 alpha_assumed = false;
+    json                 metadata      = json::object();
     Exif                 exif;     ///< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; ///< The raw XMP data from the file, if any
     std::vector<uint8_t> icc_data; ///< The raw ICC profile data from the file, if any
@@ -553,11 +550,12 @@ public:
 
     /// Record what a loader concluded about the file's alpha, and apply any override to it.
     /**
-        The one place alpha_type, alpha_type_from_file and alpha_source are written, so they cannot drift
+        The one place alpha_type, alpha_type_from_file and alpha_assumed are written, so they cannot drift
         apart. Loaders call this instead of assigning alpha_type, then read back alpha_type for the
-        premultiplication decisions they have to make while the samples are still encoded.
+        premultiplication decisions they have to make while the samples are still encoded. Pass
+        `assumed` when nothing in the file stated the kind.
     */
-    void set_alpha(AlphaType_ from_file, AlphaSource_ source, const std::optional<AlphaType_> &override_with);
+    void set_alpha(AlphaType_ from_file, const std::optional<AlphaType_> &override_with, bool assumed = false);
 
     /// Set alpha_type from the channel names alone, for an image not built from a file.
     /**

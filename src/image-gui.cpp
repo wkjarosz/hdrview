@@ -1286,15 +1286,15 @@ void Image::draw_info()
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
             // An override says what it displaced, since contradicting a kind the file stated is not the
             // same as filling in one nothing ever did.
-            filtered_property(
-                "Alpha",
-                alpha_override ? fmt::format("{} (override; {} {})", alpha_type_name(alpha_type),
-                                             alpha_source_phrase(alpha_source), alpha_type_name(alpha_type_from_file))
-                               : fmt::format("{} ({})", alpha_type_name(alpha_type), alpha_source_suffix(alpha_source)),
-                "How this image's alpha is being read: whether the color channels are multiplied "
-                "by it, and in what space, and where that came from. \"Assumed\" means nothing "
-                "stated it and the loader picked a default, which is where the override below is "
-                "most likely wanted.");
+            const string from_file =
+                fmt::format("{}{}", alpha_type_name(alpha_type_from_file), alpha_assumed ? " (assumed)" : "");
+            filtered_property("Alpha",
+                              alpha_override
+                                  ? fmt::format("{} (override; was {})", alpha_type_name(alpha_type), from_file)
+                                  : from_file,
+                              "How this image's alpha is being read: whether the color channels are multiplied "
+                              "by it, and in what space. \"Assumed\" means nothing in the file stated it and the "
+                              "loader picked a default, which is where the override below is most likely wanted.");
 
             if (filter.PassFilter("Alpha override"))
             {

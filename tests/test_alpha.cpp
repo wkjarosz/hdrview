@@ -139,10 +139,10 @@ TEST_CASE("set_alpha records what the file said, and what an override replaced i
     for (AlphaType_ at :
          {AlphaType_None, AlphaType_Straight, AlphaType_PremultipliedLinear, AlphaType_PremultipliedNonLinear})
     {
-        img->set_alpha(at, AlphaSource_File, std::nullopt);
+        img->set_alpha(at, std::nullopt);
         CHECK(img->alpha_type == at);
         CHECK(img->alpha_type_from_file == at);
-        CHECK(img->alpha_source == AlphaSource_File);
+        CHECK_FALSE(img->alpha_assumed);
     }
 
     // overridden: the effective kind changes, what the file said does not
@@ -151,10 +151,10 @@ TEST_CASE("set_alpha records what the file said, and what an override replaced i
         for (AlphaType_ from_file :
              {AlphaType_None, AlphaType_Straight, AlphaType_PremultipliedLinear, AlphaType_PremultipliedNonLinear})
         {
-            img->set_alpha(from_file, AlphaSource_Assumed, forced);
+            img->set_alpha(from_file, forced, true);
             CHECK(img->alpha_type == forced);
             CHECK(img->alpha_type_from_file == from_file);
-            CHECK(img->alpha_source == AlphaSource_Assumed);
+            CHECK(img->alpha_assumed);
         }
 }
 
@@ -252,33 +252,30 @@ TEST_CASE("A straight-alpha EXR can be read as straight, against the EXR spec")
     }
 }
 
-TEST_CASE("Every loader says where its alpha kind came from")
+TEST_CASE("Every loader reports the alpha kind its format settles")
 {
-    // A loader reports both what it concluded and how it knows, and both have to agree with what the format
-    // settles. A loader claiming a file stated something it did not is invisible in the pixels.
+    // Each of these formats states the kind for every conforming file, so no loader here may mark it
+    // assumed. A loader claiming the wrong kind is invisible in the pixels.
     struct Case
     {
         const char                                        *name;
         std::function<void(const Image &, std::ostream &)> save;
-        AlphaSource_                                       source;
         AlphaType_                                         from_file;
     };
 
     const std::vector<Case> cases = {
         {"a.png", [](const Image &i, std::ostream &o)
-         { save_png_image(i, o, "a.png", 1.f, false, false, false, TransferFunction::sRGB); }, AlphaSource_Format,
-         AlphaType_Straight},
-        {"a.exr", [](const Image &i, std::ostream &o) { save_exr_image(i, o, "a.exr"); }, AlphaSource_Format,
+         { save_png_image(i, o, "a.png", 1.f, false, false, false, TransferFunction::sRGB); }, AlphaType_Straight},
+        {"a.exr", [](const Image &i, std::ostream &o) { save_exr_image(i, o, "a.exr"); },
          AlphaType_PremultipliedLinear},
         {"a.qoi", [](const Image &i, std::ostream &o) { save_qoi_image(i, o, "a.qoi", 1.f, true, false); },
-         AlphaSource_Format, AlphaType_Straight},
+         AlphaType_Straight},
         {"a.tga", [](const Image &i, std::ostream &o)
-         { save_stb_tga(i, o, "a.tga", 1.f, TransferFunction::sRGB, false); }, AlphaSource_Format, AlphaType_Straight},
+         { save_stb_tga(i, o, "a.tga", 1.f, TransferFunction::sRGB, false); }, AlphaType_Straight},
 #if HDRVIEW_ENABLE_LIBTIFF
-        // the one format here carrying a per-file signal, so the only one that may say File
-        {"a.tif",
-         [](const Image &i, std::ostream &o) { save_tiff_image(i, o, "a.tif", 1.f, TransferFunction::sRGB, 0, 0); },
-         AlphaSource_File, AlphaType_PremultipliedNonLinear},
+        // written with an EXTRASAMPLES tag, so the file itself carries the signal
+        {"a.tif", [](const Image &i, std::ostream &o)
+         { save_tiff_image(i, o, "a.tif", 1.f, TransferFunction::sRGB, 0, 0); }, AlphaType_PremultipliedNonLinear},
 #endif
     };
 
@@ -298,7 +295,7 @@ TEST_CASE("Every loader says where its alpha kind came from")
         auto               images = load_image(in, c.name, ImageLoadOptions{});
         REQUIRE(images.size() == 1);
 
-        CHECK(images[0]->alpha_source == c.source);
+        CHECK_FALSE(images[0]->alpha_assumed);
         CHECK(images[0]->alpha_type_from_file == c.from_file);
         // with nothing overridden the effective kind is the file's, and no override is recorded
         CHECK(images[0]->alpha_type == c.from_file);
@@ -312,10 +309,10 @@ TEST_CASE("An image assembled in memory reports its alpha as assumed")
     // on that for tiles arriving before the alpha channel they would be scaled by.
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
     CHECK(img->alpha_type == AlphaType_PremultipliedLinear);
-    CHECK(img->alpha_source == AlphaSource_Assumed);
+    CHECK(img->alpha_assumed);
 
     // and one with no alpha channel says None, still without claiming anyone stated it
     auto rgb = std::make_shared<Image>(int2{1, 1}, 3);
     CHECK(rgb->alpha_type == AlphaType_None);
-    CHECK(rgb->alpha_source == AlphaSource_Assumed);
+    CHECK(rgb->alpha_assumed);
 }

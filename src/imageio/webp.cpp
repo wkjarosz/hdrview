@@ -331,8 +331,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             frame_image->filename      = filename;
             frame_image->partname      = partname;
             // WebP's spec makes alpha unassociated
-            frame_image->set_alpha(has_alpha ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
-                                   alpha_override_of(opts));
+            frame_image->set_alpha(has_alpha ? AlphaType_Straight : AlphaType_None, alpha_override_of(opts));
             frame_image->icc_data       = icc_data;
             frame_image->exif           = Exif{exif_data};
             frame_image->xmp_data       = xmp_data;

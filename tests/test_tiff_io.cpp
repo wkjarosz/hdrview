@@ -235,19 +235,19 @@ TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
     CHECK(images[0]->groups[1].type == ChannelGroup::Single_Channel);
 }
 
-TEST_CASE("A TIFF says where its alpha kind came from")
+TEST_CASE("A TIFF says whether its alpha kind was stated or guessed")
 {
     // EXTRASAMPLES settles it, whichever value it carries, including the one saying the sample is data
     for (uint16_t tag : {uint16_t(0), uint16_t(1), uint16_t(2)})
     {
         CAPTURE(tag);
         auto img = load_tiff(tiff_with_extra_samples(tag));
-        CHECK(img->alpha_source == AlphaSource_File);
+        CHECK_FALSE(img->alpha_assumed);
     }
 
     // with the tag gone, nothing in the file states a kind and straight is the loader's guess
     auto guessed = load_tiff(tiff_without_extra_samples());
-    CHECK(guessed->alpha_source == AlphaSource_Assumed);
+    CHECK(guessed->alpha_assumed);
     CHECK(guessed->alpha_type == AlphaType_Straight);
 }
 
@@ -261,11 +261,11 @@ TEST_CASE("An override leaves what the file said intact")
     auto               images = load_image(in, "rgba.tif", opts);
     REQUIRE(images.size() == 1);
 
-    // what is used, what the file declared, and how it declared it all stay answerable, so the Info panel
-    // can say the override contradicts the file rather than fills a gap
+    // what is used and what the file declared both stay answerable, so the Info panel can say the override
+    // contradicts the file instead of filling a gap
     CHECK(images[0]->alpha_type == AlphaType_PremultipliedNonLinear);
     CHECK(images[0]->alpha_type_from_file == AlphaType_Straight);
-    CHECK(images[0]->alpha_source == AlphaSource_File);
+    CHECK_FALSE(images[0]->alpha_assumed);
 }
 
 TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")

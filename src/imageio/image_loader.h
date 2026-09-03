@@ -93,10 +93,12 @@ struct BackgroundImageLoader
     const set<fs::path> &watched_directories() const { return m_directories; }
     /// Watch `dir` in its own right, whether or not anything has been loaded from it.
     bool add_watched_directory(const fs::path &dir, bool ignore_existing);
-    /// Remove all watched directories that match the criterion, however they came to be watched.
-    void remove_watched_directories(function<bool(const fs::path &)> remove_criterion);
-    /// Same, but spares the ones add_watched_directory() was asked for, which hold no loaded images of their own.
-    void remove_implicitly_watched_directories(function<bool(const fs::path &)> remove_criterion);
+    /// Remove the watched directories matching the criterion, sparing explicitly added ones if asked.
+    /**
+        A directory add_watched_directory() was asked for holds no loaded images of its own, so a criterion
+        phrased as "nothing loaded came from here" would always discard it.
+    */
+    void remove_watched_directories(function<bool(const fs::path &)> criterion, bool keep_explicit = false);
 
     void load_new_and_modified_files();
 
@@ -111,11 +113,6 @@ struct BackgroundImageLoader
 
     void draw_gui();
 
-    // Called with the raw bytes of a top-level zip archive before it's extracted as a folder of images (not
-    // called for a single-entry re-extraction from within a zip). Returning true means "handled, don't also
-    // extract this zip's images normally".
-    function<bool(string_view zip_bytes, const string &zip_name)> zip_bundle_hook;
-
 private:
     struct PendingImages;
     vector<shared_ptr<PendingImages>> pending_images;
@@ -128,8 +125,6 @@ private:
 
     // the subset of m_directories that add_watched_directory() was asked for
     set<fs::path> m_explicit_directories;
-
-    void remove_watched_directories_if(const function<bool(const fs::path &)> &criterion, bool keep_explicit);
 
     // don't treat these files as new (they are either currently loaded, or we've previously loaded them from a watched
     // directory and manually closed them, so don't want to automatically reload them)

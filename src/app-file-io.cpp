@@ -506,8 +506,7 @@ void HDRViewApp::load_images(const vector<string> &filenames)
             continue;
         }
 
-        // A .zip might be a session bundle; see zip_bundle_hook, checked inside background_load() once it
-        // has the zip's bytes in hand.
+        // A .zip might be a session bundle, which background_load() checks for once it has the bytes in hand.
         load_image(filenames[i], std::nullopt, i == 0, opts);
     }
 }
@@ -535,7 +534,7 @@ void HDRViewApp::open_image()
                 spdlog::debug("User uploaded a {:.0h} file with filename '{}' of mime-type '{}'",
                               human_readible{buffer.size()}, filename, mime_type);
 
-                // A zip might be a session bundle -- see load_image()/background_load()'s zip_bundle_hook.
+                // A zip might be a session bundle; background_load() checks for that.
                 hdrview()->load_image(filename, buffer, true, load_image_options());
             }
         });
@@ -815,13 +814,14 @@ void HDRViewApp::close_image_immediately(int index)
         }
 
         spdlog::debug("Watched directories after closing image:");
-        m_image_loader.remove_implicitly_watched_directories(
+        m_image_loader.remove_watched_directories(
             [this](const fs::path &path)
             {
                 spdlog::debug("{} watched directory: {}",
                               m_active_directories.count(path) == 0 ? "Removing" : "Keeping", path.u8string());
                 return m_active_directories.count(path) == 0;
-            });
+            },
+            /* keep_explicit */ true);
 #endif
     }
 
@@ -869,7 +869,7 @@ void HDRViewApp::close_all_images_immediately()
     m_active_directories.clear();
     // Only the folders opened alongside these images; one the user asked to watch stays watched, since it
     // is there for files that do not exist yet.
-    m_image_loader.remove_implicitly_watched_directories([](const fs::path &) { return true; });
+    m_image_loader.remove_watched_directories([](const fs::path &) { return true; }, /* keep_explicit */ true);
     update_visibility(); // this also calls set_image_textures();
 }
 

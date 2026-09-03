@@ -736,12 +736,10 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
             const int  num_ch    = (int)image->channels.size();
             const bool has_alpha = num_ch >= 4 || num_ch == 2;
             // a DX9 header has no misc_flags2, so outside DXT2/DXT4 nothing states the kind
-            const AlphaSource_ alpha_source =
-                !has_alpha || premultiplied || dds.alpha_mode != DDSFile::ALPHA_MODE_UNKNOWN ? AlphaSource_File
-                                                                                             : AlphaSource_Assumed;
+            const bool assumed = has_alpha && !premultiplied && dds.alpha_mode == DDSFile::ALPHA_MODE_UNKNOWN;
             image->set_alpha(has_alpha ? (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight)
                                        : AlphaType_None,
-                             alpha_source, alpha_override_of(opts));
+                             alpha_override_of(opts), assumed);
 
             // sRGB to linear for uncompressed sRGB formats
             if (dds.is_sRGB())
