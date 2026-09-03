@@ -15,17 +15,6 @@
 #include <smallthreadpool.h>
 #include <vector>
 
-namespace
-{
-
-/// Sample \p a at \p x, \p y with the border clamped to the nearest sample inside it.
-inline float clamped(const Array2Df &a, int x, int y)
-{
-    return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
-}
-
-} // namespace
-
 int wrap_coord(int p, int extent, int mode)
 {
     if (p >= 0 && p < extent)

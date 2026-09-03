@@ -7,6 +7,7 @@
 #pragma once
 
 #include "fwd.h"
+#include <algorithm>
 #include <vector>
 
 /// Generic, resizable, 2D array class.
@@ -106,6 +107,13 @@ template <typename T>
 inline void Array2D<T>::operator=(const T &value)
 {
     reset(value);
+}
+
+/// Value of \p a at (\p x, \p y), with a coordinate outside it clamped to the nearest sample inside.
+template <typename T>
+inline T clamped(const Array2D<T> &a, int x, int y)
+{
+    return a(std::clamp(x, 0, a.width() - 1), std::clamp(y, 0, a.height() - 1));
 }
 
 using Array2Di = Array2D<int>;
