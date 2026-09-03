@@ -686,14 +686,14 @@ void HDRViewApp::setup_frame_callbacks()
                 if (should_select)
                     m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
 
-                resolve_pending_session_image(new_image);
+                resolve_loading_session_image(new_image);
 
                 update_visibility(); // this also calls set_image_textures();
                 m_request_sort = true;
             });
 
-        if (m_pending_session && m_image_loader.num_pending_images() == 0)
-            finish_pending_session();
+        if (m_loading_session && m_image_loader.num_pending_images() == 0)
+            finish_loading_session();
 
         draw_tool_palette();
         draw_tweak_window();

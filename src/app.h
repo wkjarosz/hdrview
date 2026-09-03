@@ -512,8 +512,8 @@ private:
     //-----------------------------------------------------------------------------
     // Subsystem state, defined in the .cpp file that owns it
     //-----------------------------------------------------------------------------
-    struct PendingSessionLoad; // app-file-io.cpp
-    struct PendingSession;     // app-file-io.cpp
+    struct UnconfirmedSession; // app-file-io.cpp
+    struct LoadingSession;     // app-file-io.cpp
     struct RunningFilter;      // app-edit.cpp
 #if HDRVIEW_ENABLE_IPC
     struct IpcRates; // app-ipc.cpp
@@ -521,14 +521,14 @@ private:
 
     void load_fonts();
 
-    // Begins asynchronously loading the images `load` lists, populating m_pending_session; the rest of the
-    // session is applied by finish_pending_session() once every image has arrived.
-    void begin_session_load(const PendingSessionLoad &load);
+    // Begins asynchronously loading the images `load` lists, populating m_loading_session; the rest of the
+    // session is applied by finish_loading_session() once every image has arrived.
+    void begin_session_load(const UnconfirmedSession &load);
     // Matches an image that has just finished loading to the session entry that asked for it.
-    void resolve_pending_session_image(const ImagePtr &new_image);
-    // Called once every image in m_pending_session has been resolved (successfully or not); rebuilds m_images
+    void resolve_loading_session_image(const ImagePtr &new_image);
+    // Called once every image in m_loading_session has been resolved (successfully or not); rebuilds m_images
     // in the saved order, then applies current/reference selection, blend mode, and view settings.
-    void finish_pending_session();
+    void finish_loading_session();
 
     void   handle_mouse_interaction();
     void   calculate_viewport();
@@ -896,10 +896,10 @@ private:
     PopupDialog &dialog(const string &title);
 
     /// A parsed session file waiting on the user to confirm closing the currently-open images.
-    std::shared_ptr<PendingSessionLoad> m_pending_session_load;
+    std::shared_ptr<UnconfirmedSession> m_unconfirmed_session;
 
     /// The session whose images are loading asynchronously; see begin_session_load().
-    std::shared_ptr<PendingSession> m_pending_session;
+    std::shared_ptr<LoadingSession> m_loading_session;
 };
 
 /// Create the global singleton HDRViewApp instance

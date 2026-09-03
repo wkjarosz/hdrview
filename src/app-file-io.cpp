@@ -1062,7 +1062,7 @@ void HDRViewApp::export_session_bundle()
 }
 
 /// A parsed session file waiting on the user to confirm closing the currently-open images.
-struct HDRViewApp::PendingSessionLoad
+struct HDRViewApp::UnconfirmedSession
 {
     json     j;
     fs::path dir;       ///< Where a plain .hsess's entries are relative to
@@ -1071,7 +1071,7 @@ struct HDRViewApp::PendingSessionLoad
 };
 
 /// A session whose images have been issued to the loader and are loading asynchronously.
-struct HDRViewApp::PendingSession
+struct HDRViewApp::LoadingSession
 {
     struct Entry
     {
@@ -1142,11 +1142,11 @@ void HDRViewApp::load_session(const string &filename)
 
     fs::path dir = fs::path(filename).parent_path();
 
-    PendingSessionLoad load{j, dir, {}, {}};
+    UnconfirmedSession load{j, dir, {}, {}};
 
     if (!m_images.empty())
     {
-        m_pending_session_load          = std::make_shared<PendingSessionLoad>(std::move(load));
+        m_unconfirmed_session           = std::make_shared<UnconfirmedSession>(std::move(load));
         dialog("Replace session?").open = true;
         return;
     }
@@ -1188,11 +1188,11 @@ bool HDRViewApp::try_load_zip_as_session(string_view zip_bytes, const string &zi
                  zip_name, candidates.front().first);
     m_image_loader.add_recent_file(zip_name);
 
-    PendingSessionLoad load{j, {}, string(zip_bytes), zip_name};
+    UnconfirmedSession load{j, {}, string(zip_bytes), zip_name};
 
     if (!m_images.empty())
     {
-        m_pending_session_load          = std::make_shared<PendingSessionLoad>(std::move(load));
+        m_unconfirmed_session           = std::make_shared<UnconfirmedSession>(std::move(load));
         dialog("Replace session?").open = true;
         return true;
     }
@@ -1201,7 +1201,7 @@ bool HDRViewApp::try_load_zip_as_session(string_view zip_bytes, const string &zi
     return true;
 }
 
-void HDRViewApp::begin_session_load(const PendingSessionLoad &load)
+void HDRViewApp::begin_session_load(const UnconfirmedSession &load)
 {
     // Loading a session was already confirmed, by the prompt that warned it would replace what is
     // open; asking a second time here would stall a load that is already underway.
@@ -1219,7 +1219,7 @@ void HDRViewApp::begin_session_load(const PendingSessionLoad &load)
         return ec ? (load.dir / fs::u8path(rel)) : abs;
     };
 
-    PendingSession pending;
+    LoadingSession pending;
     pending.blend_mode = id_to_enum(j, "blend_mode", g_blend_mode_ids, BlendMode_Normal);
     pending.view       = j.value("view", json::object());
 
@@ -1232,7 +1232,7 @@ void HDRViewApp::begin_session_load(const PendingSessionLoad &load)
         // A bundled entry takes the same "zip_name/entry_path" synthetic identity regular zip-loaded images
         // get (see extract_and_schedule() in image_loader.cpp), so "reveal in file manager" and
         // reload_image() need no session-specific handling.
-        PendingSession::Entry e;
+        LoadingSession::Entry e;
         e.path              = from_zip ? fs::path(load.zip_name) / fs::u8path(rel) : resolve(rel);
         e.channel_selector  = entry.value<string>("channel_selector", "");
         e.alpha_override    = alpha_override_from_id(entry);
@@ -1249,7 +1249,7 @@ void HDRViewApp::begin_session_load(const PendingSessionLoad &load)
             bytes = zip_extract_entry(load.zip_bytes, rel);
             if (!bytes)
             {
-                // Never issued to the loader, so it stays unresolved and finish_pending_session() reports it
+                // Never issued to the loader, so it stays unresolved and finish_loading_session() reports it
                 // as a load failure, as it does a missing file on disk.
                 spdlog::warn("Session bundle '{}' references '{}', but it isn't present in the zip.", load.zip_name,
                              rel);
@@ -1274,38 +1274,38 @@ void HDRViewApp::begin_session_load(const PendingSessionLoad &load)
     pending.current_index   = clamp(j.value<int>("current", -1), -1, n - 1);
     pending.reference_index = clamp(j.value<int>("reference", -1), -1, n - 1);
 
-    m_pending_session                 = std::make_shared<PendingSession>(std::move(pending));
+    m_loading_session                 = std::make_shared<LoadingSession>(std::move(pending));
     dialog("Loading session...").open = true;
 }
 
-void HDRViewApp::resolve_pending_session_image(const ImagePtr &new_image)
+void HDRViewApp::resolve_loading_session_image(const ImagePtr &new_image)
 {
-    if (!m_pending_session)
+    if (!m_loading_session)
         return;
 
-    // Resolve this arrival to the earliest not-yet-filled entry sharing its load options; see PendingSession
+    // Resolve this arrival to the earliest not-yet-filled entry sharing its load options; see LoadingSession
     // for why that key is the right one to match on.
-    auto key = PendingSession::Key{new_image->path, new_image->channel_selector, new_image->alpha_override};
-    auto it  = m_pending_session->unresolved.find(key);
-    if (it == m_pending_session->unresolved.end())
+    auto key = LoadingSession::Key{new_image->path, new_image->channel_selector, new_image->alpha_override};
+    auto it  = m_loading_session->unresolved.find(key);
+    if (it == m_loading_session->unresolved.end())
         return;
 
     if (!it->second.empty())
     {
         int entry_idx = it->second.front();
         it->second.pop_front();
-        m_pending_session->entries[entry_idx].loaded = new_image;
+        m_loading_session->entries[entry_idx].loaded = new_image;
     }
     if (it->second.empty())
-        m_pending_session->unresolved.erase(it);
+        m_loading_session->unresolved.erase(it);
 }
 
-void HDRViewApp::finish_pending_session()
+void HDRViewApp::finish_loading_session()
 {
-    if (!m_pending_session)
+    if (!m_loading_session)
         return;
 
-    auto &entries = m_pending_session->entries;
+    auto &entries = m_loading_session->entries;
 
     for (auto &e : entries)
         if (!e.loaded)
@@ -1339,14 +1339,14 @@ void HDRViewApp::finish_pending_session()
     { return (idx >= 0 && idx < (int)entries.size()) ? entries[idx].loaded : nullptr; };
 
     m_current = m_reference = -1;
-    if (auto img = entry_loaded(m_pending_session->current_index))
+    if (auto img = entry_loaded(m_loading_session->current_index))
         m_current = image_index(img);
-    if (auto img = entry_loaded(m_pending_session->reference_index))
+    if (auto img = entry_loaded(m_loading_session->reference_index))
         m_reference = image_index(img);
 
-    m_blend_mode = m_pending_session->blend_mode;
+    m_blend_mode = m_loading_session->blend_mode;
 
-    const json &view = m_pending_session->view;
+    const json &view = m_loading_session->view;
     m_exposure_live = m_exposure = view.value<float>("exposure", m_exposure);
     // Only the floor; see MIN_GAMMA. Exposure and offset have no unsafe values, and a session has to carry
     // back whatever Ctrl+click entry and the keyboard shortcuts can set.
@@ -1383,7 +1383,7 @@ void HDRViewApp::finish_pending_session()
     m_roi_live = m_roi;
 
     m_request_sort = true;
-    m_pending_session.reset();
+    m_loading_session.reset();
 
     // m_images was rebuilt above and m_visible_images indexes into it, so leaving the old indices in place
     // would walk off the end of the new vector.
@@ -1395,12 +1395,12 @@ void HDRViewApp::draw_confirm_load_session_dialog(bool &open)
     auto result = ImGui::ConfirmDialog("Replace session?", open,
                                        "Loading this session will close all currently open images.", "Replace");
     if (result == ImGui::DialogResult::Cancel)
-        m_pending_session_load.reset();
+        m_unconfirmed_session.reset();
     else if (result == ImGui::DialogResult::Confirm)
     {
-        if (m_pending_session_load)
-            begin_session_load(*m_pending_session_load);
-        m_pending_session_load.reset();
+        if (m_unconfirmed_session)
+            begin_session_load(*m_unconfirmed_session);
+        m_unconfirmed_session.reset();
     }
 }
 
@@ -1409,11 +1409,11 @@ void HDRViewApp::draw_loading_session_dialog(bool &open)
     if (ImGui::BeginModalDialog("Loading session...", open, ImGui::DialogPosition::Center,
                                 ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
     {
-        if (m_pending_session)
+        if (m_loading_session)
         {
-            int total = (int)m_pending_session->entries.size();
+            int total = (int)m_loading_session->entries.size();
             int done  = 0;
-            for (auto &e : m_pending_session->entries)
+            for (auto &e : m_loading_session->entries)
                 if (e.loaded)
                     ++done;
             ImGui::Text("Loading session... (%d/%d)", done, total);
