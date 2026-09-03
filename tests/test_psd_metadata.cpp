@@ -8,6 +8,10 @@
 
 #include "imageio/psd.h"
 
+#include "test_support.h"
+
+using namespace hdrview_test;
+
 #include <cstdint>
 #include <sstream>
 #include <string>
@@ -36,12 +40,6 @@ TEST_CASE("PSDMetadata::color_mode_name is defined for every 16-bit value")
 namespace
 {
 
-void be16(std::string &o, uint16_t v) { o += char(v >> 8), o += char(v & 0xff); }
-void be32(std::string &o, uint32_t v)
-{
-    for (int i = 3; i >= 0; --i) o += char((v >> (8 * i)) & 0xff);
-}
-
 /// A PSD holding one image resource.
 /**
     `declared` is the size the resource block claims, `payload` what the section holds; a truncated or
@@ -52,25 +50,25 @@ std::string psd_with_resource(uint16_t resource_id, uint32_t declared, const std
 {
     std::string res;
     res += "8BIM";
-    be16(res, resource_id);
+    put<uint16_t>(res, resource_id, Endian::Big);
     res += '\0'; // empty Pascal name, already even with its length byte
     res += '\0';
-    be32(res, declared);
+    put<uint32_t>(res, declared, Endian::Big);
     res += payload;
     if (payload.size() % 2 == 1)
         res += '\0'; // resource data is padded to an even length
 
     std::string o;
     o += "8BPS";
-    be16(o, 1); // version
+    put<uint16_t>(o, 1, Endian::Big); // version
     o.append(6, '\0');
-    be16(o, 3); // channels
-    be32(o, 1); // height
-    be32(o, 1); // width
-    be16(o, 8); // depth
-    be16(o, 3); // RGB
-    be32(o, 0); // no colour-mode data
-    be32(o, (uint32_t)res.size());
+    put<uint16_t>(o, 3, Endian::Big); // channels
+    put<uint32_t>(o, 1, Endian::Big); // height
+    put<uint32_t>(o, 1, Endian::Big); // width
+    put<uint16_t>(o, 8, Endian::Big); // depth
+    put<uint16_t>(o, 3, Endian::Big); // RGB
+    put<uint32_t>(o, 0, Endian::Big); // no color-mode data
+    put<uint32_t>(o, (uint32_t)res.size(), Endian::Big);
     o += res;
     o += trailing;
     return o;

@@ -16,8 +16,7 @@
 #include "imageio/stb.h"
 
 #include "test_log_capture.h"
-
-#include <miniz.h>
+#include "test_zip.h"
 
 #include <algorithm>
 #include <memory>
@@ -30,6 +29,8 @@
 #include <string>
 #include <vector>
 
+using namespace hdrview_test;
+
 namespace
 {
 
@@ -38,17 +39,12 @@ std::string as_stream_contents(const std::vector<uint8_t> &bytes)
     return std::string(reinterpret_cast<const char *>(bytes.data()), bytes.size());
 }
 
-void append_be32(std::vector<uint8_t> &v, uint32_t x)
-{
-    v.insert(v.end(), {uint8_t(x >> 24), uint8_t(x >> 16), uint8_t(x >> 8), uint8_t(x)});
-}
-
 /// A QOI header declaring \p w by \p h. Big-endian dimensions at bytes 4..12, then channels and colorspace.
 std::string qoi_header(uint32_t w, uint32_t h)
 {
     std::vector<uint8_t> v{'q', 'o', 'i', 'f'};
-    append_be32(v, w);
-    append_be32(v, h);
+    put(v, w, Endian::Big);
+    put(v, h, Endian::Big);
     v.push_back(4); // channels
     v.push_back(0); // colorspace
     v.resize(v.size() + 32, 0);
@@ -62,13 +58,7 @@ std::string qoi_header(uint32_t w, uint32_t h)
 std::string dds_header(uint32_t w, uint32_t h)
 {
     std::vector<uint8_t> v(128, 0);
-    auto                 put_le32 = [&v](size_t off, uint32_t x)
-    {
-        v[off]     = uint8_t(x);
-        v[off + 1] = uint8_t(x >> 8);
-        v[off + 2] = uint8_t(x >> 16);
-        v[off + 3] = uint8_t(x >> 24);
-    };
+    auto                 put_le32 = [&v](size_t off, uint32_t x) { patch(v, off, x); };
 
     v[0] = 'D';
     v[1] = 'D';
@@ -126,46 +116,6 @@ bool blames_dimensions(const std::string &reason) { return reason.find("implausi
 
 } // namespace
 
-namespace
-{
-
-/// A one-entry deflated zip holding `contents` under `name`.
-std::string make_zip(const std::string &name, const std::string &contents)
-{
-    mz_zip_archive zip;
-    memset(&zip, 0, sizeof(zip));
-    REQUIRE(mz_zip_writer_init_heap(&zip, 0, 0));
-    REQUIRE(mz_zip_writer_add_mem(&zip, name.c_str(), contents.data(), contents.size(), MZ_BEST_COMPRESSION));
-    void  *buf  = nullptr;
-    size_t size = 0;
-    REQUIRE(mz_zip_writer_finalize_heap_archive(&zip, &buf, &size));
-    std::string out(reinterpret_cast<char *>(buf), size);
-    mz_zip_writer_end(&zip);
-    return out;
-}
-
-/**
-    Overwrites the uncompressed-size field in both of an entry's headers, leaving the stored bytes alone;
-    a zip whose directory claims far more than the archive is holding. Real-world equivalents are a
-    truncated or hand-edited archive and a deliberate decompression bomb; both reach the same code.
-
-    The field sits at offset 22 of a local file header (PK\3\4) and offset 24 of a central directory
-    header (PK\1\2).
-*/
-void declare_uncompressed_size(std::string &zip, uint32_t declared)
-{
-    auto patch_at = [&](const char *sig, size_t field_offset)
-    {
-        size_t pos = zip.find(sig, 0, 4);
-        REQUIRE(pos != std::string::npos);
-        for (int b = 0; b < 4; ++b) zip[pos + field_offset + b] = char((declared >> (8 * b)) & 0xff);
-    };
-    patch_at("PK\x03\x04", 22);
-    patch_at("PK\x01\x02", 24);
-}
-
-} // namespace
-
 TEST_CASE("A zip entry declaring more than the archive holds is skipped before it is allocated for")
 {
     // A zip entry is read whole into memory, sized from what the archive's directory claims. A claim the
@@ -174,7 +124,7 @@ TEST_CASE("A zip entry declaring more than the archive holds is skipped before i
 
     SUBCASE("an honest archive is untouched")
     {
-        const std::string zip = make_zip("manifest.json", manifest);
+        const std::string zip = zip_bytes({{"manifest.json", manifest}});
 
         auto found = zip_root_entries_with_suffix(zip, ".json");
         REQUIRE(found.size() == 1);
@@ -188,7 +138,7 @@ TEST_CASE("A zip entry declaring more than the archive holds is skipped before i
 
     SUBCASE("a ratio no deflate stream could produce is refused before extraction is attempted")
     {
-        std::string zip = make_zip("manifest.json", manifest);
+        std::string zip = zip_bytes({{"manifest.json", manifest}});
         // well past deflate's 1032:1 ceiling, but small enough that a build without the guard wastes the
         // allocation instead of exhausting the machine
         declare_uncompressed_size(zip, 64u << 20);

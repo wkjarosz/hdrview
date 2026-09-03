@@ -1832,9 +1832,9 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
-                                tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_numeric_edge_cases.cpp tests/test_loader_limits.cpp
+                                tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
-                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_cicp_video_range.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
+                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
                                 ${HDRVIEW_IPC_TESTS}
   )
   hdrview_setup_target(hdrview_tests)

@@ -74,10 +74,13 @@ cmake --build --preset macos-arm64-cpm-release
 ctest --test-dir build/macos-arm64-cpm -C Release --output-on-failure
 ```
 Coverage is roughly two dozen files: color math (`test_colorspace.cpp`, `test_icc_cicp.cpp`,
-`test_cicp_video_range.cpp`, `test_gainmap.cpp`), the loaders and their edge cases
+`test_gainmap.cpp`), the loaders and their edge cases
 (`test_exr_io.cpp`/`test_png_io.cpp`/`test_tiff_io.cpp`/`test_dds_io.cpp`/`test_heif_io.cpp`/`test_qoi_io.cpp`,
-`test_loader_limits.cpp`, `test_numeric_edge_cases.cpp`), metadata (`test_exif.cpp`, `test_xmp.cpp`,
-`test_psd_metadata.cpp`), export round-trips (`test_export_roundtrip.cpp`), and assorted helpers. There are
+`test_loader_limits.cpp`), metadata (`test_exif.cpp`, `test_xmp.cpp`,
+`test_psd_metadata.cpp`), export round-trips (`test_export_roundtrip.cpp`), and assorted helpers.
+`tests/test_support.h` holds the fixtures both suites share (byte writers over `endian-utils.h`, an image
+builder, loading from bytes, a TIFF builder); `tests/test_zip.h` holds the zip ones, kept apart because
+miniz declares zlib's names itself and a translation unit reaching zlib.h cannot see both. There are
 also libFuzzer targets for the loaders under `tests/fuzz/`, behind `HDRVIEW_BUILD_FUZZERS` (Clang only). The
 EXR/PNG tests conditionally compile in extra cases against vendored real-world test images (OpenEXR's test
 suite, libpng's pngsuite/testpngs), present only when CPM fetched those libraries from source: the

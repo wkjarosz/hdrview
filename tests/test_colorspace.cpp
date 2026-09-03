@@ -8,9 +8,11 @@
 
 #include "colorspace.h"
 #include "common.h" // for blend_mode_names()
+#include "image.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 TEST_CASE("sRGB encode/decode are inverses, including negative (out-of-gamut) values")
 {
@@ -35,13 +37,28 @@ TEST_CASE("linear_to_gamma round-trips when encoding with 1/gamma and decoding w
 
 TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
 {
+    // The values outside [0,1] are the ones an HDR viewer reaches. Gamut conversion produces negatives, and
+    // the convention (OpenColorIO's LIN_TO_PQ, colour-science's signed power, our own linear_to_sRGB) is to
+    // mirror the curve around the origin so the sign survives.
     for (int t = TransferFunction::Unspecified; t < TransferFunction::Count; ++t)
     {
         TransferFunction tf{static_cast<TransferFunction::Type_>(t)};
-        for (float x : {0.1f, 0.25f, 0.5f, 0.75f, 0.9f})
+        for (float x : {0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 2.f, 10.f, 100.f, 1000.f, -0.5f, -10.f})
         {
             INFO("transfer function = ", transfer_function_name(tf), ", x = ", x);
-            CHECK(to_linear(from_linear(x, tf), tf) == doctest::Approx(x));
+            const float encoded = from_linear(x, tf);
+            REQUIRE(std::isfinite(encoded));
+
+            // Log100 and its sqrt10 variant are specified on a bounded domain and clamp, losing the sign
+            if (x < 0.f && (tf.type == TransferFunction::Log100 || tf.type == TransferFunction::Log100_Sqrt10))
+                continue;
+            if (x < 0.f)
+                CHECK(encoded <= 0.f);
+
+            auto expected = doctest::Approx(x);
+            if (std::abs(x) > 1.f)
+                expected.epsilon(1e-3);
+            CHECK(to_linear(encoded, tf) == expected);
         }
     }
 }
@@ -54,8 +71,8 @@ TEST_CASE("PQ maps absolute luminance relative to BT.2408 reference white")
     CHECK(EOTF_BT2100_PQ(1.0f) == doctest::Approx(10000.f));
     CHECK(EOTF_BT2100_PQ(0.0f) == doctest::Approx(0.f));
 
-    // to_linear also normalizes so reference white lands at 1.0. 203 is spelled out here rather than taken
-    // from HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of tracking it.
+    // to_linear also normalizes so reference white lands at 1.0. 203 is spelled out here, not taken from
+    // HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of tracking it.
     CHECK(to_linear(1.0f, TransferFunction::BT2100_PQ) == doctest::Approx(10000.f / 203.f));
 
     const float reference_white_signal = inverse_EOTF_BT2100_PQ(203.f);
@@ -452,7 +469,7 @@ TEST_CASE("the lightness control mixes toward black and white rather than washin
 
 TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen for")
 {
-    // shape functions, checked on the identities that make them usable rather than on their formulas
+    // shape functions, checked on the identities that make them usable, not on their formulas
     for (float P : {0.25f, 0.5f, 1.f, 2.f, 4.f})
     {
         CAPTURE(P);
@@ -677,4 +694,53 @@ TEST_CASE("sRGB primaries land where L*a*b* is documented to put them")
     CHECK(w.x == doctest::Approx(100.f).epsilon(1e-3));
     CHECK(w.y == doctest::Approx(0.f).epsilon(2e-2));
     CHECK(w.z == doctest::Approx(0.f).epsilon(2e-2));
+}
+
+TEST_CASE("quantize_full maps non-finite input to a representable integer")
+{
+    // Casting a NaN to an integer type is undefined behavior, and std::clamp doesn't filter it out:
+    // both of its comparisons are false for NaN, so it returns the NaN unchanged.
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    CHECK(quantize_full<uint8_t>(nan, 0, 0, false) == 0);
+    CHECK(quantize_full<uint16_t>(nan, 0, 0, false) == 0);
+    CHECK(quantize_full<uint8_t>(inf, 0, 0, false) == 255);
+    CHECK(quantize_full<uint8_t>(-inf, 0, 0, false) == 0);
+}
+
+TEST_CASE("Saving wide-gamut content through an HDR transfer function stays finite")
+{
+    // BT.2020 green is outside Rec.709, so as_interleaved()'s conversion to sRGB primaries makes it
+    // negative just before the transfer function is applied.
+    Image img(int2{2, 1}, 3);
+    img.chromaticities    = gamut_chromaticities(ColorGamut_BT2020_2100);
+    img.channels[0](0, 0) = 0.0f;
+    img.channels[1](0, 0) = 1.0f;
+    img.channels[2](0, 0) = 0.0f;
+    img.channels[0](1, 0) = 0.2f;
+    img.channels[1](1, 0) = 0.2f;
+    img.channels[2](1, 0) = 0.2f;
+    img.finalize();
+
+    int  w, h, n;
+    auto px =
+        img.as_interleaved<float>(&w, &h, &n, 1.f, TransferFunction{TransferFunction::BT2100_PQ}, false, true, true);
+    for (int i = 0; i < w * h * n; ++i)
+    {
+        INFO("sample ", i);
+        CHECK(std::isfinite(px[i]));
+    }
+}
+
+TEST_CASE("axis_scale_fwd/inv round-trip across the range the histogram spans")
+{
+    for (int s = 0; s < AxisScale_COUNT; ++s)
+        for (double x : {0.0, 1e-12, 1e-6, 1e-4, 0.5, 1.0, 100.0, 1e6, 1e12, -1e-6, -1.0, -1e6})
+        {
+            INFO("scale = ", s, ", x = ", x);
+            double f = axis_scale_fwd(x, (AxisScale)s);
+            REQUIRE(std::isfinite(f));
+            CHECK(axis_scale_inv(f, (AxisScale)s) == doctest::Approx(x).epsilon(1e-9));
+        }
 }

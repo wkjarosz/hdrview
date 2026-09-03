@@ -13,6 +13,10 @@
 #include "imageio/image_loader.h"
 #include "imageio/xmp.h"
 
+#include "test_support.h"
+
+using namespace hdrview_test;
+
 #include <sstream>
 #include <string>
 #include <vector>
@@ -107,8 +111,8 @@ std::string png_with_xmp(const std::string &xmp)
 {
     auto be32 = [](uint32_t v)
     {
-        std::string s(4, '\0');
-        for (int i = 0; i < 4; ++i) s[i] = char((v >> (8 * (3 - i))) & 0xff);
+        std::string s;
+        put(s, v, Endian::Big);
         return s;
     };
     auto chunk = [&](const std::string &type, const std::string &data)

@@ -2,8 +2,8 @@
     \author Wojciech Jarosz
 
     Loading a session bundled inside a zip: a "*.hsess" manifest at the zip's root alongside the images it
-    references, which is how session sharing works on the web build. Bundles are built with miniz's writer
-    API here, since HDRViewApp::export_session_bundle() opens a native save-file dialog.
+    references, which is how session sharing works on the web build. Bundles are built in memory here,
+    since HDRViewApp::export_session_bundle() opens a native save-file dialog.
 */
 
 #include "app.h"
@@ -23,7 +23,6 @@ using namespace hdrview_test;
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <miniz.h>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
@@ -43,15 +42,7 @@ std::string read_file(const fs::path &path)
 
 fs::path write_test_zip(const char *name, const std::vector<std::pair<std::string, std::string>> &entries)
 {
-    fs::path       zip_path = fs::temp_directory_path() / name;
-    mz_zip_archive zip;
-    memset(&zip, 0, sizeof(zip));
-    mz_zip_writer_init_file(&zip, zip_path.string().c_str(), 0);
-    for (auto &[entry_name, contents] : entries)
-        mz_zip_writer_add_mem(&zip, entry_name.c_str(), contents.data(), contents.size(), MZ_DEFAULT_LEVEL);
-    mz_zip_writer_finalize_archive(&zip);
-    mz_zip_writer_end(&zip);
-    return zip_path;
+    return write_file(fs::temp_directory_path() / name, zip_bytes(entries));
 }
 
 std::string current_version_string()

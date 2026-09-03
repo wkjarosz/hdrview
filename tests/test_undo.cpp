@@ -9,6 +9,10 @@
 #include "edit/undo.h"
 #include "image.h"
 
+#include "test_support.h"
+
+using namespace hdrview_test;
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,17 +26,7 @@ constexpr int2 k_size{5, 3};
 
 float expected(int c, int x, int y) { return float(c * 1000 + y * 10 + x); }
 
-ImagePtr make_test_image(int num_channels = 3)
-{
-    auto img = std::make_shared<Image>(k_size, num_channels);
-    for (int c = 0; c < num_channels; ++c)
-    {
-        auto &ch = img->channels[size_t(c)];
-        for (int y = 0; y < k_size.y; ++y)
-            for (int x = 0; x < k_size.x; ++x) ch(x, y) = expected(c, x, y);
-    }
-    return img;
-}
+ImagePtr make_test_image(int num_channels = 3) { return test_image(k_size, num_channels, expected); }
 
 // Every sample of every channel, against the value make_test_image() put there.
 bool matches_original(const ImagePtr &img)

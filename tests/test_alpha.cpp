@@ -16,17 +16,25 @@
 #include "imageio/stb.h"
 #include "imageio/tiff.h"
 
+#include "test_support.h"
+
 #include <functional>
 #include <sstream>
 #include <vector>
 
-#include <vector>
+using namespace hdrview_test;
 
 namespace
 {
 
 // one interleaved RGBA pixel
 std::vector<float> pixel(float r, float g, float b, float a) { return {r, g, b, a}; }
+
+/// A 1x1 RGBA image: `color` in each of R, G and B, `alpha` in A.
+ImagePtr rgba_pixel_image(float color, float alpha)
+{
+    return test_image(int2{1, 1}, 4, [=](int c, int, int) { return c < 3 ? color : alpha; });
+}
 
 // by name, since OpenEXR stores channels alphabetically
 float channel_value(const ImagePtr &img, const std::string &name)
@@ -164,6 +172,7 @@ TEST_CASE("finalize() premultiplies straight alpha and leaves the other kinds al
 {
     auto make = [](TransparencyType_ at)
     {
+        // the kind has to be set before finalize(), which is what acts on it
         auto img = std::make_shared<Image>(int2{1, 1}, 4);
         for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
         img->channels[3](0, 0) = 0.5f;
@@ -185,10 +194,7 @@ TEST_CASE("An associated-alpha PNG can be read as premultiplied, against the PNG
     // PNG is unassociated by spec, so HDRView premultiplies on load. The writer divides alpha out before
     // encoding, so landing stored samples of a*OETF(C), half coverage over a fully bright color encoded as
     // 128, needs a linear color of a * EOTF(0.5) going in.
-    auto img = std::make_shared<Image>(int2{1, 1}, 4);
-    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.5f * to_linear(0.5f, TransferFunction::sRGB);
-    img->channels[3](0, 0) = 0.5f;
-    img->finalize();
+    auto img = rgba_pixel_image(0.5f * to_linear(0.5f, TransferFunction::sRGB), 0.5f);
 
     std::ostringstream out(std::ios::binary);
     save_png_image(*img, out, "premul.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
@@ -196,12 +202,11 @@ TEST_CASE("An associated-alpha PNG can be read as premultiplied, against the PNG
 
     // read as the spec says: the samples are taken as straight and multiplied by alpha again
     {
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               images = load_image(in, "premul.png", ImageLoadOptions{});
-        REQUIRE(images.size() == 1);
-        CHECK(images[0]->transparency == TransparencyType_Straight);
+        auto image = load_bytes(out.str(), "premul.png");
+        REQUIRE(image);
+        CHECK(image->transparency == TransparencyType_Straight);
         // taken as straight: EOTF(0.5) linearized, then multiplied by coverage a second time
-        CHECK(channel_value(images[0], "R") ==
+        CHECK(channel_value(image, "R") ==
               doctest::Approx(0.5f * to_linear(0.5f, TransferFunction::sRGB)).epsilon(0.05));
     }
 
@@ -211,12 +216,11 @@ TEST_CASE("An associated-alpha PNG can be read as premultiplied, against the PNG
         opts.override_transparency = true;
         opts.transparency_override = TransparencyType_PremultipliedNonLinear;
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               images = load_image(in, "premul.png", opts);
-        REQUIRE(images.size() == 1);
-        CHECK(images[0]->transparency == TransparencyType_PremultipliedNonLinear);
+        auto image = load_bytes(out.str(), "premul.png", opts);
+        REQUIRE(image);
+        CHECK(image->transparency == TransparencyType_PremultipliedNonLinear);
         // the bright color the file encodes, times its coverage
-        CHECK(channel_value(images[0], "R") == doctest::Approx(0.5f).epsilon(0.05));
+        CHECK(channel_value(image, "R") == doctest::Approx(0.5f).epsilon(0.05));
     }
 }
 
@@ -224,20 +228,16 @@ TEST_CASE("A straight-alpha EXR can be read as straight, against the EXR spec")
 {
     // EXR is associated by spec, so HDRView leaves its samples alone; a file written straight needs the
     // multiply that assumption skips
-    auto img = std::make_shared<Image>(int2{1, 1}, 4);
-    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f; // straight, linear
-    img->channels[3](0, 0) = 0.5f;
-    img->finalize();
+    auto img = rgba_pixel_image(1.f, 0.5f); // straight, linear
 
     std::ostringstream out(std::ios::binary);
     save_exr_image(*img, out, "straight.exr");
 
     {
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               images = load_image(in, "straight.exr", ImageLoadOptions{});
-        REQUIRE(images.size() == 1);
-        CHECK(images[0]->transparency == TransparencyType_PremultipliedLinear);
-        CHECK(channel_value(images[0], "R") == doctest::Approx(1.f).epsilon(0.01));
+        auto image = load_bytes(out.str(), "straight.exr");
+        REQUIRE(image);
+        CHECK(image->transparency == TransparencyType_PremultipliedLinear);
+        CHECK(channel_value(image, "R") == doctest::Approx(1.f).epsilon(0.01));
     }
 
     {
@@ -245,12 +245,11 @@ TEST_CASE("A straight-alpha EXR can be read as straight, against the EXR spec")
         opts.override_transparency = true;
         opts.transparency_override = TransparencyType_Straight;
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               images = load_image(in, "straight.exr", opts);
-        REQUIRE(images.size() == 1);
-        CHECK(images[0]->transparency == TransparencyType_Straight);
+        auto image = load_bytes(out.str(), "straight.exr", opts);
+        REQUIRE(image);
+        CHECK(image->transparency == TransparencyType_Straight);
         // finalize() now multiplies by the coverage the file's samples were never scaled by
-        CHECK(channel_value(images[0], "R") == doctest::Approx(0.5f).epsilon(0.01));
+        CHECK(channel_value(image, "R") == doctest::Approx(0.5f).epsilon(0.01));
     }
 }
 
@@ -283,10 +282,7 @@ TEST_CASE("Every loader reports the alpha kind its format settles")
 #endif
     };
 
-    auto img = std::make_shared<Image>(int2{1, 1}, 4);
-    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 0.25f;
-    img->channels[3](0, 0) = 0.5f;
-    img->finalize();
+    auto img = rgba_pixel_image(0.25f, 0.5f);
 
     for (const auto &c : cases)
     {
@@ -295,15 +291,14 @@ TEST_CASE("Every loader reports the alpha kind its format settles")
         c.save(*img, out);
         REQUIRE(out.str().size() > 8);
 
-        std::istringstream in(out.str(), std::ios::binary);
-        auto               images = load_image(in, c.name, ImageLoadOptions{});
-        REQUIRE(images.size() == 1);
+        auto image = load_bytes(out.str(), c.name);
+        REQUIRE(image);
 
-        CHECK_FALSE(images[0]->transparency_assumed);
-        CHECK(images[0]->transparency_from_file == c.from_file);
+        CHECK_FALSE(image->transparency_assumed);
+        CHECK(image->transparency_from_file == c.from_file);
         // with nothing overridden the effective kind is the file's, and no override is recorded
-        CHECK(images[0]->transparency == c.from_file);
-        CHECK_FALSE(images[0]->transparency_override.has_value());
+        CHECK(image->transparency == c.from_file);
+        CHECK_FALSE(image->transparency_override.has_value());
     }
 }
 
