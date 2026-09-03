@@ -27,9 +27,9 @@ struct ImageLoadOptions
     /// Comma-separated list of channel names to include or exclude from the image. If empty, all channels are selected.
     string channel_selector;
 
-    bool override_alpha = false;
-    /// Override what the file says about its alpha and interpret it this way instead. See Image::alpha_type.
-    AlphaType_ alpha_override = AlphaType_Straight;
+    bool override_transparency = false;
+    /// Override what the file says about its alpha and interpret it this way instead. See Image::transparency.
+    TransparencyType_ transparency_override = TransparencyType_Straight;
 
     bool override_profile = false;
     /// Override any metadata in the file and decode pixel values using this color gamut.
@@ -93,10 +93,10 @@ struct BackgroundImageLoader
     const set<fs::path> &watched_directories() const { return m_directories; }
     /// Watch `dir` in its own right, whether or not anything has been loaded from it.
     bool add_watched_directory(const fs::path &dir, bool ignore_existing);
-    /// Remove the watched directories matching the criterion, sparing explicitly added ones if asked.
+    /// Stop watching every directory \p criterion returns true for.
     /**
-        A directory add_watched_directory() was asked for holds no loaded images of its own, so a criterion
-        phrased as "nothing loaded came from here" would always discard it.
+        \p keep_explicit spares the ones add_watched_directory() was asked for. Those are watched for files
+        that do not exist yet, so they hold no loaded images and would match a "nothing came from here" rule.
     */
     void remove_watched_directories(function<bool(const fs::path &)> criterion, bool keep_explicit = false);
 
