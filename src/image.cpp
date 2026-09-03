@@ -1249,10 +1249,7 @@ ImagePtr Image::duplicate(const Box2i &region) const
 
     auto copy = std::make_shared<Image>();
 
-    // Everything that says what the samples mean: a copy that lost its primaries or its alpha convention
-    // would be read differently from the image it was made of. Left behind are `id`, which the constructor
-    // hands out; `history`, since nothing has been done to the copy; `is_live`, since these samples are a
-    // snapshot; and `vector_overlay`, which annotates what a renderer is producing.
+    // the copy gets a fresh id and an empty history, and is neither live nor annotated
     static_cast<ImageMetadata &>(*copy) = *this;
 
     const int2 extent = clipped.size();
