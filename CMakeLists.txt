@@ -1738,7 +1738,9 @@ set(HDRVIEW_SOURCES
     src/hdrview.cpp
     src/image.cpp
     src/imgui_ext.cpp
+    src/image-colorspace-gui.cpp
     src/image-gui.cpp
+    src/image-histogram.cpp
     src/opengl_check.cpp
     src/shader.cpp
     src/shader_gl.cpp
