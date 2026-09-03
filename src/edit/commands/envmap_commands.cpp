@@ -21,7 +21,6 @@
 
 namespace
 {
-
 void mapping_combo(const char *label, int *value)
 {
     if (ImGui::BeginCombo(label, envmapping_name(*value)))
@@ -40,11 +39,10 @@ public:
         EditCommand({{"Remap envmap...", "Change environment map format", "Spherical remapping"},
                      ICON_MY_ENVMAP,
                      ImGuiKey_None,
+                     true,
                      "Remap",
                      27.f})
     {
-        m_info.has_dialog = true;
-
         // reparameterizes the whole image, so there is no subject to narrow
         m_info.draws_subject_selector = false;
     }
@@ -159,11 +157,10 @@ public:
         EditCommand({{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
                      ICON_MY_IRRADIANCE,
                      ImGuiKey_None,
+                     true,
                      "Convolve",
                      27.f})
     {
-        m_info.has_dialog = true;
-
         m_info.draws_subject_selector = false;
     }
 

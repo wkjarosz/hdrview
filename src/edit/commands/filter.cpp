@@ -23,7 +23,6 @@
 
 namespace
 {
-
 /// The border-mode pair the resampling commands offer.
 void border_fields(int *border_x, int *border_y, bool *linked, const char *tooltip)
 {
@@ -51,7 +50,7 @@ void border_fields(int *border_x, int *border_y, bool *linked, const char *toolt
 class Blur final : public EditCommand
 {
 public:
-    Blur() : EditCommand({{"Blur...", "Gaussian blur", "Box blur"}, ICON_MY_BLUR}) { m_info.has_dialog = true; }
+    Blur() : EditCommand({{"Blur...", "Gaussian blur", "Box blur"}, ICON_MY_BLUR, ImGuiKey_None, true}) {}
 
     void draw(EditContext &) override
     {
@@ -139,7 +138,7 @@ private:
 class UnsharpMask final : public EditCommand
 {
 public:
-    UnsharpMask() : EditCommand({{"Unsharp mask...", "Sharpen"}, ICON_MY_SHARPEN}) { m_info.has_dialog = true; }
+    UnsharpMask() : EditCommand({{"Unsharp mask...", "Sharpen"}, ICON_MY_SHARPEN, ImGuiKey_None, true}) {}
 
     void draw(EditContext &) override
     {
@@ -164,9 +163,8 @@ private:
 class Median final : public EditCommand
 {
 public:
-    Median() : EditCommand({{"Median filter...", "Remove fireflies and outliers"}, ICON_MY_MEDIAN})
+    Median() : EditCommand({{"Median filter...", "Remove fireflies and outliers"}, ICON_MY_MEDIAN, ImGuiKey_None, true})
     {
-        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -197,9 +195,9 @@ private:
 class Shift final : public EditCommand
 {
 public:
-    Shift() : EditCommand({{"Shift...", "Offset", "Translate", "Wrap around"}, ICON_MY_SHIFT, ImGuiKey_None, "Shift"})
+    Shift() :
+        EditCommand({{"Shift...", "Offset", "Translate", "Wrap around"}, ICON_MY_SHIFT, ImGuiKey_None, true, "Shift"})
     {
-        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -247,9 +245,9 @@ class ZapGremlins final : public EditCommand
 {
 public:
     ZapGremlins() :
-        EditCommand({{"Zap gremlins...", "Replace NaNs and infinities"}, ICON_MY_ZAP_GREMLINS, ImGuiKey_None, "Zap"})
+        EditCommand(
+            {{"Zap gremlins...", "Replace NaNs and infinities"}, ICON_MY_ZAP_GREMLINS, ImGuiKey_None, true, "Zap"})
     {
-        m_info.has_dialog = true;
     }
 
     void draw(EditContext &ctx) override
@@ -309,10 +307,10 @@ public:
         EditCommand({{"Bump to normal map...", "Height to normal", "Normal map"},
                      ICON_MY_NORMAL_MAP,
                      ImGuiKey_None,
+                     true,
                      "Convert",
                      27.f})
     {
-        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override

@@ -22,7 +22,6 @@
 
 namespace
 {
-
 /// A flip or a quarter turn: its own inverse, or paired with the opposite one.
 /**
     Every sample survives, so this is reversed by performing the opposite and costs a few bytes of history.
@@ -172,11 +171,10 @@ public:
         EditCommand({{"Image size...", "Resize the image"},
                      ICON_MY_IMAGE_SIZE,
                      ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
+                     true,
                      "Resize",
                      30.f})
     {
-        m_info.has_dialog = true;
-
         // replaces the image rather than writing into it, so the subject has nothing to say about it
         m_info.draws_subject_selector = false;
     }
@@ -235,10 +233,8 @@ class CanvasSize final : public EditCommand
 public:
     CanvasSize() :
         EditCommand(
-            {{"Canvas size..."}, ICON_MY_CANVAS_SIZE, ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C, "Resize", 30.f})
+            {{"Canvas size..."}, ICON_MY_CANVAS_SIZE, ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C, true, "Resize", 30.f})
     {
-        m_info.has_dialog = true;
-
         m_info.draws_subject_selector = false;
     }
 

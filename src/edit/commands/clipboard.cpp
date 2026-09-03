@@ -24,7 +24,6 @@
 
 namespace
 {
-
 /// The rectangle these operate on: the selection when the subject asks for it, else the whole image.
 Box2i target_region(const EditContext &ctx)
 {
@@ -127,10 +126,10 @@ public:
         EditCommand({{"Seamless paste...", "Poisson paste", "Gradient-domain paste"},
                      ICON_MY_SEAMLESS_PASTE,
                      ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_V,
+                     true,
                      "Paste",
                      27.f})
     {
-        m_info.has_dialog = true;
     }
 
     bool enabled(const EditContext &ctx) const override { return ctx.clipboard && *ctx.clipboard; }

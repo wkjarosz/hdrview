@@ -77,15 +77,15 @@ public:
         /// Shown in the menu; the first is also the key the action registry and the tests address it by.
         std::vector<std::string> names;
         std::string              icon;
-        ImGuiKeyChord            chord = ImGuiKey_None;
+        ImGuiKeyChord            chord      = ImGuiKey_None;
+        bool                     has_dialog = false; ///< Whether invoking this opens a dialog rather than editing.
 
         std::string confirm  = "Apply"; ///< What the confirming button says. Ignored without a dialog.
         float       width_em = 24.f;    ///< Least dialog width in em; an Info predates the ImGui context.
 
-        bool draws_subject_selector = true;  ///< Whether "Apply to" means anything here, and so is shown.
-        bool has_dialog             = false; ///< Whether invoking this opens a dialog rather than editing at once.
-        bool fans_out               = true;  ///< Whether a multi-selection runs this once per image.
-        bool needs_editable         = true;  ///< Whether the image has to accept edits for this to be offered.
+        bool draws_subject_selector = true; ///< Whether "Apply to" means anything here, and so is shown.
+        bool fans_out               = true; ///< Whether a multi-selection runs this once per image.
+        bool needs_editable         = true; ///< Whether the image has to accept edits for this to be offered.
     };
 
     explicit EditCommand(Info info) : m_info(std::move(info)) {}

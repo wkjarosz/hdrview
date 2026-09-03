@@ -27,7 +27,6 @@
 
 namespace
 {
-
 class ConvertColorSpace final : public EditCommand
 {
 public:
@@ -35,10 +34,10 @@ public:
         EditCommand({{"Convert color space...", "Change primaries", "Change white point", "Gamut conversion"},
                      ICON_MY_COLORSPACE,
                      ImGuiKey_None,
+                     true,
                      "Convert",
                      27.f})
     {
-        m_info.has_dialog = true;
     }
 
     /// The file's own tag, so a conversion starts from what the pixels are.
@@ -158,10 +157,13 @@ class ChannelMixer final : public EditCommand
 {
 public:
     ChannelMixer() :
-        EditCommand(
-            {{"Channel mixer...", "Mix channels", "Monochrome"}, ICON_MY_CHANNEL_MIXER, ImGuiKey_None, "Mix", 27.f})
+        EditCommand({{"Channel mixer...", "Mix channels", "Monochrome"},
+                     ICON_MY_CHANNEL_MIXER,
+                     ImGuiKey_None,
+                     true,
+                     "Mix",
+                     27.f})
     {
-        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -253,10 +255,13 @@ class HueSaturation final : public EditCommand
 {
 public:
     HueSaturation() :
-        EditCommand(
-            {{"Hue/saturation...", "Colorize", "Desaturate"}, ICON_MY_HUE_SATURATION, ImGuiKey_None, "Apply", 27.f})
+        EditCommand({{"Hue/saturation...", "Colorize", "Desaturate"},
+                     ICON_MY_HUE_SATURATION,
+                     ImGuiKey_None,
+                     true,
+                     "Apply",
+                     27.f})
     {
-        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -358,10 +363,10 @@ public:
         EditCommand({{"Brightness/contrast...", "Levels", "Tone curve"},
                      ICON_MY_BRIGHTNESS_CONTRAST,
                      ImGuiKey_None,
+                     true,
                      "Apply",
                      27.f})
     {
-        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -575,9 +580,9 @@ public:
         EditCommand({{"Flatten...", "Composite over a background", "Remove transparency"},
                      ICON_MY_FLATTEN,
                      ImGuiKey_None,
+                     true,
                      "Flatten"})
     {
-        m_info.has_dialog = true;
     }
 
     void draw(EditContext &ctx) override

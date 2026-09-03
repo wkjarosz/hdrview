@@ -150,6 +150,7 @@ public:
         EditCommand({{"Ungroup channels", "Explode channel group", "Split channel group"},
                      ICON_MY_NO_CHANNEL_GROUP,
                      ImGuiKey_None,
+                     /* has_dialog */ false,
                      "Ungroup",
                      24.f,
                      /* draws_subject_selector */ false})
@@ -209,6 +210,7 @@ public:
         EditCommand({{"Regroup channels", "Rejoin exploded channels"},
                      ICON_MY_CHANNEL_GROUP,
                      ImGuiKey_None,
+                     /* has_dialog */ false,
                      "Regroup",
                      24.f,
                      /* draws_subject_selector */ false})
@@ -246,6 +248,7 @@ public:
         EditCommand({{"Delete channel group", "Remove channels"},
                      ICON_MY_TRASH_CAN,
                      ImGuiKey_None,
+                     /* has_dialog */ false,
                      "Delete",
                      24.f,
                      /* draws_subject_selector */ false})

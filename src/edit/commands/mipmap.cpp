@@ -21,7 +21,6 @@
 
 namespace
 {
-
 /// How many levels an image of \p size has, counting the image itself, down to a single sample.
 int level_count(int2 size) { return 1 + int(std::floor(std::log2(float(std::max(1, std::max(size.x, size.y)))))); }
 
@@ -37,11 +36,10 @@ public:
         EditCommand({{"Generate mipmaps...", "Build a mip pyramid", "Halve repeatedly"},
                      ICON_MY_CHANNEL_GROUP,
                      ImGuiKey_None,
+                     true,
                      "Generate",
                      26.f})
     {
-        m_info.has_dialog = true;
-
         // rewrites the whole image into a pyramid, so there is no subject to narrow
         m_info.draws_subject_selector = false;
     }

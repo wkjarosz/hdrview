@@ -53,7 +53,7 @@ public:
 class ExposureGamma final : public EditCommand
 {
 public:
-    ExposureGamma() : EditCommand({{"Exposure/gamma..."}, ICON_MY_EXPOSURE}) { m_info.has_dialog = true; }
+    ExposureGamma() : EditCommand({{"Exposure/gamma..."}, ICON_MY_EXPOSURE, ImGuiKey_None, true}) {}
 
     void draw(EditContext &) override
     {
@@ -116,7 +116,7 @@ private:
 class Fill final : public EditCommand
 {
 public:
-    Fill() : EditCommand({{"Fill..."}, ICON_MY_FILL, ImGuiKey_None, "Fill"}) { m_info.has_dialog = true; }
+    Fill() : EditCommand({{"Fill..."}, ICON_MY_FILL, ImGuiKey_None, true, "Fill"}) {}
 
     void draw(EditContext &ctx) override
     {
