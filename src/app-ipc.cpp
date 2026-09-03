@@ -112,12 +112,9 @@ void HDRViewApp::set_ipc_port(uint16_t port)
 }
 
 /// Turns the listener's running totals into the rates the activity readout shows.
-/**
-    Sampled over a window rather than per frame: at 60 fps the per-frame deltas are one or two packets.
-*/
 struct HDRViewApp::IpcRates
 {
-    double   sampled_at    = 0.0; ///< ImGui::GetTime() of the last sample
+    double   sampled_at    = 0.0; ///< ImGui::GetTime() of the last sample; see k_window for why not per frame
     uint64_t last_packets  = 0;
     uint64_t last_bytes    = 0;
     double   packets_per_s = 0.0;

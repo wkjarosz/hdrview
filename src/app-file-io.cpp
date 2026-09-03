@@ -1062,23 +1062,15 @@ void HDRViewApp::export_session_bundle()
 }
 
 /// A parsed session file waiting on the user to confirm closing the currently-open images.
-/**
-    A bundled session carries the zip's bytes along, since begin_session_load() needs them again once the
-    user confirms; an empty `zip_bytes` is a plain .hsess, whose entries name files under `dir`.
-*/
 struct HDRViewApp::PendingSessionLoad
 {
     json     j;
-    fs::path dir;
-    string   zip_bytes;
+    fs::path dir;       ///< Where a plain .hsess's entries are relative to
+    string   zip_bytes; ///< Empty for a plain .hsess; begin_session_load() needs these again after the confirm
     string   zip_name;
 };
 
 /// A session whose images have been issued to the loader and are loading asynchronously.
-/**
-    The rest of it (selection, blend mode, view settings) is applied by finish_pending_session() once every
-    entry here has been resolved, successfully or not.
-*/
 struct HDRViewApp::PendingSession
 {
     struct Entry
@@ -1095,9 +1087,8 @@ struct HDRViewApp::PendingSession
     BlendMode_    blend_mode;
     json          view; ///< The session file's "view" sub-object, applied verbatim once loading completes
 
-    // An arriving image is matched to the earliest not-yet-filled entry sharing its load options. Entries
-    // sharing that key are content-identical, so any one-to-one assignment among them is correct however the
-    // async loads finish, which is what makes it safe to load the same file twice in one session.
+    // An arrival fills the earliest entry sharing its load options. Entries sharing a key ask for identical
+    // content, so any one-to-one assignment is right whatever order the loads finish in.
     using Key = std::tuple<fs::path, string, optional<AlphaType_>>; ///< path, channel_selector, alpha_override
     map<Key, deque<int>> unresolved;
 };
