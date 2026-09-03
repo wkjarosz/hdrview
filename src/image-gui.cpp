@@ -502,20 +502,22 @@ void Image::draw_info()
             // same as filling in one nothing ever did.
             const string from_file = fmt::format("{}{}", transparency_type_name(transparency_from_file),
                                                  transparency_assumed ? " (assumed)" : "");
-            filtered_property("Alpha",
-                              transparency_override ? fmt::format("{} (override; was {})",
-                                                                  transparency_type_name(transparency), from_file)
-                                                    : from_file,
-                              "How this image's alpha is being read: whether the color channels are multiplied "
-                              "by it, and in what space. \"Assumed\" means nothing in the file stated it and the "
-                              "loader picked a default, which is where the override below is most likely wanted.");
+            filtered_property(
+                "Transparency",
+                transparency_override
+                    ? fmt::format("{} (override; was {})", transparency_type_name(transparency), from_file)
+                    : from_file,
+                "How this image's alpha channel is read: whether it means transparency, and if so in what "
+                "space. \"Assumed\" means nothing in the file stated it and the "
+                "loader picked a default, which is where the override below is most likely wanted.");
 
-            if (filter.PassFilter("Alpha override"))
+            if (filter.PassFilter("Transparency override"))
             {
                 // draw_info() is only ever drawn for the current image (see the Info window)
                 const bool reloadable = hdrview()->can_reload(hdrview()->current_image());
                 string     tooltip =
-                    "Read the alpha as something other than what the file says. \"None\" treats a fourth channel "
+                    "Read the alpha channel as something other than what the file says. \"None\" treats a fourth "
+                    "channel "
                     "as ordinary data rather than transparency, so nothing is multiplied by it.\n\nThe two "
                     "premultiplied kinds differ in where the multiply happened; pick the other one for an image "
                     "whose semi-transparent areas read too dark or too bright.\n\nChanging this re-reads the "
@@ -525,13 +527,13 @@ void Image::draw_info()
 
                 ImGui::BeginDisabled(!reloadable);
                 ImGui::PE::Entry(
-                    "Alpha override",
+                    "Transparency override",
                     [this]
                     {
                         static constexpr const char *k_not_overridden = "Not overridden";
 
                         bool changed = false;
-                        if (ImGui::BeginCombo("##Alpha override",
+                        if (ImGui::BeginCombo("##Transparency override",
                                               transparency_override ? transparency_override_name(*transparency_override)
                                                                     : k_not_overridden))
                         {

@@ -496,28 +496,28 @@ private:
         const float midpoint = (1.f - m_brightness) / 2.f;
         const float bias     = (m_brightness + 1.f) / 2.f;
 
-        float linear[ImGui::ToneCurvePlot::N], curved[ImGui::ToneCurvePlot::N];
-        for (int i = 0; i < ImGui::ToneCurvePlot::N; ++i)
+        float linear[ImGui::ToneCurveSamples], curved[ImGui::ToneCurveSamples];
+        for (int i = 0; i < ImGui::ToneCurveSamples; ++i)
         {
-            const float x = ImGui::ToneCurvePlot::x(i);
+            const float x = ImGui::ToneCurveX(i);
             linear[i]     = brightness_contrast_linear(x, slope, midpoint);
             curved[i]     = brightness_contrast_nonlinear(x, slope, bias);
         }
 
-        if (!m_plot.begin("##Curve"))
+        if (!ImGui::BeginToneCurvePlot("##Curve", true))
             return;
 
         const ImVec4 active{1.f, 1.f, 1.f, 0.85f};
         const ImVec4 faint{1.f, 1.f, 1.f, 0.18f};
 
         // both are drawn whichever is in force, the inactive one faint
-        m_plot.curve("s-curve", curved, m_linear ? faint : active);
-        m_plot.curve("line", linear, m_linear ? active : faint);
+        ImGui::ToneCurve("s-curve", curved, m_linear ? faint : active);
+        ImGui::ToneCurve("line", linear, m_linear ? active : faint);
 
         // the pivot: the one input both curves send to the middle, whatever the contrast. Drawn as a
         // handle because it is also what the drag below grabs.
-        m_plot.marker_x("pivot", midpoint, ImVec4(1.f, 1.f, 1.f, 0.35f));
-        m_plot.handle(float2{midpoint, 0.5f}, ImVec4(1.f, 1.f, 1.f, 0.55f));
+        ImGui::ToneCurveMarkerX("pivot", midpoint, ImVec4(1.f, 1.f, 1.f, 0.35f));
+        ImGui::ToneCurveHandle(float2{midpoint, 0.5f}, ImVec4(1.f, 1.f, 1.f, 0.55f));
 
         /*
             Dragging does one of two things, decided by what was under the cursor when it went down. Near
@@ -527,7 +527,7 @@ private:
             The two cannot be combined: the pivot's output is one half at every contrast, so both requests
             agree only when the cursor is at one half.
         */
-        if (float2 p, from; m_plot.drag(p, &from))
+        if (float2 p, from; ImGui::ToneCurveDrag(p, &from))
         {
             if (m_dragging_pivot.value_or(std::fabs(from.x - midpoint) < 0.06f))
             {
@@ -550,7 +550,7 @@ private:
         else
             m_dragging_pivot.reset();
 
-        m_plot.end();
+        ImGui::EndToneCurvePlot();
     }
 
     /// Which of the image's qualities the curve is applied to.
@@ -563,10 +563,9 @@ private:
         Channel_COUNT
     };
 
-    float                m_brightness = 0.f, m_contrast = 0.f;
-    bool                 m_linear  = false;
-    int                  m_channel = Channel_RGB;
-    ImGui::ToneCurvePlot m_plot;
+    float m_brightness = 0.f, m_contrast = 0.f;
+    bool  m_linear  = false;
+    int   m_channel = Channel_RGB;
     /// Which of the two things the drag in progress is doing; unset between drags.
     std::optional<bool> m_dragging_pivot;
 };

@@ -77,19 +77,18 @@ public:
         const float scale = std::pow(2.f, m_exposure);
         const float inv_g = 1.f / std::max(MIN_GAMMA, m_gamma);
 
-        float ys[ImGui::ToneCurvePlot::N];
-        for (int i = 0; i < ImGui::ToneCurvePlot::N; ++i)
-            ys[i] = spow(scale * ImGui::ToneCurvePlot::x(i) + m_offset, inv_g);
+        float ys[ImGui::ToneCurveSamples];
+        for (int i = 0; i < ImGui::ToneCurveSamples; ++i) ys[i] = spow(scale * ImGui::ToneCurveX(i) + m_offset, inv_g);
 
-        if (!m_plot.begin("##Curve"))
+        if (!ImGui::BeginToneCurvePlot("##Curve"))
             return;
 
-        m_plot.curve("exposure/gamma", ys, ImVec4(1.f, 1.f, 1.f, 0.85f));
+        ImGui::ToneCurve("exposure/gamma", ys, ImVec4(1.f, 1.f, 1.f, 0.85f));
 
         // where a mid-gray input lands
-        m_plot.marker_x("mid", 0.5f, ImVec4(1.f, 1.f, 1.f, 0.25f));
+        ImGui::ToneCurveMarkerX("mid", 0.5f, ImVec4(1.f, 1.f, 1.f, 0.25f));
 
-        m_plot.end();
+        ImGui::EndToneCurvePlot();
     }
 
     void apply(const EditContext &ctx) override
@@ -108,8 +107,7 @@ public:
     }
 
 private:
-    float                m_exposure = 0.f, m_offset = 0.f, m_gamma = 1.f;
-    ImGui::ToneCurvePlot m_plot;
+    float m_exposure = 0.f, m_offset = 0.f, m_gamma = 1.f;
 };
 
 class Fill final : public EditCommand
