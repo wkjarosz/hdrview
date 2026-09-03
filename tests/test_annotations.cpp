@@ -219,3 +219,262 @@ TEST_CASE("Every shape reports a label without being given one")
         CHECK(a.display_label() == "my label");
     }
 }
+
+namespace
+{
+
+/// Image-to-screen mapping at \p s screen pixels per image pixel, as zooming the viewport gives.
+VgTransform scaled_transform(float s)
+{
+    VgTransform x;
+    x.to_screen = [s](float2 p) { return p * s; };
+    x.scale     = s;
+    return x;
+}
+
+/// A point on \p a's outline. Which point that is differs by shape, which is the whole of the difference.
+float2 point_on_outline(const Annotation &a)
+{
+    float2    h[Annotation::MaxHandles];
+    const int n = annotation_handles(a, h);
+    switch (a.shape)
+    {
+    // The midpoint of a bounding-box edge: on a rectangle's side, and on an ellipse's extreme, which is
+    // where the box touches it.
+    case Annotation::Shape::Rect:
+    case Annotation::Shape::Ellipse: return h[4];
+    case Annotation::Shape::Line:
+    case Annotation::Shape::Arrow: return (h[0] + h[1]) * 0.5f;
+    default: return a.p0; // Text is only ever its anchor
+    }
+    (void)n;
+}
+
+constexpr float k_slop = 4.f;
+
+} // namespace
+
+TEST_CASE("Every shape is picked up on its outline, and not far from it")
+{
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        const Annotation a = sample(shape);
+        const auto       x = identity_transform();
+
+        CHECK(annotation_at({a}, point_on_outline(a), x, k_slop) == 0);
+
+        // Far outside anything the fixture spans.
+        CHECK(annotation_at({a}, float2{500.f, 500.f}, x, k_slop) == -1);
+    }
+}
+
+TEST_CASE("A shape is hit through its middle only once it is filled")
+{
+    // Otherwise an unfilled outline would swallow every click inside it, and the shape behind it could
+    // never be reached.
+    for (auto shape : all_shapes())
+    {
+        // The shapes with an interior to speak of; a line's middle is the line itself.
+        if (shape != Annotation::Shape::Rect && shape != Annotation::Shape::Ellipse)
+            continue;
+
+        CAPTURE(annotation_shape_name(shape));
+
+        Annotation   a      = sample(shape);
+        const float2 middle = (a.p0 + a.p1) * 0.5f;
+        const auto   x      = identity_transform();
+
+        CHECK(annotation_at({a}, middle, x, k_slop) == -1);
+
+        a.fill_color = float4{0.f, 0.f, 1.f, 1.f};
+        CHECK(annotation_at({a}, middle, x, k_slop) == 0);
+    }
+}
+
+TEST_CASE("Every handle is found where it is drawn")
+{
+    // Hit testing and drawing read the same list, so this is really checking that the transform is applied
+    // the same way in both directions -- the one place a handle can drift from the shape it belongs to.
+    constexpr float radius = 6.f;
+
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        const Annotation a = sample(shape);
+        for (float scale : {0.5f, 1.f, 4.f})
+        {
+            CAPTURE(scale);
+            const auto x = scaled_transform(scale);
+
+            float2    h[Annotation::MaxHandles];
+            const int count = annotation_handles(a, h);
+            CHECK(count == (shape == Annotation::Shape::Text    ? 0
+                            : shape == Annotation::Shape::Line  ? 2
+                            : shape == Annotation::Shape::Arrow ? 2
+                                                                : 8));
+
+            for (int i = 0; i < count; ++i)
+            {
+                CAPTURE(i);
+                CHECK(handle_at(a, x.to_screen(h[i]), x, radius) == i);
+            }
+
+            // A point well away from every handle finds none, so the check above is not simply always
+            // returning the first one.
+            CHECK(handle_at(a, x.to_screen(float2{500.f, 500.f}), x, radius) == -1);
+        }
+    }
+}
+
+TEST_CASE("The topmost annotation is the one picked up")
+{
+    // Later annotations draw over earlier ones, so the search has to run the other way; a forward search
+    // would hand back whichever was drawn first and looks buried.
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        const Annotation under = sample(shape);
+        const Annotation over  = sample(shape);
+        const float2     p     = point_on_outline(over);
+
+        CHECK(annotation_at({under, over}, p, identity_transform(), k_slop) == 1);
+    }
+}
+
+TEST_CASE("An annotation that cannot be taken hold of is not picked up")
+{
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        const Annotation a = sample(shape);
+        const float2     p = point_on_outline(a);
+        const auto       x = identity_transform();
+
+        REQUIRE(annotation_at({a}, p, x, k_slop) == 0);
+
+        Annotation hidden = a;
+        hidden.visible    = false;
+        CHECK(annotation_at({hidden}, p, x, k_slop) == -1);
+
+        Annotation locked = a;
+        locked.locked     = true;
+        CHECK(annotation_at({locked}, p, x, k_slop) == -1);
+
+        // ...and one of those in front does not shield the one behind it.
+        CHECK(annotation_at({a, hidden}, p, x, k_slop) == 0);
+    }
+}
+
+TEST_CASE("How easy a shape is to hit does not change with zoom")
+{
+    // Slop and stroke width are screen quantities, like the stroke itself, so the same miss by a few
+    // screen pixels has to land the same way however far the image is zoomed in.
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        const Annotation a = sample(shape);
+
+        for (float scale : {0.25f, 1.f, 8.f})
+        {
+            CAPTURE(scale);
+            const auto   x  = scaled_transform(scale);
+            const float2 on = x.to_screen(point_on_outline(a));
+
+            // Just inside the tolerance the stroke and slop together allow, and well outside it.
+            const float tol = k_slop + a.stroke_width * 0.5f;
+            CHECK(annotation_at({a}, on + float2{0.f, tol - 1.f}, x, k_slop) == 0);
+            CHECK(annotation_at({a}, on + float2{0.f, 4.f * tol}, x, k_slop) == -1);
+        }
+    }
+}
+
+TEST_CASE("A dragged handle follows the cursor, in the directions it is free to move")
+{
+    // Corners and endpoints take both of the cursor's coordinates; an edge midpoint takes only the one
+    // across the edge it sits on, and stays centered along it.
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        float2    h[Annotation::MaxHandles];
+        const int count = annotation_handles(sample(shape), h);
+
+        for (int i = 0; i < count; ++i)
+        {
+            CAPTURE(i);
+
+            // Small enough not to drag anything past the far side, which is the next test's business.
+            const float2 delta{5.f, 3.f};
+
+            Annotation a = sample(shape);
+            move_annotation_handle(a, i, h[i] + delta);
+
+            float2 after[Annotation::MaxHandles];
+            annotation_handles(a, after);
+
+            const bool free_x = i < 4 || i == 5 || i == 7;
+            const bool free_y = i < 4 || i == 4 || i == 6;
+            CHECK(after[i].x == doctest::Approx(h[i].x + (free_x ? delta.x : 0.f)));
+            CHECK(after[i].y == doctest::Approx(h[i].y + (free_y ? delta.y : 0.f)));
+        }
+    }
+}
+
+TEST_CASE("A corner dragged past the opposite one turns the shape inside out rather than sticking")
+{
+    const auto      x      = identity_transform();
+    constexpr float radius = 6.f;
+
+    for (auto shape : {Annotation::Shape::Rect, Annotation::Shape::Ellipse})
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        Annotation a = sample(shape);
+        float2     h[Annotation::MaxHandles];
+        annotation_handles(a, h);
+
+        // Handle 0 is the low corner; this drags it well beyond the high one.
+        const float2 to = h[2] + float2{50.f, 40.f};
+        move_annotation_handle(a, 0, to);
+
+        // The shape comes back ordered, so everything downstream can still read p0 as the low corner...
+        CHECK(a.p0.x <= a.p1.x);
+        CHECK(a.p0.y <= a.p1.y);
+
+        // ...and the cursor is still holding a corner of it, rather than having let go at the crossing.
+        CHECK(handle_at(a, x.to_screen(to), x, radius) >= 0);
+    }
+}
+
+TEST_CASE("Dragging one handle leaves the opposite side of the shape alone")
+{
+    // A resize pivots about the side you are not holding. Were the shape re-centered or re-ordered
+    // wrongly, this is what would move.
+    for (auto shape : {Annotation::Shape::Rect, Annotation::Shape::Ellipse})
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        const Annotation before = sample(shape);
+        float2           h0[Annotation::MaxHandles];
+        annotation_handles(before, h0);
+
+        // Handle 0 is the low corner, so handle 2, the high one, is what must not move.
+        Annotation a = before;
+        move_annotation_handle(a, 0, float2{0.f, 5.f});
+
+        float2 h1[Annotation::MaxHandles];
+        annotation_handles(a, h1);
+        CHECK(h1[2].x == doctest::Approx(h0[2].x));
+        CHECK(h1[2].y == doctest::Approx(h0[2].y));
+
+        // And the corner that was dragged did move, so the check above is not comparing two unchanged
+        // shapes.
+        CHECK(length(h1[0] - h0[0]) > 1.f);
+    }
+}

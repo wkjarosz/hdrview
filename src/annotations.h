@@ -83,6 +83,9 @@ struct Annotation
 
     /// What the panel's row shows: the label, else the text, else the shape's name.
     std::string display_label() const;
+
+    /// The most handles any shape shows: a rectangle's four corners and four edge midpoints.
+    static constexpr int MaxHandles = 8;
 };
 
 /// Human-readable name for \p shape, as the panel and the shape picker show it.
@@ -100,3 +103,30 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
 
 /// Flatten every visible annotation of \p annotations, in order, so later ones draw over earlier ones.
 std::vector<VgCommand> to_vg_commands(const std::vector<Annotation> &annotations, float scale);
+
+/// Where \p a's handles sit, in image coordinates; returns how many were written to \p out.
+/**
+    Rect and Ellipse report four corners, in the order (lo, hi.x/lo.y, hi, lo.x/hi.y), then the midpoints of
+    the edges leading away from each. Line and Arrow report their two endpoints, and Text none: it can be
+    moved but has nothing to resize. Drawing and hit testing both read this, so they cannot disagree about
+    where a handle is.
+*/
+int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles]);
+
+/// Index of the handle of \p a within \p radius of \p screen_pos, or -1 if none is.
+int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius);
+
+/// Move \p a's handle \p index to \p to, both in image coordinates.
+/**
+    A corner or edge dragged past its opposite turns the shape inside out rather than stopping, which is
+    what a rubber-band resize is expected to do; the shape is re-ordered afterwards, so its handles are
+    where the cursor left them.
+*/
+void move_annotation_handle(Annotation &a, int index, float2 to);
+
+/// Index of the annotation under \p screen_pos, searched front to back so the topmost wins, or -1.
+/**
+    \p slop widens every shape by that many screen pixels, so a thin line can still be picked up. Invisible
+    and locked annotations are skipped: neither can be taken hold of.
+*/
+int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos, const VgTransform &xform, float slop);

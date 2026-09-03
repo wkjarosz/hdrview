@@ -177,3 +177,175 @@ std::vector<VgCommand> to_vg_commands(const std::vector<Annotation> &annotations
             append_vg_commands(out, a, scale);
     return out;
 }
+
+namespace
+{
+
+/// Distance from \p p to the segment \p a -- \p b, all in the same space.
+float distance_to_segment(float2 p, float2 a, float2 b)
+{
+    const float2 along = b - a;
+    const float  len2  = dot(along, along);
+    if (len2 <= 0.f)
+        return length(p - a);
+    const float t = std::clamp(dot(p - a, along) / len2, 0.f, 1.f);
+    return length(p - (a + along * t));
+}
+
+/// \p a's two defining points, in screen coordinates and ordered so lo is the lower corner.
+void screen_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &hi)
+{
+    const float2 s0 = xform.to_screen(a.p0), s1 = xform.to_screen(a.p1);
+    lo = float2{std::min(s0.x, s1.x), std::min(s0.y, s1.y)};
+    hi = float2{std::max(s0.x, s1.x), std::max(s0.y, s1.y)};
+}
+
+} // namespace
+
+int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles])
+{
+    switch (a.shape)
+    {
+    case Annotation::Shape::Rect:
+    case Annotation::Shape::Ellipse:
+    {
+        const float2 lo{std::min(a.p0.x, a.p1.x), std::min(a.p0.y, a.p1.y)};
+        const float2 hi{std::max(a.p0.x, a.p1.x), std::max(a.p0.y, a.p1.y)};
+        out[0] = lo;
+        out[1] = float2{hi.x, lo.y};
+        out[2] = hi;
+        out[3] = float2{lo.x, hi.y};
+        for (int i = 0; i < 4; ++i) out[4 + i] = (out[i] + out[(i + 1) % 4]) * 0.5f;
+        return 8;
+    }
+
+    case Annotation::Shape::Line:
+    case Annotation::Shape::Arrow:
+        out[0] = a.p0;
+        out[1] = a.p1;
+        return 2;
+
+    default: return 0;
+    }
+}
+
+int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius)
+{
+    float2    handles[Annotation::MaxHandles];
+    const int count = annotation_handles(a, handles);
+    for (int i = 0; i < count; ++i)
+        if (length(xform.to_screen(handles[i]) - screen_pos) <= radius)
+            return i;
+    return -1;
+}
+
+int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos, const VgTransform &xform, float slop)
+{
+    for (int i = int(annotations.size()) - 1; i >= 0; --i)
+    {
+        const Annotation &a = annotations[size_t(i)];
+        if (!a.visible || a.locked)
+            continue;
+
+        // The stroke straddles the outline, so half of it widens the target along with the slop.
+        const float tol    = slop + a.stroke_width * 0.5f;
+        const bool  filled = a.fill_color.w > 0.f;
+
+        switch (a.shape)
+        {
+        case Annotation::Shape::Rect:
+        {
+            float2 lo, hi;
+            screen_extent(a, xform, lo, hi);
+            if (filled && screen_pos.x >= lo.x - tol && screen_pos.x <= hi.x + tol && screen_pos.y >= lo.y - tol &&
+                screen_pos.y <= hi.y + tol)
+                return i;
+
+            const float2 corners[4] = {lo, {hi.x, lo.y}, hi, {lo.x, hi.y}};
+            for (int c = 0; c < 4; ++c)
+                if (distance_to_segment(screen_pos, corners[c], corners[(c + 1) % 4]) <= tol)
+                    return i;
+        }
+        break;
+
+        case Annotation::Shape::Ellipse:
+        {
+            float2 lo, hi;
+            screen_extent(a, xform, lo, hi);
+            const float2 center = (lo + hi) * 0.5f;
+            const float2 radii  = (hi - lo) * 0.5f;
+
+            // A degenerate axis has no interior to speak of, so it is treated as the segment it looks like.
+            if (radii.x <= 0.f || radii.y <= 0.f)
+            {
+                if (distance_to_segment(screen_pos, lo, hi) <= tol)
+                    return i;
+                break;
+            }
+
+            // Normalized radius, turned back into a screen distance by the smaller semi-axis: exact on a
+            // circle, and close enough on an ellipse that the outline stays as easy to hit as a rectangle's.
+            const float2 d      = (screen_pos - center) / radii;
+            const float  radial = length(d);
+            if (filled && radial <= 1.f)
+                return i;
+            if (std::abs(radial - 1.f) * std::min(radii.x, radii.y) <= tol)
+                return i;
+        }
+        break;
+
+        case Annotation::Shape::Line:
+        case Annotation::Shape::Arrow:
+            if (distance_to_segment(screen_pos, xform.to_screen(a.p0), xform.to_screen(a.p1)) <= tol)
+                return i;
+            break;
+
+        case Annotation::Shape::Text:
+            // Only the anchor: the glyphs' extent depends on a font this cannot reach.
+            if (length(xform.to_screen(a.p0) - screen_pos) <= std::max(tol, a.font_size * 0.5f))
+                return i;
+            break;
+
+        default: break;
+        }
+    }
+    return -1;
+}
+
+void move_annotation_handle(Annotation &a, int index, float2 to)
+{
+    if (a.shape == Annotation::Shape::Line || a.shape == Annotation::Shape::Arrow)
+    {
+        if (index == 0)
+            a.p0 = to;
+        else if (index == 1)
+            a.p1 = to;
+        return;
+    }
+
+    if (a.shape != Annotation::Shape::Rect && a.shape != Annotation::Shape::Ellipse)
+        return;
+
+    float2 lo{std::min(a.p0.x, a.p1.x), std::min(a.p0.y, a.p1.y)};
+    float2 hi{std::max(a.p0.x, a.p1.x), std::max(a.p0.y, a.p1.y)};
+
+    // Corners move both of their edges; the midpoints that follow them move only the edge they sit on, in
+    // the order annotation_handles() lays them out.
+    switch (index)
+    {
+    case 0: lo = to; break;
+    case 1: hi.x = to.x, lo.y = to.y; break;
+    case 2: hi = to; break;
+    case 3: lo.x = to.x, hi.y = to.y; break;
+    case 4: lo.y = to.y; break;
+    case 5: hi.x = to.x; break;
+    case 6: hi.y = to.y; break;
+    case 7: lo.x = to.x; break;
+    default: return;
+    }
+
+    // A drag past the far side leaves lo above hi; ordering them here keeps p0 the low corner, which is
+    // what every reader of a Rect or Ellipse assumes.
+    a.p0 = float2{std::min(lo.x, hi.x), std::min(lo.y, hi.y)};
+    a.p1 = float2{std::max(lo.x, hi.x), std::max(lo.y, hi.y)};
+}
