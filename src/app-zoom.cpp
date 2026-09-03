@@ -263,6 +263,154 @@ static float2 scroll_units(float2 wheel)
     return discrete ? wheel * k_units_per_notch : wheel;
 }
 
+int HDRViewApp::active_annotation() const
+{
+    auto img = current_image();
+    if (!img || m_active_annotation_on != img || m_active_annotation < 0 ||
+        m_active_annotation >= int(img->annotations.size()))
+        return -1;
+    return m_active_annotation;
+}
+
+void HDRViewApp::set_active_annotation(int index)
+{
+    m_active_annotation    = index;
+    m_active_annotation_on = index < 0 ? nullptr : current_image();
+}
+
+void HDRViewApp::cancel_annotation_drag()
+{
+    const int active = active_annotation();
+    if (active >= 0)
+    {
+        if (m_annotation_drag == AnnotationDrag::Creating)
+        {
+            m_active_annotation_on->annotations.erase(m_active_annotation_on->annotations.begin() + active);
+            set_active_annotation(-1);
+        }
+        else if (m_annotation_drag != AnnotationDrag::None)
+            m_active_annotation_on->annotations[size_t(active)] = m_annotation_drag_start;
+    }
+
+    m_annotation_drag        = AnnotationDrag::None;
+    m_annotation_drag_handle = -1;
+}
+
+void HDRViewApp::handle_annotate_tool()
+{
+    auto  img = current_image();
+    auto &io  = ImGui::GetIO();
+
+    // A drag whose image is no longer current is abandoned, half-drawn shape and all, rather than carried
+    // on over whatever playback or a close has put in its place.
+    if (m_annotation_drag != AnnotationDrag::None && m_active_annotation_on != img)
+    {
+        const auto held    = m_active_annotation_on;
+        const int  index   = m_active_annotation;
+        const bool partial = m_annotation_drag == AnnotationDrag::Creating;
+        if (held && partial && index >= 0 && index < int(held->annotations.size()))
+            held->annotations.erase(held->annotations.begin() + index);
+
+        m_annotation_drag = AnnotationDrag::None;
+        set_active_annotation(-1);
+    }
+
+    if (m_annotation_drag != AnnotationDrag::None && ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+        cancel_annotation_drag();
+        return;
+    }
+
+    // Slop and handle radius are screen quantities, like everything else about how an annotation looks.
+    const float slop   = 0.25f * HelloImGui::EmSize();
+    const float radius = 0.3f * HelloImGui::EmSize();
+
+    auto        &list  = img->annotations;
+    const float2 pixel = pixel_at_app_pos(io.MousePos);
+
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        const auto xform  = viewport_transform();
+        const int  active = active_annotation();
+
+        // Handles of the annotation already in hand come first: they are drawn over everything, and often
+        // lie over a neighbor that would otherwise take the click.
+        if (active >= 0)
+            if (const int h = handle_at(list[size_t(active)], io.MousePos, xform, radius); h >= 0)
+            {
+                m_annotation_drag        = AnnotationDrag::Resizing;
+                m_annotation_drag_handle = h;
+                m_annotation_drag_start  = list[size_t(active)];
+                return;
+            }
+
+        if (const int i = annotation_at(list, io.MousePos, xform, slop); i >= 0)
+        {
+            set_active_annotation(i);
+            m_annotation_drag       = AnnotationDrag::Moving;
+            m_annotation_drag_start = list[size_t(i)];
+            m_annotation_grab       = pixel;
+            return;
+        }
+
+        // Empty space draws a new one, this being a drawing tool; the pan tool and a scroll still move the
+        // view. A click that never becomes a drag is undone on release, which is how clicking away clears
+        // the selection.
+        Annotation a = m_annotation_style;
+        a.shape      = m_annotation_shape;
+        a.p0 = a.p1 = pixel;
+        list.push_back(a);
+        set_active_annotation(int(list.size()) - 1);
+        m_annotation_drag       = AnnotationDrag::Creating;
+        m_annotation_drag_start = a;
+        return;
+    }
+
+    const int active = active_annotation();
+    if (m_annotation_drag == AnnotationDrag::None || active < 0)
+        return;
+
+    Annotation &a = list[size_t(active)];
+
+    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+    {
+        switch (m_annotation_drag)
+        {
+        case AnnotationDrag::Creating: a.p1 = pixel; break;
+
+        case AnnotationDrag::Moving:
+        {
+            // Against the annotation as it was at mouse-down, so a move never accumulates rounding.
+            const float2 delta = pixel - m_annotation_grab;
+            a.p0               = m_annotation_drag_start.p0 + delta;
+            a.p1               = m_annotation_drag_start.p1 + delta;
+        }
+        break;
+
+        case AnnotationDrag::Resizing:
+            // Dragging a corner past its opposite renumbers the handles, so the drag follows the index
+            // back rather than keeping hold of a corner that has moved out from under the cursor.
+            m_annotation_drag_handle = move_annotation_handle(a, m_annotation_drag_handle, pixel);
+            break;
+
+        default: break;
+        }
+    }
+    else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    {
+        // A click that never became a drag leaves nothing behind, rather than a shape with no extent that
+        // is invisible and cannot be taken hold of again.
+        if (m_annotation_drag == AnnotationDrag::Creating && a.p0 == a.p1)
+        {
+            list.pop_back();
+            set_active_annotation(-1);
+        }
+
+        m_annotation_drag        = AnnotationDrag::None;
+        m_annotation_drag_handle = -1;
+    }
+}
+
 void HDRViewApp::handle_mouse_interaction()
 {
     auto &io = ImGui::GetIO();
@@ -299,44 +447,7 @@ void HDRViewApp::handle_mouse_interaction()
             m_roi = m_roi_live;
     }
     else if (m_mouse_mode == MouseMode_Annotate)
-    {
-        auto img = current_image();
-
-        // A drag whose image is no longer current takes its half-drawn shape with it.
-        if (m_creating_annotation_on && m_creating_annotation_on != img)
-        {
-            if (!m_creating_annotation_on->annotations.empty())
-                m_creating_annotation_on->annotations.pop_back();
-            m_creating_annotation_on = nullptr;
-        }
-
-        if (m_creating_annotation_on && ImGui::IsKeyPressed(ImGuiKey_Escape))
-        {
-            img->annotations.pop_back();
-            m_creating_annotation_on = nullptr;
-        }
-        else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-        {
-            // Appended at once and grown in place, so the drag previews itself through the drawing path
-            // that will show it afterwards.
-            Annotation a = m_annotation_style;
-            a.shape      = m_annotation_shape;
-            a.p0 = a.p1 = pixel_at_app_pos(io.MousePos);
-            img->annotations.push_back(a);
-            m_creating_annotation_on = img;
-        }
-        else if (m_creating_annotation_on && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-            img->annotations.back().p1 = pixel_at_app_pos(io.MousePos);
-        else if (m_creating_annotation_on && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-        {
-            // A click that never became a drag leaves nothing behind, rather than a shape with no extent
-            // that is invisible and cannot be taken hold of again.
-            const auto &a = img->annotations.back();
-            if (a.p0 == a.p1)
-                img->annotations.pop_back();
-            m_creating_annotation_on = nullptr;
-        }
-    }
+        handle_annotate_tool();
     else if (m_mouse_mode == MouseMode_ColorInspector)
     {
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))

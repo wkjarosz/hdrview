@@ -116,13 +116,13 @@ int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles]);
 /// Index of the handle of \p a within \p radius of \p screen_pos, or -1 if none is.
 int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius);
 
-/// Move \p a's handle \p index to \p to, both in image coordinates.
+/// Move \p a's handle \p index to \p to, both in image coordinates; returns that handle's index afterwards.
 /**
     A corner or edge dragged past its opposite turns the shape inside out rather than stopping, which is
-    what a rubber-band resize is expected to do; the shape is re-ordered afterwards, so its handles are
-    where the cursor left them.
+    what a rubber-band resize is expected to do. That re-orders the shape, and so renumbers its handles,
+    which is why the index comes back: a drag held across the crossing has to keep hold of the same corner.
 */
-void move_annotation_handle(Annotation &a, int index, float2 to);
+int move_annotation_handle(Annotation &a, int index, float2 to);
 
 /// Index of the annotation under \p screen_pos, searched front to back so the topmost wins, or -1.
 /**

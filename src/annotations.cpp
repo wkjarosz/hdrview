@@ -312,7 +312,7 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
     return -1;
 }
 
-void move_annotation_handle(Annotation &a, int index, float2 to)
+int move_annotation_handle(Annotation &a, int index, float2 to)
 {
     if (a.shape == Annotation::Shape::Line || a.shape == Annotation::Shape::Arrow)
     {
@@ -320,11 +320,11 @@ void move_annotation_handle(Annotation &a, int index, float2 to)
             a.p0 = to;
         else if (index == 1)
             a.p1 = to;
-        return;
+        return index; // an endpoint is an endpoint however the line is turned around
     }
 
     if (a.shape != Annotation::Shape::Rect && a.shape != Annotation::Shape::Ellipse)
-        return;
+        return index;
 
     float2 lo{std::min(a.p0.x, a.p1.x), std::min(a.p0.y, a.p1.y)};
     float2 hi{std::max(a.p0.x, a.p1.x), std::max(a.p0.y, a.p1.y)};
@@ -341,11 +341,31 @@ void move_annotation_handle(Annotation &a, int index, float2 to)
     case 5: hi.x = to.x; break;
     case 6: hi.y = to.y; break;
     case 7: lo.x = to.x; break;
-    default: return;
+    default: return index;
     }
 
     // A drag past the far side leaves lo above hi; ordering them here keeps p0 the low corner, which is
     // what every reader of a Rect or Ellipse assumes.
+    const bool flip_x = lo.x > hi.x, flip_y = lo.y > hi.y;
     a.p0 = float2{std::min(lo.x, hi.x), std::min(lo.y, hi.y)};
     a.p1 = float2{std::max(lo.x, hi.x), std::max(lo.y, hi.y)};
+
+    // Which is to say the corner the cursor is holding has been renumbered: a horizontal flip exchanges
+    // left with right, a vertical one top with bottom, and the edge midpoints follow their edges.
+    static constexpr int mirrored_x[4] = {1, 0, 3, 2}, mirrored_y[4] = {3, 2, 1, 0};
+    if (index < 4)
+    {
+        if (flip_x)
+            index = mirrored_x[index];
+        if (flip_y)
+            index = mirrored_y[index];
+    }
+    else
+    {
+        if (flip_y && (index == 4 || index == 6))
+            index = index == 4 ? 6 : 4;
+        if (flip_x && (index == 5 || index == 7))
+            index = index == 5 ? 7 : 5;
+    }
+    return index;
 }

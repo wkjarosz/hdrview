@@ -798,6 +798,16 @@ private:
     float2         m_viewport_min, m_viewport_size;
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
+    /// Index of the annotation being worked on, or -1 when none on the current image is.
+    int  active_annotation() const;
+    void set_active_annotation(int index);
+    /// Everything a drag was doing is undone, and the annotation put back as it was.
+    void cancel_annotation_drag();
+    /// Create, move and resize annotations; called from handle_mouse_interaction() for the annotate tool.
+    void handle_annotate_tool();
+    /// Where the image is on screen and how big, as both the overlay and hit testing need it.
+    VgTransform viewport_transform() const;
+
     MouseMode m_mouse_mode = MouseMode_PanZoom;
     /// Selected state of each tool action, kept in sync with m_mouse_mode by set_mouse_mode().
     /**
@@ -808,12 +818,28 @@ private:
     /// Which shape the annotate tool draws, and the look every new annotation starts with.
     Annotation::Shape m_annotation_shape = Annotation::Shape::Rect;
     Annotation        m_annotation_style;
-    /// The image an in-progress drag is drawing on, null when no annotation is being created.
+
+    /// The annotation being worked on, and the image whose list that index refers to.
     /**
-        Held rather than a bool so a drag that outlives its image -- playback advancing a frame, or the
-        image being closed -- is abandoned instead of continued on whatever is current by then.
+        The two travel together because an index alone means nothing once the current image changes;
+        active_annotation() hands back -1 unless they still agree. Called active rather than selected,
+        which in this class already means the rectangular ROI and the channel-group selection both.
     */
-    ImagePtr m_creating_annotation_on;
+    ImagePtr m_active_annotation_on;
+    int      m_active_annotation = -1;
+
+    /// What a drag with the annotate tool is doing to the active annotation.
+    enum class AnnotationDrag
+    {
+        None,
+        Creating,
+        Moving,
+        Resizing
+    };
+    AnnotationDrag m_annotation_drag        = AnnotationDrag::None;
+    int            m_annotation_drag_handle = -1;
+    Annotation     m_annotation_drag_start; ///< As it was at mouse-down, so Escape can put it back
+    float2         m_annotation_grab{0.f};  ///< Where in the image the drag began, for a move
 
     HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
 

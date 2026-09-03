@@ -201,13 +201,8 @@ void HDRViewApp::draw_image_border() const
     }
 }
 
-void HDRViewApp::draw_vector_overlays() const
+VgTransform HDRViewApp::viewport_transform() const
 {
-    // The current image and, when one is set, the reference: a renderer can annotate either, so they get
-    // different default colors, matching tev's.
-    const std::pair<ConstImagePtr, ImU32> targets[] = {{current_image(), IM_COL32(255, 255, 255, 200)},
-                                                       {reference_image(), IM_COL32(255, 128, 0, 200)}};
-
     VgTransform xform;
     xform.to_screen = [this](float2 p) { return app_pos_at_pixel(p); };
     // Screen pixels per image pixel, read off the transform itself; abs() because a flip mirrors the
@@ -225,6 +220,17 @@ void HDRViewApp::draw_vector_overlays() const
             return font("mono bold");
         return font("sans regular");
     };
+    return xform;
+}
+
+void HDRViewApp::draw_vector_overlays() const
+{
+    // The current image and, when one is set, the reference: a renderer can annotate either, so they get
+    // different default colors, matching tev's.
+    const std::pair<ConstImagePtr, ImU32> targets[] = {{current_image(), IM_COL32(255, 255, 255, 200)},
+                                                       {reference_image(), IM_COL32(255, 128, 0, 200)}};
+
+    const VgTransform xform = viewport_transform();
 
     auto unsupported = [](const char *what)
     {
@@ -268,6 +274,23 @@ void HDRViewApp::draw_tool_decorations() const
 
     ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 18.f / 14.f);
 
+    // The handles of the annotation being worked on, drawn over everything so they can be picked up even
+    // where the shape runs under another. White on black reads over any image.
+    if (const int active = active_annotation(); active >= 0 && m_draw_annotations)
+    {
+        const auto  xform  = viewport_transform();
+        const float radius = 0.3f * HelloImGui::EmSize();
+
+        float2    handles[Annotation::MaxHandles];
+        const int count = annotation_handles(current_image()->annotations[size_t(active)], handles);
+        for (int i = 0; i < count; ++i)
+        {
+            const float2 at = xform.to_screen(handles[i]);
+            draw_list->AddRectFilled(at - radius, at + radius, IM_COL32_WHITE);
+            draw_list->AddRect(at - radius, at + radius, IM_COL32_BLACK);
+        }
+    }
+
     float2 pos = ImGui::GetIO().MousePos;
     if (m_mouse_mode == MouseMode_RectangularSelection)
     {
@@ -279,6 +302,12 @@ void HDRViewApp::draw_tool_decorations() const
     {
         // draw pixel watcher indicator
         ImGui::DrawCrosshairs(draw_list, pos + int2{18}, " +");
+    }
+    else if (m_mouse_mode == MouseMode_Annotate)
+    {
+        // draw annotate indicator
+        ImGui::AddTextAligned(draw_list, pos + int2{18} + int2{1, 1}, IM_COL32_BLACK, ICON_MY_ANNOTATE, {0.5f, 0.5f});
+        ImGui::AddTextAligned(draw_list, pos + int2{18}, IM_COL32_WHITE, ICON_MY_ANNOTATE, {0.5f, 0.5f});
     }
 
     ImGui::PopFont();

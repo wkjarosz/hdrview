@@ -1327,14 +1327,14 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    0,
                    [this]()
                    {
-                       if (auto img = current_image(); img && !img->annotations.empty())
-                           img->annotations.pop_back();
+                       if (const int i = active_annotation(); i >= 0)
+                       {
+                           auto img = current_image();
+                           img->annotations.erase(img->annotations.begin() + i);
+                           set_active_annotation(-1);
+                       }
                    },
-                   [this]()
-                   {
-                       auto img = current_image();
-                       return img && !img->annotations.empty();
-                   }});
+                   [this]() { return active_annotation() >= 0; }});
 
         // below actions are only available if there is an image
 

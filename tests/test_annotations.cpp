@@ -478,3 +478,46 @@ TEST_CASE("Dragging one handle leaves the opposite side of the shape alone")
         CHECK(length(h1[0] - h0[0]) > 1.f);
     }
 }
+
+TEST_CASE("A handle held across the far side keeps its grip")
+{
+    // Dragging a corner past its opposite renumbers the handles. If the index did not come back renumbered,
+    // a drag held through the crossing would let go and start moving a different corner, and the shape
+    // would jump. Each step here continues the drag from the index the last one returned.
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        float2    h[Annotation::MaxHandles];
+        const int count = annotation_handles(sample(shape), h);
+
+        for (int i = 0; i < count; ++i)
+        {
+            CAPTURE(i);
+
+            Annotation a     = sample(shape);
+            int        index = i;
+
+            // Out well past the opposite side, back through it, and out the other way again.
+            for (float2 to : {float2{300.f, 250.f}, float2{-200.f, -150.f}, float2{60.f, 45.f}})
+            {
+                CAPTURE(to.x);
+                index = move_annotation_handle(a, index, to);
+                REQUIRE(index >= 0);
+                REQUIRE(index < count);
+
+                float2 after[Annotation::MaxHandles];
+                annotation_handles(a, after);
+
+                // The handle now named by that index is the one the cursor is holding: it tracks the
+                // cursor in whichever directions it is free to move.
+                const bool free_x = index < 4 || index == 5 || index == 7;
+                const bool free_y = index < 4 || index == 4 || index == 6;
+                if (free_x)
+                    CHECK(after[index].x == doctest::Approx(to.x));
+                if (free_y)
+                    CHECK(after[index].y == doctest::Approx(to.y));
+            }
+        }
+    }
+}
