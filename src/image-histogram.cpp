@@ -31,14 +31,7 @@ struct ClipWarningToggles
 /// Index of a group's alpha channel, or -1 if it has none. Alpha is always the group's last channel.
 static int alpha_channel_index(const ChannelGroup &group)
 {
-    switch (group.type)
-    {
-    case ChannelGroup::RGBA_Channels:
-    case ChannelGroup::XYZA_Channels:
-    case ChannelGroup::YCA_Channels:
-    case ChannelGroup::YA_Channels: return group.num_channels - 1;
-    default: return -1;
-    }
+    return group_has_alpha(group.type) ? group.num_channels - 1 : -1;
 }
 
 /**
@@ -374,7 +367,7 @@ static void draw_display_range_extents(const Box1d &sdr_x, double ceiling_x, boo
 static void draw_display_ceiling_line(double ceiling_x, bool dimmed)
 {
     // Raw ImDrawList calls aren't clipped to the data rectangle on their own, same as the additive fill
-    // and the CIE diagram elsewhere in this file.
+    // below and the CIE diagram in image-colorspace-gui.cpp.
     ImPlot::PushPlotClipRect();
     const ImVec2 plot_pos  = ImPlot::GetPlotPos();
     const ImVec2 plot_size = ImPlot::GetPlotSize();

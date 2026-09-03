@@ -19,8 +19,6 @@
 #include "image.h"
 #include "imgui_ext.h"
 
-#include "edit/tone_plot.h"
-
 #include <hello_imgui/hello_imgui.h>
 
 #include <cmath>
@@ -79,8 +77,9 @@ public:
         const float scale = std::pow(2.f, m_exposure);
         const float inv_g = 1.f / std::max(MIN_GAMMA, m_gamma);
 
-        float ys[ToneCurvePlot::N];
-        for (int i = 0; i < ToneCurvePlot::N; ++i) ys[i] = spow(scale * ToneCurvePlot::x(i) + m_offset, inv_g);
+        float ys[ImGui::ToneCurvePlot::N];
+        for (int i = 0; i < ImGui::ToneCurvePlot::N; ++i)
+            ys[i] = spow(scale * ImGui::ToneCurvePlot::x(i) + m_offset, inv_g);
 
         if (!m_plot.begin("##Curve"))
             return;
@@ -109,8 +108,8 @@ public:
     }
 
 private:
-    float         m_exposure = 0.f, m_offset = 0.f, m_gamma = 1.f;
-    ToneCurvePlot m_plot;
+    float                m_exposure = 0.f, m_offset = 0.f, m_gamma = 1.f;
+    ImGui::ToneCurvePlot m_plot;
 };
 
 class Fill final : public EditCommand

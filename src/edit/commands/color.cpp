@@ -18,8 +18,6 @@
 #include "image.h"
 #include "imgui_ext.h"
 
-#include "edit/tone_plot.h"
-
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -498,10 +496,10 @@ private:
         const float midpoint = (1.f - m_brightness) / 2.f;
         const float bias     = (m_brightness + 1.f) / 2.f;
 
-        float linear[ToneCurvePlot::N], curved[ToneCurvePlot::N];
-        for (int i = 0; i < ToneCurvePlot::N; ++i)
+        float linear[ImGui::ToneCurvePlot::N], curved[ImGui::ToneCurvePlot::N];
+        for (int i = 0; i < ImGui::ToneCurvePlot::N; ++i)
         {
-            const float x = ToneCurvePlot::x(i);
+            const float x = ImGui::ToneCurvePlot::x(i);
             linear[i]     = brightness_contrast_linear(x, slope, midpoint);
             curved[i]     = brightness_contrast_nonlinear(x, slope, bias);
         }
@@ -565,10 +563,10 @@ private:
         Channel_COUNT
     };
 
-    float         m_brightness = 0.f, m_contrast = 0.f;
-    bool          m_linear  = false;
-    int           m_channel = Channel_RGB;
-    ToneCurvePlot m_plot;
+    float                m_brightness = 0.f, m_contrast = 0.f;
+    bool                 m_linear  = false;
+    int                  m_channel = Channel_RGB;
+    ImGui::ToneCurvePlot m_plot;
     /// Which of the two things the drag in progress is doing; unset between drags.
     std::optional<bool> m_dragging_pivot;
 };

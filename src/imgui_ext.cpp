@@ -7,6 +7,7 @@
 #include "imgui_internal.h"
 #include "spdlog/pattern_formatter.h"
 #include <hello_imgui/dpi_aware.h>
+#include <implot.h>
 
 #include "app.h"
 
@@ -1379,6 +1380,109 @@ void PE::WrappedText(const string &property_name, const string &value, const str
         },
         tooltip);
     ImGui::PopStyleVar();
+}
+
+} // namespace ImGui
+
+namespace ImGui
+{
+
+bool ToneCurvePlot::begin(const char *id)
+{
+    // as wide as the sliders beneath it. The tick labels take more width at the left than height at
+    // the bottom, so the height carries a correction measured from the last frame; see end().
+    m_width = ImGui::CalcItemWidth();
+
+    if (!ImPlot::BeginPlot(id, ImVec2(m_width, m_width + m_extra_height),
+                           ImPlotFlags_NoTitle | ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect))
+        return false;
+
+    const ImPlotAxisFlags axes = ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_Lock;
+    ImPlot::SetupAxes(nullptr, nullptr, axes, axes);
+
+    // the same ticks both ways, since both axes carry a level
+    ImPlot::SetupAxisTicks(ImAxis_X1, 0.0, 1.0, 5);
+    ImPlot::SetupAxisTicks(ImAxis_Y1, 0.0, 1.0, 5);
+
+    // fixed, so a steep curve is seen leaving the top and bottom instead of the frame following it
+    ImPlot::SetupAxesLimits(0.0, 1.0, 0.0, 1.0, ImPlotCond_Always);
+    return true;
+}
+
+void ToneCurvePlot::curve(const char *name, const float *ys, ImVec4 color, float weight)
+{
+    float xs[N];
+    for (int i = 0; i < N; ++i) xs[i] = x(i);
+
+    ImPlotSpec spec;
+    spec.LineWeight = weight;
+    spec.LineColor  = color;
+    ImPlot::PlotLine(name, xs, ys, N, spec);
+}
+
+void ToneCurvePlot::marker_x(const char *name, float value, ImVec4 color)
+{
+    const float xs[2] = {value, value};
+    const float ys[2] = {0.f, 1.f};
+
+    ImPlotSpec spec;
+    spec.LineWeight = 1.f;
+    spec.LineColor  = color;
+    ImPlot::PlotLine(name, xs, ys, 2, spec);
+}
+
+void ToneCurvePlot::handle(float2 at, ImVec4 color)
+{
+    const float xs[1] = {at.x};
+    const float ys[1] = {at.y};
+
+    ImPlotSpec spec;
+    spec.Marker          = ImPlotMarker_Circle;
+    spec.MarkerSize      = 4.f;
+    spec.MarkerFillColor = color;
+    spec.MarkerLineColor = color;
+    ImPlot::PlotScatter("handle", xs, ys, 1, spec);
+}
+
+bool ToneCurvePlot::drag(float2 &position, float2 *pressed_at)
+{
+    auto here = []
+    {
+        const ImPlotPoint p = ImPlot::GetPlotMousePos();
+        return float2{std::clamp(float(p.x), 0.f, 1.f), std::clamp(float(p.y), 0.f, 1.f)};
+    };
+
+    if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        m_dragging = true;
+        m_press    = here();
+    }
+
+    if (!m_dragging)
+        return false;
+
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        m_dragging = false;
+        return false;
+    }
+
+    position = here();
+    if (pressed_at)
+        *pressed_at = m_press;
+    return true;
+}
+
+void ToneCurvePlot::end()
+{
+    // measured before the plot closes, and applied to the next frame's height; see begin()
+    // Squaring the plot area usually means taking height away, since the tick labels are wider at the left
+    // than they are tall at the bottom, so this has to be free to go negative.
+    const ImVec2 area = ImPlot::GetPlotSize();
+    if (area.x > 0.f && area.y > 0.f)
+        m_extra_height = std::clamp(m_extra_height + (area.x - area.y), -0.5f * m_width, m_width);
+
+    ImPlot::EndPlot();
 }
 
 } // namespace ImGui
