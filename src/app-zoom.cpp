@@ -280,17 +280,19 @@ void HDRViewApp::set_active_annotation(int index)
 
 void HDRViewApp::cancel_annotation_drag()
 {
-    const int active = active_annotation();
-    if (active >= 0)
+    // Against the image the drag began on, which is not necessarily the one that is current now.
+    const auto held  = m_active_annotation_on;
+    const int  index = m_active_annotation;
+    if (held && index >= 0 && index < int(held->annotations.size()))
     {
         if (m_annotation_drag == AnnotationDrag::Creating)
-        {
-            m_active_annotation_on->annotations.erase(m_active_annotation_on->annotations.begin() + active);
-            set_active_annotation(-1);
-        }
+            held->annotations.erase(held->annotations.begin() + index);
         else if (m_annotation_drag != AnnotationDrag::None)
-            m_active_annotation_on->annotations[size_t(active)] = m_annotation_drag_start;
+            held->annotations[size_t(index)] = m_annotation_drag_start;
     }
+
+    if (m_annotation_drag == AnnotationDrag::Creating)
+        set_active_annotation(-1);
 
     m_annotation_drag        = AnnotationDrag::None;
     m_annotation_drag_handle = -1;
@@ -305,13 +307,7 @@ void HDRViewApp::handle_annotate_tool()
     // on over whatever playback or a close has put in its place.
     if (m_annotation_drag != AnnotationDrag::None && m_active_annotation_on != img)
     {
-        const auto held    = m_active_annotation_on;
-        const int  index   = m_active_annotation;
-        const bool partial = m_annotation_drag == AnnotationDrag::Creating;
-        if (held && partial && index >= 0 && index < int(held->annotations.size()))
-            held->annotations.erase(held->annotations.begin() + index);
-
-        m_annotation_drag = AnnotationDrag::None;
+        cancel_annotation_drag();
         set_active_annotation(-1);
     }
 
