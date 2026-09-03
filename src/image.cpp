@@ -865,7 +865,7 @@ Image::Image(int2 size, int num_channels) : Image()
         }
     }
     display_window = data_window = Box2i{int2{0}, channels.front().size()};
-    set_default_alpha_type();
+    set_default_transparency();
 }
 
 Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
@@ -877,27 +877,28 @@ Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
     for (const auto &name : channel_names) channels.emplace_back(name, size);
 
     display_window = data_window = Box2i{int2{0}, size};
-    set_default_alpha_type();
+    set_default_transparency();
 }
 
-void Image::set_alpha(AlphaType_ from_file, const std::optional<AlphaType_> &override_with, bool assumed)
+void Image::set_transparency(TransparencyType_ from_file, const std::optional<TransparencyType_> &override_with,
+                             bool assumed)
 {
-    alpha_type_from_file = from_file;
-    alpha_assumed        = assumed;
-    alpha_type           = override_with.value_or(from_file);
+    transparency_from_file = from_file;
+    transparency_assumed   = assumed;
+    transparency           = override_with.value_or(from_file);
 }
 
-void Image::set_default_alpha_type()
+void Image::set_default_transparency()
 {
     for (const auto &c : channels)
         if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
         {
-            // Assembled rather than read, so nothing declared this; see set_default_alpha_type()'s comment.
-            set_alpha(AlphaType_PremultipliedLinear, std::nullopt, true);
+            // Assembled rather than read, so nothing declared this; see set_default_transparency()'s comment.
+            set_transparency(TransparencyType_PremultipliedLinear, std::nullopt, true);
             return;
         }
 
-    set_alpha(AlphaType_None, std::nullopt, true);
+    set_transparency(TransparencyType_None, std::nullopt, true);
 }
 
 map<string, int> Image::channels_in_layer(const string &layer) const
@@ -1250,30 +1251,30 @@ ImagePtr Image::duplicate(const Box2i &region) const
 
     // Everything that says what the samples mean. A copy that lost its primaries or its alpha convention
     // would be read differently from the image it was made of, which is not what "duplicate" means.
-    copy->filename             = filename;
-    copy->partname             = partname;
-    copy->channel_selector     = channel_selector;
-    copy->chromaticities       = chromaticities;
-    copy->adopted_neutral      = adopted_neutral;
-    copy->M_RGB_to_XYZ         = M_RGB_to_XYZ;
-    copy->M_XYZ_to_RGB         = M_XYZ_to_RGB;
-    copy->M_to_sRGB            = M_to_sRGB;
-    copy->luminance_weights    = luminance_weights;
-    copy->adaptation_method    = adaptation_method;
-    copy->color_space          = color_space;
-    copy->white_point          = white_point;
-    copy->alpha_type           = alpha_type;
-    copy->alpha_type_from_file = alpha_type_from_file;
-    copy->alpha_assumed        = alpha_assumed;
-    copy->alpha_override       = alpha_override;
-    copy->metadata             = metadata;
-    copy->exif                 = exif;
-    copy->xmp_data             = xmp_data;
-    copy->icc_data             = icc_data;
-    copy->orientation_applied  = orientation_applied;
-    copy->path                 = path;
-    copy->last_modified        = last_modified;
-    copy->size_bytes           = size_bytes;
+    copy->filename               = filename;
+    copy->partname               = partname;
+    copy->channel_selector       = channel_selector;
+    copy->chromaticities         = chromaticities;
+    copy->adopted_neutral        = adopted_neutral;
+    copy->M_RGB_to_XYZ           = M_RGB_to_XYZ;
+    copy->M_XYZ_to_RGB           = M_XYZ_to_RGB;
+    copy->M_to_sRGB              = M_to_sRGB;
+    copy->luminance_weights      = luminance_weights;
+    copy->adaptation_method      = adaptation_method;
+    copy->color_space            = color_space;
+    copy->white_point            = white_point;
+    copy->transparency           = transparency;
+    copy->transparency_from_file = transparency_from_file;
+    copy->transparency_assumed   = transparency_assumed;
+    copy->transparency_override  = transparency_override;
+    copy->metadata               = metadata;
+    copy->exif                   = exif;
+    copy->xmp_data               = xmp_data;
+    copy->icc_data               = icc_data;
+    copy->orientation_applied    = orientation_applied;
+    copy->path                   = path;
+    copy->last_modified          = last_modified;
+    copy->size_bytes             = size_bytes;
 
     // Not copied: `id`, which the constructor hands out; `history`, since nothing has been done to the
     // copy; `is_live`, since these samples are a snapshot; and `vector_overlay`, which annotates what a
@@ -1580,7 +1581,7 @@ void Image::finalize()
 
     // if we have a straight alpha channel, premultiply the other channels by it.
     // this needs to be done after the values have been made linear
-    if (alpha_type == AlphaType_Straight)
+    if (transparency == TransparencyType_Straight)
     {
         for (auto &g : groups)
         {

@@ -737,9 +737,10 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
             const bool has_alpha = num_ch >= 4 || num_ch == 2;
             // a DX9 header has no misc_flags2, so outside DXT2/DXT4 nothing states the kind
             const bool assumed = has_alpha && !premultiplied && dds.alpha_mode == DDSFile::ALPHA_MODE_UNKNOWN;
-            image->set_alpha(has_alpha ? (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight)
-                                       : AlphaType_None,
-                             alpha_override_of(opts), assumed);
+            image->set_transparency(
+                has_alpha ? (premultiplied ? TransparencyType_PremultipliedLinear : TransparencyType_Straight)
+                          : TransparencyType_None,
+                transparency_override_of(opts), assumed);
 
             // sRGB to linear for uncompressed sRGB formats
             if (dds.is_sRGB())
@@ -749,7 +750,7 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
                 // color premultiplied after encoding has to be divided out across the conversion; the
                 // channels are planar here, so alpha is addressed directly. See alpha.h.
                 const Channel *alpha =
-                    image->alpha_type == AlphaType_PremultipliedNonLinear && (num_ch >= 4 || num_ch == 2)
+                    image->transparency == TransparencyType_PremultipliedNonLinear && (num_ch >= 4 || num_ch == 2)
                         ? &image->channels[num_ch - 1]
                         : nullptr;
                 for (int c = 0; c < std::min(3, dds.num_channels); ++c)

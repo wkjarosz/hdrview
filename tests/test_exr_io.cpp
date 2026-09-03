@@ -173,14 +173,14 @@ TEST_CASE("EXR load reports the format's premultiplied alpha convention")
 
         auto reloaded = save_and_reload(*img);
         REQUIRE(reloaded.size() == 1);
-        CHECK(reloaded[0]->alpha_type == AlphaType_PremultipliedLinear);
+        CHECK(reloaded[0]->transparency == TransparencyType_PremultipliedLinear);
     }
 
     SUBCASE("a part without an alpha channel")
     {
         auto reloaded = save_and_reload(*make_test_image(int2{2, 2}));
         REQUIRE(reloaded.size() == 1);
-        CHECK(reloaded[0]->alpha_type == AlphaType_None);
+        CHECK(reloaded[0]->transparency == TransparencyType_None);
     }
 }
 

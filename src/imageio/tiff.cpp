@@ -403,9 +403,10 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         auto image = make_shared<Image>(int2{(int)width, (int)height}, num_channels);
         // TIFF associated alpha is multiplied into the encoded samples (Photoshop, OIIO, ImageMagick and
         // vips all do this)
-        image->set_alpha(has_alpha ? (is_premultiplied ? AlphaType_PremultipliedNonLinear : AlphaType_Straight)
-                                   : AlphaType_None,
-                         alpha_override_of(opts), assumed);
+        image->set_transparency(
+            has_alpha ? (is_premultiplied ? TransparencyType_PremultipliedNonLinear : TransparencyType_Straight)
+                      : TransparencyType_None,
+            transparency_override_of(opts), assumed);
         image->metadata["loader"] = "libtiff";
         image->partname           = partname;
 
@@ -874,7 +875,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         Chromaticities chr;
 
         // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
-        unpremultiply_before_transfer(float_pixels.data(), size, image->alpha_type);
+        unpremultiply_before_transfer(float_pixels.data(), size, image->transparency);
 
         if (opts.override_profile)
         {
@@ -976,11 +977,11 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
             }
         }
 
-        repremultiply_after_transfer(float_pixels.data(), size, image->alpha_type);
+        repremultiply_after_transfer(float_pixels.data(), size, image->transparency);
 
         image->metadata["color profile"] = profile_desc;
 
-        // Image::finalize() premultiplies straight alpha, keyed off the alpha_type set above
+        // Image::finalize() premultiplies straight alpha, keyed off the transparency set above
 
         // Copy processed pixels to image channels
         for (int c = 0; c < num_channels; ++c)

@@ -28,25 +28,25 @@ void scale_colors_by_alpha(float *pixels, int3 size, F &&factor)
                  });
 }
 
-bool needs_undoing(int3 size, AlphaType_ alpha_type)
+bool needs_undoing(int3 size, TransparencyType_ transparency)
 {
-    return alpha_type == AlphaType_PremultipliedNonLinear && size.z > 1;
+    return transparency == TransparencyType_PremultipliedNonLinear && size.z > 1;
 }
 
 } // namespace
 
-void unpremultiply_before_transfer(float *pixels, int3 size, AlphaType_ alpha_type)
+void unpremultiply_before_transfer(float *pixels, int3 size, TransparencyType_ transparency)
 {
-    if (!needs_undoing(size, alpha_type))
+    if (!needs_undoing(size, transparency))
         return;
 
     // a fully transparent pixel carries no color to recover; don't divide by zero
     scale_colors_by_alpha(pixels, size, [](float a) { return a == 0.f ? 1.f : 1.f / a; });
 }
 
-void repremultiply_after_transfer(float *pixels, int3 size, AlphaType_ alpha_type)
+void repremultiply_after_transfer(float *pixels, int3 size, TransparencyType_ transparency)
 {
-    if (!needs_undoing(size, alpha_type))
+    if (!needs_undoing(size, transparency))
         return;
 
     scale_colors_by_alpha(pixels, size, [](float a) { return a; });

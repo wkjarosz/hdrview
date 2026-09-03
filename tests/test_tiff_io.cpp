@@ -156,7 +156,7 @@ TEST_CASE("TIFF with unassociated alpha is premultiplied exactly once")
     auto img = load_tiff(tiff_with_extra_samples(2));
 
     REQUIRE(img->channels.size() == 4);
-    CHECK(img->alpha_type == AlphaType_Straight);
+    CHECK(img->transparency == TransparencyType_Straight);
     CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
     // premultiplying twice would leave k_half*k_half here
@@ -170,7 +170,7 @@ TEST_CASE("TIFF tagged EXTRASAMPLE_UNSPECIFIED keeps its fourth sample as data")
     auto img = load_tiff(tiff_with_extra_samples(0));
 
     REQUIRE(img->channels.size() == 4);
-    CHECK(img->alpha_type == AlphaType_None);
+    CHECK(img->transparency == TransparencyType_None);
     CHECK_FALSE(img->alpha_is_transparency());
     CHECK(img->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
     CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
@@ -188,7 +188,7 @@ TEST_CASE("TIFF associated alpha is read as multiplied into the encoded samples"
     auto img = load_tiff(tiff_with_second_pixel_color(1, 0x80));
 
     REQUIRE(img->channels.size() == 4);
-    CHECK(img->alpha_type == AlphaType_PremultipliedNonLinear);
+    CHECK(img->transparency == TransparencyType_PremultipliedNonLinear);
     CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
     // dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back gives
@@ -205,30 +205,30 @@ TEST_CASE("An alpha override replaces what the TIFF declared")
     // Read a file the tag says is associated as straight, so finalize() multiplies instead of the loader
     // dividing. ImageMagick and vips both write premultiplied samples tagged unassociated.
     ImageLoadOptions opts;
-    opts.override_alpha = true;
-    opts.alpha_override = AlphaType_Straight;
+    opts.override_transparency = true;
+    opts.transparency_override = TransparencyType_Straight;
 
     std::istringstream in(tiff_with_second_pixel_color(1, 0x80), std::ios::binary);
     auto               images = load_image(in, "rgba.tif", opts);
     REQUIRE(images.size() == 1);
 
-    CHECK(images[0]->alpha_type == AlphaType_Straight);
+    CHECK(images[0]->transparency == TransparencyType_Straight);
     // straight 128/255 linearizes to 0.216, which finalize() then multiplies by alpha
     CHECK(images[0]->channels[0](1, 0) == doctest::Approx(0.216f * k_half).epsilon(0.02));
 }
 
-TEST_CASE("Overriding to AlphaType_None loads a declared alpha channel as data")
+TEST_CASE("Overriding to TransparencyType_None loads a declared alpha channel as data")
 {
     // the file declares real alpha and the user says it is a mask, so nothing is multiplied by it
     ImageLoadOptions opts;
-    opts.override_alpha = true;
-    opts.alpha_override = AlphaType_None;
+    opts.override_transparency = true;
+    opts.transparency_override = TransparencyType_None;
 
     std::istringstream in(tiff_with_extra_samples(2), std::ios::binary);
     auto               images = load_image(in, "rgba.tif", opts);
     REQUIRE(images.size() == 1);
 
-    CHECK(images[0]->alpha_type == AlphaType_None);
+    CHECK(images[0]->transparency == TransparencyType_None);
     CHECK_FALSE(images[0]->alpha_is_transparency());
     CHECK(images[0]->channels[0](1, 0) == doctest::Approx(1.f).epsilon(0.001));
     REQUIRE(images[0]->groups.size() == 2);
@@ -242,20 +242,20 @@ TEST_CASE("A TIFF says whether its alpha kind was stated or guessed")
     {
         CAPTURE(tag);
         auto img = load_tiff(tiff_with_extra_samples(tag));
-        CHECK_FALSE(img->alpha_assumed);
+        CHECK_FALSE(img->transparency_assumed);
     }
 
     // with the tag gone, nothing in the file states a kind and straight is the loader's guess
     auto guessed = load_tiff(tiff_without_extra_samples());
-    CHECK(guessed->alpha_assumed);
-    CHECK(guessed->alpha_type == AlphaType_Straight);
+    CHECK(guessed->transparency_assumed);
+    CHECK(guessed->transparency == TransparencyType_Straight);
 }
 
 TEST_CASE("An override leaves what the file said intact")
 {
     ImageLoadOptions opts;
-    opts.override_alpha = true;
-    opts.alpha_override = AlphaType_PremultipliedNonLinear;
+    opts.override_transparency = true;
+    opts.transparency_override = TransparencyType_PremultipliedNonLinear;
 
     std::istringstream in(tiff_with_extra_samples(2), std::ios::binary); // unassociated
     auto               images = load_image(in, "rgba.tif", opts);
@@ -263,9 +263,9 @@ TEST_CASE("An override leaves what the file said intact")
 
     // what is used and what the file declared both stay answerable, so the Info panel can say the override
     // contradicts the file instead of filling a gap
-    CHECK(images[0]->alpha_type == AlphaType_PremultipliedNonLinear);
-    CHECK(images[0]->alpha_type_from_file == AlphaType_Straight);
-    CHECK_FALSE(images[0]->alpha_assumed);
+    CHECK(images[0]->transparency == TransparencyType_PremultipliedNonLinear);
+    CHECK(images[0]->transparency_from_file == TransparencyType_Straight);
+    CHECK_FALSE(images[0]->transparency_assumed);
 }
 
 TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
@@ -296,7 +296,7 @@ TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
 
     // and it reads back as what it started as
     auto reloaded = load_tiff(out.str());
-    CHECK(reloaded->alpha_type == AlphaType_PremultipliedNonLinear);
+    CHECK(reloaded->transparency == TransparencyType_PremultipliedNonLinear);
     CHECK(reloaded->channels[0](0, 0) == doctest::Approx(0.5f).epsilon(0.02));
 }
 

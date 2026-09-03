@@ -295,7 +295,7 @@ void HDRViewApp::draw_image() const
             M_to_sRGB = float4x4{
                 {img->M_to_sRGB[0], 0.f}, {img->M_to_sRGB[1], 0.f}, {img->M_to_sRGB[2], 0.f}, {0.f, 0.f, 0.f, 1.f}};
             channels_type  = (int)group.type;
-            straight_alpha = (int)(img->alpha_type == AlphaType_Straight);
+            straight_alpha = (int)(img->transparency == TransparencyType_Straight);
             yw             = img->luminance_weights;
         }
 

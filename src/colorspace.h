@@ -17,20 +17,20 @@
 #include <string>
 #include <vector>
 
-using AlphaType_ = int;
-enum AlphaType : AlphaType_
+using TransparencyType_ = int;
+enum TransparencyType : TransparencyType_
 {
-    AlphaType_None = 0,
-    AlphaType_PremultipliedLinear,
-    AlphaType_PremultipliedNonLinear, // values are premultiplied in e.g. gamma- or sRGB-encoded space
-    AlphaType_Straight,
-    AlphaType_Count
+    TransparencyType_None = 0,
+    TransparencyType_PremultipliedLinear,
+    TransparencyType_PremultipliedNonLinear, // values are premultiplied in e.g. gamma- or sRGB-encoded space
+    TransparencyType_Straight,
+    TransparencyType_Count
 };
 
-const char *alpha_type_name(AlphaType_ at);
+const char *transparency_type_name(TransparencyType_ at);
 /// Name for the alpha-override combo, which needs to say more than the metadata panel's one-word label.
-const char  *alpha_override_name(AlphaType_ at);
-const char **alpha_type_names();
+const char  *transparency_override_name(TransparencyType_ at);
+const char **transparency_type_names();
 
 /**
  * Computes the luminance as ``l = 0.299r + 0.587g + 0.144b + 0.0a``.  If

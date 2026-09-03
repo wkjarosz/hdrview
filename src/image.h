@@ -455,30 +455,30 @@ public:
     /**
         Empty when the file's own interpretation was used, which is then re-derived on reload.
     */
-    std::optional<AlphaType_>     alpha_override;
-    Box2i                         data_window;
-    Box2i                         display_window;
-    std::vector<Channel>          channels;
-    std::optional<Chromaticities> chromaticities;             ///< The chromaticities of the file
-    std::optional<float2>         adopted_neutral;            ///< The adopted neutral of the file, if any
-    float3x3                      M_RGB_to_XYZ, M_XYZ_to_RGB; ///< The RGB to XYZ and XYZ to RGB conversion matrices
-    float3x3                      M_to_sRGB         = la::identity;
-    float3                        luminance_weights = sRGB_Yw();
-    AdaptationMethod              adaptation_method = AdaptationMethod_Bradford;
-    ColorGamut_                   color_space       = ColorGamut_Unspecified;
-    WhitePoint_                   white_point       = WhitePoint_Unspecified;
+    std::optional<TransparencyType_> transparency_override;
+    Box2i                            data_window;
+    Box2i                            display_window;
+    std::vector<Channel>             channels;
+    std::optional<Chromaticities>    chromaticities;             ///< The chromaticities of the file
+    std::optional<float2>            adopted_neutral;            ///< The adopted neutral of the file, if any
+    float3x3                         M_RGB_to_XYZ, M_XYZ_to_RGB; ///< The RGB to XYZ and XYZ to RGB conversion matrices
+    float3x3                         M_to_sRGB         = la::identity;
+    float3                           luminance_weights = sRGB_Yw();
+    AdaptationMethod                 adaptation_method = AdaptationMethod_Bradford;
+    ColorGamut_                      color_space       = ColorGamut_Unspecified;
+    WhitePoint_                      white_point       = WhitePoint_Unspecified;
     /// How an 'A' channel is to be read: whether it is coverage at all, and if so how it is applied.
     /**
-        Whether the color channels are multiplied by it, and in what space. AlphaType_None keeps the
+        Whether the color channels are multiplied by it, and in what space. TransparencyType_None keeps the
         channel out of an alpha-bearing group, so nothing is multiplied by it. Read by finalize(), so set
-        it before calling. Equal to alpha_type_from_file unless alpha_override replaced it.
+        it before calling. Equal to transparency_from_file unless transparency_override replaced it.
     */
-    AlphaType_ alpha_type = AlphaType_None;
+    TransparencyType_ transparency = TransparencyType_None;
     /// What the loader concluded before any override, so the override can say what it displaced.
-    AlphaType_ alpha_type_from_file = AlphaType_None;
+    TransparencyType_ transparency_from_file = TransparencyType_None;
     /// True when nothing in the file stated the alpha kind and the loader picked a default.
-    bool                 alpha_assumed = false;
-    json                 metadata      = json::object();
+    bool                 transparency_assumed = false;
+    json                 metadata             = json::object();
     Exif                 exif;     ///< The raw EXIF data from the file, if any
     std::vector<uint8_t> xmp_data; ///< The raw XMP data from the file, if any
     std::vector<uint8_t> icc_data; ///< The raw ICC profile data from the file, if any
@@ -550,20 +550,21 @@ public:
 
     /// Record what a loader concluded about the file's alpha, and apply any override to it.
     /**
-        The one place alpha_type, alpha_type_from_file and alpha_assumed are written, so they cannot drift
-        apart. Loaders call this instead of assigning alpha_type, then read back alpha_type for the
+        The one place transparency, transparency_from_file and transparency_assumed are written, so they cannot drift
+        apart. Loaders call this instead of assigning transparency, then read back transparency for the
         premultiplication decisions they have to make while the samples are still encoded. Pass
         `assumed` when nothing in the file stated the kind.
     */
-    void set_alpha(AlphaType_ from_file, const std::optional<AlphaType_> &override_with, bool assumed = false);
+    void set_transparency(TransparencyType_ from_file, const std::optional<TransparencyType_> &override_with,
+                          bool assumed = false);
 
-    /// Set alpha_type from the channel names alone, for an image not built from a file.
+    /// Set transparency from the channel names alone, for an image not built from a file.
     /**
         An image assembled in memory -- over IPC, by an edit, by a test -- already holds samples in
         HDRView's working representation, which is premultiplied and linear, so that is what its alpha
         says. A loader overwrites this the moment it knows what the file declared.
     */
-    void set_default_alpha_type();
+    void set_default_transparency();
     Image();
     Image(const Image &) = delete;
     Image(Image &&)      = default;
@@ -758,12 +759,12 @@ public:
     }
 
     /// An 'A' channel is coverage rather than ordinary data.
-    bool alpha_is_transparency() const { return alpha_type != AlphaType_None; }
+    bool alpha_is_transparency() const { return transparency != TransparencyType_None; }
 
     /// True when finalize() premultiplied `group`, so it must be divided back out; straight-alpha only.
     bool unpremultiplies(const ChannelGroup &group) const
     {
-        return alpha_type == AlphaType_Straight && group.num_channels > 1 && group_has_alpha(group.type);
+        return transparency == TransparencyType_Straight && group.num_channels > 1 && group_has_alpha(group.type);
     }
 
     /// Flatten the selected group into an interleaved buffer, applying gain and a transfer function.

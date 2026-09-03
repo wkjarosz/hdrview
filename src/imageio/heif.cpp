@@ -387,7 +387,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                                            const std::vector<uint8_t> &handle_level_icc_profile,
                                            const ImageLoadOptions &opts, int3 &size, int cpp, int num_planes,
                                            const heif_channel out_planes[], const string &partname,
-                                           AlphaType_ alpha_type)
+                                           TransparencyType_ transparency)
 {
     int img_w = heif_image_get_width(himage, out_planes[0]);
     int img_h = heif_image_get_height(himage, out_planes[0]);
@@ -486,7 +486,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         if (out_planes[p] != heif_channel_Alpha)
         {
             // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
-            unpremultiply_before_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
+            unpremultiply_before_transfer(float_pixels.get(), int3{size.xy(), cpp}, transparency);
 
             if (opts.override_profile)
             {
@@ -531,7 +531,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                 image->metadata["color profile"] = profile_desc;
             }
 
-            repremultiply_after_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
+            repremultiply_after_transfer(float_pixels.get(), int3{size.xy(), cpp}, transparency);
         }
 
         // copy the interleaved float pixels into the channels
@@ -828,21 +828,22 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     heif_image_release);
                 // MIAF marks premultiplied alpha with a 'prem' reference from the master item to the alpha
                 // one; its absence means straight, so only its presence is something the file stated
-                const bool       premultiplied = heif_image_handle_is_premultiplied_alpha(ihandle.get());
-                const AlphaType_ from_file =
-                    !has_alpha ? AlphaType_None : (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
+                const bool              premultiplied = heif_image_handle_is_premultiplied_alpha(ihandle.get());
+                const TransparencyType_ from_file =
+                    !has_alpha ? TransparencyType_None
+                               : (premultiplied ? TransparencyType_PremultipliedLinear : TransparencyType_Straight);
 
                 // resolved before decoding, since the color management below brackets itself with it
-                const AlphaType_ alpha_type = alpha_override_of(opts).value_or(from_file);
+                const TransparencyType_ transparency = transparency_override_of(opts).value_or(from_file);
 
                 // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
-                ImagePtr image =
-                    process_decoded_heif_image(himage.get(), handle_level_nclx.get(), handle_level_icc_profile, opts,
-                                               size, cpp, num_planes, out_planes, fmt::format("{:d}", id), alpha_type);
+                ImagePtr image = process_decoded_heif_image(himage.get(), handle_level_nclx.get(),
+                                                            handle_level_icc_profile, opts, size, cpp, num_planes,
+                                                            out_planes, fmt::format("{:d}", id), transparency);
 
                 // preserve file-level metadata that comes from the handle/context
                 image->filename = filename;
-                image->set_alpha(from_file, alpha_override_of(opts));
+                image->set_transparency(from_file, transparency_override_of(opts));
                 image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                 image->metadata["header"]["Main brand"] = {
                     {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
@@ -1018,7 +1019,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
 
                     heif_channel out_planes[2] = {heif_channel_interleaved, heif_channel_Alpha};
                     ImagePtr image = process_decoded_heif_image(himage.get(), nullptr, {}, opts, size, 3, 1, out_planes,
-                                                                partname, AlphaType_None);
+                                                                partname, TransparencyType_None);
                     image->filename                         = filename;
                     image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                     image->metadata["header"]["Main brand"] = {

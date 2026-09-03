@@ -49,8 +49,8 @@ const char *const g_bg_mode_ids[BGMode_COUNT]   = {"black", "white", "dark_check
 // A session records the alpha override the user chose, not the interpretation it produced: with no override
 // the file is read afresh, so a corrected loader or an edited file is picked up. The trailing entry is that
 // "no override" case, which is why this table is one longer than the enum.
-const char *const g_alpha_type_ids[AlphaType_Count + 1] = {"none", "premultiplied-linear", "premultiplied-nonlinear",
-                                                           "straight", ""};
+const char *const g_transparency_type_ids[TransparencyType_Count + 1] = {"none", "premultiplied-linear",
+                                                                         "premultiplied-nonlinear", "straight", ""};
 
 template <typename Enum, size_t N>
 string enum_to_id(Enum value, const char *const (&ids)[N])
@@ -73,10 +73,11 @@ Enum id_to_enum(const json &j, const char *key, const char *const (&ids)[N], Enu
 }
 
 // The alpha override an image entry asks for, empty when it uses the file's own interpretation.
-optional<AlphaType_> alpha_override_from_id(const json &j)
+optional<TransparencyType_> transparency_override_from_id(const json &j)
 {
-    auto at = id_to_enum(j, "alpha_override", g_alpha_type_ids, (AlphaType_)AlphaType_Count);
-    return at == AlphaType_Count ? optional<AlphaType_>{} : at;
+    auto at =
+        id_to_enum(j, "transparency_override", g_transparency_type_ids, (TransparencyType_)TransparencyType_Count);
+    return at == TransparencyType_Count ? optional<TransparencyType_>{} : at;
 }
 
 // Checks "type"/"version" on a parsed session manifest (`source_name` is a filename or zip archive name,
@@ -693,11 +694,11 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     }
 
     spdlog::info("Reloading file '{}' with channel selector '{}'...", image->filename, image->channel_selector);
-    auto opts             = load_image_options();
-    opts.channel_selector = image->channel_selector;
-    opts.override_alpha   = image->alpha_override.has_value();
-    if (image->alpha_override)
-        opts.alpha_override = *image->alpha_override;
+    auto opts                  = load_image_options();
+    opts.channel_selector      = image->channel_selector;
+    opts.override_transparency = image->transparency_override.has_value();
+    if (image->transparency_override)
+        opts.transparency_override = *image->transparency_override;
 
 #if defined(__EMSCRIPTEN__)
     // A URL was never on a filesystem to be re-read from; fetch it again instead.
@@ -895,8 +896,8 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
         json entry;
         entry["path"]             = path_of(img);
         entry["channel_selector"] = img->channel_selector;
-        if (img->alpha_override)
-            entry["alpha_override"] = enum_to_id(*img->alpha_override, g_alpha_type_ids);
+        if (img->transparency_override)
+            entry["transparency_override"] = enum_to_id(*img->transparency_override, g_transparency_type_ids);
         entry["selected_group"]  = img->selected_group;
         entry["reference_group"] = img->reference_group;
 
@@ -1075,12 +1076,12 @@ struct HDRViewApp::LoadingSession
 {
     struct Entry
     {
-        fs::path             path;
-        string               channel_selector;
-        optional<AlphaType_> alpha_override; ///< Empty when the file's own interpretation was used
-        int                  selected_group = 0, reference_group = 0;
-        vector<string>       selected_channels; ///< The multi-selection, by channel name; see Channel::selected
-        ImagePtr             loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
+        fs::path                    path;
+        string                      channel_selector;
+        optional<TransparencyType_> transparency_override; ///< Empty when the file's own interpretation was used
+        int                         selected_group = 0, reference_group = 0;
+        vector<string>              selected_channels; ///< The multi-selection, by channel name; see Channel::selected
+        ImagePtr loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
     };
     vector<Entry> entries;                                  ///< One per saved "images" entry, in file order
     int           current_index = -1, reference_index = -1; ///< Index into entries, or -1 if unset
@@ -1089,7 +1090,8 @@ struct HDRViewApp::LoadingSession
 
     // An arrival fills the earliest entry sharing its load options. Entries sharing a key ask for identical
     // content, so any one-to-one assignment is right whatever order the loads finish in.
-    using Key = std::tuple<fs::path, string, optional<AlphaType_>>; ///< path, channel_selector, alpha_override
+    using Key =
+        std::tuple<fs::path, string, optional<TransparencyType_>>; ///< path, channel_selector, transparency_override
     map<Key, deque<int>> unresolved;
 };
 
@@ -1233,12 +1235,12 @@ void HDRViewApp::begin_session_load(const UnconfirmedSession &load)
         // get (see extract_and_schedule() in image_loader.cpp), so "reveal in file manager" and
         // reload_image() need no session-specific handling.
         LoadingSession::Entry e;
-        e.path              = from_zip ? fs::path(load.zip_name) / fs::u8path(rel) : resolve(rel);
-        e.channel_selector  = entry.value<string>("channel_selector", "");
-        e.alpha_override    = alpha_override_from_id(entry);
-        e.selected_group    = entry.value<int>("selected_group", 0);
-        e.reference_group   = entry.value<int>("reference_group", 0);
-        e.selected_channels = entry.value<vector<string>>("selected_channels", {});
+        e.path                  = from_zip ? fs::path(load.zip_name) / fs::u8path(rel) : resolve(rel);
+        e.channel_selector      = entry.value<string>("channel_selector", "");
+        e.transparency_override = transparency_override_from_id(entry);
+        e.selected_group        = entry.value<int>("selected_group", 0);
+        e.reference_group       = entry.value<int>("reference_group", 0);
+        e.selected_channels     = entry.value<vector<string>>("selected_channels", {});
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
@@ -1257,13 +1259,13 @@ void HDRViewApp::begin_session_load(const UnconfirmedSession &load)
             }
         }
 
-        pending.unresolved[{e.path, e.channel_selector, e.alpha_override}].push_back(idx);
+        pending.unresolved[{e.path, e.channel_selector, e.transparency_override}].push_back(idx);
 
         ImageLoadOptions opts;
-        opts.channel_selector = e.channel_selector;
-        opts.override_alpha   = e.alpha_override.has_value();
-        if (e.alpha_override)
-            opts.alpha_override = *e.alpha_override;
+        opts.channel_selector      = e.channel_selector;
+        opts.override_transparency = e.transparency_override.has_value();
+        if (e.transparency_override)
+            opts.transparency_override = *e.transparency_override;
         if (from_zip)
             m_image_loader.background_load(e.path.string(), *bytes, false, nullptr, opts);
         else
@@ -1285,7 +1287,7 @@ void HDRViewApp::resolve_loading_session_image(const ImagePtr &new_image)
 
     // Resolve this arrival to the earliest not-yet-filled entry sharing its load options; see LoadingSession
     // for why that key is the right one to match on.
-    auto key = LoadingSession::Key{new_image->path, new_image->channel_selector, new_image->alpha_override};
+    auto key = LoadingSession::Key{new_image->path, new_image->channel_selector, new_image->transparency_override};
     auto it  = m_loading_session->unresolved.find(key);
     if (it == m_loading_session->unresolved.end())
         return;

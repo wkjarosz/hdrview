@@ -1286,12 +1286,12 @@ void Image::draw_info()
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
             // An override says what it displaced, since contradicting a kind the file stated is not the
             // same as filling in one nothing ever did.
-            const string from_file =
-                fmt::format("{}{}", alpha_type_name(alpha_type_from_file), alpha_assumed ? " (assumed)" : "");
+            const string from_file = fmt::format("{}{}", transparency_type_name(transparency_from_file),
+                                                 transparency_assumed ? " (assumed)" : "");
             filtered_property("Alpha",
-                              alpha_override
-                                  ? fmt::format("{} (override; was {})", alpha_type_name(alpha_type), from_file)
-                                  : from_file,
+                              transparency_override ? fmt::format("{} (override; was {})",
+                                                                  transparency_type_name(transparency), from_file)
+                                                    : from_file,
                               "How this image's alpha is being read: whether the color channels are multiplied "
                               "by it, and in what space. \"Assumed\" means nothing in the file stated it and the "
                               "loader picked a default, which is where the override below is most likely wanted.");
@@ -1318,19 +1318,21 @@ void Image::draw_info()
 
                         bool changed = false;
                         if (ImGui::BeginCombo("##Alpha override",
-                                              alpha_override ? alpha_override_name(*alpha_override) : k_not_overridden))
+                                              transparency_override ? transparency_override_name(*transparency_override)
+                                                                    : k_not_overridden))
                         {
-                            if (ImGui::Selectable(k_not_overridden, !alpha_override))
+                            if (ImGui::Selectable(k_not_overridden, !transparency_override))
                             {
-                                alpha_override.reset();
+                                transparency_override.reset();
                                 changed = true;
                             }
 
-                            for (AlphaType_ a = 0; a < AlphaType_Count; ++a)
-                                if (ImGui::Selectable(alpha_override_name(a), alpha_override && *alpha_override == a))
+                            for (TransparencyType_ a = 0; a < TransparencyType_Count; ++a)
+                                if (ImGui::Selectable(transparency_override_name(a),
+                                                      transparency_override && *transparency_override == a))
                                 {
-                                    alpha_override = a;
-                                    changed        = true;
+                                    transparency_override = a;
+                                    changed               = true;
                                 }
 
                             ImGui::EndCombo();

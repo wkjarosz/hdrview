@@ -902,22 +902,22 @@ void draw_load_image_options_dialog(bool &open)
                        "only load layers which contain either of these two words, and \"-.A\" would exclude channels "
                        "named \"A\". Leave empty to load all parts.");
 
-        ImGui::Checkbox("Override file's alpha", &s_opts.override_alpha);
+        ImGui::Checkbox("Override file's alpha", &s_opts.override_transparency);
         ImGui::Tooltip("By default HDRView follows what the file says about its alpha channel. Enable this to state "
                        "the interpretation yourself, for a file whose semi-transparent areas read too dark or too "
                        "bright, or whose fourth channel is really a mask rather than transparency.");
 
-        if (s_opts.override_alpha)
+        if (s_opts.override_transparency)
         {
             ImGui::Indent();
             ImGui::PushItemWidth(ImGui::CalcItemWidth() - ImGui::GetStyle().IndentSpacing);
-            if (ImGui::BeginCombo("Alpha", alpha_override_name(s_opts.alpha_override)))
+            if (ImGui::BeginCombo("Alpha", transparency_override_name(s_opts.transparency_override)))
             {
-                for (AlphaType_ a = 0; a < AlphaType_Count; ++a)
+                for (TransparencyType_ a = 0; a < TransparencyType_Count; ++a)
                 {
-                    const bool is_selected = s_opts.alpha_override == a;
-                    if (ImGui::Selectable(alpha_override_name(a), is_selected))
-                        s_opts.alpha_override = a;
+                    const bool is_selected = s_opts.transparency_override == a;
+                    if (ImGui::Selectable(transparency_override_name(a), is_selected))
+                        s_opts.transparency_override = a;
 
                     if (is_selected)
                         ImGui::SetItemDefaultFocus();
@@ -1208,10 +1208,10 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
 
                 i->filename   = filename;
                 i->size_bytes = static_cast<size_t>(size);
-                // the loaders have already applied the override to alpha_type; record the option itself so a
+                // the loaders have already applied the override to transparency; record the option itself so a
                 // reload or a saved session can repeat it
-                if (opts.override_alpha)
-                    i->alpha_override = opts.alpha_override;
+                if (opts.override_transparency)
+                    i->transparency_override = opts.transparency_override;
                 // If multiple image "parts" were loaded and they have names, store these names in the image's
                 // channel selector. This is useful if we later want to reload a specific image part from the
                 // original file.
