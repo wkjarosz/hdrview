@@ -76,10 +76,10 @@ enum EnvMapSampling : int
 
     Point sampling averages \p supersample^2 samples per output pixel. EWA reads a mip pyramid through an
     ellipse fitted to the pixel's footprint in the source (PBRT's MIPMap::EWA); there \p supersample is the
-    maximum anisotropy, and \p mip_bias shifts the level it computes (negative sharper, positive blurrier).
+    maximum anisotropy.
 */
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2, float mip_bias = 0.f,
+                         EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2,
                          AtomicProgress progress = {});
 
 /// Convolve \p src, a \p mapping of incident radiance, with a clamped cosine, giving irradiance per direction.

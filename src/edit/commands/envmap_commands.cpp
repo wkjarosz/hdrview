@@ -115,7 +115,7 @@ public:
             ImGui::SliderInt("Max anisotropy", &m_supersample, 1, 32);
             ImGui::Tooltip("How much longer than it is wide the footprint may be before it is widened to "
                            "fit. The mip level covers the short axis and the filter walks the long one, so "
-                           "this is what keeps a stretched footprint sharp -- and what it costs, since each "
+                           "this is what keeps a stretched footprint sharp, and what it costs, since each "
                            "step along that axis is another texel read.");
         }
         else
@@ -135,10 +135,9 @@ public:
         if (out_size.x <= 0 || out_size.y <= 0)
             return;
 
-        // no bias: the level the footprint asks for is the right one
         ctx.resample_image_async("Remap envmap", out_size,
                                  [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
-                                 { return remapped_envmap(src, out_size, d, s, mode, ss, 0.f, p); });
+                                 { return remapped_envmap(src, out_size, d, s, mode, ss, p); });
     }
 
 private:

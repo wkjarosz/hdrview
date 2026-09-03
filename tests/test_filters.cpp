@@ -42,13 +42,37 @@ Array2Df constant(int2 size, float v)
 
 } // namespace
 
-TEST_CASE("A blur leaves a constant image constant")
+TEST_CASE("Every filter leaves a constant image alone")
 {
-    // clamping at the border makes this hold at the edges too, which blurring against black would not
+    // Clamping at the border makes this hold at the edges too, which filtering against black would not. A
+    // filter whose weights do not sum to one drifts off the constant, and a resampling one that reconstructs
+    // between samples has to keep it there as well.
     const Array2Df flat = constant(int2{16, 12}, 0.37f);
+    const Box2i    all  = whole(flat);
 
-    for (const Array2Df &out : {gaussian_blurred(flat, whole(flat), 3.f, 3.f), box_blurred(flat, whole(flat), 2, 2)})
+    auto is_flat = [](const char *what, const Array2Df &out)
+    {
+        CAPTURE(what);
         for (int i = 0; i < out.num_elements(); ++i) CHECK(out(i) == doctest::Approx(0.37f).epsilon(1e-5));
+    };
+
+    is_flat("gaussian", gaussian_blurred(flat, all, 3.f, 3.f));
+    is_flat("fast gaussian", fast_gaussian_blurred(flat, all, 3.f, 3.f));
+    is_flat("box", box_blurred(flat, all, 2, 2));
+    is_flat("iterated box", box_blurred(flat, all, 2, 2, 4));
+    is_flat("unsharp masked", unsharp_masked(flat, all, 2.f, 1.5f));
+    is_flat("median over a disc", median_filtered(flat, all, 3.f, true));
+    is_flat("median over a square", median_filtered(flat, all, 3.f, false));
+    is_flat("zapped", zapped_gremlins(flat, all));
+
+    // a fractional shift, so every sampler reconstructs between samples instead of picking one
+    for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
+        for (int border : {BorderMode_Edge, BorderMode_Repeat, BorderMode_Mirror})
+        {
+            CAPTURE(sampler);
+            CAPTURE(border);
+            is_flat("shifted", shifted(flat, all, 0.5f, -0.25f, sampler, border, border));
+        }
 }
 
 TEST_CASE("A blur conserves what it spreads")
@@ -408,21 +432,16 @@ TEST_CASE("Wrapping makes a shift reversible, and a shift by the whole image not
     }
 }
 
-TEST_CASE("A fractional shift reconstructs, rather than snapping to a sample")
+TEST_CASE("A fractional shift reconstructs instead of snapping to a sample")
 {
-    // Two things every sampler owes: a constant image survives, or the taps do not sum to one and the result
-    // drifts as it moves; and an offset landing between two samples does not round to one of them.
-    const Array2Df flat = constant(int2{12, 10}, 0.375f);
-    const Array2Df src  = noise(int2{24, 18});
+    // an offset landing between two samples must not round to one of them
+    const Array2Df src = noise(int2{24, 18});
 
     for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
         for (int border : {BorderMode_Edge, BorderMode_Repeat, BorderMode_Mirror})
         {
             CAPTURE(sampler);
             CAPTURE(border);
-
-            const Array2Df c = shifted(flat, whole(flat), 0.5f, -0.25f, sampler, border, border);
-            for (int i = 0; i < c.num_elements(); ++i) REQUIRE(c(i) == doctest::Approx(0.375f));
 
             // bracketing is bilinear's promise alone: bicubic's negative lobes overshoot to keep an edge
             // sharp, and its accuracy is measured on a ramp below
@@ -534,15 +553,6 @@ TEST_CASE("A median removes a lone outlier where a mean only spreads it")
     // whereas the blur has pushed it outwards
     CHECK(avg(4, 4) > 0.6f);
     CHECK(avg(5, 4) > 0.6f);
-}
-
-TEST_CASE("A median leaves a constant image alone")
-{
-    Array2Df flat{int2{12, 10}};
-    for (int i = 0; i < flat.num_elements(); ++i) flat(i) = 0.25f;
-
-    const Array2Df out = median_filtered(flat, whole(flat), 3.f);
-    for (int i = 0; i < out.num_elements(); ++i) CHECK(out(i) == doctest::Approx(0.25f));
 }
 
 TEST_CASE("A median keeps an edge that a blur would soften")
