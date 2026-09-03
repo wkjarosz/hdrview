@@ -732,6 +732,7 @@ void HDRViewApp::draw_annotations_window()
     ImGui::Separator();
 
     // What the tool will draw next, which is the state a drawing tool wants in reach while drawing.
+    ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("New:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(EmSize(7));
@@ -767,13 +768,28 @@ void HDRViewApp::draw_annotations_window()
 
     if (ImGui::BeginChild("##Annotation list", ImVec2(0, -EmSize(9))))
     {
+        // Flat toggles and no frame padding, so a row is as tall as its text, like the Images panel's.
+        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+
+        const float icon_w = ImGui::IconSize().x;
+        // What the trash at the end of each row occupies, so the label stops short of it rather than
+        // running under it. SameLine() puts ItemSpacing before the button, so that counts too.
+        const float trash_w = icon_w + ImGui::GetStyle().ItemSpacing.x;
+
+        auto flat_toggle = [icon_w](const char *icon, bool &value, const char *tooltip)
+        {
+            if (ImGui::FlatButton(icon, false, ImVec2(icon_w, 0.f)))
+                value = !value;
+            ImGui::SetItemTooltip("%s", tooltip);
+            ImGui::SameLine();
+        };
+
         // The renderer's own overlay, listed but never edited: it belongs to the process sending it, and
         // this is the one place overlays are switched on and off.
         if (!img->vector_overlay.empty())
         {
-            ImGui::IconButton(img->vector_overlay_visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF,
-                              &img->vector_overlay_visible);
-            ImGui::SameLine();
+            flat_toggle(img->vector_overlay_visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF,
+                        img->vector_overlay_visible, "Draw the renderer's overlay.");
             ImGui::TextDisabled(ICON_MY_LIST_VIEW " Renderer overlay");
             ImGui::Tooltip("Drawing commands streamed in by a renderer. They can be hidden here, but only "
                            "the process sending them can change them.");
@@ -784,26 +800,24 @@ void HDRViewApp::draw_annotations_window()
             auto &a = list[size_t(i)];
             ImGui::PushID(i);
 
-            ImGui::IconButton(a.visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF, &a.visible);
-            ImGui::SetItemTooltip("Draw this annotation.");
-            ImGui::SameLine();
-            ImGui::IconButton(a.locked ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, &a.locked);
-            ImGui::SetItemTooltip("A locked annotation cannot be picked up in the viewport.");
-            ImGui::SameLine();
+            flat_toggle(a.visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF, a.visible, "Draw this annotation.");
+            flat_toggle(a.locked ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, a.locked,
+                        "A locked annotation cannot be picked up in the viewport.");
 
-            const float trash_w = ImGui::IconButtonSize().x + ImGui::GetStyle().ItemInnerSpacing.x;
             if (ImGui::Selectable(fmt::format("{} {}", ICON_MY_ANNOTATE, a.display_label()).c_str(), i == active,
                                   ImGuiSelectableFlags_AllowOverlap,
                                   ImVec2(ImGui::GetContentRegionAvail().x - trash_w, 0.f)))
                 set_active_annotation(i);
 
             ImGui::SameLine();
-            if (ImGui::IconButton(ICON_MY_TRASH_CAN))
+            if (ImGui::FlatButton(ICON_MY_TRASH_CAN, false, ImVec2(icon_w, 0.f)))
                 erase = i;
             ImGui::SetItemTooltip("Delete this annotation.");
 
             ImGui::PopID();
         }
+
+        ImGui::PopStyleVar();
     }
     ImGui::EndChild();
 
