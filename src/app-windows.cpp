@@ -714,6 +714,20 @@ void HDRViewApp::draw_statistics_window()
     }
 }
 
+/// The icon the panel and the shape picker show for \p shape.
+static const char *annotation_shape_icon(Annotation::Shape shape)
+{
+    switch (shape)
+    {
+    case Annotation::Shape::Rect: return ICON_MY_SHAPE_RECT;
+    case Annotation::Shape::Ellipse: return ICON_MY_SHAPE_ELLIPSE;
+    case Annotation::Shape::Line: return ICON_MY_SHAPE_LINE;
+    case Annotation::Shape::Arrow: return ICON_MY_SHAPE_ARROW;
+    case Annotation::Shape::Text: return ICON_MY_SHAPE_TEXT;
+    default: return ICON_MY_ANNOTATE;
+    }
+}
+
 void HDRViewApp::draw_annotations_window()
 {
     auto img = current_image();
@@ -736,7 +750,9 @@ void HDRViewApp::draw_annotations_window()
     ImGui::TextUnformatted("New:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(EmSize(7));
-    if (ImGui::BeginCombo("##AnnotationShape", annotation_shape_name(m_annotation_shape)))
+    if (ImGui::BeginCombo("##AnnotationShape", fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
+                                                           annotation_shape_name(m_annotation_shape))
+                                                   .c_str()))
     {
         for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
         {
@@ -746,7 +762,9 @@ void HDRViewApp::draw_annotations_window()
                 continue;
 
             const bool is_selected = shape == m_annotation_shape;
-            if (ImGui::Selectable(annotation_shape_name(shape), is_selected))
+            if (ImGui::Selectable(
+                    fmt::format("{} {}", annotation_shape_icon(shape), annotation_shape_name(shape)).c_str(),
+                    is_selected))
                 m_annotation_shape = shape;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
@@ -763,8 +781,10 @@ void HDRViewApp::draw_annotations_window()
 
     const int active = active_annotation();
 
-    // Erased after the list is drawn: removing a row mid-list renumbers the ones still to come.
-    int erase = -1;
+    // Both applied after the list is drawn: reordering or removing a row mid-list renumbers the ones still
+    // to come.
+    int erase     = -1;
+    int drag_from = -1, drag_to = -1;
 
     if (ImGui::BeginChild("##Annotation list", ImVec2(0, -EmSize(9))))
     {
@@ -804,10 +824,23 @@ void HDRViewApp::draw_annotations_window()
             flat_toggle(a.locked ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, a.locked,
                         "A locked annotation cannot be picked up in the viewport.");
 
-            if (ImGui::Selectable(fmt::format("{} {}", ICON_MY_ANNOTATE, a.display_label()).c_str(), i == active,
-                                  ImGuiSelectableFlags_AllowOverlap,
+            if (ImGui::Selectable(fmt::format("{} {}", annotation_shape_icon(a.shape), a.display_label()).c_str(),
+                                  i == active, ImGuiSelectableFlags_AllowOverlap,
                                   ImVec2(ImGui::GetContentRegionAvail().x - trash_w, 0.f)))
                 set_active_annotation(i);
+
+            // Held and dragged off its own row: swap with the neighbor it is heading for. The list is
+            // drawn in order, so this is what puts one annotation in front of another.
+            if (ImGui::IsItemActive() && !ImGui::IsItemHovered())
+            {
+                const int next = i + (ImGui::GetMouseDragDelta(ImGuiMouseButton_Left).y < 0.f ? -1 : 1);
+                if (next >= 0 && next < int(list.size()))
+                {
+                    drag_from = i;
+                    drag_to   = next;
+                    ImGui::ResetMouseDragDelta();
+                }
+            }
 
             ImGui::SameLine();
             if (ImGui::FlatButton(ICON_MY_TRASH_CAN, false, ImVec2(icon_w, 0.f)))
@@ -820,6 +853,17 @@ void HDRViewApp::draw_annotations_window()
         ImGui::PopStyleVar();
     }
     ImGui::EndChild();
+
+    if (erase < 0 && drag_from >= 0)
+    {
+        std::swap(list[size_t(drag_from)], list[size_t(drag_to)]);
+
+        // What is in hand is the annotation, not the row it was in, so the index follows it.
+        if (active == drag_from)
+            set_active_annotation(drag_to);
+        else if (active == drag_to)
+            set_active_annotation(drag_from);
+    }
 
     if (erase >= 0)
     {

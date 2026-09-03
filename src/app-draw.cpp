@@ -275,19 +275,29 @@ void HDRViewApp::draw_tool_decorations() const
     ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 18.f / 14.f);
 
     // The handles of the annotation being worked on, drawn over everything so they can be picked up even
-    // where the shape runs under another. White on black reads over any image.
-    if (const int active = active_annotation(); active >= 0 && m_draw_annotations)
+    // where the shape runs under another. White on black reads over any image. Only under the annotate
+    // tool, since that is the only place a click does anything with them.
+    if (const int active = active_annotation(); active >= 0 && m_draw_annotations && m_mouse_mode == MouseMode_Annotate)
     {
         const auto  xform  = viewport_transform();
         const float radius = 0.3f * HelloImGui::EmSize();
+        const auto &a      = current_image()->annotations[size_t(active)];
+
+        // The one a press would take hold of, lit so the handle says so before it is pressed; during a
+        // resize it is whichever the drag is already holding.
+        const int hot = m_annotation_drag == AnnotationDrag::Resizing
+                            ? m_annotation_drag_handle
+                            : handle_at(a, ImGui::GetIO().MousePos, xform, radius);
 
         float2    handles[Annotation::MaxHandles];
-        const int count = annotation_handles(current_image()->annotations[size_t(active)], handles);
+        const int count = annotation_handles(a, handles);
         for (int i = 0; i < count; ++i)
         {
             const float2 at = xform.to_screen(handles[i]);
-            draw_list->AddRectFilled(at - radius, at + radius, IM_COL32_WHITE);
-            draw_list->AddRect(at - radius, at + radius, IM_COL32_BLACK);
+            const float  r  = i == hot ? radius * 1.35f : radius;
+            draw_list->AddRectFilled(at - r, at + r,
+                                     i == hot ? ImGui::GetColorU32(ImGuiCol_ButtonActive) : IM_COL32_WHITE);
+            draw_list->AddRect(at - r, at + r, IM_COL32_BLACK);
         }
     }
 

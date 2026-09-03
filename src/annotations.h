@@ -54,10 +54,10 @@ struct Annotation
 
     /// The one color the user picks: the outline of a shape, and the color of a Text annotation's glyphs.
     /**
-        Cyan by default, which stands out over most images and is not the white or orange a renderer's
-        overlay is drawn in, so whose markup is whose stays readable.
+        A subdued forest green by default: legible over most images, and not the white or orange a
+        renderer's overlay is drawn in, so whose markup is whose stays readable.
     */
-    float4 stroke_color{0.2f, 0.9f, 1.f, 1.f};
+    float4 stroke_color{0.133f, 0.545f, 0.133f, 1.f};
     /// Interior of a closed shape. Alpha zero means unfilled, which is the default and the common case.
     float4 fill_color{0.f, 0.f, 0.f, 0.f};
 
