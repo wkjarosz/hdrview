@@ -301,16 +301,11 @@ void HDRViewApp::draw_image() const
 
         // Both targets report their alpha convention: choose_channel() runs after blend(), so undoing the
         // premultiply on an isolated channel is only safe when the reference qualifies too.
-        if (target == Target_Primary)
-            m_shader->set_uniform_block("fsp", {{"primary_M_to_sRGB", M_to_sRGB},
-                                                {"primary_channels_type", channels_type},
-                                                {"primary_yw", yw},
-                                                {"primary_straight_alpha", straight_alpha}});
-        else
-            m_shader->set_uniform_block("fsp", {{"secondary_M_to_sRGB", M_to_sRGB},
-                                                {"secondary_channels_type", channels_type},
-                                                {"secondary_yw", yw},
-                                                {"secondary_straight_alpha", straight_alpha}});
+        const string prefix = (target == Target_Primary) ? "fsp.primary_" : "fsp.secondary_";
+        m_shader->set_uniform(prefix + "M_to_sRGB", M_to_sRGB);
+        m_shader->set_uniform(prefix + "channels_type", channels_type);
+        m_shader->set_uniform(prefix + "yw", yw);
+        m_shader->set_uniform(prefix + "straight_alpha", straight_alpha);
     };
 
     set_color(Target_Primary, current_image());
@@ -327,27 +322,27 @@ void HDRViewApp::draw_image() const
 
         // fs_params/vs_params are GLSL uniform blocks (see image-shader.sglsl); booleans are `int` there
         // since GLSL uniform blocks cannot contain `bool` members.
-        m_shader->set_uniform_block("fsp", {{"time", (float)ImGui::GetTime()},
-                                            {"clip_warnings", int2{m_clip_warnings}},
-                                            {"clip_range", m_clip_range},
-                                            {"randomness", randomness},
-                                            {"gain", powf(2.0f, m_exposure_live)},
-                                            {"offset", m_offset_live},
-                                            {"gamma", m_gamma_live},
-                                            {"tonemap_mode", (int)m_tonemap},
-                                            {"clamp_to_LDR", (int)m_clamp_to_LDR},
-                                            {"do_dither", (int)m_dither},
-                                            {"blend_mode", (int)m_blend_mode},
-                                            {"channel", (int)m_channel},
-                                            {"bg_mode", (int)m_bg_mode},
-                                            {"bg_color", m_bg_color},
-                                            {"reverse_colormap", (int)m_reverse_colormap},
-                                            {"has_reference", (int)has_reference}});
+        m_shader->set_uniform("fsp.time", (float)ImGui::GetTime());
+        m_shader->set_uniform("fsp.clip_warnings", int2{m_clip_warnings});
+        m_shader->set_uniform("fsp.clip_range", m_clip_range);
+        m_shader->set_uniform("fsp.randomness", randomness);
+        m_shader->set_uniform("fsp.gain", powf(2.0f, m_exposure_live));
+        m_shader->set_uniform("fsp.offset", m_offset_live);
+        m_shader->set_uniform("fsp.gamma", m_gamma_live);
+        m_shader->set_uniform("fsp.tonemap_mode", (int)m_tonemap);
+        m_shader->set_uniform("fsp.clamp_to_LDR", (int)m_clamp_to_LDR);
+        m_shader->set_uniform("fsp.do_dither", (int)m_dither);
+        m_shader->set_uniform("fsp.blend_mode", (int)m_blend_mode);
+        m_shader->set_uniform("fsp.channel", (int)m_channel);
+        m_shader->set_uniform("fsp.bg_mode", (int)m_bg_mode);
+        m_shader->set_uniform("fsp.bg_color", m_bg_color);
+        m_shader->set_uniform("fsp.reverse_colormap", (int)m_reverse_colormap);
+        m_shader->set_uniform("fsp.has_reference", (int)has_reference);
 
-        m_shader->set_uniform_block("vsp", {{"primary_pos", image_position(current_image())},
-                                            {"primary_scale", image_scale(current_image())},
-                                            {"secondary_pos", secondary_pos},
-                                            {"secondary_scale", secondary_scale}});
+        m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
+        m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
+        m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
+        m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
 
         m_shader->set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
 

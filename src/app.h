@@ -180,9 +180,8 @@ public:
     // receiving live images from a renderer (see src/app-ipc.cpp and src/ipc/)
     //-----------------------------------------------------------------------------
     /// Begin accepting connections on 127.0.0.1:`port`. False if the port could not be bound.
-    bool             start_ipc_listening(uint16_t port);
-    void             stop_ipc_listening();
-    const IpcServer &ipc_server() const { return m_ipc_server; }
+    bool start_ipc_listening(uint16_t port);
+    void stop_ipc_listening();
     /// Start or stop listening, and settle `m_ipc_listen_requested` on whatever happened.
     void set_ipc_listening(bool listen);
     /// Change the port, rebinding if already listening.

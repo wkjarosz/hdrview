@@ -94,8 +94,7 @@ if(EMSCRIPTEN)
     GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.*
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/emscripten/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.glsl
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/emscripten/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
 elseif(APPLE)
@@ -103,20 +102,10 @@ elseif(APPLE)
     GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/apple/**.*
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.metal ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
-  )
-  list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
-elseif(WIN32)
-  file(
-    GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
-    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.glsl
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
-elseif(UNIX)
-  # sokol-shdc already writes the generated shaders into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders, so only
-  # Roboto and the top-level *.png need copying here
+else()
   file(
     GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -1810,6 +1799,28 @@ if(APPLE)
   target_compile_definitions(HDRView PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
 endif(APPLE)
 
+# The shared recipe for every executable built from HDRVIEW_SOURCES besides HDRView itself: the test, GUI-test
+# and fuzzer binaries. Anything specific to one of them stays at its call site.
+function(hdrview_setup_target name)
+  target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  set_target_properties(${name} PROPERTIES CXX_STANDARD 17)
+  target_compile_definitions(${name} PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
+  # mirrors the HDRVIEW_BUILD_TREE_ASSETS_DIR on HDRView above, so the app's own asset lookup is exercised
+  target_compile_definitions(${name} PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
+  target_link_libraries(${name} PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+
+  if(WIN32)
+    # same long-path opt-in as the HDRView target above, which tests/test_long_paths.cpp needs
+    target_sources(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
+  endif()
+
+  if(APPLE)
+    target_compile_options(${name} PRIVATE "-fobjc-arc")
+    target_link_libraries(${name} PRIVATE "-framework ApplicationServices")
+    target_compile_definitions(${name} PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+  endif()
+endfunction()
+
 # Unit tests, off by default. They reuse the app's own HDRVIEW_SOURCES/HDRVIEW_DEPENDENCIES/HDRVIEW_DEFINITIONS
 # minus src/hdrview.cpp, which defines the main() doctest supplies itself.
 option(HDRVIEW_BUILD_TESTS "Build unit tests (requires doctest, fetched via CPM)" OFF)
@@ -1824,27 +1835,12 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
                                 tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_cicp_video_range.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
                                 ${HDRVIEW_IPC_TESTS}
   )
-  target_include_directories(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  set_target_properties(hdrview_tests PROPERTIES CXX_STANDARD 17)
-  target_compile_definitions(hdrview_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
-  # mirrors the HDRVIEW_BUILD_TREE_ASSETS_DIR above, so tests/test_assets.cpp exercises the app's own lookup
-  target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
+  hdrview_setup_target(hdrview_tests)
+  target_link_libraries(hdrview_tests PRIVATE doctest::doctest)
   # fuzzer-found inputs that can't be synthesized; see tests/fuzz/artifacts/README.md
   target_compile_definitions(
     hdrview_tests PRIVATE HDRVIEW_TEST_ARTIFACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/artifacts"
   )
-  target_link_libraries(hdrview_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version doctest::doctest)
-
-  if(WIN32)
-    # same long-path opt-in as the HDRView target above, which tests/test_long_paths.cpp needs
-    target_sources(hdrview_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
-  endif()
-
-  if(APPLE)
-    target_compile_options(hdrview_tests PRIVATE "-fobjc-arc")
-    target_link_libraries(hdrview_tests PRIVATE "-framework ApplicationServices")
-    target_compile_definitions(hdrview_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
-  endif()
 
   # Several tests run against the real-world image corpora OpenEXR and libpng vendor in their source trees.
   # Either path can also be set directly, at a checkout of the corresponding upstream tag:
@@ -1956,13 +1952,7 @@ if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
     list(GET fuzzer_parts 1 fuzz_source)
 
     add_executable(${fuzz_target} ${HDRVIEW_SOURCES} ${fuzz_source})
-    target_include_directories(${fuzz_target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    set_target_properties(${fuzz_target} PROPERTIES CXX_STANDARD 17)
-    target_compile_definitions(${fuzz_target} PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
-    target_compile_definitions(
-      ${fuzz_target} PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
-    )
-    target_link_libraries(${fuzz_target} PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
+    hdrview_setup_target(${fuzz_target})
     target_compile_options(${fuzz_target} PRIVATE -fsanitize=fuzzer-no-link)
 
     if(HDRVIEW_FUZZER_RUNTIME)
@@ -1970,23 +1960,7 @@ if(HDRVIEW_BUILD_FUZZERS AND NOT EMSCRIPTEN)
     else()
       target_link_options(${fuzz_target} PRIVATE -fsanitize=fuzzer)
     endif()
-
-    if(APPLE)
-      target_compile_options(${fuzz_target} PRIVATE "-fobjc-arc")
-      target_link_libraries(${fuzz_target} PRIVATE "-framework ApplicationServices")
-      target_compile_definitions(${fuzz_target} PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
-    endif()
   endforeach()
-endif()
-
-# Times this build's libheif AV1 decoder plugins against each other, to re-check the dav1d-vs-libaom choice
-# on another machine or a newer libheif. It talks to libheif directly and needs none of HDRView's sources,
-# and is a measurement, not a pass/fail, so it is not registered with ctest.
-option(HDRVIEW_BUILD_BENCHMARKS "Build the libheif AV1 decoder benchmark" OFF)
-if(HDRVIEW_BUILD_BENCHMARKS AND HDRVIEW_ENABLE_LIBHEIF AND NOT EMSCRIPTEN)
-  add_executable(hdrview_bench_heif tests/bench_heif_decode.cpp)
-  set_target_properties(hdrview_bench_heif PROPERTIES CXX_STANDARD 17)
-  target_link_libraries(hdrview_bench_heif PRIVATE heif)
 endif()
 
 # GUI regression tests, driven by Dear ImGui Test Engine (https://github.com/ocornut/imgui_test_engine), which
@@ -2017,19 +1991,8 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_info.cpp
     tests/gui/test_gui_screenshots.cpp
   )
-  target_include_directories(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  set_target_properties(hdrview_gui_tests PROPERTIES CXX_STANDARD 17)
-  if(WIN32)
-    # same long-path opt-in as the HDRView/hdrview_tests targets, for test_gui_image_io.cpp's
-    # load_from_long_path test
-    target_sources(hdrview_gui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HDRView.manifest)
-  endif()
-  target_compile_definitions(
-    hdrview_gui_tests PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS} HDRVIEW_ENABLE_GUI_TEST_ENGINE
-  )
-  target_compile_definitions(
-    hdrview_gui_tests PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets"
-  )
+  hdrview_setup_target(hdrview_gui_tests)
+  target_compile_definitions(hdrview_gui_tests PRIVATE HDRVIEW_ENABLE_GUI_TEST_ENGINE)
   # the app's own icons, as small always-present image fixtures for the tests/gui/ suite
   target_compile_definitions(
     hdrview_gui_tests
@@ -2047,14 +2010,6 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
       hdrview_gui_tests PRIVATE HDRVIEW_TEST_OPENEXR_DIR="${OpenEXR_SOURCE_DIR}/src/test/bin/test_images"
     )
   endif()
-  target_link_libraries(hdrview_gui_tests PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
-
-  if(APPLE)
-    target_compile_options(hdrview_gui_tests PRIVATE "-fobjc-arc")
-    target_link_libraries(hdrview_gui_tests PRIVATE "-framework ApplicationServices")
-    target_compile_definitions(hdrview_gui_tests PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
-  endif()
-
   # its own ctest entry, so GUI-test failures and logs are never mixed into the doctest suite's output
   enable_testing()
   add_test(NAME hdrview_gui_tests COMMAND hdrview_gui_tests)

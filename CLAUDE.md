@@ -284,8 +284,6 @@ be, but dav1d decodes several times faster, so `HDRVIEW_ENABLE_DAV1D` asks libhe
 and libheif then prefers it (plugin priority 150 vs libaom's 100). Output is bit-identical, AV1 decoding
 being specified exactly. dav1d builds only under meson, so unlike libaom there is no CPM fallback: the CMake
 block finds a system dav1d or leaves AVIF on libaom, as currently happens on Windows and Emscripten.
-`tests/bench_heif_decode.cpp` (behind `HDRVIEW_BUILD_BENCHMARKS`) measures the two against each other and
-checks they agree, using `heif_decoding_options::decoder_id` to address a specific plugin.
 
 ### Rendering backend abstraction (GL vs Metal)
 `renderpass.h`, `shader.h`, and `texture.h` declare platform-agnostic interfaces (adapted from NanoGUI),

@@ -325,19 +325,6 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
     buf.dirty = true;
 }
 
-std::vector<std::string> Shader::block_member_names(const std::string &block_name) const
-{
-    // SPIRV-Cross emits a named uniform block as a struct-typed uniform, whose members glGetActiveUniform()
-    // reports individually as dotted "block.member" names
-    const std::string prefix = block_name + ".";
-
-    std::vector<std::string> names;
-    for (const auto &[key, buf] : m_buffers)
-        if (key.size() > prefix.size() && key.compare(0, prefix.size(), prefix) == 0)
-            names.push_back(key.substr(prefix.size()));
-    return names;
-}
-
 void Shader::set_texture(const std::string &name, Texture *texture)
 {
     // Vulkan-style GLSL sources declare textures and samplers separately, but SPIRV-Cross fuses them into one

@@ -52,8 +52,7 @@ public:
     /**
         Returns a text string with the source (or precompiled binary) of a shader found in the app's assets directory.
 
-        We assume Metal shaders use `.metallib` for binary, and `.metal` for source, and GLSL(ES) shader sources use one
-        of a handful of common extensions like `.glsl` or `.fs` (see \ref shader.cpp for details).
+        We assume Metal shaders use `.metallib` for binary and `.metal` for source, and GLSL(ES) sources use `.glsl`.
 
         \param [in] basename
             The base filename (without extension) relative to the app's assets directory
@@ -61,16 +60,6 @@ public:
             A text string containing the shader.
     */
     static std::string from_asset(std::string_view basename);
-
-    /**
-        Prepend the files in \ref include_files to the top of \ref shader_string
-
-        \param [] shader_string
-        \param [] include_files
-        \return
-    */
-    static std::string prepend_includes(std::string_view                     shader_string,
-                                        const std::vector<std::string_view> &include_files);
 
     /**
         Initialize the shader using the source files (read from the assets directory).
@@ -172,61 +161,6 @@ public:
         else
             throw std::invalid_argument("Shader::set_uniform(): invalid input array dimension!");
     }
-
-    /**
-        A single uniform-block member value, type-erased so that members of differing types can be passed together
-        in one \ref set_uniform_block() call. Stored inline by value, so passing temporaries is safe.
-    */
-    struct UniformValue
-    {
-        static constexpr size_t max_size = 64; ///< sizeof(float4x4), the largest type allowed in a uniform block
-
-        alignas(16) uint8_t data[max_size]{};
-        VariableType type = VariableType::Invalid;
-        size_t       ndim = 0;
-        size_t       shape[3]{1, 1, 1};
-
-        // the constructors below mirror the set_uniform() overloads above
-
-        template <typename T, int M>
-        UniformValue(const linalg::vec<T, M> &value) : type(get_type<T>()), ndim(1), shape{M, 1, 1}
-        {
-            static_assert(sizeof(value) <= max_size, "UniformValue: type too large for a uniform block member");
-            memcpy(data, &value, sizeof(value));
-        }
-
-        template <typename T, int M, int N>
-        UniformValue(const linalg::mat<T, M, N> &value) : type(get_type<T>()), ndim(2), shape{M, N, 1}
-        {
-            static_assert(sizeof(value) <= max_size, "UniformValue: type too large for a uniform block member");
-            memcpy(data, &value, sizeof(value));
-        }
-
-        template <typename T, typename = std::enable_if_t<std::is_scalar_v<T>>>
-        UniformValue(T value) : type(get_type<T>()), ndim(0), shape{1, 1, 1}
-        {
-            memcpy(data, &value, sizeof(value));
-        }
-    };
-
-    /**
-        Upload several members of a uniform block at once, addressing each by its bare member name, so that the
-        block's layout stays an implementation detail.
-
-        A member not named here is left untouched, so \ref begin()'s unbound-argument warning still catches a
-        forgotten uniform. Members whose name starts with an underscore exist only to control the
-        cross-compiler's block layout (see `_pad` in image-shader.sglsl) and are zero-filled automatically.
-
-        \param block_name
-            The block's GLSL instance name (e.g. `"vsp"`), which is what both backends' reflection reports.
-        \param values
-            The members to set, as `{"member_name", value}` pairs. Naming a member the block doesn't have throws.
-    */
-    void set_uniform_block(const std::string                                           &block_name,
-                           std::initializer_list<std::pair<const char *, UniformValue>> values);
-
-    /// Return the names of \p block_name's members, without the `"block."` prefix. Backend-specific.
-    std::vector<std::string> block_member_names(const std::string &block_name) const;
 
     /**
         Set the "rate at which generic vertex attributes advance when rendering multiple instances"
