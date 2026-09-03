@@ -297,6 +297,39 @@ TEST_CASE("A subsampled component is upsampled onto the reference grid")
         }
 }
 
+TEST_CASE("A fourth component is alpha or ink depending on what the color space says")
+{
+    const int              w = 4, h = 2;
+    std::vector<Component> comps;
+    for (int c = 0; c < 4; ++c)
+    {
+        std::vector<int32_t> samples(w * h);
+        for (int i = 0; i < w * h; ++i) samples[i] = (c * 40 + i * 8) % 256;
+        comps.push_back({8, false, 1, 1, samples});
+    }
+
+    // sRGB's fourth component is opacity, and the viewport treats it as such; CMYK's is black ink, and
+    // reading it as opacity would make a dark image transparent
+    const auto rgba = load_bytes(load_j2k_image, encode_with_openjpeg(w, h, comps, OPJ_CLRSPC_SRGB, OPJ_CODEC_JP2),
+                                 "rgba.jp2", raw_load_options());
+    REQUIRE(rgba);
+    REQUIRE(rgba->channels.size() == 4);
+    CHECK(rgba->channels[3].name == "A");
+    CHECK(rgba->transparency != TransparencyType_None);
+
+    const auto cmyk = load_bytes(load_j2k_image, encode_with_openjpeg(w, h, comps, OPJ_CLRSPC_CMYK, OPJ_CODEC_JP2),
+                                 "cmyk.jp2", raw_load_options());
+    REQUIRE(cmyk);
+    REQUIRE(cmyk->channels.size() == 4);
+    CHECK(cmyk->channels[3].name == "K");
+    CHECK(cmyk->transparency == TransparencyType_None);
+
+    // and with nothing to convert the ink with, the samples are left alone rather than guessed at
+    for (int c = 0; c < 4; ++c)
+        for (int i = 0; i < w * h; ++i)
+            CHECK(cmyk->channels[c](i) == doctest::Approx(comps[c].samples[i] / 255.).epsilon(1e-5));
+}
+
 TEST_CASE("Both JPEG 2000 syntaxes decode to the same pixels")
 {
     std::vector<int32_t> wrote;

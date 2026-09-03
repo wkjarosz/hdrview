@@ -463,15 +463,28 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
 
     const int2 size{(int)(img->x1 - img->x0), (int)(img->y1 - img->y0)};
 
+    // OpenJPEG hands over the profile it read from the 'colr' box, but only for the syntaxes whose boxes it
+    // parses, and it also parks CIELab parameters in the same field under a length of zero
+    vector<uint8_t> icc;
+    if (img->icc_profile_buf && img->icc_profile_len > 0)
+        icc.assign(img->icc_profile_buf, img->icc_profile_buf + img->icc_profile_len);
+    else if (!boxes.icc.empty())
+        icc.assign(boxes.icc.data, boxes.icc.data + boxes.icc.size);
+
     OPJ_COLOR_SPACE cs_enum = img->color_space;
     if (cs_enum == OPJ_CLRSPC_UNSPECIFIED || cs_enum == OPJ_CLRSPC_UNKNOWN)
         cs_enum = img->numcomps <= 2 ? OPJ_CLRSPC_GRAY : OPJ_CLRSPC_SRGB;
 
     const bool cmyk = cs_enum == OPJ_CLRSPC_CMYK && img->numcomps >= 4;
     const bool gray = cs_enum == OPJ_CLRSPC_GRAY || img->numcomps < 3;
+    // ICCProfile turns four ink channels into RGB through the file's own profile, the way the JPEG XL loader
+    // does. Without one there is nothing to convert them with, so they keep their own names and their values.
+    const bool cmyk_to_rgb = cmyk && img->numcomps == 4 && !icc.empty() && ICCProfile(icc).is_CMYK();
+    if (cmyk && !cmyk_to_rgb)
+        spdlog::warn("No CMYK ICC profile to convert this image's ink channels with; leaving them as they are.");
 
     // the cdef box names the alpha component, which OpenJPEG reports per component and orders last; with no
-    // cdef, a second or fourth component is alpha by convention
+    // cdef, a second or fourth component is alpha by convention. CMYK's fourth is ink, not opacity.
     uint32_t num_color = cmyk ? 4u : (gray ? 1u : 3u);
     bool     has_alpha = false;
     for (uint32_t c = 0; c < img->numcomps; ++c)
@@ -483,14 +496,20 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
     if (num_color + (has_alpha ? 1u : 0u) > img->numcomps)
         has_alpha = false;
 
-    const uint32_t num_out_color = cmyk ? 3u : num_color;
-    const uint32_t num_extra     = img->numcomps - num_color - (has_alpha ? 1u : 0u);
+    const uint32_t num_extra = img->numcomps - num_color - (has_alpha ? 1u : 0u);
 
     vector<string> names;
-    if (num_out_color == 1)
+    if (cmyk && !cmyk_to_rgb)
+        names.insert(names.end(), {"C", "M", "Y", "K"});
+    else if (num_color == 1)
         names.push_back("Y");
     else
+    {
         names.insert(names.end(), {"R", "G", "B"});
+        // the conversion writes RGB over the four ink channels and a fourth that is opaque everywhere
+        if (cmyk_to_rgb)
+            names.push_back("A");
+    }
     if (has_alpha)
         names.push_back("A");
     for (uint32_t c = 0; c < num_extra; ++c) names.push_back(fmt::format("extra.{}", c));
@@ -578,10 +597,10 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
     // an 'xml ' box is where several encoders put XMP, there being no XMP box in Part 1
     image->xmp_data = !boxes.xmp.empty() ? boxes.xmp : boxes.xml;
 
-    Timer         timer;
-    const size_t  num_pixels = (size_t)size.x * size.y;
-    const int     n_src      = (int)img->numcomps;
-    vector<float> samples(num_pixels * n_src);
+    Timer        timer;
+    const size_t num_pixels = (size_t)size.x * size.y;
+    // every component is its own channel, so this gather is already the layout the image wants
+    vector<float> pixels(num_pixels * nc);
 
     const int block_size = std::max(1, 1024 * 1024 / std::max(1, size.x));
     parallel_for(blocked_range<int>(0, size.y, block_size),
@@ -590,41 +609,18 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
                      for (int y = begin_y; y < end_y; ++y)
                          for (int x = 0; x < size.x; ++x)
                          {
-                             float *p = samples.data() + ((size_t)y * size.x + x) * n_src;
-                             for (int c = 0; c < n_src; ++c) p[c] = component_value(img.get(), (uint32_t)c, x, y);
+                             float *p = pixels.data() + ((size_t)y * size.x + x) * nc;
+                             for (int c = 0; c < nc; ++c) p[c] = component_value(img.get(), (uint32_t)c, x, y);
                          }
                  });
 
-    if ((cs_enum == OPJ_CLRSPC_SYCC || cs_enum == OPJ_CLRSPC_EYCC) && num_out_color == 3)
-        sycc_to_rgb(samples.data(), num_pixels, n_src, img->comps[1].sgnd != 0);
-
-    vector<float> pixels;
-    if (!cmyk)
-        // every component is its own channel, so the gather already has the layout the image wants
-        pixels = std::move(samples);
-    else
-    {
-        // CMYK stores ink coverage, and its four components become three, shifting everything after them
-        pixels.resize(num_pixels * nc);
-        for (size_t i = 0; i < num_pixels; ++i)
-        {
-            const float *src = samples.data() + i * n_src;
-            float       *out = pixels.data() + i * nc;
-            const float  k   = 1.f - src[3];
-            for (int c = 0; c < 3; ++c) out[c] = (1.f - src[c]) * k;
-            for (int c = 3; c < nc; ++c) out[c] = src[c + 1];
-        }
-    }
+    if ((cs_enum == OPJ_CLRSPC_SYCC || cs_enum == OPJ_CLRSPC_EYCC) && !gray && !cmyk)
+        sycc_to_rgb(pixels.data(), num_pixels, nc, img->comps[1].sgnd != 0);
 
     const int3 buffer_size{size.x, size.y, nc};
     string     profile_desc;
     unpremultiply_before_transfer(pixels.data(), buffer_size, image->transparency);
-    // OpenJPEG hands over the profile it read from the 'colr' box, but only for the syntaxes whose boxes it
-    // parses, and it also parks CIELab parameters in the same field under a length of zero
-    if (img->icc_profile_buf && img->icc_profile_len > 0)
-        image->icc_data.assign(img->icc_profile_buf, img->icc_profile_buf + img->icc_profile_len);
-    else if (!boxes.icc.empty())
-        image->icc_data.assign(boxes.icc.data, boxes.icc.data + boxes.icc.size);
+    image->icc_data = icc;
 
     Chromaticities chr;
     if (opts.override_profile)
