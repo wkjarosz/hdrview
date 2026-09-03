@@ -172,6 +172,34 @@ std::string with_extra_boxes(const std::string &jp2, const std::string &extra)
     return jp2.substr(0, at - 4) + extra + jp2.substr(at - 4);
 }
 
+/// A little-endian TIFF holding one IFD0 entry, which is what an EXIF block is.
+std::string exif_blob(uint16_t tag, uint16_t value)
+{
+    std::string out;
+    out += "II";
+    put(out, (uint16_t)42);
+    put(out, (uint32_t)8);
+    put(out, (uint16_t)1);
+    put(out, tag);
+    put(out, (uint16_t)3); // SHORT
+    put(out, (uint32_t)1);
+    put(out, value);
+    put(out, (uint16_t)0);
+    put(out, (uint32_t)0);
+    return out;
+}
+
+/// The body of a 'uuid' box: the sixteen identifying bytes followed by the payload.
+std::string uuid_payload(const uint8_t uuid[16], const std::string &payload)
+{
+    return std::string((const char *)uuid, 16) + payload;
+}
+
+constexpr uint8_t k_xmp_uuid[16]  = {0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8,
+                                     0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC};
+constexpr uint8_t k_exif_uuid[16] = {0x4A, 0x70, 0x67, 0x54, 0x69, 0x66, 0x66, 0x45,
+                                     0x78, 0x69, 0x66, 0x2D, 0x3E, 0x4A, 0x50, 0x32};
+
 } // namespace
 
 TEST_CASE("Component precision and signedness decode to the range they encode")
@@ -298,6 +326,42 @@ TEST_CASE("The sniff accepts both JPEG 2000 syntaxes and nothing else")
     {
         std::istringstream in(other, std::ios::binary);
         CHECK_FALSE(is_j2k_image(in));
+    }
+}
+
+TEST_CASE("A JP2's EXIF and XMP boxes reach the metadata the info panel reads")
+{
+    std::vector<int32_t> wrote;
+    const auto           plain = ramp_codestream(8, false, 4, 4, wrote, OPJ_CODEC_JP2);
+
+    const std::string xmp = "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
+                            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n"
+                            "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
+                            "<rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" "
+                            "xmp:CreatorTool=\"HDRView\"/>\n"
+                            "</rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>";
+
+    // writers disagree over whether the EXIF box repeats JPEG's "Exif\0\0" marker before the TIFF header
+    for (const std::string prefix : {std::string{}, std::string("Exif\0\0", 6)})
+    {
+        CAPTURE(prefix.size());
+
+        // 0x0112 is Orientation, and 3 is a 180-degree rotation
+        const auto with_meta =
+            with_extra_boxes(plain, box("uuid", uuid_payload(k_exif_uuid, prefix + exif_blob(0x0112, 3))) +
+                                        box("uuid", uuid_payload(k_xmp_uuid, xmp)));
+
+        // through load_image(), since finalize() is what turns the raw buffers into the metadata tree
+        const auto img = load_bytes(with_meta, "meta.jp2");
+        REQUIRE(img);
+
+        REQUIRE(img->metadata.contains("exif"));
+        REQUIRE(img->metadata["exif"].is_object());
+        CHECK(img->metadata["exif"].dump().find("Orientation") != std::string::npos);
+
+        REQUIRE(img->metadata.contains("xmp"));
+        REQUIRE(img->metadata["xmp"].is_object());
+        CHECK(img->metadata["xmp"]["xmp"]["CreatorTool"] == "HDRView");
     }
 }
 

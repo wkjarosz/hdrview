@@ -68,7 +68,6 @@ void save_j2k_image(const Image &, ostream &, string_view, float, bool, int, J2K
 
 #include <algorithm>
 #include <cstring>
-#include <optional>
 #include <set>
 #include <thread>
 
@@ -150,28 +149,22 @@ bool read_box(Bytes in, Box &box, size_t &total)
 /// What the JP2 boxes around a codestream say, for the parts OpenJPEG does not report itself.
 struct Jp2Boxes
 {
-    string             brand;
-    Bytes              icc;
-    vector<uint8_t>    exif;
-    vector<uint8_t>    xmp;
-    vector<uint8_t>    xml;
-    vector<Bytes>      codestreams;
-    optional<uint32_t> enum_cs;
+    string          brand;
+    Bytes           icc;
+    vector<uint8_t> exif;
+    vector<uint8_t> xmp;
+    vector<uint8_t> xml;
+    vector<Bytes>   codestreams;
 };
 
-/// Reads the 'colr' box body: an enumerated color space or a restricted ICC profile.
+/// Takes the restricted ICC profile out of a 'colr' box body, for the paths OpenJPEG does not parse itself.
+/**
+    Its enumerated color space needs no reading here: OpenJPEG reports that one as opj_image_t::color_space.
+*/
 void parse_colr(Bytes box, Jp2Boxes &out)
 {
-    if (box.size < 3)
-        return;
-
-    const uint8_t meth = box.data[0];
-    if (meth == 1 && box.size >= 7)
-    {
-        if (!out.enum_cs)
-            out.enum_cs = read_u32(box.data + 3);
-    }
-    else if ((meth == 2 || meth == 3) && box.size > 3 && out.icc.empty())
+    const uint8_t meth = box.size >= 3 ? box.data[0] : 0;
+    if ((meth == 2 || meth == 3) && box.size > 3 && out.icc.empty())
         out.icc = box.subspan(3, box.size - 3);
 }
 
@@ -382,6 +375,11 @@ void sycc_to_rgb(float *pixels, size_t num_pixels, int n, bool chroma_is_signed)
 
 json get_j2k_info() { return json{{"enabled", true}, {"name", "OpenJPEG"}, {"version", opj_version()}}; }
 
+/// Whether `is` opens with either JPEG 2000 syntax.
+/**
+    OpenJPEG publishes no such test: opj_create_decompress() has to be told which syntax to expect, and the
+    magic bytes that decide it live in its command-line tools rather than in the library.
+*/
 bool is_j2k_image(istream &is) noexcept
 {
     auto start = is.tellg();
@@ -621,7 +619,11 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
     const int3 buffer_size{size.x, size.y, nc};
     string     profile_desc;
     unpremultiply_before_transfer(pixels.data(), buffer_size, image->transparency);
-    if (!boxes.icc.empty())
+    // OpenJPEG hands over the profile it read from the 'colr' box, but only for the syntaxes whose boxes it
+    // parses, and it also parks CIELab parameters in the same field under a length of zero
+    if (img->icc_profile_buf && img->icc_profile_len > 0)
+        image->icc_data.assign(img->icc_profile_buf, img->icc_profile_buf + img->icc_profile_len);
+    else if (!boxes.icc.empty())
         image->icc_data.assign(boxes.icc.data, boxes.icc.data + boxes.icc.size);
 
     Chromaticities chr;
