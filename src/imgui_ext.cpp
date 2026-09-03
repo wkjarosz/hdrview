@@ -1387,13 +1387,31 @@ void PE::WrappedText(const string &property_name, const string &value, const str
 namespace ImGui
 {
 
-bool ToneCurvePlot::begin(const char *id)
+namespace
 {
-    // as wide as the sliders beneath it. The tick labels take more width at the left than height at
-    // the bottom, so the height carries a correction measured from the last frame; see end().
-    m_width = ImGui::CalcItemWidth();
+/// The plot's width this frame, and what its height needs on top of that for the area to come out square.
+/**
+    The correction is a property of the style rather than of any one plot, so both dialogs share it; it is
+    measured once and then holds. Between BeginToneCurvePlot() and EndToneCurvePlot() only one plot is open,
+    the same as ImPlot itself.
+*/
+float s_tone_width = 0.f;
+float s_tone_extra = 0.f;
 
-    if (!ImPlot::BeginPlot(id, ImVec2(m_width, m_width + m_extra_height),
+/// \p screen in the plot's own coordinates, clamped to the unit square the axes are locked to.
+float2 tone_plot_pos(ImVec2 screen)
+{
+    const ImPlotPoint p = ImPlot::PixelsToPlot(screen);
+    return float2{std::clamp(float(p.x), 0.f, 1.f), std::clamp(float(p.y), 0.f, 1.f)};
+}
+} // namespace
+
+bool BeginToneCurvePlot(const char *id)
+{
+    // as wide as the sliders beneath it, and as tall as it needs to be for the plot area to be square
+    s_tone_width = ImGui::CalcItemWidth();
+
+    if (!ImPlot::BeginPlot(id, ImVec2(s_tone_width, s_tone_width + s_tone_extra),
                            ImPlotFlags_NoTitle | ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect))
         return false;
 
@@ -1409,18 +1427,18 @@ bool ToneCurvePlot::begin(const char *id)
     return true;
 }
 
-void ToneCurvePlot::curve(const char *name, const float *ys, ImVec4 color, float weight)
+void ToneCurve(const char *name, const float *ys, ImVec4 color, float weight)
 {
-    float xs[N];
-    for (int i = 0; i < N; ++i) xs[i] = x(i);
+    float xs[ToneCurveSamples];
+    for (int i = 0; i < ToneCurveSamples; ++i) xs[i] = ToneCurveX(i);
 
     ImPlotSpec spec;
     spec.LineWeight = weight;
     spec.LineColor  = color;
-    ImPlot::PlotLine(name, xs, ys, N, spec);
+    ImPlot::PlotLine(name, xs, ys, ToneCurveSamples, spec);
 }
 
-void ToneCurvePlot::marker_x(const char *name, float value, ImVec4 color)
+void ToneCurveMarkerX(const char *name, float value, ImVec4 color)
 {
     const float xs[2] = {value, value};
     const float ys[2] = {0.f, 1.f};
@@ -1431,7 +1449,7 @@ void ToneCurvePlot::marker_x(const char *name, float value, ImVec4 color)
     ImPlot::PlotLine(name, xs, ys, 2, spec);
 }
 
-void ToneCurvePlot::handle(float2 at, ImVec4 color)
+void ToneCurveHandle(float2 at, ImVec4 color)
 {
     const float xs[1] = {at.x};
     const float ys[1] = {at.y};
@@ -1444,43 +1462,31 @@ void ToneCurvePlot::handle(float2 at, ImVec4 color)
     ImPlot::PlotScatter("handle", xs, ys, 1, spec);
 }
 
-bool ToneCurvePlot::drag(float2 &position, float2 *pressed_at)
+bool ToneCurveDrag(float2 &position, float2 *pressed_at)
 {
-    auto here = []
-    {
-        const ImPlotPoint p = ImPlot::GetPlotMousePos();
-        return float2{std::clamp(float(p.x), 0.f, 1.f), std::clamp(float(p.y), 0.f, 1.f)};
-    };
-
-    if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-    {
-        m_dragging = true;
-        m_press    = here();
-    }
-
-    if (!m_dragging)
-        return false;
-
     if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
-    {
-        m_dragging = false;
         return false;
-    }
 
-    position = here();
+    // ImGui already records where each button went down, so whether this drag belongs to the plot is a
+    // question about that point rather than something to remember from frame to frame
+    const ImVec2 began = ImGui::GetIO().MouseClickedPos[ImGuiMouseButton_Left];
+    const ImVec2 pos = ImPlot::GetPlotPos(), size = ImPlot::GetPlotSize();
+    if (began.x < pos.x || began.x > pos.x + size.x || began.y < pos.y || began.y > pos.y + size.y)
+        return false;
+
+    position = tone_plot_pos(ImGui::GetIO().MousePos);
     if (pressed_at)
-        *pressed_at = m_press;
+        *pressed_at = tone_plot_pos(began);
     return true;
 }
 
-void ToneCurvePlot::end()
+void EndToneCurvePlot()
 {
-    // measured before the plot closes, and applied to the next frame's height; see begin()
     // Squaring the plot area usually means taking height away, since the tick labels are wider at the left
     // than they are tall at the bottom, so this has to be free to go negative.
     const ImVec2 area = ImPlot::GetPlotSize();
     if (area.x > 0.f && area.y > 0.f)
-        m_extra_height = std::clamp(m_extra_height + (area.x - area.y), -0.5f * m_width, m_width);
+        s_tone_extra = std::clamp(s_tone_extra + (area.x - area.y), -0.5f * s_tone_width, s_tone_width);
 
     ImPlot::EndPlot();
 }
