@@ -1411,8 +1411,12 @@ bool BeginToneCurvePlot(const char *id)
     // as wide as the sliders beneath it, and as tall as it needs to be for the plot area to be square
     s_tone_width = ImGui::CalcItemWidth();
 
+    // NoInputs because the curve is dragged through ToneCurveDrag(), which reads the mouse itself. Without
+    // it ImPlot reads the same drag as an attempt to pan, finds both axes locked, and shows the cursor that
+    // says the drag is not allowed.
     if (!ImPlot::BeginPlot(id, ImVec2(s_tone_width, s_tone_width + s_tone_extra),
-                           ImPlotFlags_NoTitle | ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect))
+                           ImPlotFlags_NoTitle | ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect |
+                               ImPlotFlags_NoInputs))
         return false;
 
     const ImPlotAxisFlags axes = ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_Lock;
