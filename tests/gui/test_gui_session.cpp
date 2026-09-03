@@ -291,4 +291,47 @@ void RegisterTests_Session(ImGuiTestEngine *engine)
         // is, which leaves every later test looking at a speck
         reset_view_controls(ctx);
     };
+
+    // The prompt only appears with images already open, which every other test here has closed. Loading a
+    // session over one is the only way to reach it, so this opens an image first on purpose.
+    t           = IM_REGISTER_TEST(engine, "session", "replacing_a_session_asks_first");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        json j;
+        j["type"]    = "HDRView session";
+        j["version"] = current_version_string();
+        json entry;
+        entry["path"]               = fs::path(HDRVIEW_GUI_TEST_IMAGE).generic_u8string();
+        j["images"]                 = json::array({entry});
+        j["current"]                = 0;
+        j["reference"]              = -1;
+        j["blend_mode"]             = "normal";
+        j["view"]                   = json::object();
+        const fs::path session_path = write_temp_session(j, "hdrview_test_replace.hsess");
+
+        reset_images(ctx);
+        IM_CHECK_EQ(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}), 1);
+        const int kept_id = hdrview()->current_image()->id;
+
+        // cancelling leaves the open image alone
+        hdrview()->load_session(session_path.string());
+        ctx->SetRef("");
+        IM_CHECK(wait_until(ctx, [&] { return ctx->WindowInfo("Replace session?", ImGuiTestOpFlags_NoError).Window; }));
+        ctx->SetRef("Replace session?");
+        ctx->ItemClick("Cancel");
+        ctx->SetRef("");
+        ctx->Yield(4);
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+        IM_CHECK_EQ(hdrview()->current_image()->id, kept_id);
+
+        // confirming loads the session in its place
+        hdrview()->load_session(session_path.string());
+        IM_CHECK(wait_until(ctx, [&] { return ctx->WindowInfo("Replace session?", ImGuiTestOpFlags_NoError).Window; }));
+        ctx->SetRef("Replace session?");
+        ctx->ItemClick("Replace");
+        ctx->SetRef("");
+        wait_for_loads(ctx);
+        IM_CHECK_EQ(hdrview()->num_images(), 1);
+        IM_CHECK(hdrview()->current_image()->id != kept_id);
+    };
 }
