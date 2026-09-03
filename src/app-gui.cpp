@@ -667,6 +667,8 @@ void HDRViewApp::draw_menus()
 
 void HDRViewApp::draw_top_toolbar()
 {
+    static constexpr float2 EXPOSURE_RANGE{-9.f, 9.f}, OFFSET_RANGE{-1.f, 1.f}, GAMMA_RANGE{0.02f, 9.f};
+
     auto img = current_image();
 
     ImGui::BeginGroup();

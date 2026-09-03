@@ -430,13 +430,6 @@ public:
     void set_zoom(float zoom);
     /// The zoom factor: image pixel size / logical pixel size. Always within [MIN_ZOOM, MAX_ZOOM].
     float zoom() const { return m_zoom; }
-
-    /// The ranges the exposure/offset/gamma sliders offer.
-    /**
-        These bound the sliders' drag travel only: Ctrl+click text entry (no ImGuiSliderFlags_ClampOnInput)
-        and the keyboard shortcuts step past them, and values outside them are kept as given.
-    */
-    static constexpr float2 EXPOSURE_RANGE{-9.f, 9.f}, OFFSET_RANGE{-1.f, 1.f}, GAMMA_RANGE{0.02f, 9.f};
     //-----------------------------------------------------------------------------
 
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;
