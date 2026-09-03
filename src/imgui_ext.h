@@ -313,6 +313,50 @@ void Tooltip(const char *description, bool questionMark = false, float wrap_widt
     Fed by calling take() after each item that belongs to a row; it remembers the widest right edge and
     where the first and last rows sit vertically. See RowBracketButton(), which is what consumes it.
 */
+/**
+    The square plot of a tone curve that the tonal dialogs draw above their sliders: what a level goes in
+    as against what it comes out as, over [0,1]. Keeps state between frames, so it is a member of the
+    command. Used between begin() and end(), like ImPlot itself:
+
+        if (m_plot.begin("##Curve"))
+        {
+            m_plot.curve("gamma", ys, ImVec4(1, 1, 1, 0.85f));
+            m_plot.end();
+        }
+*/
+class ToneCurvePlot
+{
+public:
+    /// Samples along the horizontal axis.
+    static constexpr int N = 129;
+
+    /// The input level at sample \p i, where every curve drawn here is evaluated.
+    static float x(int i) { return float(i) / float(N - 1); }
+
+    /// Open the plot. False when ImPlot declined it, in which case nothing else may be called.
+    bool begin(const char *id);
+    /// One curve, \p ys being N outputs for the inputs x(0)..x(N-1).
+    void curve(const char *name, const float *ys, ImVec4 color, float weight = 2.f);
+    /// A vertical line, for marking the input level a curve pivots about.
+    void marker_x(const char *name, float value, ImVec4 color);
+    /// A small marker at \p at, for a point of the curve that can be taken hold of.
+    void handle(float2 at, ImVec4 color);
+    /// While the left button is dragging inside the plot, where it is, in plot coordinates.
+    /**
+        Not the widget's coordinates, which include the frame and tick labels. A drag that began inside is
+        followed after it leaves, and \p pressed_at receives where it began, which says what is being
+        dragged.
+    */
+    bool drag(float2 &position, float2 *pressed_at = nullptr);
+    void end();
+
+private:
+    float  m_width        = 0.f;
+    float  m_extra_height = 0.f; ///< Added to the widget's height to square the plot area; usually negative
+    bool   m_dragging     = false;
+    float2 m_press{0.f, 0.f}; ///< Where the drag began
+};
+
 struct RowSpan
 {
     float right = 0.f;             ///< Right edge of the widest row so far
