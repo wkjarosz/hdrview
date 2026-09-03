@@ -36,6 +36,8 @@ ImageLoadOptions raw_load_options()
     return opts;
 }
 
+int ceil_div(int a, int b) { return (a + b - 1) / b; }
+
 /// One component of a codestream to be built by encode_with_openjpeg().
 struct Component
 {
@@ -86,7 +88,7 @@ OPJ_BOOL out_seek(OPJ_OFF_T offset, void *user_data)
     covered past what a round trip through the writer can reach.
 */
 std::string encode_with_openjpeg(int w, int h, const std::vector<Component> &comps, OPJ_COLOR_SPACE cs,
-                                 OPJ_CODEC_FORMAT format)
+                                 OPJ_CODEC_FORMAT format, int x0 = 0, int y0 = 0)
 {
     std::vector<opj_image_cmptparm_t> parms(comps.size());
     std::memset(parms.data(), 0, parms.size() * sizeof(opj_image_cmptparm_t));
@@ -97,15 +99,24 @@ std::string encode_with_openjpeg(int w, int h, const std::vector<Component> &com
         parms[c].sgnd = comps[c].sgnd ? 1 : 0;
         parms[c].dx   = comps[c].dx;
         parms[c].dy   = comps[c].dy;
-        parms[c].w    = (uint32_t)((w + comps[c].dx - 1) / comps[c].dx);
-        parms[c].h    = (uint32_t)((h + comps[c].dy - 1) / comps[c].dy);
+        // a component holds the grid points from ceil(x0/dx) up to ceil(x1/dx), which is not ceil(w/dx)
+        // once the image has an origin
+        parms[c].w = (uint32_t)(ceil_div(x0 + w, (int)comps[c].dx) - ceil_div(x0, (int)comps[c].dx));
+        parms[c].h = (uint32_t)(ceil_div(y0 + h, (int)comps[c].dy) - ceil_div(y0, (int)comps[c].dy));
     }
 
     opj_image_t *img = opj_image_create((uint32_t)comps.size(), parms.data(), cs);
     REQUIRE(img != nullptr);
-    img->x0 = img->y0 = 0;
-    img->x1           = (uint32_t)w;
-    img->y1           = (uint32_t)h;
+    // the reference grid carries absolute edges, so an image with an origin runs from x0 to x0 + w
+    img->x0 = (uint32_t)x0;
+    img->y0 = (uint32_t)y0;
+    img->x1 = (uint32_t)(x0 + w);
+    img->y1 = (uint32_t)(y0 + h);
+    for (size_t c = 0; c < comps.size(); ++c)
+    {
+        img->comps[c].x0 = (uint32_t)ceil_div(x0, (int)comps[c].dx);
+        img->comps[c].y0 = (uint32_t)ceil_div(y0, (int)comps[c].dy);
+    }
     for (size_t c = 0; c < comps.size(); ++c)
     {
         REQUIRE(comps[c].samples.size() == (size_t)img->comps[c].w * img->comps[c].h);
@@ -229,9 +240,35 @@ TEST_CASE("Component precision and signedness decode to the range they encode")
         }
 }
 
+TEST_CASE("An image whose origin is not at zero decodes at the size it covers")
+{
+    const int            w = 6, h = 4;
+    std::vector<int32_t> samples(w * h);
+    for (int i = 0; i < w * h; ++i) samples[i] = i * 4;
+
+    for (auto origin : {std::pair{0, 0}, std::pair{1, 0}, std::pair{17, 12}})
+    {
+        CAPTURE(origin.first);
+        CAPTURE(origin.second);
+
+        const auto bytes = encode_with_openjpeg(w, h, {{8, false, 1, 1, samples}}, OPJ_CLRSPC_GRAY, OPJ_CODEC_JP2,
+                                                origin.first, origin.second);
+        const auto img   = load_bytes(load_j2k_image, bytes, "offset.jp2", raw_load_options());
+        REQUIRE(img);
+
+        // the image is what the grid covers, x1 - x0, not what its far edge is numbered
+        CHECK(img->size().x == w);
+        CHECK(img->size().y == h);
+        for (int i = 0; i < w * h; ++i) CHECK(img->channels[0](i) == doctest::Approx(samples[i] / 255.).epsilon(1e-5));
+    }
+}
+
 TEST_CASE("A subsampled component is upsampled onto the reference grid")
 {
     const int w = 8, h = 4;
+    // an origin as well, since a component's own origin is ceil(x0/dx): addressing that mixes the two grids
+    // agrees with addressing that does not until both are in play at once
+    const int x0 = 16, y0 = 12;
 
     // luma at full rate, chroma at half in both directions, all three constant per chroma sample so the
     // expected value at every pixel is the chroma sample covering it
@@ -244,7 +281,7 @@ TEST_CASE("A subsampled component is upsampled onto the reference grid")
     }
 
     const auto bytes = encode_with_openjpeg(w, h, {{8, false, 1, 1, y}, {8, false, 2, 2, cb}, {8, false, 2, 2, cr}},
-                                            OPJ_CLRSPC_SRGB, OPJ_CODEC_JP2);
+                                            OPJ_CLRSPC_SRGB, OPJ_CODEC_JP2, x0, y0);
     const auto img   = load_bytes(load_j2k_image, bytes, "subsampled.jp2", raw_load_options());
     REQUIRE(img);
     REQUIRE(img->channels.size() == 3);
