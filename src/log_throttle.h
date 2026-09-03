@@ -1,19 +1,7 @@
 #pragma once
 
-#include <atomic>
 #include <chrono>
 #include <mutex>
-
-// Fires exactly once per call site, independent of message content.
-// Usage: if (static LogOnce guard; guard) spdlog::warn(...);
-class LogOnce
-{
-public:
-    explicit operator bool() { return !m_fired.exchange(true, std::memory_order_relaxed); }
-
-private:
-    std::atomic<bool> m_fired{false};
-};
 
 // Fires at most once per interval, independent of message content.
 // Usage: if (static LogThrottle guard{std::chrono::seconds(5)}; guard) spdlog::warn(...);

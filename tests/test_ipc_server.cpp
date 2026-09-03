@@ -10,6 +10,7 @@
 #include <doctest/doctest.h>
 
 #include "ipc/ipc_server.h"
+#include "ipc_test_helpers.h"
 
 #include <algorithm>
 #include <chrono>
@@ -110,7 +111,7 @@ std::vector<char> stream_of(const std::vector<std::string> &names)
     std::vector<char> bytes;
     for (const auto &n : names)
     {
-        auto packet = IpcPacket::close_image(n);
+        auto packet = ipc_test::close_image(n);
         bytes.insert(bytes.end(), packet.bytes().begin(), packet.bytes().end());
     }
     return bytes;
@@ -221,7 +222,7 @@ TEST_CASE("A tile survives the trip over a socket")
 
     {
         TestClient client{server.port()};
-        auto       packet = IpcPacket::update_image("render", false, channels, {0, 1, 2}, {3, 3, 3}, bounds, data);
+        auto       packet = ipc_test::update_image("render", false, channels, {0, 1, 2}, {3, 3, 3}, bounds, data);
         // in two writes, so the receiver has to hold a partial packet across reads
         std::vector<char> bytes = packet.bytes();
         client.send_all({bytes.begin(), bytes.begin() + bytes.size() / 2});

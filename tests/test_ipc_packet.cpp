@@ -8,6 +8,7 @@
 
 #include "endian-utils.h"
 #include "ipc/ipc_packet.h"
+#include "ipc_test_helpers.h"
 
 #include <cstring>
 
@@ -46,7 +47,7 @@ TEST_CASE("IPC packets round-trip through the wire format")
 {
     SUBCASE("OpenImage keeps the path and selector apart")
     {
-        auto p = IpcPacket::open_image("/tmp/render.exr", "diffuse", true);
+        auto p = ipc_test::open_image("/tmp/render.exr", "diffuse", true);
         CHECK(p.type() == IpcPacketType::OpenImageV2);
 
         auto info = parse(p.bytes()).as_open_image();
@@ -57,13 +58,13 @@ TEST_CASE("IPC packets round-trip through the wire format")
 
     SUBCASE("CloseImage carries just a name")
     {
-        auto info = parse(IpcPacket::close_image("beauty").bytes()).as_close_image();
+        auto info = parse(ipc_test::close_image("beauty").bytes()).as_close_image();
         CHECK(info.name == "beauty");
     }
 
     SUBCASE("ReloadImage")
     {
-        auto info = parse(IpcPacket::reload_image("beauty", false).bytes()).as_reload_image();
+        auto info = parse(ipc_test::reload_image("beauty", false).bytes()).as_reload_image();
         CHECK(info.name == "beauty");
         CHECK_FALSE(info.grab_focus);
     }
@@ -71,7 +72,7 @@ TEST_CASE("IPC packets round-trip through the wire format")
     SUBCASE("CreateImage names every channel")
     {
         const std::vector<std::string> names{"R", "G", "B", "albedo.R"};
-        auto info = parse(IpcPacket::create_image("render", true, int2{64, 32}, names).bytes()).as_create_image();
+        auto info = parse(ipc_test::create_image("render", true, int2{64, 32}, names).bytes()).as_create_image();
 
         CHECK(info.name == "render");
         CHECK(info.size == int2{64, 32});
@@ -89,7 +90,7 @@ TEST_CASE("IPC packets round-trip through the wire format")
         std::vector<float> data(size_t(bounds.size().x) * bounds.size().y * 3);
         for (size_t i = 0; i < data.size(); ++i) data[i] = float(i) * 0.5f;
 
-        auto info = parse(IpcPacket::update_image("render", false, names, offsets, strides, bounds, data).bytes())
+        auto info = parse(ipc_test::update_image("render", false, names, offsets, strides, bounds, data).bytes())
                         .as_update_image();
 
         CHECK(info.name == "render");
@@ -130,7 +131,7 @@ TEST_CASE("VectorGraphics packets round-trip, including the per-type argument co
         {VgCommand::Type::Text, {5.f, 9.f}, "Tile 7"},
     };
 
-    auto info = parse(IpcPacket::vector_graphics("render", false, true, commands).bytes()).as_vector_graphics();
+    auto info = parse(ipc_test::vector_graphics("render", false, true, commands).bytes()).as_vector_graphics();
 
     CHECK(info.name == "render");
     CHECK(info.append);
@@ -260,7 +261,7 @@ TEST_CASE("Malformed IPC packets are refused rather than believed")
 
     SUBCASE("a length that disagrees with the bytes present")
     {
-        auto bytes = IpcPacket::close_image("x").bytes();
+        auto bytes = ipc_test::close_image("x").bytes();
         write_as(reinterpret_cast<unsigned char *>(bytes.data()), uint32_t(bytes.size() + 10), Endian::Little);
         CHECK_THROWS_AS(parse(bytes), std::runtime_error);
     }
@@ -273,7 +274,7 @@ TEST_CASE("Malformed IPC packets are refused rather than believed")
 
     SUBCASE("read as the wrong type")
     {
-        auto p = parse(IpcPacket::close_image("x").bytes());
+        auto p = parse(ipc_test::close_image("x").bytes());
         CHECK_THROWS_AS(p.as_update_image(), std::runtime_error);
         CHECK_THROWS_AS(p.as_create_image(), std::runtime_error);
     }
@@ -379,7 +380,7 @@ TEST_CASE("A byte stream is split back into the packets that were written into i
 {
     // what a socket delivers: whatever has arrived, split wherever the network chose
     std::vector<char> stream;
-    for (const auto &p : {IpcPacket::close_image("a"), IpcPacket::close_image("bb"), IpcPacket::close_image("ccc")})
+    for (const auto &p : {ipc_test::close_image("a"), ipc_test::close_image("bb"), ipc_test::close_image("ccc")})
         stream.insert(stream.end(), p.bytes().begin(), p.bytes().end());
 
     SUBCASE("all at once")

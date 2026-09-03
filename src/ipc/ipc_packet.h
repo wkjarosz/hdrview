@@ -14,7 +14,6 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <vector>
 
 // tev's IPC protocol: [uint32 length][uint8 type][payload], little-endian, NUL-terminated strings; the
@@ -135,20 +134,6 @@ public:
     IpcCreateImage    as_create_image() const;
     IpcUpdateImage    as_update_image() const;
     IpcVectorGraphics as_vector_graphics() const;
-    //@}
-
-    //@{ \name Builders, producing what tev's own client would send.
-    static IpcPacket open_image(std::string_view path, std::string_view channel_selector, bool grab_focus);
-    static IpcPacket reload_image(std::string_view name, bool grab_focus);
-    static IpcPacket close_image(std::string_view name);
-    static IpcPacket create_image(std::string_view name, bool grab_focus, int2 size,
-                                  const std::vector<std::string> &channel_names);
-    /// Builds a V3 update. `offsets`/`strides` address `data` as IpcUpdateImage documents.
-    static IpcPacket update_image(std::string_view name, bool grab_focus, const std::vector<std::string> &channel_names,
-                                  const std::vector<int64_t> &offsets, const std::vector<int64_t> &strides,
-                                  const Box2i &bounds, const std::vector<float> &data);
-    static IpcPacket vector_graphics(std::string_view name, bool grab_focus, bool append,
-                                     const std::vector<VgCommand> &commands);
     //@}
 
 private:

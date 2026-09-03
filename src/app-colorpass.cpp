@@ -195,13 +195,13 @@ void HDRViewApp::end_colorpass_frame()
 
     m_resolve_pass->begin();
     m_colorpass_shader->set_texture("color_texture", m_color_texture.get());
-    m_colorpass_shader->set_uniform_block("cpp", {{"tf_type", (int)m_display_cs.tf.type},
-                                                  {"tf_gamma", m_display_cs.tf.gamma},
-                                                  {"tf_white_nits", m_display_cs.transfer_white_nits()},
-                                                  {"sdr_white_nits", m_display_cs.sdr_white_nits},
-                                                  {"min_nits", m_display_cs.min_nits},
-                                                  {"max_nits", m_display_cs.max_nits},
-                                                  {"gamut_matrix", m_gamut_matrix}});
+    m_colorpass_shader->set_uniform("cpp.tf_type", (int)m_display_cs.tf.type);
+    m_colorpass_shader->set_uniform("cpp.tf_gamma", m_display_cs.tf.gamma);
+    m_colorpass_shader->set_uniform("cpp.tf_white_nits", m_display_cs.transfer_white_nits());
+    m_colorpass_shader->set_uniform("cpp.sdr_white_nits", m_display_cs.sdr_white_nits);
+    m_colorpass_shader->set_uniform("cpp.min_nits", m_display_cs.min_nits);
+    m_colorpass_shader->set_uniform("cpp.max_nits", m_display_cs.max_nits);
+    m_colorpass_shader->set_uniform("cpp.gamut_matrix", m_gamut_matrix);
     m_colorpass_shader->begin();
     m_colorpass_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
     m_colorpass_shader->end();
