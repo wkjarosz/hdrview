@@ -37,8 +37,7 @@ void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
     const float2 along  = a.p1 - a.p0;
     const float  length = std::sqrt(along.x * along.x + along.y * along.y);
 
-    // Degenerate: no direction to point in, so there is no head to draw and the shaft is a dot. Emitting
-    // the shaft alone keeps a click-without-drag visible rather than silently producing nothing.
+    // No direction to point in, so no head; the shaft alone keeps a click without a drag visible.
     if (length <= 0.f)
     {
         out.push_back(cmd(VgCommand::Type::BeginPath));
@@ -51,8 +50,8 @@ void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
     const float2 dir  = along / length;
     const float2 perp = float2{-dir.y, dir.x};
 
-    // The head is proportioned in screen pixels, like the stroke it terminates, but has to be expressed in
-    // image coordinates along with the rest of the geometry -- hence the division by the scale.
+    // The head is proportioned in screen pixels, like the stroke it terminates, but goes out in image
+    // coordinates with the rest of the geometry -- hence the division by the scale.
     const float head_len =
         std::min(k_head_length * a.stroke_width / std::max(scale, 1e-6f), k_max_head_fraction * length);
     const float  head_half = head_len * (k_head_half_width / k_head_length);
@@ -96,8 +95,7 @@ Box2f Annotation::bounds() const
 {
     Box2f box;
     box.enclose(p0);
-    // Text has no second point: its extent is whatever the string measures, which depends on a font this
-    // has no access to, so the anchor is all that can honestly be reported.
+    // Text has no second point, and its extent depends on a font this cannot reach, so report the anchor.
     if (shape != Shape::Text)
         box.enclose(p1);
     return box;

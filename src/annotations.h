@@ -16,19 +16,17 @@
 /*!
     A shape the user drew over an image, in that image's pixel coordinates.
 
-    Distinct from Image::vector_overlay, which carries what a renderer sends over IPC: that is a command
-    stream describing what another process is producing, replaced wholesale whenever it sends again. These
-    are the user's own markup -- retained, addressable one at a time, and edited -- so they are kept as
-    shapes and flattened into overlay commands only to be drawn. Everything the overlay interpreter can do,
-    it does for these too; see vector_overlay.h.
+    Distinct from Image::vector_overlay, which is what a renderer sends over IPC: a command stream,
+    replaced wholesale whenever it sends again. These are the user's own markup, kept as shapes so they
+    can be addressed and edited one at a time, and flattened into those same commands only to be drawn.
 
-    Deliberately not image data. Annotations do not enter the undo history, do not mark an image modified,
-    and are never rasterized into pixels -- they are how the image is being looked at, like the exposure or
-    the selection, and an image a renderer owns can carry them as freely as one loaded from a file.
+    Deliberately not image data: annotations stay out of the undo history, never mark an image modified,
+    and are never rasterized. They are how the image is being looked at, like the exposure or the
+    selection, so an image a renderer owns can carry them as freely as one loaded from a file.
 
     Geometry is in image pixels, so an annotation stays on the feature it was drawn over as the view is
-    panned and zoomed. Stroke widths and text sizes are in *screen* pixels instead, so markup stays legible
-    at any zoom rather than dwindling with the thing it points at.
+    panned and zoomed. Stroke widths and text sizes are in *screen* pixels, so markup stays legible at any
+    zoom.
 */
 struct Annotation
 {
@@ -74,8 +72,8 @@ struct Annotation
     /// Axis-aligned bounds in image pixel coordinates.
     /*!
         The geometry only. A stroke straddles the outline and text extends from its anchor, so what is
-        drawn reaches a little past this -- callers that need the drawn extent pad it themselves, since
-        the padding is a screen quantity and this is an image one.
+        drawn reaches a little past this; callers pad it themselves, the padding being a screen quantity
+        and this an image one.
     */
     Box2f bounds() const;
 
