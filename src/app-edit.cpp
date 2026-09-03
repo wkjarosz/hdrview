@@ -313,6 +313,36 @@ void HDRViewApp::draw_edit_subject_selector()
         ImGui::Tooltip("There is no selection, so edits cover the whole image.");
 }
 
+/// A filter running off the main thread, with what is needed to finish or abandon it.
+/**
+    The worker writes only `results` and `progress`; the main thread reads `done` once a frame and applies
+    the results.
+*/
+struct HDRViewApp::RunningFilter
+{
+    ImagePtr         image;
+    std::string      name;
+    std::vector<int> channels;
+    Box2i            bounds;
+
+    /// Filters one of `channels`, given its index among them and a share of the progress bar.
+    std::function<Array2Df(const Array2Df &, int, AtomicProgress)> filter;
+
+    int2                  new_size{0}; ///< The size of the results; zero keeps the image's shape.
+    std::vector<Array2Df> results;
+    AtomicProgress        progress{true};
+    std::atomic<bool>     done{false};
+    std::thread           worker;
+
+    /// Cancel and join the worker, which reads this object and the thread pool.
+    ~RunningFilter()
+    {
+        progress.cancel();
+        if (worker.joinable())
+            worker.join();
+    }
+};
+
 void HDRViewApp::modify_channels_async(const ImagePtr &img, const string &name, const EditSubject &subject,
                                        const ChannelFilter &filter)
 {
@@ -330,7 +360,7 @@ void HDRViewApp::modify_channels_async(const ImagePtr &img, const string &name, 
     if (channels.empty() || !bounds.has_volume())
         return;
 
-    auto running      = std::make_unique<RunningFilter>();
+    auto running      = std::make_shared<RunningFilter>();
     running->image    = img;
     running->name     = name;
     running->channels = channels;
@@ -357,7 +387,7 @@ void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, i
         return;
     }
 
-    auto running      = std::make_unique<RunningFilter>();
+    auto running      = std::make_shared<RunningFilter>();
     running->image    = img;
     running->name     = name;
     running->bounds   = img->data_window;
@@ -369,7 +399,7 @@ void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, i
     start_filter(std::move(running));
 }
 
-void HDRViewApp::start_filter(std::unique_ptr<RunningFilter> running)
+void HDRViewApp::start_filter(std::shared_ptr<RunningFilter> running)
 {
     // the statistics tasks read the very pixels the filter is about to
     for (auto &c : running->image->channels) c.cancel_stats();

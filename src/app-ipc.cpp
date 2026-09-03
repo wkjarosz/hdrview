@@ -111,6 +111,18 @@ void HDRViewApp::set_ipc_port(uint16_t port)
         set_ipc_listening(true);
 }
 
+/// Turns the listener's running totals into the rates the activity readout shows.
+struct HDRViewApp::IpcRates
+{
+    double   sampled_at    = 0.0; ///< ImGui::GetTime() of the last sample; see k_window for why not per frame
+    uint64_t last_packets  = 0;
+    uint64_t last_bytes    = 0;
+    double   packets_per_s = 0.0;
+    double   bytes_per_s   = 0.0;
+
+    void update(const IpcActivity &now, double time);
+};
+
 void HDRViewApp::IpcRates::update(const IpcActivity &now, double time)
 {
     // long enough that the numbers hold still, short enough to follow a renderer starting and stopping
@@ -167,7 +179,9 @@ void HDRViewApp::draw_ipc_gui()
                            clients == 1 ? "1 client" : fmt::format("{} clients", clients).c_str());
 
         const auto activity = m_ipc_server.activity();
-        m_ipc_rates.update(activity, ImGui::GetTime());
+        if (!m_ipc_rates)
+            m_ipc_rates = std::make_shared<IpcRates>();
+        m_ipc_rates->update(activity, ImGui::GetTime());
 
         // well above the quarter-second pbrt leaves between updates, so a renderer pausing between passes
         // does not make the readout flicker
@@ -180,7 +194,7 @@ void HDRViewApp::draw_ipc_gui()
             ImGui::ProgressBar(-1.f * float(ImGui::GetTime()), ImVec2(-FLT_MIN, ImGui::GetFrameHeight() * 0.35f), "");
             ImGui::TextWrapped("%s",
                                fmt::format("Receiving {:.1h}/s over {:.0f} updates/s.",
-                                           human_readible{size_t(m_ipc_rates.bytes_per_s)}, m_ipc_rates.packets_per_s)
+                                           human_readible{size_t(m_ipc_rates->bytes_per_s)}, m_ipc_rates->packets_per_s)
                                    .c_str());
         }
         else if (clients)

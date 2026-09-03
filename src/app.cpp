@@ -686,31 +686,14 @@ void HDRViewApp::setup_frame_callbacks()
                 if (should_select)
                     m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
 
-                if (m_pending_session)
-                {
-                    // Resolve this arrival to the earliest not-yet-filled entry sharing its load options;
-                    // see PendingSession in app.h for why that key is the right one to match on.
-                    auto key =
-                        PendingSession::Key{new_image->path, new_image->channel_selector, new_image->alpha_override};
-                    if (auto it = m_pending_session->unresolved.find(key); it != m_pending_session->unresolved.end())
-                    {
-                        if (!it->second.empty())
-                        {
-                            int entry_idx = it->second.front();
-                            it->second.pop_front();
-                            m_pending_session->entries[entry_idx].loaded = new_image;
-                        }
-                        if (it->second.empty())
-                            m_pending_session->unresolved.erase(it);
-                    }
-                }
+                resolve_loading_session_image(new_image);
 
                 update_visibility(); // this also calls set_image_textures();
                 m_request_sort = true;
             });
 
-        if (m_pending_session && m_image_loader.num_pending_images() == 0)
-            finish_pending_session();
+        if (m_loading_session && m_image_loader.num_pending_images() == 0)
+            finish_loading_session();
 
         draw_tool_palette();
         draw_tweak_window();
