@@ -1245,6 +1245,14 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    always_enabled,
                    false,
                    &m_draw_pixel_info});
+        add(Action{{"Draw annotations"},
+                   ICON_MY_ANNOTATE,
+                   ImGuiKey_None,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
+                   &m_draw_annotations});
 
         add(Action{{"Draw data window"},
                    ICON_MY_DATA_WINDOW,
