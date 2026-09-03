@@ -865,7 +865,7 @@ Image::Image(int2 size, int num_channels) : Image()
         }
     }
     display_window = data_window = Box2i{int2{0}, channels.front().size()};
-    set_default_alpha_type();
+    set_default_transparency();
 }
 
 Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
@@ -877,27 +877,28 @@ Image::Image(int2 size, const std::vector<std::string> &channel_names) : Image()
     for (const auto &name : channel_names) channels.emplace_back(name, size);
 
     display_window = data_window = Box2i{int2{0}, size};
-    set_default_alpha_type();
+    set_default_transparency();
 }
 
-void Image::set_alpha(AlphaType_ from_file, AlphaSource_ source, const std::optional<AlphaType_> &override_with)
+void Image::set_transparency(TransparencyType_ from_file, const std::optional<TransparencyType_> &override_with,
+                             bool assumed)
 {
-    alpha_type_from_file = from_file;
-    alpha_source         = source;
-    alpha_type           = override_with.value_or(from_file);
+    transparency_from_file = from_file;
+    transparency_assumed   = assumed;
+    transparency           = override_with.value_or(from_file);
 }
 
-void Image::set_default_alpha_type()
+void Image::set_default_transparency()
 {
     for (const auto &c : channels)
         if (auto tail = Channel::tail(c.name); tail == "A" || tail == "a")
         {
-            // Assembled rather than read, so nothing declared this; see set_default_alpha_type()'s comment.
-            set_alpha(AlphaType_PremultipliedLinear, AlphaSource_Assumed, std::nullopt);
+            // Assembled rather than read, so nothing declared this; see set_default_transparency()'s comment.
+            set_transparency(TransparencyType_PremultipliedLinear, std::nullopt, true);
             return;
         }
 
-    set_alpha(AlphaType_None, AlphaSource_Assumed, std::nullopt);
+    set_transparency(TransparencyType_None, std::nullopt, true);
 }
 
 map<string, int> Image::channels_in_layer(const string &layer) const
@@ -1248,36 +1249,8 @@ ImagePtr Image::duplicate(const Box2i &region) const
 
     auto copy = std::make_shared<Image>();
 
-    // Everything that says what the samples mean. A copy that lost its primaries or its alpha convention
-    // would be read differently from the image it was made of, which is not what "duplicate" means.
-    copy->filename             = filename;
-    copy->partname             = partname;
-    copy->channel_selector     = channel_selector;
-    copy->chromaticities       = chromaticities;
-    copy->adopted_neutral      = adopted_neutral;
-    copy->M_RGB_to_XYZ         = M_RGB_to_XYZ;
-    copy->M_XYZ_to_RGB         = M_XYZ_to_RGB;
-    copy->M_to_sRGB            = M_to_sRGB;
-    copy->luminance_weights    = luminance_weights;
-    copy->adaptation_method    = adaptation_method;
-    copy->color_space          = color_space;
-    copy->white_point          = white_point;
-    copy->alpha_type           = alpha_type;
-    copy->alpha_type_from_file = alpha_type_from_file;
-    copy->alpha_source         = alpha_source;
-    copy->alpha_override       = alpha_override;
-    copy->metadata             = metadata;
-    copy->exif                 = exif;
-    copy->xmp_data             = xmp_data;
-    copy->icc_data             = icc_data;
-    copy->orientation_applied  = orientation_applied;
-    copy->path                 = path;
-    copy->last_modified        = last_modified;
-    copy->size_bytes           = size_bytes;
-
-    // Not copied: `id`, which the constructor hands out; `history`, since nothing has been done to the
-    // copy; `is_live`, since these samples are a snapshot; and `vector_overlay`, which annotates what a
-    // renderer is producing.
+    // the copy gets a fresh id and an empty history, and is neither live nor annotated
+    static_cast<ImageMetadata &>(*copy) = *this;
 
     const int2 extent = clipped.size();
     const int2 offset = clipped.min - data_window.min;
@@ -1285,8 +1258,8 @@ ImagePtr Image::duplicate(const Box2i &region) const
     copy->channels.reserve(channels.size());
     for (const auto &channel : channels)
     {
-        // Channel cannot be copied -- the deleted copy is what stops a texture or a statistics task being
-        // duplicated by accident -- so a fresh one is filled from this one's samples.
+        // Channel cannot be copied; the deleted copy is what stops a texture or a statistics task being
+        // duplicated by accident, so a fresh one is filled from this one's samples.
         Channel out{channel.name, extent};
         out.bits_per_sample = channel.bits_per_sample;
 
@@ -1301,18 +1274,12 @@ ImagePtr Image::duplicate(const Box2i &region) const
         copy->channels.push_back(std::move(out));
     }
 
-    // A duplicated region is a whole image, not a crop sitting inside the old canvas -- but one of the
-    // whole image keeps the frame it had, display window and all.
-    if (clipped == data_window)
-    {
-        copy->data_window    = data_window;
-        copy->display_window = display_window;
-    }
-    else
+    // A duplicated region becomes a whole image of its own; a copy of the whole one keeps both windows.
+    if (clipped != data_window)
         copy->data_window = copy->display_window = clipped;
 
     // The layers and groups follow from the channel names, and finalize() would premultiply a
-    // straight-alpha image a second time -- these samples are already whatever this image's are.
+    // straight-alpha image a second time; these samples are already whatever this image's are.
     copy->rebuild_layers();
 
     return copy;
@@ -1580,7 +1547,7 @@ void Image::finalize()
 
     // if we have a straight alpha channel, premultiply the other channels by it.
     // this needs to be done after the values have been made linear
-    if (alpha_type == AlphaType_Straight)
+    if (transparency == TransparencyType_Straight)
     {
         for (auto &g : groups)
         {

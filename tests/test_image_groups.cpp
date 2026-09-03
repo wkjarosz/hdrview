@@ -14,12 +14,12 @@ namespace
 {
 
 // A 1x1 RGBA image with color channels of 1 and alpha 0.5, so a premultiply is visible.
-ImagePtr make_rgba_image(AlphaType_ alpha_type)
+ImagePtr make_rgba_image(TransparencyType_ transparency)
 {
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
     for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
     img->channels[3](0, 0) = 0.5f;
-    img->alpha_type        = alpha_type;
+    img->transparency      = transparency;
     img->finalize();
     return img;
 }
@@ -36,7 +36,7 @@ const ChannelGroup *find_group(const ImagePtr &img, const std::string &name)
 
 TEST_CASE("straight alpha is premultiplied into one RGBA group by default")
 {
-    auto img = make_rgba_image(AlphaType_Straight);
+    auto img = make_rgba_image(TransparencyType_Straight);
 
     REQUIRE(img->groups.size() == 1);
     auto *rgba = find_group(img, "R,G,B,A");
@@ -47,9 +47,9 @@ TEST_CASE("straight alpha is premultiplied into one RGBA group by default")
     CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
 }
 
-TEST_CASE("AlphaType_None splits alpha off and skips the premultiply")
+TEST_CASE("TransparencyType_None splits alpha off and skips the premultiply")
 {
-    auto img = make_rgba_image(AlphaType_None);
+    auto img = make_rgba_image(TransparencyType_None);
 
     // R,G,B group next in the table, with A left over as its own single-channel group
     REQUIRE(img->groups.size() == 2);
@@ -72,7 +72,7 @@ TEST_CASE("raw_pixel reports the file's values for a straight-alpha image")
 {
     SUBCASE("straight alpha is divided back out")
     {
-        auto img = make_rgba_image(AlphaType_Straight);
+        auto img = make_rgba_image(TransparencyType_Straight);
 
         // stored premultiplied as 0.5; the file held 1.0
         CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
@@ -84,7 +84,7 @@ TEST_CASE("raw_pixel reports the file's values for a straight-alpha image")
     SUBCASE("a premultiplied file is reported as stored")
     {
         // its alpha=0 pixels have no straight form, so its values are what the author intended
-        auto img = make_rgba_image(AlphaType_PremultipliedLinear);
+        auto img = make_rgba_image(TransparencyType_PremultipliedLinear);
 
         auto p = img->raw_pixel(int2{0, 0});
         CHECK(p.x == doctest::Approx(1.f));
@@ -98,7 +98,7 @@ TEST_CASE("An image whose default alpha type is left alone keeps its samples")
     auto img = std::make_shared<Image>(int2{1, 1}, 4);
     for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
     img->channels[3](0, 0) = 0.5f;
-    REQUIRE(img->alpha_type == AlphaType_PremultipliedLinear);
+    REQUIRE(img->transparency == TransparencyType_PremultipliedLinear);
     img->finalize();
 
     // coverage, so it groups as RGBA, and already multiplied, so finalize() leaves it alone

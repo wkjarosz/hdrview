@@ -102,7 +102,8 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
     auto image      = make_shared<Image>(size.xy(), size.z);
     image->filename = filename;
     // QOI's spec makes alpha unassociated
-    image->set_alpha(size.z > 3 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format, alpha_override_of(opts));
+    image->set_transparency(size.z > 3 ? TransparencyType_Straight : TransparencyType_None,
+                            transparency_override_of(opts));
     image->metadata["loader"]       = "qoi";
     image->metadata["pixel format"] = fmt::format("{}-bit (8 bpc)", size.z * 8);
     image->set_bits_per_sample(8);

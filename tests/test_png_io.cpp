@@ -450,7 +450,7 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
         REQUIRE(original->channels.size() == 2);
         REQUIRE(original->groups.size() == 1);
         REQUIRE(original->groups[0].type == ChannelGroup::YA_Channels);
-        REQUIRE(original->alpha_type == AlphaType_Straight);
+        REQUIRE(original->transparency == TransparencyType_Straight);
 
         std::ostringstream out(std::ios::binary);
         save_png_image(*original, out, file, /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
@@ -506,8 +506,8 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
             img->channels[1](x, y) = alpha[i];
         }
 
-    img->alpha_type = AlphaType_Straight; // what the PNG loader records for a gray+alpha file
-    img->finalize();                      // premultiplies Y by A, and builds the Y,A group
+    img->transparency = TransparencyType_Straight; // what the PNG loader records for a gray+alpha file
+    img->finalize();                               // premultiplies Y by A, and builds the Y,A group
 
     REQUIRE(img->groups.size() == 1);
     REQUIRE(img->groups[0].type == ChannelGroup::YA_Channels);
@@ -550,7 +550,7 @@ TEST_CASE("saving gray+alpha applies the exposure gain to the color channel only
             img->channels[0](x, y) = straight_y;
             img->channels[1](x, y) = a; // a gain of 2 would saturate this to 1
         }
-    img->alpha_type = AlphaType_Straight;
+    img->transparency = TransparencyType_Straight;
     img->finalize(); // premultiplies Y by A
 
     std::ostringstream out(std::ios::binary);

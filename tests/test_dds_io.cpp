@@ -93,8 +93,8 @@ TEST_CASE("DDS premultiplied-alpha formats are not premultiplied a second time")
     REQUIRE(straight->channels.size() == 4);
     REQUIRE(premultiplied->channels.size() == 4);
 
-    CHECK(straight->alpha_type == AlphaType_Straight);
-    CHECK(premultiplied->alpha_type == AlphaType_PremultipliedLinear);
+    CHECK(straight->transparency == TransparencyType_Straight);
+    CHECK(premultiplied->transparency == TransparencyType_PremultipliedLinear);
 
     // both decode to the same alpha, which has to be well away from 0 and 1 for the rest to mean anything
     for (auto *img : {straight.get(), premultiplied.get()})
@@ -121,6 +121,6 @@ TEST_CASE("DDS DXT4 is premultiplied and DXT5 is straight")
     auto dxt5 = load_dds(make_one_block_dds("DXT5"), "dxt5.dds");
     auto dxt4 = load_dds(make_one_block_dds("DXT4"), "dxt4.dds");
 
-    CHECK(dxt5->alpha_type == AlphaType_Straight);
-    CHECK(dxt4->alpha_type == AlphaType_PremultipliedLinear);
+    CHECK(dxt5->transparency == TransparencyType_Straight);
+    CHECK(dxt4->transparency == TransparencyType_PremultipliedLinear);
 }

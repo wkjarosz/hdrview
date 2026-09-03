@@ -704,8 +704,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         auto image      = make_shared<Image>(size.xy(), size.z);
         image->filename = filename;
         // PNG's spec makes alpha unassociated; a file carries no signal of its own
-        image->set_alpha(size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
-                         alpha_override_of(opts));
+        image->set_transparency(size.z == 4 || size.z == 2 ? TransparencyType_Straight : TransparencyType_None,
+                                transparency_override_of(opts));
         image->chromaticities = chr;
         image->metadata       = metadata;
         // a palette's IHDR depth counts bits per index; png_set_palette_to_rgb() expands those to 8-bit RGB
@@ -755,7 +755,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         string profile_desc = color_profile_name(chr ? named_color_gamut(*chr) : ColorGamut_Unspecified, tf);
 
         // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
-        unpremultiply_before_transfer(float_pixels.data(), size, image->alpha_type);
+        unpremultiply_before_transfer(float_pixels.data(), size, image->transparency);
 
         if (opts.override_profile)
         {
@@ -806,7 +806,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                 spdlog::info("Image is already in linear color space.");
         }
 
-        repremultiply_after_transfer(float_pixels.data(), size, image->alpha_type);
+        repremultiply_after_transfer(float_pixels.data(), size, image->transparency);
 
         image->metadata["color profile"] = profile_desc;
 

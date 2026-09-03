@@ -105,11 +105,6 @@ void HDRViewApp::setup_window_and_backend(optional<bool> force_sdr)
     Imf::setGlobalThreadCount(threads);
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 
-    // Lets any zip opened through m_image_loader (drag-and-drop, CLI args, "Open image...") be recognized as
-    // a session bundle; see try_load_zip_as_session().
-    m_image_loader.zip_bundle_hook = [this](string_view zip_bytes, const string &zip_name)
-    { return try_load_zip_as_session(zip_bytes, zip_name); };
-
 #if defined(__APPLE__)
     // if there is a screen with a non-retina resolution connected to an otherwise retina mac, the fonts may
     // look blurry. Here we force that macs always use the 2X retina scale factor for fonts. Produces crisp

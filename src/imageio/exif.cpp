@@ -236,12 +236,6 @@ void           Exif::reset() { m_impl.reset(); }
 size_t         Exif::size() const { return m_impl ? m_impl->data.size() : 0; }
 const uint8_t *Exif::data() const { return m_impl ? m_impl->data.data() : nullptr; }
 
-// see exif.h for why this compares by subtraction
-bool maker_note_range_within(uint32_t offset, uint32_t size, uint32_t bound)
-{
-    return offset <= bound && size <= bound - offset;
-}
-
 /// Walk the entries of an Apple maker note, which libexif has no decoder for.
 /**
     The note is a TIFF-style IFD preceded by a 12-byte "Apple iOS" header, with its own byte order and
@@ -336,7 +330,9 @@ static bool for_each_apple_makernote_entry(ExifData *ed, F &&visit)
         // if the data fits in 4 bytes, it sits at location 8, otherwise location 8 stores a 32-bit offset
         // to where the data is
         uint32_t entry_offset = (entry_size > 4) ? read_as<uint32_t>(mn_data + ofs + 8, endian) : uint32_t(ofs + 8);
-        if (!maker_note_range_within(entry_offset, entry_size, uint32_t(mn_size)))
+        // compared by subtraction, since these are 32-bit file fields and offset + size wraps where size_t
+        // is no wider (wasm32)
+        if (entry_offset > mn_size || entry_size > uint32_t(mn_size) - entry_offset)
         {
             spdlog::warn("ExifMnoteApple: tag 0x{:04x} points outside the maker note; skipping.", tag);
             continue;

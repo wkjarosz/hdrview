@@ -313,21 +313,68 @@ vector<string> BackgroundImageLoader::recent_files_short(int head_length, int ta
     return short_names;
 }
 
+/// A miniz reader over an in-memory archive, ended when it goes out of scope.
+class ZipReader
+{
+public:
+    explicit ZipReader(string_view bytes)
+    {
+        memset(&m_zip, 0, sizeof(m_zip));
+        m_open = mz_zip_reader_init_mem(&m_zip, bytes.data(), bytes.size(), 0);
+    }
+    ~ZipReader()
+    {
+        if (m_open)
+            mz_zip_reader_end(&m_zip);
+    }
+    ZipReader(const ZipReader &)            = delete;
+    ZipReader &operator=(const ZipReader &) = delete;
+
+    explicit operator bool() const { return m_open; }
+
+    int num_entries() { return (int)mz_zip_reader_get_num_files(&m_zip); }
+    int locate(const string &entry_path) { return mz_zip_reader_locate_file(&m_zip, entry_path.c_str(), nullptr, 0); }
+
+    /// Stat entry `index`, failing for a directory.
+    bool stat(int index, mz_zip_archive_file_stat &st)
+    {
+        return mz_zip_reader_file_stat(&m_zip, index, &st) && !st.m_is_directory;
+    }
+
+    /// Read a stat'ed entry into `buffer`, failing for an implausible declared size or a failed decompression.
+    bool extract(const mz_zip_archive_file_stat &st, std::vector<char> &buffer)
+    {
+        if (!zip_entry_size_is_plausible(st.m_uncomp_size, st.m_comp_size, st.m_filename))
+            return false;
+
+        buffer.resize(st.m_uncomp_size);
+        if (!mz_zip_reader_extract_to_mem(&m_zip, st.m_file_index, buffer.data(), buffer.size(), 0))
+        {
+            spdlog::warn("Failed to extract '{}' from the zip archive", st.m_filename);
+            return false;
+        }
+        return true;
+    }
+
+private:
+    mz_zip_archive m_zip;
+    bool           m_open = false;
+};
+
 vector<std::pair<string, string>> zip_root_entries_with_suffix(string_view zip_bytes, const string &suffix)
 {
     vector<std::pair<string, string>> found;
 
-    mz_zip_archive zip;
-    memset(&zip, 0, sizeof(zip));
-    if (!mz_zip_reader_init_mem(&zip, zip_bytes.data(), zip_bytes.size(), 0))
+    ZipReader zip{zip_bytes};
+    if (!zip)
         return found;
 
-    string suffix_lower = to_lower(suffix);
-    int    num          = (int)mz_zip_reader_get_num_files(&zip);
-    for (int i = 0; i < num; ++i)
+    string            suffix_lower = to_lower(suffix);
+    std::vector<char> buffer;
+    for (int i = 0, num = zip.num_entries(); i < num; ++i)
     {
         mz_zip_archive_file_stat stat;
-        if (!mz_zip_reader_file_stat(&zip, i, &stat) || stat.m_is_directory)
+        if (!zip.stat(i, stat))
             continue;
 
         fs::path entry_path = fs::path(stat.m_filename);
@@ -339,53 +386,25 @@ vector<std::pair<string, string>> zip_root_entries_with_suffix(string_view zip_b
             to_lower(name.substr(name.size() - suffix_lower.size())) != suffix_lower)
             continue;
 
-        if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, name))
+        if (!zip.extract(stat, buffer))
             continue;
 
-        std::vector<char> buffer(stat.m_uncomp_size);
-        if (!mz_zip_reader_extract_to_mem(&zip, i, buffer.data(), buffer.size(), 0))
-        {
-            spdlog::warn("Failed to extract '{}' while scanning a zip for session manifests", name);
-            continue;
-        }
         found.emplace_back(name, string(buffer.begin(), buffer.end()));
     }
 
-    mz_zip_reader_end(&zip);
     return found;
 }
 
 std::optional<string> zip_extract_entry(string_view zip_bytes, const string &entry_path)
 {
-    mz_zip_archive zip;
-    memset(&zip, 0, sizeof(zip));
-    if (!mz_zip_reader_init_mem(&zip, zip_bytes.data(), zip_bytes.size(), 0))
+    ZipReader zip{zip_bytes};
+    if (!zip)
         return std::nullopt;
 
-    int index = mz_zip_reader_locate_file(&zip, entry_path.c_str(), nullptr, 0);
-    if (index < 0)
-    {
-        mz_zip_reader_end(&zip);
-        return std::nullopt;
-    }
-
+    int                      index = zip.locate(entry_path);
     mz_zip_archive_file_stat stat;
-    if (!mz_zip_reader_file_stat(&zip, index, &stat))
-    {
-        mz_zip_reader_end(&zip);
-        return std::nullopt;
-    }
-
-    if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, entry_path))
-    {
-        mz_zip_reader_end(&zip);
-        return std::nullopt;
-    }
-
-    std::vector<char> buffer(stat.m_uncomp_size);
-    bool              ok = mz_zip_reader_extract_to_mem(&zip, index, buffer.data(), buffer.size(), 0);
-    mz_zip_reader_end(&zip);
-    if (!ok)
+    std::vector<char>        buffer;
+    if (index < 0 || !zip.stat(index, stat) || !zip.extract(stat, buffer))
         return std::nullopt;
 
     return string(buffer.begin(), buffer.end());
@@ -416,15 +435,14 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
     auto extract_and_schedule = [&](string_view zip_buffer, const string &zip_name, bool select_first,
                                     ImagePtr to_replace, const string &entry_pattern = "")
     {
-        mz_zip_archive zip;
-        memset(&zip, 0, sizeof(zip));
-        if (!mz_zip_reader_init_mem(&zip, zip_buffer.data(), zip_buffer.size(), 0))
+        ZipReader zip{zip_buffer};
+        if (!zip)
         {
             spdlog::error("Failed to open zip archive '{}'", zip_name);
             return 0;
         }
 
-        int num        = (int)mz_zip_reader_get_num_files(&zip);
+        int num        = zip.num_entries();
         int num_images = 0;
 
         spdlog::debug("Zip '{}' contains {} files, loading...", zip_name, num);
@@ -433,9 +451,7 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
         for (int i = 0; i < num; ++i)
         {
             mz_zip_archive_file_stat stat;
-            if (!mz_zip_reader_file_stat(&zip, i, &stat))
-                continue;
-            if (stat.m_is_directory)
+            if (!zip.stat(i, stat))
                 continue;
 
             fs::path entry_path = fs::path(stat.m_filename);
@@ -453,17 +469,10 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
             if (!entry_pattern.empty() && entry_path.u8string() != entry_pattern)
                 continue;
 
-            if (!zip_entry_size_is_plausible(stat.m_uncomp_size, stat.m_comp_size, entry_path.u8string()))
+            if (!zip.extract(stat, buffer))
                 continue;
 
-            buffer.resize(stat.m_uncomp_size);
-            if (!mz_zip_reader_extract_to_mem(&zip, i, buffer.data(), buffer.size(), 0))
-            {
-                spdlog::warn("Failed to extract '{}' from '{}'", entry_path.u8string(), zip_name);
-                continue;
-            }
-
-            string_view data{reinterpret_cast<char *>(buffer.data()), buffer.size()};
+            string_view data{buffer.data(), buffer.size()};
             // build a combined filename that prepends the zip path to the entry path
             string combined = zip_name + "/" + entry_path.u8string();
             // schedule async load; do not add each entry to recent files
@@ -477,8 +486,6 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
 
         if (!num_images)
             spdlog::warn("No loadable images found in '{}'", zip_name);
-
-        mz_zip_reader_end(&zip);
 
         spdlog::info("Loading files in the zip archive took {:f} seconds.", timer.elapsed() / 1000.f);
 
@@ -495,7 +502,8 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
 
         if (to_lower(get_extension(filename)) == ".zip")
         {
-            if (zip_bundle_hook && zip_bundle_hook(*buffer, filename))
+            // a zip opened in its own right may be a session bundle
+            if (hdrview()->try_load_zip_as_session(*buffer, filename))
                 return;
 
             remove_recent_file(filename);
@@ -591,7 +599,7 @@ void BackgroundImageLoader::background_load(const string filename, std::optional
 
             // a non-empty entry_fn means "re-extract this one already-known entry", not "a zip was just
             // opened"; only the latter is a candidate session bundle
-            if (entry_fn.empty() && zip_bundle_hook && zip_bundle_hook(string_view(buf.data(), buf.size()), zip_fn))
+            if (entry_fn.empty() && hdrview()->try_load_zip_as_session(string_view(buf.data(), buf.size()), zip_fn))
                 return;
 
             if (extract_and_schedule(string_view(buf.data(), buf.size()), zip_fn, should_select, to_replace, entry_fn))
@@ -637,18 +645,8 @@ bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &d
     return true;
 }
 
-void BackgroundImageLoader::remove_watched_directories(std::function<bool(const fs::path &)> criterion)
-{
-    remove_watched_directories_if(criterion, /* keep_explicit */ false);
-}
-
-void BackgroundImageLoader::remove_implicitly_watched_directories(std::function<bool(const fs::path &)> criterion)
-{
-    remove_watched_directories_if(criterion, /* keep_explicit */ true);
-}
-
-void BackgroundImageLoader::remove_watched_directories_if(const std::function<bool(const fs::path &)> &criterion,
-                                                          bool                                         keep_explicit)
+void BackgroundImageLoader::remove_watched_directories(std::function<bool(const fs::path &)> criterion,
+                                                       bool                                  keep_explicit)
 {
     // Remove directories that match the criterion
     for (auto it = m_directories.begin(); it != m_directories.end();)
@@ -904,22 +902,22 @@ void draw_load_image_options_dialog(bool &open)
                        "only load layers which contain either of these two words, and \"-.A\" would exclude channels "
                        "named \"A\". Leave empty to load all parts.");
 
-        ImGui::Checkbox("Override file's alpha", &s_opts.override_alpha);
+        ImGui::Checkbox("Override file's alpha", &s_opts.override_transparency);
         ImGui::Tooltip("By default HDRView follows what the file says about its alpha channel. Enable this to state "
                        "the interpretation yourself, for a file whose semi-transparent areas read too dark or too "
                        "bright, or whose fourth channel is really a mask rather than transparency.");
 
-        if (s_opts.override_alpha)
+        if (s_opts.override_transparency)
         {
             ImGui::Indent();
             ImGui::PushItemWidth(ImGui::CalcItemWidth() - ImGui::GetStyle().IndentSpacing);
-            if (ImGui::BeginCombo("Alpha", alpha_override_name(s_opts.alpha_override)))
+            if (ImGui::BeginCombo("Alpha", transparency_override_name(s_opts.transparency_override)))
             {
-                for (AlphaType_ a = 0; a < AlphaType_Count; ++a)
+                for (TransparencyType_ a = 0; a < TransparencyType_Count; ++a)
                 {
-                    const bool is_selected = s_opts.alpha_override == a;
-                    if (ImGui::Selectable(alpha_override_name(a), is_selected))
-                        s_opts.alpha_override = a;
+                    const bool is_selected = s_opts.transparency_override == a;
+                    if (ImGui::Selectable(transparency_override_name(a), is_selected))
+                        s_opts.transparency_override = a;
 
                     if (is_selected)
                         ImGui::SetItemDefaultFocus();
@@ -1210,10 +1208,10 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
 
                 i->filename   = filename;
                 i->size_bytes = static_cast<size_t>(size);
-                // the loaders have already applied the override to alpha_type; record the option itself so a
+                // the loaders have already applied the override to transparency; record the option itself so a
                 // reload or a saved session can repeat it
-                if (opts.override_alpha)
-                    i->alpha_override = opts.alpha_override;
+                if (opts.override_transparency)
+                    i->transparency_override = opts.transparency_override;
                 // If multiple image "parts" were loaded and they have names, store these names in the image's
                 // channel selector. This is useful if we later want to reload a specific image part from the
                 // original file.

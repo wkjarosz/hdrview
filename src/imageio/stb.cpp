@@ -294,8 +294,8 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         image           = make_shared<Image>(size.xy(), size.z);
         image->filename = filename;
         // none of the stb-decoded formats carries an alpha-kind signal; all specify unassociated
-        image->set_alpha(size.z > 3 || size.z == 2 ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
-                         alpha_override_of(opts));
+        image->set_transparency(size.z > 3 || size.z == 2 ? TransparencyType_Straight : TransparencyType_None,
+                                transparency_override_of(opts));
         if (size.w > 1)
             image->partname = fmt::format("frame {:04}", frame);
         image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());
@@ -359,7 +359,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         string profile_desc = color_profile_name(cg, tf);
 
         // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
-        unpremultiply_before_transfer(float_pixels.data(), size.xyz(), image->alpha_type);
+        unpremultiply_before_transfer(float_pixels.data(), size.xyz(), image->transparency);
 
         if (opts.override_profile)
         {
@@ -393,7 +393,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
                 spdlog::info("Image is already in linear color space.");
         }
 
-        repremultiply_after_transfer(float_pixels.data(), size.xyz(), image->alpha_type);
+        repremultiply_after_transfer(float_pixels.data(), size.xyz(), image->transparency);
 
         image->metadata["color profile"] = profile_desc;
 

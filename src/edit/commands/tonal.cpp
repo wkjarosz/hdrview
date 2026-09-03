@@ -151,7 +151,7 @@ public:
         if (auto img = ctx.image; img && img->is_valid_group(img->active_group_index(Target_Primary)))
         {
             const auto &group = img->groups[size_t(img->active_group_index(Target_Primary))];
-            if (img->alpha_type != AlphaType_None && group_has_alpha(group.type))
+            if (img->transparency != TransparencyType_None && group_has_alpha(group.type))
             {
                 premultiplied = true;
                 alpha_slot    = group.num_channels - 1;

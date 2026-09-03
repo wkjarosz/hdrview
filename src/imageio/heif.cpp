@@ -41,8 +41,6 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-std::vector<std::string> heif_encoder_names(HEIFCodec) { return {}; }
-
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 
 #else
@@ -92,7 +90,7 @@ struct HEIFSaveOptions
     bool             use_alpha = true;
     TransferFunction tf        = {TransferFunction::sRGB, 2.2f};
     size_t           encoder   = 0u;
-    HEIFCodec        codec     = HEIFCodec::Any;
+    HEIFCodec        codec     = HEIFCodec::HEIF;
 };
 
 static HEIFSaveOptions s_opts;
@@ -132,8 +130,8 @@ static bool codec_admits(HEIFCodec codec, heif_compression_format format)
     {
     case HEIFCodec::HEVC: return format == heif_compression_HEVC;
     case HEIFCodec::AV1: return format == heif_compression_AV1;
-    case HEIFCodec::HEIF: return format != heif_compression_AV1;
-    default: return true;
+    case HEIFCodec::HEIF:
+    default: return format != heif_compression_AV1;
     }
 }
 
@@ -148,29 +146,18 @@ static std::vector<size_t> encoders_for(HEIFCodec codec)
     return result;
 }
 
-/// The encoder to start on: the first that implements `codec`.
-/**
-    Prefers HEVC when any codec will do and, where there is a choice, one that can store alpha.
-*/
+/// The encoder to start on: the first that implements `codec`, preferring one that can store alpha.
 static size_t default_encoder_for(HEIFCodec codec, bool need_alpha)
 {
     auto candidates = encoders_for(codec);
     if (candidates.empty())
         return 0u;
 
-    auto first_matching = [&](heif_compression_format format) -> const size_t *
-    {
+    // a .heif conventionally holds HEVC
+    if (codec == HEIFCodec::HEIF)
         for (const auto &i : candidates)
-            if (heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i]) == format)
-                return &i;
-        return nullptr;
-    };
-
-    // a .heif conventionally holds HEVC, and a caller that named no codec takes AV1 as the next best
-    if (codec == HEIFCodec::Any || codec == HEIFCodec::HEIF)
-        for (auto format : {heif_compression_HEVC, heif_compression_AV1})
-            if (auto *i = first_matching(format))
-                return *i;
+            if (heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[i]) == heif_compression_HEVC)
+                return i;
 
     if (need_alpha)
         for (const auto &i : candidates)
@@ -354,12 +341,53 @@ static auto chroma_name(heif_chroma ch)
     }
 }
 
+/// Copy one decoded plane into `out` as interleaved floats in [0,1], returning its bits per channel.
+static int normalize_heif_plane(heif_image *himage, heif_channel plane, int2 size, int cpp, float *out)
+{
+    int            bytes_per_line = 0;
+    const uint8_t *pixels         = heif_image_get_plane(himage, plane, &bytes_per_line);
+    if (!pixels)
+        throw runtime_error{"HEIF image plane has no pixel data"};
+
+    const int bpp_storage = heif_image_get_bits_per_pixel(himage, plane);
+    const int bpc         = heif_image_get_bits_per_pixel_range(himage, plane);
+    spdlog::debug("Bits per pixel: {}; Bits per pixel storage: {}; Channels per pixel: {}; Bytes per line: {}", bpc,
+                  bpp_storage, cpp, bytes_per_line);
+    if (bpp_storage != cpp * 16 && bpp_storage != cpp * 8)
+        throw runtime_error(fmt::format("Unsupported bits per pixel: {}", bpp_storage));
+
+    // branching on the sample width per row lets each loop vectorize
+    const float bpc_div    = 1.f / ((1 << bpc) - 1);
+    const bool  is_16bit   = (bpp_storage == cpp * 16);
+    const int   block_size = std::max(1, 1024 * 1024 / (size.x * cpp));
+    parallel_for(blocked_range<int>(0, size.y, block_size),
+                 [&](int begin_y, int end_y, int, int)
+                 {
+                     for (int y = begin_y; y < end_y; ++y)
+                     {
+                         float *row_out = out + (size_t)y * size.x * cpp;
+                         if (is_16bit)
+                         {
+                             auto row = reinterpret_cast<const uint16_t *>(pixels + y * (size_t)bytes_per_line);
+                             for (int i = 0; i < size.x * cpp; ++i) row_out[i] = bpc_div * row[i];
+                         }
+                         else
+                         {
+                             auto row = reinterpret_cast<const uint8_t *>(pixels + y * (size_t)bytes_per_line);
+                             for (int i = 0; i < size.x * cpp; ++i) row_out[i] = bpc_div * row[i];
+                         }
+                     }
+                 });
+
+    return bpc;
+}
+
 // Process decoded heif image: create an Image, populate metadata, linearize and copy channels.
 static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_profile_nclx *handle_level_nclx,
                                            const std::vector<uint8_t> &handle_level_icc_profile,
                                            const ImageLoadOptions &opts, int3 &size, int cpp, int num_planes,
                                            const heif_channel out_planes[], const string &partname,
-                                           AlphaType_ alpha_type)
+                                           TransparencyType_ transparency)
 {
     int img_w = heif_image_get_width(himage, out_planes[0]);
     int img_h = heif_image_get_height(himage, out_planes[0]);
@@ -443,45 +471,14 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     // the code below works for both interleaved (RGBA) and planar (YA) channel layouts
     for (int p = 0; p < num_planes; ++p)
     {
-        int            bytes_per_line = 0;
-        const uint8_t *pixels         = heif_image_get_plane(himage, out_planes[p], &bytes_per_line);
-        int            bpp_storage    = heif_image_get_bits_per_pixel(himage, out_planes[p]);
-        int            bpc            = heif_image_get_bits_per_pixel_range(himage, out_planes[p]);
-        spdlog::debug("Bits per pixel: {}; Bits per pixel storage: {}; Channels per pixel: {}; Bytes per line: {}", bpc,
-                      bpp_storage, cpp, bytes_per_line);
-        if (bpp_storage != cpp * 16 && bpp_storage != cpp * 8)
-            throw runtime_error(fmt::format("Unsupported bits per pixel: {}", bpp_storage));
+        // a unique_ptr to skip a vector's value-init, which the normalization immediately overwrites
+        auto      float_pixels = std::unique_ptr<float[]>(new float[(size_t)size.x * size.y * cpp]);
+        const int bpc          = normalize_heif_plane(himage, out_planes[p], size.xy(), cpp, float_pixels.get());
         if (p == 0)
         {
             image->metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", size.z * bpc, bpc);
             image->set_bits_per_sample(bpc);
         }
-        float bpc_div = 1.f / ((1 << bpc) - 1);
-
-        // copy the pixels into a contiguous float buffer, normalized to [0,1]. Branching on the sample width
-        // per row lets each loop vectorize; the buffer is a unique_ptr to skip a vector's value-init, which
-        // this immediately overwrites.
-        auto       float_pixels = std::unique_ptr<float[]>(new float[(size_t)size.x * size.y * cpp]);
-        const bool is_16bit     = (bpp_storage == cpp * 16);
-        const int  block_size   = std::max(1, 1024 * 1024 / (size.x * cpp));
-        parallel_for(blocked_range<int>(0, size.y, block_size),
-                     [&](int begin_y, int end_y, int, int)
-                     {
-                         for (int y = begin_y; y < end_y; ++y)
-                         {
-                             float *out = &float_pixels[(size_t)y * size.x * cpp];
-                             if (is_16bit)
-                             {
-                                 auto row = reinterpret_cast<const uint16_t *>(pixels + y * (size_t)bytes_per_line);
-                                 for (int i = 0; i < size.x * cpp; ++i) out[i] = bpc_div * row[i];
-                             }
-                             else
-                             {
-                                 auto row = reinterpret_cast<const uint8_t *>(pixels + y * (size_t)bytes_per_line);
-                                 for (int i = 0; i < size.x * cpp; ++i) out[i] = bpc_div * row[i];
-                             }
-                         }
-                     });
 
         // alpha carries neither a transfer function nor primaries, so copy it through as decoded. Only the
         // monochrome path arrives here with a separate alpha plane; elsewhere linearize_pixels() gets the
@@ -489,7 +486,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         if (out_planes[p] != heif_channel_Alpha)
         {
             // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
-            unpremultiply_before_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
+            unpremultiply_before_transfer(float_pixels.get(), int3{size.xy(), cpp}, transparency);
 
             if (opts.override_profile)
             {
@@ -534,7 +531,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                 image->metadata["color profile"] = profile_desc;
             }
 
-            repremultiply_after_transfer(float_pixels.get(), int3{size.xy(), cpp}, alpha_type);
+            repremultiply_after_transfer(float_pixels.get(), int3{size.xy(), cpp}, transparency);
         }
 
         // copy the interleaved float pixels into the channels
@@ -583,32 +580,11 @@ static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
     if (w <= 0 || h <= 0)
         throw runtime_error{"HEIF auxiliary image decoded to an empty plane"};
 
-    int            bytes_per_line = 0;
-    const uint8_t *plane          = heif_image_get_plane(himage.get(), out_plane, &bytes_per_line);
-    if (!plane)
-        throw runtime_error{"HEIF auxiliary image has no pixel data"};
-
-    const int bpp_storage = heif_image_get_bits_per_pixel(himage.get(), out_plane);
-    const int bpc         = heif_image_get_bits_per_pixel_range(himage.get(), out_plane);
-    if (bpp_storage != channels * 16 && bpp_storage != channels * 8)
-        throw runtime_error{fmt::format("Unsupported bits per pixel in HEIF auxiliary image: {}", bpp_storage)};
-
-    const bool  is_16bit = (bpp_storage == channels * 16);
-    const float bpc_div  = 1.f / ((1 << bpc) - 1);
-
     GainmapImage out;
     out.size     = int2{w, h};
     out.channels = channels;
     out.pixels.resize(size_t(w) * h * channels);
-    for (int y = 0; y < h; ++y)
-    {
-        auto row8  = reinterpret_cast<const uint8_t *>(plane + y * (size_t)bytes_per_line);
-        auto row16 = reinterpret_cast<const uint16_t *>(plane + y * (size_t)bytes_per_line);
-        for (int x = 0; x < w; ++x)
-            for (int c = 0; c < channels; ++c)
-                out.pixels[(size_t(y) * w + x) * channels + c] =
-                    bpc_div * (is_16bit ? row16[channels * x + c] : row8[channels * x + c]);
-    }
+    normalize_heif_plane(himage.get(), out_plane, out.size, channels, out.pixels.data());
 
     return out;
 }
@@ -852,22 +828,22 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     heif_image_release);
                 // MIAF marks premultiplied alpha with a 'prem' reference from the master item to the alpha
                 // one; its absence means straight, so only its presence is something the file stated
-                const bool       premultiplied = heif_image_handle_is_premultiplied_alpha(ihandle.get());
-                const AlphaType_ from_file =
-                    !has_alpha ? AlphaType_None : (premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
+                const bool              premultiplied = heif_image_handle_is_premultiplied_alpha(ihandle.get());
+                const TransparencyType_ from_file =
+                    !has_alpha ? TransparencyType_None
+                               : (premultiplied ? TransparencyType_PremultipliedLinear : TransparencyType_Straight);
 
                 // resolved before decoding, since the color management below brackets itself with it
-                const AlphaType_ alpha_type = alpha_override_of(opts).value_or(from_file);
+                const TransparencyType_ transparency = transparency_override_of(opts).value_or(from_file);
 
                 // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
-                ImagePtr image =
-                    process_decoded_heif_image(himage.get(), handle_level_nclx.get(), handle_level_icc_profile, opts,
-                                               size, cpp, num_planes, out_planes, fmt::format("{:d}", id), alpha_type);
+                ImagePtr image = process_decoded_heif_image(himage.get(), handle_level_nclx.get(),
+                                                            handle_level_icc_profile, opts, size, cpp, num_planes,
+                                                            out_planes, fmt::format("{:d}", id), transparency);
 
                 // preserve file-level metadata that comes from the handle/context
                 image->filename = filename;
-                image->set_alpha(from_file, premultiplied ? AlphaSource_File : AlphaSource_Format,
-                                 alpha_override_of(opts));
+                image->set_transparency(from_file, transparency_override_of(opts));
                 image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                 image->metadata["header"]["Main brand"] = {
                     {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
@@ -1043,7 +1019,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
 
                     heif_channel out_planes[2] = {heif_channel_interleaved, heif_channel_Alpha};
                     ImagePtr image = process_decoded_heif_image(himage.get(), nullptr, {}, opts, size, 3, 1, out_planes,
-                                                                partname, AlphaType_None);
+                                                                partname, TransparencyType_None);
                     image->filename                         = filename;
                     image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                     image->metadata["header"]["Main brand"] = {
@@ -1305,15 +1281,6 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 // GUI parameter function
-std::vector<std::string> heif_encoder_names(HEIFCodec codec)
-{
-    init_heif_supported_formats();
-
-    std::vector<std::string> names;
-    for (size_t i : encoders_for(codec)) names.emplace_back(heif_encoder_descriptor_get_name(s_encoder_descriptors[i]));
-    return names;
-}
-
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
 {
     init_heif_supported_formats();

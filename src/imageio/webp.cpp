@@ -331,8 +331,8 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             frame_image->filename      = filename;
             frame_image->partname      = partname;
             // WebP's spec makes alpha unassociated
-            frame_image->set_alpha(has_alpha ? AlphaType_Straight : AlphaType_None, AlphaSource_Format,
-                                   alpha_override_of(opts));
+            frame_image->set_transparency(has_alpha ? TransparencyType_Straight : TransparencyType_None,
+                                          transparency_override_of(opts));
             frame_image->icc_data       = icc_data;
             frame_image->exif           = Exif{exif_data};
             frame_image->xmp_data       = xmp_data;
@@ -394,7 +394,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
             int3 frame_size{frame_width, frame_height, num_channels};
 
             // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
-            unpremultiply_before_transfer(frame_pixels.data(), frame_size, frame_image->alpha_type);
+            unpremultiply_before_transfer(frame_pixels.data(), frame_size, frame_image->transparency);
 
             if (opts.override_profile)
             {
@@ -421,7 +421,7 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
                 frame_image->metadata["color profile"] = profile_desc;
             }
 
-            repremultiply_after_transfer(frame_pixels.data(), frame_size, frame_image->alpha_type);
+            repremultiply_after_transfer(frame_pixels.data(), frame_size, frame_image->transparency);
 
             float        *pixels = frame_pixels.data();
             vector<float> canvas_float;

@@ -874,7 +874,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto        img   = hdrview()->current_image();
         const auto &group = img->groups[img->selected_group];
         // loudly, not silently: a test that skips itself here would pass while fill was wrong
-        IM_CHECK_EQ(int(img->alpha_type != AlphaType_None), 1);
+        IM_CHECK_EQ(int(img->transparency != TransparencyType_None), 1);
         IM_CHECK_EQ(int(group_has_alpha(group.type)), 1);
 
         // half-transparent red: finalize() premultiplies a straight-alpha image, so what lands in the
@@ -1446,7 +1446,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // what the samples mean travels with them; a copy read in different primaries is a different picture
         IM_CHECK_EQ(copy->color_space, original->color_space);
-        IM_CHECK_EQ(copy->alpha_type, original->alpha_type);
+        IM_CHECK_EQ(copy->transparency, original->transparency);
         IM_CHECK_EQ(copy->groups.size(), original->groups.size());
 
         reset_images(ctx);

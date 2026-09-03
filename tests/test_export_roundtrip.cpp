@@ -162,7 +162,7 @@ ImagePtr make_image(const Layout &layout, float alpha)
     }
     // as every loader does for a straight-alpha file, so finalize() premultiplies and the writers'
     // unpremultiply step has something to undo
-    img->alpha_type = AlphaType_Straight;
+    img->transparency = TransparencyType_Straight;
     img->finalize();
     return img;
 }

@@ -476,26 +476,19 @@ static const char *s_transfer_function_names[TransferFunction::Count + 1] = {
     "DCI-P3",                  // TransferFunction::DCI_P3
     nullptr};
 
-static const char *s_alpha_type_names[] = {"None", "Premultiplied Linear", "Premultiplied Non-Linear", "Straight",
-                                           nullptr};
+static const char *s_transparency_type_names[] = {"None", "Premultiplied Linear", "Premultiplied Non-Linear",
+                                                  "Straight", nullptr};
 
-// Spelled out, unlike s_alpha_type_names: the metadata panel reports what the file turned out to hold,
+// Spelled out, unlike s_transparency_type_names: the metadata panel reports what the file turned out to hold,
 // where one word is enough, while the combo asks the user to choose between the kinds.
-static const char *s_alpha_override_names[] = {"None (channel is data)", "Premultiplied, in linear light",
-                                               "Premultiplied, after transfer", "Straight", nullptr};
+static const char *s_transparency_override_names[] = {"None", "Premultiplied, in linear light",
+                                                      "Premultiplied, after transfer", "Straight", nullptr};
 
-static const char *s_alpha_source_suffixes[] = {"assumed", "per the format", "from the file", nullptr};
-static const char *s_alpha_source_phrases[]  = {"assumed", "the format says", "the file said", nullptr};
+const char *transparency_type_name(TransparencyType_ at) { return s_transparency_type_names[at]; }
 
-const char *alpha_type_name(AlphaType_ at) { return s_alpha_type_names[at]; }
+const char *transparency_override_name(TransparencyType_ at) { return s_transparency_override_names[at]; }
 
-const char *alpha_source_suffix(AlphaSource_ as) { return s_alpha_source_suffixes[as]; }
-
-const char *alpha_source_phrase(AlphaSource_ as) { return s_alpha_source_phrases[as]; }
-
-const char *alpha_override_name(AlphaType_ at) { return s_alpha_override_names[at]; }
-
-const char **alpha_type_names() { return s_alpha_type_names; }
+const char **transparency_type_names() { return s_transparency_type_names; }
 
 namespace
 {
