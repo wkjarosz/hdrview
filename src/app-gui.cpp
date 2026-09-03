@@ -1473,8 +1473,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                                              "https://github.com/cisco/openh264");
                     if (HDRVIEW_ENABLE_J2K)
                         ImGui::PE::Hyperlink("OpenJPEG",
-                                             "For loading & saving JPEG 2000 images, in their own file formats and "
-                                             "as J2K- and HTJ2K-compressed HEIF items.",
+                                             "For encoding/decoding J2K and HTJ2K codestreams, in native JPEG 2000 "
+                                             "files and HEIF containers.",
                                              "https://github.com/uclouvain/openjpeg");
                     if (HDRVIEW_ENABLE_HTJ2K)
                         ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K-compressed HEIF images.",

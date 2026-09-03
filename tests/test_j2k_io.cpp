@@ -81,8 +81,9 @@ OPJ_BOOL out_seek(OPJ_OFF_T offset, void *user_data)
 
 /// A lossless JPEG 2000 file holding `comps` verbatim, built by OpenJPEG rather than by our own writer.
 /**
-    Going straight to the library is what lets these cases cover component shapes HDRView's writer never
-    emits: precisions other than 8, 12 and 16, signed samples, and subsampled components.
+    HDRView writes one component shape: unsigned samples at full rate, 8, 12 or 16 bits deep. Going straight
+    to the library is what lets these cases read the rest of what a codestream may declare, so the reader is
+    covered past what a round trip through the writer can reach.
 */
 std::string encode_with_openjpeg(int w, int h, const std::vector<Component> &comps, OPJ_COLOR_SPACE cs,
                                  OPJ_CODEC_FORMAT format)
