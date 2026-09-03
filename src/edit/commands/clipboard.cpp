@@ -13,6 +13,7 @@
 
 #include "edit/commands.h"
 
+#include "edit/edit_ops.h"
 #include "edit/poisson.h"
 
 #include "fonts.h"
@@ -23,77 +24,72 @@
 
 namespace
 {
-
 /// The rectangle these operate on: the selection when the subject asks for it, else the whole image.
 Box2i target_region(const EditContext &ctx)
 {
-    auto img = ctx.image();
+    auto img = ctx.image;
     if (!img)
         return Box2i{};
 
     Box2i box = img->data_window;
-    if (ctx.subject().selection_only && ctx.selection().has_volume())
-        box.intersect(ctx.selection());
+    if (ctx.subject.selection_only && ctx.roi.has_volume())
+        box.intersect(ctx.roi);
     return box;
 }
 
 class Copy final : public EditCommand
 {
 public:
-    Info info() const override
+    Copy() : EditCommand({{"Copy", "Copy selection"}, ICON_MY_COPY, ImGuiMod_Ctrl | ImGuiKey_C})
     {
-        Info i{{"Copy", "Copy selection"}, ICON_MY_COPY, ImGuiMod_Ctrl | ImGuiKey_C};
-        i.needs_editable = false; // copying a live image is fine
-        i.fans_out       = false; // one clipboard
-        return i;
+        m_info.needs_editable = false; // copying a live image is fine
+        m_info.fans_out       = false; // one clipboard
     }
 
-    bool enabled(const EditContext &ctx) const override { return ctx.image() != nullptr; }
+    bool enabled(const EditContext &ctx) const override { return ctx.image && ctx.clipboard; }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
-        if (auto img = ctx.image())
-            ctx.set_clipboard(img->duplicate(target_region(ctx)));
+        if (ctx.image && ctx.clipboard)
+            *ctx.clipboard = ctx.image->duplicate(target_region(ctx));
     }
 };
 
 class Cut final : public EditCommand
 {
 public:
-    Info info() const override
+    Cut() : EditCommand({{"Cut", "Cut selection"}, ICON_MY_CUT, ImGuiMod_Ctrl | ImGuiKey_X})
     {
-        Info i{{"Cut", "Cut selection"}, ICON_MY_CUT, ImGuiMod_Ctrl | ImGuiKey_X};
         // the copy half cannot fan out; see Copy
-        i.fans_out = false;
-        return i;
+        m_info.fans_out = false;
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
-        auto img = ctx.image();
-        if (!img)
+        auto img = ctx.image;
+        if (!img || !ctx.clipboard)
             return;
 
         // copied before it is cleared, over the same rectangle
-        ctx.set_clipboard(img->duplicate(target_region(ctx)));
+        *ctx.clipboard = img->duplicate(target_region(ctx));
 
         // zero throughout: these samples are held premultiplied, where a color with no alpha is additive
         // and not invisible
-        ctx.modify_pixels("Cut", [](float, int2, int) { return 0.f; });
+        modify_pixels(ctx, "Cut", [](float, int2, int) { return 0.f; });
     }
 };
 
 class Paste final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Paste"}, ICON_MY_PASTE, ImGuiMod_Ctrl | ImGuiKey_V}; }
+    Paste() : EditCommand({{"Paste"}, ICON_MY_PASTE, ImGuiMod_Ctrl | ImGuiKey_V}) {}
 
-    bool enabled(const EditContext &ctx) const override { return ctx.clipboard() != nullptr; }
+    bool enabled(const EditContext &ctx) const override { return ctx.clipboard && *ctx.clipboard; }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
-        auto clip = ctx.clipboard();
-        auto img  = ctx.image();
+        auto clip = ctx.clipboard ? *ctx.clipboard : nullptr;
+        auto img  = ctx.image;
         if (!clip || !img || clip->groups.empty())
             return;
 
@@ -105,38 +101,38 @@ public:
         const int4  channels = group.channels;
         const int2  extent   = clip->data_window.size();
 
-        ctx.modify_colors("Paste",
-                          [clip, channels, n, origin, extent](const float4 &dst, int2 p)
-                          {
-                              const int2 q = p - origin;
-                              if (q.x < 0 || q.y < 0 || q.x >= extent.x || q.y >= extent.y)
-                                  return dst; // past the end of what was copied; leave what is there
+        modify_colors(ctx, "Paste",
+                      [clip, channels, n, origin, extent](const float4 &dst, int2 p, int)
+                      {
+                          const int2 q = p - origin;
+                          if (q.x < 0 || q.y < 0 || q.x >= extent.x || q.y >= extent.y)
+                              return dst; // past the end of what was copied; leave what is there
 
-                              // read as stored, not through raw_pixel(), which would divide a straight-alpha
-                              // image's color back out
-                              float4 src{0.f, 0.f, 0.f, 1.f};
-                              for (int c = 0; c < n; ++c) src[c] = clip->channels[size_t(channels[c])](q);
+                          // read as stored, not through raw_pixel(), which would divide a straight-alpha
+                          // image's color back out
+                          float4 src{0.f, 0.f, 0.f, 1.f};
+                          for (int c = 0; c < n; ++c) src[c] = clip->channels[size_t(channels[c])](q);
 
-                              // source-over on premultiplied values, the same expression for color and alpha
-                              return src + dst * (1.f - src.w);
-                          });
+                          // source-over on premultiplied values, the same expression for color and alpha
+                          return src + dst * (1.f - src.w);
+                      });
     }
 };
 
 class SeamlessPaste final : public EditCommand
 {
 public:
-    Info info() const override
+    SeamlessPaste() :
+        EditCommand({{"Seamless paste...", "Poisson paste", "Gradient-domain paste"},
+                     ICON_MY_SEAMLESS_PASTE,
+                     ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_V,
+                     true,
+                     "Paste",
+                     27.f})
     {
-        return {{"Seamless paste...", "Poisson paste", "Gradient-domain paste"},
-                ICON_MY_SEAMLESS_PASTE,
-                ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_V,
-                ImGuiInputFlags_None,
-                "Paste",
-                27.f};
     }
 
-    bool enabled(const EditContext &ctx) const override { return ctx.clipboard() != nullptr; }
+    bool enabled(const EditContext &ctx) const override { return ctx.clipboard && *ctx.clipboard; }
 
     void draw(EditContext &ctx) override
     {
@@ -154,14 +150,14 @@ public:
                        "rather than a difference. Usually what an HDR image wants, where the two sides can be "
                        "many stops apart.");
 
-        if (auto clip = ctx.clipboard())
+        if (auto clip = ctx.clipboard ? *ctx.clipboard : nullptr)
             ImGui::TextDisabled("Clipboard: %d x %d", clip->size().x, clip->size().y);
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
-        auto clip = ctx.clipboard();
-        auto img  = ctx.image();
+        auto clip = ctx.clipboard ? *ctx.clipboard : nullptr;
+        auto img  = ctx.image;
         if (!clip || !img || clip->groups.empty())
             return;
 

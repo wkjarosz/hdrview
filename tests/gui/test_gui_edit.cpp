@@ -29,6 +29,14 @@ using std::vector;
 namespace
 {
 
+/// The context the application builds for \p img, with \p subject standing in for the current one.
+EditContext edit_context(const ImagePtr &img, const EditSubject &subject)
+{
+    auto ctx    = hdrview()->edit_context(img);
+    ctx.subject = subject;
+    return ctx;
+}
+
 /// Loads the single-layer fixture and leaves it as the current image.
 bool load_fixture(ImGuiTestContext *ctx)
 {
@@ -129,8 +137,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         LogWatcher  log;
         EditSubject all_channels;
         all_channels.scope = EditSubject::Scope_AllChannels;
-        IM_CHECK_EQ(hdrview()->modify_colors(img, "Test", all_channels, [](const float4 &c, int2) { return -c; }),
-                    false);
+        IM_CHECK_EQ(
+            modify_colors(edit_context(img, all_channels), "Test", [](const float4 &c, int2, int) { return -c; }),
+            false);
 
         IM_CHECK(snapshot(img) == original);
         IM_CHECK_EQ((int)img->history.size(), entries);
@@ -370,7 +379,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         subject.selection_only = true;
 
         const auto before = snapshot(img);
-        IM_CHECK(hdrview()->modify_pixels(img, "Invert", subject, [](float v, int2, int) { return 1.f - v; }));
+        IM_CHECK(modify_pixels(edit_context(img, subject), "Invert", [](float v, int2, int) { return 1.f - v; }));
 
         const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
         const int2  o  = img->data_window.min;
@@ -406,8 +415,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         EditSubject group_scope, all_scope;
         all_scope.scope = EditSubject::Scope_AllChannels;
         if (!HDRViewApp::scope_matters(img))
-            IM_CHECK(hdrview()->resolve_subject(img, group_scope).first ==
-                     hdrview()->resolve_subject(img, all_scope).first);
+            IM_CHECK(resolve_subject(img, group_scope, hdrview()->roi()).first ==
+                     resolve_subject(img, all_scope, hdrview()->roi()).first);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "a dialog changes nothing until it is confirmed");
@@ -458,8 +467,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // not all come out the same
         const float4 color{0.25f, 0.5f, 0.75f, 1.f};
         EditSubject  subject;
-        IM_CHECK(
-            hdrview()->modify_pixels(img, "Fill", subject, [color](float, int2, int slot) { return color[slot % 4]; }));
+        IM_CHECK(modify_pixels(edit_context(img, subject), "Fill",
+                               [color](float, int2, int slot) { return color[slot % 4]; }));
 
         const auto &group = img->groups[img->selected_group];
         for (int c = 0; c < group.num_channels; ++c)
@@ -558,8 +567,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const size_t layers = img->layers.size();
         const size_t groups = img->groups.size();
 
-        IM_CHECK(hdrview()->modify_structure(img, "Canvas size", [](Image &i)
-                                             { i.resize_canvas(i.size() + int2{4, 4}, Image::Anchor_MiddleCenter); }));
+        IM_CHECK(modify_image(
+            hdrview()->edit_context(img), "Canvas size", [](Image &i)
+            { i.resize_canvas(i.size() + int2{4, 4}, Image::Anchor_MiddleCenter); }, structure_undo, Extent_Structure));
 
         IM_CHECK(img->size() == int2{img->channels[0].size()});
         // rebuilt from the new channels, not left describing the old ones
@@ -723,7 +733,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         auto img = hdrview()->current_image();
 
-        // applied straight through modify_channels, so the comparison is of the filters themselves
+        // the filters called directly, so the comparison is of the filters themselves and not of the plumbing
         auto blurred_by = [&](int which)
         {
             const Box2i all{int2{0}, img->channels[0].size()};
@@ -916,9 +926,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const bool needed = color_conversion_matrix(M, *original_chr, to, AdaptationMethod_Bradford);
         IM_CHECK(needed);
 
-        IM_CHECK(hdrview()->modify_colors(
-            img, "Convert color space", hdrview()->edit_subject(),
-            [M](const float4 &c, int2) { return float4{la::mul(M, c.xyz()), c.w}; },
+        IM_CHECK(modify_colors(
+            hdrview()->edit_context(img), "Convert color space",
+            [M](const float4 &c, int2, int) { return float4{la::mul(M, c.xyz()), c.w}; },
             [to](Image &image)
             {
                 image.chromaticities = to;
@@ -961,12 +971,13 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto original = snapshot(img);
 
         // the dialogs themselves, from the menu: everything above tests the operation, and an operation
-        // wired to nothing passes all of it
+        // wired to nothing passes all of it. Each waits for the entry, since a dialog may hand the work to
+        // a worker rather than do it in the frame that confirmed it.
         menu_click(ctx, "Edit/Shift...");
         ctx->SetRef("Shift...");
         ctx->ItemInputValue("X, Y offset/$$0", 3.0f);
         ctx->ItemClick("Shift");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Shift");
@@ -978,7 +989,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Convert color space...");
         ctx->ComboClick("Primaries##to/ACES AP0");
         ctx->ItemClick("Convert");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Convert color space");
@@ -993,7 +1004,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Channel mixer...");
         ctx->ItemClick("Monochrome");
         ctx->ItemClick("Mix");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Channel mixer");
@@ -1021,7 +1032,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Hue\\/saturation...");
         ctx->ItemInputValue("Saturation", -100.0f);
         ctx->ItemClick("Apply");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Hue/saturation");
@@ -1032,7 +1043,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Flatten...");
         ctx->SetRef("Flatten...");
         ctx->ItemClick("Flatten");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Flatten");
@@ -1043,7 +1054,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Bump to normal map...");
         ctx->SetRef("Bump to normal map...");
         ctx->ItemClick("Convert");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Bump to normal map");
@@ -1062,12 +1073,12 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // a color with all three channels different, so an edit touching one quality of it can be told
         // from one touching everything
-        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
-                                          [](float, int2, int slot)
-                                          {
-                                              const float v[4] = {0.6f, 0.3f, 0.15f, 1.f};
-                                              return v[slot < 4 ? slot : 0];
-                                          }));
+        IM_CHECK(modify_pixels(hdrview()->edit_context(img), "Fill",
+                               [](float, int2, int slot)
+                               {
+                                   const float v[4] = {0.6f, 0.3f, 0.15f, 1.f};
+                                   return v[slot < 4 ? slot : 0];
+                               }));
         ctx->Yield();
 
         const int4   ch    = img->groups[img->selected_group].channels;
@@ -1166,8 +1177,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // reading the sample beside it is what modify_pixels() cannot do: it is handed one sample and told
         // which slot it is, never the others
-        IM_CHECK(hdrview()->modify_colors(img, "Swap red and blue", hdrview()->edit_subject(),
-                                          [](const float4 &c, int2) { return float4{c.z, c.y, c.x, c.w}; }));
+        IM_CHECK(modify_colors(hdrview()->edit_context(img), "Swap red and blue",
+                               [](const float4 &c, int2, int) { return float4{c.z, c.y, c.x, c.w}; }));
         ctx->Yield();
 
         const auto &r = img->channels[group.channels[0]];
@@ -1200,15 +1211,17 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto img = hdrview()->current_image();
 
         // a depth channel beside the color, the ordinary shape of a render: a color matrix has no meaning
-        // for it, so covering "all channels" must still not touch it. Added through the structural
-        // chokepoint, which rebuilds the layer tree and the visibility the Images panel walks.
-        hdrview()->modify_structure(img, "Add Z",
-                                    [](Image &i)
-                                    {
-                                        Channel z{"Z", i.channels[0].size()};
-                                        for (int k = 0; k < z.num_elements(); ++k) z(k) = 0.25f * float(k % 7);
-                                        i.channels.push_back(std::move(z));
-                                    });
+        // for it, so covering "all channels" must still not touch it. Added through modify_image() with a
+        // structural extent, which rebuilds the layer tree and the visibility the Images panel walks.
+        modify_image(
+            hdrview()->edit_context(img), "Add Z",
+            [](Image &i)
+            {
+                Channel z{"Z", i.channels[0].size()};
+                for (int k = 0; k < z.num_elements(); ++k) z(k) = 0.25f * float(k % 7);
+                i.channels.push_back(std::move(z));
+            },
+            structure_undo, Extent_Structure);
         ctx->Yield();
 
         const int     zi = int(img->channels.size()) - 1;
@@ -1218,8 +1231,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto subject  = hdrview()->edit_subject();
         subject.scope = EditSubject::Scope_AllChannels;
 
-        IM_CHECK(hdrview()->modify_colors(img, "Halve", subject,
-                                          [](const float4 &c, int2) { return float4{0.5f * c.xyz(), c.w}; }));
+        IM_CHECK(modify_colors(edit_context(img, subject), "Halve",
+                               [](const float4 &c, int2, int) { return float4{0.5f * c.xyz(), c.w}; }));
         ctx->Yield();
 
         for (int i = 0; i < img->channels[zi].num_elements(); ++i) IM_CHECK_EQ(img->channels[zi](i), before[i]);
@@ -1291,14 +1304,13 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // a known state to composite: half-transparent mid gray, premultiplied the way the image model
         // holds every RGBA group
         const float4 fg{0.25f, 0.25f, 0.25f, 0.5f};
-        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
-                                          [fg](float, int2, int slot) { return fg[slot % 4]; }));
+        IM_CHECK(
+            modify_pixels(hdrview()->edit_context(img), "Fill", [fg](float, int2, int slot) { return fg[slot % 4]; }));
         ctx->Yield();
 
         const float4 bg{0.5f, 0.f, 0.f, 1.f};
-        IM_CHECK(hdrview()->modify_colors(
-            img, "Flatten", hdrview()->edit_subject(), [bg](const float4 &c, int2)
-            { return float4{c.xyz() + bg.xyz() * bg.w * (1.f - c.w), c.w + bg.w * (1.f - c.w)}; }));
+        IM_CHECK(modify_colors(hdrview()->edit_context(img), "Flatten", [bg](const float4 &c, int2, int)
+                               { return float4{c.xyz() + bg.xyz() * bg.w * (1.f - c.w), c.w + bg.w * (1.f - c.w)}; }));
         ctx->Yield();
 
         const auto &group = img->groups[img->active_group_index(Target_Primary)];
@@ -1314,9 +1326,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // an opaque background makes it idempotent: there is nothing left for a second pass to show
         // through, which a lerp written against straight alpha would get wrong
         const auto once = snapshot(img);
-        IM_CHECK(hdrview()->modify_colors(
-            img, "Flatten", hdrview()->edit_subject(), [bg](const float4 &c, int2)
-            { return float4{c.xyz() + bg.xyz() * bg.w * (1.f - c.w), c.w + bg.w * (1.f - c.w)}; }));
+        IM_CHECK(modify_colors(hdrview()->edit_context(img), "Flatten", [bg](const float4 &c, int2, int)
+                               { return float4{c.xyz() + bg.xyz() * bg.w * (1.f - c.w), c.w + bg.w * (1.f - c.w)}; }));
         ctx->Yield();
         IM_CHECK(snapshot(img) == once);
 
@@ -1338,26 +1349,34 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const int2 size = img->size();
 
         // a ramp rising to the right, so the answer is known: flat down the image, sloped across it
-        IM_CHECK(hdrview()->modify_pixels(img, "Ramp", hdrview()->edit_subject(), [size](float, int2 p, int slot)
-                                          { return slot >= 3 ? 1.f : float(p.x) / float(size.x); }));
+        IM_CHECK(modify_pixels(hdrview()->edit_context(img), "Ramp", [size](float, int2 p, int slot)
+                               { return slot >= 3 ? 1.f : float(p.x) / float(size.x); }));
         ctx->Yield();
 
+        // the heights come from a copy, as the command's own do
         const float2 fsize{float(size.x), float(size.y)};
-        IM_CHECK(hdrview()->modify_neighborhood(
-            img, "Bump to normal map", hdrview()->edit_subject(),
-            [fsize](const std::function<float4(int2)> &read, int2 p)
-            {
-                auto height = [&read](int2 q)
-                {
-                    const float4 c = read(q);
-                    return (c.x + c.y + c.z) / 3.f;
-                };
-                const float h00 = height(p);
-                const float dx = height(p + int2{1, 0}) - h00, dy = height(p + int2{0, 1}) - h00;
-                float3      n = la::normalize(float3{dx * fsize.x, dy * fsize.y, 1.f});
-                return float4{n * 0.5f + 0.5f, 1.f};
-            },
-            BorderMode_Edge, BorderMode_Edge));
+        auto         src = img->duplicate();
+        const auto   grp = img->groups;
+        IM_CHECK(modify_colors(hdrview()->edit_context(img), "Bump to normal map",
+                               [fsize, src, grp](const float4 &, int2 p, int gi)
+                               {
+                                   auto height = [&](int2 q)
+                                   {
+                                       const int4 channels = grp[size_t(gi)].channels;
+                                       const int2 extent   = src->channels[size_t(channels[0])].size();
+                                       const int  x =
+                                           wrap_coord(q.x - src->data_window.min.x, extent.x, BorderMode_Edge);
+                                       const int y =
+                                           wrap_coord(q.y - src->data_window.min.y, extent.y, BorderMode_Edge);
+                                       float sum = 0.f;
+                                       for (int k = 0; k < 3; ++k) sum += src->channels[size_t(channels[k])](x, y);
+                                       return sum / 3.f;
+                                   };
+                                   const float h00 = height(p);
+                                   const float dx = height(p + int2{1, 0}) - h00, dy = height(p + int2{0, 1}) - h00;
+                                   float3      n = la::normalize(float3{dx * fsize.x, dy * fsize.y, 1.f});
+                                   return float4{n * 0.5f + 0.5f, 1.f};
+                               }));
         ctx->Yield();
 
         const auto &r = img->channels[group.channels[0]];
@@ -1413,8 +1432,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(snapshot(copy) == before);
 
         // ...and its own copy of it: a shallow copy would pass everything above and fail here
-        IM_CHECK(hdrview()->modify_pixels(copy, "Invert", hdrview()->edit_subject(),
-                                          [](float v, int2, int) { return 1.f - v; }));
+        IM_CHECK(modify_pixels(hdrview()->edit_context(copy), "Invert", [](float v, int2, int) { return 1.f - v; }));
         ctx->Yield();
         IM_CHECK(snapshot(copy) != before);
         IM_CHECK(snapshot(original) == before);
@@ -1479,8 +1497,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const int2 size = img->size();
 
         // two known, different halves, so what lands where is unambiguous
-        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(), [size](float, int2 p, int slot)
-                                          { return slot == 3 ? 1.f : (p.x < size.x / 2 ? 1.f : 0.f); }));
+        IM_CHECK(modify_pixels(hdrview()->edit_context(img), "Fill", [size](float, int2 p, int slot)
+                               { return slot == 3 ? 1.f : (p.x < size.x / 2 ? 1.f : 0.f); }));
         ctx->Yield();
 
         const auto &ch = img->channels[img->groups[img->selected_group].channels[0]];
@@ -1671,8 +1689,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const int2 patch{32, 32};
 
         // a flat background, so any step at the border is the paste's doing and not the picture's
-        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
-                                          [](float, int2, int slot) { return slot == 3 ? 1.f : 0.25f; }));
+        IM_CHECK(modify_pixels(hdrview()->edit_context(img), "Fill",
+                               [](float, int2, int slot) { return slot == 3 ? 1.f : 0.25f; }));
         ctx->Yield();
 
         // copy a corner, which is 0.25 throughout...
@@ -1686,8 +1704,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // leave a visible step where 0.25 meets 0.8, and a seamless one cannot
         hdrview()->set_selection(Box2i{});
         ctx->Yield();
-        IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
-                                          [](float, int2, int slot) { return slot == 3 ? 1.f : 0.8f; }));
+        IM_CHECK(modify_pixels(hdrview()->edit_context(img), "Fill",
+                               [](float, int2, int slot) { return slot == 3 ? 1.f : 0.8f; }));
         ctx->Yield();
 
         const Box2i dst_box{int2{size.x / 2, size.y / 2}, int2{size.x / 2, size.y / 2} + patch};
@@ -1787,8 +1805,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             ctx->Yield();
 
             // a constant, so the copy taken from it has no gradients of its own to impose
-            IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(),
-                                              [](float, int2, int slot) { return slot == 3 ? 1.f : 0.5f; }));
+            IM_CHECK(modify_pixels(hdrview()->edit_context(img), "Fill",
+                                   [](float, int2, int slot) { return slot == 3 ? 1.f : 0.5f; }));
             ctx->Yield();
 
             hdrview()->set_selection(Box2i{int2{0, 0}, patch});
@@ -1798,8 +1816,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
             hdrview()->set_selection(Box2i{});
             ctx->Yield();
-            IM_CHECK(hdrview()->modify_pixels(img, "Fill", hdrview()->edit_subject(), [](float, int2 p, int slot)
-                                              { return slot == 3 ? 1.f : (((p.x / 4 + p.y / 4) % 2) ? 1.f : 0.f); }));
+            IM_CHECK(modify_pixels(hdrview()->edit_context(img), "Fill", [](float, int2 p, int slot)
+                                   { return slot == 3 ? 1.f : (((p.x / 4 + p.y / 4) % 2) ? 1.f : 0.f); }));
             ctx->Yield();
 
             hdrview()->set_selection(cfg.selection);
@@ -1900,10 +1918,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // not only grayed out in the menu: the edit itself has to decline, since the command palette and
         // the keyboard chord reach the same callback
-        const auto before = snapshot(img);
-        IM_CHECK_EQ(hdrview()->modify_image_reversibly(
-                        img, "Flip image horizontally", [](Image &i) { i.flip_horizontal(); },
-                        [](Image &i) { i.flip_horizontal(); }),
+        const auto                         before = snapshot(img);
+        const std::function<void(Image &)> flip   = [](Image &i) { i.flip_horizontal(); };
+        IM_CHECK_EQ(modify_image(hdrview()->edit_context(img), "Flip image horizontally", flip, reversible(flip, flip)),
                     false);
         IM_CHECK(snapshot(img) == before);
         IM_CHECK_EQ(img->history.has_undo(), false);

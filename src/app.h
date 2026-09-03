@@ -8,6 +8,7 @@
 #include "colormap.h"
 #include "display_colorspace.h"
 #include "edit/commands.h"
+#include "edit/edit_ops.h"
 #include "edit/envmap.h"
 #include "edit/filters.h"
 #include "edit/subject.h"
@@ -123,8 +124,6 @@ public:
         Falls back to the group on screen for an image with nothing selected.
     */
     std::vector<int> target_groups(const ConstImagePtr &img) const;
-    /// The same, for a group named by the caller rather than by what is currently pointed at.
-    std::vector<int> target_groups(const ConstImagePtr &img, int pointed_at) const;
     /// Put \p img into the list just after the current image, named \p partname, and select it.
     void add_image_beside_current(ImagePtr img, const std::string &partname);
     /// Whether `image` came from somewhere reload_image() could read it again.
@@ -201,121 +200,24 @@ public:
     //-----------------------------------------------------------------------------
     // editing images (see src/app-edit.cpp)
     //-----------------------------------------------------------------------------
+    /// What an edit command runs against: \p img, or the image being pointed at when none is given.
+    EditContext edit_context(ImagePtr img = nullptr);
+
+    /// Resample every channel of \p img into a new \p size, replacing the image as one undoable step.
     /**
-        Apply one edit to \p img and record how to reverse it. The only thing that writes image pixels: it
-        also refuses images that cannot be edited, stops the statistics tasks reading the samples,
-        invalidates the caches keyed on them, and pushes the undo entry.
-
-        \param img       Image to change
-        \param name      Shown beside "Undo"/"Redo", e.g. "Rotate 90 CW"
-        \param op        Makes the change
-        \param make_undo Builds the entry that reverses it, called before `op` so it can capture whatever
-                         `op` is about to overwrite
-        \returns Whether the edit was applied; false when the image refuses edits (see can_edit()).
+        On a worker behind a cancellable progress bar, since a resampler costs seconds a channel; a resize
+        fast enough to run synchronously goes through Image::resample() instead.
     */
-    bool modify_image(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op,
-                      const std::function<UndoPtr(const Image &)> &make_undo);
+    void resample_image_async(const ImagePtr &img, const std::string &name, int2 size, const ChannelResampler &op);
 
-    /// A geometric edit, reversed by performing its opposite instead of storing pixels.
+    /// Filter the subject's channels of \p img, likewise on a worker, as one undoable step.
     /**
-        \p forward and \p backward must be inverses of each other, as flips and quarter turns are.
+        \p filter produces one rectangle but is handed the whole channel, since its kernel reads past the
+        rectangle's edges, and which of the subject's channels it is -- 0 for the first, so a group's R, G,
+        B, A arrive as 0, 1, 2, 3. Returns having only started the work; a canceled filter changes nothing.
     */
-    bool modify_image_reversibly(const ImagePtr &img, const std::string &name,
-                                 const std::function<void(Image &)> &forward,
-                                 const std::function<void(Image &)> &backward);
-
-    /// Whether \p img accepts edits at all.
-    /**
-        False while a renderer is streaming into it, since the next tile would overwrite the edit.
-    */
-    static bool can_edit(const ConstImagePtr &img);
-
-    /// The channels \p subject names, and the rectangle of them it covers, in image coordinates.
-    /**
-        The rectangle is the data window, narrowed to the selection when the subject asks for it. Empty
-        means there is nothing to edit.
-    */
-    std::pair<std::vector<int>, Box2i> resolve_subject(const ConstImagePtr &img, const EditSubject &subject) const;
-
-    /**
-        Apply \p op to every sample the subject covers, as one undoable edit.
-
-        \p op is handed a sample, its position in image coordinates, and which of the subject's channels it
-        belongs to -- 0 for the first, so a group's R, G, B, A arrive as 0, 1, 2, 3 -- and returns what to
-        replace it with. Both the GPU upload and the undo entry cover only the subject's rectangle.
-
-        \returns Whether anything was edited; false for an image that refuses edits or a subject that
-                 names nothing.
-    */
-    bool modify_pixels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
-                       const std::function<float(float, int2, int)> &op);
-
-    /**
-        Apply \p op to each covered group's channels together -- its value and its position in image
-        coordinates -- as one undoable edit. Unlike modify_pixels(), which sees one sample at a time, this
-        can mix channels into each other, as a color-space conversion or a channel mixer does.
-
-        Only color groups are covered, RGB and RGBA; the subject's other channels are left alone. A group
-        without alpha gets 1 in that slot and whatever \p op returns there is dropped.
-
-        \p retag, if given, updates the image's color metadata to describe what \p op produced, recorded in
-        the same history entry as the pixels so undoing takes back both.
-
-        \returns Whether anything was edited; false when the subject names no color group.
-    */
-    bool modify_colors(const ImagePtr &img, const std::string &name, const EditSubject &subject,
-                       const std::function<float4(const float4 &, int2)> &op,
-                       const std::function<void(Image &)>                &retag = {});
-
-    /// As modify_colors(), but \p op is handed a reader instead of a value.
-    /**
-        `read(p)` gives the group's components at any position, with \p border_x and \p border_y deciding
-        what lies outside the image. The reader sees the image as it was before the edit.
-    */
-    bool modify_neighborhood(const ImagePtr &img, const std::string &name, const EditSubject &subject,
-                             const std::function<float4(const std::function<float4(int2)> &, int2)> &op,
-                             int border_x = BorderMode_Edge, int border_y = BorderMode_Edge);
-
-    /// Apply an edit that changes the image's shape, as one undoable step.
-    /**
-        For crop, canvas resize, or a change to the channel list. The whole channel list is saved for undo,
-        and the layer tree is rebuilt and the view refit afterwards.
-    */
-    bool modify_structure(const ImagePtr &img, const std::string &name, const std::function<void(Image &)> &op);
-
-    /**
-        Apply a neighborhood filter to the subject's channels, as one undoable edit.
-
-        \p filter is handed a whole channel and the rectangle of it to produce, in channel-local
-        coordinates, and returns an array of just that rectangle. It sees the whole channel because its
-        kernel reads past the rectangle's edges, but only has to compute the rectangle.
-    */
-    bool modify_channels(const ImagePtr &img, const std::string &name, const EditSubject &subject,
-                         const std::function<Array2Df(const Array2Df &, const Box2i &)> &filter);
-
-    /// Replace the image wholesale with something computed from it, off the main thread.
-    /**
-        For the environment-map operations, which resample every channel into a new \p size. \p op produces
-        one channel's new samples; the results are swapped in together on the main thread, as one undoable
-        step.
-    */
-    void modify_image_async(const ImagePtr &img, const std::string &name, int2 size,
-                            const std::function<Array2Df(const Array2Df &, AtomicProgress)> &op);
-
-    /**
-        As modify_channels(), but computed on a worker, with a progress bar that can cancel it. The image is
-        only touched once every channel is done, back on the main thread and through the same chokepoint, so
-        the edit still lands as one undoable step.
-
-        \p filter is handed the channel, the rectangle of it to produce, and which of the subject's channels
-        it is -- 0 for the first, so a group's R, G, B, A arrive as 0, 1, 2, 3.
-
-        Returns having only started the work. A canceled filter discards its partial result and changes
-        nothing.
-    */
-    void modify_channels_async(
-        const ImagePtr &img, const std::string &name, const EditSubject &subject,
-        const std::function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &filter);
+    void modify_channels_async(const ImagePtr &img, const std::string &name, const EditSubject &subject,
+                               const ChannelFilter &filter);
 
     /// Draws the progress bar for a filter started by modify_channels_async(), and its Cancel button.
     void draw_filter_progress_dialog(bool &open);
@@ -352,10 +254,9 @@ public:
     /// Reapply the edit undo() last reversed, across the selection. False if the current image had none.
     bool redo();
 
-    /// Everything a completed edit invalidates, applied to \p img.
+    /// What stepping \p img's history invalidates: the statistics cache and the GPU textures.
     /**
-        The statistics cache, the GPU textures, and, when the channels themselves changed, the layer and
-        group tree built from them.
+        An edit arriving through modify_image() invalidates the same things through EditContext::edited.
     */
     void after_modify(const ImagePtr &img);
     //-----------------------------------------------------------------------------
@@ -730,10 +631,15 @@ private:
     */
     struct RunningFilter
     {
-        ImagePtr              image;
-        std::string           name;
-        std::vector<int>      channels;
-        Box2i                 bounds;
+        ImagePtr         image;
+        std::string      name;
+        std::vector<int> channels;
+        Box2i            bounds;
+
+        /// Filters one of `channels`, given its index among them and a share of the progress bar.
+        std::function<Array2Df(const Array2Df &, int, AtomicProgress)> filter;
+
+        int2                  new_size{0}; ///< The size of the results; zero keeps the image's shape.
         std::vector<Array2Df> results;
         AtomicProgress        progress{true};
         std::atomic<bool>     done{false};
@@ -750,12 +656,6 @@ private:
                 worker.join();
         }
     };
-    /// Set when the running work replaces the image rather than a rectangle of it; see modify_image_async().
-    /**
-        drain_running_filter() then swaps the channels instead of uploading tiles.
-    */
-    bool m_running_filter_resizes = false;
-    int2 m_running_filter_size{0};
 
     std::unique_ptr<RunningFilter> m_running_filter;
 
@@ -765,6 +665,11 @@ private:
     */
     std::vector<std::function<void()>> m_filter_queue;
 
+    /// Take \p running as the filter in flight and set it going.
+    /**
+        On a worker with a progress dialog, or inline where there are no threads.
+    */
+    void start_filter(std::unique_ptr<RunningFilter> running);
     /// Applies a finished filter's results, or clears an abandoned one. Called once a frame.
     void drain_running_filter();
     /// Starts the next queued filter, if a fan-out left any waiting.

@@ -21,7 +21,6 @@
 
 namespace
 {
-
 void mapping_combo(const char *label, int *value)
 {
     if (ImGui::BeginCombo(label, envmapping_name(*value)))
@@ -36,23 +35,22 @@ void mapping_combo(const char *label, int *value)
 class Remap final : public EditCommand
 {
 public:
-    Info info() const override
+    Remap() :
+        EditCommand({{"Remap envmap...", "Change environment map format", "Spherical remapping"},
+                     ICON_MY_ENVMAP,
+                     ImGuiKey_None,
+                     true,
+                     "Remap",
+                     27.f})
     {
-        Info i{{"Remap envmap...", "Change environment map format", "Spherical remapping"},
-               ICON_MY_ENVMAP,
-               ImGuiKey_None,
-               ImGuiInputFlags_None,
-               "Remap",
-               27.f};
         // reparameterizes the whole image, so there is no subject to narrow
-        i.draws_subject_selector = false;
-        return i;
+        m_info.draws_subject_selector = false;
     }
 
     /// Opens at the current image's size, then follows the target mapping's aspect.
     void on_open(EditContext &ctx) override
     {
-        if (auto img = ctx.image())
+        if (auto img = ctx.image)
         {
             m_size = img->size();
             if (m_auto_aspect)
@@ -63,7 +61,7 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -127,7 +125,7 @@ public:
         }
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const auto s = EnvMapping(m_src_mapping), d = EnvMapping(m_dst_mapping);
         const int2 out_size = m_size;
@@ -138,9 +136,9 @@ public:
             return;
 
         // no bias: the level the footprint asks for is the right one
-        ctx.modify_image_async("Remap envmap", out_size,
-                               [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
-                               { return remapped_envmap(src, out_size, d, s, mode, ss, 0.f, p); });
+        ctx.resample_image_async("Remap envmap", out_size,
+                                 [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
+                                 { return remapped_envmap(src, out_size, d, s, mode, ss, 0.f, p); });
     }
 
 private:
@@ -155,29 +153,28 @@ private:
 class Irradiance final : public EditCommand
 {
 public:
-    Info info() const override
+    Irradiance() :
+        EditCommand({{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
+                     ICON_MY_IRRADIANCE,
+                     ImGuiKey_None,
+                     true,
+                     "Convolve",
+                     27.f})
     {
-        Info i{{"Irradiance envmap...", "Diffuse convolution", "Cosine convolution"},
-               ICON_MY_IRRADIANCE,
-               ImGuiKey_None,
-               ImGuiInputFlags_None,
-               "Convolve",
-               27.f};
-        i.draws_subject_selector = false;
-        return i;
+        m_info.draws_subject_selector = false;
     }
 
     /// The current image's size, since the result is usually looked at beside it.
     void on_open(EditContext &ctx) override
     {
-        if (auto img = ctx.image())
+        if (auto img = ctx.image)
             m_size = img->size();
     }
     void on_close(EditContext &) override { m_size = int2{0}; }
 
     void draw(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (img && (m_size.x <= 0 || m_size.y <= 0))
             m_size = img->size();
 
@@ -189,7 +186,7 @@ public:
                        "nine numbers however large it is written out.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const auto m        = EnvMapping(m_mapping);
         const int2 out_size = m_size;
@@ -197,8 +194,8 @@ public:
         if (out_size.x <= 0 || out_size.y <= 0)
             return;
 
-        ctx.modify_image_async("Irradiance envmap", out_size, [m, out_size](const Array2Df &src, AtomicProgress p)
-                               { return irradiance_envmap(src, out_size, m, p); });
+        ctx.resample_image_async("Irradiance envmap", out_size, [m, out_size](const Array2Df &src, AtomicProgress p)
+                                 { return irradiance_envmap(src, out_size, m, p); });
     }
 
 private:

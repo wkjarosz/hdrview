@@ -745,7 +745,7 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
     // Every command that has one, so a dialog cannot be forgotten when a command is added, and all of
     // them wear the same shell, subject selector and footer; see draw_edit_command_dialog().
     for (auto &cmd : m_edit_commands)
-        if (cmd->has_dialog())
+        if (cmd->info().has_dialog)
         {
             EditCommand *c = cmd.get();
             m_dialogs.push_back(make_unique<PopupDialog>(c->info().names.front(), [this, c](bool &open)
@@ -1642,9 +1642,9 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
         for (auto &cmd : m_edit_commands)
         {
             EditCommand *c    = cmd.get();
-            const auto   info = c->info();
-            add(Action{info.names, info.icon, info.chord, info.flags, [this, c]() { invoke_edit_command(*c); },
-                       [this, c]() { return edit_command_enabled(*c); }});
+            const auto  &info = c->info();
+            add(Action{info.names, info.icon, info.chord, ImGuiInputFlags_None,
+                       [this, c]() { invoke_edit_command(*c); }, [this, c]() { return edit_command_enabled(*c); }});
         }
 
         add(Action{{"Select all", "Select the entire image"},

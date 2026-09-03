@@ -602,6 +602,7 @@ public:
         it. HDRViewApp owns the rules relating the selection to the current and reference images.
     */
     ///@{
+
     /// Whether every channel of group \p index is selected.
     bool is_group_selected(int index) const
     {

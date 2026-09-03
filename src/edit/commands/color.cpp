@@ -13,6 +13,7 @@
 #include "edit/commands.h"
 
 #include "colorspace.h"
+#include "edit/edit_ops.h"
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
@@ -26,24 +27,23 @@
 
 namespace
 {
-
 class ConvertColorSpace final : public EditCommand
 {
 public:
-    Info info() const override
+    ConvertColorSpace() :
+        EditCommand({{"Convert color space...", "Change primaries", "Change white point", "Gamut conversion"},
+                     ICON_MY_COLORSPACE,
+                     ImGuiKey_None,
+                     true,
+                     "Convert",
+                     27.f})
     {
-        return {{"Convert color space...", "Change primaries", "Change white point", "Gamut conversion"},
-                ICON_MY_COLORSPACE,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Convert",
-                27.f};
     }
 
     /// The file's own tag, so a conversion starts from what the pixels are.
     void on_open(EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -104,7 +104,7 @@ public:
             ImGui::TextWrapped("These describe the same color space, so this would leave the samples as they are.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         float3x3 M;
         color_conversion_matrix(M, from(), to(), AdaptationMethod(m_method));
@@ -112,10 +112,10 @@ public:
         const int  g = m_dst_gamut, w = m_dst_white, m = m_method;
         const auto tagged = to();
 
-        ctx.modify_colors(
-            "Convert color space",
+        modify_colors(
+            ctx, "Convert color space",
             // premultiplied alpha is no obstacle: scaling every component by alpha commutes with a matrix
-            [M](const float4 &c, int2) { return float4{la::mul(M, c.xyz()), c.w}; },
+            [M](const float4 &c, int2, int) { return float4{la::mul(M, c.xyz()), c.w}; },
             [g, w, m, tagged](Image &image)
             {
                 image.chromaticities    = tagged;
@@ -156,14 +156,14 @@ private:
 class ChannelMixer final : public EditCommand
 {
 public:
-    Info info() const override
+    ChannelMixer() :
+        EditCommand({{"Channel mixer...", "Mix channels", "Monochrome"},
+                     ICON_MY_CHANNEL_MIXER,
+                     ImGuiKey_None,
+                     true,
+                     "Mix",
+                     27.f})
     {
-        return {{"Channel mixer...", "Mix channels", "Monochrome"},
-                ICON_MY_CHANNEL_MIXER,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Mix",
-                27.f};
     }
 
     void draw(EditContext &) override
@@ -203,7 +203,7 @@ public:
         ImGui::TextDisabled("Total: %.1f%%", w.x + w.y + w.z);
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto row = [norm = m_normalize](const float3 &r)
         {
@@ -216,18 +216,18 @@ public:
         if (m_output == Out_Monochrome)
         {
             const float3 g = row(m_rows[Out_Monochrome]);
-            ctx.modify_colors("Channel mixer",
-                              [g](const float4 &c, int2)
-                              {
-                                  const float y = la::dot(g, c.xyz());
-                                  return float4{y, y, y, c.w};
-                              });
+            modify_colors(ctx, "Channel mixer",
+                          [g](const float4 &c, int2, int)
+                          {
+                              const float y = la::dot(g, c.xyz());
+                              return float4{y, y, y, c.w};
+                          });
         }
         else
         {
             const float3 r = row(m_rows[Out_Red]), g = row(m_rows[Out_Green]), b = row(m_rows[Out_Blue]);
-            ctx.modify_colors("Channel mixer", [r, g, b](const float4 &c, int2)
-                              { return float4{la::dot(r, c.xyz()), la::dot(g, c.xyz()), la::dot(b, c.xyz()), c.w}; });
+            modify_colors(ctx, "Channel mixer", [r, g, b](const float4 &c, int2, int)
+                          { return float4{la::dot(r, c.xyz()), la::dot(g, c.xyz()), la::dot(b, c.xyz()), c.w}; });
         }
     }
 
@@ -254,14 +254,14 @@ private:
 class HueSaturation final : public EditCommand
 {
 public:
-    Info info() const override
+    HueSaturation() :
+        EditCommand({{"Hue/saturation...", "Colorize", "Desaturate"},
+                     ICON_MY_HUE_SATURATION,
+                     ImGuiKey_None,
+                     true,
+                     "Apply",
+                     27.f})
     {
-        return {{"Hue/saturation...", "Colorize", "Desaturate"},
-                ICON_MY_HUE_SATURATION,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Apply",
-                27.f};
     }
 
     void draw(EditContext &) override
@@ -345,11 +345,11 @@ public:
         strip("The hue wheel as these settings would leave it", m_hue, m_saturation, m_lightness);
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float h = m_hue / 360.f, s = (m_saturation + 100.f) / 100.f, l = m_lightness / 100.f;
-        ctx.modify_colors("Hue/saturation",
-                          [h, s, l](const float4 &c, int2) { return float4{adjust_HSL(c.xyz(), h, s, l), c.w}; });
+        modify_colors(ctx, "Hue/saturation",
+                      [h, s, l](const float4 &c, int2, int) { return float4{adjust_HSL(c.xyz(), h, s, l), c.w}; });
     }
 
 private:
@@ -359,14 +359,14 @@ private:
 class BrightnessContrast final : public EditCommand
 {
 public:
-    Info info() const override
+    BrightnessContrast() :
+        EditCommand({{"Brightness/contrast...", "Levels", "Tone curve"},
+                     ICON_MY_BRIGHTNESS_CONTRAST,
+                     ImGuiKey_None,
+                     true,
+                     "Apply",
+                     27.f})
     {
-        return {{"Brightness/contrast...", "Levels", "Tone curve"},
-                ICON_MY_BRIGHTNESS_CONTRAST,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Apply",
-                27.f};
     }
 
     void draw(EditContext &) override
@@ -400,9 +400,9 @@ public:
                        "changes how light the image is and leaves its colors, the other does the reverse.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
-        auto img = ctx.image();
+        auto img = ctx.image;
         if (!img)
             return;
 
@@ -418,8 +418,8 @@ public:
 
         if (m_channel == Channel_RGB)
         {
-            ctx.modify_colors("Brightness/contrast", [curve](const float4 &c, int2)
-                              { return float4{curve(c.x), curve(c.y), curve(c.z), c.w}; });
+            modify_colors(ctx, "Brightness/contrast", [curve](const float4 &c, int2, int)
+                          { return float4{curve(c.x), curve(c.y), curve(c.z), c.w}; });
             return;
         }
 
@@ -430,21 +430,21 @@ public:
         const float3   white    = img->chromaticities ? XYZ_from_xy(img->chromaticities->white) : Lab_reference_white();
         const bool     lightness = m_channel == Channel_Lightness;
 
-        ctx.modify_colors("Brightness/contrast",
-                          [curve, to_XYZ, from_XYZ, white, lightness](const float4 &c, int2)
+        modify_colors(ctx, "Brightness/contrast",
+                      [curve, to_XYZ, from_XYZ, white, lightness](const float4 &c, int2, int)
+                      {
+                          float3 lab = normalize_Lab(XYZ_to_Lab(mul(to_XYZ, c.xyz()), white));
+
+                          if (lightness)
+                              lab.x = curve(lab.x);
+                          else
                           {
-                              float3 lab = normalize_Lab(XYZ_to_Lab(mul(to_XYZ, c.xyz()), white));
+                              lab.y = curve(lab.y);
+                              lab.z = curve(lab.z);
+                          }
 
-                              if (lightness)
-                                  lab.x = curve(lab.x);
-                              else
-                              {
-                                  lab.y = curve(lab.y);
-                                  lab.z = curve(lab.z);
-                              }
-
-                              return float4{mul(from_XYZ, Lab_to_XYZ(unnormalize_Lab(lab), white)), c.w};
-                          });
+                          return float4{mul(from_XYZ, Lab_to_XYZ(unnormalize_Lab(lab), white)), c.w};
+                      });
     }
 
 private:
@@ -576,13 +576,13 @@ private:
 class Flatten final : public EditCommand
 {
 public:
-    Info info() const override
+    Flatten() :
+        EditCommand({{"Flatten...", "Composite over a background", "Remove transparency"},
+                     ICON_MY_FLATTEN,
+                     ImGuiKey_None,
+                     true,
+                     "Flatten"})
     {
-        return {{"Flatten...", "Composite over a background", "Remove transparency"},
-                ICON_MY_FLATTEN,
-                ImGuiKey_None,
-                ImGuiInputFlags_None,
-                "Flatten"};
     }
 
     void draw(EditContext &ctx) override
@@ -596,20 +596,20 @@ public:
 
         // the color the viewport is already showing behind the image
         if (ImGui::Button("Use viewport background"))
-            m_bg = ctx.background_color();
+            m_bg = ctx.background;
         ImGui::Tooltip("Takes the custom background color from the View menu.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float4 b = m_bg;
-        ctx.modify_colors("Flatten",
-                          [b](const float4 &c, int2)
-                          {
-                              // samples are held premultiplied, so "over" is an addition and not the
-                              // textbook's lerp; the background is given straight and premultiplied here
-                              return float4{c.xyz() + b.xyz() * b.w * (1.f - c.w), c.w + b.w * (1.f - c.w)};
-                          });
+        modify_colors(ctx, "Flatten",
+                      [b](const float4 &c, int2, int)
+                      {
+                          // samples are held premultiplied, so "over" is an addition and not the
+                          // textbook's lerp; the background is given straight and premultiplied here
+                          return float4{c.xyz() + b.xyz() * b.w * (1.f - c.w), c.w + b.w * (1.f - c.w)};
+                      });
     }
 
 private:

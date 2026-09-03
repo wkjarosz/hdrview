@@ -18,74 +18,55 @@
 #include <string>
 #include <vector>
 
+/// How far an edit reached, which says what has to be rebuilt afterwards.
+enum EditExtent : int
+{
+    Extent_Pixels = 0, ///< Pixels within the channels the image already had
+    Extent_Structure   ///< The channel list or the windows: the layer tree is rebuilt and the view refit
+};
+
+/// Produces a rectangle of one channel, in channel-local coordinates.
+/**
+    Given the whole channel to read from, its index among those covered, and a share of the progress bar.
+*/
+using ChannelFilter = std::function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)>;
+/// Produces a whole channel at the image's new size, from the channel it replaces.
+using ChannelResampler = std::function<Array2Df(const Array2Df &, AtomicProgress)>;
+
 /// What an edit command sees of the application: the image, the subject, and the ways to change it.
 /**
-    Each modify_* method names the edit for the history and takes the subject from the context; see the
-    corresponding HDRViewApp methods for what they guarantee.
+    Filled in by HDRViewApp::edit_context(), and by the tests directly. Most ways of changing an image are
+    free functions over this (see edit/edit_ops.h); the two here need the worker thread and progress dialog.
 */
 struct EditContext
 {
-    virtual ~EditContext() = default;
+    ImagePtr         image;                          ///< The image being edited; null when there is none.
+    EditSubject      subject;                        ///< Which of the image's pixels an edit covers.
+    Box2i            roi;                            ///< The selection, in image coordinates; may be empty.
+    std::vector<int> target_groups;                  ///< The groups a group edit acts on; see target_groups().
+    float4           background{0.f, 0.f, 0.f, 1.f}; ///< The color the viewport draws behind the image.
+    ImagePtr        *clipboard = nullptr;            ///< The image last cut or copied, shared by every image.
 
-    /// The image being edited; null when there is none.
-    virtual ImagePtr image() const = 0;
-    /// Which of that image's samples the edit covers.
-    virtual const EditSubject &subject() const = 0;
+    /// Put an image into the list beside the one being edited and select it; the string is its partname.
+    std::function<void(ImagePtr, std::string)> add_image;
 
-    /// The channel groups an operation acts on: normally the selected ones.
-    /**
-        See HDRViewApp::target_groups() for how a right-clicked group overrides that. Empty when there are
-        none.
-    */
-    virtual std::vector<int> target_groups() const = 0;
+    std::function<void(const Box2i &)> set_selection;         ///< Set the selection, which cropping clears.
+    std::function<void()>              draw_subject_selector; ///< Draw the shared "Apply to" controls.
 
-    virtual Box2i selection() const               = 0;
-    virtual void  set_selection(const Box2i &box) = 0;
-    /// The color the viewport draws behind the image, for the edits that composite against it.
-    virtual float4 background_color() const = 0;
+    /// Called once an edit has landed, so the application can rebind its textures and refit the view.
+    std::function<void(EditExtent)> edited;
 
-    /// The image last cut or copied, or null when nothing has been. Shared by every open image.
-    virtual ConstImagePtr clipboard() const       = 0;
-    virtual void          set_clipboard(ImagePtr) = 0;
-
-    //
-    // The ways an image can be changed. All but the async pair return whether anything was edited.
-    //
-    virtual bool modify_pixels(const std::string &name, const std::function<float(float, int2, int)> &op) = 0;
-    virtual bool modify_colors(const std::string &name, const std::function<float4(const float4 &, int2)> &op,
-                               const std::function<void(Image &)> &retag = {})                            = 0;
-    virtual bool modify_neighborhood(const std::string                                                      &name,
-                                     const std::function<float4(const std::function<float4(int2)> &, int2)> &op,
-                                     int border_x, int border_y)                                          = 0;
-    virtual bool modify_channels(const std::string                                              &name,
-                                 const std::function<Array2Df(const Array2Df &, const Box2i &)> &filter)  = 0;
-    virtual void modify_channels_async(
-        const std::string                                                                   &name,
-        const std::function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)> &f)          = 0;
-    virtual void modify_image_async(const std::string &name, int2 size,
-                                    const std::function<Array2Df(const Array2Df &, AtomicProgress)> &op) = 0;
-    virtual bool modify_structure(const std::string &name, const std::function<void(Image &)> &op)       = 0;
-    virtual bool modify_reversibly(const std::string &name, const std::function<void(Image &)> &forward,
-                                   const std::function<void(Image &)> &backward)                         = 0;
-
-    /// Put \p img into the image list beside the one being edited, and select it.
-    /**
-        \p partname is what the Images panel shows beside the file name, to tell several images made from
-        one file apart.
-    */
-    virtual void add_image(ImagePtr img, const std::string &partname) = 0;
-
-    /// Draw the shared "Apply to" controls.
-    virtual void draw_subject_selector() = 0;
+    /// Filter the subject's channels on a worker, behind a cancellable progress bar; one undoable step.
+    std::function<void(const std::string &name, const ChannelFilter &filter)> modify_channels_async;
+    /// The same, resampling every channel into a new size, which replaces the image.
+    std::function<void(const std::string &name, int2 size, const ChannelResampler &op)> resample_image_async;
 };
 
 /// One undoable edit: what it is called, what it draws, and what it does.
 /**
-    Add one by writing a subclass and naming it in the table in commands.cpp.
-
-    The dialog shell, the "Apply to" selector and the Cancel/Confirm footer are drawn around draw() by
-    HDRViewApp::draw_edit_command_dialog(); a command that leaves draw() alone has no dialog and is applied
-    the moment it is invoked. Parameters live as members, so they persist between openings.
+    Add one by writing a subclass and naming it in the table in commands.cpp. Parameters live as members, so
+    they persist between openings; HDRViewApp::draw_edit_command_dialog() draws the dialog shell, the
+    "Apply to" selector and the Cancel/Confirm footer around draw().
 */
 class EditCommand
 {
@@ -94,54 +75,30 @@ public:
     struct Info
     {
         /// Shown in the menu; the first is also the key the action registry and the tests address it by.
-        /**
-            A name ending in "..." is a dialog, as everywhere else in the interface.
-        */
         std::vector<std::string> names;
         std::string              icon;
-        ImGuiKeyChord            chord = ImGuiKey_None;
-        ImGuiInputFlags          flags = ImGuiInputFlags_None;
+        ImGuiKeyChord            chord      = ImGuiKey_None;
+        bool                     has_dialog = false; ///< Whether invoking this opens a dialog rather than editing.
 
-        /// What the confirming button says. Ignored by a command with no dialog.
-        std::string confirm = "Apply";
-        /// Least width of the dialog, in em; content wider than this widens it further.
-        /**
-            In em because an Info is built before there is an ImGui context to ask for a size.
-        */
-        float width_em = 24.f;
-        /// Whether the "Apply to" settings mean anything for this edit, and so whether its dialog shows them.
-        /**
-            False for the edits that replace or reshape the whole image.
-        */
-        bool draws_subject_selector = true;
+        std::string confirm  = "Apply"; ///< What the confirming button says. Ignored without a dialog.
+        float       width_em = 24.f;    ///< Least dialog width in em; an Info predates the ImGui context.
 
-        /// With several images selected, whether this runs on all of them or only the current one.
-        /**
-            Each gets its own invocation and undo entry.
-        */
-        bool fans_out = true;
-
-        /// Whether the image has to accept edits for this to be offered.
-        bool needs_editable = true;
+        bool draws_subject_selector = true; ///< Whether "Apply to" means anything here, and so is shown.
+        bool fans_out               = true; ///< Whether a multi-selection runs this once per image.
+        bool needs_editable         = true; ///< Whether the image has to accept edits for this to be offered.
     };
 
+    explicit EditCommand(Info info) : m_info(std::move(info)) {}
     virtual ~EditCommand() = default;
 
-    virtual Info info() const = 0;
-
-    /// True when this is a dialog rather than an edit applied the moment it is chosen.
-    bool has_dialog() const
-    {
-        // by value: info() returns a temporary
-        const std::string n = info().names.front();
-        return n.size() >= 3 && n.compare(n.size() - 3, 3, "...") == 0;
-    }
+    /// Built once, in the constructor: the menu, the palette and the action registry read it every frame.
+    const Info &info() const { return m_info; }
 
     /// Draw the command's own parameter controls; the chrome is drawn around this.
     virtual void draw(EditContext &) {}
 
     /// Perform the edit. Called on confirm, or immediately for a command with no dialog.
-    virtual void apply(EditContext &) = 0;
+    virtual void apply(const EditContext &) = 0;
 
     /// Whether the command can run at all, beyond the image accepting edits.
     virtual bool enabled(const EditContext &) const { return true; }
@@ -150,6 +107,10 @@ public:
     virtual void on_open(EditContext &) {}
     /// Called as it closes, either way, for anything that must not be carried to the next image.
     virtual void on_close(EditContext &) {}
+
+protected:
+    /// A subclass constructor may adjust the fields it would rather set by name than pass positionally.
+    Info m_info;
 };
 
 using EditCommandPtr = std::unique_ptr<EditCommand>;

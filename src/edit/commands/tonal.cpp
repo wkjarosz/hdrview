@@ -14,6 +14,7 @@
 
 #include "colorspace.h"
 #include "common.h"
+#include "edit/edit_ops.h"
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
@@ -30,29 +31,29 @@ namespace
 class Invert final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Invert", "Negative"}, ICON_MY_INVERT, ImGuiMod_Ctrl | ImGuiKey_I}; }
+    Invert() : EditCommand({{"Invert", "Negative"}, ICON_MY_INVERT, ImGuiMod_Ctrl | ImGuiKey_I}) {}
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
-        ctx.modify_pixels("Invert", [](float v, int2, int) { return 1.f - v; });
+        modify_pixels(ctx, "Invert", [](float v, int2, int) { return 1.f - v; });
     }
 };
 
 class Clamp final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Clamp to [0,1]", "Clip to LDR range"}, ICON_MY_CLAMP}; }
+    Clamp() : EditCommand({{"Clamp to [0,1]", "Clip to LDR range"}, ICON_MY_CLAMP}) {}
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
-        ctx.modify_pixels("Clamp to [0,1]", [](float v, int2, int) { return std::min(1.f, std::max(0.f, v)); });
+        modify_pixels(ctx, "Clamp to [0,1]", [](float v, int2, int) { return std::min(1.f, std::max(0.f, v)); });
     }
 };
 
 class ExposureGamma final : public EditCommand
 {
 public:
-    Info info() const override { return {{"Exposure/gamma..."}, ICON_MY_EXPOSURE}; }
+    ExposureGamma() : EditCommand({{"Exposure/gamma..."}, ICON_MY_EXPOSURE, ImGuiKey_None, true}) {}
 
     void draw(EditContext &) override
     {
@@ -92,19 +93,19 @@ public:
         m_plot.end();
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float scale = std::pow(2.f, m_exposure);
         const float inv_g = 1.f / std::max(MIN_GAMMA, m_gamma);
         const float off   = m_offset;
 
-        ctx.modify_pixels("Exposure/gamma",
-                          [scale, off, inv_g](float v, int2, int)
-                          {
-                              // signed: a negative sample is meaningful in an HDR image and pow() of one
-                              // is not, so the curve is mirrored through the origin
-                              return spow(scale * v + off, inv_g);
-                          });
+        modify_pixels(ctx, "Exposure/gamma",
+                      [scale, off, inv_g](float v, int2, int)
+                      {
+                          // signed: a negative sample is meaningful in an HDR image and pow() of one
+                          // is not, so the curve is mirrored through the origin
+                          return spow(scale * v + off, inv_g);
+                      });
     }
 
 private:
@@ -115,10 +116,7 @@ private:
 class Fill final : public EditCommand
 {
 public:
-    Info info() const override
-    {
-        return {{"Fill..."}, ICON_MY_FILL, ImGuiKey_None, ImGuiInputFlags_None, "Fill", 24.f};
-    }
+    Fill() : EditCommand({{"Fill..."}, ICON_MY_FILL, ImGuiKey_None, true, "Fill"}) {}
 
     void draw(EditContext &ctx) override
     {
@@ -136,13 +134,13 @@ public:
                        "anywhere.");
 
         if (m_mode == Mode_Replace)
-            if (auto img = ctx.image(); img && img->is_valid_group(img->active_group_index(Target_Primary)))
+            if (auto img = ctx.image; img && img->is_valid_group(img->active_group_index(Target_Primary)))
                 if (!group_has_alpha(img->groups[size_t(img->active_group_index(Target_Primary))].type))
                     ImGui::TextUnformatted("This channel group has no alpha, so the color's alpha has\n"
                                            "nowhere to go. Blend over instead to use it as coverage.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float4 c = m_color;
 
@@ -150,7 +148,7 @@ public:
         // means transparency. Both modes have to match that or the result is out by a factor of alpha.
         bool premultiplied = false;
         int  alpha_slot    = -1;
-        if (auto img = ctx.image(); img && img->is_valid_group(img->active_group_index(Target_Primary)))
+        if (auto img = ctx.image; img && img->is_valid_group(img->active_group_index(Target_Primary)))
         {
             const auto &group = img->groups[size_t(img->active_group_index(Target_Primary))];
             if (img->alpha_type != AlphaType_None && group_has_alpha(group.type))
@@ -166,19 +164,19 @@ public:
             // stored as given
             const float4 v = premultiplied ? float4{c.x * c.w, c.y * c.w, c.z * c.w, c.w} : c;
 
-            ctx.modify_pixels("Fill", [v](float, int2, int slot) { return v[slot % 4]; });
+            modify_pixels(ctx, "Fill", [v](float, int2, int slot) { return v[slot % 4]; });
         }
         else
         {
             // source-over: with premultiplied storage the color contributes a*c and what was there keeps
             // (1-a) of itself, the same expression for color and alpha alike
             const float a = c.w;
-            ctx.modify_pixels("Fill",
-                              [c, a, alpha_slot](float old, int2, int slot)
-                              {
-                                  const float src = (slot == alpha_slot) ? 1.f : c[slot % 4];
-                                  return a * src + (1.f - a) * old;
-                              });
+            modify_pixels(ctx, "Fill",
+                          [c, a, alpha_slot](float old, int2, int slot)
+                          {
+                              const float src = (slot == alpha_slot) ? 1.f : c[slot % 4];
+                              return a * src + (1.f - a) * old;
+                          });
         }
     }
 

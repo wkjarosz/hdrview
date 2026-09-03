@@ -8,9 +8,11 @@
 
 #include "array2d.h"
 #include "box.h"
+#include "colorspace.h"
 #include "fwd.h"
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,7 +20,7 @@ struct Channel;
 
 /// One reversible change to an Image.
 /**
-    An entry restores principal data only: the samples and the windows they sit in. Derived data
+    An entry restores principal data only: the pixels and the windows they sit in. Derived data
     (textures, mip chains, statistics, the layer tree) is flagged for recomputation by whoever applies it.
 */
 class UndoEntry
@@ -38,9 +40,9 @@ public:
 
 using UndoPtr = std::unique_ptr<UndoEntry>;
 
-/// Specify the undo and redo commands using lambda expressions, storing no pixels at all.
+/// Undo and redo given as lambdas, storing no pixels at all.
 /**
-    For operations that re-derive their inverse: a flip, or a quarter turn the other way.
+    For the edits that re-derive their inverse: a flip, or a quarter turn the other way.
 */
 class LambdaUndo : public UndoEntry
 {
@@ -49,9 +51,6 @@ public:
         m_name(std::move(name)), m_undo(std::move(undo_fn)), m_redo(std::move(redo_fn))
     {
     }
-
-    /// An operation that is its own inverse; \p fn is used in both directions.
-    LambdaUndo(std::string name, std::function<void(Image &)> fn) : LambdaUndo(std::move(name), fn, fn) {}
 
     void        undo(Image &img) override { m_undo(img); }
     void        redo(Image &img) override { m_redo(img); }
@@ -117,64 +116,42 @@ private:
     Box2i                m_data_window, m_display_window;
 };
 
-/// Every field compute_color_transform() reads or writes, plus the profile name, as a color conversion found them.
-/**
-    Rides alongside the pixels in a CompositeUndo, since the two must undo together.
-*/
+/// The pixels a color conversion rewrote and the color metadata describing them, taken back together.
 class ColorMetadataUndo : public UndoEntry
 {
 public:
-    ColorMetadataUndo(const Image &img, std::string name);
-    /// Out of line because State is incomplete here and the pointer has to destroy it.
-    ~ColorMetadataUndo() override;
+    /// As ChannelRectUndo, and \p img's color metadata alongside.
+    ColorMetadataUndo(const Image &img, std::vector<int> channels, const Box2i &bounds, std::string name);
 
     void        undo(Image &img) override { swap(img); }
     void        redo(Image &img) override { swap(img); }
-    std::string name() const override { return m_name; }
+    std::string name() const override { return m_pixels.name(); }
+    size_t      memory_usage() const override { return m_pixels.memory_usage(); }
 
 private:
     void swap(Image &img);
 
-    struct State;
-    std::unique_ptr<State> m_state; ///< Out of line, since its members need image.h
-    std::string            m_name;
+    ChannelRectUndo               m_pixels;
+    std::optional<Chromaticities> m_chromaticities;
+    std::optional<float2>         m_adopted_neutral;
+    float3x3                      m_RGB_to_XYZ, m_XYZ_to_RGB, m_to_sRGB;
+    float3                        m_luminance_weights;
+    AdaptationMethod              m_adaptation_method;
+    ColorGamut_                   m_color_space;
+    WhitePoint_                   m_white_point;
+    std::string                   m_color_profile; ///< metadata["color profile"], the panel's "Profile name"
 };
 
-/// Several entries applied as one, undone in the opposite order to how they were built.
-class CompositeUndo : public UndoEntry
-{
-public:
-    CompositeUndo(std::string name, std::vector<UndoPtr> entries) :
-        m_name(std::move(name)), m_entries(std::move(entries))
-    {
-    }
+/// Builds the entry that reverses an edit, from the image as it was before it; see modify_image().
+using UndoFactory = std::function<UndoPtr(const Image &, const std::string &)>;
 
-    void undo(Image &img) override
-    {
-        for (auto it = m_entries.rbegin(); it != m_entries.rend(); ++it) (*it)->undo(img);
-    }
-    void redo(Image &img) override
-    {
-        for (auto &e : m_entries) e->redo(img);
-    }
-    std::string name() const override { return m_name; }
-    size_t      memory_usage() const override
-    {
-        size_t total = 0;
-        for (const auto &e : m_entries) total += e->memory_usage();
-        return total;
-    }
+/// Saves the whole channel list and the windows, for the edits that reshape the image.
+UndoPtr structure_undo(const Image &img, const std::string &name);
 
-private:
-    std::string          m_name;
-    std::vector<UndoPtr> m_entries;
-};
+/// An edit that re-derives its inverse: \p backward must undo \p forward, as a flip or a quarter turn does.
+UndoFactory reversible(std::function<void(Image &)> forward, std::function<void(Image &)> backward);
 
-/// An image's undo history: the entries applied so far, and a cursor into them.
-/**
-    Bounded by total bytes, since what threatens memory is one large structural edit and not many small
-    ones.
-*/
+/// An image's undo history: the entries applied so far, a cursor into them, and a bound on total bytes.
 class CommandHistory
 {
 public:
@@ -213,10 +190,7 @@ public:
     /// Total bytes held by the entries.
     size_t memory_usage() const;
 
-    /// Largest total the entries may occupy before the oldest are dropped.
-    /**
-        Generous, since dropping one silently shortens how far back the user can go.
-    */
+    /// Largest total the entries may occupy before the oldest are dropped; generous, since dropping one is silent.
     static constexpr size_t k_max_memory = size_t(1) << 30; // 1 GiB
 
 private:
