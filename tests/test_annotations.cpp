@@ -521,3 +521,75 @@ TEST_CASE("A handle held across the far side keeps its grip")
         }
     }
 }
+
+namespace
+{
+
+/// Every field of an annotation, so a field left out of the serializer shows up as a difference.
+bool same(const Annotation &a, const Annotation &b)
+{
+    return a.shape == b.shape && a.p0 == b.p0 && a.p1 == b.p1 && a.stroke_color == b.stroke_color &&
+           a.fill_color == b.fill_color && a.stroke_width == b.stroke_width && a.font_size == b.font_size &&
+           a.text_align == b.text_align && a.text == b.text && a.label == b.label && a.visible == b.visible &&
+           a.locked == b.locked;
+}
+
+} // namespace
+
+TEST_CASE("Every shape survives a trip through a session file")
+{
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        // Every field set away from its default, so a field the serializer forgets comes back as that
+        // default and fails here rather than round-tripping by accident.
+        Annotation a   = sample(shape);
+        a.fill_color   = float4{0.25f, 0.5f, 0.75f, 0.5f};
+        a.text_align   = VgCommand::AlignRight | VgCommand::AlignBottom;
+        a.label        = "a label of its own";
+        a.visible      = false;
+        a.locked       = true;
+        a.stroke_width = 7.5f;
+        a.font_size    = 31.f;
+
+        const Annotation b = json(a).get<Annotation>();
+        CHECK(same(a, b));
+
+        // Each field really is away from its default, so the check above is not comparing two defaults.
+        CHECK(!same(a, Annotation{}));
+    }
+}
+
+TEST_CASE("A session that says nothing about a field reads it as the default")
+{
+    // What an older session file looks like: the shape, and nothing else. Anything missing has to come
+    // back as a freshly constructed annotation's value rather than as whatever was in the variable.
+    json j     = json::object();
+    j["shape"] = "ellipse";
+
+    Annotation       a = j.get<Annotation>();
+    const Annotation d;
+
+    CHECK(a.shape == Annotation::Shape::Ellipse);
+    CHECK(a.stroke_color == d.stroke_color);
+    CHECK(a.stroke_width == d.stroke_width);
+    CHECK(a.visible == d.visible);
+    CHECK(a.locked == d.locked);
+    CHECK(a.text.empty());
+    CHECK(a.label.empty());
+}
+
+TEST_CASE("An unknown shape name reads as a shape rather than as nothing")
+{
+    // A session written by a newer HDRView can name a shape this one does not have. Falling back to the
+    // default keeps the rest of the annotation, which is better than dropping it or reading past the table.
+    json j     = json::object();
+    j["shape"] = "no-such-shape";
+    j["width"] = 5.f;
+
+    const Annotation a = j.get<Annotation>();
+    CHECK(int(a.shape) >= 0);
+    CHECK(int(a.shape) < int(Annotation::Shape::COUNT));
+    CHECK(a.stroke_width == doctest::Approx(5.f));
+}

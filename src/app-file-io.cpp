@@ -934,6 +934,11 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
                 selected_channels.push_back(c.name);
         entry["selected_channels"] = selected_channels;
 
+        // The user's own markup, in the order it draws in. Written even when empty is not worth it, so a
+        // session from an image with none says nothing about them.
+        if (!img->annotations.empty())
+            entry["annotations"] = img->annotations;
+
         images.push_back(entry);
     }
     j["images"] = images;
@@ -1106,6 +1111,7 @@ struct HDRViewApp::LoadingSession
         optional<TransparencyType_> transparency_override; ///< Empty when the file's own interpretation was used
         int                         selected_group = 0, reference_group = 0;
         vector<string>              selected_channels; ///< The multi-selection, by channel name; see Channel::selected
+        vector<Annotation>          annotations;       ///< The user's markup over this image, in draw order
         ImagePtr loaded; ///< Set once this entry's image arrives; still null => not yet arrived, or failed
     };
     vector<Entry> entries;                                  ///< One per saved "images" entry, in file order
@@ -1266,6 +1272,7 @@ void HDRViewApp::begin_session_load(const UnconfirmedSession &load)
         e.selected_group        = entry.value<int>("selected_group", 0);
         e.reference_group       = entry.value<int>("reference_group", 0);
         e.selected_channels     = entry.value<vector<string>>("selected_channels", {});
+        e.annotations           = entry.value<vector<Annotation>>("annotations", {});
 
         int idx = (int)pending.entries.size();
         pending.entries.push_back(e);
@@ -1351,6 +1358,9 @@ void HDRViewApp::finish_loading_session()
             for (auto &c : e.loaded->channels)
                 c.selected = std::find(e.selected_channels.begin(), e.selected_channels.end(), c.name) !=
                              e.selected_channels.end();
+
+            // In image coordinates, so they need nothing from the image to be placed correctly.
+            e.loaded->annotations = e.annotations;
         }
 
     // Rebuild m_images in the saved order: images arrive in whatever order their background loads finish,

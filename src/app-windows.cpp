@@ -714,6 +714,43 @@ void HDRViewApp::draw_statistics_window()
     }
 }
 
+/// Stroke and fill as one control, the way an illustration tool shows them: the stroke in front as a ring,
+/// the fill behind it. Which is which is what the overlap says, so neither needs a label of its own.
+static bool stroke_fill_swatches(const char *id, float4 &stroke, float4 &fill)
+{
+    constexpr ImGuiColorEditFlags flags =
+        ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf;
+
+    const float  sw   = ImGui::GetFrameHeight();
+    const float  off  = sw * 0.5f;
+    const ImVec2 base = ImGui::GetCursorScreenPos();
+
+    ImGui::PushID(id);
+
+    // The fill is behind, so it is submitted first and allows the stroke to take the hover where they meet.
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::SetCursorScreenPos(ImVec2(base.x + off, base.y + off));
+    bool changed = ImGui::ColorEdit4("##fill", &fill.x, flags);
+    ImGui::SetItemTooltip("Fill: the inside of a closed shape. Fully transparent leaves it unfilled.");
+
+    ImGui::SetCursorScreenPos(base);
+    changed |= ImGui::ColorEdit4("##stroke", &stroke.x, flags);
+    ImGui::SetItemTooltip("Stroke: the outline of a shape, and the color of a text annotation.");
+
+    // The middle punched out, so the front swatch reads as an outline rather than a second fill.
+    const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+    const float  t = (hi.x - lo.x) * 0.3f;
+    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(lo.x + t, lo.y + t), ImVec2(hi.x - t, hi.y - t),
+                                              ImGui::GetColorU32(ImGuiCol_WindowBg));
+
+    ImGui::PopID();
+
+    // Both were placed by hand, so the layout has to be told how much room they took between them.
+    ImGui::SetCursorScreenPos(base);
+    ImGui::Dummy(ImVec2(sw + off, sw + off));
+    return changed;
+}
+
 /// The icon the panel and the shape picker show for \p shape.
 static const char *annotation_shape_icon(Annotation::Shape shape)
 {
@@ -771,11 +808,9 @@ void HDRViewApp::draw_annotations_window()
         }
         ImGui::EndCombo();
     }
-    ImGui::SetItemTooltip("Which shape the %s tool draws.", "annotate");
+    ImGui::SetItemTooltip("Which shape the annotate tool draws.");
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::ColorEdit4("##AnnotationColor", &m_annotation_style.stroke_color.x,
-                      ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-    ImGui::SetItemTooltip("The color new annotations are drawn in.");
+    stroke_fill_swatches("NewAnnotation", m_annotation_style.stroke_color, m_annotation_style.fill_color);
 
     ImGui::Separator();
 
@@ -786,7 +821,11 @@ void HDRViewApp::draw_annotations_window()
     int erase     = -1;
     int drag_from = -1, drag_to = -1;
 
-    if (ImGui::BeginChild("##Annotation list", ImVec2(0, -EmSize(9))))
+    // Room kept below the list for the properties: a label row, then the swatches beside the width.
+    const float properties_h = active < 0 ? ImGui::GetTextLineHeightWithSpacing()
+                                          : ImGui::GetFrameHeight() * 2.5f + ImGui::GetStyle().ItemSpacing.y * 2.f;
+
+    if (ImGui::BeginChild("##Annotation list", ImVec2(0, -properties_h)))
     {
         // Flat toggles and no frame padding, so a row is as tall as its text, like the Images panel's.
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
@@ -885,40 +924,26 @@ void HDRViewApp::draw_annotations_window()
 
     Annotation &a = list[size_t(selected)];
 
-    if (ImGui::PE::Begin("AnnotationPE", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
-    {
-        ImGui::PE::PushLabelFont(m_sans_bold);
+    // Laid out by hand rather than in a property table: the two colors are one control, and what is left
+    // is small enough to sit beside them.
+    char buf[128];
+    snprintf(buf, sizeof(buf), "%s", a.label.c_str());
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::InputTextWithHint("##label", "Label", buf, sizeof(buf)))
+        a.label = buf;
+    ImGui::SetItemTooltip("What this annotation's row says. Empty falls back to the shape's name.");
 
-        ImGui::PE::Entry(
-            "Label",
-            [&a]
-            {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "%s", a.label.c_str());
-                if (ImGui::InputText("##label", buf, sizeof(buf)))
-                {
-                    a.label = buf;
-                    return true;
-                }
-                return false;
-            },
-            "What this row says. Empty falls back to the shape's name.");
+    stroke_fill_swatches("Annotation", a.stroke_color, a.fill_color);
 
-        ImGui::PE::Entry(
-            "Stroke", [&a] { return ImGui::ColorEdit4("##stroke", &a.stroke_color.x, ImGuiColorEditFlags_NoInputs); },
-            "Outline of the shape, and the color of a text annotation.");
-
-        ImGui::PE::Entry(
-            "Fill", [&a] { return ImGui::ColorEdit4("##fill", &a.fill_color.x, ImGuiColorEditFlags_NoInputs); },
-            "Interior of a closed shape. Fully transparent leaves it unfilled.");
-
-        ImGui::PE::Entry(
-            "Width", [&a] { return ImGui::SliderFloat("##width", &a.stroke_width, 0.5f, 16.f, "%.1f px"); },
-            "Stroke width, in screen pixels, so it does not change with zoom.");
-
-        ImGui::PE::PopLabelFont();
-        ImGui::PE::End();
-    }
+    ImGui::SameLine();
+    ImGui::BeginGroup();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Width");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderFloat("##width", &a.stroke_width, 0.5f, 16.f, "%.1f px");
+    ImGui::SetItemTooltip("Stroke width in screen pixels, so it does not change with zoom.");
+    ImGui::EndGroup();
 }
 
 std::vector<std::pair<int, int>> HDRViewApp::selected_targets() const

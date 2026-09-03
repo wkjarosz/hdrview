@@ -12,6 +12,10 @@
 namespace
 {
 
+// Stable identifiers for Shape as stored in .hsess session files. Independent of the display names
+// annotation_shape_name() returns, so relabeling one in the GUI cannot change what an old session means.
+const char *const g_shape_ids[int(Annotation::Shape::COUNT)] = {"rect", "ellipse", "line", "arrow", "text"};
+
 /// An arrowhead's length and half-width, in multiples of the stroke width.
 constexpr float k_head_length = 4.f, k_head_half_width = 2.f;
 /// Most of the shaft an arrowhead may occupy, so a very short arrow stays an arrow.
@@ -77,6 +81,56 @@ void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
 }
 
 } // namespace
+
+void to_json(json &j, const Annotation &a)
+{
+    j              = json::object();
+    j["shape"]     = g_shape_ids[size_t(a.shape) < std::size(g_shape_ids) ? size_t(a.shape) : 0];
+    j["p0"]        = a.p0;
+    j["p1"]        = a.p1;
+    j["stroke"]    = a.stroke_color;
+    j["fill"]      = a.fill_color;
+    j["width"]     = a.stroke_width;
+    j["font_size"] = a.font_size;
+    j["align"]     = a.text_align;
+    j["visible"]   = a.visible;
+    j["locked"]    = a.locked;
+
+    // Omitted when empty, which is the common case: a shape with no text and no label of its own.
+    if (!a.text.empty())
+        j["text"] = a.text;
+    if (!a.label.empty())
+        j["label"] = a.label;
+}
+
+void from_json(const json &j, Annotation &a)
+{
+    a = Annotation{};
+
+    const auto id = j.value<std::string>("shape", g_shape_ids[0]);
+    for (size_t i = 0; i < std::size(g_shape_ids); ++i)
+        if (id == g_shape_ids[i])
+            a.shape = Annotation::Shape(i);
+
+    // Anything the file leaves out keeps the default it was constructed with, so a session written by an
+    // older version reads as one of those rather than as garbage.
+    if (j.contains("p0"))
+        j.at("p0").get_to(a.p0);
+    if (j.contains("p1"))
+        j.at("p1").get_to(a.p1);
+    if (j.contains("stroke"))
+        j.at("stroke").get_to(a.stroke_color);
+    if (j.contains("fill"))
+        j.at("fill").get_to(a.fill_color);
+
+    a.stroke_width = j.value("width", a.stroke_width);
+    a.font_size    = j.value("font_size", a.font_size);
+    a.text_align   = j.value("align", a.text_align);
+    a.visible      = j.value("visible", a.visible);
+    a.locked       = j.value("locked", a.locked);
+    a.text         = j.value<std::string>("text", a.text);
+    a.label        = j.value<std::string>("label", a.label);
+}
 
 const char *annotation_shape_name(Annotation::Shape shape)
 {

@@ -8,6 +8,7 @@
 
 #include "box.h"
 #include "fwd.h"
+#include "json.h"
 #include "vector_overlay.h"
 
 #include <string>
@@ -87,6 +88,14 @@ struct Annotation
     /// The most handles any shape shows: a rectangle's four corners and four edge midpoints.
     static constexpr int MaxHandles = 8;
 };
+
+/// Read and write an annotation as a session file stores it.
+/**
+    A field added to Annotation has to be added to both of these, and to the round-trip test that sweeps
+    every field, or it will quietly come back as its default.
+*/
+void to_json(json &j, const Annotation &a);
+void from_json(const json &j, Annotation &a);
 
 /// Human-readable name for \p shape, as the panel and the shape picker show it.
 const char *annotation_shape_name(Annotation::Shape shape);
