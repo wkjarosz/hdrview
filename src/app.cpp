@@ -674,7 +674,11 @@ void HDRViewApp::setup_frame_callbacks()
 #endif
 
                 if (is_valid(idx))
-                    m_images[idx] = new_image;
+                {
+                    // The reloaded file is the same picture, so the user's markup over it still applies.
+                    new_image->annotations = to_replace->annotations;
+                    m_images[idx]          = new_image;
+                }
                 else
                     m_images.push_back(new_image);
 

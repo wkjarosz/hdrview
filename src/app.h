@@ -760,7 +760,8 @@ private:
     float     m_histogram_height = default_histogram_height;
 
     bool m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
-         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true, m_show_FPS = false;
+         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true, m_show_FPS = false,
+         m_draw_annotations = true;
     /// Zebra-stripe values below clip_range.x (x: shadows) and above clip_range.y (y: highlights)
     bool2  m_clip_warnings{false, false};
     float2 m_clip_range{0.f, 1.f};

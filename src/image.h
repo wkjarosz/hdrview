@@ -8,6 +8,7 @@
 
 #include "fwd.h"
 
+#include "annotations.h"
 #include "array2d.h"
 #include "box.h"
 #include "colorspace.h"
@@ -508,6 +509,13 @@ public:
         vector_overlay.h.
     */
     std::vector<VgCommand> vector_overlay;
+
+    /// The user's own markup over this image, in its pixel coordinates.
+    /**
+        Not vector_overlay: that is a renderer's stream, replaced wholesale on each send, while these are
+        retained shapes the user draws and edits. See annotations.h.
+    */
+    std::vector<Annotation> annotations;
 
     /// This image's undo history; each image is its own document, so closing one takes its history with it.
     /**

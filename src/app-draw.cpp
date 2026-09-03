@@ -226,19 +226,27 @@ void HDRViewApp::draw_vector_overlays() const
         return font("sans regular");
     };
 
+    auto unsupported = [](const char *what)
+    {
+        // Throttled: an overlay is redrawn every frame, so an unsupported command in it would report
+        // itself at the frame rate.
+        if (static LogThrottle throttle{std::chrono::seconds(10)}; throttle)
+            spdlog::warn("Vector overlay uses {}, which HDRView does not draw.", what);
+    };
+
     for (const auto &[img, color] : targets)
     {
-        if (!img || img->vector_overlay.empty())
+        if (!img)
             continue;
 
-        draw_vector_overlay(ImGui::GetBackgroundDrawList(), img->vector_overlay, xform, color,
-                            [](const char *what)
-                            {
-                                // Throttled: an overlay is redrawn every frame, so an unsupported command
-                                // in it would report itself at the frame rate.
-                                if (static LogThrottle throttle{std::chrono::seconds(10)}; throttle)
-                                    spdlog::warn("Vector overlay uses {}, which HDRView does not draw.", what);
-                            });
+        if (!img->vector_overlay.empty())
+            draw_vector_overlay(ImGui::GetBackgroundDrawList(), img->vector_overlay, xform, color, unsupported);
+
+        // Flattened each frame rather than cached: an annotation being dragged changes every frame anyway,
+        // and the command list is small enough that keeping it in step with the shapes is not worth it.
+        if (m_draw_annotations && !img->annotations.empty())
+            draw_vector_overlay(ImGui::GetBackgroundDrawList(), to_vg_commands(img->annotations, xform.scale), xform,
+                                color, unsupported);
     }
 }
 

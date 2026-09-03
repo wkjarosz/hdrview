@@ -747,6 +747,11 @@ void HDRViewApp::duplicate_image()
     // apart while the file name still says where it came from.
     copy->partname = m_roi.has_volume() ? "selection" : "copy";
 
+    // Annotations are in image coordinates, so they only land correctly on a copy of the whole image; a
+    // duplicated selection is a different region and starts unmarked.
+    if (!m_roi.has_volume())
+        copy->annotations = img->annotations;
+
     // Nothing on disk holds this, so it counts as unsaved from the start and closing it will say so.
     copy->history = CommandHistory{true};
 
