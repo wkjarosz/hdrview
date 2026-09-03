@@ -43,6 +43,8 @@ public:
                      "Remap",
                      27.f})
     {
+        m_info.has_dialog = true;
+
         // reparameterizes the whole image, so there is no subject to narrow
         m_info.draws_subject_selector = false;
     }
@@ -125,7 +127,7 @@ public:
         }
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const auto s = EnvMapping(m_src_mapping), d = EnvMapping(m_dst_mapping);
         const int2 out_size = m_size;
@@ -136,9 +138,9 @@ public:
             return;
 
         // no bias: the level the footprint asks for is the right one
-        ctx.modify_image_async("Remap envmap", out_size,
-                               [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
-                               { return remapped_envmap(src, out_size, d, s, mode, ss, 0.f, p); });
+        ctx.resample_image_async("Remap envmap", out_size,
+                                 [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
+                                 { return remapped_envmap(src, out_size, d, s, mode, ss, 0.f, p); });
     }
 
 private:
@@ -160,6 +162,8 @@ public:
                      "Convolve",
                      27.f})
     {
+        m_info.has_dialog = true;
+
         m_info.draws_subject_selector = false;
     }
 
@@ -185,7 +189,7 @@ public:
                        "nine numbers however large it is written out.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const auto m        = EnvMapping(m_mapping);
         const int2 out_size = m_size;
@@ -193,8 +197,8 @@ public:
         if (out_size.x <= 0 || out_size.y <= 0)
             return;
 
-        ctx.modify_image_async("Irradiance envmap", out_size, [m, out_size](const Array2Df &src, AtomicProgress p)
-                               { return irradiance_envmap(src, out_size, m, p); });
+        ctx.resample_image_async("Irradiance envmap", out_size, [m, out_size](const Array2Df &src, AtomicProgress p)
+                                 { return irradiance_envmap(src, out_size, m, p); });
     }
 
 private:

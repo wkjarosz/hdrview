@@ -51,7 +51,7 @@ void border_fields(int *border_x, int *border_y, bool *linked, const char *toolt
 class Blur final : public EditCommand
 {
 public:
-    Blur() : EditCommand({{"Blur...", "Gaussian blur", "Box blur"}, ICON_MY_BLUR}) {}
+    Blur() : EditCommand({{"Blur...", "Gaussian blur", "Box blur"}, ICON_MY_BLUR}) { m_info.has_dialog = true; }
 
     void draw(EditContext &) override
     {
@@ -92,7 +92,7 @@ public:
         }
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         if (m_kind == Kind_Box)
         {
@@ -139,7 +139,7 @@ private:
 class UnsharpMask final : public EditCommand
 {
 public:
-    UnsharpMask() : EditCommand({{"Unsharp mask...", "Sharpen"}, ICON_MY_SHARPEN}) {}
+    UnsharpMask() : EditCommand({{"Unsharp mask...", "Sharpen"}, ICON_MY_SHARPEN}) { m_info.has_dialog = true; }
 
     void draw(EditContext &) override
     {
@@ -150,7 +150,7 @@ public:
         ImGui::Tooltip("How much of what the blur removed is added back. Zero changes nothing.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float s = m_sigma, a = m_amount;
         ctx.modify_channels_async("Unsharp mask", [s, a](const Array2Df &src, const Box2i &r, int, AtomicProgress p)
@@ -164,7 +164,10 @@ private:
 class Median final : public EditCommand
 {
 public:
-    Median() : EditCommand({{"Median filter...", "Remove fireflies and outliers"}, ICON_MY_MEDIAN}) {}
+    Median() : EditCommand({{"Median filter...", "Remove fireflies and outliers"}, ICON_MY_MEDIAN})
+    {
+        m_info.has_dialog = true;
+    }
 
     void draw(EditContext &) override
     {
@@ -177,7 +180,7 @@ public:
                        "would cause. Costs the area of the disc per sample, so a large radius is slow.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float r = m_radius;
         const bool  d = m_disc;
@@ -196,6 +199,7 @@ class Shift final : public EditCommand
 public:
     Shift() : EditCommand({{"Shift...", "Offset", "Translate", "Wrap around"}, ICON_MY_SHIFT, ImGuiKey_None, "Shift"})
     {
+        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -222,7 +226,7 @@ public:
                        "has to ask.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float2 d  = m_offset;
         const int    s  = m_sampler;
@@ -245,6 +249,7 @@ public:
     ZapGremlins() :
         EditCommand({{"Zap gremlins...", "Replace NaNs and infinities"}, ICON_MY_ZAP_GREMLINS, ImGuiKey_None, "Zap"})
     {
+        m_info.has_dialog = true;
     }
 
     void draw(EditContext &ctx) override
@@ -272,7 +277,7 @@ public:
         ImGui::EndDisabled();
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         if (m_mode == Mode_Median)
             ctx.modify_channels_async("Zap gremlins", [](const Array2Df &src, const Box2i &r, int, AtomicProgress)
@@ -307,6 +312,7 @@ public:
                      "Convert",
                      27.f})
     {
+        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -329,7 +335,7 @@ public:
                        "is a convention it chooses, and the two are commonly called OpenGL and DirectX.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img)
@@ -371,7 +377,7 @@ public:
                               return sum / 3.f;
                           };
 
-                          // forward differences: the finest slope the samples can express
+                          // forward differences: the finest slope the pixels can express
                           const float h00 = height(p);
                           const float dx  = height(p + int2{1, 0}) - h00;
                           const float dy  = height(p + int2{0, 1}) - h00;

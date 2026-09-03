@@ -203,25 +203,18 @@ public:
     /// What an edit command runs against: \p img, or the image being pointed at when none is given.
     EditContext edit_context(ImagePtr img = nullptr);
 
-    /// Replace the image wholesale with something computed from it, off the main thread.
+    /// Resample every channel of \p img into a new \p size, replacing the image as one undoable step.
     /**
-        For the environment-map operations, which resample every channel into a new \p size. \p op produces
-        one channel's new samples; the results are swapped in together on the main thread, as one undoable
-        step.
+        On a worker behind a cancellable progress bar, since a resampler costs seconds a channel; a resize
+        fast enough to run synchronously goes through Image::resample() instead.
     */
-    void modify_image_async(const ImagePtr &img, const std::string &name, int2 size, const ImageFilter &op);
+    void resample_image_async(const ImagePtr &img, const std::string &name, int2 size, const ChannelResampler &op);
 
+    /// Filter the subject's channels of \p img, likewise on a worker, as one undoable step.
     /**
-        Apply a neighborhood filter to the subject's channels, computed on a worker with a progress bar that
-        can cancel it. The image is only touched once every channel is done, back on the main thread and
-        through modify_image(), so the edit still lands as one undoable step.
-
-        \p filter is handed the whole channel, the rectangle of it to produce in channel-local coordinates,
-        and which of the subject's channels it is -- 0 for the first, so a group's R, G, B, A arrive as 0, 1,
-        2, 3. It sees the whole channel because its kernel reads past the rectangle's edges.
-
-        Returns having only started the work. A canceled filter discards its partial result and changes
-        nothing.
+        \p filter produces one rectangle but is handed the whole channel, since its kernel reads past the
+        rectangle's edges, and which of the subject's channels it is -- 0 for the first, so a group's R, G,
+        B, A arrive as 0, 1, 2, 3. Returns having only started the work; a canceled filter changes nothing.
     */
     void modify_channels_async(const ImagePtr &img, const std::string &name, const EditSubject &subject,
                                const ChannelFilter &filter);
@@ -642,14 +635,11 @@ private:
         std::string      name;
         std::vector<int> channels;
         Box2i            bounds;
+
         /// Filters one of `channels`, given its index among them and a share of the progress bar.
         std::function<Array2Df(const Array2Df &, int, AtomicProgress)> filter;
-        /// The size the results are, when the work replaces the image rather than a rectangle of it.
-        /**
-            Zero for a filter that keeps the image's shape; when it is set, drain_running_filter() swaps the
-            channels in instead of uploading tiles.
-        */
-        int2                  new_size{0};
+
+        int2                  new_size{0}; ///< The size of the results; zero keeps the image's shape.
         std::vector<Array2Df> results;
         AtomicProgress        progress{true};
         std::atomic<bool>     done{false};

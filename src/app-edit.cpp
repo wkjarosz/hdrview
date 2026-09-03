@@ -99,8 +99,8 @@ EditContext HDRViewApp::edit_context(ImagePtr img)
     const EditSubject subject       = ctx.subject;
     ctx.modify_channels_async       = [this, subject_image, subject](const string &name, const ChannelFilter &filter)
     { modify_channels_async(subject_image, name, subject, filter); };
-    ctx.modify_image_async = [this, subject_image](const string &name, int2 size, const ImageFilter &op)
-    { modify_image_async(subject_image, name, size, op); };
+    ctx.resample_image_async = [this, subject_image](const string &name, int2 size, const ChannelResampler &op)
+    { resample_image_async(subject_image, name, size, op); };
 
     return ctx;
 }
@@ -112,15 +112,14 @@ void HDRViewApp::apply_edit_command(EditCommand &cmd)
     const Box2i roi = m_roi;
     for (const auto &img : edit_command_images(cmd))
     {
-        m_roi    = roi;
-        auto ctx = edit_context(img);
-        cmd.apply(ctx);
+        m_roi = roi;
+        cmd.apply(edit_context(img));
     }
 }
 
 void HDRViewApp::invoke_edit_command(EditCommand &cmd)
 {
-    if (cmd.has_dialog())
+    if (cmd.info().has_dialog)
     {
         dialog(cmd.info().names.front()).open = true;
         return;
@@ -131,10 +130,9 @@ void HDRViewApp::invoke_edit_command(EditCommand &cmd)
 
 bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
 {
-    auto ctx = edit_context();
-    if (cmd.info().needs_editable && !can_edit(ctx.image))
+    if (cmd.info().needs_editable && !can_edit(target_image()))
         return false;
-    return cmd.enabled(ctx);
+    return cmd.enabled(edit_context());
 }
 
 void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
@@ -158,7 +156,7 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
             draw_edit_subject_selector();
 
         // applied on confirm, not as the controls move: an edit per frame of a drag would fill the
-        // history and rewrite every sample it covers
+        // history and rewrite every pixel it covers
         const auto result = ImGui::DialogButtons(info.confirm.c_str());
         if (result == ImGui::DialogResult::Confirm)
         {
@@ -348,14 +346,14 @@ void HDRViewApp::modify_channels_async(const ImagePtr &img, const string &name, 
     start_filter(std::move(running));
 }
 
-void HDRViewApp::modify_image_async(const ImagePtr &img, const string &name, int2 size, const ImageFilter &op)
+void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, int2 size, const ChannelResampler &op)
 {
     if (!can_edit(img) || size.x <= 0 || size.y <= 0)
         return;
 
     if (m_running_filter)
     {
-        m_filter_queue.push_back([this, img, name, size, op] { modify_image_async(img, name, size, op); });
+        m_filter_queue.push_back([this, img, name, size, op] { resample_image_async(img, name, size, op); });
         return;
     }
 
@@ -373,7 +371,7 @@ void HDRViewApp::modify_image_async(const ImagePtr &img, const string &name, int
 
 void HDRViewApp::start_filter(std::unique_ptr<RunningFilter> running)
 {
-    // the statistics tasks read the very samples the filter is about to
+    // the statistics tasks read the very pixels the filter is about to
     for (auto &c : running->image->channels) c.cancel_stats();
 
     running->results.resize(running->channels.size());

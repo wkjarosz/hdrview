@@ -159,7 +159,7 @@ public:
     /// Only worth offering while one of the target groups holds more than one channel.
     bool enabled(const EditContext &ctx) const override { return !ungroupable_channels(ctx).empty(); }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img)
@@ -217,7 +217,7 @@ public:
 
     bool enabled(const EditContext &ctx) const override { return !regroup_channels(ctx).empty(); }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img)
@@ -263,7 +263,7 @@ public:
         return !channels.empty() && channels.size() < img->channels.size();
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img)

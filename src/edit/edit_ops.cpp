@@ -38,7 +38,7 @@ std::vector<int> subject_groups(const Image &img, const EditSubject &subject)
 /**
     \p op fills the staging arrays for the rows [y0, y1) of the rectangle: one array per entry of
     \p channels, each sized to the rectangle and indexed from its corner. Nothing reaches the image until
-    every row is staged, so an op may read the samples it is replacing.
+    every row is staged, so an op may read the pixels it is replacing.
 */
 void write_rect(Image &image, const std::vector<int> &channels, const Box2i &bounds,
                 const function<void(int y0, int y1, std::vector<Array2Df> &staging)> &op)
@@ -53,7 +53,7 @@ void write_rect(Image &image, const std::vector<int> &channels, const Box2i &bou
     stp::parallel_for(stp::blocked_range<int>(0, extent.y, block_size),
                       [&](int y0, int y1, int, int) { op(y0, y1, staging); });
 
-    // upload_tile() writes the samples and pushes just this rectangle to the GPU
+    // upload_tile() writes the pixels and pushes just this rectangle to the GPU
     for (size_t i = 0; i < channels.size(); ++i)
         image.channels[size_t(channels[i])].upload_tile(Box2i{offset, offset + extent}, staging[i].data());
 }
@@ -151,7 +151,7 @@ bool modify_image(const EditContext &ctx, const string &name, const function<voi
 
     spdlog::debug("Editing '{}': {}", img->filename, name);
 
-    // a statistics task reads these samples from a worker thread, so it has to be off them before the
+    // a statistics task reads these pixels from a worker thread, so it has to be off them before the
     // write, and before the undo entry reads them
     for (auto &c : img->channels) c.cancel_stats();
 
@@ -264,7 +264,7 @@ bool modify_colors(const EditContext &ctx, const string &name, const function<fl
         },
         [&channels, &bounds, &retag](const Image &image, const string &n) -> UndoPtr
         {
-            // the samples and what they mean changed together, so they are taken back together
+            // the pixels and what they mean changed together, so they are taken back together
             if (retag)
                 return std::make_unique<ColorMetadataUndo>(image, channels, bounds, n);
             return std::make_unique<ChannelRectUndo>(image, channels, bounds, n);

@@ -160,15 +160,15 @@ Addressing quirks worth knowing before writing new tests here:
   should look it up by filename after loading (see `find_image_index_containing()` in
   `tests/gui/test_gui_filtering.cpp`).
 - A test's body runs on the Test Engine's own coroutine thread, and the GL context is current on the main
-  thread only, so **any GL call made directly from a test is a no-op**. Calling `modify_structure()` (or
-  anything else that rebuilds textures) straight from a test therefore builds them with no context:
-  `glGenTextures` quietly yields a handle of 0, the channel is marked clean anyway, and the *next* edit
-  throws `Texture::upload_sub_region(): not implemented for render targets!` — or, more often, nothing
-  visibly fails and the shader merely logs `unbound argument "primary_0_texture..."` for a few frames.
-  Driving the same edit through `MenuClick()` is safe, because the action then runs inside the main
-  thread's frame, which is also how the application reaches it. Prefer the menu for anything that changes
-  an image's shape; calling the chokepoints directly is fine for edits that only write samples into
-  textures that already exist.
+  thread only, so **any GL call made directly from a test is a no-op**. Calling `modify_image()` with a
+  structural extent (or anything else that rebuilds textures) straight from a test therefore builds them
+  with no context: `glGenTextures` quietly yields a handle of 0, the channel is marked clean anyway, and
+  the *next* edit throws `Texture::upload_sub_region(): not implemented for render targets!` — or, more
+  often, nothing visibly fails and the shader merely logs `unbound argument "primary_0_texture..."` for a
+  few frames. Driving the same edit through `MenuClick()` is safe, because the action then runs inside the
+  main thread's frame, which is also how the application reaches it. Prefer the menu for anything that
+  changes an image's shape; calling the edit functions directly is fine for edits that only write pixels
+  into textures that already exist.
 
 Like `hdrview_tests`' EXR/PNG doctests, `tests/gui/test_gui_multipart.cpp` builds real assertions against a
 vendored multi-part OpenEXR fixture (`HDRVIEW_TEST_OPENEXR_DIR`, only set on `-cpm`/`-universal` presets) and

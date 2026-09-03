@@ -38,6 +38,7 @@ public:
                      "Convert",
                      27.f})
     {
+        m_info.has_dialog = true;
     }
 
     /// The file's own tag, so a conversion starts from what the pixels are.
@@ -104,7 +105,7 @@ public:
             ImGui::TextWrapped("These describe the same color space, so this would leave the samples as they are.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         float3x3 M;
         color_conversion_matrix(M, from(), to(), AdaptationMethod(m_method));
@@ -160,6 +161,7 @@ public:
         EditCommand(
             {{"Channel mixer...", "Mix channels", "Monochrome"}, ICON_MY_CHANNEL_MIXER, ImGuiKey_None, "Mix", 27.f})
     {
+        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -199,7 +201,7 @@ public:
         ImGui::TextDisabled("Total: %.1f%%", w.x + w.y + w.z);
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto row = [norm = m_normalize](const float3 &r)
         {
@@ -254,6 +256,7 @@ public:
         EditCommand(
             {{"Hue/saturation...", "Colorize", "Desaturate"}, ICON_MY_HUE_SATURATION, ImGuiKey_None, "Apply", 27.f})
     {
+        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -337,7 +340,7 @@ public:
         strip("The hue wheel as these settings would leave it", m_hue, m_saturation, m_lightness);
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float h = m_hue / 360.f, s = (m_saturation + 100.f) / 100.f, l = m_lightness / 100.f;
         modify_colors(ctx, "Hue/saturation",
@@ -358,6 +361,7 @@ public:
                      "Apply",
                      27.f})
     {
+        m_info.has_dialog = true;
     }
 
     void draw(EditContext &) override
@@ -391,7 +395,7 @@ public:
                        "changes how light the image is and leaves its colors, the other does the reverse.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img)
@@ -573,6 +577,7 @@ public:
                      ImGuiKey_None,
                      "Flatten"})
     {
+        m_info.has_dialog = true;
     }
 
     void draw(EditContext &ctx) override
@@ -590,7 +595,7 @@ public:
         ImGui::Tooltip("Takes the custom background color from the View menu.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float4 b = m_bg;
         modify_colors(ctx, "Flatten",

@@ -733,7 +733,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         auto img = hdrview()->current_image();
 
-        // applied straight through modify_channels, so the comparison is of the filters themselves
+        // the filters called directly, so the comparison is of the filters themselves and not of the plumbing
         auto blurred_by = [&](int which)
         {
             const Box2i all{int2{0}, img->channels[0].size()};
@@ -971,12 +971,13 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto original = snapshot(img);
 
         // the dialogs themselves, from the menu: everything above tests the operation, and an operation
-        // wired to nothing passes all of it
+        // wired to nothing passes all of it. Each waits for the entry, since a dialog may hand the work to
+        // a worker rather than do it in the frame that confirmed it.
         menu_click(ctx, "Edit/Shift...");
         ctx->SetRef("Shift...");
         ctx->ItemInputValue("X, Y offset/$$0", 3.0f);
         ctx->ItemClick("Shift");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Shift");
@@ -988,7 +989,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Convert color space...");
         ctx->ComboClick("Primaries##to/ACES AP0");
         ctx->ItemClick("Convert");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Convert color space");
@@ -1003,7 +1004,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Channel mixer...");
         ctx->ItemClick("Monochrome");
         ctx->ItemClick("Mix");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Channel mixer");
@@ -1031,7 +1032,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Hue\\/saturation...");
         ctx->ItemInputValue("Saturation", -100.0f);
         ctx->ItemClick("Apply");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Hue/saturation");
@@ -1042,7 +1043,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Flatten...");
         ctx->SetRef("Flatten...");
         ctx->ItemClick("Flatten");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Flatten");
@@ -1053,7 +1054,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Bump to normal map...");
         ctx->SetRef("Bump to normal map...");
         ctx->ItemClick("Convert");
-        ctx->Yield(2);
+        wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);
         IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Bump to normal map");
@@ -1210,8 +1211,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto img = hdrview()->current_image();
 
         // a depth channel beside the color, the ordinary shape of a render: a color matrix has no meaning
-        // for it, so covering "all channels" must still not touch it. Added through the structural
-        // chokepoint, which rebuilds the layer tree and the visibility the Images panel walks.
+        // for it, so covering "all channels" must still not touch it. Added through modify_image() with a
+        // structural extent, which rebuilds the layer tree and the visibility the Images panel walks.
         modify_image(
             hdrview()->edit_context(img), "Add Z",
             [](Image &i)

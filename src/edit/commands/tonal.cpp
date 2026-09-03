@@ -33,7 +33,7 @@ class Invert final : public EditCommand
 public:
     Invert() : EditCommand({{"Invert", "Negative"}, ICON_MY_INVERT, ImGuiMod_Ctrl | ImGuiKey_I}) {}
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         modify_pixels(ctx, "Invert", [](float v, int2, int) { return 1.f - v; });
     }
@@ -44,7 +44,7 @@ class Clamp final : public EditCommand
 public:
     Clamp() : EditCommand({{"Clamp to [0,1]", "Clip to LDR range"}, ICON_MY_CLAMP}) {}
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         modify_pixels(ctx, "Clamp to [0,1]", [](float v, int2, int) { return std::min(1.f, std::max(0.f, v)); });
     }
@@ -53,7 +53,7 @@ public:
 class ExposureGamma final : public EditCommand
 {
 public:
-    ExposureGamma() : EditCommand({{"Exposure/gamma..."}, ICON_MY_EXPOSURE}) {}
+    ExposureGamma() : EditCommand({{"Exposure/gamma..."}, ICON_MY_EXPOSURE}) { m_info.has_dialog = true; }
 
     void draw(EditContext &) override
     {
@@ -93,7 +93,7 @@ public:
         m_plot.end();
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float scale = std::pow(2.f, m_exposure);
         const float inv_g = 1.f / std::max(MIN_GAMMA, m_gamma);
@@ -116,7 +116,7 @@ private:
 class Fill final : public EditCommand
 {
 public:
-    Fill() : EditCommand({{"Fill..."}, ICON_MY_FILL, ImGuiKey_None, "Fill"}) {}
+    Fill() : EditCommand({{"Fill..."}, ICON_MY_FILL, ImGuiKey_None, "Fill"}) { m_info.has_dialog = true; }
 
     void draw(EditContext &ctx) override
     {
@@ -140,7 +140,7 @@ public:
                                            "nowhere to go. Blend over instead to use it as coverage.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const float4 c = m_color;
 

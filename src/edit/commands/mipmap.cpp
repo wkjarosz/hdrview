@@ -40,6 +40,8 @@ public:
                      "Generate",
                      26.f})
     {
+        m_info.has_dialog = true;
+
         // rewrites the whole image into a pyramid, so there is no subject to narrow
         m_info.draws_subject_selector = false;
     }
@@ -82,7 +84,7 @@ public:
             ImGui::TextDisabled("... down to mip %d", m_levels);
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img)

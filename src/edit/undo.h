@@ -20,7 +20,7 @@ struct Channel;
 
 /// One reversible change to an Image.
 /**
-    An entry restores principal data only: the samples and the windows they sit in. Derived data
+    An entry restores principal data only: the pixels and the windows they sit in. Derived data
     (textures, mip chains, statistics, the layer tree) is flagged for recomputation by whoever applies it.
 */
 class UndoEntry
@@ -94,10 +94,7 @@ private:
     std::vector<Array2Df> m_pixels; ///< One per entry of m_channels, sized to m_bounds
 };
 
-/// An image's whole channel list and windows, for cropping, resizing, and anything that adds or removes a channel.
-/**
-    Putting one back swaps the vectors, so the sample buffers move rather than copy.
-*/
+/// An image's whole channel list and windows, for cropping, resizing, and anything that adds or removes one.
 class StructureUndo : public UndoEntry
 {
 public:
@@ -119,12 +116,7 @@ private:
     Box2i                m_data_window, m_display_window;
 };
 
-/// What a color conversion changed: the samples, and the color metadata that says what they mean.
-/**
-    The metadata is every field compute_color_transform() reads or writes, plus the profile name. It goes
-    back with the pixels, so the image is never left describing itself with a profile its samples no longer
-    match.
-*/
+/// The pixels a color conversion rewrote and the color metadata describing them, taken back together.
 class ColorMetadataUndo : public UndoEntry
 {
 public:
@@ -198,12 +190,7 @@ public:
     /// Total bytes held by the entries.
     size_t memory_usage() const;
 
-    /// Largest total the entries may occupy before the oldest are dropped.
-    /**
-        Bounded by bytes rather than by count, since what threatens memory is one large structural edit and
-        not many small ones. Generous, since dropping an entry silently shortens how far back the user can
-        go.
-    */
+    /// Largest total the entries may occupy before the oldest are dropped; generous, since dropping one is silent.
     static constexpr size_t k_max_memory = size_t(1) << 30; // 1 GiB
 
 private:

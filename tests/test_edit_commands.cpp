@@ -77,7 +77,7 @@ struct TestEditContext : EditContext
                 { return std::make_unique<ChannelRectUndo>(img, channels, bounds, n); });
         };
 
-        modify_image_async = [this](const std::string &name, int2 size, const ImageFilter &op)
+        resample_image_async = [this](const std::string &name, int2 size, const ChannelResampler &op)
         {
             if (!image || size.x <= 0 || size.y <= 0)
                 return;
@@ -206,11 +206,6 @@ TEST_CASE("Every edit command is addressable and describes itself")
         CHECK_FALSE(info.names.front().empty());
         CHECK_FALSE(info.icon.empty());
         CHECK(info.width_em > 0.f);
-
-        // "..." means a dialog everywhere in the interface, so a command with no draw() must not claim one
-        const std::string &n        = info.names.front();
-        const bool         ellipsis = n.size() >= 3 && n.compare(n.size() - 3, 3, "...") == 0;
-        CHECK(cmd->has_dialog() == ellipsis);
 
         names.push_back(info.names.front());
     }

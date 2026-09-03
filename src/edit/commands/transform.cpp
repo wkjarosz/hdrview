@@ -37,7 +37,7 @@ public:
         m_info.draws_subject_selector = false;
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         modify_image(ctx, m_info.names.front(), m_forward, reversible(m_forward, m_backward));
     }
@@ -68,7 +68,7 @@ public:
         return box.has_volume() && box != img->data_window;
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img)
@@ -175,6 +175,8 @@ public:
                      "Resize",
                      30.f})
     {
+        m_info.has_dialog = true;
+
         // replaces the image rather than writing into it, so the subject has nothing to say about it
         m_info.draws_subject_selector = false;
     }
@@ -214,7 +216,7 @@ public:
             ImGui::TextUnformatted("Enlarging: samples are interpolated.");
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         const int2 out = m_size;
         if (m_have_size && out.x > 0 && out.y > 0)
@@ -235,6 +237,8 @@ public:
         EditCommand(
             {{"Canvas size..."}, ICON_MY_CANVAS_SIZE, ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C, "Resize", 30.f})
     {
+        m_info.has_dialog = true;
+
         m_info.draws_subject_selector = false;
     }
 
@@ -295,7 +299,7 @@ public:
             }
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img || !m_have_size)

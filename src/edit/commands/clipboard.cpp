@@ -49,7 +49,7 @@ public:
 
     bool enabled(const EditContext &ctx) const override { return ctx.image && ctx.clipboard; }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         if (ctx.image && ctx.clipboard)
             *ctx.clipboard = ctx.image->duplicate(target_region(ctx));
@@ -65,7 +65,7 @@ public:
         m_info.fans_out = false;
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
         if (!img || !ctx.clipboard)
@@ -87,7 +87,7 @@ public:
 
     bool enabled(const EditContext &ctx) const override { return ctx.clipboard && *ctx.clipboard; }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto clip = ctx.clipboard ? *ctx.clipboard : nullptr;
         auto img  = ctx.image;
@@ -130,6 +130,7 @@ public:
                      "Paste",
                      27.f})
     {
+        m_info.has_dialog = true;
     }
 
     bool enabled(const EditContext &ctx) const override { return ctx.clipboard && *ctx.clipboard; }
@@ -154,7 +155,7 @@ public:
             ImGui::TextDisabled("Clipboard: %d x %d", clip->size().x, clip->size().y);
     }
 
-    void apply(EditContext &ctx) override
+    void apply(const EditContext &ctx) override
     {
         auto clip = ctx.clipboard ? *ctx.clipboard : nullptr;
         auto img  = ctx.image;
