@@ -330,7 +330,11 @@ constexpr int ToneCurveSamples = 129;
 inline float ToneCurveX(int i) { return float(i) / float(ToneCurveSamples - 1); }
 
 /// Open the plot. False when ImPlot declined it, in which case nothing else may be called.
-bool BeginToneCurvePlot(const char *id);
+/**
+    \p draggable says the curve answers ToneCurveDrag(), which is what the cursor over the plot then
+    advertises. A plot that only draws leaves the cursor alone.
+*/
+bool BeginToneCurvePlot(const char *id, bool draggable = false);
 /// One curve, \p ys being ToneCurveSamples outputs for the inputs ToneCurveX(0)...
 void ToneCurve(const char *name, const float *ys, ImVec4 color, float weight = 2.f);
 /// A vertical line, for marking the input level a curve pivots about.

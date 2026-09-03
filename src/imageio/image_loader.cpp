@@ -902,7 +902,7 @@ void draw_load_image_options_dialog(bool &open)
                        "only load layers which contain either of these two words, and \"-.A\" would exclude channels "
                        "named \"A\". Leave empty to load all parts.");
 
-        ImGui::Checkbox("Override file's alpha", &s_opts.override_transparency);
+        ImGui::Checkbox("Override file's transparency type", &s_opts.override_transparency);
         ImGui::Tooltip("By default HDRView follows what the file says about its alpha channel. Enable this to state "
                        "the interpretation yourself, for a file whose semi-transparent areas read too dark or too "
                        "bright, or whose fourth channel is really a mask rather than transparency.");
@@ -911,7 +911,7 @@ void draw_load_image_options_dialog(bool &open)
         {
             ImGui::Indent();
             ImGui::PushItemWidth(ImGui::CalcItemWidth() - ImGui::GetStyle().IndentSpacing);
-            if (ImGui::BeginCombo("Alpha", transparency_override_name(s_opts.transparency_override)))
+            if (ImGui::BeginCombo("Transparency", transparency_override_name(s_opts.transparency_override)))
             {
                 for (TransparencyType_ a = 0; a < TransparencyType_Count; ++a)
                 {

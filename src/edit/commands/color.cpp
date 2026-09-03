@@ -504,7 +504,7 @@ private:
             curved[i]     = brightness_contrast_nonlinear(x, slope, bias);
         }
 
-        if (!ImGui::BeginToneCurvePlot("##Curve"))
+        if (!ImGui::BeginToneCurvePlot("##Curve", true))
             return;
 
         const ImVec4 active{1.f, 1.f, 1.f, 0.85f};

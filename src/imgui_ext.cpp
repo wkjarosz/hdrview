@@ -1398,6 +1398,13 @@ namespace
 float s_tone_width = 0.f;
 float s_tone_extra = 0.f;
 
+/// Whether \p p is inside the open plot's area.
+bool in_tone_plot(ImVec2 p)
+{
+    const ImVec2 pos = ImPlot::GetPlotPos(), size = ImPlot::GetPlotSize();
+    return p.x >= pos.x && p.x <= pos.x + size.x && p.y >= pos.y && p.y <= pos.y + size.y;
+}
+
 /// \p screen in the plot's own coordinates, clamped to the unit square the axes are locked to.
 float2 tone_plot_pos(ImVec2 screen)
 {
@@ -1406,7 +1413,7 @@ float2 tone_plot_pos(ImVec2 screen)
 }
 } // namespace
 
-bool BeginToneCurvePlot(const char *id)
+bool BeginToneCurvePlot(const char *id, bool draggable)
 {
     // as wide as the sliders beneath it, and as tall as it needs to be for the plot area to be square
     s_tone_width = ImGui::CalcItemWidth();
@@ -1428,6 +1435,14 @@ bool BeginToneCurvePlot(const char *id)
 
     // fixed, so a steep curve is seen leaving the top and bottom instead of the frame following it
     ImPlot::SetupAxesLimits(0.0, 1.0, 0.0, 1.0, ImPlotCond_Always);
+
+    // say the curve can be taken hold of, and keep saying it while it is being held and the cursor has
+    // wandered off the plot
+    if (draggable && (ImGui::IsWindowHovered() ? in_tone_plot(ImGui::GetIO().MousePos)
+                                               : ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
+                                                     in_tone_plot(ImGui::GetIO().MouseClickedPos[0])))
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
     return true;
 }
 
@@ -1474,8 +1489,7 @@ bool ToneCurveDrag(float2 &position, float2 *pressed_at)
     // ImGui already records where each button went down, so whether this drag belongs to the plot is a
     // question about that point rather than something to remember from frame to frame
     const ImVec2 began = ImGui::GetIO().MouseClickedPos[ImGuiMouseButton_Left];
-    const ImVec2 pos = ImPlot::GetPlotPos(), size = ImPlot::GetPlotSize();
-    if (began.x < pos.x || began.x > pos.x + size.x || began.y < pos.y || began.y > pos.y + size.y)
+    if (!in_tone_plot(began))
         return false;
 
     position = tone_plot_pos(ImGui::GetIO().MousePos);
