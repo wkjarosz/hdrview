@@ -17,6 +17,10 @@
 using namespace hdrview_test;
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -252,3 +256,121 @@ TEST_CASE("A maker-note entry is followed only where its data lies inside the no
         CHECK(*headroom == doctest::Approx(42.0));
     }
 }
+
+#ifdef HDRVIEW_TEST_LIBEXIF_DIR
+
+namespace
+{
+
+/// The TIFF block inside a JPEG's APP1 "Exif\0\0" segment.
+std::vector<uint8_t> exif_segment(const std::string &jpeg)
+{
+    for (size_t at = 2; at + 4 <= jpeg.size() && (uint8_t)jpeg[at] == 0xFF;)
+    {
+        const uint8_t  marker = (uint8_t)jpeg[at + 1];
+        const uint16_t length = uint16_t(((uint8_t)jpeg[at + 2] << 8) | (uint8_t)jpeg[at + 3]);
+        if (marker == 0xDA || length < 2)
+            break;
+        if (marker == 0xE1 && jpeg.compare(at + 4, 6, "Exif\0\0", 6) == 0)
+            return {jpeg.begin() + at + 10, jpeg.begin() + at + 2 + length};
+        at += 2 + length;
+    }
+    return {};
+}
+
+/// The ASCII entries libexif reports for a file, keyed by its own name for each tag.
+/**
+    `parsed` is the dump libexif produces from the same bytes, in lines of "Entry 3: Model (ASCII)" followed
+    by "Value: Canon PowerShot S70".
+*/
+std::map<std::string, std::string> ascii_entries(const std::string &parsed)
+{
+    std::map<std::string, std::string> entries;
+    std::istringstream                 in(parsed);
+    for (std::string line, tag; std::getline(in, line);)
+    {
+        const auto start = line.find_first_not_of(" \t");
+        if (start == std::string::npos)
+            continue;
+
+        const auto text = line.substr(start);
+        if (text.rfind("Entry ", 0) == 0)
+        {
+            const auto colon = text.find(": ");
+            tag = colon != std::string::npos && text.size() > 8 && text.substr(text.size() - 8) == " (ASCII)"
+                      ? text.substr(colon + 2, text.size() - colon - 10)
+                      : "";
+        }
+        else if (!tag.empty() && text.rfind("Value: ", 0) == 0)
+        {
+            if (const auto v = text.substr(7); v.size() > 3)
+                entries.emplace(tag, v);
+            tag.clear();
+        }
+    }
+    return entries;
+}
+
+} // namespace
+
+// libexif's own regression files, one per maker-note layout its parsers know. Every vendor lays a note out
+// differently and several misdescribe their offsets, which is what no blob written here can stand in for.
+TEST_CASE("A real camera file's tags and maker note survive into the metadata")
+{
+    namespace fs = std::filesystem;
+
+    int files = 0;
+    for (const auto &entry : fs::directory_iterator(HDRVIEW_TEST_LIBEXIF_DIR))
+    {
+        const auto path = entry.path();
+        if (path.extension() != ".jpg")
+            continue;
+
+        CAPTURE(path.filename().string());
+        std::ifstream in(path, std::ios::binary);
+        REQUIRE(in.good());
+        const std::string jpeg{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+
+        const auto block = exif_segment(jpeg);
+        REQUIRE_FALSE(block.empty());
+
+        Exif exif{block.data(), block.size()};
+        REQUIRE(exif.valid());
+
+        const json j = exif.to_json();
+        REQUIRE(j.contains("TIFF IFD0"));
+        // each file is named for the maker-note variant it carries, so every one has to be found
+        CHECK(j.contains("Maker notes"));
+
+        std::ifstream     pin(path.string() + ".parsed", std::ios::binary);
+        const std::string parsed{std::istreambuf_iterator<char>(pin), std::istreambuf_iterator<char>()};
+        const auto        entries = ascii_entries(parsed);
+        REQUIRE_FALSE(entries.empty());
+
+        // the strings libexif reads out of the same bytes have to be the strings that arrive here
+        const auto dump = j.dump();
+        for (const auto &[tag, value] : entries)
+        {
+            CAPTURE(value);
+            CHECK(dump.find(value) != std::string::npos);
+        }
+
+        // and against the tag each belongs to, under the title HDRView keys by rather than libexif's name.
+        // Presence alone would not notice a build that lost every title and filed them under tag numbers.
+        for (const auto &[name, title] :
+             {std::pair{"Make", "Manufacturer"}, std::pair{"Model", "Model"}, std::pair{"DateTime", "Date and Time"}})
+        {
+            const auto reported = entries.find(name);
+            if (reported == entries.end())
+                continue;
+
+            CAPTURE(title);
+            REQUIRE(j["TIFF IFD0"].contains(title));
+            CHECK(j["TIFF IFD0"][title].value("string", std::string{}) == reported->second);
+        }
+        ++files;
+    }
+    CHECK(files > 0);
+}
+
+#endif // HDRVIEW_TEST_LIBEXIF_DIR

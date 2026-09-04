@@ -161,8 +161,7 @@ include(sanitizers)
 # versions.
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
-# ============================================================================
-# Set a default build configuration (Release)
+# =====================================================================# Set a default build configuration (Release)
 # ============================================================================
 get_cmake_property(IS_MULTI GENERATOR_IS_MULTI_CONFIG)
 if(NOT CMAKE_BUILD_TYPE AND NOT IS_MULTI)
@@ -1966,6 +1965,31 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
       message(FATAL_ERROR "HDRVIEW_TEST_J2K_DIR is set to '${HDRVIEW_TEST_J2K_DIR}', which does not exist")
     endif()
     target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_J2K_DIR="${HDRVIEW_TEST_J2K_DIR}")
+  endif()
+
+  # libexif's own regression files: nine camera JPEGs, one per maker-note variant its parsers handle, each
+  # beside the dump libexif produces from it. Real notes are what the synthetic blobs in tests/test_exif.cpp
+  # cannot be, since every vendor lays its own out differently and several lie about their offsets.
+  set(HDRVIEW_TEST_LIBEXIF_DIR
+      ""
+      CACHE PATH "libexif's test/testdata directory, holding camera JPEGs and their parsed dumps"
+  )
+  if(HDRVIEW_TEST_LIBEXIF_DIR)
+    set(_hdrview_libexif_data "${HDRVIEW_TEST_LIBEXIF_DIR}")
+    set(_hdrview_libexif_explicit TRUE)
+  elseif(DEFINED libexif_SOURCE_DIR)
+    set(_hdrview_libexif_data "${libexif_SOURCE_DIR}/test/testdata")
+    set(_hdrview_libexif_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_libexif_data AND EXISTS "${_hdrview_libexif_data}")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_LIBEXIF_DIR="${_hdrview_libexif_data}")
+  elseif(_hdrview_libexif_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_LIBEXIF_DIR is set to '${_hdrview_libexif_data}', which does not exist")
+  else()
+    message(STATUS "libexif test files not available (no fetched source; set HDRVIEW_TEST_LIBEXIF_DIR to use "
+                   "a checkout); skipping tests/test_exif.cpp's camera-file cases"
+    )
   endif()
 
   include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
