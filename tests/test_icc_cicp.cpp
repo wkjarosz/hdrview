@@ -313,3 +313,95 @@ TEST_CASE("Profiles encoding the same color space agree on its primaries")
 }
 
 #endif // HDRVIEW_TEST_LIBJXL_DIR
+
+#ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
+
+// lcms's own testbed profiles: eight real ones, RGB and CMYK over ICC v2 and v4, beside the three it keeps
+// for being broken. Every profile HDRView parses came embedded in a file it did not write, and every loader
+// spends it the same way, asking what color space it is and falling back when the answer is none, so a
+// profile that cannot be used has to answer that way rather than crash or claim a space it does not have.
+TEST_CASE("Profiles lcms cannot use are not mistaken for ones it can")
+{
+    namespace fs = std::filesystem;
+
+    int usable = 0, cmyk = 0, broken = 0;
+    for (const auto &entry : fs::directory_iterator(HDRVIEW_TEST_LCMS_TESTBED_DIR))
+    {
+        const auto path = entry.path();
+        if (path.extension() != ".icc")
+            continue;
+
+        const std::string name = path.filename().string();
+        CAPTURE(name);
+
+        std::ifstream in(path, std::ios::binary);
+        REQUIRE(in.good());
+        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+
+        // constructing from bytes must not throw, whatever they hold: the loaders do this inside a decode,
+        // and one exception would lose an image whose pixels are perfectly good
+        ICCProfile profile;
+        REQUIRE_NOTHROW(profile = ICCProfile{reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()});
+
+        // being two of these at once would send a loader down two paths
+        const int spaces = int(profile.is_RGB()) + int(profile.is_Gray()) + int(profile.is_CMYK());
+        CHECK(spaces <= 1);
+
+        // lcms refuses two of its bad files outright and opens the third, whose color space is a malformed
+        // signature; either way no loader can use it, and the name says which those are
+        if (name.rfind("bad", 0) == 0 || name == "toosmall.icc")
+        {
+            ++broken;
+            CHECK(spaces == 0);
+        }
+
+        if (spaces == 0)
+        {
+            // an unusable profile answers every accessor without reaching lcms, and leaves the pixels of a
+            // caller that ignores the return value untouched rather than partly transformed
+            Chromaticities chr;
+            CHECK_FALSE(profile.extract_chromaticities(&chr));
+            CHECK_FALSE(profile.linearized_profile().valid());
+
+            const std::array<float, 8> before{0.1f, 0.2f, 0.3f, 1.f, 0.4f, 0.5f, 0.6f, 1.f};
+            auto                       pixels = before;
+            CHECK_FALSE(profile.linearize_pixels(pixels.data(), int3{2, 1, 4}));
+            CHECK(pixels == before);
+            continue;
+        }
+
+        ++usable;
+        CHECK_FALSE(profile.description().empty());
+
+        // CMYK has no colorants of its own to read; its conversion is covered in tests/test_j2k_io.cpp
+        if (profile.is_CMYK())
+        {
+            ++cmyk;
+            continue;
+        }
+
+        // linearized_profile() is the keep_primaries path every loader takes: it rebuilds the profile with
+        // linear curves and the same colorants, so reading those back has to return what it was handed
+        Chromaticities want;
+        REQUIRE(profile.extract_chromaticities(&want));
+        auto linear = profile.linearized_profile();
+        REQUIRE(linear.valid());
+
+        Chromaticities got;
+        REQUIRE(linear.extract_chromaticities(&got));
+        CHECK(got.red.x == doctest::Approx(want.red.x).epsilon(1e-3));
+        CHECK(got.red.y == doctest::Approx(want.red.y).epsilon(1e-3));
+        CHECK(got.green.x == doctest::Approx(want.green.x).epsilon(1e-3));
+        CHECK(got.green.y == doctest::Approx(want.green.y).epsilon(1e-3));
+        CHECK(got.blue.x == doctest::Approx(want.blue.x).epsilon(1e-3));
+        CHECK(got.blue.y == doctest::Approx(want.blue.y).epsilon(1e-3));
+        CHECK(got.white.x == doctest::Approx(want.white.x).epsilon(1e-3));
+        CHECK(got.white.y == doctest::Approx(want.white.y).epsilon(1e-3));
+    }
+
+    CHECK(broken == 3);
+    CHECK(usable >= 8);
+    CHECK(cmyk >= 1);
+}
+
+#endif // HDRVIEW_TEST_LCMS_TESTBED_DIR

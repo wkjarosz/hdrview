@@ -1927,11 +1927,12 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   endif()
 
   # The CMYK conversions cannot be exercised without a CMYK ICC profile, and the smallest real one is half a
-  # megabyte, too large to vendor. libjxl carries lcms in-tree and lcms's testbed carries two, so a build
-  # that fetched libjxl already has one on disk and the cases can run in CI like the OpenEXR ones.
+  # megabyte, too large to vendor. libjxl carries lcms in-tree and lcms's testbed carries two, alongside real
+  # RGB profiles and the three malformed ones lcms keeps for rejecting, so a build that fetched libjxl
+  # already has them on disk and the cases can run in CI like the OpenEXR ones.
   set(HDRVIEW_TEST_LCMS_TESTBED_DIR
       ""
-      CACHE PATH "lcms2's testbed directory, whose test1.icc is a CMYK printer profile"
+      CACHE PATH "lcms2's testbed directory of real and deliberately malformed ICC profiles"
   )
   if(HDRVIEW_TEST_LCMS_TESTBED_DIR)
     set(_hdrview_lcms_testbed "${HDRVIEW_TEST_LCMS_TESTBED_DIR}")
@@ -1949,8 +1950,8 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     )
   else()
     message(STATUS "lcms2's test profiles not available (no fetched libjxl source; set "
-                   "HDRVIEW_TEST_LCMS_TESTBED_DIR to use a checkout); skipping the CMYK cases in "
-                   "tests/test_j2k_io.cpp"
+                   "HDRVIEW_TEST_LCMS_TESTBED_DIR to use a checkout); skipping the profile cases in "
+                   "tests/test_j2k_io.cpp and tests/test_icc_cicp.cpp"
     )
   endif()
 
