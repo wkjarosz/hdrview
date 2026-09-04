@@ -772,18 +772,6 @@ static bool stroke_fill_swatches(const char *id, float4 &stroke, float4 &fill)
     return changed;
 }
 
-/// The width a stroke-width drag takes in a row, so the rows that carry one agree about it.
-static float width_drag_size() { return EmSize(4.f); }
-
-/// The stroke width, as a drag rather than a slider: a few pixels either way is the usual adjustment.
-static bool stroke_width_drag(float &width)
-{
-    ImGui::SetNextItemWidth(width_drag_size());
-    const bool changed = ImGui::DragFloat("##width", &width, 0.05f, 0.5f, 32.f, "%.1f px");
-    ImGui::SetItemTooltip("Stroke width in screen pixels, so it does not change with zoom.");
-    return changed;
-}
-
 /// The icon the panel and the shape picker show for \p shape.
 static const char *annotation_shape_icon(Annotation::Shape shape)
 {
@@ -807,7 +795,8 @@ void HDRViewApp::draw_annotations_window()
         return;
     }
 
-    auto &list = img->annotations;
+    auto     &list   = img->annotations;
+    const int active = active_annotation();
 
     ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
     ImGui::Checkbox("Show " ICON_MY_ANNOTATE " in viewport", &m_draw_annotations);
@@ -815,64 +804,27 @@ void HDRViewApp::draw_annotations_window()
 
     ImGui::Separator();
 
-    // What the tool will draw next, which is the state a drawing tool wants in reach while drawing.
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("New:");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(EmSize(7));
-    if (ImGui::BeginCombo("##AnnotationShape", fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
-                                                           annotation_shape_name(m_annotation_shape))
-                                                   .c_str()))
-    {
-        for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
-        {
-            const auto shape = Annotation::Shape(n);
-            // Text is placed by clicking and then typing, which nothing here can do yet.
-            if (shape == Annotation::Shape::Text)
-                continue;
-
-            const bool is_selected = shape == m_annotation_shape;
-            if (ImGui::Selectable(
-                    fmt::format("{} {}", annotation_shape_icon(shape), annotation_shape_name(shape)).c_str(),
-                    is_selected))
-                m_annotation_shape = shape;
-            if (is_selected)
-                ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::SetItemTooltip("Which shape the annotate tool draws.");
-    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    stroke_fill_swatches("NewAnnotation", m_annotation_style.stroke_color, m_annotation_style.fill_color);
-    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    stroke_width_drag(m_annotation_style.stroke_width);
+    // One row of controls, editing whichever annotation is in hand, or the look the next one will be drawn
+    // with when none is. The same widgets either way, so there is nothing to learn twice.
+    Annotation &edited = active >= 0 ? list[size_t(active)] : m_annotation_style;
+    draw_annotation_controls(edited);
 
     ImGui::Separator();
 
-    const int active = active_annotation();
-
-    // Both applied after the list is drawn: reordering or removing a row mid-list renumbers the ones still
-    // to come.
+    // Applied after the list is drawn: removing a row mid-list renumbers the ones still to come.
     int erase = -1;
 
     // Where the rows are, so a drag can say which one the cursor is over.
     float first_row_top = 0.f, row_height = 0.f;
 
-    // Room kept below the list for the properties: a label row, then the swatches beside the width.
-    const float properties_h = active < 0 ? ImGui::GetTextLineHeightWithSpacing()
-                                          : ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y * 2.f;
-
-    if (ImGui::BeginChild("##Annotation list", ImVec2(0, -properties_h)))
+    if (ImGui::BeginChild("##Annotation list", ImVec2(0.f, 0.f)))
     {
-        // Flat toggles and no frame padding, so a row is as tall as its text, like the Images panel's.
+        // A row is as tall as its text, like the Images panel's, and its buttons sit against each other:
+        // each already carries its own highlight, which is all the separation they need.
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+        ImGui::PushStyleVarX(ImGuiStyleVar_ItemSpacing, 0.f);
 
-        // The glyph plus the padding a button puts around it; the glyph width alone clips the wider icons
-        // and leaves the narrower ones adrift.
         const float icon_w = ImGui::IconSize().x + 2.f * ImGui::GetStyle().FramePadding.x;
-        // What the trash at the end of each row occupies, so the label stops short of it rather than
-        // running under it. SameLine() puts ItemSpacing before the button, so that counts too.
-        const float trash_w = icon_w + ImGui::GetStyle().ItemSpacing.x;
 
         auto flat_toggle = [icon_w](const char *icon, bool &value, const char *tooltip)
         {
@@ -898,13 +850,14 @@ void HDRViewApp::draw_annotations_window()
             auto &a = list[size_t(i)];
             ImGui::PushID(i);
 
-            flat_toggle(a.visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF, a.visible, "Draw this annotation.");
-            flat_toggle(a.locked ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, a.locked,
-                        "A locked annotation cannot be picked up in the viewport.");
+            const float row_x = ImGui::GetCursorPosX();
+            const float row_w = ImGui::GetContentRegionAvail().x;
 
-            if (ImGui::Selectable(fmt::format("{} {}", annotation_shape_icon(a.shape), a.display_label()).c_str(),
-                                  i == active, ImGuiSelectableFlags_AllowOverlap,
-                                  ImVec2(ImGui::GetContentRegionAvail().x - trash_w, 0.f)))
+            // The highlight goes down first and spans the row, with everything else drawn back over it, so
+            // selecting reads across the whole row rather than just the label.
+            ImGui::SetNextItemAllowOverlap();
+            if (ImGui::Selectable("##row", i == active, ImGuiSelectableFlags_AllowOverlap,
+                                  ImVec2(0.f, ImGui::GetTextLineHeight())))
                 set_active_annotation(i);
 
             // Which row a press took hold of. Tracked here rather than read back from ImGui's active item,
@@ -919,7 +872,17 @@ void HDRViewApp::draw_annotations_window()
                 row_height    = ImGui::GetItemRectSize().y + ImGui::GetStyle().ItemSpacing.y;
             }
 
-            ImGui::SameLine();
+            ImGui::SameLine(0.f, 0.f);
+            ImGui::SetCursorPosX(row_x);
+
+            flat_toggle(a.visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF, a.visible, "Draw this annotation.");
+            flat_toggle(a.locked ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, a.locked,
+                        "A locked annotation cannot be picked up in the viewport.");
+
+            ImGui::TextUnformatted(fmt::format("{} {}", annotation_shape_icon(a.shape), a.display_label()).c_str());
+
+            ImGui::SameLine(0.f, 0.f);
+            ImGui::SetCursorPosX(row_x + row_w - icon_w);
             if (ImGui::FlatButton(ICON_MY_TRASH_CAN, false, ImVec2(icon_w, 0.f)))
                 erase = i;
             ImGui::SetItemTooltip("Delete this annotation.");
@@ -927,7 +890,7 @@ void HDRViewApp::draw_annotations_window()
             ImGui::PopID();
         }
 
-        ImGui::PopStyleVar();
+        ImGui::PopStyleVar(2);
     }
     ImGui::EndChild();
 
@@ -967,36 +930,91 @@ void HDRViewApp::draw_annotations_window()
         else if (active > erase)
             set_active_annotation(active - 1);
     }
+}
 
-    // Re-read: the erase above may have taken the annotation that was in hand, or shifted its index.
-    const int selected = active_annotation();
-    if (selected < 0)
+void HDRViewApp::draw_annotation_controls(Annotation &a)
+{
+    const auto &style = ImGui::GetStyle();
+
+    // Icon alone, or icon and name once the row can spare the difference. It snaps between the two rather
+    // than growing with the panel, so the control does not change size as the panel is resized.
+    const float combo_narrow = ImGui::GetFrameHeight();
+    float       combo_wide   = 0.f;
+    for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
+        combo_wide = std::max(combo_wide, ImGui::CalcTextSize(annotation_shape_name(Annotation::Shape(n))).x);
+    combo_wide += combo_narrow + style.ItemInnerSpacing.x;
+
+    const float add_w     = ImGui::CalcTextSize("Add:").x + style.ItemInnerSpacing.x;
+    const float colors_w  = ImGui::GetFrameHeight();
+    const float label_min = EmSize(5.f), width_min = EmSize(3.5f);
+
+    // Enough room for everything at its smallest, plus what showing the names would add.
+    const float avail   = ImGui::GetContentRegionAvail().x;
+    const bool  named   = avail >= label_min + colors_w + width_min + add_w + combo_wide + 5.f * style.CellPadding.x;
+    const float combo_w = named ? combo_wide : combo_narrow;
+
+    // Spare width goes mostly to the label, and what is left of it to the width drag; the colors, the
+    // "Add:" and the shape picker stay the size they need.
+    if (ImGui::BeginTable("##AnnotationControls", 5,
+                          ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_NoPadOuterX |
+                              ImGuiTableFlags_SizingFixedFit))
     {
-        ImGui::TextDisabled("Nothing selected.");
-        return;
+        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 3.f);
+        ImGui::TableSetupColumn("colors", ImGuiTableColumnFlags_WidthFixed, colors_w);
+        ImGui::TableSetupColumn("width", ImGuiTableColumnFlags_WidthStretch, 1.f);
+        ImGui::TableSetupColumn("add", ImGuiTableColumnFlags_WidthFixed, add_w);
+        ImGui::TableSetupColumn("shape", ImGuiTableColumnFlags_WidthFixed, combo_w);
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s", a.label.c_str());
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputTextWithHint("##label", "Label", buf, sizeof(buf)))
+            a.label = buf;
+        ImGui::SetItemTooltip("What this annotation's row says. Empty falls back to the shape's name.");
+
+        ImGui::TableNextColumn();
+        stroke_fill_swatches("Colors", a.stroke_color, a.fill_color);
+
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::DragFloat("##width", &a.stroke_width, 0.05f, 0.5f, 32.f, "%.1f px");
+        ImGui::SetItemTooltip("Stroke width in screen pixels, so it does not change with zoom.");
+
+        ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Add:");
+
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        const std::string preview = named ? fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
+                                                        annotation_shape_name(m_annotation_shape))
+                                          : annotation_shape_icon(m_annotation_shape);
+        if (ImGui::BeginCombo("##shape", preview.c_str(), ImGuiComboFlags_NoArrowButton))
+        {
+            for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
+            {
+                const auto shape = Annotation::Shape(n);
+                // Text is placed by clicking and then typing, which nothing here can do yet.
+                if (shape == Annotation::Shape::Text)
+                    continue;
+
+                // The names are always spelled out in the list, whatever the closed control has room for.
+                const bool is_selected = shape == m_annotation_shape;
+                if (ImGui::Selectable(
+                        fmt::format("{} {}", annotation_shape_icon(shape), annotation_shape_name(shape)).c_str(),
+                        is_selected))
+                    m_annotation_shape = shape;
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SetItemTooltip("Which shape the annotate tool draws next.");
+
+        ImGui::EndTable();
     }
-
-    Annotation &a = list[size_t(selected)];
-
-    // One row, laid out by hand: label, the two colors as a single control, then the width. The swatches
-    // are a frame tall between them, so all of it sits on one line.
-    const float spacing    = ImGui::GetStyle().ItemInnerSpacing.x;
-    const float swatches_w = ImGui::GetFrameHeight();
-    const float label_w =
-        std::max(EmSize(4.f), ImGui::GetContentRegionAvail().x - swatches_w - width_drag_size() - 2.f * spacing);
-
-    char buf[128];
-    snprintf(buf, sizeof(buf), "%s", a.label.c_str());
-    ImGui::SetNextItemWidth(label_w);
-    if (ImGui::InputTextWithHint("##label", "Label", buf, sizeof(buf)))
-        a.label = buf;
-    ImGui::SetItemTooltip("What this annotation's row says. Empty falls back to the shape's name.");
-
-    ImGui::SameLine(0.f, spacing);
-    stroke_fill_swatches("Annotation", a.stroke_color, a.fill_color);
-
-    ImGui::SameLine(0.f, spacing);
-    stroke_width_drag(a.stroke_width);
 }
 
 std::vector<std::pair<int, int>> HDRViewApp::selected_targets() const

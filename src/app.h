@@ -532,6 +532,8 @@ private:
     void draw_statistics_window();
     void draw_history_window();
     void draw_annotations_window();
+    /// The one row of controls the annotations panel edits an annotation, or the next one's look, through.
+    void draw_annotation_controls(Annotation &a);
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
