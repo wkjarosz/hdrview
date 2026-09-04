@@ -802,14 +802,10 @@ void HDRViewApp::draw_annotations_window()
     ImGui::Checkbox("Show annotations in viewport", &m_draw_annotations);
     ImGui::PopStyleVar();
 
-    ImGui::Separator();
-
     // One row of controls, editing whichever annotation is in hand, or the look the next one will be drawn
     // with when none is. The same widgets either way, so there is nothing to learn twice.
     Annotation &edited = active >= 0 ? list[size_t(active)] : m_annotation_style;
     draw_annotation_controls(edited);
-
-    ImGui::Separator();
 
     // Applied after the list is drawn: removing a row mid-list renumbers the ones still to come.
     int erase = -1;
@@ -817,7 +813,8 @@ void HDRViewApp::draw_annotations_window()
     // Where the rows are, so a drag can say which one the cursor is over.
     float first_row_top = 0.f, row_height = 0.f;
 
-    if (ImGui::BeginChild("##Annotation list", ImVec2(0.f, 0.f)))
+    // Bordered like the Images panel's list, which is the other list of things an image holds.
+    if (ImGui::BeginChild("##Annotation list", ImVec2(0.f, 0.f), ImGuiChildFlags_Borders))
     {
         // A row is as tall as its text, like the Images panel's, and its buttons sit against each other:
         // each already carries its own highlight, which is all the separation they need.
