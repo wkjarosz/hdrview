@@ -54,6 +54,19 @@ Below, the two views of a stereo EXR are subtracted from one another and the sig
 
 ![The signed difference between the two views of a stereo EXR, through the IceFire colormap](resources/screenshot-compare.jpg)
 
+**Editing** — HDRView has limited image editing capabilities, including:
+- Transforms: horizontal and vertical flips, 90° rotations, cropping to the selection, and resizing the image or the canvas.
+- Tonal and color adjustment: exposure/gamma, brightness/contrast, hue/saturation, a channel mixer, invert, clamp, fill, color-space conversion, and zapping non-finite gremlins.
+- Filters: Gaussian and box blur, unsharp mask, median, sub-pixel shift, and bump-to-normal-map.
+- Operations for manipulating environment maps: converting between spherical parametrizations (angular, mirror ball, longitude-latitude, and cube maps as a cross or a column), and fast irradiance convolution.
+- Channel and layer surgery: flattening, grouping and ungrouping, and deleting a channel group.
+- Mipmap generation.
+- Any of these can be confined to the current selection, and all of them are undoable: the History panel lists the steps and steps back to any one of them.
+
+Below, a Gaussian blur has been applied to a rectangular selection while the rest of the frame stays sharp. The History panel on the right lists the steps taken; the faded ones are those an undo has taken back and a redo would reapply.
+
+![A blur applied to a rectangular selection, beside the History panel listing the edit steps](resources/screenshot-editing.jpg)
+
 **Multi-layer and multi-part files**
 - Channels are grouped automatically into RGBA, XYZ, luminance-chroma, UV, depth, and single-channel groups.
 - Nested layers (`layer.sublayer.channel`) are browsable as a flat list or a tree.
@@ -70,7 +83,7 @@ Below, the two views of a stereo EXR are subtracted from one another and the sig
 - A Log window with controllable severity levels and filtering.
 - Extensive keyboard shortcuts, and a VS Code/Atom/Sublime Text-style command palette (`Ctrl`/`Cmd+Shift+P`) allowing you to find any command with keyboard-based fuzzy searching:
 
-![The command palette](resources/screenshot-command-palette.jpg)
+![The command palette over an image marked up with an arrow, a caption and a freehand circle, with the Annotations panel listing them and the Log window below the viewport](resources/screenshot-command-palette.jpg)
 
 ## Supported formats
 
