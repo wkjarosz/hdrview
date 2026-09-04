@@ -308,18 +308,24 @@ static std::string row_name(const Annotation &a, float width)
     current \p scale, so what is on screen does not jump when the unit under it changes.
 */
 static bool size_drag(const char *id, float &value, bool &relative, float speed, float lo_limit, float hi_limit,
-                      float scale, float width)
+                      float scale, float width, bool left_align = false)
 {
-    const ImGuiStyle &style = ImGui::GetStyle();
-    const float       arrow = ImGui::GetFrameHeight();
+    const ImGuiStyle &style  = ImGui::GetStyle();
+    const float       arrow  = ImGui::GetFrameHeight();
+    const char       *format = relative ? "%.2f img" : "%.1f px";
 
     ImGui::PushID(id);
+
+    // DragFloat centers its value with no way to ask for anything else, and in a narrow field that runs it
+    // under the menu. So the drag is given nothing to draw and the value is drawn here instead -- except
+    // while it is being typed into, when the input box draws and aligns its own.
+    const bool typing = !left_align || ImGui::TempInputIsActive(ImGui::GetID("##value"));
 
     // The drag takes the whole width; the menu is laid over its right-hand end, so the two are one frame
     // rather than two side by side.
     ImGui::SetNextItemAllowOverlap();
     ImGui::SetNextItemWidth(width);
-    bool changed = ImGui::DragFloat("##value", &value, speed, lo_limit, hi_limit, relative ? "%.2f img" : "%.1f px");
+    bool changed = ImGui::DragFloat("##value", &value, speed, lo_limit, hi_limit, typing ? format : "");
     ImGui::SetItemTooltip("%s", relative ? "Image pixels: zooms with what it marks."
                                          : "Screen pixels: the same size however far the view is zoomed.");
 
@@ -338,6 +344,14 @@ static bool size_drag(const char *id, float &value, bool &relative, float speed,
                              style.FrameRounding, ImDrawFlags_RoundCornersRight);
     ImGui::RenderArrow(draw_list, ImVec2(at.x + style.FramePadding.y, at.y + style.FramePadding.y),
                        ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 1.f);
+
+    if (!typing)
+    {
+        char shown[64];
+        snprintf(shown, sizeof(shown), format, value);
+        draw_list->AddText(ImVec2(field_lo.x + style.FramePadding.x, field_lo.y + style.FramePadding.y),
+                           ImGui::GetColorU32(ImGuiCol_Text), shown);
+    }
 
     // The menu was placed by hand, so the layout goes on from where the field left it.
     ImGui::SetCursorScreenPos(resume);
@@ -824,7 +838,7 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
 
         ImGui::TableNextColumn();
         restyled |= size_drag("width", a.stroke_width, a.stroke_width_relative, 0.05f, 0.01f, 512.f,
-                              viewport_transform().scale, ImGui::GetContentRegionAvail().x);
+                              viewport_transform().scale, ImGui::GetContentRegionAvail().x, true);
 
         // Restyling the annotation in hand also sets what the next one will look like, so a color or a
         // width chosen once carries forward instead of being forgotten when the selection is dropped.
