@@ -341,10 +341,14 @@ void annotate_subject()
     const float2 extent = float2(img->display_window.size());
     const auto   at     = [extent](float u, float v) { return float2{u * extent.x, v * extent.y}; };
 
+    // A color of their own, so the pair that points reads apart from the circle that surrounds.
+    constexpr float4 pointing{0.25f, 0.85f, 1.f, 1.f};
+
     Annotation arrow;
     arrow.shape        = Annotation::Shape::Arrow;
     arrow.points       = {at(0.34f, 0.24f), at(0.517f, 0.365f)};
     arrow.stroke_width = 3.f;
+    arrow.stroke_color = pointing;
 
     Annotation caption;
     caption.shape  = Annotation::Shape::Text;
@@ -357,6 +361,7 @@ void annotate_subject()
     // height because the subject's resolution is not known here
     caption.font_size          = 0.05f * extent.y;
     caption.font_size_relative = true;
+    caption.stroke_color       = pointing;
 
     // Freehand rather than Ellipse: the point is that it looks drawn by hand
     Annotation circle;
@@ -430,6 +435,16 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
             ctx->SetRef("##MainMenuBar");
             ctx->MenuClick("View/Fit display window");
             ctx->SetRef("");
+        }
+
+        // The palette sits over the middle of the viewport, which is where a fitted image puts the things
+        // worth pointing at, so the image is pushed down into the clear band beneath it. Fitting leaves
+        // room above and below, and this spends it.
+        if (const float2 vp = hdrview()->viewport_size(); vp.y > 0.f)
+        {
+            const float2 center = vp * 0.5f;
+            hdrview()->reposition_pixel_to_vp_pos(center + float2{0.f, 0.22f * vp.y},
+                                                  hdrview()->pixel_at_vp_pos(center));
         }
 
         // the same shot carries the annotations and the panel that lists them, and the Log window under the
@@ -538,8 +553,13 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         {
             c->SetRef("##MainMenuBar");
             c->MenuClick("Edit/Blur...");
-            c->SetRef("Blur...");
-            c->ItemInputValue("Sigma", sigma);
+            // The dialog exists from the frame after the click, and its items are addressed by an absolute
+            // path: SetRef does not resolve this popup by name.
+            c->Yield(2);
+            // One Blur object serves the whole process and remembers the kind it was last set to, so an
+            // edit test that chose Box leaves a dialog with no Sigma in it.
+            c->ItemClick("//Blur.../Gaussian");
+            c->ItemInputValue("//Blur.../Sigma", sigma);
             c->KeyPress(ImGuiKey_Enter);
             c->SetRef("");
         };
