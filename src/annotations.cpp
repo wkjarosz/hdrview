@@ -446,8 +446,13 @@ int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, 
     float2    handles[Annotation::MaxHandles];
     const int count = annotation_handles(a, handles, &xform);
     for (int i = 0; i < count; ++i)
-        if (length(xform.to_screen(handles[i]) - screen_pos) <= radius)
+    {
+        // A handle is drawn as a square of this half-size, so the square is what answers: measured as a
+        // radius, its own corners fall outside it, and those are what a corner handle is grabbed by.
+        const float2 d = abs(xform.to_screen(handles[i]) - screen_pos);
+        if (std::max(d.x, d.y) <= radius)
             return i;
+    }
     return -1;
 }
 

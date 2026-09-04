@@ -249,8 +249,9 @@ void HDRViewApp::draw_text_editing() const
 
     auto *draw_list = ImGui::GetBackgroundDrawList();
 
-    // Boxed, so a selected string reads as selected even where its corners are not yet in reach.
-    draw_list->AddRect(lo - 2.f, hi + 2.f, ImGui::GetColorU32(ImGuiCol_Border));
+    // Boxed, so a selected string reads as selected. On the box itself, not a couple of pixels outside it,
+    // since its corners are where the handles are and a click has to land on what it can see.
+    draw_list->AddRect(lo, hi, ImGui::GetColorU32(ImGuiCol_Border));
 
     // Dear ImGui draws the caret and the selection inside InputTextEx, which cannot be called from out
     // here; the state behind it can be read, so the same marks are drawn from it.

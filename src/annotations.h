@@ -153,7 +153,7 @@ std::vector<VgCommand> to_vg_commands(const std::vector<Annotation> &annotations
 */
 int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles], const VgTransform *xform = nullptr);
 
-/// Index of the handle of \p a within \p radius of \p screen_pos, or -1 if none is.
+/// Index of \p a's handle whose square of half-size \p radius holds \p screen_pos, or -1 if none does.
 int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius);
 
 /// The polyline \p a is drawn as: its points, or the curve sampled through them.

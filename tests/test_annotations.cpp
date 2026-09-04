@@ -970,3 +970,39 @@ TEST_CASE("Text is baked at a handful of sizes, and at the same one however far 
 
 // That the zoom is not one of the things picking a baked size is what the box test above checks, by way of
 // the extent being the same at every zoom: nothing here takes a zoom to be independent of.
+
+TEST_CASE("A handle can be grabbed anywhere it is drawn")
+{
+    // Handles are drawn as squares of the hit radius, so the square is what has to answer: measured as a
+    // radius, a click on one of its own corners -- which is where a corner handle is aimed at -- misses,
+    // and the press falls through to whatever is under it.
+    constexpr float radius = 6.f;
+    const auto      x      = identity_transform();
+
+    for (auto shape : all_shapes())
+    {
+        CAPTURE(annotation_shape_name(shape));
+
+        const Annotation a = sample(shape);
+        float2           h[Annotation::MaxHandles];
+        const int        count = annotation_handles(a, h, &x);
+
+        for (int i = 0; i < count; ++i)
+        {
+            CAPTURE(i);
+            const float2 at = x.to_screen(h[i]);
+
+            // Every corner of the drawn square, just inside it.
+            const float e = radius - 0.5f;
+            for (float2 corner : {float2{-e, -e}, float2{e, -e}, float2{e, e}, float2{-e, e}})
+            {
+                CAPTURE(corner.x);
+                CAPTURE(corner.y);
+                CHECK(handle_at(a, at + corner, x, radius) >= 0);
+            }
+
+            // ...and well outside it, so the square has not simply grown without limit.
+            CHECK(handle_at(a, at + float2{4.f * radius, 4.f * radius}, x, radius) == -1);
+        }
+    }
+}
