@@ -345,6 +345,8 @@ static bool size_drag(const char *id, float &value, bool &relative, float speed,
     if (clicked)
         ImGui::OpenPopup("##units");
 
+    // Under the field's own bottom-left, where a combo puts its list, instead of wherever the cursor was.
+    ImGui::SetNextWindowPos(ImVec2(field_lo.x, field_hi.y));
     if (ImGui::BeginPopup("##units"))
     {
         // Converted at the zoom it is switched under, so the size on screen is what it was.
