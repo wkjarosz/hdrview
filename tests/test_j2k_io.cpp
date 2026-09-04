@@ -618,15 +618,7 @@ TEST_CASE("Every rendition of one photograph decodes to the same picture")
             continue;
 
         CAPTURE(path.filename().string());
-        const string name = path.filename().string();
-        const bool   cmyk = name.find("-cmyk") != string::npos;
-
-        // A CMYK TIFF is left out because it is a standing bug in the TIFF loader, not in anything this
-        // file covers: libtiff's RGBA interface converts the ink itself, ignoring the profile, and
-        // tiff.cpp applies no transfer function when an ICC profile fails to apply, so the image reads
-        // back about twice as bright as it should.
-        if (cmyk && (name.find(".tif") != string::npos))
-            continue;
+        const bool cmyk = path.filename().string().find("-cmyk") != string::npos;
 
         // first as the app loads it. A CMYK profile has no primaries of its own to keep, so it has to be
         // applied even under the default that keeps them, and its name is what says that it was.
@@ -640,8 +632,9 @@ TEST_CASE("Every rendition of one photograph decodes to the same picture")
         REQUIRE(got);
         REQUIRE(got->size() == want->size());
 
-        // a CMYK rendition clips where SWOP's gamut falls short, and the lossy ones move samples, so the
-        // average is what carries: ink read the wrong way up puts this above 0.25
+        // a CMYK rendition clips where SWOP's gamut falls short and the lossy ones move samples, so the
+        // average is what carries: ink read the wrong way up puts this above 0.25, and a transfer function
+        // never applied puts it near 0.2
         for (int c = 0; c < 3; ++c)
         {
             CAPTURE(c);

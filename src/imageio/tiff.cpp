@@ -314,7 +314,20 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 
         int num_channels = samples_per_pixel;
 
-        if ((photometric == PHOTOMETRIC_YCBCR && compression_type != COMPRESSION_JPEG) || is_cmyk || is_lab)
+        // libtiff's RGBA interface converts CMYK by a formula of its own that no profile informs, which
+        // costs a print profile's rendering entirely. A file carrying one takes the ordinary path instead,
+        // and its four ink samples reach ICCProfile intact.
+        bool cmyk_via_icc = false;
+        if (is_cmyk)
+        {
+            uint32_t       icc_size = 0;
+            const uint8_t *icc_data = nullptr;
+            if (TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icc_size, &icc_data) && icc_size > 0)
+                cmyk_via_icc = ICCProfile(icc_data, icc_size).is_CMYK();
+        }
+
+        if ((photometric == PHOTOMETRIC_YCBCR && compression_type != COMPRESSION_JPEG) || (is_cmyk && !cmyk_via_icc) ||
+            is_lab)
         {
             const char *color_space = is_cmyk ? "CMYK" : (is_lab ? "Lab" : "YCbCr");
             spdlog::debug("Using RGBA interface for {} image", color_space);
@@ -391,7 +404,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         // only guess when the file said nothing; an EXTRASAMPLES tag naming EXTRASAMPLE_UNSPECIFIED is the
         // file saying the extra sample is arbitrary data
         bool assumed = false;
-        if (!has_alpha && !has_extra_samples && num_channels == 4)
+        if (!has_alpha && !has_extra_samples && num_channels == 4 && photometric != PHOTOMETRIC_SEPARATED)
         {
             has_alpha = true;
             // straight is the likelier reading for an unlabeled RGBA TIFF, but it is a guess
@@ -877,6 +890,10 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
         unpremultiply_before_transfer(float_pixels.data(), size, image->transparency);
 
+        // a priority that ran is the end of it; one that could not is not, and the file's own tags still have
+        // to say how to read the samples
+        bool linearized = opts.override_profile;
+
         if (opts.override_profile)
         {
             // Priority 1: User override (highest priority) - use gamut_override and tf_override
@@ -893,13 +910,19 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         {
             // Priority 2: ICC profile
             if (ICCProfile(image->icc_data)
-                    .linearize_pixels(float_pixels.data(), size, opts.keep_primaries, &profile_desc, &chr))
+                    .linearize_pixels(float_pixels.data(), size, opts.keep_primaries, &profile_desc, &chr,
+                                      /* cmyk_is_inverted */ false))
             {
                 spdlog::info("Linearizing colors using ICC profile.");
                 image->chromaticities = chr;
+                linearized            = true;
             }
+            else
+                spdlog::warn("Could not linearize through the embedded ICC profile; reading what the file's "
+                             "own tags say instead.");
         }
-        else
+
+        if (!linearized)
         {
             // Priority 3: TRANSFERFUNCTION tag + chromaticities. The curve is a table of 2^BitsPerSample
             // entries, which only a palette or integer image small enough to index is meant to carry.
@@ -1146,7 +1169,8 @@ vector<ImagePtr> load_sub_images(TIFF *tif, tdir_t dir, const ImageLoadOptions &
                 throw invalid_argument{"Failed to read sub IFD."};
 
             int j = 0;
-            do {
+            do
+            {
                 auto sub_images = load_image(tif, dir, i, j, opts);
                 for (auto sub_image : sub_images) images.push_back(sub_image);
                 ++j;
@@ -1258,7 +1282,8 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
     vector<ImagePtr> images;
 
     // TIFF files can contain multiple directories (sub-images)
-    do {
+    do
+    {
 
         tdir_t dir = TIFFCurrentDirectory(tif);
 

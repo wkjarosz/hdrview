@@ -185,10 +185,13 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
                 {
                 case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, msg); break;
                 case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, msg); break;
+                // libexif carries on past a tag it cannot follow, and the tags it can read still arrive, so
+                // this says what was skipped rather than announcing a failure that did not happen. A writer
+                // trimming an EXIF block without trimming the offsets into it is enough to reach here.
+                case EXIF_LOG_CODE_CORRUPT_DATA: spdlog::warn("{}: {}", domain, msg); break;
                 case EXIF_LOG_CODE_NO_MEMORY:
-                case EXIF_LOG_CODE_CORRUPT_DATA:
                     *error = true;
-                    spdlog::error("log: {}: {}", domain, msg);
+                    spdlog::error("{}: {}", domain, msg);
                     break;
                 }
             },
@@ -200,7 +203,7 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
         exif_data_load_data(m_impl->exif_data.get(), m_impl->data.data(), (unsigned)m_impl->data.size());
 
         if (m_impl->load_error)
-            spdlog::warn("There were errors while loading EXIF data, but trying to continue.");
+            spdlog::error("Ran out of memory while loading EXIF data; keeping what was read.");
 
         if (!m_impl->exif_data)
             throw std::invalid_argument{"Failed to decode EXIF data."};
