@@ -98,8 +98,6 @@ public:
     */
     CICPProfile cicp() const;
 
-    std::vector<uint8_t> dump_to_memory() const;
-
     bool is_CMYK() const; ///< Check if this is a CMYK profile.
     bool is_RGB() const;  ///< Check if this is a RGB profile.
     bool is_Gray() const; ///< Check if this is a Grayscale profile.

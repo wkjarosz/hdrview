@@ -449,21 +449,6 @@ bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries,
     return false;
 }
 
-std::vector<uint8_t> ICCProfile::dump_to_memory() const
-{
-    if (!valid())
-        return {};
-
-    std::vector<uint8_t> data;
-    cmsUInt32Number      size;
-    cmsSaveProfileToMem(get(), nullptr, &size);
-    data.resize(size);
-    if (cmsSaveProfileToMem(get(), reinterpret_cast<void *>(data.data()), &size))
-        return data;
-
-    return {};
-}
-
 #else
 
 // Stubs for builds without LCMS2 which just return failure for operations that require LCMS functionality.
@@ -473,16 +458,15 @@ ICCProfile::ICCProfile(const uint8_t *icc_profile, size_t icc_profile_size) : m_
     parse_icc_cicp_tag(icc_profile, icc_profile_size, m_cicp);
 }
 ICCProfile::~ICCProfile() {}
-ICCProfile           ICCProfile::linear_RGB(const Chromaticities           &/*chr*/) { return ICCProfile(nullptr); }
-ICCProfile           ICCProfile::linear_Gray(const float2           &/*whitepoint*/) { return ICCProfile(nullptr); }
-ICCProfile           ICCProfile::linearized_profile(Chromaticities           */*c*/) const { return ICCProfile(nullptr); }
-int                  ICCProfile::lcms_version() { return 0; }
-std::string          ICCProfile::description() const { return std::string(); }
-bool                 ICCProfile::extract_chromaticities(Chromaticities                 */*c*/) const { return false; }
-std::vector<uint8_t> ICCProfile::dump_to_memory() const { return {}; }
-bool                 ICCProfile::is_CMYK() const { return false; }
-bool                 ICCProfile::is_RGB() const { return false; }
-bool                 ICCProfile::is_Gray() const { return false; }
+ICCProfile  ICCProfile::linear_RGB(const Chromaticities  &/*chr*/) { return ICCProfile(nullptr); }
+ICCProfile  ICCProfile::linear_Gray(const float2  &/*whitepoint*/) { return ICCProfile(nullptr); }
+ICCProfile  ICCProfile::linearized_profile(Chromaticities  */*c*/) const { return ICCProfile(nullptr); }
+int         ICCProfile::lcms_version() { return 0; }
+std::string ICCProfile::description() const { return std::string(); }
+bool        ICCProfile::extract_chromaticities(Chromaticities        */*c*/) const { return false; }
+bool        ICCProfile::is_CMYK() const { return false; }
+bool        ICCProfile::is_RGB() const { return false; }
+bool        ICCProfile::is_Gray() const { return false; }
 
 bool ICCProfile::transform_pixels(float * /*pixels*/, int3 /*size*/, const ICCProfile & /*profile_in*/,
                                   const ICCProfile & /*profile_out*/, bool /*cmyk_is_inverted*/)
