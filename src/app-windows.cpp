@@ -799,7 +799,7 @@ void HDRViewApp::draw_annotations_window()
     const int active = active_annotation();
 
     ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-    ImGui::Checkbox("Show " ICON_MY_ANNOTATE " in viewport", &m_draw_annotations);
+    ImGui::Checkbox("Show annotations in viewport", &m_draw_annotations);
     ImGui::PopStyleVar();
 
     ImGui::Separator();
