@@ -1180,7 +1180,43 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
     ImGui::SetNextItemWidth(EmSize(6));
     if (ImGui::DragFloat("##size", &a.font_size, 0.25f, Annotation::MinFontSize, Annotation::MaxFontSize, "%.0f px"))
         m_annotation_style.font_size = a.font_size;
-    ImGui::SetItemTooltip("Screen pixels, so the text stays the same size however far the image is zoomed.");
+    ImGui::SetItemTooltip("Image pixels, so the text grows and shrinks with what it labels.");
+
+    // Where the anchor sits in the text: which corner or edge the string is laid out from. One row for
+    // each direction, since the two are set independently.
+    const struct
+    {
+        const char *icon, *tip;
+        int         flag, clears;
+    } alignments[] = {
+        {ICON_MY_ALIGN_LEFT, "Anchor at the left", VgCommand::AlignLeft, 0},
+        {ICON_MY_ALIGN_CENTER, "Anchor at the horizontal center", VgCommand::AlignCenter, 0},
+        {ICON_MY_ALIGN_RIGHT, "Anchor at the right", VgCommand::AlignRight, 0},
+        {ICON_MY_ALIGN_TOP, "Anchor at the top", VgCommand::AlignTop, 1},
+        {ICON_MY_ALIGN_MIDDLE, "Anchor at the middle", VgCommand::AlignMiddle, 1},
+        {ICON_MY_ALIGN_BOTTOM, "Anchor at the bottom", VgCommand::AlignBottom, 1},
+    };
+
+    constexpr int horizontal = VgCommand::AlignLeft | VgCommand::AlignCenter | VgCommand::AlignRight;
+    constexpr int vertical =
+        VgCommand::AlignTop | VgCommand::AlignMiddle | VgCommand::AlignBottom | VgCommand::AlignBaseline;
+
+    const float button = ImGui::GetFrameHeight();
+    for (const auto &al : alignments)
+    {
+        if (al.flag == VgCommand::AlignLeft || al.flag == VgCommand::AlignTop)
+            ImGui::NewLine();
+        else
+            ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+        // Setting one direction leaves the other alone, so the two rows do not undo each other.
+        if (ImGui::FlatButton(al.icon, (a.text_align & al.flag) != 0, ImVec2(button, button)))
+        {
+            a.text_align                  = (a.text_align & ~(al.clears ? vertical : horizontal)) | al.flag;
+            m_annotation_style.text_align = a.text_align;
+        }
+        ImGui::SetItemTooltip("%s", al.tip);
+    }
 
     ImGui::PopStyleVar();
     ImGui::EndPopup();

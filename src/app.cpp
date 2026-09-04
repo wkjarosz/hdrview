@@ -228,11 +228,11 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
 
     // Hidden by default, like the log: an image with no history has nothing to show, and the Edit menu
     // already names what undo and redo would do.
-    DockableWindow history_window{"History", "RightSpace", [this] { draw_history_window(); }, false};
+    DockableWindow history_window{"History", "RightBottomSpace", [this] { draw_history_window(); }, false};
 
     // Hidden by default, like the history: an image with no annotations has nothing to show, and the tool
     // palette is how the feature is reached.
-    DockableWindow annotations_window{"Annotations", "RightSpace", [this] { draw_annotations_window(); }, false};
+    DockableWindow annotations_window{"Annotations", "RightBottomSpace", [this] { draw_annotations_window(); }, false};
 
     DockableWindow log_window{
         "Log", "LogSpace",
@@ -290,12 +290,15 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
     };
 
     // Left column: "Images" occupies the top 80%, "Watched Folders" the bottom 20%. Each dock space holds a
-    // single window, so auto-hide their tab bars.
+    // single window, so auto-hide their tab bars. The right column is split off before the log, so the log
+    // runs under the image alone rather than under that column too; its own bottom fifth holds the panels
+    // that belong to the image rather than describe it.
     std::vector<DockingSplit> docking_splits = {
         DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
         DockingSplit{"ImagesSpace", "WatchedFoldersSpace", ImGuiDir_Down, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
-        DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-        DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
+        DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
+        DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.2f},
+        DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}};
     m_params.dockingParams.dockingSplits = docking_splits;
 
     // Builds an alternate layout from the same dockable windows as the default one, letting `customize`
@@ -321,8 +324,9 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
         make_layout("Metadata",
                     {DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f},
                      DockingSplit{"ImagesSpace", "InfoSpace", ImGuiDir_Down, 0.54f, ImGuiDockNodeFlags_AutoHideTabBar},
-                     DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-                     DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}},
+                     DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
+                     DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.2f},
+                     DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}},
                     [](DockableWindow &w)
                     {
                         if (w.label == "Watched Folders")
