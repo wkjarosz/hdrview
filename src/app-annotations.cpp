@@ -263,11 +263,9 @@ void HDRViewApp::draw_text_editing() const
     const float line_h = hi.y - lo.y;
     auto        place  = [&](int offset)
     {
-        // Measured for a font of a.font_size screen pixels, which is what the size already is when it is
-        // absolute; a relative one is image pixels and reaches the screen by way of the zoom.
-        const int   n     = std::clamp(offset, 0, int(a.text.size()));
-        const float width = xform.measure_text(a.font_face, a.font_size, a.text.substr(0, size_t(n))).x;
-        return a.font_size_relative ? width * xform.scale : width;
+        const int n = std::clamp(offset, 0, int(a.text.size()));
+        return xform.measure_text(a.font_face, a.font_size, a.text.substr(0, size_t(n))).x *
+               font_size_scale(a, xform.scale);
     };
 
     if (state->HasSelection())
@@ -321,12 +319,11 @@ static bool size_drag(const char *id, float &value, bool &relative, float speed,
 
     // DragFloat centers its value across the whole frame with no way to ask for anything else, which in a
     // narrow field runs it under the menu. So the drag is given nothing to draw and the value is drawn
-    // here, centered in what the menu leaves -- except while it is being typed into, when the input box
-    // draws and aligns its own.
+    // here, centered in what the menu leaves. While it is being typed into, the input box draws its own.
     const bool typing = ImGui::TempInputIsActive(ImGui::GetID("##value"));
 
-    // The drag takes the whole width; the menu is laid over its right-hand end, so the two are one frame
-    // rather than two side by side.
+    // The drag takes the whole width and the menu is laid over its right-hand end, so the two read as one
+    // frame.
     ImGui::SetNextItemAllowOverlap();
     ImGui::SetNextItemWidth(width);
     bool changed = ImGui::DragFloat("##value", &value, speed, lo_limit, hi_limit, typing ? format : "");

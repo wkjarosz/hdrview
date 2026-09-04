@@ -189,15 +189,17 @@ TEST_CASE("A filled shape draws more than the same shape unfilled")
     }
 }
 
-TEST_CASE("An arrow's head is proportioned in screen pixels")
+TEST_CASE("An arrow's head is proportioned in the unit its stroke is measured in")
 {
-    // The head is the one piece of geometry that has to be expressed in image coordinates while being
-    // sized like a screen quantity, so it is the one place the scale can be dropped or applied twice.
-    auto head_width_at = [](float scale)
+    // The head is a multiple of the stroke, expressed in image coordinates whatever the stroke is measured
+    // in, so it is where the zoom is most easily dropped or applied twice -- and it has to follow the
+    // stroke's own unit, growing on screen with the image only when the stroke does.
+    auto head_width_at = [](float scale, bool relative)
     {
-        Annotation a = sample(Annotation::Shape::Arrow);
-        a.p0()       = float2{0.f, 0.f};
-        a.p1()       = float2{1000.f, 0.f}; // long, so the head is never clamped by the shaft
+        Annotation a            = sample(Annotation::Shape::Arrow);
+        a.stroke_width_relative = relative;
+        a.p0()                  = float2{0.f, 0.f};
+        a.p1()                  = float2{1000.f, 0.f}; // long, so the head is never clamped by the shaft
 
         TestDrawList d;
         VgTransform  x = identity_transform();
@@ -210,19 +212,23 @@ TEST_CASE("An arrow's head is proportioned in screen pixels")
         return b.max_y - b.min_y;
     };
 
-    // Doubling the zoom must leave the head the same size on screen. Were the scale dropped, the head
-    // would double along with the image; were it applied twice, it would halve.
-    CHECK(head_width_at(2.f) == doctest::Approx(head_width_at(1.f)).epsilon(0.02f));
-    CHECK(head_width_at(4.f) == doctest::Approx(head_width_at(1.f)).epsilon(0.02f));
+    // A screen-pixel stroke keeps its head the same size on screen however far the view is zoomed. Were
+    // the zoom dropped, the head would grow with the image; were it applied twice, it would shrink.
+    CHECK(head_width_at(2.f, false) == doctest::Approx(head_width_at(1.f, false)).epsilon(0.02f));
+    CHECK(head_width_at(4.f, false) == doctest::Approx(head_width_at(1.f, false)).epsilon(0.02f));
 
-    // And the head is genuinely wider than the shaft, so the check above is measuring one.
+    // An image-pixel stroke draws a head that grows with the image, in step with the shaft it ends.
+    CHECK(head_width_at(2.f, true) == doctest::Approx(2.f * head_width_at(1.f, true)).epsilon(0.05f));
+    CHECK(head_width_at(4.f, true) == doctest::Approx(4.f * head_width_at(1.f, true)).epsilon(0.05f));
+
+    // And the head is genuinely wider than the shaft, so the checks above are measuring one.
     Annotation shaft_only = sample(Annotation::Shape::Line);
     shaft_only.p0()       = float2{0.f, 0.f};
     shaft_only.p1()       = float2{1000.f, 0.f};
     TestDrawList d;
     draw_vector_overlay(&d.list, to_vg_commands({shaft_only}, 1.f), identity_transform(), IM_COL32_WHITE);
     const auto sb = vertex_bounds(d.list);
-    CHECK(head_width_at(1.f) > (sb.max_y - sb.min_y) * 1.5f);
+    CHECK(head_width_at(1.f, false) > (sb.max_y - sb.min_y) * 1.5f);
 }
 
 TEST_CASE("Every shape reports a label without being given one")

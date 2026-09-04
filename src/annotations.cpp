@@ -77,10 +77,11 @@ void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
     const float2 dir  = along / length;
     const float2 perp = float2{-dir.y, dir.x};
 
-    // The head is proportioned in screen pixels, like the stroke it terminates, and goes out in image
-    // coordinates with the rest of the geometry; hence the division by the scale.
-    const float head_len =
-        std::min(k_head_length * a.stroke_width / std::max(scale, 1e-6f), k_max_head_fraction * length);
+    // The head is proportioned in multiples of the stroke and goes out in image coordinates with the rest
+    // of the geometry, so the stroke is brought into them first: a screen-pixel one by way of the zoom, an
+    // image-pixel one being there already.
+    const float  stroke    = a.stroke_width * stroke_width_scale(a, scale) / std::max(scale, 1e-6f);
+    const float  head_len  = std::min(k_head_length * stroke, k_max_head_fraction * length);
     const float  head_half = head_len * (k_head_half_width / k_head_length);
     const float2 base      = a.p1() - dir * head_len;
 
@@ -362,16 +363,22 @@ void screen_extent(const Annotation &a, const VgTransform &xform, float2 &lo, fl
 
 } // namespace
 
+float font_size_scale(const Annotation &a, float scale) { return a.font_size_relative ? std::max(scale, 1e-6f) : 1.f; }
+
+float stroke_width_scale(const Annotation &a, float scale)
+{
+    return a.stroke_width_relative ? std::max(scale, 1e-6f) : 1.f;
+}
+
 bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &extent)
 {
     if (a.shape != Annotation::Shape::Text || !xform.measure_text)
         return false;
 
-    // Measured at the size that is stored, which keeps the glyphs baked at one size however far the view
-    // is zoomed. Measuring is linear in the size, so what comes back scales into image coordinates: a
-    // relative size is already in them, and an absolute one is screen pixels and divides by the zoom.
+    // Measured at the size that is stored, which keeps the glyphs baked at one size however far the view is
+    // zoomed, then taken to the screen and back down into image coordinates.
     const float2 measured = xform.measure_text(a.font_face, a.font_size, a.text);
-    extent                = a.font_size_relative ? measured : measured / std::max(xform.scale, 1e-6f);
+    extent                = measured * font_size_scale(a, xform.scale) / std::max(xform.scale, 1e-6f);
     lo                    = a.p0() - text_anchor_offset(a.text_align, extent);
 
     // Zero wide until something is typed, but a line tall from the start, so a text annotation shows where
@@ -454,7 +461,7 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
 
         // The stroke straddles the outline, so half of it widens the target along with the slop; a
         // relative width is in image pixels and has to be brought up to the screen to be added to them.
-        const float stroke = a.stroke_width * (a.stroke_width_relative ? xform.scale : 1.f);
+        const float stroke = a.stroke_width * stroke_width_scale(a, xform.scale);
         const float tol    = slop + stroke * 0.5f;
         const bool  filled = a.fill_color.w > 0.f;
 

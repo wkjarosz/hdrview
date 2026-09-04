@@ -114,6 +114,16 @@ struct Annotation
 void to_json(json &j, const Annotation &a);
 void from_json(const json &j, Annotation &a);
 
+/// Screen pixels per unit of \p a's font size, and of its stroke width: \p scale when that size is
+/// relative, and one when it is not.
+/**
+    These are the only places that say what the two flags mean; everything that has to know asks here.
+    Measuring is linear in a font's size, so a string measured at font_size scales by the first into screen
+    pixels, and dividing by \p scale again brings it back to image ones.
+*/
+float font_size_scale(const Annotation &a, float scale);
+float stroke_width_scale(const Annotation &a, float scale);
+
 /// Where \p a's text sits, in image coordinates, or false when \p xform cannot measure it.
 bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &extent);
 
