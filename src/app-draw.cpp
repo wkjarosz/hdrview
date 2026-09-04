@@ -312,48 +312,27 @@ void HDRViewApp::draw_text_editing() const
 
     // Where a byte offset falls, in the line it is on: the text can run to several lines, and each starts
     // again at the left.
-    auto place = [&](int offset) -> float2
+    // How far into the string a byte offset is. One line, as the overlay's Text command is.
+    auto place = [&](int offset)
     {
-        offset            = std::clamp(offset, 0, int(a.text.size()));
         const char *begin = a.text.c_str();
-        const char *at    = begin + offset;
-        const char *line  = begin;
-        int         row   = 0;
-        for (const char *c = begin; c < at; ++c)
-            if (*c == '\n')
-            {
-                line = c + 1;
-                ++row;
-            }
-        return float2{font->CalcTextSizeA(baked, FLT_MAX, 0.f, line, at).x * (size / baked), float(row) * size};
+        const char *at    = begin + std::clamp(offset, 0, int(a.text.size()));
+        return font->CalcTextSizeA(baked, FLT_MAX, 0.f, begin, at).x * (size / baked);
     };
-
-    const float line_h = size;
 
     if (state->HasSelection())
     {
-        const int from = std::min(state->GetSelectionStart(), state->GetSelectionEnd());
-        const int to   = std::max(state->GetSelectionStart(), state->GetSelectionEnd());
-
-        // One rectangle per line the selection covers, since a line ends where the text does.
-        int start = from;
-        while (start < to)
-        {
-            int stop = start;
-            while (stop < to && a.text[size_t(stop)] != '\n') ++stop;
-
-            const float2 s = place(start), e = place(stop);
-            draw_list->AddRectFilled(lo + s, lo + float2{e.x, s.y + line_h},
-                                     ImGui::GetColorU32(ImGuiCol_TextSelectedBg));
-            start = stop + 1;
-        }
+        const float from = place(std::min(state->GetSelectionStart(), state->GetSelectionEnd()));
+        const float to   = place(std::max(state->GetSelectionStart(), state->GetSelectionEnd()));
+        draw_list->AddRectFilled(lo + float2{from, 0.f}, lo + float2{to, size},
+                                 ImGui::GetColorU32(ImGuiCol_TextSelectedBg));
     }
 
     // Blinking as Dear ImGui's own does, so it reads as the same caret.
     if (std::fmod(state->CursorAnim, 1.20f) <= 0.80f)
     {
-        const float2 c = place(state->GetCursorPos());
-        draw_list->AddLine(lo + c, lo + float2{c.x, c.y + line_h}, ImGui::GetColorU32(ImGuiCol_Text));
+        const float x = place(state->GetCursorPos());
+        draw_list->AddLine(lo + float2{x, 0.f}, lo + float2{x, size}, ImGui::GetColorU32(ImGuiCol_Text));
     }
 }
 

@@ -782,11 +782,6 @@ static std::string row_name(const Annotation &a, float width)
     std::string name =
         a.shape == Annotation::Shape::Text && a.label.empty() && !a.text.empty() ? a.text : a.display_label();
 
-    // Newlines would run the row into the ones below it.
-    for (auto &c : name)
-        if (c == '\n' || c == '\r')
-            c = ' ';
-
     if (ImGui::CalcTextSize(name.c_str()).x <= width)
         return name;
 
@@ -994,22 +989,9 @@ void HDRViewApp::draw_annotations_window()
 
                 const float field_w = row_x + row_w - icon_sz.x - ImGui::GetCursorPosX();
 
-                bool edited = false;
-                if (a.shape == Annotation::Shape::Text)
-                {
-                    // What a text annotation says can run to several lines, so its row grows a box that
-                    // takes them, and Enter starts a line rather than finishing the edit.
-                    const int lines = 1 + int(std::count(a.text.begin(), a.text.end(), '\n'));
-                    edited          = ImGui::InputTextMultiline(
-                        "##rename", m_annotation_rename, sizeof(m_annotation_rename),
-                        ImVec2(field_w, ImGui::GetTextLineHeight() * float(std::min(lines + 1, 8))));
-                }
-                else
-                {
-                    ImGui::SetNextItemWidth(field_w);
-                    edited = ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
-                                                      sizeof(m_annotation_rename));
-                }
+                ImGui::SetNextItemWidth(field_w);
+                const bool edited = ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
+                                                             sizeof(m_annotation_rename));
 
                 // So the viewport can find this field's caret and selection and show them on the image.
                 m_annotation_rename_id = ImGui::GetItemID();
@@ -1186,57 +1168,50 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
         m_annotation_style.font_size = a.font_size;
     ImGui::SetItemTooltip("Image pixels, so the text grows and shrinks with what it labels.");
 
-    // Where the anchor sits in the text: which corner or edge the string is laid out from. One row for
-    // each direction, since the two are set independently.
-    const struct
-    {
-        const char *icon, *tip;
-        int         flag, clears;
-    } alignments[] = {
-        {ICON_MY_ALIGN_LEFT, "Anchor at the left", VgCommand::AlignLeft, 0},
-        {ICON_MY_ALIGN_CENTER, "Anchor at the horizontal center", VgCommand::AlignCenter, 0},
-        {ICON_MY_ALIGN_RIGHT, "Anchor at the right", VgCommand::AlignRight, 0},
-        {ICON_MY_ALIGN_TOP, "Anchor at the top", VgCommand::AlignTop, 1},
-        {ICON_MY_ALIGN_MIDDLE, "Anchor at the middle", VgCommand::AlignMiddle, 1},
-        {ICON_MY_ALIGN_BOTTOM, "Anchor at the bottom", VgCommand::AlignBottom, 1},
-    };
+    // Which corner or edge of the string lands on the point it was placed at -- NanoVG's align flags say
+    // exactly that, so a grid of the nine positions states it more directly than alignment icons could.
+    // Baseline is the tenth and has no square here; only a renderer sends it.
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Anchor");
+    ImGui::SameLine(0.f, item_spacing_x);
 
-    constexpr int horizontal = VgCommand::AlignLeft | VgCommand::AlignCenter | VgCommand::AlignRight;
-    constexpr int vertical =
-        VgCommand::AlignTop | VgCommand::AlignMiddle | VgCommand::AlignBottom | VgCommand::AlignBaseline;
-
-    // One of each three is on, so the one that is gets the filled look a radio button would: the flat
-    // button's own toggled state is too quiet to pick out of a row of six.
-    auto align_button = [](const char *icon, bool on, float size)
+    auto cell = [](bool on, float size)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
-        ImGui::PushStyleColor(ImGuiCol_Button, on ? ImGui::GetColorU32(ImGuiCol_ButtonActive) : IM_COL32(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetColorU32(ImGuiCol_ButtonHovered, on ? 1.f : 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetColorU32(ImGuiCol_ButtonActive));
-        const bool clicked = ImGui::Button(icon, ImVec2(size, size));
-        ImGui::PopStyleColor(3);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetColorU32(on ? ImGuiCol_ButtonActive : ImGuiCol_FrameBg));
+        const bool clicked = ImGui::Button("##cell", ImVec2(size, size));
+        ImGui::PopStyleColor();
         ImGui::PopStyleVar();
         return clicked;
     };
 
-    const float button = ImGui::GetFrameHeight();
-    for (const auto &al : alignments)
-    {
-        // All six on one row, with the two groups set apart so which three belong together is plain. The
-        // first begins the row simply by not joining the one above: NewLine() would put an empty item a
-        // whole line high between them.
-        if (al.flag != VgCommand::AlignLeft)
-            ImGui::SameLine(0.f, al.flag == VgCommand::AlignTop ? ImGui::GetStyle().ItemSpacing.x * 2.f
-                                                                : ImGui::GetStyle().ItemInnerSpacing.x);
+    static const char *const rows[3] = {"top", "middle", "bottom"};
+    static const char *const cols[3] = {"left", "center", "right"};
+    constexpr int            h_of[3] = {VgCommand::AlignLeft, VgCommand::AlignCenter, VgCommand::AlignRight};
+    constexpr int            v_of[3] = {VgCommand::AlignTop, VgCommand::AlignMiddle, VgCommand::AlignBottom};
 
-        // Setting one direction leaves the other alone, so the two groups do not undo each other.
-        if (align_button(al.icon, (a.text_align & al.flag) != 0, button))
+    const float side = ImGui::GetFrameHeight() * 0.6f;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1.f, 1.f));
+    ImGui::BeginGroup();
+    for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 3; ++col)
         {
-            a.text_align                  = (a.text_align & ~(al.clears ? vertical : horizontal)) | al.flag;
-            m_annotation_style.text_align = a.text_align;
+            ImGui::PushID(row * 3 + col);
+            if (col)
+                ImGui::SameLine();
+
+            const bool on = (a.text_align & h_of[col]) != 0 && (a.text_align & v_of[row]) != 0;
+            if (cell(on, side))
+            {
+                a.text_align                  = h_of[col] | v_of[row];
+                m_annotation_style.text_align = a.text_align;
+            }
+            ImGui::SetItemTooltip("Anchor the text at its %s %s", rows[row], cols[col]);
+            ImGui::PopID();
         }
-        ImGui::SetItemTooltip("%s", al.tip);
-    }
+    ImGui::EndGroup();
+    ImGui::PopStyleVar();
 
     ImGui::PopStyleVar(2);
     ImGui::EndPopup();
