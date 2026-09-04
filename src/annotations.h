@@ -80,6 +80,13 @@ struct Annotation
     std::string text;  ///< What a Shape::Text annotation says
     std::string label; ///< What the panel's row says; display_label() supplies one when this is empty
 
+    /// Whether a Freehand path is drawn as a curve through its points rather than as straight segments.
+    /**
+        The points are the same either way, so this can be turned on and off without losing anything; every
+        other shape ignores it.
+    */
+    bool smooth = false;
+
     bool visible = true; ///< Drawn, and hit-tested; an invisible annotation is neither
     bool locked  = false;
 
@@ -139,6 +146,13 @@ int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles]);
 
 /// Index of the handle of \p a within \p radius of \p screen_pos, or -1 if none is.
 int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius);
+
+/// The polyline \p a is drawn as: its points, or the curve through them sampled closely enough to stand in
+/// for it.
+/**
+    Hit testing reads this rather than the points, so what is clicked is what is drawn.
+*/
+std::vector<float2> annotation_path(const Annotation &a);
 
 /// Drop the points of \p path that stray less than \p tolerance from the line their neighbors describe.
 /**

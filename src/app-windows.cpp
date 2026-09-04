@@ -975,22 +975,25 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
     // cell padding between them would set the label further from what it labels than from the width drag.
     const float add_text_w = ImGui::CalcTextSize("Add:").x + style.ItemInnerSpacing.x;
     const float colors_w   = ImGui::GetFrameHeight();
+    const float smooth_w   = ImGui::GetFrameHeight();
     const float label_min = EmSize(5.f), width_min = EmSize(3.5f);
 
     // Enough room for everything at its smallest, plus what showing the names would add.
     const float avail = ImGui::GetContentRegionAvail().x;
-    const bool  named = avail >= label_min + colors_w + width_min + add_text_w + combo_wide + 4.f * style.CellPadding.x;
+    const bool  named =
+        avail >= label_min + colors_w + smooth_w + width_min + add_text_w + combo_wide + 5.f * style.CellPadding.x;
     const float add_w = add_text_w + (named ? combo_wide : combo_narrow);
 
     // Spare width is split two to one between the label and the width drag; the colors, the "Add:" and the
     // shape picker stay the size they need.
-    if (ImGui::BeginTable("##AnnotationControls", 4,
+    if (ImGui::BeginTable("##AnnotationControls", 5,
                           ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_NoPadOuterX |
                               ImGuiTableFlags_SizingFixedFit))
     {
         ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 2.f);
         ImGui::TableSetupColumn("colors", ImGuiTableColumnFlags_WidthFixed, colors_w);
         ImGui::TableSetupColumn("width", ImGuiTableColumnFlags_WidthStretch, 1.f);
+        ImGui::TableSetupColumn("smooth", ImGuiTableColumnFlags_WidthFixed, smooth_w);
         ImGui::TableSetupColumn("add", ImGuiTableColumnFlags_WidthFixed, add_w);
         ImGui::TableNextRow();
 
@@ -1009,6 +1012,16 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::DragFloat("##width", &a.stroke_width, 0.05f, 0.5f, 32.f, "%.1f px");
         ImGui::SetItemTooltip("Stroke width in screen pixels, so it does not change with zoom.");
+
+        // Only a scribble has a path to run a curve through; on anything else the control has nothing to
+        // say, so it is shown disabled rather than appearing and disappearing with the selection.
+        ImGui::TableNextColumn();
+        ImGui::BeginDisabled(a.shape != Annotation::Shape::Freehand);
+        if (ImGui::FlatButton(a.smooth ? ICON_MY_SMOOTH : ICON_MY_POLYLINE, a.smooth, ImVec2(smooth_w, 0.f)))
+            a.smooth = !a.smooth;
+        ImGui::SetItemTooltip("%s", a.smooth ? "Drawn as a curve through its points. Click for straight segments."
+                                             : "Drawn as straight segments. Click for a curve through its points.");
+        ImGui::EndDisabled();
 
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();

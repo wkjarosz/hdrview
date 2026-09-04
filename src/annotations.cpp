@@ -37,6 +37,27 @@ std::vector<float> color_floats(const float4 &c) { return {c.x, c.y, c.z, c.w}; 
 /// Whether \p c would paint anything at all.
 bool is_visible_color(const float4 &c) { return c.w > 0.f; }
 
+/// How finely a curved span is sampled when it has to stand in as a polyline.
+constexpr int k_curve_samples = 8;
+
+/// The cubic Bezier for the span from \p pts[i] to \p pts[i + 1], as its four control points.
+/**
+    Uniform Catmull-Rom: the curve passes through every point, and each tangent is a sixth of the vector
+    between that point's neighbors. An end repeats its own point for the neighbor it lacks, so the curve
+    starts and finishes along the path rather than turning away from it.
+*/
+void catmull_rom_span(const std::vector<float2> &pts, size_t i, float2 b[4])
+{
+    const float2 &p1 = pts[i], &p2 = pts[i + 1];
+    const float2 &p0 = i > 0 ? pts[i - 1] : p1;
+    const float2 &p3 = i + 2 < pts.size() ? pts[i + 2] : p2;
+
+    b[0] = p1;
+    b[1] = p1 + (p2 - p0) / 6.f;
+    b[2] = p2 - (p3 - p1) / 6.f;
+    b[3] = p2;
+}
+
 /// Emit the shaft and head of an arrow from \p a's p0 to its p1.
 void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
 {
@@ -94,6 +115,7 @@ void to_json(json &j, const Annotation &a)
     j["width"]     = a.stroke_width;
     j["font_size"] = a.font_size;
     j["align"]     = a.text_align;
+    j["smooth"]    = a.smooth;
     j["visible"]   = a.visible;
     j["locked"]    = a.locked;
 
@@ -128,6 +150,7 @@ void from_json(const json &j, Annotation &a)
     a.stroke_width = j.value("width", a.stroke_width);
     a.font_size    = j.value("font_size", a.font_size);
     a.text_align   = j.value("align", a.text_align);
+    a.smooth       = j.value("smooth", a.smooth);
     a.visible      = j.value("visible", a.visible);
     a.locked       = j.value("locked", a.locked);
     a.text         = j.value<std::string>("text", a.text);
@@ -214,11 +237,21 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     break;
 
     case Annotation::Shape::Freehand:
-        // The path as it was drawn. Closed when it is to be filled, so the fill has an interior to cover,
-        // and left open otherwise, which is what a stroked scribble should look like.
+        // The path as it was drawn, point to point or as the curve through them -- the interpreter
+        // tessellates a cubic itself, so a smooth stroke costs one command per span rather than a sampled
+        // polyline. Closed when it is to be filled, so the fill has an interior to cover, and left open
+        // otherwise, which is what a stroked scribble should look like.
         out.push_back(cmd(VgCommand::Type::MoveTo, {a.points.front().x, a.points.front().y}));
-        for (size_t i = 1; i < a.points.size(); ++i)
-            out.push_back(cmd(VgCommand::Type::LineTo, {a.points[i].x, a.points[i].y}));
+        if (a.smooth)
+            for (size_t i = 0; i + 1 < a.points.size(); ++i)
+            {
+                float2 b[4];
+                catmull_rom_span(a.points, i, b);
+                out.push_back(cmd(VgCommand::Type::BezierTo, {b[1].x, b[1].y, b[2].x, b[2].y, b[3].x, b[3].y}));
+            }
+        else
+            for (size_t i = 1; i < a.points.size(); ++i)
+                out.push_back(cmd(VgCommand::Type::LineTo, {a.points[i].x, a.points[i].y}));
         if (filled)
             out.push_back(cmd(VgCommand::Type::ClosePath));
         break;
@@ -267,17 +300,22 @@ float distance_to_box(float2 p, float2 lo, float2 hi)
     return std::sqrt(dx * dx + dy * dy);
 }
 
-/// \p a's extent in screen coordinates, ordered so lo is the lower corner.
-void screen_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &hi)
+/// The extent of \p pts in screen coordinates, ordered so lo is the lower corner.
+void screen_extent(const std::vector<float2> &pts, const VgTransform &xform, float2 &lo, float2 &hi)
 {
     lo = float2{FLT_MAX, FLT_MAX};
     hi = float2{-FLT_MAX, -FLT_MAX};
-    for (const auto &p : a.points)
+    for (const auto &p : pts)
     {
         const float2 s = xform.to_screen(p);
         lo             = float2{std::min(lo.x, s.x), std::min(lo.y, s.y)};
         hi             = float2{std::max(hi.x, s.x), std::max(hi.y, s.y)};
     }
+}
+
+void screen_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &hi)
+{
+    screen_extent(a.points, xform, lo, hi);
 }
 
 } // namespace
@@ -383,17 +421,17 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
 
         case Annotation::Shape::Freehand:
         {
+            const auto path = annotation_path(a);
+
             // The box first: a scribble is mostly empty space, and walking hundreds of segments to answer
-            // "nowhere near it" is the common case. Every segment lies inside the box, so nothing further
-            // from the box than the tolerance can be within the tolerance of a segment.
+            // "nowhere near it" is the common case. Measured over the drawn path rather than the points,
+            // since a curve through them bows outside the box they describe.
             float2 lo, hi;
-            screen_extent(a, xform, lo, hi);
+            screen_extent(path, xform, lo, hi);
             if (distance_to_box(screen_pos, lo, hi) > tol)
                 break;
-
-            for (size_t k = 1; k < a.points.size(); ++k)
-                if (distance_to_segment(screen_pos, xform.to_screen(a.points[k - 1]), xform.to_screen(a.points[k])) <=
-                    tol)
+            for (size_t k = 1; k < path.size(); ++k)
+                if (distance_to_segment(screen_pos, xform.to_screen(path[k - 1]), xform.to_screen(path[k])) <= tol)
                     return i;
         }
         break;
@@ -408,6 +446,28 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
         }
     }
     return -1;
+}
+
+std::vector<float2> annotation_path(const Annotation &a)
+{
+    if (!a.smooth || a.shape != Annotation::Shape::Freehand || a.points.size() < 2)
+        return a.points;
+
+    std::vector<float2> out;
+    out.reserve((a.points.size() - 1) * k_curve_samples + 1);
+    out.push_back(a.points.front());
+
+    for (size_t i = 0; i + 1 < a.points.size(); ++i)
+    {
+        float2 b[4];
+        catmull_rom_span(a.points, i, b);
+        for (int k = 1; k <= k_curve_samples; ++k)
+        {
+            const float t = float(k) / float(k_curve_samples), u = 1.f - t;
+            out.push_back(u * u * u * b[0] + 3.f * u * u * t * b[1] + 3.f * u * t * t * b[2] + t * t * t * b[3]);
+        }
+    }
+    return out;
 }
 
 std::vector<float2> simplify_polyline(const std::vector<float2> &path, float tolerance)

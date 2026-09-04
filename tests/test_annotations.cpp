@@ -703,3 +703,113 @@ TEST_CASE("Resizing a scribble carries its whole path")
     // And the box really did change, so the check above is not comparing a shape with itself.
     CHECK(box1.max.x - box1.min.x == doctest::Approx(2.f * (box0.max.x - box0.min.x)));
 }
+
+TEST_CASE("A smoothed scribble is a curve through the stroke that was drawn")
+{
+    // Three properties together, because no one of them is enough: a curve can pass through every point
+    // and still leap between them, or run smoothly and still bulge far away from what was drawn.
+    Annotation a = sample(Annotation::Shape::Freehand);
+    a.smooth     = true;
+
+    const auto path = annotation_path(a);
+    REQUIRE(path.size() > a.points.size()); // it really was sampled, not handed back unchanged
+
+    float longest = 0.f;
+    for (size_t i = 1; i < a.points.size(); ++i) longest = std::max(longest, length(a.points[i] - a.points[i - 1]));
+    REQUIRE(longest > 0.f);
+
+    // It interpolates: every point drawn is a point on the curve, which is what separates a curve through
+    // the stroke from one merely near it.
+    for (const auto &p : a.points)
+    {
+        CAPTURE(p.x);
+        float best = FLT_MAX;
+        for (const auto &q : path) best = std::min(best, length(q - p));
+        CHECK(best < 1e-3f);
+    }
+
+    // The ends are the ends, so it does not start or finish somewhere the stroke never went.
+    CHECK(length(path.front() - a.points.front()) < 1e-4f);
+    CHECK(length(path.back() - a.points.back()) < 1e-4f);
+
+    // It is continuous: the samples walk along one curve rather than jumping between pieces of several.
+    // A span sampled evenly steps a fraction of its own length at a time.
+    for (size_t i = 1; i < path.size(); ++i)
+    {
+        CAPTURE(i);
+        CHECK(length(path[i] - path[i - 1]) <= 0.25f * longest);
+    }
+
+    // And it stays close to the stroke: a curve free to bow arbitrarily far from the points is no longer
+    // a smoothing of what was drawn. Well clear of where this sits, and well clear of twice it.
+    for (const auto &q : path)
+    {
+        float best = FLT_MAX;
+        for (size_t i = 1; i < a.points.size(); ++i)
+        {
+            const float2 s = a.points[i - 1], e = a.points[i], se = e - s;
+            const float  l2 = dot(se, se);
+            const float  t  = l2 > 0.f ? std::clamp(dot(q - s, se) / l2, 0.f, 1.f) : 0.f;
+            best            = std::min(best, length(q - (s + se * t)));
+        }
+        CHECK(best <= 0.09f * longest);
+    }
+}
+
+TEST_CASE("Smoothing changes how a scribble is drawn, not what it is")
+{
+    Annotation straight = sample(Annotation::Shape::Freehand);
+    Annotation curved   = straight;
+    curved.smooth       = true;
+
+    // The points are untouched, so the flag can be turned on and off without losing the stroke.
+    CHECK(straight.points == curved.points);
+
+    // Only a scribble has a path to curve; the flag is inert on everything else.
+    for (auto shape : all_shapes())
+    {
+        if (shape == Annotation::Shape::Freehand)
+            continue;
+
+        CAPTURE(annotation_shape_name(shape));
+        Annotation a = sample(shape), b = a;
+        b.smooth = true;
+        CHECK(to_vg_commands({a}, 1.f).size() == to_vg_commands({b}, 1.f).size());
+        CHECK(annotation_path(a) == annotation_path(b));
+    }
+
+    // A curve is emitted as cubics, one per span, rather than as the straight segments of the polyline.
+    const auto flat   = to_vg_commands({straight}, 1.f);
+    const auto bezier = to_vg_commands({curved}, 1.f);
+    auto       count  = [](const std::vector<VgCommand> &cmds, VgCommand::Type t)
+    {
+        int n = 0;
+        for (const auto &c : cmds)
+            if (c.type == t)
+                ++n;
+        return n;
+    };
+    CHECK(count(flat, VgCommand::Type::LineTo) == int(straight.points.size()) - 1);
+    CHECK(count(flat, VgCommand::Type::BezierTo) == 0);
+    CHECK(count(bezier, VgCommand::Type::BezierTo) == int(curved.points.size()) - 1);
+    CHECK(count(bezier, VgCommand::Type::LineTo) == 0);
+}
+
+TEST_CASE("A smoothed scribble is picked up on the curve, not on the polyline")
+{
+    // Hit testing reads the same path the drawing does, so a curve that bows away from the straight line
+    // between two points is caught where it is drawn rather than where the polyline would have been.
+    Annotation a   = sample(Annotation::Shape::Freehand);
+    a.smooth       = true;
+    a.stroke_width = 1.f; // a thin stroke, so the tolerance cannot paper over a mismatch
+
+    const auto x    = identity_transform();
+    const auto path = annotation_path(a);
+
+    // Every point of the drawn curve is on the annotation.
+    for (size_t i = 0; i < path.size(); i += 3)
+    {
+        CAPTURE(i);
+        CHECK(annotation_at({a}, path[i], x, 1.f) == 0);
+    }
+}
