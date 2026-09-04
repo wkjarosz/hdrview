@@ -886,6 +886,10 @@ void HDRViewApp::draw_annotations_window()
             if (ImGui::IsItemActivated())
                 m_annotation_row_drag = i;
 
+            // Taken while the selectable is the item under the cursor, and acted on below, once the name
+            // it applies to has been drawn.
+            const bool renamed_here = ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+
             // Where the rows sit, for the reorder below. The pitch is measured between the first two rather
             // than assumed, since a table decides row heights for itself.
             if (i == 0)
@@ -917,7 +921,34 @@ void HDRViewApp::draw_annotations_window()
                 ImGui::SameLine();
             }
 
-            ImGui::TextUnformatted(fmt::format("{} {}", annotation_shape_icon(a.shape), a.display_label()).c_str());
+            if (m_annotation_renaming == i)
+            {
+                // Focused the frame it appears, so the name can be typed straight away; once it holds the
+                // focus it is the active item, so this stops asking for it. Enter or clicking away keeps
+                // the name, and Escape drops it, InputText restoring its own buffer.
+                if (!ImGui::IsAnyItemActive())
+                    ImGui::SetKeyboardFocusHere();
+
+                ImGui::SetNextItemWidth(row_x + row_w - icon_sz.x - ImGui::GetCursorPosX());
+                ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
+                                         sizeof(m_annotation_rename), ImGuiInputTextFlags_EnterReturnsTrue);
+
+                if (ImGui::IsItemDeactivatedAfterEdit())
+                    a.label = m_annotation_rename;
+                if (ImGui::IsItemDeactivated())
+                    m_annotation_renaming = -1;
+            }
+            else
+            {
+                ImGui::TextUnformatted(fmt::format("{} {}", annotation_shape_icon(a.shape), a.display_label()).c_str());
+
+                // Double-clicking the row renames it in place, which is where the name is read.
+                if (renamed_here)
+                {
+                    m_annotation_renaming = i;
+                    snprintf(m_annotation_rename, sizeof(m_annotation_rename), "%s", a.label.c_str());
+                }
+            }
 
             ImGui::SameLine(0.f, 0.f);
             ImGui::SetCursorPosX(row_x + row_w - icon_sz.x);
@@ -943,6 +974,8 @@ void HDRViewApp::draw_annotations_window()
             std::clamp(int((ImGui::GetIO().MousePos.y - first_row_top) / row_height), 0, int(list.size()) - 1);
         if (to != m_annotation_row_drag)
         {
+            m_annotation_renaming = -1;
+
             Annotation moved = list[size_t(m_annotation_row_drag)];
             list.erase(list.begin() + m_annotation_row_drag);
             list.insert(list.begin() + to, moved);
@@ -961,6 +994,9 @@ void HDRViewApp::draw_annotations_window()
 
     if (erase >= 0)
     {
+        // The row being renamed is about to be a different annotation, or none.
+        m_annotation_renaming = -1;
+
         list.erase(list.begin() + erase);
         // The rows after it have shifted down, so what was in hand has to shift with them.
         if (active == erase)
@@ -968,6 +1004,41 @@ void HDRViewApp::draw_annotations_window()
         else if (active > erase)
             set_active_annotation(active - 1);
     }
+}
+
+/// The "Add:" label and the picker that says which shape the tool draws next, as one table cell.
+void HDRViewApp::draw_shape_picker(bool named)
+{
+    ImGui::TableNextColumn();
+    const auto &style = ImGui::GetStyle();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Add:");
+    ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    const std::string preview = named ? fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
+                                                    annotation_shape_name(m_annotation_shape))
+                                      : annotation_shape_icon(m_annotation_shape);
+    if (ImGui::BeginCombo("##shape", preview.c_str()))
+    {
+        for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
+        {
+            const auto shape = Annotation::Shape(n);
+            // Text is placed by clicking and then typing, which nothing here can do yet.
+            if (shape == Annotation::Shape::Text)
+                continue;
+
+            // The names are always spelled out in the list, whatever the closed control has room for.
+            const bool is_selected = shape == m_annotation_shape;
+            if (ImGui::Selectable(
+                    fmt::format("{} {}", annotation_shape_icon(shape), annotation_shape_name(shape)).c_str(),
+                    is_selected))
+                m_annotation_shape = shape;
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("Which shape the annotate tool draws next.");
 }
 
 void HDRViewApp::draw_annotation_controls(Annotation &a)
@@ -988,35 +1059,27 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
     const float combo_wide   = ImGui::IconSize().x + style.ItemInnerSpacing.x + names_w + combo_pad;
 
     // "Add:" and the picker share a column, separated by their own spacing: in columns of their own the
-    // cell padding between them would set the label further from what it labels than from the width drag.
+    // cell padding between them would set the label further from what it labels than from the drag beside.
     const float add_text_w = ImGui::CalcTextSize("Add:").x + style.ItemInnerSpacing.x;
     const float colors_w   = ImGui::GetFrameHeight();
-    const float label_min = EmSize(5.f), width_min = EmSize(3.5f);
+    const float width_min  = EmSize(3.5f);
 
-    // Enough room for everything at its smallest, plus what showing the names would add.
+    // Spare width all goes to the width drag, until there is enough of it for the picker to spell its
+    // names out as well.
     const float avail = ImGui::GetContentRegionAvail().x;
-    const bool  named = avail >= label_min + colors_w + width_min + add_text_w + combo_wide + 4.f * style.CellPadding.x;
+    const bool  named = avail >= colors_w + width_min + add_text_w + combo_wide + 3.f * style.CellPadding.x;
     const float add_w = add_text_w + (named ? combo_wide : combo_narrow);
 
-    // Spare width is split two to one between the label and the width drag; the colors, the "Add:" and the
-    // shape picker stay the size they need.
-    if (ImGui::BeginTable("##AnnotationControls", 4,
+    if (ImGui::BeginTable("##AnnotationControls", 3,
                           ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_NoPadOuterX |
                               ImGuiTableFlags_SizingFixedFit))
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 2.f);
+        ImGui::TableSetupColumn("add", ImGuiTableColumnFlags_WidthFixed, add_w);
         ImGui::TableSetupColumn("colors", ImGuiTableColumnFlags_WidthFixed, colors_w);
         ImGui::TableSetupColumn("width", ImGuiTableColumnFlags_WidthStretch, 1.f);
-        ImGui::TableSetupColumn("add", ImGuiTableColumnFlags_WidthFixed, add_w);
         ImGui::TableNextRow();
 
-        ImGui::TableNextColumn();
-        char buf[128];
-        snprintf(buf, sizeof(buf), "%s", a.label.c_str());
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::InputTextWithHint("##label", "Label", buf, sizeof(buf)))
-            a.label = buf;
-        ImGui::SetItemTooltip("What this annotation's row says. Empty falls back to the shape's name.");
+        draw_shape_picker(named);
 
         ImGui::TableNextColumn();
         bool restyled = stroke_fill_swatches("Colors", a.stroke_color, a.fill_color);
@@ -1034,36 +1097,6 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
             m_annotation_style.fill_color   = a.fill_color;
             m_annotation_style.stroke_width = a.stroke_width;
         }
-
-        ImGui::TableNextColumn();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Add:");
-        ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        const std::string preview = named ? fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
-                                                        annotation_shape_name(m_annotation_shape))
-                                          : annotation_shape_icon(m_annotation_shape);
-        if (ImGui::BeginCombo("##shape", preview.c_str()))
-        {
-            for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
-            {
-                const auto shape = Annotation::Shape(n);
-                // Text is placed by clicking and then typing, which nothing here can do yet.
-                if (shape == Annotation::Shape::Text)
-                    continue;
-
-                // The names are always spelled out in the list, whatever the closed control has room for.
-                const bool is_selected = shape == m_annotation_shape;
-                if (ImGui::Selectable(
-                        fmt::format("{} {}", annotation_shape_icon(shape), annotation_shape_name(shape)).c_str(),
-                        is_selected))
-                    m_annotation_shape = shape;
-                if (is_selected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::SetItemTooltip("Which shape the annotate tool draws next.");
 
         ImGui::EndTable();
     }

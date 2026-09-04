@@ -534,6 +534,7 @@ private:
     void draw_annotations_window();
     /// The one row of controls the annotations panel edits an annotation, or the next one's look, through.
     void draw_annotation_controls(Annotation &a);
+    void draw_shape_picker(bool named);
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
@@ -839,6 +840,10 @@ private:
         Moving,
         Resizing
     };
+    /// Row the annotations panel is renaming in place, or -1, and the name being typed into it.
+    int  m_annotation_renaming = -1;
+    char m_annotation_rename[128]{};
+
     /// Row the annotations panel is dragging to reorder, or -1. See draw_annotations_window().
     int m_annotation_row_drag = -1;
 
