@@ -824,11 +824,17 @@ void HDRViewApp::draw_annotations_window()
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
         ImGui::PushStyleVarX(ImGuiStyleVar_ItemSpacing, 0.f);
 
-        const float icon_w = ImGui::IconSize().x + 2.f * ImGui::GetStyle().FramePadding.x;
+        // Each of these is only as wide as its own glyph needs. IconSize() is the widest glyph in the whole
+        // set, which on a narrow icon leaves enough slack to read as a gap.
+        auto icon_width = [](const char *icon)
+        { return ImGui::CalcTextSize(icon).x + 2.f * ImGui::GetStyle().FramePadding.x; };
 
-        auto flat_toggle = [icon_w](const char *icon, bool &value, const char *tooltip)
+        const float trash_w = icon_width(ICON_MY_TRASH_CAN);
+
+        // Sized to the wider of its two states, so toggling one does not shift the rest of the row.
+        auto flat_toggle = [&icon_width](const char *on, const char *off, bool &value, const char *tooltip)
         {
-            if (ImGui::FlatButton(icon, false, ImVec2(icon_w, 0.f)))
+            if (ImGui::FlatButton(value ? on : off, false, ImVec2(std::max(icon_width(on), icon_width(off)), 0.f)))
                 value = !value;
             ImGui::SetItemTooltip("%s", tooltip);
             ImGui::SameLine();
@@ -838,8 +844,8 @@ void HDRViewApp::draw_annotations_window()
         // this is the one place overlays are switched on and off.
         if (!img->vector_overlay.empty())
         {
-            flat_toggle(img->vector_overlay_visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF,
-                        img->vector_overlay_visible, "Draw the renderer's overlay.");
+            flat_toggle(ICON_MY_VISIBILITY, ICON_MY_VISIBILITY_OFF, img->vector_overlay_visible,
+                        "Draw the renderer's overlay.");
             ImGui::TextDisabled(ICON_MY_LIST_VIEW " Renderer overlay");
             ImGui::Tooltip("Drawing commands streamed in by a renderer. They can be hidden here, but only "
                            "the process sending them can change them.");
@@ -875,15 +881,15 @@ void HDRViewApp::draw_annotations_window()
             ImGui::SameLine(0.f, 0.f);
             ImGui::SetCursorPosX(row_x);
 
-            flat_toggle(a.visible ? ICON_MY_VISIBILITY : ICON_MY_VISIBILITY_OFF, a.visible, "Draw this annotation.");
-            flat_toggle(a.locked ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, a.locked,
+            flat_toggle(ICON_MY_VISIBILITY, ICON_MY_VISIBILITY_OFF, a.visible, "Draw this annotation.");
+            flat_toggle(ICON_MY_LOCK, ICON_MY_LOCK_OPEN, a.locked,
                         "A locked annotation cannot be picked up in the viewport.");
 
             ImGui::TextUnformatted(fmt::format("{} {}", annotation_shape_icon(a.shape), a.display_label()).c_str());
 
             ImGui::SameLine(0.f, 0.f);
-            ImGui::SetCursorPosX(row_x + row_w - icon_w);
-            if (ImGui::FlatButton(ICON_MY_TRASH_CAN, false, ImVec2(icon_w, 0.f)))
+            ImGui::SetCursorPosX(row_x + row_w - trash_w);
+            if (ImGui::FlatButton(ICON_MY_TRASH_CAN, false, ImVec2(trash_w, 0.f)))
                 erase = i;
             ImGui::SetItemTooltip("Delete this annotation.");
 
