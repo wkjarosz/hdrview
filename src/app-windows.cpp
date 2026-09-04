@@ -1150,8 +1150,10 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
         return;
 
     // The rows flatten their padding to stay one line tall; a popup off one of them is an ordinary window
-    // and wants ordinary widgets.
+    // and wants ordinary widgets. Its own two rows sit closer together than the default, which is spaced
+    // for a window rather than for a couple of controls.
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, frame_padding);
+    ImGui::PushStyleVarY(ImGuiStyleVar_ItemSpacing, frame_padding.y);
 
     const auto &faces = annotation_font_faces();
     const char *shown = faces.front().label;
@@ -1201,16 +1203,32 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
     constexpr int vertical =
         VgCommand::AlignTop | VgCommand::AlignMiddle | VgCommand::AlignBottom | VgCommand::AlignBaseline;
 
+    // One of each three is on, so the one that is gets the filled look a radio button would: the flat
+    // button's own toggled state is too quiet to pick out of a row of six.
+    auto align_button = [](const char *icon, bool on, float size)
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
+        ImGui::PushStyleColor(ImGuiCol_Button, on ? ImGui::GetColorU32(ImGuiCol_ButtonActive) : IM_COL32(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetColorU32(ImGuiCol_ButtonHovered, on ? 1.f : 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetColorU32(ImGuiCol_ButtonActive));
+        const bool clicked = ImGui::Button(icon, ImVec2(size, size));
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
+        return clicked;
+    };
+
     const float button = ImGui::GetFrameHeight();
     for (const auto &al : alignments)
     {
-        if (al.flag == VgCommand::AlignLeft || al.flag == VgCommand::AlignTop)
+        // All six on one row, with the two groups set apart so which three belong together is plain.
+        if (al.flag == VgCommand::AlignLeft)
             ImGui::NewLine();
         else
-            ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+            ImGui::SameLine(0.f, al.flag == VgCommand::AlignTop ? ImGui::GetStyle().ItemSpacing.x * 2.f
+                                                                : ImGui::GetStyle().ItemInnerSpacing.x);
 
-        // Setting one direction leaves the other alone, so the two rows do not undo each other.
-        if (ImGui::FlatButton(al.icon, (a.text_align & al.flag) != 0, ImVec2(button, button)))
+        // Setting one direction leaves the other alone, so the two groups do not undo each other.
+        if (align_button(al.icon, (a.text_align & al.flag) != 0, button))
         {
             a.text_align                  = (a.text_align & ~(al.clears ? vertical : horizontal)) | al.flag;
             m_annotation_style.text_align = a.text_align;
@@ -1218,7 +1236,7 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
         ImGui::SetItemTooltip("%s", al.tip);
     }
 
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(2);
     ImGui::EndPopup();
 }
 
