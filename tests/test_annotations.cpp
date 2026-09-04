@@ -551,7 +551,8 @@ bool same(const Annotation &a, const Annotation &b)
     return a.shape == b.shape && a.points == b.points && a.stroke_color == b.stroke_color &&
            a.fill_color == b.fill_color && a.stroke_width == b.stroke_width && a.font_size == b.font_size &&
            a.font_face == b.font_face && a.text_align == b.text_align && a.text == b.text && a.label == b.label &&
-           a.smooth == b.smooth && a.visible == b.visible && a.locked == b.locked;
+           a.smooth == b.smooth && a.visible == b.visible && a.locked == b.locked &&
+           a.stroke_width_relative == b.stroke_width_relative && a.font_size_relative == b.font_size_relative;
 }
 
 } // namespace
@@ -564,16 +565,18 @@ TEST_CASE("Every shape survives a trip through a session file")
 
         // Every field set away from its default, so a field the serializer forgets comes back as that
         // default and fails here rather than round-tripping by accident.
-        Annotation a   = sample(shape);
-        a.fill_color   = float4{0.25f, 0.5f, 0.75f, 0.5f};
-        a.text_align   = VgCommand::AlignRight | VgCommand::AlignBottom;
-        a.label        = "a label of its own";
-        a.visible      = false;
-        a.locked       = true;
-        a.stroke_width = 7.5f;
-        a.font_size    = 31.f;
-        a.font_face    = "mono-bold";
-        a.smooth       = true;
+        Annotation a            = sample(shape);
+        a.fill_color            = float4{0.25f, 0.5f, 0.75f, 0.5f};
+        a.text_align            = VgCommand::AlignRight | VgCommand::AlignBottom;
+        a.label                 = "a label of its own";
+        a.visible               = false;
+        a.locked                = true;
+        a.stroke_width          = 7.5f;
+        a.font_size             = 31.f;
+        a.font_face             = "mono-bold";
+        a.smooth                = true;
+        a.stroke_width_relative = true;
+        a.font_size_relative    = false;
 
         const Annotation b = json(a).get<Annotation>();
         CHECK(same(a, b));

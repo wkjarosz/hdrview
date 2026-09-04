@@ -61,8 +61,17 @@ struct Annotation
     /// Interior of a closed shape. Alpha zero means unfilled, which is the default and the common case.
     float4 fill_color{0.f, 0.f, 0.f, 0.f};
 
-    float stroke_width = 2.f;  ///< Screen pixels, so it neither thickens nor shrinks as the view is zoomed
-    float font_size    = 16.f; ///< Shape::Text only, in image pixels, so it zooms with what it labels
+    float stroke_width = 2.f;
+    float font_size    = 16.f; ///< Shape::Text only
+
+    /// Whether each size is in image pixels, and so zooms with what it marks, or in screen pixels.
+    /**
+        The protocol carries this per command, as VgCommand::ScaleKind, and these are what it is set from.
+        A stroke defaults to screen pixels, so a line stays visible however far out the view is, and a font
+        to image pixels, so a string stays the size of the feature it labels.
+    */
+    bool stroke_width_relative = false;
+    bool font_size_relative    = true;
     /// Which face a Shape::Text is drawn in, as a NanoVG face name; see annotation_font_faces().
     std::string font_face = "sans";
     /// VgCommand::TextAlign flags, saying where p0 sits relative to the text it anchors.

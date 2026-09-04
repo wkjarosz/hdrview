@@ -106,18 +106,20 @@ void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
 
 void to_json(json &j, const Annotation &a)
 {
-    j              = json::object();
-    j["shape"]     = g_shape_ids[size_t(a.shape) < std::size(g_shape_ids) ? size_t(a.shape) : 0];
-    j["points"]    = a.points;
-    j["stroke"]    = a.stroke_color;
-    j["fill"]      = a.fill_color;
-    j["width"]     = a.stroke_width;
-    j["font_size"] = a.font_size;
-    j["font_face"] = a.font_face;
-    j["align"]     = a.text_align;
-    j["smooth"]    = a.smooth;
-    j["visible"]   = a.visible;
-    j["locked"]    = a.locked;
+    j                   = json::object();
+    j["shape"]          = g_shape_ids[size_t(a.shape) < std::size(g_shape_ids) ? size_t(a.shape) : 0];
+    j["points"]         = a.points;
+    j["stroke"]         = a.stroke_color;
+    j["fill"]           = a.fill_color;
+    j["width"]          = a.stroke_width;
+    j["font_size"]      = a.font_size;
+    j["font_face"]      = a.font_face;
+    j["width_relative"] = a.stroke_width_relative;
+    j["size_relative"]  = a.font_size_relative;
+    j["align"]          = a.text_align;
+    j["smooth"]         = a.smooth;
+    j["visible"]        = a.visible;
+    j["locked"]         = a.locked;
 
     // Omitted when empty, which is the common case: a shape with no text and no label of its own.
     if (!a.text.empty())
@@ -146,15 +148,17 @@ void from_json(const json &j, Annotation &a)
     if (j.contains("fill"))
         j.at("fill").get_to(a.fill_color);
 
-    a.stroke_width = j.value("width", a.stroke_width);
-    a.font_size    = j.value("font_size", a.font_size);
-    a.font_face    = j.value<std::string>("font_face", a.font_face);
-    a.text_align   = j.value("align", a.text_align);
-    a.smooth       = j.value("smooth", a.smooth);
-    a.visible      = j.value("visible", a.visible);
-    a.locked       = j.value("locked", a.locked);
-    a.text         = j.value<std::string>("text", a.text);
-    a.label        = j.value<std::string>("label", a.label);
+    a.stroke_width          = j.value("width", a.stroke_width);
+    a.font_size             = j.value("font_size", a.font_size);
+    a.font_face             = j.value<std::string>("font_face", a.font_face);
+    a.stroke_width_relative = j.value("width_relative", a.stroke_width_relative);
+    a.font_size_relative    = j.value("size_relative", a.font_size_relative);
+    a.text_align            = j.value("align", a.text_align);
+    a.smooth                = j.value("smooth", a.smooth);
+    a.visible               = j.value("visible", a.visible);
+    a.locked                = j.value("locked", a.locked);
+    a.text                  = j.value<std::string>("text", a.text);
+    a.label                 = j.value<std::string>("label", a.label);
 }
 
 const std::vector<AnnotationFace> &annotation_font_faces()
@@ -207,14 +211,16 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     {
         // The interpreter draws text in the *fill* color, so the one color the user picked goes there.
         out.push_back(cmd(VgCommand::Type::FontFace, {}, a.font_face));
-        out.push_back(cmd(VgCommand::Type::FontSize, {a.font_size, float(VgCommand::Relative)}));
+        out.push_back(cmd(VgCommand::Type::FontSize,
+                          {a.font_size, float(a.font_size_relative ? VgCommand::Relative : VgCommand::Absolute)}));
         out.push_back(cmd(VgCommand::Type::TextAlign, {float(a.text_align)}));
         out.push_back(cmd(VgCommand::Type::FillColor, color_floats(a.stroke_color)));
         out.push_back(cmd(VgCommand::Type::Text, {a.p0().x, a.p0().y}, a.text));
         return;
     }
 
-    out.push_back(cmd(VgCommand::Type::StrokeWidth, {a.stroke_width, float(VgCommand::Absolute)}));
+    out.push_back(cmd(VgCommand::Type::StrokeWidth,
+                      {a.stroke_width, float(a.stroke_width_relative ? VgCommand::Relative : VgCommand::Absolute)}));
     out.push_back(cmd(VgCommand::Type::StrokeColor, color_floats(a.stroke_color)));
 
     if (a.shape == Annotation::Shape::Arrow)
@@ -361,10 +367,12 @@ bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, floa
     if (a.shape != Annotation::Shape::Text || !xform.measure_text)
         return false;
 
-    // Measured at the size that is stored, which is already image pixels, so what comes back is the box in
-    // image coordinates with no zoom in it either way.
-    extent = xform.measure_text(a.font_face, a.font_size, a.text);
-    lo     = a.p0() - text_anchor_offset(a.text_align, extent);
+    // Measured at the size that is stored, which keeps the glyphs baked at one size however far the view
+    // is zoomed. Measuring is linear in the size, so what comes back scales into image coordinates: a
+    // relative size is already in them, and an absolute one is screen pixels and divides by the zoom.
+    const float2 measured = xform.measure_text(a.font_face, a.font_size, a.text);
+    extent                = a.font_size_relative ? measured : measured / std::max(xform.scale, 1e-6f);
+    lo                    = a.p0() - text_anchor_offset(a.text_align, extent);
     return extent.x > 0.f && extent.y > 0.f;
 }
 
@@ -441,8 +449,10 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
         if (!a.visible || a.locked)
             continue;
 
-        // The stroke straddles the outline, so half of it widens the target along with the slop.
-        const float tol    = slop + a.stroke_width * 0.5f;
+        // The stroke straddles the outline, so half of it widens the target along with the slop; a
+        // relative width is in image pixels and has to be brought up to the screen to be added to them.
+        const float stroke = a.stroke_width * (a.stroke_width_relative ? xform.scale : 1.f);
+        const float tol    = slop + stroke * 0.5f;
         const bool  filled = a.fill_color.w > 0.f;
 
         switch (a.shape)

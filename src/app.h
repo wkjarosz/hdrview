@@ -823,6 +823,9 @@ private:
     */
     bool m_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false, false};
 
+    /// Choose the shape the annotate tool draws; the tool's own icon follows it.
+    void set_annotation_shape(Annotation::Shape shape);
+
     /// Which shape the annotate tool draws, and the look every new annotation starts with.
     Annotation::Shape m_annotation_shape = Annotation::Shape::Rect;
     Annotation        m_annotation_style;

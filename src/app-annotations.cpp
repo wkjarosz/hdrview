@@ -18,6 +18,29 @@
 using namespace std;
 using namespace HelloImGui;
 
+/// The icon the panel and the shape picker show for \p shape.
+static const char *annotation_shape_icon(Annotation::Shape shape)
+{
+    switch (shape)
+    {
+    case Annotation::Shape::Rect: return ICON_MY_SHAPE_RECT;
+    case Annotation::Shape::Ellipse: return ICON_MY_SHAPE_ELLIPSE;
+    case Annotation::Shape::Line: return ICON_MY_SHAPE_LINE;
+    case Annotation::Shape::Arrow: return ICON_MY_SHAPE_ARROW;
+    case Annotation::Shape::Text: return ICON_MY_SHAPE_TEXT;
+    case Annotation::Shape::Freehand: return ICON_MY_SHAPE_FREEHAND;
+    default: return ICON_MY_ANNOTATE;
+    }
+}
+
+void HDRViewApp::set_annotation_shape(Annotation::Shape shape)
+{
+    m_annotation_shape = shape;
+
+    // The tool's button says which shape it will draw, so the palette shows the choice without being asked.
+    action(mouse_mode_action_name(MouseMode_Annotate)).icon = annotation_shape_icon(shape);
+}
+
 int HDRViewApp::active_annotation() const
 {
     auto img = current_image();
@@ -278,19 +301,55 @@ static std::string row_name(const Annotation &a, float width)
     return name + "...";
 }
 
-/// The icon the panel and the shape picker show for \p shape.
-static const char *annotation_shape_icon(Annotation::Shape shape)
+/// A size, with the unit it is measured in chosen from a menu inside the field.
+/**
+    The protocol carries a scale kind on each of the two sizes it has, so both are offered: image pixels,
+    which zoom with what they mark, and screen pixels, which do not. Switching converts \p value at the
+    current \p scale, so what is on screen does not jump when the unit under it changes.
+*/
+static bool size_drag(const char *id, float &value, bool &relative, float speed, float lo_limit, float hi_limit,
+                      float scale)
 {
-    switch (shape)
+    ImGui::PushID(id);
+
+    // The drag fills the field, and the menu sits over its right-hand end.
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    bool changed = ImGui::DragFloat("##value", &value, speed, lo_limit, hi_limit, relative ? "%.2f img" : "%.1f px");
+    ImGui::SetItemTooltip("%s", relative ? "Image pixels: zooms with what it marks."
+                                         : "Screen pixels: the same size however far the view is zoomed.");
+
+    const ImVec2 field_lo = ImGui::GetItemRectMin(), field_hi = ImGui::GetItemRectMax();
+    const float  arrow_w = ImGui::GetFrameHeight() * 0.7f;
+
+    ImGui::SetCursorScreenPos(ImVec2(field_hi.x - arrow_w, field_lo.y));
+    if (ImGui::InvisibleButton("##units", ImVec2(arrow_w, field_hi.y - field_lo.y)))
+        ImGui::OpenPopup("##units");
+
+    ImGui::RenderArrow(ImGui::GetWindowDrawList(),
+                       ImVec2(field_hi.x - arrow_w, field_lo.y + ImGui::GetStyle().FramePadding.y),
+                       ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 0.7f);
+
+    if (ImGui::BeginPopup("##units"))
     {
-    case Annotation::Shape::Rect: return ICON_MY_SHAPE_RECT;
-    case Annotation::Shape::Ellipse: return ICON_MY_SHAPE_ELLIPSE;
-    case Annotation::Shape::Line: return ICON_MY_SHAPE_LINE;
-    case Annotation::Shape::Arrow: return ICON_MY_SHAPE_ARROW;
-    case Annotation::Shape::Text: return ICON_MY_SHAPE_TEXT;
-    case Annotation::Shape::Freehand: return ICON_MY_SHAPE_FREEHAND;
-    default: return ICON_MY_ANNOTATE;
+        // Converted at the zoom it is switched under, so the size on screen is what it was.
+        const float zoom = std::max(scale, 1e-6f);
+        if (ImGui::Selectable("Relative px (zooms with the image)", relative) && !relative)
+        {
+            value /= zoom;
+            relative = changed = true;
+        }
+        if (ImGui::Selectable("Absolute px (fixed on screen)", !relative) && relative)
+        {
+            value *= zoom;
+            relative = false;
+            changed  = true;
+        }
+        ImGui::EndPopup();
     }
+
+    ImGui::PopID();
+    return changed;
 }
 
 void HDRViewApp::draw_annotations_window()
@@ -595,7 +654,7 @@ void HDRViewApp::draw_shape_picker(bool named)
             if (ImGui::Selectable(
                     fmt::format("{} {}", annotation_shape_icon(shape), annotation_shape_name(shape)).c_str(),
                     is_selected))
-                m_annotation_shape = shape;
+                set_annotation_shape(shape);
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }
@@ -639,10 +698,13 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
     }
 
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::SetNextItemWidth(EmSize(6));
-    if (ImGui::DragFloat("##size", &a.font_size, 0.25f, Annotation::MinFontSize, Annotation::MaxFontSize, "%.0f px"))
-        m_annotation_style.font_size = a.font_size;
-    ImGui::SetItemTooltip("Image pixels, so the text grows and shrinks with what it labels.");
+    ImGui::SetNextItemWidth(EmSize(7));
+    if (size_drag("size", a.font_size, a.font_size_relative, 0.25f, Annotation::MinFontSize, Annotation::MaxFontSize,
+                  viewport_transform().scale))
+    {
+        m_annotation_style.font_size          = a.font_size;
+        m_annotation_style.font_size_relative = a.font_size_relative;
+    }
 
     // Which corner or edge of the string lands on the point it was placed at, which is what NanoVG's
     // align flags say. Each square carries a dot where its own anchor sits, drawn because FontAwesome has
@@ -745,17 +807,17 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
         bool restyled = ImGui::StrokeFillSwatches("Colors", a.stroke_color, a.fill_color);
 
         ImGui::TableNextColumn();
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        restyled |= ImGui::DragFloat("##width", &a.stroke_width, 0.05f, 0.5f, 32.f, "%.1f px");
-        ImGui::SetItemTooltip("Stroke width in screen pixels, so it does not change with zoom.");
+        restyled |= size_drag("width", a.stroke_width, a.stroke_width_relative, 0.05f, 0.01f, 512.f,
+                              viewport_transform().scale);
 
         // Restyling the annotation in hand also sets what the next one will look like, so a color or a
         // width chosen once carries forward instead of being forgotten when the selection is dropped.
         if (restyled && &a != &m_annotation_style)
         {
-            m_annotation_style.stroke_color = a.stroke_color;
-            m_annotation_style.fill_color   = a.fill_color;
-            m_annotation_style.stroke_width = a.stroke_width;
+            m_annotation_style.stroke_color          = a.stroke_color;
+            m_annotation_style.fill_color            = a.fill_color;
+            m_annotation_style.stroke_width          = a.stroke_width;
+            m_annotation_style.stroke_width_relative = a.stroke_width_relative;
         }
 
         ImGui::EndTable();
