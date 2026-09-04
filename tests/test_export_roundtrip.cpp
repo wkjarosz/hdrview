@@ -109,6 +109,9 @@ const Writer k_writers[] = {
     {"jp2_16", ".jp2", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_j2k_image(i, o, "a.jp2", 1.f, true, 16, J2KContainer::JP2, t, false); }},
+    {"jp2_10", ".jp2", Cap_Alpha,
+     [](const Image &i, std::ostream &o, TransferFunction t)
+     { save_j2k_image(i, o, "a.jp2", 1.f, true, 10, J2KContainer::JP2, t, false); }},
     {"jp2_8", ".jp2", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_j2k_image(i, o, "a.jp2", 1.f, true, 8, J2KContainer::JP2, t, false); }},

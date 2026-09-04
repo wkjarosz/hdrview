@@ -357,6 +357,19 @@ TEST_CASE("Both JPEG 2000 syntaxes decode to the same pixels")
     CHECK_FALSE(from_j2k->metadata["header"].contains("Brand"));
 }
 
+TEST_CASE("A bit depth the writer does not offer is refused, not quietly changed")
+{
+    auto img = test_image(int2{4, 4}, 3, [](int, int, int) { return 0.5f; });
+
+    std::ostringstream out(std::ios::binary);
+    for (int bits : {8, 10, 12, 16})
+    {
+        CAPTURE(bits);
+        CHECK_NOTHROW(save_j2k_image(*img, out, "a.jp2", 1.f, true, bits));
+    }
+    CHECK_THROWS_AS(save_j2k_image(*img, out, "a.jp2", 1.f, true, 11), std::exception);
+}
+
 TEST_CASE("A lossy write is smaller than a lossless one and stays close to the samples")
 {
     const int2 size{64, 64};

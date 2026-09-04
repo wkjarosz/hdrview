@@ -17,7 +17,7 @@ struct J2KSaveOptions
     float            gain            = 1.f;
     TransferFunction tf              = TransferFunction::sRGB;
     bool             dither          = true;
-    int              bit_depth_index = 2;
+    int              bit_depth_index = 3; ///< index into k_bit_depths, defaulting to 16-bit
     bool             reversible      = true;
     float            ratio           = 20.f; ///< target compression ratio, ignored when reversible
     int              num_resolutions = 6;
@@ -40,7 +40,12 @@ vector<ImagePtr> load_j2k_image(istream &, string_view, const ImageLoadOptions &
     throw runtime_error("JPEG 2000 support not enabled in this build.");
 }
 
-J2KSaveOptions *j2k_parameters_gui(J2KContainer) { return &s_opts; }
+J2KSaveOptions *j2k_parameters_gui() { return &s_opts; }
+
+const char *j2k_extension(const J2KSaveOptions *params)
+{
+    return params && params->container == J2KContainer::J2K ? ".j2k" : ".jp2";
+}
 
 void save_j2k_image(const Image &, ostream &, string_view, const J2KSaveOptions *)
 {
@@ -76,7 +81,7 @@ using namespace std;
 namespace
 {
 
-constexpr int k_bit_depths[]   = {8, 12, 16};
+constexpr int k_bit_depths[]   = {8, 10, 12, 16};
 constexpr int k_num_bit_depths = (int)(sizeof(k_bit_depths) / sizeof(k_bit_depths[0]));
 /// The most components a codestream may declare, per ISO/IEC 15444-1.
 constexpr uint32_t k_max_components = 16384;
@@ -850,10 +855,13 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, float g
     save_j2k_image(img, os, filename, &opts);
 }
 
-J2KSaveOptions *j2k_parameters_gui(J2KContainer container)
+const char *j2k_extension(const J2KSaveOptions *params)
 {
-    s_opts.container = container;
+    return params && params->container == J2KContainer::J2K ? ".j2k" : ".jp2";
+}
 
+J2KSaveOptions *j2k_parameters_gui()
+{
     if (ImGui::PE::Begin("JPEG 2000 Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
@@ -904,8 +912,20 @@ J2KSaveOptions *j2k_parameters_gui(J2KContainer container)
             ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
 
+        {
+            int container = (int)s_opts.container;
+            ImGui::PE::Combo("Container", &container,
+                             "JP2 file (.jp2)\0"
+                             "Raw codestream (.j2k)\0",
+                             -1,
+                             "A JP2 wraps the codestream in boxes, which is where the color space, an ICC "
+                             "profile and any metadata go. A raw codestream carries none of that, and is what "
+                             "a container of its own holds, such as a HEIF item or an MJ2 track.");
+            s_opts.container = (J2KContainer)container;
+        }
         ImGui::PE::Combo("Bit depth", &s_opts.bit_depth_index,
                          "8-bit\0"
+                         "10-bit\0"
                          "12-bit\0"
                          "16-bit\0");
         ImGui::PE::Checkbox("Dither", &s_opts.dither);

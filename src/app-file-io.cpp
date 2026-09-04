@@ -122,8 +122,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             Format_JPEG_STB,
             Format_JPEG_UHDR,
             Format_JPEG_XL,
-            Format_JPEG2000_JP2,
-            Format_JPEG2000_J2K,
+            Format_JPEG2000,
             Format_WEBP,
             Format_EXR,
             Format_PFM,
@@ -159,9 +158,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                                                        false,
 #endif
 #if HDRVIEW_ENABLE_J2K
-                                                       true, true,
+                                                       true,
 #else
-                                                       false, false,
+                                                       false,
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
                                                        true,
@@ -193,8 +192,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             "JPEG (stb)",
             "JPEG (UltraHDR)",
             "JPEG-XL",
-            "JPEG 2000 (JP2)",
-            "JPEG 2000 (codestream)",
+            "JPEG 2000",
             "WebP",
             "OpenEXR",
             "PFM",
@@ -218,7 +216,6 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             ".jpg",
             ".jxl",
             ".jp2",
-            ".j2k",
             ".webp",
             ".exr",
             ".pfm",
@@ -271,6 +268,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         ImGui::PopFont();
 
         std::function<void(const Image &, std::ostream &, const std::string_view)> save_func;
+        // what the format writes unless one of its options says otherwise
+        std::string save_extension = save_format_extensions[save_format];
 
         switch (save_format)
         {
@@ -309,13 +308,12 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         }
         break;
 
-        // Two entries, since the file's extension fixes which of the two syntaxes goes in it: a .jp2 carries
-        // the boxes that record the color space, a .j2k is the bare codestream.
-        case Format_JPEG2000_JP2:
-        case Format_JPEG2000_J2K:
+        case Format_JPEG2000:
         {
-            auto opts = j2k_parameters_gui(save_format == Format_JPEG2000_J2K ? J2KContainer::J2K : J2KContainer::JP2);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            auto opts = j2k_parameters_gui();
+            // the container is one of its options, so the extension follows what was chosen there
+            save_extension = j2k_extension(opts);
+            save_func      = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_j2k_image(img, os, filename, opts); };
         }
         break;
@@ -426,11 +424,10 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         save_as_name = fmt::format("Save as {}...", save_format_names[save_format]).c_str();
         if (ImGui::Button(save_as_name.c_str()))
         {
-            filename = current_image()->path.stem().u8string() + string(save_format_extensions[save_format]);
+            filename = current_image()->path.stem().u8string() + save_extension;
 #if !defined(__EMSCRIPTEN__)
-            filename = pfd::save_file(
-                           save_as_name.c_str(), filename,
-                           {string(save_format_names[save_format]) + " images", save_format_extensions[save_format]})
+            filename = pfd::save_file(save_as_name.c_str(), filename,
+                                      {string(save_format_names[save_format]) + " images", save_extension})
                            .result();
 #endif
         }
