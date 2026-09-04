@@ -822,6 +822,9 @@ void HDRViewApp::draw_annotations_window()
     auto     &list   = img->annotations;
     const int active = active_annotation();
 
+    // Taken before anything below flattens it, for the popup that wants ordinary widgets.
+    const ImVec2 frame_padding = ImGui::GetStyle().FramePadding;
+
     ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
     ImGui::Checkbox("Show annotations in viewport", &m_draw_annotations);
     ImGui::PopStyleVar();
@@ -958,7 +961,7 @@ void HDRViewApp::draw_annotations_window()
                     ImGui::OpenPopup("##font");
                 ImGui::SetItemTooltip("The face and size this text is drawn in.");
                 ImGui::SameLine();
-                draw_font_popup(a);
+                draw_font_popup(a, frame_padding);
             }
             else
             {
@@ -968,15 +971,38 @@ void HDRViewApp::draw_annotations_window()
 
             if (m_annotation_renaming == i)
             {
+                // Only the name becomes a field; the icons stay where they are, so a row does not
+                // rearrange itself the moment it is renamed.
+                ImGui::TextUnformatted(annotation_shape_icon(a.shape));
+                ImGui::SameLine();
+
                 // Focused the frame it appears, so the name can be typed straight away; once it holds the
                 // focus it is the active item, so this stops asking for it. Enter or clicking away keeps
                 // the name, and Escape drops it, InputText restoring its own buffer.
                 if (!ImGui::IsAnyItemActive())
                     ImGui::SetKeyboardFocusHere();
 
-                ImGui::SetNextItemWidth(row_x + row_w - icon_sz.x - ImGui::GetCursorPosX());
-                const bool edited = ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
-                                                             sizeof(m_annotation_rename));
+                const float field_w = row_x + row_w - icon_sz.x - ImGui::GetCursorPosX();
+
+                bool edited = false;
+                if (a.shape == Annotation::Shape::Text)
+                {
+                    // What a text annotation says can run to several lines, so its row grows a box that
+                    // takes them, and Enter starts a line rather than finishing the edit.
+                    const int lines = 1 + int(std::count(a.text.begin(), a.text.end(), '\n'));
+                    edited          = ImGui::InputTextMultiline(
+                        "##rename", m_annotation_rename, sizeof(m_annotation_rename),
+                        ImVec2(field_w, ImGui::GetTextLineHeight() * float(std::min(lines + 1, 8))));
+                }
+                else
+                {
+                    ImGui::SetNextItemWidth(field_w);
+                    edited = ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
+                                                      sizeof(m_annotation_rename));
+                }
+
+                // So the viewport can find this field's caret and selection and show them on the image.
+                m_annotation_rename_id = ImGui::GetItemID();
 
                 // For a text annotation the row's name is what it says, so this is how the text is typed --
                 // as it is typed, so the image shows it rather than waiting for the field to be left.
@@ -1095,10 +1121,14 @@ void HDRViewApp::draw_shape_picker(bool named)
     ImGui::SetItemTooltip("Which shape the annotate tool draws next.");
 }
 
-void HDRViewApp::draw_font_popup(Annotation &a)
+void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
 {
     if (!ImGui::BeginPopup("##font"))
         return;
+
+    // The rows flatten their padding to stay one line tall; a popup off one of them is an ordinary window
+    // and wants ordinary widgets.
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, frame_padding);
 
     const auto &faces = annotation_font_faces();
     const char *shown = faces.front().label;
@@ -1106,7 +1136,7 @@ void HDRViewApp::draw_font_popup(Annotation &a)
         if (a.font_face == f.name)
             shown = f.label;
 
-    ImGui::SetNextItemWidth(EmSize(7));
+    ImGui::SetNextItemWidth(EmSize(8));
     if (ImGui::BeginCombo("##face", shown))
     {
         for (const auto &f : faces)
@@ -1124,11 +1154,12 @@ void HDRViewApp::draw_font_popup(Annotation &a)
     }
 
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::SetNextItemWidth(EmSize(5));
+    ImGui::SetNextItemWidth(EmSize(6));
     if (ImGui::DragFloat("##size", &a.font_size, 0.25f, 4.f, 256.f, "%.0f px"))
         m_annotation_style.font_size = a.font_size;
     ImGui::SetItemTooltip("Screen pixels, so the text stays the same size however far the image is zoomed.");
 
+    ImGui::PopStyleVar();
     ImGui::EndPopup();
 }
 

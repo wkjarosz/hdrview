@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include "imgui_internal.h"
+
 #include "colormap.h"
 #include "common.h"
 #include "fonts.h"
@@ -265,6 +267,86 @@ void HDRViewApp::draw_vector_overlays() const
     }
 }
 
+void HDRViewApp::draw_text_editing() const
+{
+    const int active = active_annotation();
+    if (active < 0 || !m_draw_annotations)
+        return;
+
+    const Annotation &a = current_image()->annotations[size_t(active)];
+    if (a.shape != Annotation::Shape::Text)
+        return;
+
+    const auto xform = viewport_transform();
+
+    auto *font = (ImFont *)(xform.font_for ? xform.font_for(a.font_face) : nullptr);
+    if (!font)
+        font = (ImFont *)xform.default_font;
+    if (!font)
+        return;
+
+    const float  size   = std::max(1.f, a.font_size);
+    const float2 extent = font->CalcTextSizeA(size, FLT_MAX, 0.f, a.text.c_str());
+    const float2 lo     = aligned_text_pos(xform.to_screen(a.p0()), extent, a.text_align);
+
+    auto *draw_list = ImGui::GetBackgroundDrawList();
+
+    // Selected text is boxed rather than left to the handles it does not have.
+    draw_list->AddRect(lo - 2.f, lo + extent + 2.f, ImGui::GetColorU32(ImGuiCol_Border));
+
+    // Dear ImGui draws the caret and the selection inside InputTextEx, which is not something that can be
+    // called from out here -- but the state behind it can be read, so the same marks are drawn from it.
+    ImGuiInputTextState *state = ImGui::GetInputTextState(m_annotation_rename_id);
+    if (!state || m_annotation_renaming != active)
+        return;
+
+    // Where a byte offset falls, in the line it is on: the text can run to several lines, and each starts
+    // again at the left.
+    auto place = [&](int offset) -> float2
+    {
+        offset            = std::clamp(offset, 0, int(a.text.size()));
+        const char *begin = a.text.c_str();
+        const char *at    = begin + offset;
+        const char *line  = begin;
+        int         row   = 0;
+        for (const char *c = begin; c < at; ++c)
+            if (*c == '\n')
+            {
+                line = c + 1;
+                ++row;
+            }
+        return float2{font->CalcTextSizeA(size, FLT_MAX, 0.f, line, at).x, float(row) * size};
+    };
+
+    const float line_h = size;
+
+    if (state->HasSelection())
+    {
+        const int from = std::min(state->GetSelectionStart(), state->GetSelectionEnd());
+        const int to   = std::max(state->GetSelectionStart(), state->GetSelectionEnd());
+
+        // One rectangle per line the selection covers, since a line ends where the text does.
+        int start = from;
+        while (start < to)
+        {
+            int stop = start;
+            while (stop < to && a.text[size_t(stop)] != '\n') ++stop;
+
+            const float2 s = place(start), e = place(stop);
+            draw_list->AddRectFilled(lo + s, lo + float2{e.x, s.y + line_h},
+                                     ImGui::GetColorU32(ImGuiCol_TextSelectedBg));
+            start = stop + 1;
+        }
+    }
+
+    // Blinking as Dear ImGui's own does, so it reads as the same caret.
+    if (std::fmod(state->CursorAnim, 1.20f) <= 0.80f)
+    {
+        const float2 c = place(state->GetCursorPos());
+        draw_list->AddLine(lo + c, lo + float2{c.x, c.y + line_h}, ImGui::GetColorU32(ImGuiCol_Text));
+    }
+}
+
 void HDRViewApp::draw_tool_decorations() const
 {
     if (!current_image())
@@ -313,6 +395,8 @@ void HDRViewApp::draw_tool_decorations() const
             draw_list->AddRect(at - r, at + r, IM_COL32_BLACK);
         }
     }
+
+    draw_text_editing();
 
     float2 pos = ImGui::GetIO().MousePos;
     if (m_mouse_mode == MouseMode_RectangularSelection)

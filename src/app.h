@@ -536,7 +536,7 @@ private:
     void draw_annotation_controls(Annotation &a);
     void draw_shape_picker(bool named);
     /// Face and size for a text annotation, in a popup off its row's font button.
-    void draw_font_popup(Annotation &a);
+    void draw_font_popup(Annotation &a, const ImVec2 &frame_padding);
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
@@ -547,6 +547,8 @@ private:
     void draw_image() const;
     void draw_image_border() const;
     void draw_tool_decorations() const;
+    /// The box, caret and selection of the text annotation being edited, drawn over the image.
+    void draw_text_editing() const;
     /// Draws the current and reference images' vector overlays, if either has one.
     void draw_vector_overlays() const;
     void draw_file_window();
@@ -848,7 +850,8 @@ private:
     /// Row the annotations panel is renaming in place, or -1, and the name being typed into it.
     int         m_annotation_renaming = -1;
     char        m_annotation_rename[128]{};
-    std::string m_annotation_rename_was; ///< What it said before, so Escape can put it back
+    std::string m_annotation_rename_was;    ///< What it said before, so Escape can put it back
+    ImGuiID     m_annotation_rename_id = 0; ///< The field holding it, so the viewport can show its caret
 
     /// Row the annotations panel is dragging to reorder, or -1. See draw_annotations_window().
     int m_annotation_row_drag = -1;
