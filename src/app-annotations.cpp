@@ -308,7 +308,7 @@ static std::string row_name(const Annotation &a, float width)
     current \p scale, so what is on screen does not jump when the unit under it changes.
 */
 static bool size_drag(const char *id, float &value, bool &relative, float speed, float lo_limit, float hi_limit,
-                      float scale, float width, bool left_align = false)
+                      float scale, float width)
 {
     const ImGuiStyle &style  = ImGui::GetStyle();
     const float       arrow  = ImGui::GetFrameHeight();
@@ -316,10 +316,11 @@ static bool size_drag(const char *id, float &value, bool &relative, float speed,
 
     ImGui::PushID(id);
 
-    // DragFloat centers its value with no way to ask for anything else, and in a narrow field that runs it
-    // under the menu. So the drag is given nothing to draw and the value is drawn here instead -- except
-    // while it is being typed into, when the input box draws and aligns its own.
-    const bool typing = !left_align || ImGui::TempInputIsActive(ImGui::GetID("##value"));
+    // DragFloat centers its value across the whole frame with no way to ask for anything else, which in a
+    // narrow field runs it under the menu. So the drag is given nothing to draw and the value is drawn
+    // here, centered in what the menu leaves -- except while it is being typed into, when the input box
+    // draws and aligns its own.
+    const bool typing = ImGui::TempInputIsActive(ImGui::GetID("##value"));
 
     // The drag takes the whole width; the menu is laid over its right-hand end, so the two are one frame
     // rather than two side by side.
@@ -345,11 +346,16 @@ static bool size_drag(const char *id, float &value, bool &relative, float speed,
     ImGui::RenderArrow(draw_list, ImVec2(at.x + style.FramePadding.y, at.y + style.FramePadding.y),
                        ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 1.f);
 
+    ImGui::SetItemTooltip("The unit this size is measured in.");
+
     if (!typing)
     {
         char shown[64];
         snprintf(shown, sizeof(shown), format, value);
-        draw_list->AddText(ImVec2(field_lo.x + style.FramePadding.x, field_lo.y + style.FramePadding.y),
+
+        const float text_w = ImGui::CalcTextSize(shown).x;
+        const float from = field_lo.x + style.FramePadding.x, to = at.x;
+        draw_list->AddText(ImVec2(from + ImMax(0.f, (to - from - text_w) * 0.5f), field_lo.y + style.FramePadding.y),
                            ImGui::GetColorU32(ImGuiCol_Text), shown);
     }
 
@@ -838,7 +844,7 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
 
         ImGui::TableNextColumn();
         restyled |= size_drag("width", a.stroke_width, a.stroke_width_relative, 0.05f, 0.01f, 512.f,
-                              viewport_transform().scale, ImGui::GetContentRegionAvail().x, true);
+                              viewport_transform().scale, ImGui::GetContentRegionAvail().x);
 
         // Restyling the annotation in hand also sets what the next one will look like, so a color or a
         // width chosen once carries forward instead of being forgotten when the selection is dropped.
