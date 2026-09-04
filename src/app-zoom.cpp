@@ -439,7 +439,7 @@ void HDRViewApp::handle_annotate_tool()
             // and cannot be taken hold of again. Text is the exception, a click being how one is placed,
             // and the panel opens its name for typing straight afterwards.
             if (a.shape == Annotation::Shape::Text)
-                m_annotation_place_text = true;
+                m_annotation_edit_text = true;
             else if (a.bounds().min == a.bounds().max)
             {
                 list.pop_back();

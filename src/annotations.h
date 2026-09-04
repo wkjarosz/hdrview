@@ -108,6 +108,10 @@ void from_json(const json &j, Annotation &a);
 /// Where \p a's text sits, in image coordinates, or false when \p xform cannot measure it.
 bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &extent);
 
+/// The same box in screen coordinates, ordered so \p lo is the upper-left corner whichever way the view is
+/// flipped. Drawing and hit testing both read this.
+bool text_screen_box(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &hi);
+
 /// The faces a text annotation can be drawn in; the viewport falls back to the first for any other.
 struct AnnotationFace
 {
@@ -118,9 +122,6 @@ const std::vector<AnnotationFace> &annotation_font_faces();
 
 /// Human-readable name for \p shape, as the panel and the shape picker show it.
 const char *annotation_shape_name(Annotation::Shape shape);
-
-/// Append \p a to \p out as overlay drawing commands, visible or not; \p scale sizes an arrowhead.
-void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float scale);
 
 /// Flatten every visible annotation of \p annotations, in order, so later ones draw over earlier ones.
 std::vector<VgCommand> to_vg_commands(const std::vector<Annotation> &annotations, float scale);

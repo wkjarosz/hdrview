@@ -286,23 +286,15 @@ void HDRViewApp::draw_text_editing() const
 
     const auto xform = viewport_transform();
 
-    auto *font = (ImFont *)(xform.font_for ? xform.font_for(a.font_face) : nullptr);
-    if (!font)
-        font = (ImFont *)xform.default_font;
-    if (!font)
+    // The same box the hit test uses, so what is boxed is what can be clicked.
+    float2 lo, hi;
+    if (!text_screen_box(a, xform, lo, hi))
         return;
-
-    // Baked from the size before the zoom, as the drawing is, and scaled up to what is on screen.
-    const float baked = text_baked_size(a.font_size);
-    const float size  = std::max(1.f, a.font_size * xform.scale);
-
-    const float2 extent = float2{font->CalcTextSizeA(baked, FLT_MAX, 0.f, a.text.c_str())} * (size / baked);
-    const float2 lo     = aligned_text_pos(xform.to_screen(a.p0()), extent, a.text_align);
 
     auto *draw_list = ImGui::GetBackgroundDrawList();
 
     // Boxed, so a selected string reads as selected even where its corners are not yet in reach.
-    draw_list->AddRect(lo - 2.f, lo + extent + 2.f, ImGui::GetColorU32(ImGuiCol_Border));
+    draw_list->AddRect(lo - 2.f, hi + 2.f, ImGui::GetColorU32(ImGuiCol_Border));
 
     // Dear ImGui draws the caret and the selection inside InputTextEx, which cannot be called from out
     // here; the state behind it can be read, so the same marks are drawn from it.
@@ -310,21 +302,20 @@ void HDRViewApp::draw_text_editing() const
     if (!state || m_annotation_renaming != active)
         return;
 
-    // Where a byte offset falls, in the line it is on: the text can run to several lines, and each starts
-    // again at the left.
-    // How far into the string a byte offset is. One line, as the overlay's Text command is.
-    auto place = [&](int offset)
+    // How far into the string a byte offset is, measured the way the box was. One line, as the overlay's
+    // Text command is.
+    const float line_h = hi.y - lo.y;
+    auto        place  = [&](int offset)
     {
-        const char *begin = a.text.c_str();
-        const char *at    = begin + std::clamp(offset, 0, int(a.text.size()));
-        return font->CalcTextSizeA(baked, FLT_MAX, 0.f, begin, at).x * (size / baked);
+        const int n = std::clamp(offset, 0, int(a.text.size()));
+        return xform.measure_text(a.font_face, a.font_size, a.text.substr(0, size_t(n))).x * xform.scale;
     };
 
     if (state->HasSelection())
     {
         const float from = place(std::min(state->GetSelectionStart(), state->GetSelectionEnd()));
         const float to   = place(std::max(state->GetSelectionStart(), state->GetSelectionEnd()));
-        draw_list->AddRectFilled(lo + float2{from, 0.f}, lo + float2{to, size},
+        draw_list->AddRectFilled(lo + float2{from, 0.f}, lo + float2{to, line_h},
                                  ImGui::GetColorU32(ImGuiCol_TextSelectedBg));
     }
 
@@ -332,7 +323,7 @@ void HDRViewApp::draw_text_editing() const
     if (std::fmod(state->CursorAnim, 1.20f) <= 0.80f)
     {
         const float x = place(state->GetCursorPos());
-        draw_list->AddLine(lo + float2{x, 0.f}, lo + float2{x, size}, ImGui::GetColorU32(ImGuiCol_Text));
+        draw_list->AddLine(lo + float2{x, 0.f}, lo + float2{x, line_h}, ImGui::GetColorU32(ImGuiCol_Text));
     }
 }
 

@@ -831,20 +831,8 @@ void HDRViewApp::draw_annotations_window()
     Annotation &edited = active >= 0 ? list[size_t(active)] : m_annotation_style;
     draw_annotation_controls(edited);
 
-    // A text annotation is placed with a click and says nothing yet, so the row it landed in opens for
-    // typing.
-    if (m_annotation_place_text)
-    {
-        m_annotation_place_text = false;
-        if (active >= 0)
-        {
-            m_annotation_renaming  = active;
-            m_annotation_rename[0] = '\0';
-            m_annotation_rename_was.clear();
-        }
-    }
-
-    // The viewport asks for this when a text annotation is double-clicked on the image.
+    // The viewport asks for this when a text annotation is placed with a click, which leaves it saying
+    // nothing, and when one is double-clicked to be edited. Both open its row for typing.
     if (m_annotation_edit_text && active >= 0)
     {
         m_annotation_renaming   = active;

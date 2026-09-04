@@ -65,8 +65,7 @@ TEST_CASE("Every shape flattens to a well-formed command stream")
     {
         CAPTURE(annotation_shape_name(shape));
 
-        std::vector<VgCommand> out;
-        append_vg_commands(out, sample(shape), 1.f);
+        const std::vector<VgCommand> out = to_vg_commands({sample(shape)}, 1.f);
 
         REQUIRE(!out.empty());
         for (const auto &c : out)
@@ -127,8 +126,7 @@ TEST_CASE("A stroke is a screen width, and a font size an image one")
     {
         CAPTURE(annotation_shape_name(shape));
 
-        std::vector<VgCommand> out;
-        append_vg_commands(out, sample(shape), 1.f);
+        const std::vector<VgCommand> out = to_vg_commands({sample(shape)}, 1.f);
 
         int widths = 0, sizes = 0;
         for (const auto &c : out)

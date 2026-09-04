@@ -197,6 +197,10 @@ std::string Annotation::display_label() const
     return annotation_shape_name(shape);
 }
 
+namespace
+{
+
+/// Append \p a as overlay drawing commands, visible or not; \p scale sizes an arrowhead.
 void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float scale)
 {
     if (a.shape == Annotation::Shape::Text)
@@ -275,6 +279,8 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
         out.push_back(cmd(VgCommand::Type::Fill));
     out.push_back(cmd(VgCommand::Type::Stroke));
 }
+
+} // namespace
 
 std::vector<VgCommand> to_vg_commands(const std::vector<Annotation> &annotations, float scale)
 {
@@ -360,6 +366,18 @@ bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, floa
     extent = xform.measure_text(a.font_face, a.font_size, a.text);
     lo     = a.p0() - text_anchor_offset(a.text_align, extent);
     return extent.x > 0.f && extent.y > 0.f;
+}
+
+bool text_screen_box(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &hi)
+{
+    float2 image_lo, extent;
+    if (!text_extent(a, xform, image_lo, extent))
+        return false;
+
+    const float2 s0 = xform.to_screen(image_lo), s1 = xform.to_screen(image_lo + extent);
+    lo = float2{std::min(s0.x, s1.x), std::min(s0.y, s1.y)};
+    hi = float2{std::max(s0.x, s1.x), std::max(s0.y, s1.y)};
+    return true;
 }
 
 int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles], const VgTransform *xform)
@@ -497,15 +515,11 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
         {
             const float2 anchor = xform.to_screen(a.p0());
 
-            // The box the glyphs occupy, placed the same way the drawing places them, and taken to the
-            // screen by its corners so a flipped view maps as it should. With nothing to measure with
-            // there is only the anchor, which is where the string starts, so a click has to land near it.
-            float2 lo, extent;
-            if (text_extent(a, xform, lo, extent))
+            // The box the glyphs occupy. With nothing to measure with there is only the anchor, which is
+            // where the string starts, so a click has to land near it.
+            float2 box_lo, box_hi;
+            if (text_screen_box(a, xform, box_lo, box_hi))
             {
-                const float2 s0 = xform.to_screen(lo), s1 = xform.to_screen(lo + extent);
-                const float2 box_lo{std::min(s0.x, s1.x), std::min(s0.y, s1.y)};
-                const float2 box_hi{std::max(s0.x, s1.x), std::max(s0.y, s1.y)};
                 if (distance_to_box(screen_pos, box_lo, box_hi) <= tol)
                     return i;
             }
