@@ -301,34 +301,41 @@ static std::string row_name(const Annotation &a, float width)
     return name + "...";
 }
 
-/// A size, with the unit it is measured in chosen from a menu inside the field.
+/// A size, with the unit it is measured in chosen from a menu at the end of the field.
 /**
     The protocol carries a scale kind on each of the two sizes it has, so both are offered: image pixels,
     which zoom with what they mark, and screen pixels, which do not. Switching converts \p value at the
     current \p scale, so what is on screen does not jump when the unit under it changes.
 */
 static bool size_drag(const char *id, float &value, bool &relative, float speed, float lo_limit, float hi_limit,
-                      float scale)
+                      float scale, float width)
 {
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float       arrow = ImGui::GetFrameHeight();
+
     ImGui::PushID(id);
 
-    // The drag fills the field, and the menu sits over its right-hand end.
-    ImGui::SetNextItemAllowOverlap();
-    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SetNextItemWidth(ImMax(width - arrow, arrow));
     bool changed = ImGui::DragFloat("##value", &value, speed, lo_limit, hi_limit, relative ? "%.2f img" : "%.1f px");
     ImGui::SetItemTooltip("%s", relative ? "Image pixels: zooms with what it marks."
                                          : "Screen pixels: the same size however far the view is zoomed.");
+    const float height = ImGui::GetItemRectSize().y;
 
-    const ImVec2 field_lo = ImGui::GetItemRectMin(), field_hi = ImGui::GetItemRectMax();
-    const float  arrow_w = ImGui::GetFrameHeight() * 0.7f;
+    // Drawn the way BeginCombo draws its own arrow -- a button-colored box rounded on the right, with the
+    // arrow inset by the frame padding at full size -- so the two read as the same control.
+    ImGui::SameLine(0.f, 0.f);
+    const ImVec2 at      = ImGui::GetCursorScreenPos();
+    const bool   clicked = ImGui::InvisibleButton("##units", ImVec2(arrow, height));
 
-    ImGui::SetCursorScreenPos(ImVec2(field_hi.x - arrow_w, field_lo.y));
-    if (ImGui::InvisibleButton("##units", ImVec2(arrow_w, field_hi.y - field_lo.y)))
+    auto *draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddRectFilled(at, ImVec2(at.x + arrow, at.y + height),
+                             ImGui::GetColorU32(ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered : ImGuiCol_Button),
+                             style.FrameRounding, ImDrawFlags_RoundCornersRight);
+    ImGui::RenderArrow(draw_list, ImVec2(at.x + style.FramePadding.y, at.y + style.FramePadding.y),
+                       ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 1.f);
+
+    if (clicked)
         ImGui::OpenPopup("##units");
-
-    ImGui::RenderArrow(ImGui::GetWindowDrawList(),
-                       ImVec2(field_hi.x - arrow_w, field_lo.y + ImGui::GetStyle().FramePadding.y),
-                       ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 0.7f);
 
     if (ImGui::BeginPopup("##units"))
     {
@@ -698,9 +705,8 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
     }
 
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::SetNextItemWidth(EmSize(7));
     if (size_drag("size", a.font_size, a.font_size_relative, 0.25f, Annotation::MinFontSize, Annotation::MaxFontSize,
-                  viewport_transform().scale))
+                  viewport_transform().scale, EmSize(9)))
     {
         m_annotation_style.font_size          = a.font_size;
         m_annotation_style.font_size_relative = a.font_size_relative;
@@ -808,7 +814,7 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
 
         ImGui::TableNextColumn();
         restyled |= size_drag("width", a.stroke_width, a.stroke_width_relative, 0.05f, 0.01f, 512.f,
-                              viewport_transform().scale);
+                              viewport_transform().scale, ImGui::GetContentRegionAvail().x);
 
         // Restyling the annotation in hand also sets what the next one will look like, so a color or a
         // width chosen once carries forward instead of being forgotten when the selection is dropped.
