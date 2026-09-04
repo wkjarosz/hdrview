@@ -824,13 +824,18 @@ void HDRViewApp::draw_annotations_window()
         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
 
         // A row is as tall as its text, like the Images panel's, and its buttons sit against each other:
-        // each already carries its own highlight, which is all the separation they need.
-        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+        // each already carries its own highlight, which is all the separation they need. No frame padding
+        // either, which would otherwise be subtracted from a square button and push its glyph off center.
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.f, 0.f));
         ImGui::PushStyleVarX(ImGuiStyleVar_ItemSpacing, 0.f);
 
-        // Square, and the height of a row, so the three of them are the same size whatever their glyphs
-        // measure and no wider than they are tall.
-        const ImVec2 icon_sz{ImGui::GetFrameHeight(), ImGui::GetFrameHeight()};
+        // Square, and big enough for the widest glyph any of these buttons draws: an icon is wider than the
+        // font size it is drawn at, so a square of that would clip it.
+        float side = ImGui::GetTextLineHeight();
+        for (const char *icon :
+             {ICON_MY_VISIBILITY, ICON_MY_VISIBILITY_OFF, ICON_MY_LOCK, ICON_MY_LOCK_OPEN, ICON_MY_TRASH_CAN})
+            side = std::max(side, ImGui::CalcTextSize(icon).x);
+        const ImVec2 icon_sz{side, side};
 
         auto flat_toggle = [icon_sz](const char *on, const char *off, bool &value, const char *tooltip)
         {
