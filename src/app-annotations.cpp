@@ -263,8 +263,11 @@ void HDRViewApp::draw_text_editing() const
     const float line_h = hi.y - lo.y;
     auto        place  = [&](int offset)
     {
-        const int n = std::clamp(offset, 0, int(a.text.size()));
-        return xform.measure_text(a.font_face, a.font_size, a.text.substr(0, size_t(n))).x * xform.scale;
+        // Measured for a font of a.font_size screen pixels, which is what the size already is when it is
+        // absolute; a relative one is image pixels and reaches the screen by way of the zoom.
+        const int   n     = std::clamp(offset, 0, int(a.text.size()));
+        const float width = xform.measure_text(a.font_face, a.font_size, a.text.substr(0, size_t(n))).x;
+        return a.font_size_relative ? width * xform.scale : width;
     };
 
     if (state->HasSelection())
