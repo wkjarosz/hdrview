@@ -853,3 +853,50 @@ TEST_CASE("A text annotation is picked up over its glyphs, not just at its ancho
     auto blind = identity_transform();
     CHECK(annotation_at({a}, a.p0(), blind, k_slop) == 0);
 }
+
+TEST_CASE("Resizing a text annotation's box scales the size it is drawn at")
+{
+    // Glyphs cannot be stretched, so a box drag has to come out as a font size. The measure here stands in
+    // for a font: a fixed box per character, proportional to the size, which is all the property needs.
+    // Zoomed, not identity: a font size is a screen quantity and the box is an image one, so a transform
+    // that scales by one would hide the conversion between them entirely.
+    constexpr float zoom = 2.f;
+    auto            x    = scaled_transform(zoom);
+    x.measure_text       = [](const std::string &, float size, const std::string &text)
+    { return float2{0.5f * size * float(text.size()), size}; };
+
+    Annotation a = sample(Annotation::Shape::Text);
+    a.text       = "caption";
+    a.font_size  = 20.f;
+    a.points     = {float2{100.f, 100.f}};
+    a.text_align = VgCommand::AlignLeft | VgCommand::AlignTop;
+
+    float2    handles[Annotation::MaxHandles];
+    const int count = annotation_handles(a, handles, &x);
+    REQUIRE(count == 4); // the corners; an edge would only stretch it
+
+    // Without something to measure with there is no box, so there is nothing to take hold of.
+    CHECK(annotation_handles(a, handles, nullptr) == 0);
+
+    float2 lo, extent;
+    REQUIRE(text_extent(a, x, lo, extent));
+
+    // The box is in image coordinates: what the font measures on screen, divided back by the zoom.
+    CHECK(extent.y == doctest::Approx(a.font_size / zoom));
+    CHECK(extent.x == doctest::Approx(0.5f * a.font_size * float(a.text.size()) / zoom));
+
+    // Drag the low corner up and left so the box doubles in height; the size doubles with it.
+    const float2 fixed = lo + extent;
+    move_annotation_handle(a, 0, float2{lo.x, fixed.y - 2.f * extent.y}, &x);
+    CHECK(a.font_size == doctest::Approx(40.f));
+
+    // The corner opposite the one dragged stayed where it was.
+    float2 lo2, extent2;
+    REQUIRE(text_extent(a, x, lo2, extent2));
+    CHECK((lo2 + extent2).x == doctest::Approx(fixed.x));
+    CHECK((lo2 + extent2).y == doctest::Approx(fixed.y));
+
+    // Shrinking works the same way round.
+    move_annotation_handle(a, 0, float2{lo2.x, (lo2 + extent2).y - 0.5f * extent2.y}, &x);
+    CHECK(a.font_size == doctest::Approx(20.f));
+}

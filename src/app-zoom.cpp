@@ -328,10 +328,24 @@ void HDRViewApp::handle_annotate_tool()
 
     // Screen pixels per image pixel, which turns the two scribble constants into the image distances the
     // points are actually kept in.
-    const float xform_scale = viewport_transform().scale;
+    const VgTransform xform_for_handles = viewport_transform();
+    const float       xform_scale       = xform_for_handles.scale;
 
     auto        &list  = img->annotations;
     const float2 pixel = pixel_at_app_pos(io.MousePos);
+
+    // Double-clicking a text annotation on the image edits what it says, which is where it is read.
+    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        if (const int i = annotation_at(list, io.MousePos, viewport_transform(), slop);
+            i >= 0 && list[size_t(i)].shape == Annotation::Shape::Text)
+        {
+            set_active_annotation(i);
+            m_annotation_edit_text = true;
+
+            // The press that opened it had already taken hold of the annotation to move it.
+            m_annotation_drag = AnnotationDrag::None;
+            return;
+        }
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
@@ -406,7 +420,7 @@ void HDRViewApp::handle_annotate_tool()
         case AnnotationDrag::Resizing:
             // Dragging a corner past its opposite renumbers the handles, so the drag follows the index
             // back rather than keeping hold of a corner that has moved out from under the cursor.
-            m_annotation_drag_handle = move_annotation_handle(a, m_annotation_drag_handle, pixel);
+            m_annotation_drag_handle = move_annotation_handle(a, m_annotation_drag_handle, pixel, &xform_for_handles);
             break;
 
         default: break;

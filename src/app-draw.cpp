@@ -291,7 +291,7 @@ void HDRViewApp::draw_text_editing() const
 
     auto *draw_list = ImGui::GetBackgroundDrawList();
 
-    // Selected text is boxed rather than left to the handles it does not have.
+    // Boxed, so a selected string reads as selected even where its corners are not yet in reach.
     draw_list->AddRect(lo - 2.f, lo + extent + 2.f, ImGui::GetColorU32(ImGuiCol_Border));
 
     // Dear ImGui draws the caret and the selection inside InputTextEx, which is not something that can be
@@ -385,7 +385,7 @@ void HDRViewApp::draw_tool_decorations() const
                             : handle_at(a, ImGui::GetIO().MousePos, xform, radius);
 
         float2    handles[Annotation::MaxHandles];
-        const int count = annotation_handles(a, handles);
+        const int count = annotation_handles(a, handles, &xform);
         for (int i = 0; i < count; ++i)
         {
             const float2 at = xform.to_screen(handles[i]);

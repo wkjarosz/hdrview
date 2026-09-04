@@ -302,6 +302,29 @@ float distance_to_segment(float2 p, float2 a, float2 b)
     return length(p - (a + along * t));
 }
 
+/// How far a string's anchor sits from the low corner of the box it occupies, under \p align.
+/**
+    The inverse of what aligned_text_pos() subtracts, so an anchor can be recovered from a box.
+*/
+float2 text_anchor_offset(int align, float2 extent)
+{
+    float x = 0.f;
+    if (align & VgCommand::AlignCenter)
+        x = extent.x * 0.5f;
+    else if (align & VgCommand::AlignRight)
+        x = extent.x;
+
+    float y = 0.f;
+    if (align & VgCommand::AlignMiddle)
+        y = extent.y * 0.5f;
+    else if (align & VgCommand::AlignBottom)
+        y = extent.y;
+    else if (align & VgCommand::AlignBaseline)
+        y = extent.y * 0.8f;
+
+    return float2{x, y};
+}
+
 /// Distance from \p p to the box \p lo -- \p hi, and zero inside it.
 float distance_to_box(float2 p, float2 lo, float2 hi)
 {
@@ -330,8 +353,36 @@ void screen_extent(const Annotation &a, const VgTransform &xform, float2 &lo, fl
 
 } // namespace
 
-int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles])
+bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &extent)
 {
+    if (a.shape != Annotation::Shape::Text || !xform.measure_text)
+        return false;
+
+    // Measured in screen pixels, since that is what a font size means here, and divided back into image
+    // coordinates, which is what every other piece of an annotation's geometry is in.
+    const float scale = std::max(xform.scale, 1e-6f);
+    extent            = xform.measure_text(a.font_face, a.font_size, a.text) / scale;
+    lo                = a.p0() - text_anchor_offset(a.text_align, extent);
+    return extent.x > 0.f && extent.y > 0.f;
+}
+
+int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles], const VgTransform *xform)
+{
+    // Text is boxed by what it measures, which needs a font; without one it has no handles to show.
+    if (a.shape == Annotation::Shape::Text)
+    {
+        float2 lo, extent;
+        if (!xform || !text_extent(a, *xform, lo, extent))
+            return 0;
+
+        // The corners only: glyphs cannot be stretched, so an edge is not something to drag.
+        out[0] = lo;
+        out[1] = float2{lo.x + extent.x, lo.y};
+        out[2] = lo + extent;
+        out[3] = float2{lo.x, lo.y + extent.y};
+        return 4;
+    }
+
     switch (a.shape)
     {
     case Annotation::Shape::Rect:
@@ -361,7 +412,7 @@ int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles])
 int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius)
 {
     float2    handles[Annotation::MaxHandles];
-    const int count = annotation_handles(a, handles);
+    const int count = annotation_handles(a, handles, &xform);
     for (int i = 0; i < count; ++i)
         if (length(xform.to_screen(handles[i]) - screen_pos) <= radius)
             return i;
@@ -537,8 +588,34 @@ std::vector<float2> simplify_polyline(const std::vector<float2> &path, float tol
     return out;
 }
 
-int move_annotation_handle(Annotation &a, int index, float2 to)
+int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransform *xform)
 {
+    if (a.shape == Annotation::Shape::Text)
+    {
+        float2 lo, extent;
+        if (!xform || index < 0 || index > 3 || !text_extent(a, *xform, lo, extent))
+            return index;
+
+        // The corner opposite the one being dragged stays where it is.
+        const float2 fixed{index == 0 || index == 3 ? lo.x + extent.x : lo.x,
+                           index == 0 || index == 1 ? lo.y + extent.y : lo.y};
+
+        // Glyphs cannot be stretched, so the box's new height is what the font size follows; a drag that
+        // would turn it inside out is ignored rather than flipping the text over.
+        const float height = std::abs(to.y - fixed.y);
+        if (height <= 0.f || extent.y <= 0.f)
+            return index;
+
+        const float  ratio      = height / extent.y;
+        const float2 new_extent = extent * ratio;
+        const float2 new_lo{std::min(fixed.x, to.x) == fixed.x ? fixed.x : fixed.x - new_extent.x,
+                            std::min(fixed.y, to.y) == fixed.y ? fixed.y : fixed.y - new_extent.y};
+
+        a.font_size = std::clamp(a.font_size * ratio, 4.f, 256.f);
+        a.p0()      = new_lo + text_anchor_offset(a.text_align, new_extent);
+        return index;
+    }
+
     if (a.shape == Annotation::Shape::Line || a.shape == Annotation::Shape::Arrow)
     {
         if (index == 0)

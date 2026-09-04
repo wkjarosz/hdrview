@@ -846,6 +846,8 @@ private:
     };
     /// Set when a text annotation has just been placed, so the panel opens its row for typing.
     bool m_annotation_place_text = false;
+    /// Set when the viewport asks for a text annotation to be edited, with the caret at the end of it.
+    bool m_annotation_edit_text = false;
 
     /// Row the annotations panel is renaming in place, or -1, and the name being typed into it.
     int         m_annotation_renaming = -1;

@@ -847,6 +847,14 @@ void HDRViewApp::draw_annotations_window()
         }
     }
 
+    // The viewport asks for this when a text annotation is double-clicked on the image.
+    if (m_annotation_edit_text && active >= 0)
+    {
+        m_annotation_renaming   = active;
+        m_annotation_rename_was = list[size_t(active)].text;
+        snprintf(m_annotation_rename, sizeof(m_annotation_rename), "%s", m_annotation_rename_was.c_str());
+    }
+
     // Applied after the list is drawn: removing a row mid-list renumbers the ones still to come.
     int erase = -1;
 
@@ -1004,6 +1012,15 @@ void HDRViewApp::draw_annotations_window()
                 // So the viewport can find this field's caret and selection and show them on the image.
                 m_annotation_rename_id = ImGui::GetItemID();
 
+                // Focusing a field from code selects all of it; an edit opened from the image continues
+                // what is already there, so the caret goes to the end instead.
+                if (m_annotation_edit_text)
+                    if (auto *state = ImGui::GetInputTextState(m_annotation_rename_id))
+                    {
+                        state->ReloadUserBufAndMoveToEnd();
+                        m_annotation_edit_text = false;
+                    }
+
                 // For a text annotation the row's name is what it says, so this is how the text is typed --
                 // as it is typed, so the image shows it rather than waiting for the field to be left.
                 auto &named = a.shape == Annotation::Shape::Text ? a.text : a.label;
@@ -1015,7 +1032,13 @@ void HDRViewApp::draw_annotations_window()
                     // Escape asks for what was there before, and every keystroke has already been applied.
                     if (!ImGui::IsItemDeactivatedAfterEdit())
                         named = m_annotation_rename_was;
-                    m_annotation_renaming = -1;
+                    m_annotation_renaming  = -1;
+                    m_annotation_edit_text = false;
+
+                    // A text annotation with nothing to say is not kept: placing one and thinking better
+                    // of it leaves nothing behind, as a click that never became a drag does.
+                    if (a.shape == Annotation::Shape::Text && a.text.empty())
+                        erase = i;
                 }
             }
             else

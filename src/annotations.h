@@ -121,6 +121,9 @@ struct Annotation
 void to_json(json &j, const Annotation &a);
 void from_json(const json &j, Annotation &a);
 
+/// Where \p a's text sits, in image coordinates, or false when \p xform cannot measure it.
+bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &extent);
+
 /// The faces a text annotation can be drawn in: the NanoVG name to store, and what to call it.
 /**
     These are the ones the viewport resolves to a loaded font; anything else falls back to the first.
@@ -151,11 +154,12 @@ std::vector<VgCommand> to_vg_commands(const std::vector<Annotation> &annotations
 /// Where \p a's handles sit, in image coordinates; returns how many were written to \p out.
 /**
     The shapes resized by a box report four corners of it, in the order (lo, hi.x/lo.y, hi, lo.x/hi.y),
-    then the midpoints of the edges leading away from each. Line and Arrow report their two endpoints, and
-    Text none: it can be moved but has nothing to resize. Drawing and hit testing both read this, so they
-    cannot disagree about where a handle is.
+    then the midpoints of the edges leading away from each. Line and Arrow report their two endpoints.
+    Text reports its four corners when \p xform can measure it, and none otherwise: without a font there is
+    no telling where its box is. Drawing and hit testing both read this, so they cannot disagree about
+    where a handle is.
 */
-int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles]);
+int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles], const VgTransform *xform = nullptr);
 
 /// Index of the handle of \p a within \p radius of \p screen_pos, or -1 if none is.
 int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius);
@@ -179,8 +183,11 @@ std::vector<float2> simplify_polyline(const std::vector<float2> &path, float tol
     A corner or edge dragged past its opposite turns the shape inside out rather than stopping, which is
     what a rubber-band resize is expected to do. That re-orders the shape, and so renumbers its handles,
     which is why the index comes back: a drag held across the crossing has to keep hold of the same corner.
+
+    Text has no geometry to stretch, so dragging its box scales the font size by how much taller the box
+    became, and moves its anchor to keep the corner opposite the one being dragged where it was.
 */
-int move_annotation_handle(Annotation &a, int index, float2 to);
+int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransform *xform = nullptr);
 
 /// Index of the annotation under \p screen_pos, searched front to back so the topmost wins, or -1.
 /**
