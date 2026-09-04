@@ -12,6 +12,7 @@
 
 #include "imageio/exr.h"
 #include "imageio/heif.h"
+#include "imageio/j2k.h"
 #include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
@@ -121,6 +122,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             Format_JPEG_STB,
             Format_JPEG_UHDR,
             Format_JPEG_XL,
+            Format_JPEG2000,
             Format_WEBP,
             Format_EXR,
             Format_PFM,
@@ -155,6 +157,11 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #else
                                                        false,
 #endif
+#if HDRVIEW_ENABLE_J2K
+                                                       true,
+#else
+                                                       false,
+#endif
 #if HDRVIEW_ENABLE_LIBWEBP
                                                        true,
 #else
@@ -185,6 +192,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             "JPEG (stb)",
             "JPEG (UltraHDR)",
             "JPEG-XL",
+            "JPEG 2000",
             "WebP",
             "OpenEXR",
             "PFM",
@@ -207,6 +215,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             ".jpg",
             ".jpg",
             ".jxl",
+            ".jp2",
             ".webp",
             ".exr",
             ".pfm",
@@ -259,6 +268,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         ImGui::PopFont();
 
         std::function<void(const Image &, std::ostream &, const std::string_view)> save_func;
+        // what the format writes unless one of its options says otherwise
+        std::string save_extension = save_format_extensions[save_format];
 
         switch (save_format)
         {
@@ -294,6 +305,16 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             auto opts = jxl_parameters_gui();
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_jxl_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_JPEG2000:
+        {
+            auto opts = j2k_parameters_gui();
+            // the container is one of its options, so the extension follows what was chosen there
+            save_extension = j2k_extension(opts);
+            save_func      = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_j2k_image(img, os, filename, opts); };
         }
         break;
 
@@ -403,11 +424,10 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         save_as_name = fmt::format("Save as {}...", save_format_names[save_format]).c_str();
         if (ImGui::Button(save_as_name.c_str()))
         {
-            filename = current_image()->path.stem().u8string() + string(save_format_extensions[save_format]);
+            filename = current_image()->path.stem().u8string() + save_extension;
 #if !defined(__EMSCRIPTEN__)
-            filename = pfd::save_file(
-                           save_as_name.c_str(), filename,
-                           {string(save_format_names[save_format]) + " images", save_format_extensions[save_format]})
+            filename = pfd::save_file(save_as_name.c_str(), filename,
+                                      {string(save_format_names[save_format]) + " images", save_extension})
                            .result();
 #endif
         }

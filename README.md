@@ -83,6 +83,7 @@ HDRView picks a decoder by inspecting a file's contents rather than by trusting 
 | PNG (.png) | Including animated PNGs and HDR PNGs with CICP (via [libpng](https://github.com/pnggroup/libpng)) | ✓ | ✓ |
 | TIFF (.tif, .tiff) | Including SGI LogLuv and Pixar Log HDR formats (via [libtiff](https://gitlab.com/libtiff/libtiff)) | ✓ | ✓ |
 | JPEG-XL (.jxl) | Including lossless, lossy, animation/burst, HDR, and gain maps (via [libjxl](https://github.com/libjxl/libjxl)) | ✓ | ✓ |
+| JPEG 2000 (.jp2, .j2k, .jph, .jhc) | Both the boxed JP2 file format and bare codestreams, at any precision up to 31 bits, including high-throughput HTJ2K (via [OpenJPEG](https://github.com/uclouvain/openjpeg)) | ✓ | ✓ |
 | HEIF, AVIF (.heif, .heic, .avif, .avci) | Including lossless, lossy, animation/burst, HDR, and the gain maps in HDR photos from iPhones (via [libheif](https://github.com/strukturag/libheif) and various codec libraries). Output is HEIF or AVIF | ✓ | ✓ |
 | WebP (.webp) | Google's format supporting lossy/lossless and animation (via [libwebp](https://chromium.googlesource.com/webm/libwebp)) | ✓ | ✓ |
 | QOI (.qoi) | Quite OK Image — simple, fast, lossless (via [qoi](https://github.com/phoboslab/qoi)) | ✓ | ✓ |
@@ -96,7 +97,7 @@ HDRView picks a decoder by inspecting a file's contents rather than by trusting 
 | PNM (.pnm, .pgm, .ppm) | Netpbm portable bitmaps (via [stb_image](https://github.com/nothings/stb)) | ✓ | |
 | PIC (.pic) | Softimage PIC (via [stb_image](https://github.com/nothings/stb)) | ✓ | |
 
-JPEG 2000 and HTJ2K are supported as codecs *inside* HEIF containers, not as standalone `.jp2` files.
+JPEG 2000 and HTJ2K are also readable as codecs *inside* a HEIF container (`.hej2`).
 
 Which formats a particular build actually has depends on its `HDRVIEW_ENABLE_*` options; the About dialog's Build info tab lists what was compiled in.
 

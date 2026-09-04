@@ -62,13 +62,13 @@ bool zip_entry_size_is_plausible(uint64_t uncompressed_size, uint64_t compressed
 const ImageLoadOptions &load_image_options();
 void                    draw_load_image_options_dialog(bool &open);
 
+/// Load an image from the input stream, reporting failure by returning an empty vector.
 /**
-    Load the an image from the input stream.
-
     \param [] is       The input stream to read from
     \param [] filename The corresponding filename if `is` was opened from a file
     \param [] opts     Options for loading the image
-    \return            A vector of possibly multiple images (e.g. from multi-part EXR files)
+    \return            A vector of possibly multiple images (e.g. from multi-part EXR files), empty if
+                       nothing could be loaded
 */
 vector<ImagePtr> load_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 

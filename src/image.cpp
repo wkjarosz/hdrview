@@ -174,9 +174,21 @@ const std::set<std::string> &Image::loadable_formats()
 #if HDRVIEW_ENABLE_LIBJXL
         "jxl",
 #endif
+#if HDRVIEW_ENABLE_J2K
+        "jp2",
+        "j2k",
+        "j2c",
+        "jpc",
+        "jpf",
+        "jpx",
+        "jpm",
+        "jph",
+        "jhc",
+#endif
 #if HDRVIEW_ENABLE_LIBHEIF
         "heif",
         "heifs",
+        "hej2",
 #endif
 #if HDRVIEW_ENABLE_HEIC
         "heic",

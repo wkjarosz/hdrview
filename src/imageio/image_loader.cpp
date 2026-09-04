@@ -22,6 +22,7 @@
 #include "imageio/dds.h"
 #include "imageio/exr.h"
 #include "imageio/heif.h"
+#include "imageio/j2k.h"
 #include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
@@ -105,6 +106,19 @@ static std::vector<LoaderEntry> default_loaders()
              {
                  spdlog::info("Loading '{}' using libjxl loader...", filename);
                  out = load_jxl_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#if HDRVIEW_ENABLE_J2K
+        {"openjpeg",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_j2k_image(is))
+             {
+                 spdlog::info("Loading '{}' using OpenJPEG loader...", filename);
+                 out = load_j2k_image(is, filename, opts);
                  return true;
              }
              return false;

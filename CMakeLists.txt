@@ -1219,14 +1219,18 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_AVIF)
   )
 endif()
 
-# OpenJPEG decodes the J2K- and HTJ2K-compressed HEIF images, and under Emscripten there is no installed
-# copy for libheif's find_package(OpenJPEG) to turn up, so build it here as with libaom above.
-if(EMSCRIPTEN AND HDRVIEW_ENABLE_J2K)
+# OpenJPEG serves two consumers: imageio/j2k.cpp, which reads and writes standalone JPEG 2000 files, and
+# libheif's J2K/HTJ2K plugins, which handle the same codestreams wrapped in a HEIF item. libheif finds it
+# only through find_package(OpenJPEG), which turns up nothing under Emscripten and nothing on a bare Windows
+# runner, so build it here when no installed copy answers and hand libheif the result via the redirect file.
+# Both paths leave the same `openjp2` target name.
+if(HDRVIEW_ENABLE_J2K)
   CPMAddPackage(
     NAME OpenJPEG
-    VERSION 2.5.4
+    VERSION 2.5.0 # 2.5.0 is the first release whose decoder handles HTJ2K codestreams
     GITHUB_REPOSITORY uclouvain/openjpeg
     GIT_TAG v2.5.4
+    FIND_PACKAGE_ARGUMENTS "QUIET"
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_CODEC OFF"
             "BUILD_TESTING OFF"
@@ -1234,23 +1238,33 @@ if(EMSCRIPTEN AND HDRVIEW_ENABLE_J2K)
     SYSTEM YES
     EXCLUDE_FROM_ALL YES
   )
-  if(NOT OpenJPEG_ADDED)
-    message(FATAL_ERROR "Failed to fetch OpenJPEG, which the Emscripten build needs for J2K support.")
-  endif()
-  # OpenJPEG puts the legacy EXECUTABLE_OUTPUT_PATH and LIBRARY_OUTPUT_PATH into the cache, which is global,
-  # so left there every target in the build lands in OpenJPEG's bin directory. Nothing else sets them.
-  unset(EXECUTABLE_OUTPUT_PATH CACHE)
-  unset(LIBRARY_OUTPUT_PATH CACHE)
+  if(OpenJPEG_ADDED)
+    # OpenJPEG puts the legacy EXECUTABLE_OUTPUT_PATH and LIBRARY_OUTPUT_PATH into the cache, which is
+    # global, so left there every target in the build lands in OpenJPEG's bin directory. Nothing else sets
+    # them.
+    unset(EXECUTABLE_OUTPUT_PATH CACHE)
+    unset(LIBRARY_OUTPUT_PATH CACHE)
 
-  message(STATUS "Will build OpenJPEG library")
-  mark_as_system_library(openjp2)
-  disable_target_warnings(openjp2)
-  # openjpeg.h lives beside the sources, and the opj_config.h it includes is generated into the build tree
-  file(
-    WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/openjpeg-extra.cmake"
-    "set(OPENJPEG_FOUND TRUE)\n" "set(OPENJPEG_LIBRARIES openjp2)\n"
-    "set(OPENJPEG_INCLUDE_DIRS \"${OpenJPEG_SOURCE_DIR}/src/lib/openjp2;${OpenJPEG_BINARY_DIR}/src/lib/openjp2\")\n"
-  )
+    message(STATUS "Will build OpenJPEG library")
+    mark_as_system_library(openjp2)
+    disable_target_warnings(openjp2)
+    # openjpeg.h lives beside the sources, and the opj_config.h it includes is generated into the build tree.
+    # OpenJPEG publishes both only to an install tree, so state them for the build tree: on the target for
+    # our own use, and in the redirect file for libheif's find module.
+    target_include_directories(openjp2 INTERFACE $<BUILD_INTERFACE:${OpenJPEG_SOURCE_DIR}/src/lib/openjp2>
+                                                 $<BUILD_INTERFACE:${OpenJPEG_BINARY_DIR}/src/lib/openjp2>
+    )
+    file(
+      WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/openjpeg-extra.cmake"
+      "set(OPENJPEG_FOUND TRUE)\n" "set(OPENJPEG_LIBRARIES openjp2)\n"
+      "set(OPENJPEG_INCLUDE_DIRS \"${OpenJPEG_SOURCE_DIR}/src/lib/openjp2;${OpenJPEG_BINARY_DIR}/src/lib/openjp2\")\n"
+    )
+  elseif(TARGET openjp2)
+    message(STATUS "Using system-installed OpenJPEG library")
+  else()
+    message(FATAL_ERROR "OpenJPEG not found. Please install it or turn off HDRVIEW_ENABLE_J2K.")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "openjp2")
 endif()
 
 # dav1d decodes the AV1 in an AVIF about twice as fast as libaom's decoder, to the same pixels, so libheif
@@ -1694,6 +1708,7 @@ set(HDRVIEW_SOURCES
     src/imageio/gainmap.cpp
     src/imageio/heif.cpp
     src/imageio/icc.cpp
+    src/imageio/j2k.cpp
     src/imageio/jpg.cpp
     src/imageio/jxl.cpp
     src/imageio/pfm.cpp
@@ -1834,7 +1849,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
                                 tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
-                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
+                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
                                 ${HDRVIEW_IPC_TESTS}
   )
   hdrview_setup_target(hdrview_tests)
@@ -1907,6 +1922,47 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     message(STATUS "libpng test images not available (no fetched source; set HDRVIEW_TEST_PNG_CONTRIB_DIR to "
                     "use a checkout); skipping tests/test_png_io.cpp's vendored-data tests"
     )
+  endif()
+
+  # The CMYK conversions cannot be exercised without a CMYK ICC profile, and the smallest real one is half a
+  # megabyte, too large to vendor. libjxl carries lcms in-tree and lcms's testbed carries two, so a build
+  # that fetched libjxl already has one on disk and the cases can run in CI like the OpenEXR ones.
+  set(HDRVIEW_TEST_LCMS_TESTBED_DIR
+      ""
+      CACHE PATH "lcms2's testbed directory, whose test1.icc is a CMYK printer profile"
+  )
+  if(HDRVIEW_TEST_LCMS_TESTBED_DIR)
+    set(_hdrview_lcms_testbed "${HDRVIEW_TEST_LCMS_TESTBED_DIR}")
+    set(_hdrview_lcms_explicit TRUE)
+  elseif(DEFINED JXL_SOURCE_DIR)
+    set(_hdrview_lcms_testbed "${JXL_SOURCE_DIR}/third_party/lcms/testbed")
+    set(_hdrview_lcms_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_lcms_testbed AND EXISTS "${_hdrview_lcms_testbed}/test1.icc")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_LCMS_TESTBED_DIR="${_hdrview_lcms_testbed}")
+  elseif(_hdrview_lcms_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_LCMS_TESTBED_DIR is set to '${_hdrview_lcms_testbed}', which holds no "
+                        "test1.icc"
+    )
+  else()
+    message(STATUS "lcms2's test profiles not available (no fetched libjxl source; set "
+                   "HDRVIEW_TEST_LCMS_TESTBED_DIR to use a checkout); skipping the CMYK cases in "
+                   "tests/test_j2k_io.cpp"
+    )
+  endif()
+
+  # No JPEG 2000 corpus is vendored by anything the build fetches, so this one is opt-in: point it at a
+  # directory of real .jp2/.j2k/.jph files and tests/test_j2k_io.cpp sweeps it.
+  set(HDRVIEW_TEST_J2K_DIR
+      ""
+      CACHE PATH "A directory of real JPEG 2000 files for tests/test_j2k_io.cpp to sweep"
+  )
+  if(HDRVIEW_TEST_J2K_DIR)
+    if(NOT EXISTS "${HDRVIEW_TEST_J2K_DIR}")
+      message(FATAL_ERROR "HDRVIEW_TEST_J2K_DIR is set to '${HDRVIEW_TEST_J2K_DIR}', which does not exist")
+    endif()
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_J2K_DIR="${HDRVIEW_TEST_J2K_DIR}")
   endif()
 
   include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
@@ -2189,6 +2245,11 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   list(APPEND CPACK_GENERATOR External)
   set(CPACK_EXTERNAL_PACKAGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/create-appimage.cmake")
   set(CPACK_EXTERNAL_ENABLE_STAGING YES)
+  # CPack reads the global COMPONENTS property, so one dependency's install(... COMPONENT ...) is enough to
+  # put it in component mode, and staging then lands each component in a subdirectory of its own:
+  # `Unspecified/usr/bin/HDRView` rather than `usr/bin/HDRView`, which linuxdeploy cannot find. Nothing here
+  # names a component, so ask for the single-pass install the AppDir layout needs.
+  set(CPACK_MONOLITHIC_INSTALL ON)
   # When packaging, instruct CPack to set DESTDIR so install uses a staging dir
   set(CPACK_SET_DESTDIR ON)
   # Place generated packages in the build directory instead of the source root

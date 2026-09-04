@@ -20,6 +20,7 @@
 #include "imageio/exr.h"
 #include "imageio/heif.h"
 #include "imageio/image_loader.h"
+#include "imageio/j2k.h"
 #include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
@@ -102,6 +103,21 @@ const Writer k_writers[] = {
     {"jpg", ".jpg", Cap_Lossy,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_jpg_image(i, o, "a.jpg", 1.f, t.type == TransferFunction::sRGB, false, 100, false); }},
+#endif
+#if HDRVIEW_ENABLE_J2K
+    // both syntaxes, and both ends of the bit depths the dialog offers
+    {"jp2_16", ".jp2", Cap_Alpha,
+     [](const Image &i, std::ostream &o, TransferFunction t)
+     { save_j2k_image(i, o, "a.jp2", 1.f, true, 16, J2KContainer::JP2, t, false); }},
+    {"jp2_10", ".jp2", Cap_Alpha,
+     [](const Image &i, std::ostream &o, TransferFunction t)
+     { save_j2k_image(i, o, "a.jp2", 1.f, true, 10, J2KContainer::JP2, t, false); }},
+    {"jp2_8", ".jp2", Cap_Alpha,
+     [](const Image &i, std::ostream &o, TransferFunction t)
+     { save_j2k_image(i, o, "a.jp2", 1.f, true, 8, J2KContainer::JP2, t, false); }},
+    {"j2k", ".j2k", Cap_Alpha,
+     [](const Image &i, std::ostream &o, TransferFunction t)
+     { save_j2k_image(i, o, "a.j2k", 1.f, true, 16, J2KContainer::J2K, t, false); }},
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
     {"webp", ".webp", Cap_Alpha,

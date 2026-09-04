@@ -140,7 +140,6 @@ struct Exif::Impl
     std::unique_ptr<ExifLog, decltype(&exif_log_unref)>   exif_log{nullptr, &exif_log_unref};
 
     /// libexif's log callback keeps firing after the constructor (e.g. from to_json()), so this can't be local.
-    bool load_error = false;
 };
 
 Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<Impl>())
@@ -177,30 +176,25 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
             [](ExifLog * /*log*/, ExifLogCode kind, const char *domain, const char *format, va_list args,
                void *user_data)
             {
-                bool *error = static_cast<bool *>(user_data);
-                char  msg[1024];
+                char msg[1024];
                 vsnprintf(msg, sizeof(msg), format, args);
 
                 switch (kind)
                 {
                 case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, msg); break;
                 case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, msg); break;
-                case EXIF_LOG_CODE_NO_MEMORY:
-                case EXIF_LOG_CODE_CORRUPT_DATA:
-                    *error = true;
-                    spdlog::error("log: {}: {}", domain, msg);
-                    break;
+                // libexif carries on past a tag it cannot follow and the readable tags still arrive, so
+                // this says what was skipped rather than announcing a failure that did not happen
+                case EXIF_LOG_CODE_CORRUPT_DATA: spdlog::warn("{}: {}", domain, msg); break;
+                case EXIF_LOG_CODE_NO_MEMORY: spdlog::error("{}: {}", domain, msg); break;
                 }
             },
-            &m_impl->load_error);
+            nullptr);
 
         exif_data_log(m_impl->exif_data.get(), m_impl->exif_log.get());
 
         // 3) Load the EXIF data from memory buffer
         exif_data_load_data(m_impl->exif_data.get(), m_impl->data.data(), (unsigned)m_impl->data.size());
-
-        if (m_impl->load_error)
-            spdlog::warn("There were errors while loading EXIF data, but trying to continue.");
 
         if (!m_impl->exif_data)
             throw std::invalid_argument{"Failed to decode EXIF data."};

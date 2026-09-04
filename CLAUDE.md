@@ -262,9 +262,10 @@ stats), separate from `image.cpp`'s data-model logic.
 `src/imageio/image_loader.h` declares `BackgroundImageLoader`, which loads images asynchronously (off the
 main thread, tile-uploaded to the GPU across frames to avoid stalling), watches directories for changed
 files, and manages recent files. Format decoding lives in `src/imageio/<format>.cpp`, one file per codec
-(`exr.cpp`, `png.cpp`, `jpg.cpp`, `jxl.cpp`, `heif.cpp` — also handles AVIF/HEIC/AVCI/J2K/HTJ2K, all
-libheif plugin codecs gated by their own `HDRVIEW_ENABLE_*` options — `uhdr.cpp` (Ultra HDR), `webp.cpp`,
-`tiff.cpp`, `raw.cpp`, `dds.cpp`, `qoi.cpp`, `pfm.cpp`, `stb.cpp` for the stb_image-covered formats, plus
+(`exr.cpp`, `png.cpp`, `jpg.cpp`, `jxl.cpp`, `j2k.cpp` for JPEG 2000 and HTJ2K, `heif.cpp` — also handles
+AVIF/HEIC/AVCI/J2K/HTJ2K, all libheif plugin codecs gated by their own `HDRVIEW_ENABLE_*` options —
+`uhdr.cpp` (Ultra HDR), `webp.cpp`, `tiff.cpp`, `raw.cpp`, `dds.cpp`, `qoi.cpp`, `pfm.cpp`, `stb.cpp` for
+the stb_image-covered formats, plus
 `exif.cpp`/`icc.cpp`/`xmp.cpp` for metadata (`psd.cpp` similarly only parses PSD metadata — color mode, ICC
 profile, etc. — consumed by `stb.cpp`, since stb_image itself decodes PSD pixel data). `image_loader.cpp`
 holds a `default_loaders()` table of `{name, try_load}` entries, each guarded by an `is_<format>_image()`
@@ -273,8 +274,9 @@ CMake options above. To add a new format: implement `is_X_image()` + `load_X_ima
 `imageio/x.{h,cpp}`, add a CMake option/target wiring, and register it in `default_loaders()`.
 
 libheif is the one dependency that finds its own codecs, with `find_package()` calls that only ever turn up
-an installed library, of which Emscripten has none. So the web build builds libaom (AVIF) and OpenJPEG (J2K)
-itself, in `CMakeLists.txt` just above the libheif block, and reaches libheif through the `<pkg>-extra.cmake`
+an installed library, of which Emscripten and a bare Windows runner have none. So the build fetches libaom
+(AVIF) itself under Emscripten, and OpenJPEG whenever no installed copy answers — `imageio/j2k.cpp` needs it
+too — in `CMakeLists.txt` just above the libheif block, reaching libheif through the `<pkg>-extra.cmake`
 files it writes into `CMAKE_FIND_PACKAGE_REDIRECTS_DIR`: CPM already leaves a redirect config there for every
 package it adds, and the `-extra.cmake` fills in the `AOM_*`/`OPENJPEG_*` variables libheif's own find
 modules would otherwise have set. Both packages also write their own preferences into the CMake cache, which
