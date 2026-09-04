@@ -10,7 +10,6 @@
 
 #include "app.h"
 
-#include "common.h"
 #include "fonts.h"
 #include "image.h"
 
