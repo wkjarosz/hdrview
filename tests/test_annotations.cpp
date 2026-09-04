@@ -30,14 +30,19 @@ Annotation sample(Annotation::Shape shape)
 {
     Annotation a;
     a.shape        = shape;
-    a.p0           = float2{10.f, 20.f};
-    a.p1           = float2{110.f, 70.f};
+    a.points       = {float2{10.f, 20.f}, float2{110.f, 70.f}};
     a.stroke_color = float4{1.f, 0.5f, 0.25f, 1.f};
     a.stroke_width = 4.f;
     a.font_size    = 24.f;
     a.text         = "label";
     if (shape == Annotation::Shape::Text)
-        a.p1 = a.p0;
+        a.points = {a.p0()};
+
+    // A scribble is a path, not a pair of corners: a zigzag across the same extent, so it spans exactly
+    // what the other shapes do and the sweeps can hold it to the same properties.
+    if (shape == Annotation::Shape::Freehand)
+        a.points = {float2{10.f, 20.f}, float2{35.f, 70.f},  float2{60.f, 20.f},
+                    float2{85.f, 70.f}, float2{110.f, 20.f}, float2{110.f, 70.f}};
     return a;
 }
 
@@ -176,8 +181,8 @@ TEST_CASE("An arrow's head is proportioned in screen pixels")
     auto head_width_at = [](float scale)
     {
         Annotation a = sample(Annotation::Shape::Arrow);
-        a.p0         = float2{0.f, 0.f};
-        a.p1         = float2{1000.f, 0.f}; // long, so the head is never clamped by the shaft
+        a.p0()       = float2{0.f, 0.f};
+        a.p1()       = float2{1000.f, 0.f}; // long, so the head is never clamped by the shaft
 
         TestDrawList d;
         VgTransform  x = identity_transform();
@@ -197,8 +202,8 @@ TEST_CASE("An arrow's head is proportioned in screen pixels")
 
     // And the head is genuinely wider than the shaft, so the check above is measuring one.
     Annotation shaft_only = sample(Annotation::Shape::Line);
-    shaft_only.p0         = float2{0.f, 0.f};
-    shaft_only.p1         = float2{1000.f, 0.f};
+    shaft_only.p0()       = float2{0.f, 0.f};
+    shaft_only.p1()       = float2{1000.f, 0.f};
     TestDrawList d;
     draw_vector_overlay(&d.list, to_vg_commands({shaft_only}, 1.f), identity_transform(), IM_COL32_WHITE);
     const auto sb = vertex_bounds(d.list);
@@ -245,7 +250,7 @@ float2 point_on_outline(const Annotation &a)
     case Annotation::Shape::Ellipse: return h[4];
     case Annotation::Shape::Line:
     case Annotation::Shape::Arrow: return (h[0] + h[1]) * 0.5f;
-    default: return a.p0; // Text is only ever its anchor
+    default: return a.p0(); // Text is only ever its anchor
     }
     (void)n;
 }
@@ -283,7 +288,7 @@ TEST_CASE("A shape is hit through its middle only once it is filled")
         CAPTURE(annotation_shape_name(shape));
 
         Annotation   a      = sample(shape);
-        const float2 middle = (a.p0 + a.p1) * 0.5f;
+        const float2 middle = (a.p0() + a.p1()) * 0.5f;
         const auto   x      = identity_transform();
 
         CHECK(annotation_at({a}, middle, x, k_slop) == -1);
@@ -444,8 +449,8 @@ TEST_CASE("A corner dragged past the opposite one turns the shape inside out rat
         move_annotation_handle(a, 0, to);
 
         // The shape comes back ordered, so everything downstream can still read p0 as the low corner...
-        CHECK(a.p0.x <= a.p1.x);
-        CHECK(a.p0.y <= a.p1.y);
+        CHECK(a.p0().x <= a.p1().x);
+        CHECK(a.p0().y <= a.p1().y);
 
         // ...and the cursor is still holding a corner of it, rather than having let go at the crossing.
         CHECK(handle_at(a, x.to_screen(to), x, radius) >= 0);
@@ -528,7 +533,7 @@ namespace
 /// Every field of an annotation, so a field left out of the serializer shows up as a difference.
 bool same(const Annotation &a, const Annotation &b)
 {
-    return a.shape == b.shape && a.p0 == b.p0 && a.p1 == b.p1 && a.stroke_color == b.stroke_color &&
+    return a.shape == b.shape && a.points == b.points && a.stroke_color == b.stroke_color &&
            a.fill_color == b.fill_color && a.stroke_width == b.stroke_width && a.font_size == b.font_size &&
            a.text_align == b.text_align && a.text == b.text && a.label == b.label && a.visible == b.visible &&
            a.locked == b.locked;
@@ -592,4 +597,109 @@ TEST_CASE("An unknown shape name reads as a shape rather than as nothing")
     CHECK(int(a.shape) >= 0);
     CHECK(int(a.shape) < int(Annotation::Shape::COUNT));
     CHECK(a.stroke_width == doctest::Approx(5.f));
+}
+
+TEST_CASE("Simplifying a scribble keeps its shape")
+{
+    // The property that matters is not how many points survive but how far the survivors stray from the
+    // path: every dropped point has to still lie within the tolerance of what is left.
+    auto distance_to_path = [](float2 p, const std::vector<float2> &path)
+    {
+        float best = FLT_MAX;
+        for (size_t i = 1; i < path.size(); ++i)
+        {
+            const float2 a = path[i - 1], b = path[i];
+            const float2 ab = b - a;
+            const float  l2 = dot(ab, ab);
+            const float  t  = l2 > 0.f ? std::clamp(dot(p - a, ab) / l2, 0.f, 1.f) : 0.f;
+            best            = std::min(best, length(p - (a + ab * t)));
+        }
+        return best;
+    };
+
+    // A wobble along a diagonal: the wobble is what a tolerance either keeps or drops.
+    std::vector<float2> path;
+    for (int i = 0; i <= 200; ++i) path.push_back(float2{float(i), float(i) + ((i % 2) ? 0.4f : -0.4f)});
+
+    for (float tolerance : {0.1f, 1.f, 5.f})
+    {
+        CAPTURE(tolerance);
+        const auto simplified = simplify_polyline(path, tolerance);
+
+        REQUIRE(simplified.size() >= 2);
+        CHECK(simplified.front() == path.front()); // the ends are never dropped
+        CHECK(simplified.back() == path.back());
+        CHECK(simplified.size() <= path.size());
+
+        for (const auto &p : path)
+        {
+            CAPTURE(p.x);
+            CHECK(distance_to_path(p, simplified) <= tolerance + 1e-3f);
+        }
+    }
+
+    // A tolerance past the wobble's size collapses it to the diagonal it wobbles along...
+    CHECK(simplify_polyline(path, 5.f).size() < 10);
+    // ...while one below it cannot, so the check above is measuring the tolerance and not just shrinkage.
+    CHECK(simplify_polyline(path, 0.1f).size() > 100);
+
+    // Nothing to simplify is left alone rather than mangled.
+    CHECK(simplify_polyline(path, 0.f).size() == path.size());
+    CHECK(simplify_polyline({float2{0.f, 0.f}, float2{1.f, 1.f}}, 10.f).size() == 2);
+}
+
+TEST_CASE("A scribble is picked up on its path, not merely inside its box")
+{
+    // The box is only a first pass. A click in the gap between two strokes is inside the box and must
+    // still miss, or a scribble would swallow every click across the rectangle it happens to span.
+    Annotation a = sample(Annotation::Shape::Freehand);
+    const auto x = identity_transform();
+
+    // On the path.
+    CHECK(annotation_at({a}, a.points[1], x, k_slop) == 0);
+
+    // Well inside the box but in the trough between two of the zigzag's legs: above the low vertex at
+    // points[1], and between the two peaks either side of it.
+    const Box2f  box = a.bounds();
+    const float2 gap{a.points[1].x, box.min.y + 5.f};
+    REQUIRE(gap.x > box.min.x);
+    REQUIRE(gap.x < box.max.x);
+    REQUIRE(gap.y < box.max.y);
+    CHECK(annotation_at({a}, gap, x, k_slop) == -1);
+
+    // Just outside the box, but within the tolerance of a stroke that reaches the edge. The box is only a
+    // rejection test, so it has to be widened by the same tolerance the segments are, or a click a pixel
+    // outside a scribble that touches its own bounding box would miss what it is plainly on.
+    CHECK(annotation_at({a}, a.points.front() - float2{3.f, 0.f}, x, k_slop) == 0);
+
+    // Outside the box entirely.
+    CHECK(annotation_at({a}, float2{500.f, 500.f}, x, k_slop) == -1);
+}
+
+TEST_CASE("Resizing a scribble carries its whole path")
+{
+    // A scribble is resized by the box around it, so every point has to move with that box -- not just the
+    // two the other shapes are described by.
+    Annotation       a      = sample(Annotation::Shape::Freehand);
+    const Annotation before = a;
+    const Box2f      box0   = a.bounds();
+
+    // Drag the low corner out, doubling the box in both directions.
+    move_annotation_handle(a, 0, box0.min - (box0.max - box0.min));
+
+    REQUIRE(a.points.size() == before.points.size());
+    const Box2f box1 = a.bounds();
+
+    // Every point is still inside the box it belongs to, and where it was within it.
+    for (size_t i = 0; i < a.points.size(); ++i)
+    {
+        CAPTURE(i);
+        const float2 t0 = (before.points[i] - box0.min) / (box0.max - box0.min);
+        const float2 t1 = (a.points[i] - box1.min) / (box1.max - box1.min);
+        CHECK(t1.x == doctest::Approx(t0.x).epsilon(1e-4));
+        CHECK(t1.y == doctest::Approx(t0.y).epsilon(1e-4));
+    }
+
+    // And the box really did change, so the check above is not comparing a shape with itself.
+    CHECK(box1.max.x - box1.min.x == doctest::Approx(2.f * (box0.max.x - box0.min.x)));
 }

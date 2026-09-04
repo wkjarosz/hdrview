@@ -31,7 +31,7 @@
 */
 struct Annotation
 {
-    /// The shapes a user can draw. Two points describe every one of them; see p0/p1.
+    /// The shapes a user can draw.
     enum class Shape : int
     {
         Rect = 0,
@@ -39,6 +39,7 @@ struct Annotation
         Line,
         Arrow,
         Text,
+        Freehand,
 
         COUNT
     };
@@ -47,11 +48,19 @@ struct Annotation
 
     /// Geometry, in image pixel coordinates.
     /*!
-        Rect and Ellipse take p0 and p1 as opposite corners, in either order. Line and Arrow take them as
-        tail and head, which do differ: an arrow's head is drawn at p1. Text uses p0 as its anchor and
-        leaves p1 equal to it, since its extent is whatever the string measures at the current font size.
+        Every shape but Freehand is described by the first and last of these, which p0() and p1() name:
+        opposite corners for Rect and Ellipse, in either order; tail and head for Line and Arrow, which do
+        differ, an arrow's head being drawn at p1; the anchor alone for Text, whose extent is whatever the
+        string measures. Freehand is the path itself, in the order it was drawn.
+
+        Never empty, so p0() and p1() are always a point.
     */
-    float2 p0{0.f, 0.f}, p1{0.f, 0.f};
+    std::vector<float2> points{float2{0.f, 0.f}, float2{0.f, 0.f}};
+
+    float2       &p0() { return points.front(); }
+    float2       &p1() { return points.back(); }
+    const float2 &p0() const { return points.front(); }
+    const float2 &p1() const { return points.back(); }
 
     /// The one color the user picks: the outline of a shape, and the color of a Text annotation's glyphs.
     /**
@@ -85,8 +94,14 @@ struct Annotation
     /// What the panel's row shows: the label, else the text, else the shape's name.
     std::string display_label() const;
 
-    /// The most handles any shape shows: a rectangle's four corners and four edge midpoints.
+    /// The most handles any shape shows: four corners and four edge midpoints.
     static constexpr int MaxHandles = 8;
+
+    /// Whether \p shape is resized by a box around it rather than by its own points.
+    static bool boxed(Shape shape)
+    {
+        return shape == Shape::Rect || shape == Shape::Ellipse || shape == Shape::Freehand;
+    }
 };
 
 /// Read and write an annotation as a session file stores it.
@@ -115,15 +130,22 @@ std::vector<VgCommand> to_vg_commands(const std::vector<Annotation> &annotations
 
 /// Where \p a's handles sit, in image coordinates; returns how many were written to \p out.
 /**
-    Rect and Ellipse report four corners, in the order (lo, hi.x/lo.y, hi, lo.x/hi.y), then the midpoints of
-    the edges leading away from each. Line and Arrow report their two endpoints, and Text none: it can be
-    moved but has nothing to resize. Drawing and hit testing both read this, so they cannot disagree about
-    where a handle is.
+    The shapes resized by a box report four corners of it, in the order (lo, hi.x/lo.y, hi, lo.x/hi.y),
+    then the midpoints of the edges leading away from each. Line and Arrow report their two endpoints, and
+    Text none: it can be moved but has nothing to resize. Drawing and hit testing both read this, so they
+    cannot disagree about where a handle is.
 */
 int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles]);
 
 /// Index of the handle of \p a within \p radius of \p screen_pos, or -1 if none is.
 int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius);
+
+/// Drop the points of \p path that stray less than \p tolerance from the line their neighbors describe.
+/**
+    Ramer-Douglas-Peucker. A scribble captured a point at a time holds far more of them than its shape
+    needs, which costs a session file its size and every frame its draw time.
+*/
+std::vector<float2> simplify_polyline(const std::vector<float2> &path, float tolerance);
 
 /// Move \p a's handle \p index to \p to, both in image coordinates; returns that handle's index afterwards.
 /**

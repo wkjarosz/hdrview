@@ -7,14 +7,16 @@
 #include "annotations.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
+#include <utility>
 
 namespace
 {
 
 // Stable identifiers for Shape as stored in .hsess session files. Independent of the display names
 // annotation_shape_name() returns, so relabeling one in the GUI cannot change what an old session means.
-const char *const g_shape_ids[int(Annotation::Shape::COUNT)] = {"rect", "ellipse", "line", "arrow", "text"};
+const char *const g_shape_ids[int(Annotation::Shape::COUNT)] = {"rect", "ellipse", "line", "arrow", "text", "freehand"};
 
 /// An arrowhead's length and half-width, in multiples of the stroke width.
 constexpr float k_head_length = 4.f, k_head_half_width = 2.f;
@@ -38,15 +40,15 @@ bool is_visible_color(const float4 &c) { return c.w > 0.f; }
 /// Emit the shaft and head of an arrow from \p a's p0 to its p1.
 void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
 {
-    const float2 along  = a.p1 - a.p0;
+    const float2 along  = a.p1() - a.p0();
     const float  length = std::sqrt(along.x * along.x + along.y * along.y);
 
     // No direction to point in, so no head; the shaft alone keeps a click without a drag visible.
     if (length <= 0.f)
     {
         out.push_back(cmd(VgCommand::Type::BeginPath));
-        out.push_back(cmd(VgCommand::Type::MoveTo, {a.p0.x, a.p0.y}));
-        out.push_back(cmd(VgCommand::Type::LineTo, {a.p1.x, a.p1.y}));
+        out.push_back(cmd(VgCommand::Type::MoveTo, {a.p0().x, a.p0().y}));
+        out.push_back(cmd(VgCommand::Type::LineTo, {a.p1().x, a.p1().y}));
         out.push_back(cmd(VgCommand::Type::Stroke));
         return;
     }
@@ -59,12 +61,12 @@ void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
     const float head_len =
         std::min(k_head_length * a.stroke_width / std::max(scale, 1e-6f), k_max_head_fraction * length);
     const float  head_half = head_len * (k_head_half_width / k_head_length);
-    const float2 base      = a.p1 - dir * head_len;
+    const float2 base      = a.p1() - dir * head_len;
 
     // The shaft stops where the head begins rather than running under it, so a translucent stroke does not
     // show through as a darker wedge.
     out.push_back(cmd(VgCommand::Type::BeginPath));
-    out.push_back(cmd(VgCommand::Type::MoveTo, {a.p0.x, a.p0.y}));
+    out.push_back(cmd(VgCommand::Type::MoveTo, {a.p0().x, a.p0().y}));
     out.push_back(cmd(VgCommand::Type::LineTo, {base.x, base.y}));
     out.push_back(cmd(VgCommand::Type::Stroke));
 
@@ -73,7 +75,7 @@ void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
     const float2 left = base + perp * head_half, right = base - perp * head_half;
     out.push_back(cmd(VgCommand::Type::FillColor, color_floats(a.stroke_color)));
     out.push_back(cmd(VgCommand::Type::BeginPath));
-    out.push_back(cmd(VgCommand::Type::MoveTo, {a.p1.x, a.p1.y}));
+    out.push_back(cmd(VgCommand::Type::MoveTo, {a.p1().x, a.p1().y}));
     out.push_back(cmd(VgCommand::Type::LineTo, {left.x, left.y}));
     out.push_back(cmd(VgCommand::Type::LineTo, {right.x, right.y}));
     out.push_back(cmd(VgCommand::Type::ClosePath));
@@ -86,8 +88,7 @@ void to_json(json &j, const Annotation &a)
 {
     j              = json::object();
     j["shape"]     = g_shape_ids[size_t(a.shape) < std::size(g_shape_ids) ? size_t(a.shape) : 0];
-    j["p0"]        = a.p0;
-    j["p1"]        = a.p1;
+    j["points"]    = a.points;
     j["stroke"]    = a.stroke_color;
     j["fill"]      = a.fill_color;
     j["width"]     = a.stroke_width;
@@ -114,10 +115,11 @@ void from_json(const json &j, Annotation &a)
 
     // Anything the file leaves out keeps the default it was constructed with, so a session written by an
     // older version reads as one of those rather than as garbage.
-    if (j.contains("p0"))
-        j.at("p0").get_to(a.p0);
-    if (j.contains("p1"))
-        j.at("p1").get_to(a.p1);
+    // A shape with no points at all could not be drawn or picked up, so an empty array is refused rather
+    // than stored: p0() and p1() are allowed to assume there is always a point.
+    if (j.contains("points"))
+        if (auto pts = j.at("points").get<std::vector<float2>>(); !pts.empty())
+            a.points = std::move(pts);
     if (j.contains("stroke"))
         j.at("stroke").get_to(a.stroke_color);
     if (j.contains("fill"))
@@ -141,6 +143,7 @@ const char *annotation_shape_name(Annotation::Shape shape)
     case Annotation::Shape::Line: return "Line";
     case Annotation::Shape::Arrow: return "Arrow";
     case Annotation::Shape::Text: return "Text";
+    case Annotation::Shape::Freehand: return "Scribble";
     default: return "Annotation";
     }
 }
@@ -148,10 +151,10 @@ const char *annotation_shape_name(Annotation::Shape shape)
 Box2f Annotation::bounds() const
 {
     Box2f box;
-    box.enclose(p0);
+    box.enclose(p0());
     // Text has no second point, and its extent depends on a font this cannot reach, so report the anchor.
     if (shape != Shape::Text)
-        box.enclose(p1);
+        for (const auto &p : points) box.enclose(p);
     return box;
 }
 
@@ -172,7 +175,7 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
         out.push_back(cmd(VgCommand::Type::FontSize, {a.font_size, float(VgCommand::Absolute)}));
         out.push_back(cmd(VgCommand::Type::TextAlign, {float(a.text_align)}));
         out.push_back(cmd(VgCommand::Type::FillColor, color_floats(a.stroke_color)));
-        out.push_back(cmd(VgCommand::Type::Text, {a.p0.x, a.p0.y}, a.text));
+        out.push_back(cmd(VgCommand::Type::Text, {a.p0().x, a.p0().y}, a.text));
         return;
     }
 
@@ -196,24 +199,34 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     {
         // Rect takes a corner and an extent, so the corners are ordered first -- a drag that ran right to
         // left would otherwise give it a negative width.
-        const float2 lo{std::min(a.p0.x, a.p1.x), std::min(a.p0.y, a.p1.y)};
-        const float2 hi{std::max(a.p0.x, a.p1.x), std::max(a.p0.y, a.p1.y)};
+        const float2 lo{std::min(a.p0().x, a.p1().x), std::min(a.p0().y, a.p1().y)};
+        const float2 hi{std::max(a.p0().x, a.p1().x), std::max(a.p0().y, a.p1().y)};
         out.push_back(cmd(VgCommand::Type::Rect, {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y}));
     }
     break;
 
     case Annotation::Shape::Ellipse:
     {
-        const float2 center = (a.p0 + a.p1) * 0.5f;
-        const float2 radii{std::abs(a.p1.x - a.p0.x) * 0.5f, std::abs(a.p1.y - a.p0.y) * 0.5f};
+        const float2 center = (a.p0() + a.p1()) * 0.5f;
+        const float2 radii{std::abs(a.p1().x - a.p0().x) * 0.5f, std::abs(a.p1().y - a.p0().y) * 0.5f};
         out.push_back(cmd(VgCommand::Type::Ellipse, {center.x, center.y, radii.x, radii.y}));
     }
     break;
 
+    case Annotation::Shape::Freehand:
+        // The path as it was drawn. Closed when it is to be filled, so the fill has an interior to cover,
+        // and left open otherwise, which is what a stroked scribble should look like.
+        out.push_back(cmd(VgCommand::Type::MoveTo, {a.points.front().x, a.points.front().y}));
+        for (size_t i = 1; i < a.points.size(); ++i)
+            out.push_back(cmd(VgCommand::Type::LineTo, {a.points[i].x, a.points[i].y}));
+        if (filled)
+            out.push_back(cmd(VgCommand::Type::ClosePath));
+        break;
+
     case Annotation::Shape::Line:
     default:
-        out.push_back(cmd(VgCommand::Type::MoveTo, {a.p0.x, a.p0.y}));
-        out.push_back(cmd(VgCommand::Type::LineTo, {a.p1.x, a.p1.y}));
+        out.push_back(cmd(VgCommand::Type::MoveTo, {a.p0().x, a.p0().y}));
+        out.push_back(cmd(VgCommand::Type::LineTo, {a.p1().x, a.p1().y}));
         break;
     }
 
@@ -246,12 +259,25 @@ float distance_to_segment(float2 p, float2 a, float2 b)
     return length(p - (a + along * t));
 }
 
-/// \p a's two defining points, in screen coordinates and ordered so lo is the lower corner.
+/// Distance from \p p to the box \p lo -- \p hi, and zero inside it.
+float distance_to_box(float2 p, float2 lo, float2 hi)
+{
+    const float dx = std::max({lo.x - p.x, 0.f, p.x - hi.x});
+    const float dy = std::max({lo.y - p.y, 0.f, p.y - hi.y});
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+/// \p a's extent in screen coordinates, ordered so lo is the lower corner.
 void screen_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &hi)
 {
-    const float2 s0 = xform.to_screen(a.p0), s1 = xform.to_screen(a.p1);
-    lo = float2{std::min(s0.x, s1.x), std::min(s0.y, s1.y)};
-    hi = float2{std::max(s0.x, s1.x), std::max(s0.y, s1.y)};
+    lo = float2{FLT_MAX, FLT_MAX};
+    hi = float2{-FLT_MAX, -FLT_MAX};
+    for (const auto &p : a.points)
+    {
+        const float2 s = xform.to_screen(p);
+        lo             = float2{std::min(lo.x, s.x), std::min(lo.y, s.y)};
+        hi             = float2{std::max(hi.x, s.x), std::max(hi.y, s.y)};
+    }
 }
 
 } // namespace
@@ -262,9 +288,10 @@ int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles])
     {
     case Annotation::Shape::Rect:
     case Annotation::Shape::Ellipse:
+    case Annotation::Shape::Freehand:
     {
-        const float2 lo{std::min(a.p0.x, a.p1.x), std::min(a.p0.y, a.p1.y)};
-        const float2 hi{std::max(a.p0.x, a.p1.x), std::max(a.p0.y, a.p1.y)};
+        const Box2f  box = a.bounds();
+        const float2 lo = box.min, hi = box.max;
         out[0] = lo;
         out[1] = float2{hi.x, lo.y};
         out[2] = hi;
@@ -275,8 +302,8 @@ int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles])
 
     case Annotation::Shape::Line:
     case Annotation::Shape::Arrow:
-        out[0] = a.p0;
-        out[1] = a.p1;
+        out[0] = a.p0();
+        out[1] = a.p1();
         return 2;
 
     default: return 0;
@@ -350,13 +377,30 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
 
         case Annotation::Shape::Line:
         case Annotation::Shape::Arrow:
-            if (distance_to_segment(screen_pos, xform.to_screen(a.p0), xform.to_screen(a.p1)) <= tol)
+            if (distance_to_segment(screen_pos, xform.to_screen(a.p0()), xform.to_screen(a.p1())) <= tol)
                 return i;
             break;
 
+        case Annotation::Shape::Freehand:
+        {
+            // The box first: a scribble is mostly empty space, and walking hundreds of segments to answer
+            // "nowhere near it" is the common case. Every segment lies inside the box, so nothing further
+            // from the box than the tolerance can be within the tolerance of a segment.
+            float2 lo, hi;
+            screen_extent(a, xform, lo, hi);
+            if (distance_to_box(screen_pos, lo, hi) > tol)
+                break;
+
+            for (size_t k = 1; k < a.points.size(); ++k)
+                if (distance_to_segment(screen_pos, xform.to_screen(a.points[k - 1]), xform.to_screen(a.points[k])) <=
+                    tol)
+                    return i;
+        }
+        break;
+
         case Annotation::Shape::Text:
             // Only the anchor: the glyphs' extent depends on a font this cannot reach.
-            if (length(xform.to_screen(a.p0) - screen_pos) <= std::max(tol, a.font_size * 0.5f))
+            if (length(xform.to_screen(a.p0()) - screen_pos) <= std::max(tol, a.font_size * 0.5f))
                 return i;
             break;
 
@@ -366,22 +410,66 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
     return -1;
 }
 
+std::vector<float2> simplify_polyline(const std::vector<float2> &path, float tolerance)
+{
+    if (path.size() < 3 || tolerance <= 0.f)
+        return path;
+
+    // Iterative Ramer-Douglas-Peucker: keep the endpoints, keep whichever point between them strays
+    // furthest if it strays far enough, and consider the two halves it makes in turn. Iterative rather
+    // than recursive because a captured scribble can be thousands of points long.
+    std::vector<bool>                      keep(path.size(), false);
+    std::vector<std::pair<size_t, size_t>> spans{{0, path.size() - 1}};
+    keep.front() = keep.back() = true;
+
+    while (!spans.empty())
+    {
+        const auto [first, last] = spans.back();
+        spans.pop_back();
+        if (last <= first + 1)
+            continue;
+
+        size_t worst   = first;
+        float  worst_d = 0.f;
+        for (size_t i = first + 1; i < last; ++i)
+            if (const float d = distance_to_segment(path[i], path[first], path[last]); d > worst_d)
+            {
+                worst   = i;
+                worst_d = d;
+            }
+
+        if (worst_d > tolerance)
+        {
+            keep[worst] = true;
+            spans.push_back({first, worst});
+            spans.push_back({worst, last});
+        }
+    }
+
+    std::vector<float2> out;
+    out.reserve(path.size());
+    for (size_t i = 0; i < path.size(); ++i)
+        if (keep[i])
+            out.push_back(path[i]);
+    return out;
+}
+
 int move_annotation_handle(Annotation &a, int index, float2 to)
 {
     if (a.shape == Annotation::Shape::Line || a.shape == Annotation::Shape::Arrow)
     {
         if (index == 0)
-            a.p0 = to;
+            a.p0() = to;
         else if (index == 1)
-            a.p1 = to;
+            a.p1() = to;
         return index; // an endpoint is an endpoint however the line is turned around
     }
 
-    if (a.shape != Annotation::Shape::Rect && a.shape != Annotation::Shape::Ellipse)
+    if (!Annotation::boxed(a.shape))
         return index;
 
-    float2 lo{std::min(a.p0.x, a.p1.x), std::min(a.p0.y, a.p1.y)};
-    float2 hi{std::max(a.p0.x, a.p1.x), std::max(a.p0.y, a.p1.y)};
+    const Box2f before = a.bounds();
+    float2      lo = before.min, hi = before.max;
 
     // Corners move both of their edges; the midpoints that follow them move only the edge they sit on, in
     // the order annotation_handles() lays them out.
@@ -398,11 +486,22 @@ int move_annotation_handle(Annotation &a, int index, float2 to)
     default: return index;
     }
 
-    // A drag past the far side leaves lo above hi; ordering them here keeps p0 the low corner, which is
-    // what every reader of a Rect or Ellipse assumes.
-    const bool flip_x = lo.x > hi.x, flip_y = lo.y > hi.y;
-    a.p0 = float2{std::min(lo.x, hi.x), std::min(lo.y, hi.y)};
-    a.p1 = float2{std::max(lo.x, hi.x), std::max(lo.y, hi.y)};
+    // A drag past the far side leaves lo above hi; ordering them here keeps the first point the low corner,
+    // which is what every reader of a Rect or Ellipse assumes.
+    const bool   flip_x = lo.x > hi.x, flip_y = lo.y > hi.y;
+    const float2 to_lo{std::min(lo.x, hi.x), std::min(lo.y, hi.y)};
+    const float2 to_hi{std::max(lo.x, hi.x), std::max(lo.y, hi.y)};
+
+    // Every point moves with the box, which for a Rect or Ellipse -- whose two points are its corners -- is
+    // the corner drag it always was, and for a scribble scales the whole path. An axis the box has no
+    // extent along cannot be scaled, so those points go to the new edge instead.
+    const float2 extent = before.max - before.min;
+    for (auto &p : a.points)
+    {
+        const float2 t{extent.x > 0.f ? (p.x - before.min.x) / extent.x : 0.f,
+                       extent.y > 0.f ? (p.y - before.min.y) / extent.y : 0.f};
+        p = to_lo + t * (to_hi - to_lo);
+    }
 
     // Which is to say the corner the cursor is holding has been renumbered: a horizontal flip exchanges
     // left with right, a vertical one top with bottom, and the edge midpoints follow their edges.

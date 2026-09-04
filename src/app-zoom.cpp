@@ -298,6 +298,11 @@ void HDRViewApp::cancel_annotation_drag()
     m_annotation_drag_handle = -1;
 }
 
+// How far the cursor must travel before a scribble keeps another point, and how far a point may stray from
+// its neighbors before being dropped again. Both screen pixels: a stroke should record the same shape
+// however far the image is zoomed.
+static constexpr float k_scribble_step = 2.f, k_scribble_tolerance = 1.f;
+
 void HDRViewApp::handle_annotate_tool()
 {
     auto  img = current_image();
@@ -320,6 +325,10 @@ void HDRViewApp::handle_annotate_tool()
     // Slop and handle radius are screen quantities, like everything else about how an annotation looks.
     const float slop   = 0.25f * HelloImGui::EmSize();
     const float radius = 0.3f * HelloImGui::EmSize();
+
+    // Screen pixels per image pixel, which turns the two scribble constants into the image distances the
+    // points are actually kept in.
+    const float xform_scale = viewport_transform().scale;
 
     auto        &list  = img->annotations;
     const float2 pixel = pixel_at_app_pos(io.MousePos);
@@ -354,7 +363,7 @@ void HDRViewApp::handle_annotate_tool()
         // the selection.
         Annotation a = m_annotation_style;
         a.shape      = m_annotation_shape;
-        a.p0 = a.p1 = pixel;
+        a.points     = {pixel, pixel};
         list.push_back(a);
         set_active_annotation(int(list.size()) - 1);
         m_annotation_drag       = AnnotationDrag::Creating;
@@ -372,14 +381,25 @@ void HDRViewApp::handle_annotate_tool()
     {
         switch (m_annotation_drag)
         {
-        case AnnotationDrag::Creating: a.p1 = pixel; break;
+        case AnnotationDrag::Creating:
+            if (a.shape == Annotation::Shape::Freehand)
+            {
+                // A point per frame would record how fast the cursor moved rather than where it went, so
+                // one is kept only once the last is a couple of screen pixels behind.
+                const float step = k_scribble_step / std::max(xform_scale, 1e-6f);
+                if (length(pixel - a.points.back()) >= step)
+                    a.points.push_back(pixel);
+            }
+            else
+                a.p1() = pixel;
+            break;
 
         case AnnotationDrag::Moving:
         {
             // Against the annotation as it was at mouse-down, so a move never accumulates rounding.
             const float2 delta = pixel - m_annotation_grab;
-            a.p0               = m_annotation_drag_start.p0 + delta;
-            a.p1               = m_annotation_drag_start.p1 + delta;
+            a.points           = m_annotation_drag_start.points;
+            for (auto &p : a.points) p += delta;
         }
         break;
 
@@ -394,12 +414,20 @@ void HDRViewApp::handle_annotate_tool()
     }
     else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
     {
-        // A click that never became a drag leaves nothing behind, rather than a shape with no extent that
-        // is invisible and cannot be taken hold of again.
-        if (m_annotation_drag == AnnotationDrag::Creating && a.p0 == a.p1)
+        if (m_annotation_drag == AnnotationDrag::Creating)
         {
-            list.pop_back();
-            set_active_annotation(-1);
+            // A captured scribble holds far more points than its shape needs. Simplified once, on release,
+            // rather than while it is being drawn, so what is dropped is judged against the whole stroke.
+            if (a.shape == Annotation::Shape::Freehand)
+                a.points = simplify_polyline(a.points, k_scribble_tolerance / std::max(xform_scale, 1e-6f));
+
+            // A click that never became a drag leaves nothing behind, rather than a shape with no extent
+            // that is invisible and cannot be taken hold of again.
+            if (a.bounds().min == a.bounds().max)
+            {
+                list.pop_back();
+                set_active_annotation(-1);
+            }
         }
 
         m_annotation_drag        = AnnotationDrag::None;

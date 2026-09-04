@@ -782,6 +782,7 @@ static const char *annotation_shape_icon(Annotation::Shape shape)
     case Annotation::Shape::Line: return ICON_MY_SHAPE_LINE;
     case Annotation::Shape::Arrow: return ICON_MY_SHAPE_ARROW;
     case Annotation::Shape::Text: return ICON_MY_SHAPE_TEXT;
+    case Annotation::Shape::Freehand: return ICON_MY_SHAPE_FREEHAND;
     default: return ICON_MY_ANNOTATE;
     }
 }
