@@ -365,6 +365,9 @@ void HDRViewApp::draw_tool_decorations() const
 
     ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 18.f / 14.f);
 
+    // Before the handles, so the corners of a text annotation's box sit on top of the box itself.
+    draw_text_editing();
+
     // The handles of the annotation being worked on, drawn over everything so they can be picked up even
     // where the shape runs under another. White on black reads over any image. Only under the annotate
     // tool, since that is the only place a click does anything with them.
@@ -395,8 +398,6 @@ void HDRViewApp::draw_tool_decorations() const
             draw_list->AddRect(at - r, at + r, IM_COL32_BLACK);
         }
     }
-
-    draw_text_editing();
 
     float2 pos = ImGui::GetIO().MousePos;
     if (m_mouse_mode == MouseMode_RectangularSelection)
