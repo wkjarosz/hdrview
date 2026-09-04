@@ -159,6 +159,9 @@ ICCProfile ICCProfile::linear_Gray(const float2 &whitepoint)
 // The white-point extraction logic is adapted from the UnadaptedWhitePoint function in libjxl.
 bool ICCProfile::extract_chromaticities(Chromaticities *c) const
 {
+    if (!valid())
+        return false;
+
     // This code is adapted from the IdentifyPrimaries function in libjxl
     // Copyright (c) the JPEG XL Project Authors. All rights reserved.
     //

@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -554,4 +555,82 @@ TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples ar
     const float4 got = reloaded->rgba_pixel(int2{0, 0}, Target_Primary);
     for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
 }
+
+#ifdef HDRVIEW_TEST_LIBTIFF_DIR
+
+// libtiff's own test images: OJPEG, fax, palettes at three depths, LogLuv, float64 behind a predictor, and
+// four files with several directories, two of which loop. A name of the form photometric-channels-bits is
+// the only oracle they carry; the README's "mostly 157x151" is not one, since two of them are neither.
+TEST_CASE("libtiff's test images decode as their names say, or are refused")
+{
+    namespace fs = std::filesystem;
+
+    int named = 0, read = 0, refused = 0;
+    for (const auto &entry : fs::directory_iterator(HDRVIEW_TEST_LIBTIFF_DIR))
+    {
+        const auto path = entry.path();
+        if (path.extension() != ".tif" && path.extension() != ".tiff")
+            continue;
+
+        const std::string name = path.filename().string();
+        CAPTURE(name);
+
+        std::ifstream in(path, std::ios::binary);
+        REQUIRE(in.good());
+        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+
+        // the loader is called directly rather than through load_bytes(), which keeps only a lone image: the
+        // files with several directories are the ones worth reaching here, and they decode to one apiece
+        std::istringstream    in_stream(bytes, std::ios::binary);
+        std::vector<ImagePtr> images;
+        try
+        {
+            images = load_tiff_image(in_stream, name);
+        }
+        catch (const std::exception &)
+        {
+            ++refused;
+            continue;
+        }
+
+        // refusing a file is an answer rather than a failure, whether it comes as a throw or as the empty
+        // vector load_image() documents: libtiff is not built with every codec everywhere, and the WebP one
+        // is unreadable wherever it lacks that support. The counts below are what say every file was reached.
+        if (images.empty())
+        {
+            ++refused;
+            continue;
+        }
+
+        ++read;
+        for (const auto &part : images)
+        {
+            part->finalize();
+            CHECK(part->size().x > 0);
+            CHECK(part->size().y > 0);
+        }
+        const auto &img = images.front();
+
+        // photometric-channels-bits, e.g. rgb-3c-16b.tiff. A palette is one channel of indices in the file
+        // and three of color once expanded, so the count is what the pixels are, not what the file stores.
+        int channels = 0, bits = 0;
+        if (sscanf(name.c_str(), "%*[a-z]-%dc-%db", &channels, &bits) == 2)
+        {
+            ++named;
+            CHECK((int)img->channels.size() == (name.rfind("palette", 0) == 0 ? 3 : channels));
+            // LogLuv decodes to float, and a float channel reports a depth of zero rather than the file's
+            if (name.rfind("logluv", 0) != 0)
+                CHECK(img->channels[0].bits_per_sample == bits);
+        }
+    }
+
+    CAPTURE(read);
+    CAPTURE(refused);
+    CHECK(named >= 8);           // the README lists eight of them
+    CHECK(read + refused >= 31); // every .tif and .tiff in the directory, the multi-directory ones included
+    CHECK(refused <= 2);         // and a sweep must not refuse its way to a pass
+    CHECK(read > named);
+}
+
+#endif // HDRVIEW_TEST_LIBTIFF_DIR
 #endif

@@ -161,8 +161,7 @@ include(sanitizers)
 # versions.
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
-# ============================================================================
-# Set a default build configuration (Release)
+# =====================================================================# Set a default build configuration (Release)
 # ============================================================================
 get_cmake_property(IS_MULTI GENERATOR_IS_MULTI_CONFIG)
 if(NOT CMAKE_BUILD_TYPE AND NOT IS_MULTI)
@@ -1851,7 +1850,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
                                 tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
-                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
+                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_jxl_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
                                 tests/test_vector_overlay.cpp tests/test_annotations.cpp
                                 ${HDRVIEW_IPC_TESTS}
   )
@@ -1928,11 +1927,12 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   endif()
 
   # The CMYK conversions cannot be exercised without a CMYK ICC profile, and the smallest real one is half a
-  # megabyte, too large to vendor. libjxl carries lcms in-tree and lcms's testbed carries two, so a build
-  # that fetched libjxl already has one on disk and the cases can run in CI like the OpenEXR ones.
+  # megabyte, too large to vendor. libjxl carries lcms in-tree and lcms's testbed carries two, alongside real
+  # RGB profiles and the three malformed ones lcms keeps for rejecting, so a build that fetched libjxl
+  # already has them on disk and the cases can run in CI like the OpenEXR ones.
   set(HDRVIEW_TEST_LCMS_TESTBED_DIR
       ""
-      CACHE PATH "lcms2's testbed directory, whose test1.icc is a CMYK printer profile"
+      CACHE PATH "lcms2's testbed directory of real and deliberately malformed ICC profiles"
   )
   if(HDRVIEW_TEST_LCMS_TESTBED_DIR)
     set(_hdrview_lcms_testbed "${HDRVIEW_TEST_LCMS_TESTBED_DIR}")
@@ -1950,8 +1950,8 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     )
   else()
     message(STATUS "lcms2's test profiles not available (no fetched libjxl source; set "
-                   "HDRVIEW_TEST_LCMS_TESTBED_DIR to use a checkout); skipping the CMYK cases in "
-                   "tests/test_j2k_io.cpp"
+                   "HDRVIEW_TEST_LCMS_TESTBED_DIR to use a checkout); skipping the profile cases in "
+                   "tests/test_j2k_io.cpp and tests/test_icc_cicp.cpp"
     )
   endif()
 
@@ -1966,6 +1966,107 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
       message(FATAL_ERROR "HDRVIEW_TEST_J2K_DIR is set to '${HDRVIEW_TEST_J2K_DIR}', which does not exist")
     endif()
     target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_J2K_DIR="${HDRVIEW_TEST_J2K_DIR}")
+  endif()
+
+  # libexif's own regression files: nine camera JPEGs, one per maker-note variant its parsers handle, each
+  # beside the dump libexif produces from it. Real notes are what the synthetic blobs in tests/test_exif.cpp
+  # cannot be, since every vendor lays its own out differently and several lie about their offsets.
+  set(HDRVIEW_TEST_LIBEXIF_DIR
+      ""
+      CACHE PATH "libexif's test/testdata directory, holding camera JPEGs and their parsed dumps"
+  )
+  if(HDRVIEW_TEST_LIBEXIF_DIR)
+    set(_hdrview_libexif_data "${HDRVIEW_TEST_LIBEXIF_DIR}")
+    set(_hdrview_libexif_explicit TRUE)
+  elseif(DEFINED libexif_SOURCE_DIR)
+    set(_hdrview_libexif_data "${libexif_SOURCE_DIR}/test/testdata")
+    set(_hdrview_libexif_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_libexif_data AND EXISTS "${_hdrview_libexif_data}")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_LIBEXIF_DIR="${_hdrview_libexif_data}")
+  elseif(_hdrview_libexif_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_LIBEXIF_DIR is set to '${_hdrview_libexif_data}', which does not exist")
+  else()
+    message(STATUS "libexif test files not available (no fetched source; set HDRVIEW_TEST_LIBEXIF_DIR to use "
+                   "a checkout); skipping tests/test_exif.cpp's camera-file cases"
+    )
+  endif()
+
+  # libtiff's own test images: one per photometric/channels/bits combination, named for what they hold, plus
+  # the encodings and malformed directories its regressions were written against. The loader's other cases
+  # build their TIFFs here, which cannot reach OJPEG, fax, or a directory that points at itself.
+  set(HDRVIEW_TEST_LIBTIFF_DIR
+      ""
+      CACHE PATH "libtiff's test/images directory"
+  )
+  if(HDRVIEW_TEST_LIBTIFF_DIR)
+    set(_hdrview_libtiff_data "${HDRVIEW_TEST_LIBTIFF_DIR}")
+    set(_hdrview_libtiff_explicit TRUE)
+  elseif(DEFINED tiff_SOURCE_DIR)
+    set(_hdrview_libtiff_data "${tiff_SOURCE_DIR}/test/images")
+    set(_hdrview_libtiff_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_libtiff_data AND EXISTS "${_hdrview_libtiff_data}")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_LIBTIFF_DIR="${_hdrview_libtiff_data}")
+  elseif(_hdrview_libtiff_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_LIBTIFF_DIR is set to '${_hdrview_libtiff_data}', which does not exist")
+  else()
+    message(STATUS "libtiff test images not available (no fetched source; set HDRVIEW_TEST_LIBTIFF_DIR to use "
+                   "a checkout); skipping tests/test_tiff_io.cpp's vendored-data cases"
+    )
+  endif()
+
+  # bcdec's own test images, one per block format it decodes. HDRView decodes DDS through that very library,
+  # so these are the reference files for the code under test.
+  set(HDRVIEW_TEST_BCDEC_DIR
+      ""
+      CACHE PATH "bcdec's test_images directory"
+  )
+  if(HDRVIEW_TEST_BCDEC_DIR)
+    set(_hdrview_bcdec_data "${HDRVIEW_TEST_BCDEC_DIR}")
+    set(_hdrview_bcdec_explicit TRUE)
+  elseif(DEFINED bcdec_SOURCE_DIR)
+    set(_hdrview_bcdec_data "${bcdec_SOURCE_DIR}/test_images")
+    set(_hdrview_bcdec_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_bcdec_data AND EXISTS "${_hdrview_bcdec_data}")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_BCDEC_DIR="${_hdrview_bcdec_data}")
+  elseif(_hdrview_bcdec_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_BCDEC_DIR is set to '${_hdrview_bcdec_data}', which does not exist")
+  else()
+    message(STATUS "bcdec test images not available (no fetched source; set HDRVIEW_TEST_BCDEC_DIR to use a "
+                   "checkout); skipping tests/test_dds_io.cpp's vendored-data cases"
+    )
+  endif()
+
+  # libjxl's test data: the Compact-ICC-Profiles set, which encodes each color space four ways over ICC v2
+  # and v4, and a handful of its own codestreams.
+  set(HDRVIEW_TEST_LIBJXL_DIR
+      ""
+      CACHE PATH "libjxl's testdata directory"
+  )
+  if(HDRVIEW_TEST_LIBJXL_DIR)
+    set(_hdrview_libjxl_data "${HDRVIEW_TEST_LIBJXL_DIR}")
+    set(_hdrview_libjxl_explicit TRUE)
+  elseif(DEFINED JXL_SOURCE_DIR)
+    set(_hdrview_libjxl_data "${JXL_SOURCE_DIR}/testdata")
+    set(_hdrview_libjxl_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_libjxl_data AND EXISTS "${_hdrview_libjxl_data}/external/Compact-ICC-Profiles/profiles")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_LIBJXL_DIR="${_hdrview_libjxl_data}")
+  elseif(_hdrview_libjxl_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_LIBJXL_DIR is set to '${_hdrview_libjxl_data}', which holds no "
+                        "external/Compact-ICC-Profiles/profiles"
+    )
+  else()
+    message(STATUS "libjxl test data not available (no fetched source; set HDRVIEW_TEST_LIBJXL_DIR to use a "
+                   "checkout); skipping the vendored-data cases in tests/test_icc_cicp.cpp and "
+                   "tests/test_jxl_io.cpp"
+    )
   endif()
 
   include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
