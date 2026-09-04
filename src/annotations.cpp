@@ -373,7 +373,10 @@ bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, floa
     const float2 measured = xform.measure_text(a.font_face, a.font_size, a.text);
     extent                = a.font_size_relative ? measured : measured / std::max(xform.scale, 1e-6f);
     lo                    = a.p0() - text_anchor_offset(a.text_align, extent);
-    return extent.x > 0.f && extent.y > 0.f;
+
+    // Zero wide until something is typed, but a line tall from the start, so a text annotation shows where
+    // it is the moment it is placed.
+    return extent.y > 0.f;
 }
 
 bool text_screen_box(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &hi)
