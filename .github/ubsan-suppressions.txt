@@ -22,3 +22,10 @@ nonnull-attribute:bitstream.cc
 # whole reported stack is stb's -- HDRView hands it a float buffer and a size. Reached from
 # Image::resample(), so from resizing an image and from every level of a generated mip pyramid.
 alignment:stb_image_resize2.h
+
+# bcdec's BC7 decoder declares its endpoint array uninitialized (int endpoints[6][4]) and reads the alpha
+# component back for every mode, shifting endpoints[i][3] left before it gets around to asking whether the
+# mode defines alpha at all -- so a mode without alpha shifts indeterminate memory, which can be negative.
+# The garbage is overwritten with 1.0 immediately afterwards, the whole reported stack is bcdec's, and the
+# header is vendored. Reached from tests/test_dds_io.cpp's sweep of bcdec's own BC7 image.
+shift-base:bcdec.h
