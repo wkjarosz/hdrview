@@ -813,25 +813,28 @@ void HDRViewApp::draw_annotations_window()
     // Where the rows are, so a drag can say which one the cursor is over.
     float first_row_top = 0.f, row_height = 0.f;
 
-    // Bordered like the Images panel's list, which is the other list of things an image holds.
-    if (ImGui::BeginChild("##Annotation list", ImVec2(0.f, 0.f), ImGuiChildFlags_Borders))
+    // The same table the Images panel's list is: an outer border, striped rows, and rows that reach the
+    // full width rather than sitting inside a child's padding.
+    static constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit |
+                                                   ImGuiTableFlags_BordersOuter | ImGuiTableFlags_RowBg |
+                                                   ImGuiTableFlags_ScrollY;
+
+    if (ImGui::BeginTable("AnnotationList", 1, table_flags))
     {
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+
         // A row is as tall as its text, like the Images panel's, and its buttons sit against each other:
         // each already carries its own highlight, which is all the separation they need.
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
         ImGui::PushStyleVarX(ImGuiStyleVar_ItemSpacing, 0.f);
 
-        // Each of these is only as wide as its own glyph needs. IconSize() is the widest glyph in the whole
-        // set, which on a narrow icon leaves enough slack to read as a gap.
-        auto icon_width = [](const char *icon)
-        { return ImGui::CalcTextSize(icon).x + 2.f * ImGui::GetStyle().FramePadding.x; };
+        // Square, and the height of a row, so the three of them are the same size whatever their glyphs
+        // measure and no wider than they are tall.
+        const ImVec2 icon_sz{ImGui::GetFrameHeight(), ImGui::GetFrameHeight()};
 
-        const float trash_w = icon_width(ICON_MY_TRASH_CAN);
-
-        // Sized to the wider of its two states, so toggling one does not shift the rest of the row.
-        auto flat_toggle = [&icon_width](const char *on, const char *off, bool &value, const char *tooltip)
+        auto flat_toggle = [icon_sz](const char *on, const char *off, bool &value, const char *tooltip)
         {
-            if (ImGui::FlatButton(value ? on : off, false, ImVec2(std::max(icon_width(on), icon_width(off)), 0.f)))
+            if (ImGui::FlatButton(value ? on : off, false, icon_sz))
                 value = !value;
             ImGui::SetItemTooltip("%s", tooltip);
             ImGui::SameLine();
@@ -841,6 +844,8 @@ void HDRViewApp::draw_annotations_window()
         // this is the one place overlays are switched on and off.
         if (!img->vector_overlay.empty())
         {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
             flat_toggle(ICON_MY_VISIBILITY, ICON_MY_VISIBILITY_OFF, img->vector_overlay_visible,
                         "Draw the renderer's overlay.");
             ImGui::TextDisabled(ICON_MY_LIST_VIEW " Renderer overlay");
@@ -853,14 +858,18 @@ void HDRViewApp::draw_annotations_window()
             auto &a = list[size_t(i)];
             ImGui::PushID(i);
 
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+
             const float row_x = ImGui::GetCursorPosX();
             const float row_w = ImGui::GetContentRegionAvail().x;
 
             // The highlight goes down first and spans the row, with everything else drawn back over it, so
             // selecting reads across the whole row rather than just the label.
             ImGui::SetNextItemAllowOverlap();
-            if (ImGui::Selectable("##row", i == active, ImGuiSelectableFlags_AllowOverlap,
-                                  ImVec2(0.f, ImGui::GetTextLineHeight())))
+            if (ImGui::Selectable("##row", i == active,
+                                  ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_SpanAllColumns,
+                                  ImVec2(0.f, icon_sz.y)))
                 set_active_annotation(i);
 
             // Which row a press took hold of. Tracked here rather than read back from ImGui's active item,
@@ -869,11 +878,15 @@ void HDRViewApp::draw_annotations_window()
             if (ImGui::IsItemActivated())
                 m_annotation_row_drag = i;
 
+            // Where the rows sit, for the reorder below. The pitch is measured between the first two rather
+            // than assumed, since a table decides row heights for itself.
             if (i == 0)
             {
                 first_row_top = ImGui::GetItemRectMin().y;
-                row_height    = ImGui::GetItemRectSize().y + ImGui::GetStyle().ItemSpacing.y;
+                row_height    = ImGui::GetItemRectSize().y;
             }
+            else if (i == 1)
+                row_height = ImGui::GetItemRectMin().y - first_row_top;
 
             ImGui::SameLine(0.f, 0.f);
             ImGui::SetCursorPosX(row_x);
@@ -885,8 +898,8 @@ void HDRViewApp::draw_annotations_window()
             ImGui::TextUnformatted(fmt::format("{} {}", annotation_shape_icon(a.shape), a.display_label()).c_str());
 
             ImGui::SameLine(0.f, 0.f);
-            ImGui::SetCursorPosX(row_x + row_w - trash_w);
-            if (ImGui::FlatButton(ICON_MY_TRASH_CAN, false, ImVec2(trash_w, 0.f)))
+            ImGui::SetCursorPosX(row_x + row_w - icon_sz.x);
+            if (ImGui::FlatButton(ICON_MY_TRASH_CAN, false, icon_sz))
                 erase = i;
             ImGui::SetItemTooltip("Delete this annotation.");
 
@@ -894,8 +907,8 @@ void HDRViewApp::draw_annotations_window()
         }
 
         ImGui::PopStyleVar(2);
+        ImGui::EndTable();
     }
-    ImGui::EndChild();
 
     if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
         m_annotation_row_drag = -1;
