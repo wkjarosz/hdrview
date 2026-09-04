@@ -17,6 +17,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -928,4 +929,35 @@ TEST_CASE("Resizing a text annotation's box scales the size it is drawn at")
     // Shrinking works the same way round.
     move_annotation_handle(a, 0, float2{lo2.x, (lo2 + extent2).y - 0.5f * extent2.y}, &x);
     CHECK(a.font_size == doctest::Approx(20.f));
+}
+
+TEST_CASE("Text is baked at a handful of sizes, however far it is zoomed")
+{
+    // Dear ImGui rasterizes a font at each size it is asked for. Asking for whatever the zoom works out to
+    // would rasterize a new set of glyphs every frame, so the size is quantized and the leftover applied to
+    // the glyphs. What matters is that the sizes are few and bounded, and that nothing is lost doing it.
+    std::set<float> baked_sizes;
+
+    for (float wanted = 0.1f; wanted < 20000.f; wanted *= 1.05f)
+    {
+        CAPTURE(wanted);
+
+        float baked, scale;
+        text_bake_size(wanted, baked, scale);
+        baked_sizes.insert(baked);
+
+        // Whatever is baked, scaling it by what comes back is the size that was asked for -- so a string
+        // is drawn the size it should be, however it got there.
+        CHECK(baked * scale == doctest::Approx(std::max(1.f, wanted)));
+
+        // Never rasterized larger than the cap, which is what stops the cost growing with the zoom.
+        CHECK(baked <= 128.f);
+        CHECK(baked >= 1.f);
+    }
+
+    // A handful, not one per zoom level: powers of two from 1 to the cap.
+    CHECK(baked_sizes.size() <= 8);
+
+    // ...and it really is quantizing rather than returning the cap for everything.
+    CHECK(baked_sizes.size() > 1);
 }

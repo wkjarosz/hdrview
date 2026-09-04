@@ -152,6 +152,17 @@ private:
 
 } // namespace
 
+void text_bake_size(float wanted, float &baked, float &scale)
+{
+    // 128 is already a very large glyph; past it the text is scaled up and goes soft, which is what the
+    // image under it does at that zoom too.
+    constexpr float k_max_baked = 128.f;
+
+    wanted = ImMax(1.f, wanted);
+    baked  = ImMin(ImPow(2.f, ImCeil(ImLog(wanted) / ImLog(2.f))), k_max_baked);
+    scale  = wanted / baked;
+}
+
 /// Where AddText should put the string's top-left, given NanoVG's alignment flags.
 /**
     ImGui has no notion of a baseline, so Baseline is approximated as a fraction of the line height.
@@ -320,14 +331,27 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
 
         case VgCommand::Type::Text:
         {
-            const float size = ImMax(1.f, state.font_size * (state.font_size_relative ? scale : 1.f));
-            auto       *font = (ImFont *)(state.font ? state.font : xform.default_font);
+            const float wanted = ImMax(1.f, state.font_size * (state.font_size_relative ? scale : 1.f));
+            auto       *font   = (ImFont *)(state.font ? state.font : xform.default_font);
             if (!font)
                 break;
 
-            const ImVec2 extent = font->CalcTextSizeA(size, FLT_MAX, 0.f, cmd.text.c_str());
+            float baked, glyph_scale;
+            text_bake_size(wanted, baked, glyph_scale);
+
+            const float2 extent = float2{font->CalcTextSizeA(baked, FLT_MAX, 0.f, cmd.text.c_str())} * glyph_scale;
             const ImVec2 at     = aligned_text_pos(to_screen(f[0], f[1]), extent, state.text_align);
-            draw_list->AddText(font, size, at, state.fill_color, cmd.text.c_str());
+
+            // Drawn at the size the glyphs are baked at, then the quads it emitted are scaled to the size
+            // that was asked for.
+            const int first = draw_list->VtxBuffer.Size;
+            draw_list->AddText(font, baked, at, state.fill_color, cmd.text.c_str());
+            if (glyph_scale != 1.f)
+                for (int v = first; v < draw_list->VtxBuffer.Size; ++v)
+                {
+                    ImVec2 &p = draw_list->VtxBuffer[v].pos;
+                    p         = ImVec2(at.x + (p.x - at.x) * glyph_scale, at.y + (p.y - at.y) * glyph_scale);
+                }
         }
         break;
 

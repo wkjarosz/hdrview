@@ -229,7 +229,14 @@ VgTransform HDRViewApp::viewport_transform() const
         auto *f = (ImFont *)(font_for ? font_for(face) : nullptr);
         if (!f)
             f = (ImFont *)fallback;
-        return f ? float2{f->CalcTextSizeA(std::max(1.f, size), FLT_MAX, 0.f, text.c_str())} : float2{0.f};
+        if (!f)
+            return float2{0.f};
+
+        // Measured at the size the glyphs are baked at, for the same reason they are drawn there: asking
+        // for an arbitrary size here would bake one.
+        float baked, glyph_scale;
+        text_bake_size(size, baked, glyph_scale);
+        return float2{f->CalcTextSizeA(baked, FLT_MAX, 0.f, text.c_str())} * glyph_scale;
     };
     return xform;
 }
