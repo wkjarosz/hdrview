@@ -289,6 +289,12 @@ std::map<std::string, std::string> ascii_entries(const std::string &parsed)
     std::istringstream                 in(parsed);
     for (std::string line, tag; std::getline(in, line);)
     {
+        // only the \r goes: git checks these dumps out with CRLF endings on Windows, and the suffix this
+        // looks for sits at the end of the line, but the trailing spaces padding a fixed-width ASCII value
+        // are part of that value
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+
         const auto start = line.find_first_not_of(" \t");
         if (start == std::string::npos)
             continue;

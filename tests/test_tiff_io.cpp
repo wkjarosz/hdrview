@@ -589,12 +589,18 @@ TEST_CASE("libtiff's test images decode as their names say, or are refused")
         }
         catch (const std::exception &)
         {
-            // refusing a file libtiff keeps because it is malformed is an answer rather than a failure; the
-            // count below is what says every file was reached
             ++refused;
             continue;
         }
-        REQUIRE_FALSE(images.empty());
+
+        // refusing a file is an answer rather than a failure, whether it comes as a throw or as the empty
+        // vector load_image() documents: libtiff is not built with every codec everywhere, and the WebP one
+        // is unreadable wherever it lacks that support. The counts below are what say every file was reached.
+        if (images.empty())
+        {
+            ++refused;
+            continue;
+        }
 
         ++read;
         for (const auto &part : images)
@@ -620,8 +626,9 @@ TEST_CASE("libtiff's test images decode as their names say, or are refused")
 
     CAPTURE(read);
     CAPTURE(refused);
-    CHECK(named >= 8); // the README lists eight of them
-    CHECK(read >= 31); // every .tif and .tiff in the directory, the multi-directory ones included
+    CHECK(named >= 8);           // the README lists eight of them
+    CHECK(read + refused >= 31); // every .tif and .tiff in the directory, the multi-directory ones included
+    CHECK(refused <= 2);         // and a sweep must not refuse its way to a pass
     CHECK(read > named);
 }
 
