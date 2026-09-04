@@ -13,6 +13,10 @@
 # HDRVIEW_SCREENSHOT_IMAGES is a ":"-separated list of files and/or directories, in order: the first entry
 # is the image the shots are actually of, and the rest are loaded so the Images panel has something to show.
 # HDRVIEW_SCREENSHOT_DIFF_IMAGE names the multi-view file whose two views the comparison shot differences.
+# HDRVIEW_SCREENSHOT_PALETTE_IMAGE names the file the command-palette and editing shots sit over: those two
+# want recognizable content, one being marked up with an arrow that points at something and the other
+# blurring part of the frame. The annotation and blur geometry is placed as fractions of the image, tuned
+# for the still life below, so pointing this elsewhere still draws them, just not around anything.
 # HDRVIEW_SCREENSHOT_ZOOM_PIXEL is the "x,y" the zoomed-in shot centers on; without it the harness picks the
 # strongest edge it can find, which is serviceable but rarely the most telling spot in a photograph.
 # The screenshots committed to this repository were taken with:
@@ -20,6 +24,7 @@
 #   base="$HOME/Dartmouth College Dropbox/Wojciech Jarosz/Temporary Shares/hdrview-test-images"
 #   HDRVIEW_SCREENSHOT_IMAGES="$base/HDR Lightroom export/_28A7394-HDR-sRGB.jpg:$base/openexr/MultiView/Adjuster.exr:$base/openexr/MultiView/LosPadres.exr:$base/openexr/Beachball/singlepart.0001.exr" \
 #   HDRVIEW_SCREENSHOT_DIFF_IMAGE="$base/openexr/MultiView/Fog.exr" \
+#   HDRVIEW_SCREENSHOT_PALETTE_IMAGE="$base/self-generated/upbp large teaser.exr" \
 #   HDRVIEW_SCREENSHOT_ZOOM_PIXEL="1511,2344" \
 #       ./resources/regenerate-screenshots.sh
 #

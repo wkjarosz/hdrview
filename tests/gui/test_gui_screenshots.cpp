@@ -23,6 +23,7 @@
 #include "test_gui_support.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -103,7 +104,11 @@ std::string diff_subject()
     return v.empty() ? std::string{} : v.front();
 }
 
-/// The image the command-palette shot sits over, or empty to use the same subject as everything else.
+/// The image the command-palette and editing shots sit over, or empty to use the same subject as the rest.
+/**
+    Those two want a picture with recognizable things in it: one is marked up with an arrow pointing at
+    something, and the other blurs part of the frame and needs detail for the blur to be visible against.
+*/
 std::string palette_subject()
 {
     auto v = path_list(getenv("HDRVIEW_SCREENSHOT_PALETTE_IMAGE"));
@@ -298,6 +303,12 @@ void reset_view(ImGuiTestContext *ctx)
         ctx->MenuClick("Windows/Show status bar");
     // closed unless a shot asks for it: it docks under the viewport and takes height from the image
     *hdrview()->action("Show Log window").p_selected = false;
+    // likewise the two right-hand panels only one shot each is of
+    *hdrview()->action("Show Annotations window").p_selected = false;
+    *hdrview()->action("Show History window").p_selected     = false;
+    // markup belongs to the shot that draws it; left in place it turns up in every picture after
+    for (int i = 0; i < hdrview()->num_images(); ++i) hdrview()->image(i)->annotations.clear();
+    *hdrview()->action("Draw annotations").p_selected = true;
     ctx->MenuClick("View/Fit display window");
     ctx->SetRef("");
 
@@ -312,6 +323,64 @@ void zoom_to_pixel(float zoom, int2 pixel)
 {
     hdrview()->set_zoom(zoom);
     hdrview()->reposition_pixel_to_vp_pos(hdrview()->viewport_size() / 2.f, float2(pixel));
+}
+
+/// Marks up the current image the way someone would to point something out: a captioned arrow and a circle.
+/**
+    The geometry is fractions of the image rather than pixels, since which file the shots are of comes from
+    the environment. The fractions suit the still life the committed screenshot uses, whose wine glass
+    stands at the center and whose pitcher stands to its right; against another subject they still produce
+    an arrow and a circle, just not around anything in particular.
+*/
+void annotate_subject()
+{
+    auto img = hdrview()->current_image();
+    if (!img)
+        return;
+
+    const float2 extent = float2(img->display_window.size());
+    const auto   at     = [extent](float u, float v) { return float2{u * extent.x, v * extent.y}; };
+
+    // A color of their own, so the pair that points reads apart from the circle that surrounds.
+    constexpr float4 pointing{0.25f, 0.85f, 1.f, 1.f};
+
+    Annotation arrow;
+    arrow.shape        = Annotation::Shape::Arrow;
+    arrow.points       = {at(0.34f, 0.24f), at(0.517f, 0.365f)};
+    arrow.stroke_width = 3.f;
+    arrow.stroke_color = pointing;
+
+    Annotation caption;
+    caption.shape  = Annotation::Shape::Text;
+    caption.points = {at(0.332f, 0.24f)};
+    caption.text   = "look here";
+    // anchored to the right of the words and centered on them, so they sit beside the arrow's tail instead
+    // of across the shaft
+    caption.text_align = VgCommand::AlignRight | VgCommand::AlignMiddle;
+    // in image pixels, so the caption keeps its size relative to what it names, and a fraction of the
+    // height because the subject's resolution is not known here
+    caption.font_size          = 0.05f * extent.y;
+    caption.font_size_relative = true;
+    caption.stroke_color       = pointing;
+
+    // Freehand rather than Ellipse: the point is that it looks drawn by hand
+    Annotation circle;
+    circle.shape        = Annotation::Shape::Freehand;
+    circle.smooth       = true;
+    circle.stroke_width = 3.f;
+    circle.points.clear();
+    const float2 center = at(0.848f, 0.40f), radii = at(0.105f, 0.36f);
+    // past a full turn and wobbling as it goes, the way a circle scribbled around something overshoots
+    // where it started rather than closing on it
+    constexpr int steps = 48;
+    for (int i = 0; i <= steps; ++i)
+    {
+        const float t      = float(i) / steps * 6.9f;
+        const float wobble = 1.f + 0.06f * std::sin(t * 3.f) + 0.03f * std::cos(t * 5.f);
+        circle.points.push_back(center + float2{radii.x * wobble * std::cos(t), radii.y * wobble * std::sin(t)});
+    }
+
+    img->annotations = {arrow, caption, circle};
 }
 
 } // namespace
@@ -367,6 +436,22 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
             ctx->MenuClick("View/Fit display window");
             ctx->SetRef("");
         }
+
+        // The palette sits over the middle of the viewport, which is where a fitted image puts the things
+        // worth pointing at, so the image is pushed down into the clear band beneath it. Fitting leaves
+        // room above and below, and this spends it.
+        if (const float2 vp = hdrview()->viewport_size(); vp.y > 0.f)
+        {
+            const float2 center = vp * 0.5f;
+            hdrview()->reposition_pixel_to_vp_pos(center + float2{0.f, 0.22f * vp.y},
+                                                  hdrview()->pixel_at_vp_pos(center));
+        }
+
+        // the same shot carries the annotations and the panel that lists them, and the Log window under the
+        // viewport, so one picture shows the palette over an image that has been marked up
+        annotate_subject();
+        *hdrview()->action("Show Annotations window").p_selected = true;
+        *hdrview()->action("Show Log window").p_selected         = true;
 
         ctx->SetRef("##MainMenuBar");
         ctx->MenuClick("Windows/Command palette...");
@@ -431,5 +516,88 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         hdrview()->tonemap()    = Tonemap_Gamma;
         hdrview()->blend_mode() = BlendMode_Normal;
         hdrview()->set_reference_image_index(-1, true);
+    };
+
+    // an edit confined to a selection, and the History panel that says what was done and what redo would
+    // put back. A blur over part of the frame rather than all of it: a wholly blurred photograph reads as a
+    // soft photograph, where a sharp edge against a blurred rectangle can only be an edit.
+    t           = IM_REGISTER_TEST(engine, "screenshots", "editing");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        load_subjects(ctx);
+        reset_view(ctx);
+        // the same subject as the palette shot: a blur only reads as a blur against detail
+        if (const auto subject = palette_subject(); !subject.empty())
+            select_image_containing(fs::path(subject).stem().string());
+
+        auto img = hdrview()->current_image();
+        IM_CHECK(img != nullptr);
+
+        ctx->SetRef("##MainMenuBar");
+        ctx->MenuClick("View/Fit display window");
+        ctx->SetRef("");
+
+        *hdrview()->action("Show History window").p_selected = true;
+
+        // a rectangle over the middle of the frame, which is where these subjects put their subject
+        const int2 extent = img->display_window.size();
+        const auto span   = [](int lo, int hi, int n) { return int2{lo * n / 100, hi * n / 100}; };
+        const int2 xs = span(30, 62, extent.x), ys = span(22, 78, extent.y);
+        hdrview()->roi() = hdrview()->roi_live() = Box2i{int2{xs.x, ys.x}, int2{xs.y, ys.y}};
+        // the default, but the whole shot is about the edit stopping at the selection's edge
+        hdrview()->edit_subject().selection_only = true;
+
+        // Sigma is in image pixels while the picture is displayed fit to the window, so a radius that reads
+        // as a blur at 1:1 is a pixel or two here; this is most of the slider's range on purpose.
+        const auto blur = [](ImGuiTestContext *c, float sigma)
+        {
+            c->SetRef("##MainMenuBar");
+            c->MenuClick("Edit/Blur...");
+            // The dialog exists from the frame after the click, and its items are addressed by an absolute
+            // path: SetRef does not resolve this popup by name.
+            c->Yield(2);
+            // One Blur object serves the whole process and remembers the kind it was last set to, so an
+            // edit test that chose Box leaves a dialog with no Sigma in it.
+            c->ItemClick("//Blur.../Gaussian");
+            c->ItemInputValue("//Blur.../Sigma", sigma);
+            c->KeyPress(ImGuiKey_Enter);
+            c->SetRef("");
+        };
+
+        const size_t before = hdrview()->current_image()->history.size();
+        blur(ctx, 48.f);
+        wait_until(ctx, [before] { return hdrview()->current_image()->history.size() > before; });
+
+        // two more steps, then taken back: everything past the cursor is drawn faded, so the panel shows
+        // both what has been applied and what redo would reapply. Neither changes the image's extent, which
+        // a test thread cannot undo safely -- textures rebuild on the main thread.
+        for (const char *item : {"Edit/Invert", "Edit/Clamp to [0,1]"})
+        {
+            const size_t n = hdrview()->current_image()->history.size();
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick(item);
+            ctx->SetRef("");
+            wait_until(ctx, [n] { return hdrview()->current_image()->history.size() > n; });
+        }
+        for (int i = 0; i < 2; ++i)
+        {
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick("Edit/Undo");
+            ctx->SetRef("");
+            ctx->Yield(2);
+        }
+
+        capture(ctx, "screenshot-editing");
+
+        // back to the pixels on disk: load_subjects() only reloads when the path list changes, so an edit
+        // left applied here is in every shot that runs after
+        while (hdrview()->current_image()->history.has_undo())
+        {
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick("Edit/Undo");
+            ctx->SetRef("");
+            ctx->Yield(2);
+        }
+        hdrview()->roi() = hdrview()->roi_live() = Box2i{int2{0}};
     };
 }
