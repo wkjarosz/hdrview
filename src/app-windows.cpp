@@ -1178,7 +1178,7 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
 
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(EmSize(6));
-    if (ImGui::DragFloat("##size", &a.font_size, 0.25f, 4.f, 256.f, "%.0f px"))
+    if (ImGui::DragFloat("##size", &a.font_size, 0.25f, Annotation::MinFontSize, Annotation::MaxFontSize, "%.0f px"))
         m_annotation_style.font_size = a.font_size;
     ImGui::SetItemTooltip("Screen pixels, so the text stays the same size however far the image is zoomed.");
 

@@ -358,11 +358,10 @@ bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, floa
     if (a.shape != Annotation::Shape::Text || !xform.measure_text)
         return false;
 
-    // The size is in image pixels, so it is taken up to screen pixels to be measured, and the measurement
-    // brought back down: what a string occupies is geometry, like every other extent here.
-    const float scale = std::max(xform.scale, 1e-6f);
-    extent            = xform.measure_text(a.font_face, a.font_size * scale, a.text) / scale;
-    lo                = a.p0() - text_anchor_offset(a.text_align, extent);
+    // Measured at the size that is stored, which is already image pixels, so what comes back is the box in
+    // image coordinates with no zoom in it either way.
+    extent = xform.measure_text(a.font_face, a.font_size, a.text);
+    lo     = a.p0() - text_anchor_offset(a.text_align, extent);
     return extent.x > 0.f && extent.y > 0.f;
 }
 
@@ -501,14 +500,17 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
         {
             const float2 anchor = xform.to_screen(a.p0());
 
-            // The box the glyphs occupy, placed the same way the drawing places them. Without something to
-            // measure with there is only the anchor, which is where the string starts rather than where it
-            // is, so a click has to land near that instead.
-            if (xform.measure_text)
+            // The box the glyphs occupy, placed the same way the drawing places them, and taken to the
+            // screen by its corners so a flipped view maps as it should. Without something to measure with
+            // there is only the anchor, which is where the string starts rather than where it is, so a
+            // click has to land near that instead.
+            float2 lo, extent;
+            if (text_extent(a, xform, lo, extent))
             {
-                const float2 extent = xform.measure_text(a.font_face, a.font_size, a.text);
-                const float2 lo     = aligned_text_pos(anchor, extent, a.text_align);
-                if (distance_to_box(screen_pos, lo, lo + extent) <= tol)
+                const float2 s0 = xform.to_screen(lo), s1 = xform.to_screen(lo + extent);
+                const float2 box_lo{std::min(s0.x, s1.x), std::min(s0.y, s1.y)};
+                const float2 box_hi{std::max(s0.x, s1.x), std::max(s0.y, s1.y)};
+                if (distance_to_box(screen_pos, box_lo, box_hi) <= tol)
                     return i;
             }
             else if (length(anchor - screen_pos) <= std::max(tol, a.font_size * 0.5f))
@@ -603,15 +605,21 @@ int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransfor
         // Glyphs cannot be stretched, so the box's new height is what the font size follows; a drag that
         // would turn it inside out is ignored rather than flipping the text over.
         const float height = std::abs(to.y - fixed.y);
-        if (height <= 0.f || extent.y <= 0.f)
+        if (height <= 0.f || extent.y <= 0.f || a.font_size <= 0.f)
             return index;
 
-        const float  ratio      = height / extent.y;
-        const float2 new_extent = extent * ratio;
-        const float2 new_lo{std::min(fixed.x, to.x) == fixed.x ? fixed.x : fixed.x - new_extent.x,
-                            std::min(fixed.y, to.y) == fixed.y ? fixed.y : fixed.y - new_extent.y};
+        // The size the drag asks for, and the size it can have. The box has to follow the second: sized
+        // from what was asked for, it would keep growing after the size stopped, and the corner meant to
+        // stay put would slide away in whichever direction that corner is measured from.
+        const float size =
+            std::clamp(a.font_size * (height / extent.y), Annotation::MinFontSize, Annotation::MaxFontSize);
+        const float ratio = size / a.font_size;
 
-        a.font_size = std::clamp(a.font_size * ratio, 4.f, 256.f);
+        const float2 new_extent = extent * ratio;
+        const float2 new_lo{to.x >= fixed.x ? fixed.x : fixed.x - new_extent.x,
+                            to.y >= fixed.y ? fixed.y : fixed.y - new_extent.y};
+
+        a.font_size = size;
         a.p0()      = new_lo + text_anchor_offset(a.text_align, new_extent);
         return index;
     }

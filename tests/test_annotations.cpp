@@ -931,33 +931,35 @@ TEST_CASE("Resizing a text annotation's box scales the size it is drawn at")
     CHECK(a.font_size == doctest::Approx(20.f));
 }
 
-TEST_CASE("Text is baked at a handful of sizes, however far it is zoomed")
+TEST_CASE("Text is baked at a handful of sizes, and at the same one however far it is zoomed")
 {
-    // Dear ImGui rasterizes a font at each size it is asked for. Asking for whatever the zoom works out to
-    // would rasterize a new set of glyphs every frame, so the size is quantized and the leftover applied to
-    // the glyphs. What matters is that the sizes are few and bounded, and that nothing is lost doing it.
+    // Dear ImGui rasterizes a font into its atlas at each size it is asked for, so the size it is asked for
+    // is quantized and whatever is left over scales the glyphs instead. Two properties matter: the sizes
+    // are few and bounded, and the zoom is not one of the things that picks them -- were it, a view being
+    // zoomed would rasterize a fresh set every frame and the text would step as it crossed between them.
     std::set<float> baked_sizes;
 
-    for (float wanted = 0.1f; wanted < 20000.f; wanted *= 1.05f)
+    for (float size = 0.1f; size < 20000.f; size *= 1.05f)
     {
-        CAPTURE(wanted);
+        CAPTURE(size);
 
-        float baked, scale;
-        text_bake_size(wanted, baked, scale);
+        const float baked = text_baked_size(size);
         baked_sizes.insert(baked);
 
-        // Whatever is baked, scaling it by what comes back is the size that was asked for -- so a string
-        // is drawn the size it should be, however it got there.
-        CHECK(baked * scale == doctest::Approx(std::max(1.f, wanted)));
-
-        // Never rasterized larger than the cap, which is what stops the cost growing with the zoom.
+        // Never rasterized larger than the cap, which is what stops the cost growing with the size.
         CHECK(baked <= 128.f);
         CHECK(baked >= 1.f);
+
+        // Big enough to hold the size it stands in for, until the cap, so text is scaled down rather than
+        // up wherever that is possible.
+        if (size <= 128.f)
+            CHECK(baked >= std::max(1.f, size));
     }
 
-    // A handful, not one per zoom level: powers of two from 1 to the cap.
+    // A handful, not one per size: powers of two from 1 to the cap.
     CHECK(baked_sizes.size() <= 8);
-
-    // ...and it really is quantizing rather than returning the cap for everything.
     CHECK(baked_sizes.size() > 1);
 }
+
+// That the zoom is not one of the things picking a baked size is what the box test above checks, by way of
+// the extent being the same at every zoom: nothing here takes a zoom to be independent of.

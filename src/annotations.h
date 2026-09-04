@@ -108,6 +108,9 @@ struct Annotation
     /// The most handles any shape shows: four corners and four edge midpoints.
     static constexpr int MaxHandles = 8;
 
+    /// What a font size is kept between, in image pixels.
+    static constexpr float MinFontSize = 1.f, MaxFontSize = 4096.f;
+
     /// Whether \p shape is resized by a box around it rather than by its own points.
     static bool boxed(Shape shape)
     {

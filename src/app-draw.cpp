@@ -233,10 +233,10 @@ VgTransform HDRViewApp::viewport_transform() const
             return float2{0.f};
 
         // Measured at the size the glyphs are baked at, for the same reason they are drawn there: asking
-        // for an arbitrary size here would bake one.
-        float baked, glyph_scale;
-        text_bake_size(size, baked, glyph_scale);
-        return float2{f->CalcTextSizeA(baked, FLT_MAX, 0.f, text.c_str())} * glyph_scale;
+        // for an arbitrary size here would bake one. Measuring is linear in the size, so scaling what comes
+        // back gives the same answer.
+        const float baked = text_baked_size(size);
+        return float2{f->CalcTextSizeA(baked, FLT_MAX, 0.f, text.c_str())} * (std::max(1.f, size) / baked);
     };
     return xform;
 }
@@ -292,9 +292,11 @@ void HDRViewApp::draw_text_editing() const
     if (!font)
         return;
 
-    // The size is in image pixels; the caret and selection are drawn on screen, so it goes up by the zoom.
-    const float  size   = std::max(1.f, a.font_size * xform.scale);
-    const float2 extent = font->CalcTextSizeA(size, FLT_MAX, 0.f, a.text.c_str());
+    // Baked from the size before the zoom, as the drawing is, and scaled up to what is on screen.
+    const float baked = text_baked_size(a.font_size);
+    const float size  = std::max(1.f, a.font_size * xform.scale);
+
+    const float2 extent = float2{font->CalcTextSizeA(baked, FLT_MAX, 0.f, a.text.c_str())} * (size / baked);
     const float2 lo     = aligned_text_pos(xform.to_screen(a.p0()), extent, a.text_align);
 
     auto *draw_list = ImGui::GetBackgroundDrawList();
@@ -323,7 +325,7 @@ void HDRViewApp::draw_text_editing() const
                 line = c + 1;
                 ++row;
             }
-        return float2{font->CalcTextSizeA(size, FLT_MAX, 0.f, line, at).x, float(row) * size};
+        return float2{font->CalcTextSizeA(baked, FLT_MAX, 0.f, line, at).x * (size / baked), float(row) * size};
     };
 
     const float line_h = size;

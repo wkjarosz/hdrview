@@ -152,15 +152,14 @@ private:
 
 } // namespace
 
-void text_bake_size(float wanted, float &baked, float &scale)
+float text_baked_size(float size)
 {
     // 128 is already a very large glyph; past it the text is scaled up and goes soft, which is what the
     // image under it does at that zoom too.
     constexpr float k_max_baked = 128.f;
 
-    wanted = ImMax(1.f, wanted);
-    baked  = ImMin(ImPow(2.f, ImCeil(ImLog(wanted) / ImLog(2.f))), k_max_baked);
-    scale  = wanted / baked;
+    size = ImMax(1.f, size);
+    return ImMin(ImPow(2.f, ImCeil(ImLog(size) / ImLog(2.f))), k_max_baked);
 }
 
 /// Where AddText should put the string's top-left, given NanoVG's alignment flags.
@@ -336,14 +335,19 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
             if (!font)
                 break;
 
-            float baked, glyph_scale;
-            text_bake_size(wanted, baked, glyph_scale);
+            // Baked from the size before the zoom, so zooming neither rasterizes a new set of glyphs nor
+            // steps from one baked size to another under the reader.
+            const float baked       = text_baked_size(state.font_size);
+            const float glyph_scale = wanted / baked;
 
             const float2 extent = float2{font->CalcTextSizeA(baked, FLT_MAX, 0.f, cmd.text.c_str())} * glyph_scale;
             const ImVec2 at     = aligned_text_pos(to_screen(f[0], f[1]), extent, state.text_align);
 
-            // Drawn at the size the glyphs are baked at, then the quads it emitted are scaled to the size
-            // that was asked for.
+            // The glyphs are laid out small and then scaled up, so they are drawn against the box they end
+            // up filling rather than the one they start in -- against the smaller box, everything outside
+            // it is culled a letter at a time as the scale grows.
+            draw_list->PushClipRect(at, ImVec2(at.x + extent.x, at.y + extent.y), false);
+
             const int first = draw_list->VtxBuffer.Size;
             draw_list->AddText(font, baked, at, state.fill_color, cmd.text.c_str());
             if (glyph_scale != 1.f)
@@ -352,6 +356,8 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
                     ImVec2 &p = draw_list->VtxBuffer[v].pos;
                     p         = ImVec2(at.x + (p.x - at.x) * glyph_scale, at.y + (p.y - at.y) * glyph_scale);
                 }
+
+            draw_list->PopClipRect();
         }
         break;
 

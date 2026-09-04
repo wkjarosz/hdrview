@@ -104,15 +104,17 @@ struct VgTransform
     std::function<float2(const std::string &face, float size, const std::string &text)> measure_text;
 };
 
-/// The size glyphs should be baked at to draw text of \p wanted size, and what to scale the result by.
+/// The size glyphs are rasterized at to draw text of nominal size \p size.
 /**
-    Dear ImGui bakes a font at each size it is asked for, so a zoom that changes the size every frame would
-    rasterize a new set of glyphs every frame, and a very large size is very expensive to rasterize. Baking
-    at powers of two up to a cap leaves a handful of sizes to reuse, and the leftover factor is applied to
-    the glyph quads instead: down to two thirds of a power of two it is a shrink, and past the cap the text
-    softens rather than costing more.
+    Dear ImGui bakes a font into its atlas at each size it is asked for, and a large size is expensive to
+    rasterize. Baking at powers of two up to a cap leaves a handful of sizes to reuse, and whatever is left
+    over is applied to the glyph quads instead.
+
+    Deliberately the size before any zoom: were the zoom in it, a view being zoomed would ask for a size it
+    had not baked every frame, and the text would shift as it crossed from one baked size to the next.
+    Measuring goes through this too, since measuring a size bakes it.
 */
-void text_bake_size(float wanted, float &baked, float &scale);
+float text_baked_size(float size);
 
 /// Where a string of \p size is drawn when anchored at \p anchor under \p align (VgCommand's TextAlign).
 /**
