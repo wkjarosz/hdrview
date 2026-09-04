@@ -1721,6 +1721,7 @@ set(HDRVIEW_SOURCES
     src/imageio/uhdr.cpp
     src/imageio/webp.cpp
     src/imageio/xmp.cpp
+    src/app-annotations.cpp
     src/app-colorpass.cpp
     src/app-draw.cpp
     src/app-edit.cpp

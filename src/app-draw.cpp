@@ -274,59 +274,6 @@ void HDRViewApp::draw_vector_overlays() const
     }
 }
 
-void HDRViewApp::draw_text_editing() const
-{
-    const int active = active_annotation();
-    if (active < 0 || !m_draw_annotations)
-        return;
-
-    const Annotation &a = current_image()->annotations[size_t(active)];
-    if (a.shape != Annotation::Shape::Text)
-        return;
-
-    const auto xform = viewport_transform();
-
-    // The same box the hit test uses, so what is boxed is what can be clicked.
-    float2 lo, hi;
-    if (!text_screen_box(a, xform, lo, hi))
-        return;
-
-    auto *draw_list = ImGui::GetBackgroundDrawList();
-
-    // Boxed, so a selected string reads as selected even where its corners are not yet in reach.
-    draw_list->AddRect(lo - 2.f, hi + 2.f, ImGui::GetColorU32(ImGuiCol_Border));
-
-    // Dear ImGui draws the caret and the selection inside InputTextEx, which cannot be called from out
-    // here; the state behind it can be read, so the same marks are drawn from it.
-    ImGuiInputTextState *state = ImGui::GetInputTextState(m_annotation_rename_id);
-    if (!state || m_annotation_renaming != active)
-        return;
-
-    // How far into the string a byte offset is, measured the way the box was. One line, as the overlay's
-    // Text command is.
-    const float line_h = hi.y - lo.y;
-    auto        place  = [&](int offset)
-    {
-        const int n = std::clamp(offset, 0, int(a.text.size()));
-        return xform.measure_text(a.font_face, a.font_size, a.text.substr(0, size_t(n))).x * xform.scale;
-    };
-
-    if (state->HasSelection())
-    {
-        const float from = place(std::min(state->GetSelectionStart(), state->GetSelectionEnd()));
-        const float to   = place(std::max(state->GetSelectionStart(), state->GetSelectionEnd()));
-        draw_list->AddRectFilled(lo + float2{from, 0.f}, lo + float2{to, line_h},
-                                 ImGui::GetColorU32(ImGuiCol_TextSelectedBg));
-    }
-
-    // Blinking as Dear ImGui's own does, so it reads as the same caret.
-    if (std::fmod(state->CursorAnim, 1.20f) <= 0.80f)
-    {
-        const float x = place(state->GetCursorPos());
-        draw_list->AddLine(lo + float2{x, 0.f}, lo + float2{x, line_h}, ImGui::GetColorU32(ImGuiCol_Text));
-    }
-}
-
 void HDRViewApp::draw_tool_decorations() const
 {
     if (!current_image())

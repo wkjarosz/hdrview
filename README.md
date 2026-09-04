@@ -42,6 +42,7 @@ On an HDR display this means finer precision (less banding) and brighter whites 
 - Watched pixels: pin any number of probes and read current, reference, and composite values at each.
 - Rectangular selections, with statistics (min/max/average/std. dev., and counts of NaNs and infinities) computed over just the selection.
 - A histogram with linear, sRGB, asinh, and symlog axis scales.
+- Annotations: draw rectangles, ellipses, lines, arrows, freehand scribbles, and text over an image to mark up what you are looking at. They are view state and never rasterized into the pixels, so they can be drawn over an image a renderer is still writing to.
 
 ![Per-pixel values at high zoom, beside the Colorspace panel](resources/screenshot-inspect.jpg)
 
@@ -63,7 +64,8 @@ Below, the two views of a stereo EXR are subtracted from one another and the sig
 
 **Workflow**
 - Watched folders: point HDRView at a directory and it loads new files and reloads changed ones as they appear — useful when a renderer is writing into it.
-- Sessions (`.hsess`) save the image list and view state; an exported session *bundle* zips the images with it, so it can be handed to someone else or opened in the web build.
+- A display server speaking [tev](https://github.com/Tom94/tev)'s protocol, so a renderer — [pbrt](https://pbrt.org) among them — can open images, stream tiles into them as they converge, and lay vector graphics over them: paths, shapes, and text drawn in the image's own coordinates.
+- Sessions (`.hsess`) save the image list, view state, and any annotations; an exported session *bundle* zips the images with it, so it can be handed to someone else or opened in the web build.
 - Step through the image list like a flipbook at an adjustable frame rate.
 - A Log window with controllable severity levels and filtering.
 - Extensive keyboard shortcuts, and a VS Code/Atom/Sublime Text-style command palette (`Ctrl`/`Cmd+Shift+P`) allowing you to find any command with keyboard-based fuzzy searching:

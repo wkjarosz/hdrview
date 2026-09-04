@@ -371,6 +371,56 @@ bool FlatButton(const char *label, bool active, const ImVec2 &size)
     return ret;
 }
 
+bool ColorSwatch(const char *id, float4 &color, float size)
+{
+    bool changed = false;
+    ImGui::PushID(id);
+    if (ImGui::ColorButton("##swatch", ImVec4(color.x, color.y, color.z, color.w), ImGuiColorEditFlags_AlphaPreviewHalf,
+                           ImVec2(size, size)))
+        ImGui::OpenPopup("##picker");
+    if (ImGui::BeginPopup("##picker"))
+    {
+        changed = ImGui::ColorPicker4("##picker4", &color.x, ImGuiColorEditFlags_AlphaBar);
+        ImGui::EndPopup();
+    }
+    ImGui::PopID();
+    return changed;
+}
+
+bool StrokeFillSwatches(const char *id, float4 &stroke, float4 &fill)
+{
+    // Two thirds of a frame each, overlapping by half of that, so the pair is exactly one frame tall.
+    const float  h    = ImGui::GetFrameHeight();
+    const float  sw   = h * 2.f / 3.f;
+    const float  off  = sw * 0.5f;
+    const ImVec2 base = ImGui::GetCursorScreenPos();
+
+    ImGui::PushID(id);
+
+    // Behind, so it is submitted first and allows the fill to take the hover where the two meet.
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::SetCursorScreenPos(ImVec2(base.x + off, base.y + off));
+    bool changed = ColorSwatch("stroke", stroke, sw);
+    ImGui::SetItemTooltip("Stroke: the outline of a shape, and the color of text.");
+
+    // Its middle punched out before the fill goes over it, so it reads as an outline, not a second fill.
+    const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+    const float  t = (hi.x - lo.x) * 0.3f;
+    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(lo.x + t, lo.y + t), ImVec2(hi.x - t, hi.y - t),
+                                              ImGui::GetColorU32(ImGuiCol_WindowBg));
+
+    ImGui::SetCursorScreenPos(base);
+    changed |= ColorSwatch("fill", fill, sw);
+    ImGui::SetItemTooltip("Fill: the inside of a closed shape. Fully transparent leaves it unfilled.");
+
+    ImGui::PopID();
+
+    // Both were placed by hand, so the layout has to be told how much room they took between them.
+    ImGui::SetCursorScreenPos(base);
+    ImGui::Dummy(ImVec2(sw + off, sw + off));
+    return changed;
+}
+
 void AddTextAligned(ImDrawList *draw_list, float2 pos, ImU32 color, const string &text, float2 align)
 {
     draw_list->AddText(pos - align * float2{ImGui::CalcTextSize(text.c_str())}, color, text.c_str());
