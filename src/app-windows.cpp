@@ -937,12 +937,17 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
     const auto &style = ImGui::GetStyle();
 
     // Icon alone, or icon and name once the row can spare the difference. It snaps between the two rather
-    // than growing with the panel, so the control does not change size as the panel is resized.
-    const float combo_narrow = ImGui::GetFrameHeight();
-    float       combo_wide   = 0.f;
+    // than growing with the panel, so the control does not change size as the panel is resized. Both widths
+    // leave room for the drop-down arrow, which is a frame wide at the right-hand end.
+    const float arrow_w   = ImGui::GetFrameHeight();
+    const float combo_pad = 2.f * style.FramePadding.x + arrow_w;
+
+    float names_w = 0.f;
     for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
-        combo_wide = std::max(combo_wide, ImGui::CalcTextSize(annotation_shape_name(Annotation::Shape(n))).x);
-    combo_wide += combo_narrow + style.ItemInnerSpacing.x;
+        names_w = std::max(names_w, ImGui::CalcTextSize(annotation_shape_name(Annotation::Shape(n))).x);
+
+    const float combo_narrow = ImGui::IconSize().x + combo_pad;
+    const float combo_wide   = ImGui::IconSize().x + style.ItemInnerSpacing.x + names_w + combo_pad;
 
     const float add_w     = ImGui::CalcTextSize("Add:").x + style.ItemInnerSpacing.x;
     const float colors_w  = ImGui::GetFrameHeight();
@@ -991,7 +996,7 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
         const std::string preview = named ? fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
                                                         annotation_shape_name(m_annotation_shape))
                                           : annotation_shape_icon(m_annotation_shape);
-        if (ImGui::BeginCombo("##shape", preview.c_str(), ImGuiComboFlags_NoArrowButton))
+        if (ImGui::BeginCombo("##shape", preview.c_str()))
         {
             for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
             {
