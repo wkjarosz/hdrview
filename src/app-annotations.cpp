@@ -353,10 +353,10 @@ static bool size_drag(const char *id, float &value, bool &relative, float speed,
         char shown[64];
         snprintf(shown, sizeof(shown), format, value);
 
-        const float text_w = ImGui::CalcTextSize(shown).x;
-        const float from = field_lo.x + style.FramePadding.x, to = at.x;
-        draw_list->AddText(ImVec2(from + ImMax(0.f, (to - from - text_w) * 0.5f), field_lo.y + style.FramePadding.y),
-                           ImGui::GetColorU32(ImGuiCol_Text), shown);
+        // Centered in what the menu leaves, and cut off there: a value too long for the room would run
+        // under the arrow, which is what a narrow panel produces.
+        ImGui::RenderTextClipped(ImVec2(field_lo.x + style.FramePadding.x, field_lo.y), ImVec2(at.x, field_hi.y), shown,
+                                 nullptr, nullptr, ImVec2(0.5f, 0.5f));
     }
 
     // The menu was placed by hand, so the layout goes on from where the field left it.
@@ -670,13 +670,16 @@ void HDRViewApp::draw_annotations_window()
 }
 
 /// The "Add:" label and the picker that says which shape the tool draws next, as one table cell.
-void HDRViewApp::draw_shape_picker(bool named)
+void HDRViewApp::draw_shape_picker(bool named, bool labeled)
 {
     ImGui::TableNextColumn();
     const auto &style = ImGui::GetStyle();
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Add:");
-    ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
+    if (labeled)
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Add:");
+        ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
+    }
     ImGui::SetNextItemWidth(-FLT_MIN);
     const std::string preview = named ? fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
                                                     annotation_shape_name(m_annotation_shape))
@@ -826,7 +829,11 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
     // names out as well.
     const float avail = ImGui::GetContentRegionAvail().x;
     const bool  named = avail >= colors_w + width_min + add_text_w + combo_wide + 3.f * style.CellPadding.x;
-    const float add_w = add_text_w + (named ? combo_wide : combo_narrow);
+
+    // Narrower still and the word goes too, before the columns start running over one another; the picker's
+    // own icon says what it is.
+    const bool  labeled = avail >= colors_w + width_min + add_text_w + combo_narrow + 3.f * style.CellPadding.x;
+    const float add_w   = (labeled ? add_text_w : 0.f) + (named ? combo_wide : combo_narrow);
 
     if (ImGui::BeginTable("##AnnotationControls", 3,
                           ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_NoPadOuterX |
@@ -837,7 +844,7 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
         ImGui::TableSetupColumn("width", ImGuiTableColumnFlags_WidthStretch, 1.f);
         ImGui::TableNextRow();
 
-        draw_shape_picker(named);
+        draw_shape_picker(named, labeled);
 
         ImGui::TableNextColumn();
         bool restyled = ImGui::StrokeFillSwatches("Colors", a.stroke_color, a.fill_color);
