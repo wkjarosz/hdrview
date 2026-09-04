@@ -220,6 +220,15 @@ VgTransform HDRViewApp::viewport_transform() const
             return font("mono bold");
         return font("sans regular");
     };
+    // By value: the transform is returned, so a reference to it would be gone by the time this is called.
+    xform.measure_text = [font_for = xform.font_for, fallback = xform.default_font](const std::string &face, float size,
+                                                                                    const std::string &text) -> float2
+    {
+        auto *f = (ImFont *)(font_for ? font_for(face) : nullptr);
+        if (!f)
+            f = (ImFont *)fallback;
+        return f ? float2{f->CalcTextSizeA(std::max(1.f, size), FLT_MAX, 0.f, text.c_str())} : float2{0.f};
+    };
     return xform;
 }
 

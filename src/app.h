@@ -846,8 +846,9 @@ private:
     bool m_annotation_place_text = false;
 
     /// Row the annotations panel is renaming in place, or -1, and the name being typed into it.
-    int  m_annotation_renaming = -1;
-    char m_annotation_rename[128]{};
+    int         m_annotation_renaming = -1;
+    char        m_annotation_rename[128]{};
+    std::string m_annotation_rename_was; ///< What it said before, so Escape can put it back
 
     /// Row the annotations panel is dragging to reorder, or -1. See draw_annotations_window().
     int m_annotation_row_drag = -1;

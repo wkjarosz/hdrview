@@ -840,6 +840,7 @@ void HDRViewApp::draw_annotations_window()
         {
             m_annotation_renaming  = active;
             m_annotation_rename[0] = '\0';
+            m_annotation_rename_was.clear();
         }
     }
 
@@ -974,19 +975,22 @@ void HDRViewApp::draw_annotations_window()
                     ImGui::SetKeyboardFocusHere();
 
                 ImGui::SetNextItemWidth(row_x + row_w - icon_sz.x - ImGui::GetCursorPosX());
-                ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
-                                         sizeof(m_annotation_rename), ImGuiInputTextFlags_EnterReturnsTrue);
+                const bool edited = ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
+                                                             sizeof(m_annotation_rename));
 
-                // For a text annotation the row's name is what it says, so this is how the text is typed.
-                if (ImGui::IsItemDeactivatedAfterEdit())
-                {
-                    if (a.shape == Annotation::Shape::Text)
-                        a.text = m_annotation_rename;
-                    else
-                        a.label = m_annotation_rename;
-                }
+                // For a text annotation the row's name is what it says, so this is how the text is typed --
+                // as it is typed, so the image shows it rather than waiting for the field to be left.
+                auto &named = a.shape == Annotation::Shape::Text ? a.text : a.label;
+                if (edited)
+                    named = m_annotation_rename;
+
                 if (ImGui::IsItemDeactivated())
+                {
+                    // Escape asks for what was there before, and every keystroke has already been applied.
+                    if (!ImGui::IsItemDeactivatedAfterEdit())
+                        named = m_annotation_rename_was;
                     m_annotation_renaming = -1;
+                }
             }
             else
             {
@@ -998,9 +1002,9 @@ void HDRViewApp::draw_annotations_window()
                 // Double-clicking the row renames it in place, which is where the name is read.
                 if (renamed_here)
                 {
-                    m_annotation_renaming = i;
-                    snprintf(m_annotation_rename, sizeof(m_annotation_rename), "%s",
-                             a.shape == Annotation::Shape::Text ? a.text.c_str() : a.label.c_str());
+                    m_annotation_renaming   = i;
+                    m_annotation_rename_was = a.shape == Annotation::Shape::Text ? a.text : a.label;
+                    snprintf(m_annotation_rename, sizeof(m_annotation_rename), "%s", m_annotation_rename_was.c_str());
                 }
             }
 
@@ -1096,14 +1100,14 @@ void HDRViewApp::draw_font_popup(Annotation &a)
     if (!ImGui::BeginPopup("##font"))
         return;
 
-    ImGui::SetNextItemWidth(EmSize(8));
     const auto &faces = annotation_font_faces();
     const char *shown = faces.front().label;
     for (const auto &f : faces)
         if (a.font_face == f.name)
             shown = f.label;
 
-    if (ImGui::BeginCombo("Face", shown))
+    ImGui::SetNextItemWidth(EmSize(7));
+    if (ImGui::BeginCombo("##face", shown))
     {
         for (const auto &f : faces)
         {
@@ -1119,8 +1123,9 @@ void HDRViewApp::draw_font_popup(Annotation &a)
         ImGui::EndCombo();
     }
 
-    ImGui::SetNextItemWidth(EmSize(8));
-    if (ImGui::DragFloat("Size", &a.font_size, 0.25f, 4.f, 256.f, "%.0f px"))
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::SetNextItemWidth(EmSize(5));
+    if (ImGui::DragFloat("##size", &a.font_size, 0.25f, 4.f, 256.f, "%.0f px"))
         m_annotation_style.font_size = a.font_size;
     ImGui::SetItemTooltip("Screen pixels, so the text stays the same size however far the image is zoomed.");
 

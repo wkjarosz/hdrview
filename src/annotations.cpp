@@ -447,10 +447,23 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
         break;
 
         case Annotation::Shape::Text:
-            // Only the anchor: the glyphs' extent depends on a font this cannot reach.
-            if (length(xform.to_screen(a.p0()) - screen_pos) <= std::max(tol, a.font_size * 0.5f))
+        {
+            const float2 anchor = xform.to_screen(a.p0());
+
+            // The box the glyphs occupy, placed the same way the drawing places them. Without something to
+            // measure with there is only the anchor, which is where the string starts rather than where it
+            // is, so a click has to land near that instead.
+            if (xform.measure_text)
+            {
+                const float2 extent = xform.measure_text(a.font_face, a.font_size, a.text);
+                const float2 lo     = aligned_text_pos(anchor, extent, a.text_align);
+                if (distance_to_box(screen_pos, lo, lo + extent) <= tol)
+                    return i;
+            }
+            else if (length(anchor - screen_pos) <= std::max(tol, a.font_size * 0.5f))
                 return i;
-            break;
+        }
+        break;
 
         default: break;
         }

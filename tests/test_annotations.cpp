@@ -815,3 +815,41 @@ TEST_CASE("A smoothed scribble is picked up on the curve, not on the polyline")
         CHECK(annotation_at({a}, path[i], x, 1.f) == 0);
     }
 }
+
+TEST_CASE("A text annotation is picked up over its glyphs, not just at its anchor")
+{
+    // The anchor is where a string starts, not where it is, so hit testing has to measure it. The measure
+    // here stands in for a font: a fixed box per character, which is all the property needs.
+    Annotation a = sample(Annotation::Shape::Text);
+    a.text       = "a caption";
+    a.font_size  = 20.f;
+    a.points     = {float2{100.f, 100.f}};
+
+    const float2 glyph{10.f, 20.f};
+    auto         x = identity_transform();
+    x.measure_text = [glyph](const std::string &, float, const std::string &text)
+    { return float2{glyph.x * float(text.size()), glyph.y}; };
+
+    const float2 extent = float2{glyph.x * float(a.text.size()), glyph.y};
+
+    for (int align : {VgCommand::AlignLeft | VgCommand::AlignTop, VgCommand::AlignCenter | VgCommand::AlignMiddle,
+                      VgCommand::AlignRight | VgCommand::AlignBottom})
+    {
+        CAPTURE(align);
+        a.text_align = align;
+
+        // Wherever the alignment puts the box, its middle is on the annotation and a point well outside
+        // it is not.
+        const float2 lo     = aligned_text_pos(a.p0(), extent, align);
+        const float2 middle = lo + extent * 0.5f;
+        CHECK(annotation_at({a}, middle, x, k_slop) == 0);
+        CHECK(annotation_at({a}, lo + extent + float2{50.f, 50.f}, x, k_slop) == -1);
+
+        // The far end of a long string is still on it, which the anchor alone would have missed.
+        CHECK(annotation_at({a}, lo + float2{extent.x - 1.f, extent.y * 0.5f}, x, k_slop) == 0);
+    }
+
+    // With nothing to measure with, the anchor is all there is, and it still answers.
+    auto blind = identity_transform();
+    CHECK(annotation_at({a}, a.p0(), blind, k_slop) == 0);
+}

@@ -150,11 +150,13 @@ private:
     std::vector<SubPath> m_subpaths;
 };
 
+} // namespace
+
 /// Where AddText should put the string's top-left, given NanoVG's alignment flags.
 /**
     ImGui has no notion of a baseline, so Baseline is approximated as a fraction of the line height.
 */
-ImVec2 aligned_text_pos(ImVec2 anchor, ImVec2 size, int align)
+float2 aligned_text_pos(float2 anchor, float2 size, int align)
 {
     float x = anchor.x;
     if (align & VgCommand::AlignCenter)
@@ -170,10 +172,8 @@ ImVec2 aligned_text_pos(ImVec2 anchor, ImVec2 size, int align)
     else if (align & VgCommand::AlignBaseline)
         y -= size.y * 0.8f;
 
-    return ImVec2(x, y);
+    return float2(x, y);
 }
-
-} // namespace
 
 void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &commands, const VgTransform &xform,
                          uint32_t default_color, const std::function<void(const char *)> &on_unsupported)

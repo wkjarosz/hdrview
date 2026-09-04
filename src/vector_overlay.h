@@ -100,7 +100,15 @@ struct VgTransform
     std::function<void *(const std::string &)> font_for;
     /// Font the overlay starts with, and falls back to when a face name is unknown.
     void *default_font = nullptr;
+    /// Screen size of \p text in \p face at \p size; null when there is no font to measure with.
+    std::function<float2(const std::string &face, float size, const std::string &text)> measure_text;
 };
+
+/// Where a string of \p size is drawn when anchored at \p anchor under \p align (VgCommand's TextAlign).
+/**
+    Drawing and hit testing both read this, so they cannot disagree about where a string sits.
+*/
+float2 aligned_text_pos(float2 anchor, float2 size, int align);
 
 /**
     Execute \p commands into \p draw_list. Unsupported commands are skipped, not approximated.
