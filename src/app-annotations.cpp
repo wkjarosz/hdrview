@@ -315,24 +315,32 @@ static bool size_drag(const char *id, float &value, bool &relative, float speed,
 
     ImGui::PushID(id);
 
-    ImGui::SetNextItemWidth(ImMax(width - arrow, arrow));
+    // The drag takes the whole width; the menu is laid over its right-hand end, so the two are one frame
+    // rather than two side by side.
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::SetNextItemWidth(width);
     bool changed = ImGui::DragFloat("##value", &value, speed, lo_limit, hi_limit, relative ? "%.2f img" : "%.1f px");
     ImGui::SetItemTooltip("%s", relative ? "Image pixels: zooms with what it marks."
                                          : "Screen pixels: the same size however far the view is zoomed.");
-    const float height = ImGui::GetItemRectSize().y;
 
-    // Drawn the way BeginCombo draws its own arrow -- a button-colored box rounded on the right, with the
-    // arrow inset by the frame padding at full size -- so the two read as the same control.
-    ImGui::SameLine(0.f, 0.f);
-    const ImVec2 at      = ImGui::GetCursorScreenPos();
-    const bool   clicked = ImGui::InvisibleButton("##units", ImVec2(arrow, height));
+    const ImVec2 field_lo = ImGui::GetItemRectMin(), field_hi = ImGui::GetItemRectMax();
+    const ImVec2 resume = ImGui::GetCursorScreenPos();
+
+    // Drawn the way BeginCombo draws its own arrow: a button-colored box over the end of the frame, rounded
+    // on the right, with the arrow inset by the frame padding at full size.
+    const ImVec2 at{field_hi.x - arrow, field_lo.y};
+    ImGui::SetCursorScreenPos(at);
+    const bool clicked = ImGui::InvisibleButton("##units", ImVec2(arrow, field_hi.y - field_lo.y));
 
     auto *draw_list = ImGui::GetWindowDrawList();
-    draw_list->AddRectFilled(at, ImVec2(at.x + arrow, at.y + height),
+    draw_list->AddRectFilled(at, field_hi,
                              ImGui::GetColorU32(ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered : ImGuiCol_Button),
                              style.FrameRounding, ImDrawFlags_RoundCornersRight);
     ImGui::RenderArrow(draw_list, ImVec2(at.x + style.FramePadding.y, at.y + style.FramePadding.y),
                        ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 1.f);
+
+    // The menu was placed by hand, so the layout goes on from where the field left it.
+    ImGui::SetCursorScreenPos(resume);
 
     if (clicked)
         ImGui::OpenPopup("##units");
