@@ -822,8 +822,10 @@ void HDRViewApp::draw_annotations_window()
     auto     &list   = img->annotations;
     const int active = active_annotation();
 
-    // Taken before anything below flattens it, for the popup that wants ordinary widgets.
-    const ImVec2 frame_padding = ImGui::GetStyle().FramePadding;
+    // Taken before anything below flattens them, for the popup that wants ordinary widgets: the rows put
+    // both to nothing so their buttons sit against each other and stay one line tall.
+    const ImVec2 frame_padding  = ImGui::GetStyle().FramePadding;
+    const float  item_spacing_x = ImGui::GetStyle().ItemSpacing.x;
 
     ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
     ImGui::Checkbox("Show annotations in viewport", &m_draw_annotations);
@@ -969,7 +971,7 @@ void HDRViewApp::draw_annotations_window()
                     ImGui::OpenPopup("##font");
                 ImGui::SetItemTooltip("The face and size this text is drawn in.");
                 ImGui::SameLine();
-                draw_font_popup(a, frame_padding);
+                draw_font_popup(a, frame_padding, item_spacing_x);
             }
             else
             {
@@ -1144,7 +1146,7 @@ void HDRViewApp::draw_shape_picker(bool named)
     ImGui::SetItemTooltip("Which shape the annotate tool draws next.");
 }
 
-void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
+void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, float item_spacing_x)
 {
     if (!ImGui::BeginPopup("##font"))
         return;
@@ -1153,7 +1155,7 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
     // and wants ordinary widgets. Its own two rows sit closer together than the default, which is spaced
     // for a window rather than for a couple of controls.
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, frame_padding);
-    ImGui::PushStyleVarY(ImGuiStyleVar_ItemSpacing, frame_padding.y);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(item_spacing_x, frame_padding.y));
 
     const auto &faces = annotation_font_faces();
     const char *shown = faces.front().label;

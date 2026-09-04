@@ -536,7 +536,7 @@ private:
     void draw_annotation_controls(Annotation &a);
     void draw_shape_picker(bool named);
     /// Face and size for a text annotation, in a popup off its row's font button.
-    void draw_font_popup(Annotation &a, const ImVec2 &frame_padding);
+    void draw_font_popup(Annotation &a, const ImVec2 &frame_padding, float item_spacing_x);
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
