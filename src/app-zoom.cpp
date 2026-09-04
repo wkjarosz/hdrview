@@ -422,8 +422,11 @@ void HDRViewApp::handle_annotate_tool()
                 a.points = simplify_polyline(a.points, k_scribble_tolerance / std::max(xform_scale, 1e-6f));
 
             // A click that never became a drag leaves nothing behind, rather than a shape with no extent
-            // that is invisible and cannot be taken hold of again.
-            if (a.bounds().min == a.bounds().max)
+            // that is invisible and cannot be taken hold of again. Text is the exception: a click is how
+            // one is placed, and the panel opens its name for typing straight afterwards.
+            if (a.shape == Annotation::Shape::Text)
+                m_annotation_place_text = true;
+            else if (a.bounds().min == a.bounds().max)
             {
                 list.pop_back();
                 set_active_annotation(-1);

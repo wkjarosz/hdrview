@@ -535,8 +535,8 @@ bool same(const Annotation &a, const Annotation &b)
 {
     return a.shape == b.shape && a.points == b.points && a.stroke_color == b.stroke_color &&
            a.fill_color == b.fill_color && a.stroke_width == b.stroke_width && a.font_size == b.font_size &&
-           a.text_align == b.text_align && a.text == b.text && a.label == b.label && a.visible == b.visible &&
-           a.locked == b.locked;
+           a.font_face == b.font_face && a.text_align == b.text_align && a.text == b.text && a.label == b.label &&
+           a.smooth == b.smooth && a.visible == b.visible && a.locked == b.locked;
 }
 
 } // namespace
@@ -557,6 +557,8 @@ TEST_CASE("Every shape survives a trip through a session file")
         a.locked       = true;
         a.stroke_width = 7.5f;
         a.font_size    = 31.f;
+        a.font_face    = "mono-bold";
+        a.smooth       = true;
 
         const Annotation b = json(a).get<Annotation>();
         CHECK(same(a, b));

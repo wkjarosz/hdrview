@@ -535,6 +535,8 @@ private:
     /// The one row of controls the annotations panel edits an annotation, or the next one's look, through.
     void draw_annotation_controls(Annotation &a);
     void draw_shape_picker(bool named);
+    /// Face and size for a text annotation, in a popup off its row's font button.
+    void draw_font_popup(Annotation &a);
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
@@ -840,6 +842,9 @@ private:
         Moving,
         Resizing
     };
+    /// Set when a text annotation has just been placed, so the panel opens its row for typing.
+    bool m_annotation_place_text = false;
+
     /// Row the annotations panel is renaming in place, or -1, and the name being typed into it.
     int  m_annotation_renaming = -1;
     char m_annotation_rename[128]{};

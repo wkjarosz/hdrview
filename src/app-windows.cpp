@@ -772,6 +772,29 @@ static bool stroke_fill_swatches(const char *id, float4 &stroke, float4 &fill)
     return changed;
 }
 
+/// What a row calls an annotation, cut with an ellipsis at \p width.
+/**
+    A text annotation is named by what it says, which can be a paragraph, so the row shows as much of it as
+    it has room for.
+*/
+static std::string row_name(const Annotation &a, float width)
+{
+    std::string name =
+        a.shape == Annotation::Shape::Text && a.label.empty() && !a.text.empty() ? a.text : a.display_label();
+
+    // Newlines would run the row into the ones below it.
+    for (auto &c : name)
+        if (c == '\n' || c == '\r')
+            c = ' ';
+
+    if (ImGui::CalcTextSize(name.c_str()).x <= width)
+        return name;
+
+    const float ellipsis = ImGui::CalcTextSize("...").x;
+    while (!name.empty() && ImGui::CalcTextSize(name.c_str()).x + ellipsis > width) name.pop_back();
+    return name + "...";
+}
+
 /// The icon the panel and the shape picker show for \p shape.
 static const char *annotation_shape_icon(Annotation::Shape shape)
 {
@@ -808,6 +831,18 @@ void HDRViewApp::draw_annotations_window()
     Annotation &edited = active >= 0 ? list[size_t(active)] : m_annotation_style;
     draw_annotation_controls(edited);
 
+    // A text annotation is placed with a click and says nothing yet, so the row it landed in opens for
+    // typing rather than leaving an empty one to be found and double-clicked.
+    if (m_annotation_place_text)
+    {
+        m_annotation_place_text = false;
+        if (active >= 0)
+        {
+            m_annotation_renaming  = active;
+            m_annotation_rename[0] = '\0';
+        }
+    }
+
     // Applied after the list is drawn: removing a row mid-list renumbers the ones still to come.
     int erase = -1;
 
@@ -834,7 +869,7 @@ void HDRViewApp::draw_annotations_window()
         // font size it is drawn at, so a square of that would clip it.
         float side = ImGui::GetTextLineHeight();
         for (const char *icon : {ICON_MY_VISIBILITY, ICON_MY_VISIBILITY_OFF, ICON_MY_LOCK, ICON_MY_LOCK_OPEN,
-                                 ICON_MY_SMOOTH, ICON_MY_POLYLINE, ICON_MY_TRASH_CAN})
+                                 ICON_MY_SMOOTH, ICON_MY_POLYLINE, ICON_MY_FONT, ICON_MY_TRASH_CAN})
             side = std::max(side, ImGui::CalcTextSize(icon).x);
         const ImVec2 icon_sz{side, side};
 
@@ -907,13 +942,22 @@ void HDRViewApp::draw_annotations_window()
             flat_toggle(ICON_MY_LOCK, ICON_MY_LOCK_OPEN, a.locked,
                         "A locked annotation cannot be picked up in the viewport.");
 
-            // Only a scribble has a path to run a curve through. The rows that cannot take one hold its
-            // place, so the shape icons beside them still line up.
+            // One column, whatever the shape has to put in it: a scribble runs a curve through its points,
+            // a text annotation picks its face and size, and the rest hold the place so the shape icons
+            // beside them still line up.
             if (a.shape == Annotation::Shape::Freehand)
             {
                 if (flat_toggle(ICON_MY_SMOOTH, ICON_MY_POLYLINE, a.smooth,
                                 "Draw this scribble as a curve through its points."))
                     m_annotation_style.smooth = a.smooth;
+            }
+            else if (a.shape == Annotation::Shape::Text)
+            {
+                if (ImGui::FlatButton(ICON_MY_FONT, false, icon_sz))
+                    ImGui::OpenPopup("##font");
+                ImGui::SetItemTooltip("The face and size this text is drawn in.");
+                ImGui::SameLine();
+                draw_font_popup(a);
             }
             else
             {
@@ -933,20 +977,30 @@ void HDRViewApp::draw_annotations_window()
                 ImGui::InputTextWithHint("##rename", a.display_label().c_str(), m_annotation_rename,
                                          sizeof(m_annotation_rename), ImGuiInputTextFlags_EnterReturnsTrue);
 
+                // For a text annotation the row's name is what it says, so this is how the text is typed.
                 if (ImGui::IsItemDeactivatedAfterEdit())
-                    a.label = m_annotation_rename;
+                {
+                    if (a.shape == Annotation::Shape::Text)
+                        a.text = m_annotation_rename;
+                    else
+                        a.label = m_annotation_rename;
+                }
                 if (ImGui::IsItemDeactivated())
                     m_annotation_renaming = -1;
             }
             else
             {
-                ImGui::TextUnformatted(fmt::format("{} {}", annotation_shape_icon(a.shape), a.display_label()).c_str());
+                const float name_w = row_x + row_w - icon_sz.x - ImGui::GetCursorPosX() -
+                                     ImGui::CalcTextSize(annotation_shape_icon(a.shape)).x - ImGui::CalcTextSize(" ").x;
+                ImGui::TextUnformatted(
+                    fmt::format("{} {}", annotation_shape_icon(a.shape), row_name(a, name_w)).c_str());
 
                 // Double-clicking the row renames it in place, which is where the name is read.
                 if (renamed_here)
                 {
                     m_annotation_renaming = i;
-                    snprintf(m_annotation_rename, sizeof(m_annotation_rename), "%s", a.label.c_str());
+                    snprintf(m_annotation_rename, sizeof(m_annotation_rename), "%s",
+                             a.shape == Annotation::Shape::Text ? a.text.c_str() : a.label.c_str());
                 }
             }
 
@@ -1023,10 +1077,6 @@ void HDRViewApp::draw_shape_picker(bool named)
         for (int n = 0; n < int(Annotation::Shape::COUNT); ++n)
         {
             const auto shape = Annotation::Shape(n);
-            // Text is placed by clicking and then typing, which nothing here can do yet.
-            if (shape == Annotation::Shape::Text)
-                continue;
-
             // The names are always spelled out in the list, whatever the closed control has room for.
             const bool is_selected = shape == m_annotation_shape;
             if (ImGui::Selectable(
@@ -1039,6 +1089,42 @@ void HDRViewApp::draw_shape_picker(bool named)
         ImGui::EndCombo();
     }
     ImGui::SetItemTooltip("Which shape the annotate tool draws next.");
+}
+
+void HDRViewApp::draw_font_popup(Annotation &a)
+{
+    if (!ImGui::BeginPopup("##font"))
+        return;
+
+    ImGui::SetNextItemWidth(EmSize(8));
+    const auto &faces = annotation_font_faces();
+    const char *shown = faces.front().label;
+    for (const auto &f : faces)
+        if (a.font_face == f.name)
+            shown = f.label;
+
+    if (ImGui::BeginCombo("Face", shown))
+    {
+        for (const auto &f : faces)
+        {
+            const bool is_selected = a.font_face == f.name;
+            if (ImGui::Selectable(f.label, is_selected))
+            {
+                a.font_face                  = f.name;
+                m_annotation_style.font_face = a.font_face;
+            }
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::SetNextItemWidth(EmSize(8));
+    if (ImGui::DragFloat("Size", &a.font_size, 0.25f, 4.f, 256.f, "%.0f px"))
+        m_annotation_style.font_size = a.font_size;
+    ImGui::SetItemTooltip("Screen pixels, so the text stays the same size however far the image is zoomed.");
+
+    ImGui::EndPopup();
 }
 
 void HDRViewApp::draw_annotation_controls(Annotation &a)

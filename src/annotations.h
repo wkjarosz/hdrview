@@ -74,6 +74,8 @@ struct Annotation
     /// Screen pixels, so neither thickens nor shrinks as the view is zoomed.
     float stroke_width = 2.f;
     float font_size    = 16.f; ///< Shape::Text only
+    /// Which face a Shape::Text is drawn in, as a NanoVG face name; see annotation_font_faces().
+    std::string font_face = "sans";
     /// VgCommand::TextAlign flags, saying where p0 sits relative to the text it anchors.
     int text_align = VgCommand::AlignLeft | VgCommand::AlignTop;
 
@@ -118,6 +120,17 @@ struct Annotation
 */
 void to_json(json &j, const Annotation &a);
 void from_json(const json &j, Annotation &a);
+
+/// The faces a text annotation can be drawn in: the NanoVG name to store, and what to call it.
+/**
+    These are the ones the viewport resolves to a loaded font; anything else falls back to the first.
+*/
+struct AnnotationFace
+{
+    const char *name;  ///< NanoVG face name, as stored and as the overlay interpreter expects it
+    const char *label; ///< What the font popup calls it
+};
+const std::vector<AnnotationFace> &annotation_font_faces();
 
 /// Human-readable name for \p shape, as the panel and the shape picker show it.
 const char *annotation_shape_name(Annotation::Shape shape);

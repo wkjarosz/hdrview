@@ -114,6 +114,7 @@ void to_json(json &j, const Annotation &a)
     j["fill"]      = a.fill_color;
     j["width"]     = a.stroke_width;
     j["font_size"] = a.font_size;
+    j["font_face"] = a.font_face;
     j["align"]     = a.text_align;
     j["smooth"]    = a.smooth;
     j["visible"]   = a.visible;
@@ -149,12 +150,20 @@ void from_json(const json &j, Annotation &a)
 
     a.stroke_width = j.value("width", a.stroke_width);
     a.font_size    = j.value("font_size", a.font_size);
+    a.font_face    = j.value<std::string>("font_face", a.font_face);
     a.text_align   = j.value("align", a.text_align);
     a.smooth       = j.value("smooth", a.smooth);
     a.visible      = j.value("visible", a.visible);
     a.locked       = j.value("locked", a.locked);
     a.text         = j.value<std::string>("text", a.text);
     a.label        = j.value<std::string>("label", a.label);
+}
+
+const std::vector<AnnotationFace> &annotation_font_faces()
+{
+    static const std::vector<AnnotationFace> faces{
+        {"sans", "Sans"}, {"sans-bold", "Sans bold"}, {"mono", "Mono"}, {"mono-bold", "Mono bold"}};
+    return faces;
 }
 
 const char *annotation_shape_name(Annotation::Shape shape)
@@ -195,6 +204,7 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     if (a.shape == Annotation::Shape::Text)
     {
         // The interpreter draws text in the *fill* color, so the one color the user picked goes there.
+        out.push_back(cmd(VgCommand::Type::FontFace, {}, a.font_face));
         out.push_back(cmd(VgCommand::Type::FontSize, {a.font_size, float(VgCommand::Absolute)}));
         out.push_back(cmd(VgCommand::Type::TextAlign, {float(a.text_align)}));
         out.push_back(cmd(VgCommand::Type::FillColor, color_floats(a.stroke_color)));
