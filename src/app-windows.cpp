@@ -1182,11 +1182,14 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
     const float side = ImGui::GetFrameHeight() * 0.8f;
     const float grid = 3.f * side + 2.f;
 
-    // Set against the middle of the grid rather than the top of it.
+    // Set against the middle of the grid rather than the top of it. The offset goes inside the label's own
+    // group: moved outside it, it would move the first square alone, the other two lining up with the line
+    // the label left behind.
+    ImGui::BeginGroup();
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 0.5f * (grid - ImGui::GetTextLineHeight()));
     ImGui::TextUnformatted("Anchor");
+    ImGui::EndGroup();
     ImGui::SameLine(0.f, item_spacing_x);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 0.5f * (grid - ImGui::GetTextLineHeight()));
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1.f, 1.f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.f);
