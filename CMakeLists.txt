@@ -1992,6 +1992,31 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     )
   endif()
 
+  # libtiff's own test images: one per photometric/channels/bits combination, named for what they hold, plus
+  # the encodings and malformed directories its regressions were written against. The loader's other cases
+  # build their TIFFs here, which cannot reach OJPEG, fax, or a directory that points at itself.
+  set(HDRVIEW_TEST_LIBTIFF_DIR
+      ""
+      CACHE PATH "libtiff's test/images directory"
+  )
+  if(HDRVIEW_TEST_LIBTIFF_DIR)
+    set(_hdrview_libtiff_data "${HDRVIEW_TEST_LIBTIFF_DIR}")
+    set(_hdrview_libtiff_explicit TRUE)
+  elseif(DEFINED tiff_SOURCE_DIR)
+    set(_hdrview_libtiff_data "${tiff_SOURCE_DIR}/test/images")
+    set(_hdrview_libtiff_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_libtiff_data AND EXISTS "${_hdrview_libtiff_data}")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_LIBTIFF_DIR="${_hdrview_libtiff_data}")
+  elseif(_hdrview_libtiff_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_LIBTIFF_DIR is set to '${_hdrview_libtiff_data}', which does not exist")
+  else()
+    message(STATUS "libtiff test images not available (no fetched source; set HDRVIEW_TEST_LIBTIFF_DIR to use "
+                   "a checkout); skipping tests/test_tiff_io.cpp's vendored-data cases"
+    )
+  endif()
+
   include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
   enable_testing()
   doctest_discover_tests(hdrview_tests)

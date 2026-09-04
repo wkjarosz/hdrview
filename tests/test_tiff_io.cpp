@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -554,4 +555,68 @@ TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples ar
     const float4 got = reloaded->rgba_pixel(int2{0, 0}, Target_Primary);
     for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(1e-3));
 }
+
+#ifdef HDRVIEW_TEST_LIBTIFF_DIR
+
+// libtiff's own test images. Most are named photometric-channels-bits, and its README says they hold the
+// same picture at 157x151, which is what lets these be checked without transcribing any pixels. The rest are
+// the files its regressions were written against: OJPEG, fax, and directories that point at themselves.
+TEST_CASE("libtiff's test images decode as their names say, or are refused")
+{
+    namespace fs = std::filesystem;
+
+    int named = 0, read = 0, refused = 0;
+    for (const auto &entry : fs::directory_iterator(HDRVIEW_TEST_LIBTIFF_DIR))
+    {
+        const auto path = entry.path();
+        if (path.extension() != ".tif" && path.extension() != ".tiff")
+            continue;
+
+        const std::string name = path.filename().string();
+        CAPTURE(name);
+
+        std::ifstream in(path, std::ios::binary);
+        REQUIRE(in.good());
+        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+
+        ImagePtr img;
+        try
+        {
+            img = load_bytes(load_tiff_image, bytes, name.c_str());
+        }
+        catch (const std::exception &)
+        {
+            // a file libtiff's own suite keeps because it is malformed; refusing it is an answer, and
+            // reaching this line at all is the point for the ones that describe a loop
+            ++refused;
+            continue;
+        }
+        if (!img)
+            continue;
+
+        ++read;
+        img->finalize();
+        CHECK(img->size().x > 0);
+        CHECK(img->size().y > 0);
+
+        // photometric-channels-bits, e.g. rgb-3c-16b.tiff. A palette is one channel of indices in the file
+        // and three of color once expanded, so the count is what the pixels are, not what the file stores.
+        int channels = 0, bits = 0;
+        if (sscanf(name.c_str(), "%*[a-z]-%dc-%db", &channels, &bits) == 2)
+        {
+            ++named;
+            CHECK((int)img->channels.size() == (name.rfind("palette", 0) == 0 ? 3 : channels));
+            // LogLuv decodes to float, and a float channel reports a depth of zero rather than the file's
+            if (name.rfind("logluv", 0) != 0)
+                CHECK(img->channels[0].bits_per_sample == bits);
+        }
+    }
+
+    CAPTURE(read);
+    CAPTURE(refused);
+    CHECK(named >= 8); // the README lists eight of them
+    CHECK(read > named);
+}
+
+#endif // HDRVIEW_TEST_LIBTIFF_DIR
 #endif
