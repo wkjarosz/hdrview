@@ -88,7 +88,7 @@ OPJ_BOOL out_seek(OPJ_OFF_T offset, void *user_data)
     covered past what a round trip through the writer can reach.
 */
 std::string encode_with_openjpeg(int w, int h, const std::vector<Component> &comps, OPJ_COLOR_SPACE cs,
-                                 OPJ_CODEC_FORMAT format, int x0 = 0, int y0 = 0)
+                                 OPJ_CODEC_FORMAT format, int x0 = 0, int y0 = 0, const std::string &icc = {})
 {
     std::vector<opj_image_cmptparm_t> parms(comps.size());
     std::memset(parms.data(), 0, parms.size() * sizeof(opj_image_cmptparm_t));
@@ -121,6 +121,16 @@ std::string encode_with_openjpeg(int w, int h, const std::vector<Component> &com
     {
         REQUIRE(comps[c].samples.size() == (size_t)img->comps[c].w * img->comps[c].h);
         std::memcpy(img->comps[c].data, comps[c].samples.data(), comps[c].samples.size() * sizeof(int32_t));
+    }
+
+    // OpenJPEG writes a 'colr' box of method 2 around whatever profile the image carries, and frees the
+    // buffer with the image, so it has to own it
+    if (!icc.empty())
+    {
+        img->icc_profile_buf = (OPJ_BYTE *)malloc(icc.size());
+        REQUIRE(img->icc_profile_buf != nullptr);
+        std::memcpy(img->icc_profile_buf, icc.data(), icc.size());
+        img->icc_profile_len = (OPJ_UINT32)icc.size();
     }
 
     opj_cparameters_t cp;
@@ -524,6 +534,43 @@ TEST_CASE("A codestream declaring impossible dimensions is refused before it is 
 
     CHECK_THROWS_AS(load_bytes(load_j2k_image, j2k, "huge.j2k"), std::exception);
 }
+
+#ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
+
+// lcms's own CMYK printer profile, which is a real one with real tables and says of itself that it is not
+// suitable for real use. That is all this needs: a profile whose color space is CMYK, so the conversion has
+// something to run through.
+TEST_CASE("CMYK ink decodes through the file's profile, and the right way up")
+{
+    std::ifstream in(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc", std::ios::binary);
+    REQUIRE(in.good());
+    const std::string icc{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    REQUIRE(icc.size() > 128);
+
+    // two pixels of known ink: bare paper, and a solid hit of black
+    const std::vector<int32_t> none(2, 0);
+    std::vector<int32_t>       black{0, 255};
+    const auto                 bytes = encode_with_openjpeg(
+        2, 1, {{8, false, 1, 1, none}, {8, false, 1, 1, none}, {8, false, 1, 1, none}, {8, false, 1, 1, black}},
+        OPJ_CLRSPC_CMYK, OPJ_CODEC_JP2, 0, 0, icc);
+
+    // as the app loads it, since a CMYK profile has to be applied even under the default that keeps primaries
+    const auto img = load_bytes(load_j2k_image, bytes, "cmyk.jp2");
+    REQUIRE(img);
+    CHECK(img->metadata.value("color profile", std::string{}).find("Test profile") != string::npos);
+    REQUIRE(img->channels.size() >= 3);
+
+    // paper is lighter than solid black ink. Reading the ink inverted swaps the two, and failing to convert
+    // at all leaves both at the C, M and Y that are zero in each.
+    for (int c = 0; c < 3; ++c)
+    {
+        CAPTURE(c);
+        CHECK(img->channels[c](0, 0) > 0.5f);
+        CHECK(img->channels[c](1, 0) < 0.2f);
+    }
+}
+
+#endif // HDRVIEW_TEST_LCMS_TESTBED_DIR
 
 #ifdef HDRVIEW_TEST_J2K_DIR
 

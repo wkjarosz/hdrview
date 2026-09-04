@@ -1924,6 +1924,34 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     )
   endif()
 
+  # The CMYK conversions cannot be exercised without a CMYK ICC profile, and the smallest real one is half a
+  # megabyte, too large to vendor. libjxl carries lcms in-tree and lcms's testbed carries two, so a build
+  # that fetched libjxl already has one on disk and the cases can run in CI like the OpenEXR ones.
+  set(HDRVIEW_TEST_LCMS_TESTBED_DIR
+      ""
+      CACHE PATH "lcms2's testbed directory, whose test1.icc is a CMYK printer profile"
+  )
+  if(HDRVIEW_TEST_LCMS_TESTBED_DIR)
+    set(_hdrview_lcms_testbed "${HDRVIEW_TEST_LCMS_TESTBED_DIR}")
+    set(_hdrview_lcms_explicit TRUE)
+  elseif(DEFINED JXL_SOURCE_DIR)
+    set(_hdrview_lcms_testbed "${JXL_SOURCE_DIR}/third_party/lcms/testbed")
+    set(_hdrview_lcms_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_lcms_testbed AND EXISTS "${_hdrview_lcms_testbed}/test1.icc")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_LCMS_TESTBED_DIR="${_hdrview_lcms_testbed}")
+  elseif(_hdrview_lcms_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_LCMS_TESTBED_DIR is set to '${_hdrview_lcms_testbed}', which holds no "
+                        "test1.icc"
+    )
+  else()
+    message(STATUS "lcms2's test profiles not available (no fetched libjxl source; set "
+                   "HDRVIEW_TEST_LCMS_TESTBED_DIR to use a checkout); skipping the CMYK cases in "
+                   "tests/test_j2k_io.cpp"
+    )
+  endif()
+
   # No JPEG 2000 corpus is vendored by anything the build fetches, so this one is opt-in: point it at a
   # directory of real .jp2/.j2k/.jph files and tests/test_j2k_io.cpp sweeps it.
   set(HDRVIEW_TEST_J2K_DIR
