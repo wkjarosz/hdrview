@@ -130,6 +130,8 @@ TEST_CASE("DDS premultiplied-alpha formats are not premultiplied a second time")
 #ifdef HDRVIEW_TEST_BCDEC_DIR
 
 // bcdec's own test images, one per block format, decoded by the library HDRView links for exactly this.
+// The BC7 one reaches a left shift of an uninitialized endpoint inside bcdec, suppressed for UBSan in
+// .github/ubsan-suppressions.txt.
 TEST_CASE("Every block format bcdec ships decodes to the size its header declares")
 {
     namespace fs = std::filesystem;
