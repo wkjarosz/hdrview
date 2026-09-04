@@ -579,10 +579,13 @@ TEST_CASE("libtiff's test images decode as their names say, or are refused")
         REQUIRE(in.good());
         const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 
-        ImagePtr img;
+        // the loader is called directly rather than through load_bytes(), which keeps only a lone image: the
+        // files with several directories are the ones worth reaching here, and they decode to one apiece
+        std::istringstream    in_stream(bytes, std::ios::binary);
+        std::vector<ImagePtr> images;
         try
         {
-            img = load_bytes(load_tiff_image, bytes, name.c_str());
+            images = load_tiff_image(in_stream, name);
         }
         catch (const std::exception &)
         {
@@ -591,13 +594,16 @@ TEST_CASE("libtiff's test images decode as their names say, or are refused")
             ++refused;
             continue;
         }
-        if (!img)
-            continue;
+        REQUIRE_FALSE(images.empty());
 
         ++read;
-        img->finalize();
-        CHECK(img->size().x > 0);
-        CHECK(img->size().y > 0);
+        for (const auto &part : images)
+        {
+            part->finalize();
+            CHECK(part->size().x > 0);
+            CHECK(part->size().y > 0);
+        }
+        const auto &img = images.front();
 
         // photometric-channels-bits, e.g. rgb-3c-16b.tiff. A palette is one channel of indices in the file
         // and three of color once expanded, so the count is what the pixels are, not what the file stores.
@@ -615,6 +621,7 @@ TEST_CASE("libtiff's test images decode as their names say, or are refused")
     CAPTURE(read);
     CAPTURE(refused);
     CHECK(named >= 8); // the README lists eight of them
+    CHECK(read >= 31); // every .tif and .tiff in the directory, the multi-directory ones included
     CHECK(read > named);
 }
 
