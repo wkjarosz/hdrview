@@ -830,8 +830,8 @@ private:
     /// The annotation being worked on, and the image whose list that index refers to.
     /**
         The two travel together because an index alone means nothing once the current image changes;
-        active_annotation() hands back -1 unless they still agree. Called active rather than selected,
-        which in this class already means the rectangular ROI and the channel-group selection both.
+        active_annotation() hands back -1 unless they still agree. Called active because selected already
+        means the rectangular ROI and the channel-group selection both.
     */
     ImagePtr m_active_annotation_on;
     int      m_active_annotation = -1;

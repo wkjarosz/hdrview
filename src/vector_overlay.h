@@ -110,8 +110,8 @@ struct VgTransform
     rasterize. Baking at powers of two up to a cap leaves a handful of sizes to reuse, and whatever is left
     over is applied to the glyph quads instead.
 
-    Deliberately the size before any zoom: were the zoom in it, a view being zoomed would ask for a size it
-    had not baked every frame, and the text would shift as it crossed from one baked size to the next.
+    Takes the size before any zoom: with the zoom in it, a view being zoomed would ask for a size it had
+    not baked every frame, and the text would shift as it crossed from one baked size to the next.
     Measuring goes through this too, since measuring a size bakes it.
 */
 float text_baked_size(float size);

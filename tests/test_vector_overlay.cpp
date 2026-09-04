@@ -226,7 +226,7 @@ TEST_CASE("Scaled-up text moves with its anchor rather than jumping between pixe
     // Text is laid out at a size the font is baked at and the glyphs are then scaled up, which is what
     // keeps a zoomed view from rasterizing a fresh set every frame. ImFont::RenderText lays them out from
     // a whole-pixel position, so scaling them about anywhere else multiplies the fraction of a pixel
-    // between the two -- and the text jumps by that multiple every time it crosses a pixel boundary.
+    // between the two, and the text jumps by that multiple every time it crosses a pixel boundary.
     ImFontAtlas atlas;
     ImFont     *font = atlas.AddFontDefault();
     REQUIRE(font != nullptr);

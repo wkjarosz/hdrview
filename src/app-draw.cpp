@@ -266,8 +266,8 @@ void HDRViewApp::draw_vector_overlays() const
         if (img->vector_overlay_visible && !img->vector_overlay.empty())
             draw_vector_overlay(ImGui::GetBackgroundDrawList(), img->vector_overlay, xform, color, unsupported);
 
-        // Flattened each frame rather than cached: an annotation being dragged changes every frame anyway,
-        // and the command list is small enough that keeping it in step with the shapes is not worth it.
+        // Flattened each frame: an annotation being dragged changes every frame anyway, and the command
+        // list is small.
         if (m_draw_annotations && !img->annotations.empty())
             draw_vector_overlay(ImGui::GetBackgroundDrawList(), to_vg_commands(img->annotations, xform.scale), xform,
                                 color, unsupported);
@@ -304,8 +304,8 @@ void HDRViewApp::draw_text_editing() const
     // Boxed, so a selected string reads as selected even where its corners are not yet in reach.
     draw_list->AddRect(lo - 2.f, lo + extent + 2.f, ImGui::GetColorU32(ImGuiCol_Border));
 
-    // Dear ImGui draws the caret and the selection inside InputTextEx, which is not something that can be
-    // called from out here -- but the state behind it can be read, so the same marks are drawn from it.
+    // Dear ImGui draws the caret and the selection inside InputTextEx, which cannot be called from out
+    // here; the state behind it can be read, so the same marks are drawn from it.
     ImGuiInputTextState *state = ImGui::GetInputTextState(m_annotation_rename_id);
     if (!state || m_annotation_renaming != active)
         return;

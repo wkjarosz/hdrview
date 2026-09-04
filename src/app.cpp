@@ -291,8 +291,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
 
     // Left column: "Images" occupies the top 80%, "Watched Folders" the bottom 20%. Each dock space holds a
     // single window, so auto-hide their tab bars. The right column is split off before the log, so the log
-    // runs under the image alone rather than under that column too; its own bottom fifth holds the panels
-    // that belong to the image rather than describe it.
+    // runs under the image alone; its own bottom fifth holds the panels that belong to an image.
     std::vector<DockingSplit> docking_splits = {
         DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
         DockingSplit{"ImagesSpace", "WatchedFoldersSpace", ImGuiDir_Down, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},

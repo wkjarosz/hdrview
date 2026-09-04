@@ -44,7 +44,7 @@ constexpr int k_curve_samples = 8;
 /**
     Uniform Catmull-Rom: the curve passes through every point, and each tangent is a sixth of the vector
     between that point's neighbors. An end repeats its own point for the neighbor it lacks, so the curve
-    starts and finishes along the path rather than turning away from it.
+    starts and finishes along the path.
 */
 void catmull_rom_span(const std::vector<float2> &pts, size_t i, float2 b[4])
 {
@@ -77,15 +77,14 @@ void append_arrow(std::vector<VgCommand> &out, const Annotation &a, float scale)
     const float2 dir  = along / length;
     const float2 perp = float2{-dir.y, dir.x};
 
-    // The head is proportioned in screen pixels, like the stroke it terminates, but goes out in image
-    // coordinates with the rest of the geometry -- hence the division by the scale.
+    // The head is proportioned in screen pixels, like the stroke it terminates, and goes out in image
+    // coordinates with the rest of the geometry; hence the division by the scale.
     const float head_len =
         std::min(k_head_length * a.stroke_width / std::max(scale, 1e-6f), k_max_head_fraction * length);
     const float  head_half = head_len * (k_head_half_width / k_head_length);
     const float2 base      = a.p1() - dir * head_len;
 
-    // The shaft stops where the head begins rather than running under it, so a translucent stroke does not
-    // show through as a darker wedge.
+    // The shaft stops where the head begins, so a translucent stroke shows no darker wedge under it.
     out.push_back(cmd(VgCommand::Type::BeginPath));
     out.push_back(cmd(VgCommand::Type::MoveTo, {a.p0().x, a.p0().y}));
     out.push_back(cmd(VgCommand::Type::LineTo, {base.x, base.y}));
@@ -136,8 +135,7 @@ void from_json(const json &j, Annotation &a)
         if (id == g_shape_ids[i])
             a.shape = Annotation::Shape(i);
 
-    // Anything the file leaves out keeps the default it was constructed with, so a session written by an
-    // older version reads as one of those rather than as garbage.
+    // Anything the file leaves out keeps the default it was constructed with, so an older session reads.
     // A shape with no points at all could not be drawn or picked up, so an empty array is refused rather
     // than stored: p0() and p1() are allowed to assume there is always a point.
     if (j.contains("points"))
@@ -230,8 +228,8 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     {
     case Annotation::Shape::Rect:
     {
-        // Rect takes a corner and an extent, so the corners are ordered first -- a drag that ran right to
-        // left would otherwise give it a negative width.
+        // Rect takes a corner and an extent, so the corners are ordered first: a drag that ran right to
+        // left would give it a negative width.
         const float2 lo{std::min(a.p0().x, a.p1().x), std::min(a.p0().y, a.p1().y)};
         const float2 hi{std::max(a.p0().x, a.p1().x), std::max(a.p0().y, a.p1().y)};
         out.push_back(cmd(VgCommand::Type::Rect, {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y}));
@@ -247,10 +245,9 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     break;
 
     case Annotation::Shape::Freehand:
-        // The path as it was drawn, point to point or as the curve through them -- the interpreter
-        // tessellates a cubic itself, so a smooth stroke costs one command per span rather than a sampled
-        // polyline. Closed when it is to be filled, so the fill has an interior to cover, and left open
-        // otherwise, which is what a stroked scribble should look like.
+        // The path as it was drawn, point to point or as the curve through them: the interpreter
+        // tessellates a cubic itself, so a smooth stroke costs one command per span. Closed only when it
+        // is to be filled, so the fill has an interior to cover.
         out.push_back(cmd(VgCommand::Type::MoveTo, {a.points.front().x, a.points.front().y}));
         if (a.smooth)
             for (size_t i = 0; i + 1 < a.points.size(); ++i)
@@ -273,7 +270,7 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
         break;
     }
 
-    // Filled before stroked, so the outline sits over the interior rather than being half-covered by it.
+    // Filled before stroked, so the outline sits over the interior.
     if (filled)
         out.push_back(cmd(VgCommand::Type::Fill));
     out.push_back(cmd(VgCommand::Type::Stroke));
@@ -484,8 +481,8 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
             const auto path = annotation_path(a);
 
             // The box first: a scribble is mostly empty space, and walking hundreds of segments to answer
-            // "nowhere near it" is the common case. Measured over the drawn path rather than the points,
-            // since a curve through them bows outside the box they describe.
+            // "nowhere near it" is the common case. Measured over the drawn path, since a curve through
+            // the points bows outside the box they describe.
             float2 lo, hi;
             screen_extent(path, xform, lo, hi);
             if (distance_to_box(screen_pos, lo, hi) > tol)
@@ -501,9 +498,8 @@ int annotation_at(const std::vector<Annotation> &annotations, float2 screen_pos,
             const float2 anchor = xform.to_screen(a.p0());
 
             // The box the glyphs occupy, placed the same way the drawing places them, and taken to the
-            // screen by its corners so a flipped view maps as it should. Without something to measure with
-            // there is only the anchor, which is where the string starts rather than where it is, so a
-            // click has to land near that instead.
+            // screen by its corners so a flipped view maps as it should. With nothing to measure with
+            // there is only the anchor, which is where the string starts, so a click has to land near it.
             float2 lo, extent;
             if (text_extent(a, xform, lo, extent))
             {
@@ -602,8 +598,8 @@ int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransfor
         const float2 fixed{index == 0 || index == 3 ? lo.x + extent.x : lo.x,
                            index == 0 || index == 1 ? lo.y + extent.y : lo.y};
 
-        // Glyphs cannot be stretched, so the box's new height is what the font size follows; a drag that
-        // would turn it inside out is ignored rather than flipping the text over.
+        // Glyphs cannot be stretched, so the box's new height is what the font size follows. A drag that
+        // would turn it inside out is ignored.
         const float height = std::abs(to.y - fixed.y);
         if (height <= 0.f || extent.y <= 0.f || a.font_size <= 0.f)
             return index;
@@ -660,9 +656,9 @@ int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransfor
     const float2 to_lo{std::min(lo.x, hi.x), std::min(lo.y, hi.y)};
     const float2 to_hi{std::max(lo.x, hi.x), std::max(lo.y, hi.y)};
 
-    // Every point moves with the box, which for a Rect or Ellipse -- whose two points are its corners -- is
-    // the corner drag it always was, and for a scribble scales the whole path. An axis the box has no
-    // extent along cannot be scaled, so those points go to the new edge instead.
+    // Every point moves with the box: for a Rect or Ellipse, whose two points are its corners, that is the
+    // corner drag itself, and for a scribble it scales the whole path. An axis the box has no extent along
+    // cannot be scaled, so those points go to the new edge.
     const float2 extent = before.max - before.min;
     for (auto &p : a.points)
     {

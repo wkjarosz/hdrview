@@ -60,7 +60,7 @@ struct TestEditContext : EditContext
 
         modify_channels_async = [this](const std::string &name, const ChannelFilter &filter)
         {
-            // Named apart rather than as a structured binding, which C++17 cannot capture in a lambda.
+            // Named apart: C++17 cannot capture a structured binding in a lambda.
             auto  resolved = resolve_subject(image, subject, roi);
             auto &channels = resolved.first;
             auto &bounds   = resolved.second;

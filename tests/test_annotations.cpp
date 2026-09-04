@@ -60,7 +60,7 @@ std::vector<Annotation::Shape> all_shapes()
 TEST_CASE("Every shape flattens to a well-formed command stream")
 {
     // The wire format carries no per-command length, so a command's argument count is what makes the
-    // stream parseable at all -- and an arity mistake is the likeliest way to write a new shape wrongly.
+    // stream parseable at all, and an arity mistake is the likeliest way to write a new shape wrongly.
     for (auto shape : all_shapes())
     {
         CAPTURE(annotation_shape_name(shape));
@@ -83,7 +83,7 @@ TEST_CASE("Every shape flattens to a well-formed command stream")
 TEST_CASE("Every shape draws within the bounds it declares")
 {
     // Ties bounds() to what is actually drawn. Catches the argument-order mistakes a command-level check
-    // cannot see -- Rect takes a corner and an extent, Ellipse a center and radii, and passing either one
+    // cannot see: Rect takes a corner and an extent, Ellipse a center and radii, and passing either one
     // the other way puts geometry somewhere bounds() never claimed.
     for (auto shape : all_shapes())
     {
@@ -162,7 +162,7 @@ TEST_CASE("An invisible annotation draws nothing, and does not disturb its neigh
 
         CHECK(to_vg_commands({hidden}, 1.f).empty());
 
-        // Hiding one annotation must leave the others exactly as they were -- the state the interpreter
+        // Hiding one annotation must leave the others exactly as they were: the state the interpreter
         // carries between commands makes "skipped" and "drawn transparently" different things.
         const Annotation visible = sample(Annotation::Shape::Rect);
         CHECK(to_vg_commands({hidden, visible}, 1.f).size() == to_vg_commands({visible}, 1.f).size());
@@ -318,7 +318,7 @@ TEST_CASE("A shape is hit through its middle only once it is filled")
 TEST_CASE("Every handle is found where it is drawn")
 {
     // Hit testing and drawing read the same list, so this is really checking that the transform is applied
-    // the same way in both directions -- the one place a handle can drift from the shape it belongs to.
+    // the same way in both directions, the one place a handle can drift from the shape it belongs to.
     constexpr float radius = 6.f;
 
     for (auto shape : all_shapes())

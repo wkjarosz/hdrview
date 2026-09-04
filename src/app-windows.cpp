@@ -832,7 +832,7 @@ void HDRViewApp::draw_annotations_window()
     draw_annotation_controls(edited);
 
     // A text annotation is placed with a click and says nothing yet, so the row it landed in opens for
-    // typing rather than leaving an empty one to be found and double-clicked.
+    // typing.
     if (m_annotation_place_text)
     {
         m_annotation_place_text = false;
@@ -858,8 +858,8 @@ void HDRViewApp::draw_annotations_window()
     // Where the rows are, so a drag can say which one the cursor is over.
     float first_row_top = 0.f, row_height = 0.f;
 
-    // The same table the Images panel's list is: an outer border, striped rows, and rows that reach the
-    // full width rather than sitting inside a child's padding.
+    // The same table the Images panel's list is: an outer border, striped rows, and rows reaching the
+    // full width. A child window would inset them by its padding.
     static constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit |
                                                    ImGuiTableFlags_BordersOuter | ImGuiTableFlags_RowBg |
                                                    ImGuiTableFlags_ScrollY;
@@ -916,17 +916,17 @@ void HDRViewApp::draw_annotations_window()
             const float row_x = ImGui::GetCursorPosX();
             const float row_w = ImGui::GetContentRegionAvail().x;
 
-            // The highlight goes down first and spans the row, with everything else drawn back over it, so
-            // selecting reads across the whole row rather than just the label.
+            // The highlight goes down first and spans the row, with everything else drawn back over it,
+            // so selecting reads across the whole row.
             ImGui::SetNextItemAllowOverlap();
             if (ImGui::Selectable("##row", i == active,
                                   ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_SpanAllColumns,
                                   ImVec2(0.f, icon_sz.y)))
                 set_active_annotation(i);
 
-            // Which row a press took hold of. Tracked here rather than read back from ImGui's active item,
-            // whose id is this row's index: reordering moves annotations between indices, so the active
-            // item would stay on the row number and the list would flicker between two orders.
+            // Which row a press took hold of. ImGui's active item cannot say: its id is this row's index,
+            // and reordering moves annotations between indices, so it would stay on the row number and the
+            // list would flicker between two orders.
             if (ImGui::IsItemActivated())
                 m_annotation_row_drag = i;
 
@@ -1005,8 +1005,8 @@ void HDRViewApp::draw_annotations_window()
                         m_annotation_edit_text = false;
                     }
 
-                // For a text annotation the row's name is what it says, so this is how the text is typed --
-                // as it is typed, so the image shows it rather than waiting for the field to be left.
+                // For a text annotation the row's name is what it says, so this is how the text is typed,
+                // and it is written as it is typed, so the image shows it before the field is left.
                 auto &named = a.shape == Annotation::Shape::Text ? a.text : a.label;
                 if (edited)
                     named = m_annotation_rename;
@@ -1134,8 +1134,8 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
         return;
 
     // The rows flatten their padding to stay one line tall; a popup off one of them is an ordinary window
-    // and wants ordinary widgets. Its own two rows sit closer together than the default, which is spaced
-    // for a window rather than for a couple of controls.
+    // and wants ordinary widgets. Its own two rows sit closer than the default, which is spaced for a
+    // window.
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, frame_padding);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(item_spacing_x, frame_padding.y));
 
@@ -1168,11 +1168,10 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
         m_annotation_style.font_size = a.font_size;
     ImGui::SetItemTooltip("Image pixels, so the text grows and shrinks with what it labels.");
 
-    // Which corner or edge of the string lands on the point it was placed at -- NanoVG's align flags say
-    // exactly that, so a grid of the nine positions states it more directly than alignment icons could.
-    // Each square carries a dot where its own anchor sits, drawn rather than lettered: FontAwesome has no
-    // diagonal arrows, and four of the nine would have been blank under it. Baseline is the tenth position
-    // and has no square; only a renderer sends it.
+    // Which corner or edge of the string lands on the point it was placed at, which is what NanoVG's
+    // align flags say. Each square carries a dot where its own anchor sits, drawn because FontAwesome has
+    // no diagonal arrows and four of the nine would be blank under it. Baseline is the tenth position and
+    // has no square; only a renderer sends it.
     constexpr int h_of[3] = {VgCommand::AlignLeft, VgCommand::AlignCenter, VgCommand::AlignRight};
     constexpr int v_of[3] = {VgCommand::AlignTop, VgCommand::AlignMiddle, VgCommand::AlignBottom};
 
@@ -1182,9 +1181,8 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
     const float side = ImGui::GetFrameHeight() * 0.8f;
     const float grid = 3.f * side + 2.f;
 
-    // Set against the middle of the grid rather than the top of it. The offset goes inside the label's own
-    // group: moved outside it, it would move the first square alone, the other two lining up with the line
-    // the label left behind.
+    // Set against the middle of the grid. The offset goes inside the label's own group; outside it, it
+    // would move the first square alone, the other two lining up with the line the label left behind.
     ImGui::BeginGroup();
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 0.5f * (grid - ImGui::GetTextLineHeight()));
     ImGui::TextUnformatted("Anchor");

@@ -308,8 +308,8 @@ void HDRViewApp::handle_annotate_tool()
     auto  img = current_image();
     auto &io  = ImGui::GetIO();
 
-    // A drag whose image is no longer current is abandoned, half-drawn shape and all, rather than carried
-    // on over whatever playback or a close has put in its place.
+    // A drag whose image is no longer current is abandoned, half-drawn shape and all: playback or a close
+    // has put something else in its place.
     if (m_annotation_drag != AnnotationDrag::None && m_active_annotation_on != img)
     {
         cancel_annotation_drag();
@@ -398,8 +398,8 @@ void HDRViewApp::handle_annotate_tool()
         case AnnotationDrag::Creating:
             if (a.shape == Annotation::Shape::Freehand)
             {
-                // A point per frame would record how fast the cursor moved rather than where it went, so
-                // one is kept only once the last is a couple of screen pixels behind.
+                // A point per frame would record how fast the cursor moved, so one is kept only once the
+                // last is a couple of screen pixels behind.
                 const float step = k_scribble_step / std::max(xform_scale, 1e-6f);
                 if (length(pixel - a.points.back()) >= step)
                     a.points.push_back(pixel);
@@ -419,7 +419,7 @@ void HDRViewApp::handle_annotate_tool()
 
         case AnnotationDrag::Resizing:
             // Dragging a corner past its opposite renumbers the handles, so the drag follows the index
-            // back rather than keeping hold of a corner that has moved out from under the cursor.
+            // back and keeps hold of the corner under the cursor.
             m_annotation_drag_handle = move_annotation_handle(a, m_annotation_drag_handle, pixel, &xform_for_handles);
             break;
 
@@ -430,14 +430,14 @@ void HDRViewApp::handle_annotate_tool()
     {
         if (m_annotation_drag == AnnotationDrag::Creating)
         {
-            // A captured scribble holds far more points than its shape needs. Simplified once, on release,
-            // rather than while it is being drawn, so what is dropped is judged against the whole stroke.
+            // A captured scribble holds far more points than its shape needs. Simplified once, on
+            // release, so what is dropped is judged against the whole stroke.
             if (a.shape == Annotation::Shape::Freehand)
                 a.points = simplify_polyline(a.points, k_scribble_tolerance / std::max(xform_scale, 1e-6f));
 
-            // A click that never became a drag leaves nothing behind, rather than a shape with no extent
-            // that is invisible and cannot be taken hold of again. Text is the exception: a click is how
-            // one is placed, and the panel opens its name for typing straight afterwards.
+            // A click that never became a drag leaves nothing behind: a shape with no extent is invisible
+            // and cannot be taken hold of again. Text is the exception, a click being how one is placed,
+            // and the panel opens its name for typing straight afterwards.
             if (a.shape == Annotation::Shape::Text)
                 m_annotation_place_text = true;
             else if (a.bounds().min == a.bounds().max)
