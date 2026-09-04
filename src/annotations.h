@@ -61,8 +61,17 @@ struct Annotation
     /// Interior of a closed shape. Alpha zero means unfilled, which is the default and the common case.
     float4 fill_color{0.f, 0.f, 0.f, 0.f};
 
-    float stroke_width = 2.f;  ///< Screen pixels, so it neither thickens nor shrinks as the view is zoomed
-    float font_size    = 16.f; ///< Shape::Text only, in image pixels, so it zooms with what it labels
+    float stroke_width = 2.f;
+    float font_size    = 16.f; ///< Shape::Text only
+
+    /// Whether each size is in image pixels, and so zooms with what it marks, or in screen pixels.
+    /**
+        The protocol carries this per command, as VgCommand::ScaleKind, and these are what it is set from.
+        A stroke defaults to screen pixels, so a line stays visible however far out the view is, and a font
+        to image pixels, so a string stays the size of the feature it labels.
+    */
+    bool stroke_width_relative = false;
+    bool font_size_relative    = true;
     /// Which face a Shape::Text is drawn in, as a NanoVG face name; see annotation_font_faces().
     std::string font_face = "sans";
     /// VgCommand::TextAlign flags, saying where p0 sits relative to the text it anchors.
@@ -105,6 +114,16 @@ struct Annotation
 void to_json(json &j, const Annotation &a);
 void from_json(const json &j, Annotation &a);
 
+/// Screen pixels per unit of \p a's font size, and of its stroke width: \p scale when that size is
+/// relative, and one when it is not.
+/**
+    These are the only places that say what the two flags mean; everything that has to know asks here.
+    Measuring is linear in a font's size, so a string measured at font_size scales by the first into screen
+    pixels, and dividing by \p scale again brings it back to image ones.
+*/
+float font_size_scale(const Annotation &a, float scale);
+float stroke_width_scale(const Annotation &a, float scale);
+
 /// Where \p a's text sits, in image coordinates, or false when \p xform cannot measure it.
 bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &extent);
 
@@ -134,7 +153,7 @@ std::vector<VgCommand> to_vg_commands(const std::vector<Annotation> &annotations
 */
 int annotation_handles(const Annotation &a, float2 out[Annotation::MaxHandles], const VgTransform *xform = nullptr);
 
-/// Index of the handle of \p a within \p radius of \p screen_pos, or -1 if none is.
+/// Index of \p a's handle whose square of half-size \p radius holds \p screen_pos, or -1 if none does.
 int handle_at(const Annotation &a, float2 screen_pos, const VgTransform &xform, float radius);
 
 /// The polyline \p a is drawn as: its points, or the curve sampled through them.

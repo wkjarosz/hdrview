@@ -1325,7 +1325,15 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        tool_icons[i],
                        tool_chords[i],
                        0,
-                       [this, i]() { set_mouse_mode(i); },
+                       [this, i]()
+                       {
+                           // The tool's own key cycles what it draws once it is the tool in hand.
+                           if (i == MouseMode_Annotate && m_mouse_mode == MouseMode_Annotate)
+                               set_annotation_shape(
+                                   Annotation::Shape((int(m_annotation_shape) + 1) % int(Annotation::Shape::COUNT)));
+                           else
+                               set_mouse_mode(i);
+                       },
                        always_enabled,
                        false,
                        &m_mouse_mode_enabled[i]});

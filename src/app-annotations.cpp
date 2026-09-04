@@ -18,6 +18,29 @@
 using namespace std;
 using namespace HelloImGui;
 
+/// The icon the panel and the shape picker show for \p shape.
+static const char *annotation_shape_icon(Annotation::Shape shape)
+{
+    switch (shape)
+    {
+    case Annotation::Shape::Rect: return ICON_MY_SHAPE_RECT;
+    case Annotation::Shape::Ellipse: return ICON_MY_SHAPE_ELLIPSE;
+    case Annotation::Shape::Line: return ICON_MY_SHAPE_LINE;
+    case Annotation::Shape::Arrow: return ICON_MY_SHAPE_ARROW;
+    case Annotation::Shape::Text: return ICON_MY_SHAPE_TEXT;
+    case Annotation::Shape::Freehand: return ICON_MY_SHAPE_FREEHAND;
+    default: return ICON_MY_ANNOTATE;
+    }
+}
+
+void HDRViewApp::set_annotation_shape(Annotation::Shape shape)
+{
+    m_annotation_shape = shape;
+
+    // The tool's button says which shape it will draw, so the palette shows the choice without being asked.
+    action(mouse_mode_action_name(MouseMode_Annotate)).icon = annotation_shape_icon(shape);
+}
+
 int HDRViewApp::active_annotation() const
 {
     auto img = current_image();
@@ -226,8 +249,9 @@ void HDRViewApp::draw_text_editing() const
 
     auto *draw_list = ImGui::GetBackgroundDrawList();
 
-    // Boxed, so a selected string reads as selected even where its corners are not yet in reach.
-    draw_list->AddRect(lo - 2.f, hi + 2.f, ImGui::GetColorU32(ImGuiCol_Border));
+    // Boxed, so a selected string reads as selected. On the box itself, not a couple of pixels outside it,
+    // since its corners are where the handles are and a click has to land on what it can see.
+    draw_list->AddRect(lo, hi, ImGui::GetColorU32(ImGuiCol_Border));
 
     // Dear ImGui draws the caret and the selection inside InputTextEx, which cannot be called from out
     // here; the state behind it can be read, so the same marks are drawn from it.
@@ -241,7 +265,8 @@ void HDRViewApp::draw_text_editing() const
     auto        place  = [&](int offset)
     {
         const int n = std::clamp(offset, 0, int(a.text.size()));
-        return xform.measure_text(a.font_face, a.font_size, a.text.substr(0, size_t(n))).x * xform.scale;
+        return xform.measure_text(a.font_face, a.font_size, a.text.substr(0, size_t(n))).x *
+               font_size_scale(a, xform.scale);
     };
 
     if (state->HasSelection())
@@ -278,19 +303,91 @@ static std::string row_name(const Annotation &a, float width)
     return name + "...";
 }
 
-/// The icon the panel and the shape picker show for \p shape.
-static const char *annotation_shape_icon(Annotation::Shape shape)
+/// A size, with the unit it is measured in chosen from a menu at the end of the field.
+/**
+    The protocol carries a scale kind on each of the two sizes it has, so both are offered: image pixels,
+    which zoom with what they mark, and screen pixels, which do not. Switching converts \p value at the
+    current \p scale, so what is on screen does not jump when the unit under it changes.
+*/
+static bool size_drag(const char *id, float &value, bool &relative, float speed, float lo_limit, float hi_limit,
+                      float scale, float width)
 {
-    switch (shape)
+    const ImGuiStyle &style  = ImGui::GetStyle();
+    const float       arrow  = ImGui::GetFrameHeight();
+    const char       *format = relative ? "%.2f img" : "%.1f px";
+
+    ImGui::PushID(id);
+
+    // DragFloat centers its value across the whole frame with no way to ask for anything else, which in a
+    // narrow field runs it under the menu. So the drag is given nothing to draw and the value is drawn
+    // here, centered in what the menu leaves. While it is being typed into, the input box draws its own.
+    const bool typing = ImGui::TempInputIsActive(ImGui::GetID("##value"));
+
+    // The drag takes the whole width and the menu is laid over its right-hand end, so the two read as one
+    // frame.
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::SetNextItemWidth(width);
+    bool changed = ImGui::DragFloat("##value", &value, speed, lo_limit, hi_limit, typing ? format : "");
+    ImGui::SetItemTooltip("%s", relative ? "Image pixels: zooms with what it marks."
+                                         : "Screen pixels: the same size however far the view is zoomed.");
+
+    const ImVec2 field_lo = ImGui::GetItemRectMin(), field_hi = ImGui::GetItemRectMax();
+    const ImVec2 resume = ImGui::GetCursorScreenPos();
+
+    // Drawn the way BeginCombo draws its own arrow: a button-colored box over the end of the frame, rounded
+    // on the right, with the arrow inset by the frame padding at full size.
+    const ImVec2 at{field_hi.x - arrow, field_lo.y};
+    ImGui::SetCursorScreenPos(at);
+    const bool clicked = ImGui::InvisibleButton("##units", ImVec2(arrow, field_hi.y - field_lo.y));
+
+    auto *draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddRectFilled(at, field_hi,
+                             ImGui::GetColorU32(ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered : ImGuiCol_Button),
+                             style.FrameRounding, ImDrawFlags_RoundCornersRight);
+    ImGui::RenderArrow(draw_list, ImVec2(at.x + style.FramePadding.y, at.y + style.FramePadding.y),
+                       ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 1.f);
+
+    ImGui::SetItemTooltip("The unit this size is measured in.");
+
+    if (!typing)
     {
-    case Annotation::Shape::Rect: return ICON_MY_SHAPE_RECT;
-    case Annotation::Shape::Ellipse: return ICON_MY_SHAPE_ELLIPSE;
-    case Annotation::Shape::Line: return ICON_MY_SHAPE_LINE;
-    case Annotation::Shape::Arrow: return ICON_MY_SHAPE_ARROW;
-    case Annotation::Shape::Text: return ICON_MY_SHAPE_TEXT;
-    case Annotation::Shape::Freehand: return ICON_MY_SHAPE_FREEHAND;
-    default: return ICON_MY_ANNOTATE;
+        char shown[64];
+        snprintf(shown, sizeof(shown), format, value);
+
+        // Centered in what the menu leaves, and cut off there: a value too long for the room would run
+        // under the arrow, which is what a narrow panel produces.
+        ImGui::RenderTextClipped(ImVec2(field_lo.x + style.FramePadding.x, field_lo.y), ImVec2(at.x, field_hi.y), shown,
+                                 nullptr, nullptr, ImVec2(0.5f, 0.5f));
     }
+
+    // The menu was placed by hand, so the layout goes on from where the field left it.
+    ImGui::SetCursorScreenPos(resume);
+
+    if (clicked)
+        ImGui::OpenPopup("##units");
+
+    // Under the field's own bottom-left, where a combo puts its list, instead of wherever the cursor was.
+    ImGui::SetNextWindowPos(ImVec2(field_lo.x, field_hi.y));
+    if (ImGui::BeginPopup("##units"))
+    {
+        // Converted at the zoom it is switched under, so the size on screen is what it was.
+        const float zoom = std::max(scale, 1e-6f);
+        if (ImGui::Selectable("Relative px (zooms with the image)", relative) && !relative)
+        {
+            value /= zoom;
+            relative = changed = true;
+        }
+        if (ImGui::Selectable("Absolute px (fixed on screen)", !relative) && relative)
+        {
+            value *= zoom;
+            relative = false;
+            changed  = true;
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopID();
+    return changed;
 }
 
 void HDRViewApp::draw_annotations_window()
@@ -574,13 +671,16 @@ void HDRViewApp::draw_annotations_window()
 }
 
 /// The "Add:" label and the picker that says which shape the tool draws next, as one table cell.
-void HDRViewApp::draw_shape_picker(bool named)
+void HDRViewApp::draw_shape_picker(bool named, bool labeled)
 {
     ImGui::TableNextColumn();
     const auto &style = ImGui::GetStyle();
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Add:");
-    ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
+    if (labeled)
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Add:");
+        ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
+    }
     ImGui::SetNextItemWidth(-FLT_MIN);
     const std::string preview = named ? fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
                                                     annotation_shape_name(m_annotation_shape))
@@ -595,7 +695,7 @@ void HDRViewApp::draw_shape_picker(bool named)
             if (ImGui::Selectable(
                     fmt::format("{} {}", annotation_shape_icon(shape), annotation_shape_name(shape)).c_str(),
                     is_selected))
-                m_annotation_shape = shape;
+                set_annotation_shape(shape);
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }
@@ -639,10 +739,12 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
     }
 
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::SetNextItemWidth(EmSize(6));
-    if (ImGui::DragFloat("##size", &a.font_size, 0.25f, Annotation::MinFontSize, Annotation::MaxFontSize, "%.0f px"))
-        m_annotation_style.font_size = a.font_size;
-    ImGui::SetItemTooltip("Image pixels, so the text grows and shrinks with what it labels.");
+    if (size_drag("size", a.font_size, a.font_size_relative, 0.25f, Annotation::MinFontSize, Annotation::MaxFontSize,
+                  viewport_transform().scale, EmSize(9)))
+    {
+        m_annotation_style.font_size          = a.font_size;
+        m_annotation_style.font_size_relative = a.font_size_relative;
+    }
 
     // Which corner or edge of the string lands on the point it was placed at, which is what NanoVG's
     // align flags say. Each square carries a dot where its own anchor sits, drawn because FontAwesome has
@@ -728,7 +830,11 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
     // names out as well.
     const float avail = ImGui::GetContentRegionAvail().x;
     const bool  named = avail >= colors_w + width_min + add_text_w + combo_wide + 3.f * style.CellPadding.x;
-    const float add_w = add_text_w + (named ? combo_wide : combo_narrow);
+
+    // Narrower still and the word goes too, before the columns start running over one another; the picker's
+    // own icon says what it is.
+    const bool  labeled = avail >= colors_w + width_min + add_text_w + combo_narrow + 3.f * style.CellPadding.x;
+    const float add_w   = (labeled ? add_text_w : 0.f) + (named ? combo_wide : combo_narrow);
 
     if (ImGui::BeginTable("##AnnotationControls", 3,
                           ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_NoPadOuterX |
@@ -739,23 +845,23 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
         ImGui::TableSetupColumn("width", ImGuiTableColumnFlags_WidthStretch, 1.f);
         ImGui::TableNextRow();
 
-        draw_shape_picker(named);
+        draw_shape_picker(named, labeled);
 
         ImGui::TableNextColumn();
         bool restyled = ImGui::StrokeFillSwatches("Colors", a.stroke_color, a.fill_color);
 
         ImGui::TableNextColumn();
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        restyled |= ImGui::DragFloat("##width", &a.stroke_width, 0.05f, 0.5f, 32.f, "%.1f px");
-        ImGui::SetItemTooltip("Stroke width in screen pixels, so it does not change with zoom.");
+        restyled |= size_drag("width", a.stroke_width, a.stroke_width_relative, 0.05f, 0.01f, 512.f,
+                              viewport_transform().scale, ImGui::GetContentRegionAvail().x);
 
         // Restyling the annotation in hand also sets what the next one will look like, so a color or a
         // width chosen once carries forward instead of being forgotten when the selection is dropped.
         if (restyled && &a != &m_annotation_style)
         {
-            m_annotation_style.stroke_color = a.stroke_color;
-            m_annotation_style.fill_color   = a.fill_color;
-            m_annotation_style.stroke_width = a.stroke_width;
+            m_annotation_style.stroke_color          = a.stroke_color;
+            m_annotation_style.fill_color            = a.fill_color;
+            m_annotation_style.stroke_width          = a.stroke_width;
+            m_annotation_style.stroke_width_relative = a.stroke_width_relative;
         }
 
         ImGui::EndTable();

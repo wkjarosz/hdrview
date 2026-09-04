@@ -534,7 +534,7 @@ private:
     void draw_annotations_window();
     /// The one row of controls the annotations panel edits an annotation, or the next one's look, through.
     void draw_annotation_controls(Annotation &a);
-    void draw_shape_picker(bool named);
+    void draw_shape_picker(bool named, bool labeled);
     /// Face and size for a text annotation, in a popup off its row's font button.
     void draw_font_popup(Annotation &a, const ImVec2 &frame_padding, float item_spacing_x);
     void draw_about_dialog(bool &);
@@ -822,6 +822,9 @@ private:
         The tool actions point their Action::p_selected at these.
     */
     bool m_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false, false};
+
+    /// Choose the shape the annotate tool draws; the tool's own icon follows it.
+    void set_annotation_shape(Annotation::Shape shape);
 
     /// Which shape the annotate tool draws, and the look every new annotation starts with.
     Annotation::Shape m_annotation_shape = Annotation::Shape::Rect;
