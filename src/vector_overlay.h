@@ -100,7 +100,27 @@ struct VgTransform
     std::function<void *(const std::string &)> font_for;
     /// Font the overlay starts with, and falls back to when a face name is unknown.
     void *default_font = nullptr;
+    /// Screen size of \p text in \p face at \p size; null when there is no font to measure with.
+    std::function<float2(const std::string &face, float size, const std::string &text)> measure_text;
 };
+
+/// The size glyphs are rasterized at to draw text of nominal size \p size.
+/**
+    Dear ImGui bakes a font into its atlas at each size it is asked for, and a large size is expensive to
+    rasterize. Baking at powers of two up to a cap leaves a handful of sizes to reuse, and whatever is left
+    over is applied to the glyph quads instead.
+
+    Takes the size before any zoom: with the zoom in it, a view being zoomed would ask for a size it had
+    not baked every frame, and the text would shift as it crossed from one baked size to the next.
+    Measuring goes through this too, since measuring a size bakes it.
+*/
+float text_baked_size(float size);
+
+/// Where a string of \p size is drawn when anchored at \p anchor under \p align (VgCommand's TextAlign).
+/**
+    Drawing and hit testing both read this, so they cannot disagree about where a string sits.
+*/
+float2 aligned_text_pos(float2 anchor, float2 size, int align);
 
 /**
     Execute \p commands into \p draw_list. Unsupported commands are skipped, not approximated.

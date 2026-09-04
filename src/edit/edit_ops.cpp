@@ -119,7 +119,10 @@ bool modify_image(const EditContext &ctx, const string &name, const function<voi
 
 bool modify_pixels(const EditContext &ctx, const string &name, const function<float(float, int2, int)> &op)
 {
-    auto [channels, bounds] = resolve_subject(ctx.image, ctx.subject, ctx.roi);
+    // Named apart: C++17 cannot capture a structured binding in a lambda.
+    auto  resolved = resolve_subject(ctx.image, ctx.subject, ctx.roi);
+    auto &channels = resolved.first;
+    auto &bounds   = resolved.second;
     if (channels.empty() || !bounds.has_volume())
         return false;
 
@@ -154,7 +157,10 @@ bool modify_colors(const EditContext &ctx, const string &name, const function<fl
     if (!ctx.image)
         return false;
 
-    auto [groups, channels] = subject_color_groups(*ctx.image, ctx.subject);
+    // Named apart: C++17 cannot capture a structured binding in a lambda.
+    auto  color    = subject_color_groups(*ctx.image, ctx.subject);
+    auto &groups   = color.first;
+    auto &channels = color.second;
     if (groups.empty())
     {
         // e.g. an ungrouped image or a depth pass: nothing here is color

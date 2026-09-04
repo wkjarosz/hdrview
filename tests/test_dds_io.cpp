@@ -84,8 +84,11 @@ TEST_CASE("DDS premultiplied-alpha formats are not premultiplied a second time")
     REQUIRE(k_alpha < 0.9f);
 
     // BC2's pair and BC3's, each the same bits under two FourCCs
-    for (auto [premultiplied_cc, straight_cc] : {std::pair{"DXT2", "DXT3"}, std::pair{"DXT4", "DXT5"}})
+    for (auto fourccs : {std::pair{"DXT2", "DXT3"}, std::pair{"DXT4", "DXT5"}})
     {
+        // Named apart: C++17 cannot capture a structured binding in a lambda.
+        const char *premultiplied_cc = fourccs.first;
+        const char *straight_cc      = fourccs.second;
         CAPTURE(premultiplied_cc);
         auto straight_bytes      = make_one_block_dds(straight_cc);
         auto premultiplied_bytes = make_one_block_dds(premultiplied_cc);

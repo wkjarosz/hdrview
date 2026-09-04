@@ -88,6 +88,20 @@ bool   IconButton(const char *icon, bool *v = nullptr, const ImVec2 &size = ImVe
 // ImGuiCol_FrameBg for a toggled-on look, without affecting the return value.
 bool FlatButton(const char *label, bool active = false, const ImVec2 &size = ImVec2(0, 0));
 
+/// A square color swatch of a stated size, opening a picker when clicked.
+/**
+    ColorEdit4's own swatch is always one frame tall, which is too big to pair two of them into a control
+    that lines up with the widgets beside it.
+*/
+bool ColorSwatch(const char *id, float4 &color, float size);
+
+/// Stroke and fill as one control, the way an illustration tool shows them.
+/**
+    The fill in front, the stroke behind it and drawn as a ring; which is which is what the overlap says,
+    so neither needs a label. One frame tall in all, so it sits on a line with ordinary widgets.
+*/
+bool StrokeFillSwatches(const char *id, float4 &stroke, float4 &fill);
+
 /// A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
 struct Action
 {

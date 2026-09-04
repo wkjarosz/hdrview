@@ -11,67 +11,14 @@
 
 #include "vector_overlay.h"
 
+#include "test_draw_list.h"
+
 #include "imgui.h"
 #include "imgui_internal.h"
 
 #include <algorithm>
 
-namespace
-{
-
-/// A draw list with just enough shared state to tessellate and emit geometry.
-struct TestDrawList
-{
-    ImDrawListSharedData shared;
-    ImDrawList           list;
-
-    TestDrawList() : list(&shared)
-    {
-        shared.ClipRectFullscreen   = ImVec4(-8192.f, -8192.f, 8192.f, 8192.f);
-        shared.CurveTessellationTol = 1.25f;
-        // no anti-aliasing, so a vertex count reflects the path and not the fringe around it
-        shared.InitialFlags = ImDrawListFlags_None;
-        shared.SetCircleTessellationMaxError(0.30f);
-
-        // what ImGui does at the top of each frame; without it the first PushClipRect has no command to amend
-        list._ResetForNewFrame();
-        list.PushClipRectFullScreen();
-    }
-};
-
-/// Identity image-to-screen mapping, so expected coordinates are the ones the commands name.
-VgTransform identity_transform()
-{
-    VgTransform x;
-    x.to_screen = [](float2 p) { return p; };
-    x.scale     = 1.f;
-    return x;
-}
-
-/// Axis-aligned bounds of everything written into the vertex buffer.
-struct Bounds
-{
-    float min_x = FLT_MAX, min_y = FLT_MAX, max_x = -FLT_MAX, max_y = -FLT_MAX;
-    bool  empty() const { return min_x > max_x; }
-};
-
-Bounds vertex_bounds(const ImDrawList &list)
-{
-    Bounds b;
-    for (int i = 0; i < list.VtxBuffer.Size; ++i)
-    {
-        const ImVec2 p = list.VtxBuffer[i].pos;
-        b.min_x        = std::min(b.min_x, p.x);
-        b.min_y        = std::min(b.min_y, p.y);
-        b.max_x        = std::max(b.max_x, p.x);
-        b.max_y        = std::max(b.max_y, p.y);
-    }
-    return b;
-}
-
-VgCommand cmd(VgCommand::Type type, std::vector<float> data = {}) { return VgCommand{type, std::move(data), ""}; }
-
-} // namespace
+using namespace test_draw;
 
 TEST_CASE("A stroked rectangle lands where the commands put it")
 {
@@ -272,4 +219,51 @@ TEST_CASE("An overlay leaves the draw list's shared path buffer empty")
                         identity_transform(), IM_COL32_WHITE);
 
     CHECK(d.list._Path.Size == 0);
+}
+
+TEST_CASE("Scaled-up text moves with its anchor rather than jumping between pixels")
+{
+    // Text is laid out at a size the font is baked at and the glyphs are then scaled up, which is what
+    // keeps a zoomed view from rasterizing a fresh set every frame. ImFont::RenderText lays them out from
+    // a whole-pixel position, so scaling them about anywhere else multiplies the fraction of a pixel
+    // between the two, and the text jumps by that multiple every time it crosses a pixel boundary.
+    ImFontAtlas atlas;
+    ImFont     *font = atlas.AddFontDefault();
+    REQUIRE(font != nullptr);
+
+    // A small size drawn into a hugely zoomed view: the size the glyphs bake at is small, so what they are
+    // scaled by is large, and so is anything it multiplies.
+    VgTransform x  = identity_transform();
+    x.scale        = 40.f;
+    x.default_font = font;
+
+    auto drawn_offset = [&](float anchor_x)
+    {
+        std::vector<VgCommand> program{
+            cmd(VgCommand::Type::FillColor, {1.f, 1.f, 1.f, 1.f}),
+            cmd(VgCommand::Type::FontSize, {4.f, float(VgCommand::Relative)}),
+            cmd(VgCommand::Type::TextAlign, {float(VgCommand::AlignLeft | VgCommand::AlignTop)}),
+            cmd(VgCommand::Type::Text, {anchor_x, 50.f}, "Hjy")};
+
+        TestDrawList d;
+        draw_vector_overlay(&d.list, program, x, IM_COL32_WHITE);
+        REQUIRE(d.list.VtxBuffer.Size > 0);
+
+        // Where the glyphs landed relative to where the text was asked to go. However the layout rounds
+        // internally, this cannot depend on where in a pixel the anchor happens to fall.
+        return vertex_bounds(d.list).min_x - anchor_x;
+    };
+
+    const float reference = drawn_offset(100.f);
+
+    // Across a whole pixel in small steps, which is what carries the anchor over a boundary.
+    for (int step = 0; step <= 20; ++step)
+    {
+        const float anchor = 100.f + 0.1f * float(step);
+        CAPTURE(anchor);
+
+        // Half a screen pixel: far under the forty a boundary crossing would move it by, and loose enough
+        // that the arithmetic behind the layout is not what is being pinned.
+        CHECK(std::abs(drawn_offset(anchor) - reference) < 0.5f);
+    }
 }

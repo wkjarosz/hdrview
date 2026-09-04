@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "annotations.h"
 #include "box.h"
 #include "colormap.h"
 #include "display_colorspace.h"
@@ -530,6 +531,12 @@ private:
     void draw_background();
     void draw_statistics_window();
     void draw_history_window();
+    void draw_annotations_window();
+    /// The one row of controls the annotations panel edits an annotation, or the next one's look, through.
+    void draw_annotation_controls(Annotation &a);
+    void draw_shape_picker(bool named);
+    /// Face and size for a text annotation, in a popup off its row's font button.
+    void draw_font_popup(Annotation &a, const ImVec2 &frame_padding, float item_spacing_x);
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
@@ -540,6 +547,8 @@ private:
     void draw_image() const;
     void draw_image_border() const;
     void draw_tool_decorations() const;
+    /// The box, caret and selection of the text annotation being edited, drawn over the image.
+    void draw_text_editing() const;
     /// Draws the current and reference images' vector overlays, if either has one.
     void draw_vector_overlays() const;
     void draw_file_window();
@@ -760,7 +769,8 @@ private:
     float     m_histogram_height = default_histogram_height;
 
     bool m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
-         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true, m_show_FPS = false;
+         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true, m_show_FPS = false,
+         m_draw_annotations = true;
     /// Zebra-stripe values below clip_range.x (x: shadows) and above clip_range.y (y: highlights)
     bool2  m_clip_warnings{false, false};
     float2 m_clip_range{0.f, 1.f};
@@ -796,12 +806,60 @@ private:
     float2         m_viewport_min, m_viewport_size;
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
+    /// Index of the annotation being worked on, or -1 when none on the current image is.
+    int  active_annotation() const;
+    void set_active_annotation(int index);
+    /// Everything a drag was doing is undone, and the annotation put back as it was.
+    void cancel_annotation_drag();
+    /// Create, move and resize annotations; called from handle_mouse_interaction() for the annotate tool.
+    void handle_annotate_tool();
+    /// Where the image is on screen and how big, as both the overlay and hit testing need it.
+    VgTransform viewport_transform() const;
+
     MouseMode m_mouse_mode = MouseMode_PanZoom;
     /// Selected state of each tool action, kept in sync with m_mouse_mode by set_mouse_mode().
     /**
         The tool actions point their Action::p_selected at these.
     */
-    bool m_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
+    bool m_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false, false};
+
+    /// Which shape the annotate tool draws, and the look every new annotation starts with.
+    Annotation::Shape m_annotation_shape = Annotation::Shape::Rect;
+    Annotation        m_annotation_style;
+
+    /// The annotation being worked on, and the image whose list that index refers to.
+    /**
+        The two travel together because an index alone means nothing once the current image changes;
+        active_annotation() hands back -1 unless they still agree. Called active because selected already
+        means the rectangular ROI and the channel-group selection both.
+    */
+    ImagePtr m_active_annotation_on;
+    int      m_active_annotation = -1;
+
+    /// What a drag with the annotate tool is doing to the active annotation.
+    enum class AnnotationDrag
+    {
+        None,
+        Creating,
+        Moving,
+        Resizing
+    };
+    /// Set when the viewport asks for a text annotation to be typed into, with the caret at the end of it.
+    bool m_annotation_edit_text = false;
+
+    /// Row the annotations panel is renaming in place, or -1, and the name being typed into it.
+    int         m_annotation_renaming = -1;
+    char        m_annotation_rename[128]{};
+    std::string m_annotation_rename_was;    ///< What it said before, so Escape can put it back
+    ImGuiID     m_annotation_rename_id = 0; ///< The field holding it, so the viewport can show its caret
+
+    /// Row the annotations panel is dragging to reorder, or -1. See draw_annotations_window().
+    int m_annotation_row_drag = -1;
+
+    AnnotationDrag m_annotation_drag        = AnnotationDrag::None;
+    int            m_annotation_drag_handle = -1;
+    Annotation     m_annotation_drag_start; ///< As it was at mouse-down, so Escape can put it back
+    float2         m_annotation_grab{0.f};  ///< Where in the image the drag began, for a move
 
     HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
 

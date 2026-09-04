@@ -150,11 +150,23 @@ private:
     std::vector<SubPath> m_subpaths;
 };
 
+} // namespace
+
+float text_baked_size(float size)
+{
+    // 128 is already a very large glyph; past it the text is scaled up and goes soft, which is what the
+    // image under it does at that zoom too.
+    constexpr float k_max_baked = 128.f;
+
+    size = ImMax(1.f, size);
+    return ImMin(ImPow(2.f, ImCeil(ImLog(size) / ImLog(2.f))), k_max_baked);
+}
+
 /// Where AddText should put the string's top-left, given NanoVG's alignment flags.
 /**
     ImGui has no notion of a baseline, so Baseline is approximated as a fraction of the line height.
 */
-ImVec2 aligned_text_pos(ImVec2 anchor, ImVec2 size, int align)
+float2 aligned_text_pos(float2 anchor, float2 size, int align)
 {
     float x = anchor.x;
     if (align & VgCommand::AlignCenter)
@@ -170,10 +182,8 @@ ImVec2 aligned_text_pos(ImVec2 anchor, ImVec2 size, int align)
     else if (align & VgCommand::AlignBaseline)
         y -= size.y * 0.8f;
 
-    return ImVec2(x, y);
+    return float2(x, y);
 }
-
-} // namespace
 
 void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &commands, const VgTransform &xform,
                          uint32_t default_color, const std::function<void(const char *)> &on_unsupported)
@@ -320,14 +330,43 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
 
         case VgCommand::Type::Text:
         {
-            const float size = ImMax(1.f, state.font_size * (state.font_size_relative ? scale : 1.f));
-            auto       *font = (ImFont *)(state.font ? state.font : xform.default_font);
+            const float wanted = ImMax(1.f, state.font_size * (state.font_size_relative ? scale : 1.f));
+            auto       *font   = (ImFont *)(state.font ? state.font : xform.default_font);
             if (!font)
                 break;
 
-            const ImVec2 extent = font->CalcTextSizeA(size, FLT_MAX, 0.f, cmd.text.c_str());
+            // Baked from the size before the zoom, so zooming neither rasterizes a new set of glyphs nor
+            // steps from one baked size to another under the reader.
+            const float baked       = text_baked_size(state.font_size);
+            const float glyph_scale = wanted / baked;
+
+            const float2 extent = float2{font->CalcTextSizeA(baked, FLT_MAX, 0.f, cmd.text.c_str())} * glyph_scale;
             const ImVec2 at     = aligned_text_pos(to_screen(f[0], f[1]), extent, state.text_align);
-            draw_list->AddText(font, size, at, state.fill_color, cmd.text.c_str());
+
+            // Clipped to whichever of the two boxes is larger, and a little past it: the glyphs are laid
+            // out in one and end up filling the other, so a rect holding only the box they are laid out in
+            // culls them a letter at a time, and one holding only where they end up cuts off the last of
+            // them when the text is being made smaller.
+            const float2 covered{ImMax(extent.x, extent.x / glyph_scale), ImMax(extent.y, extent.y / glyph_scale)};
+            const float2 pad{covered.y, covered.y};
+            draw_list->PushClipRect(ImVec2(at.x - pad.x, at.y - pad.y),
+                                    ImVec2(at.x + covered.x + pad.x, at.y + covered.y + pad.y), false);
+
+            // ImFont::RenderText lays the glyphs out from a whole-pixel position, so they are scaled about
+            // that one and not about where the text was asked to go: about the latter, the fraction of a
+            // pixel between them is multiplied by the scale, and jumps by that much every time the zoom
+            // carries the text across a pixel boundary.
+            const ImVec2 origin{ImTrunc(at.x), ImTrunc(at.y)};
+
+            const int first = draw_list->VtxBuffer.Size;
+            draw_list->AddText(font, baked, at, state.fill_color, cmd.text.c_str());
+            for (int v = first; v < draw_list->VtxBuffer.Size; ++v)
+            {
+                ImVec2 &p = draw_list->VtxBuffer[v].pos;
+                p         = ImVec2(at.x + (p.x - origin.x) * glyph_scale, at.y + (p.y - origin.y) * glyph_scale);
+            }
+
+            draw_list->PopClipRect();
         }
         break;
 

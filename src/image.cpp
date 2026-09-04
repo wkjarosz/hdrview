@@ -1261,7 +1261,7 @@ ImagePtr Image::duplicate(const Box2i &region) const
 
     auto copy = std::make_shared<Image>();
 
-    // the copy gets a fresh id and an empty history, and is neither live nor annotated
+    // the copy gets a fresh id and an empty history, and is neither live nor overlaid
     static_cast<ImageMetadata &>(*copy) = *this;
 
     const int2 extent = clipped.size();

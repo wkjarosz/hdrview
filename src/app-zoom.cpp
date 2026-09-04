@@ -298,6 +298,8 @@ void HDRViewApp::handle_mouse_interaction()
         else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
             m_roi = m_roi_live;
     }
+    else if (m_mouse_mode == MouseMode_Annotate)
+        handle_annotate_tool();
     else if (m_mouse_mode == MouseMode_ColorInspector)
     {
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))

@@ -63,6 +63,7 @@ const char *mouse_mode_action_name(MouseMode m)
     case MouseMode_PanZoom: return "Pan and zoom";
     case MouseMode_RectangularSelection: return "Rectangular select";
     case MouseMode_ColorInspector: return "Pixel/color inspector";
+    case MouseMode_Annotate: return "Annotate";
     default: return "Pan and zoom";
     }
 }
@@ -227,7 +228,11 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
 
     // Hidden by default, like the log: an image with no history has nothing to show, and the Edit menu
     // already names what undo and redo would do.
-    DockableWindow history_window{"History", "RightSpace", [this] { draw_history_window(); }, false};
+    DockableWindow history_window{"History", "RightBottomSpace", [this] { draw_history_window(); }, false};
+
+    // Hidden by default, like the history: an image with no annotations has nothing to show, and the tool
+    // palette is how the feature is reached.
+    DockableWindow annotations_window{"Annotations", "RightBottomSpace", [this] { draw_annotations_window(); }, false};
 
     DockableWindow log_window{
         "Log", "LogSpace",
@@ -258,6 +263,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                               info_window,
                                               colorspace_window,
                                               history_window,
+                                              annotations_window,
                                               log_window
 #if !defined(__EMSCRIPTEN__)
                                               ,
@@ -275,6 +281,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                                    {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                                    {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
                                                    {ImGuiKey_F9, ICON_MY_HISTORY},
+                                                   {ImGuiKey_F10, ICON_MY_ANNOTATE},
                                                    {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
 #if !defined(__EMSCRIPTEN__)
                                                    ,
@@ -283,12 +290,14 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
     };
 
     // Left column: "Images" occupies the top 80%, "Watched Folders" the bottom 20%. Each dock space holds a
-    // single window, so auto-hide their tab bars.
+    // single window, so auto-hide their tab bars. The right column is split off before the log, so the log
+    // runs under the image alone; its own bottom fifth holds the panels that belong to an image.
     std::vector<DockingSplit> docking_splits = {
         DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
         DockingSplit{"ImagesSpace", "WatchedFoldersSpace", ImGuiDir_Down, 0.2f, ImGuiDockNodeFlags_AutoHideTabBar},
-        DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-        DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}};
+        DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
+        DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.2f},
+        DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}};
     m_params.dockingParams.dockingSplits = docking_splits;
 
     // Builds an alternate layout from the same dockable windows as the default one, letting `customize`
@@ -314,8 +323,9 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
         make_layout("Metadata",
                     {DockingSplit{"MainDockSpace", "ImagesSpace", ImGuiDir_Left, 0.2f},
                      DockingSplit{"ImagesSpace", "InfoSpace", ImGuiDir_Down, 0.54f, ImGuiDockNodeFlags_AutoHideTabBar},
-                     DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-                     DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f}},
+                     DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
+                     DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.2f},
+                     DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}},
                     [](DockableWindow &w)
                     {
                         if (w.label == "Watched Folders")
@@ -674,7 +684,11 @@ void HDRViewApp::setup_frame_callbacks()
 #endif
 
                 if (is_valid(idx))
-                    m_images[idx] = new_image;
+                {
+                    // The reloaded file is the same picture, so the user's markup over it still applies.
+                    new_image->annotations = to_replace->annotations;
+                    m_images[idx]          = new_image;
+                }
                 else
                     m_images.push_back(new_image);
 
@@ -1240,6 +1254,14 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    always_enabled,
                    false,
                    &m_draw_pixel_info});
+        add(Action{{"Draw annotations"},
+                   ICON_MY_ANNOTATE,
+                   ImGuiKey_None,
+                   0,
+                   []() {},
+                   always_enabled,
+                   false,
+                   &m_draw_annotations});
 
         add(Action{{"Draw data window"},
                    ICON_MY_DATA_WINDOW,
@@ -1295,8 +1317,9 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
 
         // The tools are a radio group: each callback routes through set_mouse_mode(), which clears the other
         // tools' selected flags.
-        const ImGuiKeyChord tool_chords[MouseMode_COUNT] = {ImGuiKey_P, ImGuiKey_M, ImGuiKey_I};
-        const char *tool_icons[MouseMode_COUNT] = {ICON_MY_PAN_ZOOM_TOOL, ICON_MY_SELECT, ICON_MY_WATCHED_PIXEL};
+        const ImGuiKeyChord tool_chords[MouseMode_COUNT] = {ImGuiKey_P, ImGuiKey_M, ImGuiKey_I, ImGuiKey_A};
+        const char         *tool_icons[MouseMode_COUNT] = {ICON_MY_PAN_ZOOM_TOOL, ICON_MY_SELECT, ICON_MY_WATCHED_PIXEL,
+                                                           ICON_MY_ANNOTATE};
         for (int i = 0; i < MouseMode_COUNT; ++i)
             add(Action{{mouse_mode_action_name(i)},
                        tool_icons[i],
@@ -1306,6 +1329,21 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                        always_enabled,
                        false,
                        &m_mouse_mode_enabled[i]});
+
+        add(Action{{"Delete annotation"},
+                   ICON_MY_DELETE,
+                   ImGuiKey_Delete,
+                   0,
+                   [this]()
+                   {
+                       if (const int i = active_annotation(); i >= 0)
+                       {
+                           auto img = current_image();
+                           img->annotations.erase(img->annotations.begin() + i);
+                           set_active_annotation(-1);
+                       }
+                   },
+                   [this]() { return active_annotation() >= 0; }});
 
         // below actions are only available if there is an image
 

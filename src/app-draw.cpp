@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include "imgui_internal.h"
+
 #include "colormap.h"
 #include "common.h"
 #include "fonts.h"
@@ -201,13 +203,8 @@ void HDRViewApp::draw_image_border() const
     }
 }
 
-void HDRViewApp::draw_vector_overlays() const
+VgTransform HDRViewApp::viewport_transform() const
 {
-    // The current image and, when one is set, the reference: a renderer can annotate either, so they get
-    // different default colors, matching tev's.
-    const std::pair<ConstImagePtr, ImU32> targets[] = {{current_image(), IM_COL32(255, 255, 255, 200)},
-                                                       {reference_image(), IM_COL32(255, 128, 0, 200)}};
-
     VgTransform xform;
     xform.to_screen = [this](float2 p) { return app_pos_at_pixel(p); };
     // Screen pixels per image pixel, read off the transform itself; abs() because a flip mirrors the
@@ -225,20 +222,55 @@ void HDRViewApp::draw_vector_overlays() const
             return font("mono bold");
         return font("sans regular");
     };
+    // By value: the transform is returned, so a reference to it would be gone by the time this is called.
+    xform.measure_text = [font_for = xform.font_for, fallback = xform.default_font](const std::string &face, float size,
+                                                                                    const std::string &text) -> float2
+    {
+        auto *f = (ImFont *)(font_for ? font_for(face) : nullptr);
+        if (!f)
+            f = (ImFont *)fallback;
+        if (!f)
+            return float2{0.f};
+
+        // Measured at the size the glyphs are baked at, for the same reason they are drawn there: asking
+        // for an arbitrary size here would bake one. Measuring is linear in the size, so scaling what comes
+        // back gives the same answer.
+        const float baked = text_baked_size(size);
+        return float2{f->CalcTextSizeA(baked, FLT_MAX, 0.f, text.c_str())} * (std::max(1.f, size) / baked);
+    };
+    return xform;
+}
+
+void HDRViewApp::draw_vector_overlays() const
+{
+    // The current image and, when one is set, the reference: a renderer can annotate either, so they get
+    // different default colors, matching tev's.
+    const std::pair<ConstImagePtr, ImU32> targets[] = {{current_image(), IM_COL32(255, 255, 255, 200)},
+                                                       {reference_image(), IM_COL32(255, 128, 0, 200)}};
+
+    const VgTransform xform = viewport_transform();
+
+    auto unsupported = [](const char *what)
+    {
+        // Throttled: an overlay is redrawn every frame, so an unsupported command in it would report
+        // itself at the frame rate.
+        if (static LogThrottle throttle{std::chrono::seconds(10)}; throttle)
+            spdlog::warn("Vector overlay uses {}, which HDRView does not draw.", what);
+    };
 
     for (const auto &[img, color] : targets)
     {
-        if (!img || img->vector_overlay.empty())
+        if (!img)
             continue;
 
-        draw_vector_overlay(ImGui::GetBackgroundDrawList(), img->vector_overlay, xform, color,
-                            [](const char *what)
-                            {
-                                // Throttled: an overlay is redrawn every frame, so an unsupported command
-                                // in it would report itself at the frame rate.
-                                if (static LogThrottle throttle{std::chrono::seconds(10)}; throttle)
-                                    spdlog::warn("Vector overlay uses {}, which HDRView does not draw.", what);
-                            });
+        if (img->vector_overlay_visible && !img->vector_overlay.empty())
+            draw_vector_overlay(ImGui::GetBackgroundDrawList(), img->vector_overlay, xform, color, unsupported);
+
+        // Flattened each frame: an annotation being dragged changes every frame anyway, and the command
+        // list is small.
+        if (m_draw_annotations && !img->annotations.empty())
+            draw_vector_overlay(ImGui::GetBackgroundDrawList(), to_vg_commands(img->annotations, xform.scale), xform,
+                                color, unsupported);
     }
 }
 
@@ -260,6 +292,40 @@ void HDRViewApp::draw_tool_decorations() const
 
     ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 18.f / 14.f);
 
+    // Before the handles, so the corners of a text annotation's box sit on top of the box itself.
+    draw_text_editing();
+
+    // The handles of the annotation being worked on, drawn over everything so they can be picked up even
+    // where the shape runs under another. White on black reads over any image. Only under the annotate
+    // tool, since that is the only place a click does anything with them.
+    // Not while one is being drawn: the shape under the cursor already says what is happening, and a box
+    // around a scribble is a shape the scribble is not.
+    if (const int active = active_annotation(); active >= 0 && m_draw_annotations &&
+                                                m_mouse_mode == MouseMode_Annotate &&
+                                                m_annotation_drag != AnnotationDrag::Creating)
+    {
+        const auto  xform  = viewport_transform();
+        const float radius = 0.3f * HelloImGui::EmSize();
+        const auto &a      = current_image()->annotations[size_t(active)];
+
+        // The one a press would take hold of, lit so the handle says so before it is pressed; during a
+        // resize it is whichever the drag is already holding.
+        const int hot = m_annotation_drag == AnnotationDrag::Resizing
+                            ? m_annotation_drag_handle
+                            : handle_at(a, ImGui::GetIO().MousePos, xform, radius);
+
+        float2    handles[Annotation::MaxHandles];
+        const int count = annotation_handles(a, handles, &xform);
+        for (int i = 0; i < count; ++i)
+        {
+            const float2 at = xform.to_screen(handles[i]);
+            const float  r  = i == hot ? radius * 1.35f : radius;
+            draw_list->AddRectFilled(at - r, at + r,
+                                     i == hot ? ImGui::GetColorU32(ImGuiCol_ButtonActive) : IM_COL32_WHITE);
+            draw_list->AddRect(at - r, at + r, IM_COL32_BLACK);
+        }
+    }
+
     float2 pos = ImGui::GetIO().MousePos;
     if (m_mouse_mode == MouseMode_RectangularSelection)
     {
@@ -271,6 +337,12 @@ void HDRViewApp::draw_tool_decorations() const
     {
         // draw pixel watcher indicator
         ImGui::DrawCrosshairs(draw_list, pos + int2{18}, " +");
+    }
+    else if (m_mouse_mode == MouseMode_Annotate)
+    {
+        // draw annotate indicator
+        ImGui::AddTextAligned(draw_list, pos + int2{18} + int2{1, 1}, IM_COL32_BLACK, ICON_MY_ANNOTATE, {0.5f, 0.5f});
+        ImGui::AddTextAligned(draw_list, pos + int2{18}, IM_COL32_WHITE, ICON_MY_ANNOTATE, {0.5f, 0.5f});
     }
 
     ImGui::PopFont();
