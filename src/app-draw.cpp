@@ -285,7 +285,8 @@ void HDRViewApp::draw_text_editing() const
     if (!font)
         return;
 
-    const float  size   = std::max(1.f, a.font_size);
+    // The size is in image pixels; the caret and selection are drawn on screen, so it goes up by the zoom.
+    const float  size   = std::max(1.f, a.font_size * xform.scale);
     const float2 extent = font->CalcTextSizeA(size, FLT_MAX, 0.f, a.text.c_str());
     const float2 lo     = aligned_text_pos(xform.to_screen(a.p0()), extent, a.text_align);
 

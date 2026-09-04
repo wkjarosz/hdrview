@@ -205,7 +205,7 @@ void append_vg_commands(std::vector<VgCommand> &out, const Annotation &a, float 
     {
         // The interpreter draws text in the *fill* color, so the one color the user picked goes there.
         out.push_back(cmd(VgCommand::Type::FontFace, {}, a.font_face));
-        out.push_back(cmd(VgCommand::Type::FontSize, {a.font_size, float(VgCommand::Absolute)}));
+        out.push_back(cmd(VgCommand::Type::FontSize, {a.font_size, float(VgCommand::Relative)}));
         out.push_back(cmd(VgCommand::Type::TextAlign, {float(a.text_align)}));
         out.push_back(cmd(VgCommand::Type::FillColor, color_floats(a.stroke_color)));
         out.push_back(cmd(VgCommand::Type::Text, {a.p0().x, a.p0().y}, a.text));
@@ -358,10 +358,10 @@ bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, floa
     if (a.shape != Annotation::Shape::Text || !xform.measure_text)
         return false;
 
-    // Measured in screen pixels, since that is what a font size means here, and divided back into image
-    // coordinates, which is what every other piece of an annotation's geometry is in.
+    // The size is in image pixels, so it is taken up to screen pixels to be measured, and the measurement
+    // brought back down: what a string occupies is geometry, like every other extent here.
     const float scale = std::max(xform.scale, 1e-6f);
-    extent            = xform.measure_text(a.font_face, a.font_size, a.text) / scale;
+    extent            = xform.measure_text(a.font_face, a.font_size * scale, a.text) / scale;
     lo                = a.p0() - text_anchor_offset(a.text_align, extent);
     return extent.x > 0.f && extent.y > 0.f;
 }

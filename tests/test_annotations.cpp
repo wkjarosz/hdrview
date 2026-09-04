@@ -117,10 +117,11 @@ TEST_CASE("Every shape draws within the bounds it declares")
     }
 }
 
-TEST_CASE("Stroke width and font size are screen quantities, and do not scale with zoom")
+TEST_CASE("A stroke is a screen width, and a font size an image one")
 {
-    // The decision that separates user annotations from what a renderer sends: markup stays legible at any
-    // zoom rather than dwindling with the feature it points at. Zoom is the only difference between these.
+    // The two are measured differently on purpose: a stroke is how the markup is drawn, so it stays as easy
+    // to see however far out the view is, while how large a string is on the image is its geometry, and
+    // shrinks with the feature it labels like every other extent here.
     for (auto shape : all_shapes())
     {
         CAPTURE(annotation_shape_name(shape));
@@ -128,9 +129,24 @@ TEST_CASE("Stroke width and font size are screen quantities, and do not scale wi
         std::vector<VgCommand> out;
         append_vg_commands(out, sample(shape), 1.f);
 
+        int widths = 0, sizes = 0;
         for (const auto &c : out)
-            if (c.type == VgCommand::Type::StrokeWidth || c.type == VgCommand::Type::FontSize)
+        {
+            if (c.type == VgCommand::Type::StrokeWidth)
+            {
                 CHECK(int(c.data[1]) == int(VgCommand::Absolute));
+                ++widths;
+            }
+            if (c.type == VgCommand::Type::FontSize)
+            {
+                CHECK(int(c.data[1]) == int(VgCommand::Relative));
+                ++sizes;
+            }
+        }
+
+        // Every shape says one or the other, so neither check above can pass by never running.
+        CHECK(widths + sizes > 0);
+        CHECK((shape == Annotation::Shape::Text ? sizes : widths) > 0);
     }
 }
 
@@ -881,9 +897,22 @@ TEST_CASE("Resizing a text annotation's box scales the size it is drawn at")
     float2 lo, extent;
     REQUIRE(text_extent(a, x, lo, extent));
 
-    // The box is in image coordinates: what the font measures on screen, divided back by the zoom.
-    CHECK(extent.y == doctest::Approx(a.font_size / zoom));
-    CHECK(extent.x == doctest::Approx(0.5f * a.font_size * float(a.text.size()) / zoom));
+    // The box is in image coordinates, and a font size is too, so it is the same box however far the view
+    // is zoomed -- which is what makes a string shrink with the image rather than floating over it.
+    CHECK(extent.y == doctest::Approx(a.font_size));
+    CHECK(extent.x == doctest::Approx(0.5f * a.font_size * float(a.text.size())));
+
+    for (float other_zoom : {0.25f, 1.f, 8.f})
+    {
+        CAPTURE(other_zoom);
+        auto y         = scaled_transform(other_zoom);
+        y.measure_text = x.measure_text;
+
+        float2 lo_z, extent_z;
+        REQUIRE(text_extent(a, y, lo_z, extent_z));
+        CHECK(extent_z.x == doctest::Approx(extent.x));
+        CHECK(extent_z.y == doctest::Approx(extent.y));
+    }
 
     // Drag the low corner up and left so the box doubles in height; the size doubles with it.
     const float2 fixed = lo + extent;

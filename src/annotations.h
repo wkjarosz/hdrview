@@ -26,8 +26,8 @@
     selection, so an image a renderer owns can carry them as freely as one loaded from a file.
 
     Geometry is in image pixels, so an annotation stays on the feature it was drawn over as the view is
-    panned and zoomed. Stroke widths and text sizes are in *screen* pixels, so markup stays legible at any
-    zoom.
+    panned and zoomed, a string's size among it. Stroke widths are in *screen* pixels instead, so a line
+    stays as easy to see however far out the view is.
 */
 struct Annotation
 {
@@ -73,7 +73,9 @@ struct Annotation
 
     /// Screen pixels, so neither thickens nor shrinks as the view is zoomed.
     float stroke_width = 2.f;
-    float font_size    = 16.f; ///< Shape::Text only
+    /// Image pixels, unlike the stroke: how large a string is on the image is its geometry, so it grows
+    /// and shrinks with everything else as the view is zoomed.
+    float font_size = 16.f; ///< Shape::Text only
     /// Which face a Shape::Text is drawn in, as a NanoVG face name; see annotation_font_faces().
     std::string font_face = "sans";
     /// VgCommand::TextAlign flags, saying where p0 sits relative to the text it anchors.
