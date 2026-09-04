@@ -591,8 +591,7 @@ TEST_CASE("Every rendition of one photograph decodes to the same picture")
     if (!fs::exists(reference))
         return;
 
-    // load_image() reports a rendition this build cannot read by returning nothing rather than by throwing,
-    // as it does for a CMYK PSD, which stb refuses
+    // load_image() never throws: a file nothing can read comes back as an empty vector, as a CMYK PSD does
     const auto load = [](const fs::path &p, const ImageLoadOptions &opts) -> ImagePtr
     {
         std::ifstream in(p, std::ios::binary);
