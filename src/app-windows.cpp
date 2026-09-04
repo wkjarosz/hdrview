@@ -1220,10 +1220,10 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding)
     const float button = ImGui::GetFrameHeight();
     for (const auto &al : alignments)
     {
-        // All six on one row, with the two groups set apart so which three belong together is plain.
-        if (al.flag == VgCommand::AlignLeft)
-            ImGui::NewLine();
-        else
+        // All six on one row, with the two groups set apart so which three belong together is plain. The
+        // first begins the row simply by not joining the one above: NewLine() would put an empty item a
+        // whole line high between them.
+        if (al.flag != VgCommand::AlignLeft)
             ImGui::SameLine(0.f, al.flag == VgCommand::AlignTop ? ImGui::GetStyle().ItemSpacing.x * 2.f
                                                                 : ImGui::GetStyle().ItemInnerSpacing.x);
 
