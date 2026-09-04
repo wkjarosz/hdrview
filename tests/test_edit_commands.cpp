@@ -60,7 +60,10 @@ struct TestEditContext : EditContext
 
         modify_channels_async = [this](const std::string &name, const ChannelFilter &filter)
         {
-            auto [channels, bounds] = resolve_subject(image, subject, roi);
+            // Named apart rather than as a structured binding, which C++17 cannot capture in a lambda.
+            auto  resolved = resolve_subject(image, subject, roi);
+            auto &channels = resolved.first;
+            auto &bounds   = resolved.second;
             if (channels.empty() || !bounds.has_volume())
                 return;
 
