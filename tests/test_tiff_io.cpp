@@ -558,9 +558,9 @@ TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples ar
 
 #ifdef HDRVIEW_TEST_LIBTIFF_DIR
 
-// libtiff's own test images. Most are named photometric-channels-bits, and its README says they hold the
-// same picture at 157x151, which is what lets these be checked without transcribing any pixels. The rest are
-// the files its regressions were written against: OJPEG, fax, and directories that point at themselves.
+// libtiff's own test images: OJPEG, fax, palettes at three depths, LogLuv, float64 behind a predictor, and
+// four files with several directories, two of which loop. A name of the form photometric-channels-bits is
+// the only oracle they carry; the README's "mostly 157x151" is not one, since two of them are neither.
 TEST_CASE("libtiff's test images decode as their names say, or are refused")
 {
     namespace fs = std::filesystem;
@@ -589,8 +589,8 @@ TEST_CASE("libtiff's test images decode as their names say, or are refused")
         }
         catch (const std::exception &)
         {
-            // a file libtiff's own suite keeps because it is malformed; refusing it is an answer, and
-            // reaching this line at all is the point for the ones that describe a loop
+            // refusing a file libtiff keeps because it is malformed is an answer rather than a failure; the
+            // count below is what says every file was reached
             ++refused;
             continue;
         }

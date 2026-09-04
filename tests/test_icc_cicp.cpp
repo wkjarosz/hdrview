@@ -243,10 +243,9 @@ TEST_CASE("icc_cicp_tag reports the video range flag")
 
 #ifdef HDRVIEW_TEST_LIBJXL_DIR
 
-// The Compact-ICC-Profiles set libjxl vendors: each color space written four ways, over ICC v2 and v4 and in
-// the cut-down "micro" and "magic" forms, all named <space>-<version>[-form].icc. Four encodings of one space
-// is the oracle: whatever primaries a profile yields, its siblings have to yield the same, and no number has
-// to be written down here for that to hold.
+// The Compact-ICC-Profiles set libjxl vendors writes each color space four ways, over ICC v2 and v4 and in
+// the cut-down "micro" and "magic" forms, named <space>-<version>[-form].icc. The names are the oracle:
+// whatever primaries one encoding yields, its siblings have to yield the same.
 TEST_CASE("Profiles encoding the same color space agree on its primaries")
 {
     namespace fs = std::filesystem;
