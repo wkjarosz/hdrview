@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstring>
+#include <fstream>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -83,6 +84,35 @@ std::vector<unsigned char> tiff_raw_samples(const std::string &bytes)
     return {bytes.begin() + offset, bytes.begin() + offset + count};
 }
 
+#ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
+/// A 2x1 8-bit CMYK uncompressed TIFF carrying `icc`; pixel 0 is bare paper, pixel 1 a solid hit of black.
+std::string cmyk_tiff(const std::string &icc)
+{
+    std::vector<TiffEntry> entries{
+        {256, 4, 1, 2, {}},                       // ImageWidth
+        {257, 4, 1, 1, {}},                       // ImageLength
+        {258, 3, 4, 0, {8, 0, 8, 0, 8, 0, 8, 0}}, // BitsPerSample
+        {259, 3, 1, 1, {}},                       // Compression: none
+        {262, 3, 1, 5, {}},                       // Photometric: SEPARATED, which is to say ink
+        {277, 3, 1, 4, {}},                       // SamplesPerPixel
+        {278, 4, 1, 1, {}},                       // RowsPerStrip
+        {284, 3, 1, 1, {}},                       // PlanarConfiguration: chunky
+        {332, 3, 1, 1, {}},                       // InkSet: CMYK
+        {34675, 7, (uint32_t)icc.size(), 0, std::vector<uint8_t>(icc.begin(), icc.end())}, // ICCProfile
+    };
+
+    return tiff_bytes(Endian::Little, entries, {0, 0, 0, 0, 0, 0, 0, 0xff});
+}
+
+/// lcms's own CMYK printer profile, which libjxl carries in-tree.
+std::string cmyk_profile()
+{
+    std::ifstream in(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc", std::ios::binary);
+    REQUIRE(in.good());
+    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+}
+#endif
+
 ImagePtr load_tiff(const std::string &bytes)
 {
     auto img = load_bytes(load_tiff_image, bytes, "rgba.tif");
@@ -150,6 +180,28 @@ TEST_CASE("What a TIFF declares about its fourth sample, and what an override do
             CHECK(img->groups[1].type == ChannelGroup::Single_Channel);
         }
     }
+
+#ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
+    // A separated image's fourth sample is black ink and never coverage, whatever EXTRASAMPLES is absent.
+    // Reading it as alpha would make the solid black pixel transparent instead of dark.
+    {
+        auto img = load_bytes(cmyk_tiff(cmyk_profile()), "cmyk.tif");
+        REQUIRE(img);
+        CHECK(img->transparency == TransparencyType_None);
+        CHECK_FALSE(img->alpha_is_transparency());
+
+        // the profile is what converts the ink, and applying it means the loader read the four samples
+        // itself rather than taking libtiff's RGBA interface, which converts them by a formula of its own
+        CHECK(img->metadata.value("color profile", std::string{}).find("Test profile") != std::string::npos);
+        REQUIRE(img->channels.size() >= 3);
+        for (int c = 0; c < 3; ++c)
+        {
+            CAPTURE(c);
+            CHECK(img->channels[c](0, 0) > 0.5f); // bare paper
+            CHECK(img->channels[c](1, 0) < 0.2f); // solid black
+        }
+    }
+#endif
 }
 
 TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied by coverage")
