@@ -410,12 +410,8 @@ namespace
 {
 
 /// Decodes one codestream into an Image, applying the color pipeline `opts` asks for.
-/**
-    `cs` is what the decoder reads, which for the JP2 syntax is the whole file rather than the codestream
-    alone, so `syntax` names the bytes the codestream markers actually start at.
-*/
-ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, const Jp2Boxes &boxes, string_view filename,
-                           const ImageLoadOptions &opts)
+ImagePtr decode_codestream(Bytes cs, bool high_throughput, OPJ_CODEC_FORMAT format, const Jp2Boxes &boxes,
+                           string_view filename, const ImageLoadOptions &opts)
 {
     CodecPtr codec{opj_create_decompress(format), opj_destroy_codec};
     if (!codec)
@@ -477,8 +473,8 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
 
     const bool cmyk = cs_enum == OPJ_CLRSPC_CMYK && img->numcomps >= 4;
     const bool gray = cs_enum == OPJ_CLRSPC_GRAY || img->numcomps < 3;
-    // ICCProfile turns four ink channels into RGB through the file's own profile, the way the JPEG XL loader
-    // does. Without one there is nothing to convert them with, so they keep their own names and their values.
+    // ICCProfile turns four ink channels into RGB through the file's own profile. Without one there is
+    // nothing to convert them with, so they keep their own names and their values.
     const bool cmyk_to_rgb = cmyk && img->numcomps == 4 && !icc.empty() && ICCProfile(icc).is_CMYK();
     if (cmyk && !cmyk_to_rgb)
         spdlog::warn("No CMYK ICC profile to convert this image's ink channels with; leaving them as they are.");
@@ -500,17 +496,13 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
 
     vector<string> names;
     if (cmyk && !cmyk_to_rgb)
-        names.insert(names.end(), {"C", "M", "Y", "K"});
+        names = {"C", "M", "Y", "K"};
     else if (num_color == 1)
-        names.push_back("Y");
+        names = {"Y"};
     else
-    {
-        names.insert(names.end(), {"R", "G", "B"});
-        // the conversion writes RGB over the four ink channels and a fourth that is opaque everywhere
-        if (cmyk_to_rgb)
-            names.push_back("A");
-    }
-    if (has_alpha)
+        names = {"R", "G", "B"};
+    // the ink conversion writes RGB over the four channels it reads, leaving the fourth opaque
+    if (has_alpha || cmyk_to_rgb)
         names.push_back("A");
     for (uint32_t c = 0; c < num_extra; ++c) names.push_back(fmt::format("extra.{}", c));
 
@@ -541,7 +533,6 @@ ImagePtr decode_codestream(Bytes cs, Bytes syntax, OPJ_CODEC_FORMAT format, cons
     auto &header = image->metadata["header"];
     header["Color space"] =
         header_entry(color_space_name(cs_enum), color_space_name(cs_enum), "string", "Color space of the codestream");
-    const bool high_throughput = codestream_is_high_throughput(syntax);
     header["Block coder"] =
         header_entry(high_throughput ? "HTJ2K" : "JPEG 2000", high_throughput ? "high-throughput (Part 15)" : "Part 1",
                      "string", "Block coder the codestream needs");
@@ -696,8 +687,11 @@ vector<ImagePtr> load_j2k_image(istream &is, string_view filename, const ImageLo
         // extracted codestreams are the fallback for the family members it does not parse, such as JPM
         try
         {
+            // the JP2 codec reads the whole file, so the markers naming the block coder are in the first
+            // codestream box rather than at the front
             const Bytes first = boxes.codestreams.empty() ? all : boxes.codestreams.front();
-            images.push_back(decode_codestream(all, first, OPJ_CODEC_JP2, boxes, filename, opts));
+            images.push_back(
+                decode_codestream(all, codestream_is_high_throughput(first), OPJ_CODEC_JP2, boxes, filename, opts));
         }
         catch (const exception &e)
         {
@@ -717,7 +711,8 @@ vector<ImagePtr> load_j2k_image(istream &is, string_view filename, const ImageLo
             if (!partname.empty() && !filter.PassFilter(partname.c_str()))
                 continue;
 
-            auto image      = decode_codestream(streams[i], streams[i], OPJ_CODEC_J2K, boxes, filename, opts);
+            auto image = decode_codestream(streams[i], codestream_is_high_throughput(streams[i]), OPJ_CODEC_J2K, boxes,
+                                           filename, opts);
             image->partname = partname;
             images.push_back(image);
         }
@@ -848,8 +843,10 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, float g
     opts.dither     = dither;
     opts.reversible = lossless;
     opts.container  = container;
-    opts.bit_depth_index =
-        (int)(std::find(k_bit_depths, k_bit_depths + k_num_bit_depths, bit_depth) - k_bit_depths) % k_num_bit_depths;
+    const auto *at  = std::find(k_bit_depths, k_bit_depths + k_num_bit_depths, bit_depth);
+    if (at == k_bit_depths + k_num_bit_depths)
+        throw invalid_argument{fmt::format("JPEG 2000: cannot write {}-bit samples", bit_depth)};
+    opts.bit_depth_index = (int)(at - k_bit_depths);
     save_j2k_image(img, os, filename, &opts);
 }
 

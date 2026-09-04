@@ -314,9 +314,8 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 
         int num_channels = samples_per_pixel;
 
-        // libtiff's RGBA interface converts CMYK by a formula of its own that no profile informs, which
-        // costs a print profile's rendering entirely. A file carrying one takes the ordinary path instead,
-        // and its four ink samples reach ICCProfile intact.
+        // libtiff's RGBA interface converts CMYK by a formula of its own that no profile informs, so a file
+        // carrying one takes the ordinary path and its four ink samples reach ICCProfile intact
         bool cmyk_via_icc = false;
         if (is_cmyk)
         {
@@ -890,8 +889,8 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
         // inverting the transfer function does not commute with multiplication by alpha; see alpha.h
         unpremultiply_before_transfer(float_pixels.data(), size, image->transparency);
 
-        // a priority that ran is the end of it; one that could not is not, and the file's own tags still have
-        // to say how to read the samples
+        // a priority that could not be applied has to fall through, or the samples keep the encoding the
+        // file stored them in
         bool linearized = opts.override_profile;
 
         if (opts.override_profile)

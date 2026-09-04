@@ -428,9 +428,8 @@ bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries,
         return codes.linearize_pixels(pixels, size, keep_primaries, tf_description, c);
 
     ICCProfile profile_out = nullptr;
-    // create the output profile and store either the input or output primaries in c. CMYK is the exception:
-    // it has no primaries of its own to keep, so linearized_profile() would find no colorants to read and
-    // give up, and transform_pixels() needs an RGB output profile to recognize the conversion at all.
+    // create the output profile and store either the input or output primaries in c. CMYK has no primaries
+    // of its own to keep, and transform_pixels() needs an RGB output profile to recognize the conversion.
     if (keep_primaries && !is_CMYK())
         profile_out = linearized_profile(c);
     else

@@ -185,9 +185,8 @@ Exif::Exif(const uint8_t *data_ptr, size_t data_size) : m_impl(std::make_unique<
                 {
                 case EXIF_LOG_CODE_NONE: spdlog::info("{}: {}", domain, msg); break;
                 case EXIF_LOG_CODE_DEBUG: spdlog::debug("{}: {}", domain, msg); break;
-                // libexif carries on past a tag it cannot follow, and the tags it can read still arrive, so
-                // this says what was skipped rather than announcing a failure that did not happen. A writer
-                // trimming an EXIF block without trimming the offsets into it is enough to reach here.
+                // libexif carries on past a tag it cannot follow and the readable tags still arrive, so
+                // this says what was skipped rather than announcing a failure that did not happen
                 case EXIF_LOG_CODE_CORRUPT_DATA: spdlog::warn("{}: {}", domain, msg); break;
                 case EXIF_LOG_CODE_NO_MEMORY:
                     *error = true;
