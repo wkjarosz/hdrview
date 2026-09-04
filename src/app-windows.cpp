@@ -1170,29 +1170,26 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
 
     // Which corner or edge of the string lands on the point it was placed at -- NanoVG's align flags say
     // exactly that, so a grid of the nine positions states it more directly than alignment icons could.
-    // Baseline is the tenth and has no square here; only a renderer sends it.
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Anchor");
-    ImGui::SameLine(0.f, item_spacing_x);
-
-    auto cell = [](bool on, float size)
-    {
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
-        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetColorU32(on ? ImGuiCol_ButtonActive : ImGuiCol_FrameBg));
-        const bool clicked = ImGui::Button("##cell", ImVec2(size, size));
-        ImGui::PopStyleColor();
-        ImGui::PopStyleVar();
-        return clicked;
-    };
+    // Each square carries a dot where its own anchor sits, drawn rather than lettered: FontAwesome has no
+    // diagonal arrows, and four of the nine would have been blank under it. Baseline is the tenth position
+    // and has no square; only a renderer sends it.
+    constexpr int h_of[3] = {VgCommand::AlignLeft, VgCommand::AlignCenter, VgCommand::AlignRight};
+    constexpr int v_of[3] = {VgCommand::AlignTop, VgCommand::AlignMiddle, VgCommand::AlignBottom};
 
     static const char *const rows[3] = {"top", "middle", "bottom"};
     static const char *const cols[3] = {"left", "center", "right"};
-    constexpr int            h_of[3] = {VgCommand::AlignLeft, VgCommand::AlignCenter, VgCommand::AlignRight};
-    constexpr int            v_of[3] = {VgCommand::AlignTop, VgCommand::AlignMiddle, VgCommand::AlignBottom};
 
-    const float side = ImGui::GetFrameHeight() * 0.6f;
+    const float side = ImGui::GetFrameHeight() * 0.8f;
+    const float grid = 3.f * side + 2.f;
+
+    // Set against the middle of the grid rather than the top of it.
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 0.5f * (grid - ImGui::GetTextLineHeight()));
+    ImGui::TextUnformatted("Anchor");
+    ImGui::SameLine(0.f, item_spacing_x);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 0.5f * (grid - ImGui::GetTextLineHeight()));
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1.f, 1.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.f);
     ImGui::BeginGroup();
     for (int row = 0; row < 3; ++row)
         for (int col = 0; col < 3; ++col)
@@ -1202,16 +1199,26 @@ void HDRViewApp::draw_font_popup(Annotation &a, const ImVec2 &frame_padding, flo
                 ImGui::SameLine();
 
             const bool on = (a.text_align & h_of[col]) != 0 && (a.text_align & v_of[row]) != 0;
-            if (cell(on, side))
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetColorU32(on ? ImGuiCol_ButtonActive : ImGuiCol_FrameBg));
+            if (ImGui::Button("##cell", ImVec2(side, side)))
             {
                 a.text_align                  = h_of[col] | v_of[row];
                 m_annotation_style.text_align = a.text_align;
             }
+            ImGui::PopStyleColor();
             ImGui::SetItemTooltip("Anchor the text at its %s %s", rows[row], cols[col]);
+
+            // The dot sits where this square's own anchor would, so a square says what it does.
+            const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+            const float  inset = 0.25f * side;
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(ImLerp(lo.x + inset, hi.x - inset, 0.5f * float(col)),
+                                                               ImLerp(lo.y + inset, hi.y - inset, 0.5f * float(row))),
+                                                        ImMax(1.5f, side * 0.1f), ImGui::GetColorU32(ImGuiCol_Text));
+
             ImGui::PopID();
         }
     ImGui::EndGroup();
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(2);
 
     ImGui::PopStyleVar(2);
     ImGui::EndPopup();
