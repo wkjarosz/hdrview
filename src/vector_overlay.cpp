@@ -343,19 +343,28 @@ void draw_vector_overlay(ImDrawList *draw_list, const std::vector<VgCommand> &co
             const float2 extent = float2{font->CalcTextSizeA(baked, FLT_MAX, 0.f, cmd.text.c_str())} * glyph_scale;
             const ImVec2 at     = aligned_text_pos(to_screen(f[0], f[1]), extent, state.text_align);
 
-            // The glyphs are laid out small and then scaled up, so they are drawn against the box they end
-            // up filling rather than the one they start in -- against the smaller box, everything outside
-            // it is culled a letter at a time as the scale grows.
-            draw_list->PushClipRect(at, ImVec2(at.x + extent.x, at.y + extent.y), false);
+            // Clipped to whichever of the two boxes is larger, and a little past it: the glyphs are laid
+            // out in one and end up filling the other, so a rect holding only the box they are laid out in
+            // culls them a letter at a time, and one holding only where they end up cuts off the last of
+            // them when the text is being made smaller.
+            const float2 covered{ImMax(extent.x, extent.x / glyph_scale), ImMax(extent.y, extent.y / glyph_scale)};
+            const float2 pad{covered.y, covered.y};
+            draw_list->PushClipRect(ImVec2(at.x - pad.x, at.y - pad.y),
+                                    ImVec2(at.x + covered.x + pad.x, at.y + covered.y + pad.y), false);
+
+            // ImFont::RenderText lays the glyphs out from a whole-pixel position, so they are scaled about
+            // that one and not about where the text was asked to go: about the latter, the fraction of a
+            // pixel between them is multiplied by the scale, and jumps by that much every time the zoom
+            // carries the text across a pixel boundary.
+            const ImVec2 origin{ImTrunc(at.x), ImTrunc(at.y)};
 
             const int first = draw_list->VtxBuffer.Size;
             draw_list->AddText(font, baked, at, state.fill_color, cmd.text.c_str());
-            if (glyph_scale != 1.f)
-                for (int v = first; v < draw_list->VtxBuffer.Size; ++v)
-                {
-                    ImVec2 &p = draw_list->VtxBuffer[v].pos;
-                    p         = ImVec2(at.x + (p.x - at.x) * glyph_scale, at.y + (p.y - at.y) * glyph_scale);
-                }
+            for (int v = first; v < draw_list->VtxBuffer.Size; ++v)
+            {
+                ImVec2 &p = draw_list->VtxBuffer[v].pos;
+                p         = ImVec2(at.x + (p.x - origin.x) * glyph_scale, at.y + (p.y - origin.y) * glyph_scale);
+            }
 
             draw_list->PopClipRect();
         }
