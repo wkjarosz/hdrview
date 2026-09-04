@@ -949,26 +949,27 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
     const float combo_narrow = ImGui::IconSize().x + combo_pad;
     const float combo_wide   = ImGui::IconSize().x + style.ItemInnerSpacing.x + names_w + combo_pad;
 
-    const float add_w     = ImGui::CalcTextSize("Add:").x + style.ItemInnerSpacing.x;
-    const float colors_w  = ImGui::GetFrameHeight();
+    // "Add:" and the picker share a column, separated by their own spacing: in columns of their own the
+    // cell padding between them would set the label further from what it labels than from the width drag.
+    const float add_text_w = ImGui::CalcTextSize("Add:").x + style.ItemInnerSpacing.x;
+    const float colors_w   = ImGui::GetFrameHeight();
     const float label_min = EmSize(5.f), width_min = EmSize(3.5f);
 
     // Enough room for everything at its smallest, plus what showing the names would add.
-    const float avail   = ImGui::GetContentRegionAvail().x;
-    const bool  named   = avail >= label_min + colors_w + width_min + add_w + combo_wide + 5.f * style.CellPadding.x;
-    const float combo_w = named ? combo_wide : combo_narrow;
+    const float avail = ImGui::GetContentRegionAvail().x;
+    const bool  named = avail >= label_min + colors_w + width_min + add_text_w + combo_wide + 4.f * style.CellPadding.x;
+    const float add_w = add_text_w + (named ? combo_wide : combo_narrow);
 
-    // Spare width goes mostly to the label, and what is left of it to the width drag; the colors, the
-    // "Add:" and the shape picker stay the size they need.
-    if (ImGui::BeginTable("##AnnotationControls", 5,
+    // Spare width is split two to one between the label and the width drag; the colors, the "Add:" and the
+    // shape picker stay the size they need.
+    if (ImGui::BeginTable("##AnnotationControls", 4,
                           ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_NoPadOuterX |
                               ImGuiTableFlags_SizingFixedFit))
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 3.f);
+        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 2.f);
         ImGui::TableSetupColumn("colors", ImGuiTableColumnFlags_WidthFixed, colors_w);
         ImGui::TableSetupColumn("width", ImGuiTableColumnFlags_WidthStretch, 1.f);
         ImGui::TableSetupColumn("add", ImGuiTableColumnFlags_WidthFixed, add_w);
-        ImGui::TableSetupColumn("shape", ImGuiTableColumnFlags_WidthFixed, combo_w);
         ImGui::TableNextRow();
 
         ImGui::TableNextColumn();
@@ -990,8 +991,7 @@ void HDRViewApp::draw_annotation_controls(Annotation &a)
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Add:");
-
-        ImGui::TableNextColumn();
+        ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(-FLT_MIN);
         const std::string preview = named ? fmt::format("{} {}", annotation_shape_icon(m_annotation_shape),
                                                         annotation_shape_name(m_annotation_shape))
