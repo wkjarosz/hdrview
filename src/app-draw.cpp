@@ -277,7 +277,11 @@ void HDRViewApp::draw_tool_decorations() const
     // The handles of the annotation being worked on, drawn over everything so they can be picked up even
     // where the shape runs under another. White on black reads over any image. Only under the annotate
     // tool, since that is the only place a click does anything with them.
-    if (const int active = active_annotation(); active >= 0 && m_draw_annotations && m_mouse_mode == MouseMode_Annotate)
+    // Not while one is being drawn: the shape under the cursor already says what is happening, and a box
+    // around a scribble is a shape the scribble is not.
+    if (const int active = active_annotation(); active >= 0 && m_draw_annotations &&
+                                                m_mouse_mode == MouseMode_Annotate &&
+                                                m_annotation_drag != AnnotationDrag::Creating)
     {
         const auto  xform  = viewport_transform();
         const float radius = 0.3f * HelloImGui::EmSize();
