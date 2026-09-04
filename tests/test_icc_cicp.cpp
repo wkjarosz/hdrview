@@ -17,7 +17,11 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace hdrview_test;
@@ -236,3 +240,77 @@ TEST_CASE("icc_cicp_tag reports the video range flag")
     CHECK(icc_cicp_tag(narrow.data(), narrow.size()).valid());
     CHECK(!icc_cicp_tag(nullptr, 0).valid());
 }
+
+#ifdef HDRVIEW_TEST_LIBJXL_DIR
+
+// The Compact-ICC-Profiles set libjxl vendors: each color space written four ways, over ICC v2 and v4 and in
+// the cut-down "micro" and "magic" forms, all named <space>-<version>[-form].icc. Four encodings of one space
+// is the oracle: whatever primaries a profile yields, its siblings have to yield the same, and no number has
+// to be written down here for that to hold.
+TEST_CASE("Profiles encoding the same color space agree on its primaries")
+{
+    namespace fs = std::filesystem;
+
+    std::map<std::string, std::vector<std::pair<std::string, Chromaticities>>> by_space;
+    int                                                                        read = 0;
+
+    for (const auto &entry :
+         fs::directory_iterator(std::string(HDRVIEW_TEST_LIBJXL_DIR) + "/external/Compact-ICC-Profiles/profiles"))
+    {
+        const auto path = entry.path();
+        if (path.extension() != ".icc")
+            continue;
+
+        const std::string name = path.filename().string();
+        CAPTURE(name);
+
+        std::ifstream in(path, std::ios::binary);
+        REQUIRE(in.good());
+        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        REQUIRE(bytes.size() > 128);
+        ++read;
+
+        // reading one must not throw, whatever it holds
+        ICCProfile     profile{reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()};
+        Chromaticities chr;
+        if (!profile.valid() || !profile.extract_chromaticities(&chr))
+            continue; // a gray or LUT-shaped profile carries no colorants to read
+
+        by_space[name.substr(0, name.find("-v"))].emplace_back(name, chr);
+    }
+    CHECK(read >= 40);
+
+    for (const auto &[space, profiles] : by_space)
+    {
+        CAPTURE(space);
+        const auto &[first_name, want] = profiles.front();
+        for (const auto &[name, got] : profiles)
+        {
+            CAPTURE(first_name);
+            CAPTURE(name);
+            CHECK(got.red.x == doctest::Approx(want.red.x).epsilon(1e-3));
+            CHECK(got.green.y == doctest::Approx(want.green.y).epsilon(1e-3));
+            CHECK(got.blue.x == doctest::Approx(want.blue.x).epsilon(1e-3));
+            CHECK(got.white.x == doctest::Approx(want.white.x).epsilon(1e-3));
+        }
+    }
+
+    // Agreement alone is self-consistent: read every colorant out of the wrong tag and the siblings still
+    // match each other. sRGB's primaries are published, so one group is anchored to them.
+    const auto srgb = by_space.find("sRGB");
+    REQUIRE(srgb != by_space.end());
+    for (const auto &[name, got] : srgb->second)
+    {
+        CAPTURE(name);
+        CHECK(got.red.x == doctest::Approx(0.64f).epsilon(1e-3));
+        CHECK(got.red.y == doctest::Approx(0.33f).epsilon(1e-3));
+        CHECK(got.green.x == doctest::Approx(0.30f).epsilon(1e-3));
+        CHECK(got.green.y == doctest::Approx(0.60f).epsilon(1e-3));
+        CHECK(got.blue.x == doctest::Approx(0.15f).epsilon(1e-3));
+        CHECK(got.blue.y == doctest::Approx(0.06f).epsilon(1e-3));
+        CHECK(got.white.x == doctest::Approx(0.3127f).epsilon(1e-3));
+        CHECK(got.white.y == doctest::Approx(0.3290f).epsilon(1e-3));
+    }
+}
+
+#endif // HDRVIEW_TEST_LIBJXL_DIR

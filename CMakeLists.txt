@@ -1850,7 +1850,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
                                 tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
-                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
+                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_jxl_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
                                 tests/test_vector_overlay.cpp tests/test_annotations.cpp
                                 ${HDRVIEW_IPC_TESTS}
   )
@@ -2038,6 +2038,33 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   else()
     message(STATUS "bcdec test images not available (no fetched source; set HDRVIEW_TEST_BCDEC_DIR to use a "
                    "checkout); skipping tests/test_dds_io.cpp's vendored-data cases"
+    )
+  endif()
+
+  # libjxl's test data: the Compact-ICC-Profiles set, which encodes each color space four ways over ICC v2
+  # and v4, and a handful of its own codestreams.
+  set(HDRVIEW_TEST_LIBJXL_DIR
+      ""
+      CACHE PATH "libjxl's testdata directory"
+  )
+  if(HDRVIEW_TEST_LIBJXL_DIR)
+    set(_hdrview_libjxl_data "${HDRVIEW_TEST_LIBJXL_DIR}")
+    set(_hdrview_libjxl_explicit TRUE)
+  elseif(DEFINED JXL_SOURCE_DIR)
+    set(_hdrview_libjxl_data "${JXL_SOURCE_DIR}/testdata")
+    set(_hdrview_libjxl_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_libjxl_data AND EXISTS "${_hdrview_libjxl_data}/external/Compact-ICC-Profiles/profiles")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_LIBJXL_DIR="${_hdrview_libjxl_data}")
+  elseif(_hdrview_libjxl_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_LIBJXL_DIR is set to '${_hdrview_libjxl_data}', which holds no "
+                        "external/Compact-ICC-Profiles/profiles"
+    )
+  else()
+    message(STATUS "libjxl test data not available (no fetched source; set HDRVIEW_TEST_LIBJXL_DIR to use a "
+                   "checkout); skipping the vendored-data cases in tests/test_icc_cicp.cpp and "
+                   "tests/test_jxl_io.cpp"
     )
   endif()
 
