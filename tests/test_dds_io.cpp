@@ -16,6 +16,8 @@
 using namespace hdrview_test;
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -124,3 +126,47 @@ TEST_CASE("DDS premultiplied-alpha formats are not premultiplied a second time")
         }
     }
 }
+
+#ifdef HDRVIEW_TEST_BCDEC_DIR
+
+// bcdec's own test images, one per block format, decoded by the library HDRView links for exactly this.
+TEST_CASE("Every block format bcdec ships decodes to the size its header declares")
+{
+    namespace fs = std::filesystem;
+
+    int files = 0;
+    for (const auto &entry : fs::directory_iterator(HDRVIEW_TEST_BCDEC_DIR))
+    {
+        const auto path = entry.path();
+        if (path.extension() != ".dds")
+            continue;
+
+        const std::string name = path.filename().string();
+        CAPTURE(name);
+
+        std::ifstream in(path, std::ios::binary);
+        REQUIRE(in.good());
+        const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+
+        // DDS_HEADER follows the four-byte magic: dwSize, dwFlags, then height and width
+        REQUIRE(bytes.size() > 20);
+        REQUIRE(bytes.compare(0, 4, "DDS ") == 0);
+        auto u32 = [&bytes](size_t at)
+        {
+            return (uint32_t)(uint8_t)bytes[at] | ((uint32_t)(uint8_t)bytes[at + 1] << 8) |
+                   ((uint32_t)(uint8_t)bytes[at + 2] << 16) | ((uint32_t)(uint8_t)bytes[at + 3] << 24);
+        };
+
+        auto img = load_bytes(load_dds_image, bytes, name.c_str());
+        REQUIRE(img);
+        img->finalize();
+
+        CHECK(img->size().y == (int)u32(12));
+        CHECK(img->size().x == (int)u32(16));
+        REQUIRE_FALSE(img->channels.empty());
+        ++files;
+    }
+    CHECK(files > 0);
+}
+
+#endif // HDRVIEW_TEST_BCDEC_DIR

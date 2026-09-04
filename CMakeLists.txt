@@ -2017,6 +2017,30 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
     )
   endif()
 
+  # bcdec's own test images, one per block format it decodes. HDRView decodes DDS through that very library,
+  # so these are the reference files for the code under test.
+  set(HDRVIEW_TEST_BCDEC_DIR
+      ""
+      CACHE PATH "bcdec's test_images directory"
+  )
+  if(HDRVIEW_TEST_BCDEC_DIR)
+    set(_hdrview_bcdec_data "${HDRVIEW_TEST_BCDEC_DIR}")
+    set(_hdrview_bcdec_explicit TRUE)
+  elseif(DEFINED bcdec_SOURCE_DIR)
+    set(_hdrview_bcdec_data "${bcdec_SOURCE_DIR}/test_images")
+    set(_hdrview_bcdec_explicit FALSE)
+  endif()
+
+  if(DEFINED _hdrview_bcdec_data AND EXISTS "${_hdrview_bcdec_data}")
+    target_compile_definitions(hdrview_tests PRIVATE HDRVIEW_TEST_BCDEC_DIR="${_hdrview_bcdec_data}")
+  elseif(_hdrview_bcdec_explicit)
+    message(FATAL_ERROR "HDRVIEW_TEST_BCDEC_DIR is set to '${_hdrview_bcdec_data}', which does not exist")
+  else()
+    message(STATUS "bcdec test images not available (no fetched source; set HDRVIEW_TEST_BCDEC_DIR to use a "
+                   "checkout); skipping tests/test_dds_io.cpp's vendored-data cases"
+    )
+  endif()
+
   include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
   enable_testing()
   doctest_discover_tests(hdrview_tests)
