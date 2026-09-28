@@ -24,6 +24,15 @@ echo "Extracting $appimage"
 (cd "$workdir" && "$appimage" --appimage-extract >/dev/null)
 appdir=$workdir/squashfs-root
 
+# Update information lets AppImageUpdate find newer releases; it needs the .zsync file published beside it.
+update_info=$("$appimage" --appimage-updateinformation)
+if [[ $update_info != gh-releases-zsync\|* ]]; then
+    echo "error: the AppImage embeds no gh-releases-zsync update information (got '$update_info')" >&2
+    exit 1
+fi
+[[ -f $appimage.zsync ]] || { echo "error: no $appimage.zsync beside the AppImage" >&2; exit 1; }
+echo "Update information: $update_info"
+
 # The four shaders the Linux/OpenGL build generates with sokol-shdc; see sokol_shdc_generate() in
 # CMakeLists.txt. Their names are what Shader::from_asset() asks for at runtime, plus the .glsl extension.
 shader_dir=$appdir/usr/bin/assets/shaders
