@@ -39,6 +39,26 @@ if ((${#missing[@]})); then
 fi
 echo "Compiled shaders present in $shader_dir"
 
+# The AppImage bundles neither glibc nor libstdc++, so the newest symbol versions anything inside asks for are
+# what a host must provide. The ceilings are Ubuntu 22.04's, the oldest supported LTS, which is what the
+# AppImage catalog tests against.
+elfs=()
+while IFS= read -r -d '' f; do
+    [[ $(head -c4 "$f" | tr -d '\0') == $'\x7fELF' ]] && elfs+=("$f")
+done < <(find "$appdir" -type f -print0)
+for ceiling in GLIBC_2.35 GLIBCXX_3.4.30; do
+    prefix=${ceiling%%_*}
+    newest=$(objdump -T "${elfs[@]}" 2>/dev/null | grep -o "\b${prefix}_[0-9.]*" | sort -Vu | tail -1 || true)
+    if [[ $(printf '%s\n' "$ceiling" "$newest" | sort -V | tail -1) != "$ceiling" ]]; then
+        echo "error: the AppImage requires $newest, newer than the $ceiling it may assume of a host" >&2
+        for f in "${elfs[@]}"; do
+            grep -q "\b$newest\b" <<<"$(objdump -T "$f" 2>/dev/null)" && echo "    ${f#"$appdir"/}" >&2
+        done
+        exit 1
+    fi
+    echo "Newest ${prefix} required: ${newest:-none} (ceiling $ceiling)"
+done
+
 # Launch it for real. HDRView has no run-and-exit mode, so let it come up and then kill it; what matters is
 # what it logged on the way, not its exit status. Poll rather than waiting out the timeout: a healthy start
 # takes a couple of seconds, and the timeout only bounds a hung one.

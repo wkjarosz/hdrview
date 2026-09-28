@@ -2337,6 +2337,8 @@ elseif(UNIX AND NOT EMSCRIPTEN)
   # Install desktop file and icons
   install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.desktop"
           DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
+  install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/HDRView.appdata.xml"
+          DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/metainfo")
 
   # register the .hsess session file's mime type so file managers offer HDRView to open it
   install(FILES "${CMAKE_SOURCE_DIR}/assets/app_settings/linux/hdrview-session-mime.xml"

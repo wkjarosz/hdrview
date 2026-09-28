@@ -138,7 +138,7 @@ New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
 
 (or via Group Policy: *Computer Configuration → Administrative Templates → System → Filesystem → Enable Win32 long paths*). A reboot may be needed before every process picks it up.
 
-**Linux.** `chmod +x` the AppImage and run it.
+**Linux.** `chmod +x` the AppImage and run it. It needs glibc 2.35 or newer: Ubuntu 22.04, Debian 12, Fedora 36, or anything more recent.
 
 ## Command-line usage
 
