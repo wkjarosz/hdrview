@@ -8,8 +8,7 @@
     <name>Wojciech Jarosz</name>
   </developer>
   <metadata_license>CC0-1.0</metadata_license>
-  <!-- LICENSE.txt: BSD-3-Clause plus the "Enhancements" clause, which SPDX calls BSD-3-Clause-LBNL -->
-  <project_license>BSD-3-Clause-LBNL</project_license>
+  <project_license>BSD-3-Clause</project_license>
 
   <description>
     <p>
