@@ -60,8 +60,10 @@ jobs:
           - { name: "Ubuntu 24.04 CPM arm", os: ubuntu-24.04-arm, preset: "linux-cpm", arch: "arm" }
           - { name: "Ubuntu 24.04 Local arm", os: ubuntu-24.04-arm, preset: "linux-local", arch: "arm" }
 
-          - { name: "Ubuntu 24.04 AppImage", os: ubuntu-24.04, preset: "linux-appimage", arch: "x86_64" }
-          - { name: "Ubuntu 24.04 AppImage arm", os: ubuntu-24.04-arm, preset: "linux-appimage", arch: "arm" }
+          # On the oldest supported LTS, as release.yml's AppImage is: an AppImage bundles no C library, so it
+          # runs only where the host's glibc is at least as new as the one it was built against.
+          - { name: "Ubuntu 22.04 AppImage", os: ubuntu-22.04, preset: "linux-appimage", arch: "x86_64" }
+          - { name: "Ubuntu 22.04 AppImage arm", os: ubuntu-22.04-arm, preset: "linux-appimage", arch: "arm" }
 
           - { name: "Ubuntu 22.04 CPM", os: ubuntu-22.04, preset: "linux-cpm", arch: "x86_64" }
           - { name: "Ubuntu 22.04 CPM arm", os: ubuntu-22.04-arm, preset: "linux-cpm", arch: "arm" }
@@ -85,7 +87,7 @@ jobs:
 
       - name: Install dependencies (Ubuntu 22.04)
         if: startsWith(matrix.config.os, 'ubuntu-22.04')
-        run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libdav1d-dev libde265-dev libx265-dev libcli11-dev libspdlog-dev libfmt-dev libwayland-dev wayland-protocols libxkbcommon-dev libdbus-1-dev libopenh264-dev libopenjp2-7-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libdav1d-dev libde265-dev libx265-dev libcli11-dev libspdlog-dev libfmt-dev libwayland-dev wayland-protocols libxkbcommon-dev libdbus-1-dev libopenh264-dev libopenjp2-7-dev xvfb
 
       - name: Install Python dependencies
         run: pip install --upgrade pip && pip install Pillow

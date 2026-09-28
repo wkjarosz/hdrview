@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Named after HDRView.desktop, which is where appimagetool looks for it. -->
+<component type="desktop-application">
+  <id>io.github.wkjarosz.hdrview</id>
+  <name>HDRView</name>
+  <summary>Inspect and compare high-dynamic-range images</summary>
+  <developer id="io.github.wkjarosz">
+    <name>Wojciech Jarosz</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <!-- LICENSE.txt: BSD-3-Clause plus the "Enhancements" clause, which SPDX calls BSD-3-Clause-LBNL -->
+  <project_license>BSD-3-Clause-LBNL</project_license>
+
+  <description>
+    <p>
+      HDRView is a research-oriented image viewer for examining and comparing high-dynamic-range images:
+      what the values actually are, which color space they are in, how two images differ, and what the file
+      claims about itself in its metadata.
+    </p>
+    <ul>
+      <li>Exposure, offset and gamma, false color over 17 colormaps, and zebra-striped clip warnings</li>
+      <li>True HDR output on Wayland compositors that support color management</li>
+      <li>ICC profiles, CICP code points, and gainmap HDR photos from recent phones</li>
+      <li>Pixel inspector, per-channel histograms and statistics, and difference blending against a reference</li>
+      <li>OpenEXR (multi-part and multi-layer), Radiance HDR, PFM, PNG, JPEG, Ultra HDR, JPEG XL, JPEG 2000,
+        AVIF, WebP, TIFF, DDS, QOI, and camera raw</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">HDRView.desktop</launchable>
+  <provides>
+    <binary>HDRView</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/wkjarosz/hdrview</url>
+  <url type="bugtracker">https://github.com/wkjarosz/hdrview/issues</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>An HDR photograph alongside several multi-view and multi-part EXRs</caption>
+      <image>https://raw.githubusercontent.com/wkjarosz/hdrview/master/resources/screenshot-overview.jpg</image>
+    </screenshot>
+    <screenshot>
+      <caption>Per-pixel values at high zoom, beside the Colorspace panel</caption>
+      <image>https://raw.githubusercontent.com/wkjarosz/hdrview/master/resources/screenshot-inspect.jpg</image>
+    </screenshot>
+    <screenshot>
+      <caption>The signed difference between the two views of a stereo EXR</caption>
+      <image>https://raw.githubusercontent.com/wkjarosz/hdrview/master/resources/screenshot-compare.jpg</image>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1"/>
+</component>
