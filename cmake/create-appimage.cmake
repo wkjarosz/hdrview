@@ -12,20 +12,25 @@ cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
 set(CREATE_APPIMAGE_SCRIPT_DIR "${CMAKE_CURRENT_LIST_DIR}")
 get_filename_component(PROJECT_ROOT "${CREATE_APPIMAGE_SCRIPT_DIR}/.." ABSOLUTE)
 
-find_program(LINUXDEPLOY_EXECUTABLE
-    NAMES linuxdeploy linuxdeploy-${CMAKE_SYSTEM_PROCESSOR}.AppImage
-    PATHS ${CPACK_PACKAGE_DIRECTORY}/dependencies/)
-
-if (NOT LINUXDEPLOY_EXECUTABLE)
-    message(WARNING "Couldn't find linuxdeploy. Downloading pre-built binary instead.")
-    set(LINUXDEPLOY_EXECUTABLE ${CPACK_PACKAGE_DIRECTORY}/dependencies/linuxdeploy-${CMAKE_SYSTEM_PROCESSOR}.AppImage)
-    file(DOWNLOAD 
-        https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${CMAKE_SYSTEM_PROCESSOR}.AppImage
-        ${LINUXDEPLOY_EXECUTABLE}
-        INACTIVITY_TIMEOUT 10
-        LOG ${CPACK_PACKAGE_DIRECTORY}/linuxdeploy/download.log
-        STATUS LINUXDEPLOY_DOWNLOAD)
-    execute_process(COMMAND chmod +x ${LINUXDEPLOY_EXECUTABLE} COMMAND_ECHO STDOUT)
+# Fetched afresh on every run, never taken from the PATH: linuxdeploy publishes only a rolling "continuous"
+# build, and an old one's patchelf breaks the RELR relocations current distributions build their libraries
+# with, so the AppImage crashes on launch. The previous download is kept only to package offline.
+set(LINUXDEPLOY_EXECUTABLE ${CPACK_PACKAGE_DIRECTORY}/dependencies/linuxdeploy-${CMAKE_SYSTEM_PROCESSOR}.AppImage)
+file(DOWNLOAD
+    https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${CMAKE_SYSTEM_PROCESSOR}.AppImage
+    ${LINUXDEPLOY_EXECUTABLE}.part
+    INACTIVITY_TIMEOUT 10
+    STATUS LINUXDEPLOY_DOWNLOAD)
+list(GET LINUXDEPLOY_DOWNLOAD 0 LINUXDEPLOY_DOWNLOAD_CODE)
+if(LINUXDEPLOY_DOWNLOAD_CODE EQUAL 0)
+    file(RENAME ${LINUXDEPLOY_EXECUTABLE}.part ${LINUXDEPLOY_EXECUTABLE})
+    execute_process(COMMAND chmod +x ${LINUXDEPLOY_EXECUTABLE})
+else()
+    file(REMOVE ${LINUXDEPLOY_EXECUTABLE}.part)
+    if(NOT EXISTS ${LINUXDEPLOY_EXECUTABLE})
+        message(FATAL_ERROR "Could not download linuxdeploy: ${LINUXDEPLOY_DOWNLOAD}")
+    endif()
+    message(WARNING "Could not download linuxdeploy (${LINUXDEPLOY_DOWNLOAD}); using the copy downloaded earlier")
 endif()
 
 # Ensure desktop file is present in the AppDir (some CPack configs may not stage it)
@@ -112,4 +117,9 @@ execute_process(
         --output=appimage
     WORKING_DIRECTORY ${CPACK_PACKAGE_DIRECTORY}
     COMMAND_ECHO STDOUT
+    RESULT_VARIABLE LINUXDEPLOY_RESULT
 )
+# CPack reports success whatever this script's commands return, so a failed packaging must stop it here.
+if(NOT LINUXDEPLOY_RESULT EQUAL 0)
+    message(FATAL_ERROR "linuxdeploy failed (${LINUXDEPLOY_RESULT}); no AppImage was produced")
+endif()
