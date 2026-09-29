@@ -32,7 +32,7 @@ endif()
 set(APPDIR "${CPACK_TEMPORARY_DIRECTORY}")
 
 # Copy desktop file from project assets into AppDir
-set(DESKTOP_SRC "${PROJECT_ROOT}/assets/app_settings/linux/HDRView.desktop")
+set(DESKTOP_SRC "${PROJECT_ROOT}/assets/app_settings/linux/io.github.wkjarosz.hdrview.desktop")
 if(EXISTS "${DESKTOP_SRC}")
   file(MAKE_DIRECTORY "${APPDIR}/usr/share/applications")
   file(COPY "${DESKTOP_SRC}" DESTINATION "${APPDIR}/usr/share/applications")
@@ -95,10 +95,16 @@ endif()
 
 ## No need to manually copy the executable; it is staged by CPack via install(TARGETS ...)
 
+# Lets AppImageUpdate fetch the newest release's AppImage for this architecture, by way of the .zsync file
+# linuxdeploy writes next to it; "latest" skips pre-releases. The architecture is the file name's last field.
+string(REGEX MATCH "[^-]+$" APPIMAGE_ARCH "${CPACK_PACKAGE_FILE_NAME}")
+set(UPDATE_INFORMATION "gh-releases-zsync|wkjarosz|hdrview|latest|HDRView-*-${APPIMAGE_ARCH}.appimage.zsync")
+
 execute_process(
     COMMAND
         ${CMAKE_COMMAND} -E env
         OUTPUT=${CPACK_PACKAGE_FILE_NAME}.appimage
+        "LDAI_UPDATE_INFORMATION=${UPDATE_INFORMATION}"
         VERSION=${CPACK_PACKAGE_VERSION}
         NO_STRIP=1
         ${LINUXDEPLOY_EXECUTABLE}

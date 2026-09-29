@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Named after HDRView.desktop, which is where appimagetool looks for it. -->
+<!-- Named after the desktop file, which is where appimagetool looks for it, and after <id>, as appstreamcli requires. -->
 <component type="desktop-application">
   <id>io.github.wkjarosz.hdrview</id>
   <name>HDRView</name>
@@ -26,7 +26,7 @@
     </ul>
   </description>
 
-  <launchable type="desktop-id">HDRView.desktop</launchable>
+  <launchable type="desktop-id">io.github.wkjarosz.hdrview.desktop</launchable>
   <provides>
     <binary>HDRView</binary>
   </provides>
