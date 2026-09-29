@@ -126,8 +126,9 @@ jobs:
           - { name: "Ubuntu 22.04 arm64", os: ubuntu-22.04-arm, preset: "linux-appimage", arch: "arm64" }
 
     steps:
+      # appstream and desktop-file-utils make appimagetool validate the AppImage's metadata
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libdav1d-dev libde265-dev libx265-dev libcli11-dev libspdlog-dev libfmt-dev libwayland-dev wayland-protocols libxkbcommon-dev libdbus-1-dev libopenh264-dev libopenjp2-7-dev xvfb
+        run: sudo apt-get update && sudo apt-get install -y cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libjpeg-dev libpng-dev libtiff-dev liblcms2-dev libwebp-dev libraw-dev libheif-dev libaom-dev libdav1d-dev libde265-dev libx265-dev libcli11-dev libspdlog-dev libfmt-dev libwayland-dev wayland-protocols libxkbcommon-dev libdbus-1-dev libopenh264-dev libopenjp2-7-dev xvfb appstream desktop-file-utils
 
       - name: Install Python dependencies
         run: pip install --upgrade pip && pip install Pillow
