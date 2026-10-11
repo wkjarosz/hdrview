@@ -473,10 +473,8 @@ void Image::draw_info()
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
         if (ImGui::PE::Begin("Image info", ImGuiTableFlags_ScrollY))
         {
-            // calculate left column based on the longest property name
-            ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
-            float col_width = ImGui::CalcTextSize("Channel selector").x + ImGui::GetStyle().CellPadding.x;
-            ImGui::PopFont();
+            // The column cannot be resized, so it is sized to the longest property name, in the font labels use
+            float col_width = ImGui::CalcTextSize("Transparency override").x + ImGui::GetStyle().CellPadding.x;
 
             ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, col_width);
 
@@ -553,6 +551,9 @@ void Image::draw_info()
 
                             ImGui::EndCombo();
                         }
+                        // The text rows around this one end in ItemSpacing.y below their text (see
+                        // PE::WrappedText()); end this row the same way, so the gaps above and below it match.
+                        ImGui::Spacing();
 
                         if (!changed)
                             return false;
