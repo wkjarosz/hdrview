@@ -15,7 +15,7 @@
 #include <vector>
 
 /// A shape the user drew over an image, in that image's pixel coordinates.
-/*!
+/**
     View state, like the exposure: annotations stay out of the undo history, never mark an image modified,
     and are never rasterized, so an image a renderer owns can carry them as freely as one from a file.
     They are kept as shapes, addressable one at a time, and flattened into Image::vector_overlay's commands
@@ -43,7 +43,7 @@ struct Annotation
     Shape shape = Shape::Rect;
 
     /// Geometry, in image pixel coordinates. Never empty, so p0() and p1() always name a point.
-    /*!
+    /**
         Freehand is the path as drawn; every other shape uses the first and last alone. Rect and Ellipse
         take them as opposite corners, in either order, Line and Arrow as tail and head, an arrow's head
         being at p1, and Text as its anchor.
@@ -114,12 +114,12 @@ struct Annotation
 void to_json(json &j, const Annotation &a);
 void from_json(const json &j, Annotation &a);
 
-/// Screen pixels per unit of \p a's font size, and of its stroke width: \p scale when that size is
-/// relative, and one when it is not.
+/// Screen pixels per unit of \p a's font size, and of its stroke width.
 /**
-    These are the only places that say what the two flags mean; everything that has to know asks here.
-    Measuring is linear in a font's size, so a string measured at font_size scales by the first into screen
-    pixels, and dividing by \p scale again brings it back to image ones.
+    That is \p scale when the size is relative, and one when it is not. These are the only places that say
+    what the two flags mean; everything that has to know asks here. Measuring is linear in a font's size, so
+    a string measured at font_size scales by the first into screen pixels, and dividing by \p scale again
+    brings it back to image ones.
 */
 float font_size_scale(const Annotation &a, float scale);
 float stroke_width_scale(const Annotation &a, float scale);
@@ -127,8 +127,8 @@ float stroke_width_scale(const Annotation &a, float scale);
 /// Where \p a's text sits, in image coordinates, or false when \p xform cannot measure it.
 bool text_extent(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &extent);
 
-/// The same box in screen coordinates, ordered so \p lo is the upper-left corner whichever way the view is
-/// flipped. Drawing and hit testing both read this.
+/// The same box in screen coordinates.
+/** \p lo is the upper-left corner whichever way the view is flipped. Drawing and hit testing both read this. */
 bool text_screen_box(const Annotation &a, const VgTransform &xform, float2 &lo, float2 &hi);
 
 /// The faces a text annotation can be drawn in; the viewport falls back to the first for any other.
