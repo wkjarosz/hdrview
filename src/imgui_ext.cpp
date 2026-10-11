@@ -275,27 +275,49 @@ ImU32 SpdLogWindow::get_level_color(spdlog::level::level_enum level)
     return m_level_colors.at(static_cast<size_t>(level));
 }
 
-string TruncatedText(const string &filename, const string &icon)
+string TruncatedText(const string &text, const string &icon, bool keep_tail, const string &suffix)
 {
-    const float avail_width = GetContentRegionAvail().x;
+    // Right-aligned text leaves its slack between itself and the icon; left-aligned text has none.
+    const string lead        = keep_tail ? "" : " ";
+    const float  avail_width = GetContentRegionAvail().x;
 
     // Common case: the whole thing already fits, nothing to truncate.
-    if (CalcTextSize((icon + filename).c_str()).x <= avail_width)
-        return filename;
+    if (CalcTextSize((icon + lead + text + suffix).c_str()).x <= avail_width)
+        return lead + text + suffix;
 
-    // Filenames here are `file:part.layer.channel` paths whose meaningful part is the end, so this keeps the
-    // tail and elides the front, the opposite of ImGui's RenderTextEllipsis(). Same technique as that
-    // function: accumulate per-glyph advances in a single pass, here walking backwards from the end.
-    static const string ellipsis = " ...";
-    const float         budget   = avail_width - CalcTextSize((icon + ellipsis).c_str()).x;
+    // Same technique as ImGui's RenderTextEllipsis(): accumulate per-glyph advances in a single pass, walking
+    // in from whichever end is kept. Keeping the tail is the opposite of what that function does, and suits
+    // `file:part.layer.channel` paths, whose meaningful part is the end.
+    const string ellipsis = keep_tail ? " ..." : "...";
+    const float  budget   = avail_width - CalcTextSize((icon + lead + ellipsis + suffix).c_str()).x;
 
     ImFont      *font  = GetFont();
     ImFontBaked *baked = font->GetFontBaked(GetFontSize());
 
-    const char *begin = filename.c_str();
-    const char *end   = begin + filename.size();
-    const char *cut   = end;
+    const char *begin = text.c_str();
+    const char *end   = begin + text.size();
     float       width = 0.f;
+
+    if (!keep_tail)
+    {
+        const char *cut = begin;
+        while (cut < end)
+        {
+            unsigned int codepoint = 0;
+            const char  *next      = cut + ImTextCharFromUtf8(&codepoint, cut, end);
+            float        advance   = baked->GetCharAdvance((ImWchar)codepoint);
+
+            // Always keep at least the first character, as below.
+            if (cut != begin && width + advance > budget)
+                break;
+
+            width += advance;
+            cut = next;
+        }
+        return lead + (cut == end ? text : string(begin, cut) + ellipsis) + suffix;
+    }
+
+    const char *cut = end;
     while (cut > begin)
     {
         // Step back to the start (lead byte) of the codepoint immediately before `cut`.
@@ -315,7 +337,7 @@ string TruncatedText(const string &filename, const string &icon)
         cut = prev;
     }
 
-    return cut == begin ? filename : ellipsis + string(cut, end);
+    return (cut == begin ? text : ellipsis + string(cut, end)) + suffix;
 };
 
 ImVec2 IconSize() { return CalcTextSize(ICON_MY_WIDEST); }

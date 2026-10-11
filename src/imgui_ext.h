@@ -294,8 +294,13 @@ inline void AlignCursor(float width, float align)
 
 inline void AlignCursor(const std::string &text, float align) { AlignCursor(CalcTextSize(text.c_str()).x, align); }
 
-// right-align the truncated file name
-std::string TruncatedText(const std::string &filename, const std::string &icon);
+/// The part of \p text that fits in the rest of the line beside \p icon, followed by \p suffix.
+/**
+    \p suffix is always kept. With \p keep_tail the front of \p text is elided, for drawing right-aligned;
+    otherwise the back is, and a space leads the result, for drawing left-aligned straight after the icon.
+*/
+std::string TruncatedText(const std::string &text, const std::string &icon, bool keep_tail = true,
+                          const std::string &suffix = "");
 
 /// Push the Header/HeaderHovered/HeaderActive colors an image-list row is drawn with.
 /**

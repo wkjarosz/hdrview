@@ -442,6 +442,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
                 m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
                 m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
+                m_left_align_names    = j.value<bool>("left align names", m_left_align_names);
                 m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
                 m_gamma_live = m_gamma = std::max(MIN_GAMMA, j.value<float>("gamma", m_gamma));
                 m_tonemap        = (Tonemap_)clamp<int>(j.value<Tonemap_>("tonemap", m_tonemap), 0, Tonemap_COUNT - 1);
@@ -532,6 +533,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         j["verbosity"]               = spdlog::get_level();
         j["file list mode"]          = m_file_list_mode;
         j["short names"]             = m_short_names;
+        j["left align names"]        = m_left_align_names;
         j["clip warnings"]           = m_clip_warnings;
         j["show FPS"]                = m_show_FPS;
         j["clip range"]              = m_clip_range;

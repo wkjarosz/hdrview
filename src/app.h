@@ -470,6 +470,8 @@ public:
     bool       &draw_grid_on() { return m_draw_grid; }
     /// Whether the image list shows only the unique portion of each file name.
     bool      &short_names() { return m_short_names; }
+    /// Whether the image list left-aligns file names, cutting long ones short at the back instead of the front.
+    bool      &left_align_names() { return m_left_align_names; }
     bool      &draw_pixel_info_on() { return m_draw_pixel_info; }
     AxisScale &histogram_x_scale() { return m_x_scale; }
     AxisScale &histogram_y_scale() { return m_y_scale; }
@@ -917,6 +919,7 @@ private:
     bool  m_show_tweak_window    = false;
     bool  m_request_sort         = false;
     bool  m_short_names          = false;
+    bool  m_left_align_names     = false;
     int   m_file_list_mode       = 1;    // 0: images only; 1: list; 2: tree;
     float m_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
 

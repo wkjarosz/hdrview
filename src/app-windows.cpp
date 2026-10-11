@@ -987,9 +987,12 @@ void HDRViewApp::draw_file_window()
     static char filter_buffer[256] = {0};
 
     const ImVec2 button_size = ImGui::IconButtonSize();
+    // The buttons after the filter sit closer to each other than to it, as the parts of one control.
+    const float button_gap = ImGui::GetStyle().ItemInnerSpacing.x;
 
     bool show_button = m_file_filter.IsActive() || m_channel_filter.IsActive(); // save here to avoid flicker
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.f * (button_size.x + ImGui::GetStyle().ItemSpacing.x));
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x - 3.f * button_size.x -
+                            2.f * button_gap);
     ImGui::SetNextItemAllowOverlap();
     if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file pattern:channel pattern'",
                                  filter_buffer, IM_ARRAYSIZE(filter_buffer)))
@@ -1038,9 +1041,16 @@ void HDRViewApp::draw_file_window()
     ImGui::Tooltip(m_short_names ? "Click to show full filenames."
                                  : "Click to show only the unique portion of each file name.");
 
+    ImGui::SameLine(0.f, button_gap);
+    if (ImGui::IconButton(m_left_align_names ? ICON_MY_ALIGN_NAMES_LEFT "##align names button"
+                                             : ICON_MY_ALIGN_NAMES_RIGHT "##align names button"))
+        m_left_align_names = !m_left_align_names;
+    ImGui::Tooltip(m_left_align_names ? "Click to right-align file names, cutting long names off at the left."
+                                      : "Click to left-align file names, cutting long names off at the right.");
+
     static const string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
 
-    ImGui::SameLine();
+    ImGui::SameLine(0.f, button_gap);
     if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[m_file_list_mode].data()))
     {
         auto old_mode = m_file_list_mode;
@@ -1173,13 +1183,11 @@ void HDRViewApp::draw_file_window()
                 string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
                                   (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
-                // Marks edits that exist only in memory. Appended, not prefixed, because the name below is
-                // truncated from the front.
-                if (img->history.is_modified())
-                    filename += " *";
+                // Marks edits that exist only in memory; kept whichever end of the name is cut short.
+                const string modified = img->history.is_modified() ? " *" : "";
 
                 // Drawn with an empty label -- SpanAllColumns still makes this the row's click target -- so
-                // the icon and front-truncated filename below can be laid out by hand afterward.
+                // the icon and truncated filename below can be laid out by hand afterward.
                 bool open = ImGui::TreeRow((void *)(intptr_t)i, node_flags, "", [&]
                                            { ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str()); },
                                            [&]
@@ -1191,7 +1199,7 @@ void HDRViewApp::draw_file_window()
                                            });
                 auto icon = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
                 ImGui::SameLine(0.f, 0.f);
-                string the_text = ImGui::TruncatedText(filename, icon);
+                string the_text = ImGui::TruncatedText(filename, icon, !m_left_align_names, modified);
 
                 // Add right-click context menu
                 ImGui::PushFont(m_sans_regular, 0.f);
@@ -1296,7 +1304,7 @@ void HDRViewApp::draw_file_window()
 
                 ImGui::TextUnformatted(icon);
                 ImGui::SameLine(0.f, 0.f);
-                ImGui::TextAligned2(1.0f, -FLT_MIN, the_text.c_str());
+                ImGui::TextAligned2(m_left_align_names ? 0.f : 1.f, -FLT_MIN, the_text.c_str());
 
                 if (open)
                 {
