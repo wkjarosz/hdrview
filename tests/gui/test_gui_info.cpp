@@ -1,8 +1,7 @@
 /** \file test_gui_info.cpp
     \author Wojciech Jarosz
 
-    The Info window's "General" property table: its one widget row lines up with the text rows around it,
-    and HDRViewApp::can_reload() agrees with what is readable.
+    The Info window: HDRViewApp::can_reload() and the reload actions agree with what is readable.
 */
 
 #include "app.h"
@@ -13,11 +12,6 @@
 #include "imgui_internal.h"
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
-
-#include <algorithm>
-#include <cmath>
-#include <cstring>
-#include <vector>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
 #error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"

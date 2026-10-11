@@ -3,7 +3,7 @@
 ##
 
 - [x] sort image list
-- [ ] left vs. right align images in image list
+- [x] left vs. right align images in image list
 - [x] have spdlog output to the log window
 - [x] add image and channel list filtering
 - [x] load images asynchronously
