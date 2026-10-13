@@ -17,7 +17,6 @@
 #include <hello_imgui/dpi_aware.h>
 #include <miniz.h>
 #include <optional>
-#include <sstream>
 
 #include "imageio/dds.h"
 #include "imageio/exr.h"
@@ -30,6 +29,7 @@
 #include "imageio/qoi.h"
 #include "imageio/raw.h"
 #include "imageio/stb.h"
+#include "imageio/streams.h"
 #include "imageio/tiff.h"
 #include "imageio/uhdr.h"
 #include "imageio/webp.h"
@@ -263,7 +263,7 @@ struct BackgroundImageLoader::PendingImages
                     {
                     }
 
-                    if (std::ifstream is{path, std::ios_base::binary})
+                    if (FileIStream is{path})
                         images = load_image(is, path.u8string(), opts);
                     else
                     {
@@ -280,7 +280,7 @@ struct BackgroundImageLoader::PendingImages
                 }
                 else
                 {
-                    std::istringstream is{*buffer_str};
+                    SpanIStream is{*buffer_str};
                     images = load_image(is, path.u8string(), opts);
                 }
 

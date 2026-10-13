@@ -9,10 +9,17 @@
 #include "image.h"
 #include "imageio/exr.h"
 #include "imageio/exr_save_options.h"
+#include "imageio/exr_streams.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 
+#include <algorithm>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
+#include <string>
 
 #include <ImfChannelList.h>
 #include <ImfFrameBuffer.h>
@@ -22,10 +29,7 @@
 #include <ImfStdIO.h>
 
 #ifdef HDRVIEW_TEST_OPENEXR_DIR
-#include <algorithm>
-#include <filesystem>
 #include <set>
-#include <string>
 #endif
 
 namespace
@@ -350,9 +354,28 @@ TEST_CASE("EXR load up-samples subsampled channels to full resolution with block
     }
 }
 
-TEST_CASE("EXR load doesn't crash across the full vendored real-world test image set")
+TEST_CASE("EXR load reads every vendored real-world file identically from disk, from memory, and from a plain stream")
 {
     namespace fs = std::filesystem;
+
+    // load_exr_image() lets OpenEXR open a FileIStream's path itself, wraps a SpanIStream's bytes, and copies any
+    // other stream into memory; all three must decode the same pixels
+    auto decode = [](std::istream &is, const std::string &name)
+    {
+        std::vector<std::pair<std::string, std::vector<float>>> parts;
+        for (const auto &img : load_exr_image(is, name))
+        {
+            std::vector<float> samples;
+            std::string        names = img->partname;
+            for (const auto &c : img->channels)
+            {
+                names += fmt::format(" {}:{}x{}", c.name, c.size().x, c.size().y);
+                for (int i = 0; i < c.num_elements(); ++i) samples.push_back(c(i));
+            }
+            parts.emplace_back(names, std::move(samples));
+        }
+        return parts;
+    };
 
     int checked = 0;
     for (const auto &entry : fs::directory_iterator(HDRVIEW_TEST_OPENEXR_DIR))
@@ -364,14 +387,34 @@ TEST_CASE("EXR load doesn't crash across the full vendored real-world test image
         if (entry.path().filename().string().find(".deep.") != std::string::npos)
             continue;
 
-        INFO("file = ", entry.path().filename().string());
-        std::ifstream file(entry.path(), std::ios::binary);
+        const auto name = entry.path().filename().string();
+        INFO("file = ", name);
+
+        FileIStream file{entry.path()};
         REQUIRE(file.good());
+        auto from_disk = decode(file, name);
+        REQUIRE_FALSE(from_disk.empty());
+        for (const auto &[names, samples] : from_disk) CHECK_FALSE(samples.empty());
 
-        auto reloaded = load_exr_image(file, entry.path().filename().string());
-        CHECK_FALSE(reloaded.empty());
-        for (const auto &img : reloaded) CHECK_FALSE(img->channels.empty());
+        file.clear();
+        file.seekg(0);
+        std::string bytes{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 
+        SpanIStream        span{bytes};
+        std::istringstream plain{bytes, std::ios::binary};
+        for (auto *is : {static_cast<std::istream *>(&span), static_cast<std::istream *>(&plain)})
+        {
+            auto other = decode(*is, name);
+            REQUIRE(other.size() == from_disk.size());
+            for (size_t p = 0; p < other.size(); ++p)
+            {
+                CHECK(other[p].first == from_disk[p].first);
+                // bitwise, so NaNs compare equal
+                CHECK((other[p].second.size() == from_disk[p].second.size() &&
+                       std::memcmp(other[p].second.data(), from_disk[p].second.data(),
+                                   other[p].second.size() * sizeof(float)) == 0));
+            }
+        }
         ++checked;
     }
     CHECK(checked > 0); // sanity: make sure the directory iteration actually found and checked something
@@ -436,4 +479,71 @@ TEST_CASE("An EXR rational attribute with a zero denominator does not divide by 
     CHECK(fps["denominator"] == 0);
 
     std::filesystem::remove(path);
+}
+
+#if OPENEXR_VERSION_MAJOR > 3 || (OPENEXR_VERSION_MAJOR == 3 && OPENEXR_VERSION_MINOR >= 3)
+TEST_CASE("MemoryIStream's concurrent reads return what exists at an offset and zero-fill the rest")
+{
+    // OpenEXR's chunk reads come from offsets in the file, which a damaged offset table can put anywhere
+    std::string bytes(100, '\0');
+    for (size_t i = 0; i < bytes.size(); ++i) bytes[i] = char(i + 1);
+    MemoryIStream is{bytes, "test.exr"};
+    CHECK(is.isStatelessRead());
+    CHECK(is.size() == int64_t(bytes.size()));
+
+    for (uint64_t offset :
+         {uint64_t(0), uint64_t(37), uint64_t(99), uint64_t(100), uint64_t(101), uint64_t(1) << 40, ~uint64_t(0)})
+        for (uint64_t sz : {uint64_t(0), uint64_t(1), uint64_t(63), uint64_t(200)})
+        {
+            INFO("offset = ", offset, ", sz = ", sz);
+            std::vector<char> buf(sz, 'x');
+            uint64_t          want = offset < bytes.size() ? std::min<uint64_t>(sz, bytes.size() - offset) : 0;
+            CHECK(is.read(buf.data(), sz, offset) == int64_t(want));
+            for (uint64_t i = 0; i < sz; ++i)
+                if (buf[i] != (i < want ? bytes[offset + i] : '\0'))
+                {
+                    FAIL_CHECK("byte ", i, " is wrong");
+                    break;
+                }
+        }
+
+    // the sequential interface refuses to run off the end instead
+    char c[8];
+    is.seekg(96);
+    CHECK_THROWS(is.read(c, 8));
+    CHECK_THROWS(is.seekg(101));
+}
+#endif
+
+TEST_CASE("EXR load of a truncated file fails cleanly, from disk and from memory")
+{
+    auto img = make_test_image(int2{64, 48});
+    for (bool tiled : {false, true})
+    {
+        INFO("tiled = ", tiled);
+        auto opts        = exr_default_save_options(*img);
+        opts.compression = Imf::ZIP_COMPRESSION;
+        opts.tiled       = tiled;
+        opts.tile_width = opts.tile_height = 16;
+        std::ostringstream out(std::ios::binary);
+        save_exr_image(*img, out, "test.exr", &opts);
+        const std::string full = out.str();
+
+        const std::string path = (std::filesystem::temp_directory_path() / "hdrview_truncated.exr").string();
+        for (size_t len = 0; len < full.size(); len += 1 + full.size() / 40)
+        {
+            INFO("len = ", len, " of ", full.size());
+            const std::string bytes = full.substr(0, len);
+            SpanIStream       span{bytes};
+            CHECK_THROWS(load_exr_image(span, "test.exr"));
+
+            std::ofstream{path, std::ios::binary}.write(bytes.data(), bytes.size());
+            FileIStream file{path};
+            CHECK_THROWS(load_exr_image(file, "test.exr"));
+        }
+        std::filesystem::remove(path);
+
+        SpanIStream span{full};
+        CHECK(load_exr_image(span, "test.exr").size() == 1);
+    }
 }
