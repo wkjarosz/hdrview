@@ -30,7 +30,8 @@ public:
         if (n < 0 || uint64_t(n) > m_data.size() - m_pos)
             throw IEX_NAMESPACE::InputExc("Unexpected end of file.");
 
-        std::memcpy(c, m_data.data() + m_pos, n);
+        if (n > 0)
+            std::memcpy(c, m_data.data() + m_pos, n);
         m_pos += n;
         return m_pos < m_data.size();
     }
@@ -54,9 +55,11 @@ public:
     int64_t read(void *buf, uint64_t sz, uint64_t offset) override
     {
         uint64_t n = offset < m_data.size() ? std::min<uint64_t>(sz, m_data.size() - offset) : 0;
-        if (n)
+        // memcpy and memset take no null pointer even for zero bytes
+        if (n > 0)
             std::memcpy(buf, m_data.data() + offset, n);
-        std::memset(static_cast<char *>(buf) + n, 0, sz - n);
+        if (sz > n)
+            std::memset(static_cast<char *>(buf) + n, 0, sz - n);
         return int64_t(n);
     }
 #endif
