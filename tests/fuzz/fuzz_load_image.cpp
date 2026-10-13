@@ -13,12 +13,12 @@
 
 #include "image.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 
 #include <spdlog/spdlog.h>
 
 #include <cstdint>
-#include <sstream>
-#include <string>
+#include <string_view>
 
 namespace
 {
@@ -39,8 +39,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     if (size > 1u << 20)
         return 0;
 
-    std::string        bytes(reinterpret_cast<const char *>(data), size);
-    std::istringstream is(bytes, std::ios::binary);
+    // the stream an in-memory load hands the loaders, so they read the fuzzer's own bounded buffer
+    SpanIStream is{std::string_view{reinterpret_cast<const char *>(data), size}};
 
     try
     {

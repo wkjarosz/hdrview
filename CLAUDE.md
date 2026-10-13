@@ -273,6 +273,13 @@ magic-byte sniff (not file extension) and an `#if HDRVIEW_ENABLE_<FORMAT>` compi
 CMake options above. To add a new format: implement `is_X_image()` + `load_X_image()` in a new
 `imageio/x.{h,cpp}`, add a CMake option/target wiring, and register it in `default_loaders()`.
 
+Loaders take a plain `std::istream`, but the background loader passes one of two subclasses from
+`imageio/streams.h`: a `FileIStream` for a file on disk, which remembers its path, or a `SpanIStream` over bytes
+already in memory (zip entries, downloads, every web load), whose `view()` reaches them without a copy. The EXR
+loader relies on both: OpenEXR reads chunks from many threads only through its own file reader or an `IStream`
+supporting stateless reads (`MemoryIStream` in `imageio/exr_streams.h`, OpenEXR 3.3+), and otherwise serializes
+them behind one lock.
+
 libheif is the one dependency that finds its own codecs, with `find_package()` calls that only ever turn up
 an installed library, of which Emscripten and a bare Windows runner have none. So the build fetches libaom
 (AVIF) itself under Emscripten, and OpenJPEG whenever no installed copy answers — `imageio/j2k.cpp` needs it

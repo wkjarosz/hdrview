@@ -8,12 +8,13 @@
 #include "colorspace.h"
 #include "common.h" // for lerp, mod, clamp, getExtension
 #include "exr_save_options.h"
-#include "exr_std_streams.h"
+#include "exr_streams.h"
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imgui.h"
 #include "imgui_ext.h"
+#include "streams.h"
 #include "timer.h"
 #include <ImfBoxAttribute.h>
 #include <ImfChannelList.h>
@@ -38,13 +39,13 @@
 #include <ImfStandardAttributes.h>
 #include <ImfStringAttribute.h>
 #include <ImfStringVectorAttribute.h>
-#include <ImfTestFile.h> // for isOpenExrFile
 #include <ImfTileDescriptionAttribute.h>
 #include <ImfTiledOutputFile.h>
 #include <ImfTimeCodeAttribute.h>
 #include <ImfVecAttribute.h>
 #include <ImfVersion.h>
 #include <hello_imgui/dpi_aware.h>
+#include <optional>
 #include <sstream>
 #include <stdexcept> // for runtime_error, out_of_range
 
@@ -402,18 +403,47 @@ EXRSaveOptions exr_default_save_options(const Image &img)
     return opts;
 }
 
-bool is_exr_image(istream &is_, string_view filename) noexcept
+bool is_exr_image(istream &is, string_view filename) noexcept
 {
-    auto is = StdIStream{is_, string(filename).c_str()};
-    return Imf::isOpenExrFile(is);
+    char magic[4];
+    return is.read(magic, sizeof(magic)) && Imf::isImfMagic(magic);
 }
 
-vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageLoadOptions &opts)
+vector<ImagePtr> load_exr_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "EXR"};
-    auto      is = StdIStream{is_, string(filename).c_str()};
 
-    Imf::MultiPartInputFile infile{is};
+    // OpenEXR decodes chunks on many threads but reads them through one lock unless its stream supports
+    // stateless reads, which its own file reader and MemoryIStream do. So let it open a file on disk itself,
+    // and otherwise read the bytes from memory, copying them there only if the stream doesn't already hold them.
+    vector<char>                             copy;
+    std::optional<MemoryIStream>             mem_is;
+    std::unique_ptr<Imf::MultiPartInputFile> infile_ptr;
+    if (auto file = dynamic_cast<FileIStream *>(&is))
+        infile_ptr = std::make_unique<Imf::MultiPartInputFile>(file->path().u8string().c_str());
+    else
+    {
+        string_view bytes;
+        if (auto span = dynamic_cast<SpanIStream *>(&is))
+            bytes = span->view();
+        else
+        {
+            is.clear();
+            is.seekg(0, ios::end);
+            auto end = is.tellg();
+            if (end < 0)
+                throw invalid_argument{"Cannot determine the size of the EXR stream"};
+            copy.resize(static_cast<size_t>(end));
+            is.seekg(0, ios::beg);
+            if (!is.read(copy.data(), copy.size()))
+                throw invalid_argument{
+                    fmt::format("Failed to read file: expected {} bytes, got {}", copy.size(), is.gcount())};
+            bytes = string_view{copy.data(), copy.size()};
+        }
+        mem_is.emplace(bytes, string(filename).c_str());
+        infile_ptr = std::make_unique<Imf::MultiPartInputFile>(*mem_is);
+    }
+    auto &infile = *infile_ptr;
 
     if (infile.parts() <= 0)
         throw invalid_argument{"EXR file contains no parts!"};

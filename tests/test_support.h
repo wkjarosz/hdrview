@@ -9,6 +9,7 @@
 #include "endian-utils.h"
 #include "image.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -63,8 +64,8 @@ inline std::vector<float> samples(const ImagePtr &img)
 /// Decodes `bytes` as if read from a file named `name`; null unless the load yielded exactly one image.
 inline ImagePtr load_bytes(const std::string &bytes, const char *name, const ImageLoadOptions &opts = {})
 {
-    std::istringstream in(bytes, std::ios::binary);
-    auto               images = load_image(in, name, opts);
+    SpanIStream in{bytes};
+    auto        images = load_image(in, name, opts);
     return images.size() == 1 ? images.front() : nullptr;
 }
 
@@ -72,8 +73,8 @@ inline ImagePtr load_bytes(const std::string &bytes, const char *name, const Ima
 template <typename Loader>
 ImagePtr load_bytes(Loader &&loader, const std::string &bytes, const char *name, const ImageLoadOptions &opts = {})
 {
-    std::istringstream in(bytes, std::ios::binary);
-    auto               images = loader(in, name, opts);
+    SpanIStream in{bytes};
+    auto        images = loader(in, name, opts);
     return images.size() == 1 ? images.front() : nullptr;
 }
 
