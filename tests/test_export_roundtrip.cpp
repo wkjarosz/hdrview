@@ -27,10 +27,15 @@
 #include "imageio/png.h"
 #include "imageio/qoi.h"
 #include "imageio/stb.h"
+#include "imageio/streams.h"
 #include "imageio/tiff.h"
 #include "imageio/webp.h"
+#include "test_support.h"
 
 #include <cmath>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -239,23 +244,45 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
             if (!save_error.empty() || out.str().empty())
                 continue;
 
+            // the app hands loaders a SpanIStream over bytes in memory or a FileIStream for a file on disk,
+            // which they may read without a copy or through the file itself; each must decode what a plain
+            // stream does
+            const std::string     bytes = out.str();
+            const std::string     name  = std::string("a") + writer.ext;
+            const auto            path  = std::filesystem::temp_directory_path() / ("hdrview_roundtrip" + name);
             std::string           load_error;
-            std::vector<ImagePtr> reloaded;
+            std::vector<ImagePtr> reloaded, from_span, from_disk;
             try
             {
-                std::istringstream in(out.str(), std::ios::binary);
-                reloaded = load_image(in, std::string("a") + writer.ext);
+                std::istringstream in(bytes, std::ios::binary);
+                reloaded = load_image(in, name);
+
+                SpanIStream span{bytes};
+                from_span = load_image(span, name);
+
+                std::ofstream{path, std::ios::binary}.write(bytes.data(), bytes.size());
+                FileIStream file{path};
+                from_disk = load_image(file, name);
             }
             catch (const std::exception &e)
             {
                 load_error = e.what();
             }
+            std::error_code ec;
+            std::filesystem::remove(path, ec);
             CHECK_MESSAGE(load_error.empty(), "load threw: ", load_error);
             if (!load_error.empty())
                 continue;
             CHECK(reloaded.size() == 1);
             if (reloaded.size() != 1)
                 continue;
+            for (const auto *other : {&from_span, &from_disk})
+            {
+                REQUIRE(other->size() == 1);
+                const auto a = hdrview_test::samples(reloaded[0]), b = hdrview_test::samples(other->front());
+                // bitwise, so NaNs compare equal
+                CHECK((a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0));
+            }
 
             // Two cells are open questions about what the file should hold. They still run this far, so a
             // crash or failed decode is caught; only the color comparison is skipped.

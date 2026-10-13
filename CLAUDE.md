@@ -275,10 +275,13 @@ CMake options above. To add a new format: implement `is_X_image()` + `load_X_ima
 
 Loaders take a plain `std::istream`, but the background loader passes one of two subclasses from
 `imageio/streams.h`: a `FileIStream` for a file on disk, which remembers its path, or a `SpanIStream` over bytes
-already in memory (zip entries, downloads, every web load), whose `view()` reaches them without a copy. The EXR
-loader relies on both: OpenEXR reads chunks from many threads only through its own file reader or an `IStream`
-supporting stateless reads (`MemoryIStream` in `imageio/exr_streams.h`, OpenEXR 3.3+), and otherwise serializes
-them behind one lock.
+already in memory (zip entries, downloads, every web load), whose `view()` reaches them without a copy. A loader
+that needs the whole file takes it through `StreamBytes`, which views a `SpanIStream`'s bytes and reads a
+`FileIStream`'s file with one `fread()`, about three times as fast as libc++'s `std::ifstream::read()`. The EXR loader instead
+lets OpenEXR open a `FileIStream`'s path itself: OpenEXR reads chunks from many threads only through its own file
+reader or an `IStream` supporting stateless reads (`MemoryIStream` in `imageio/exr_streams.h`, OpenEXR 3.3+), and
+otherwise serializes them behind one lock. Every `is_<format>_image()` sniff runs on every file a later loader
+claims, so it must decide from a header-sized prefix; `tests/test_loader_limits.cpp` holds them all to that.
 
 libheif is the one dependency that finds its own codecs, with `find_package()` calls that only ever turn up
 an installed library, of which Emscripten and a bare Windows runner have none. So the build fetches libaom

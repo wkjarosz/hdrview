@@ -642,11 +642,17 @@ bool is_dds_image(std::istream &is) noexcept
 {
     try
     {
-        DDSFile dds;
-        auto    result = dds.load(is);
+        // DDSFile::load() reads the whole file before looking at it, so check the magic number first
+        char magic[4] = {};
+        bool result   = is.read(magic, sizeof(magic)) && std::memcmp(magic, DDSFile::Magic, sizeof(magic)) == 0;
+        if (result)
+        {
+            DDSFile dds;
+            result = dds.load(is).type != Result::Error;
+        }
         is.clear();
         is.seekg(0);
-        return result.type != Result::Error;
+        return result;
     }
     catch (...)
     {

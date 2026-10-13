@@ -12,6 +12,7 @@
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 #include "imgui.h"
 #include "timer.h"
 #include <cmath>
@@ -105,56 +106,20 @@ json get_uhdr_info()
 
 bool is_uhdr_image(istream &is) noexcept
 {
-    if (!is.good())
-        return false;
-
     bool ret = false;
     try
     {
-        // calculate size of stream
-        is.seekg(0, ios::end);
-        size_t size = (size_t)is.tellg();
-        is.seekg(0, ios::beg);
-        if (size <= 0)
-            throw invalid_argument{"Stream is empty"};
-
-        // allocate memory to store contents of file and read it in
-        unique_ptr<char[]> data(new char[size]);
-        is.read(reinterpret_cast<char *>(data.get()), size);
-
-        if ((size_t)is.gcount() != size)
-            throw invalid_argument{
-                fmt::format("Failed to read : {} bytes, read : {} bytes", size, (size_t)is.gcount())};
-
-        // we could just call ::is_uhdr_image now, but we want to report the error in case this is not a uhdr image
-        return ::is_uhdr_image(data.get(), (int)size);
-
-        // auto throw_if_error = [](uhdr_error_info_t status)
-        // {
-        //     if (status.error_code != UHDR_CODEC_OK)
-        //         throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
-        // };
-
-        // using Decoder = unique_ptr<uhdr_codec_private_t, decltype(&uhdr_release_decoder)>;
-        // auto decoder  = Decoder{uhdr_create_decoder(), &uhdr_release_decoder};
-
-        // uhdr_compressed_image_t compressed_image{
-        //     data.get(),          /**< Pointer to a block of data to decode */
-        //     size,                /**< size of the data buffer */
-        //     size,                /**< maximum size of the data buffer */
-        //     UHDR_CG_UNSPECIFIED, /**< Color Gamut */
-        //     UHDR_CT_UNSPECIFIED, /**< Color Transfer */
-        //     UHDR_CR_UNSPECIFIED  /**< Color Range */
-        // };
-
-        // throw_if_error(uhdr_dec_set_image(decoder.get(), &compressed_image));
-        // throw_if_error(uhdr_dec_probe(decoder.get()));
-
-        // ret = true;
+        // an Ultra HDR image is a JPEG, so rule out everything else before reading the whole file
+        unsigned char soi[3] = {};
+        if (is.read(reinterpret_cast<char *>(soi), sizeof(soi)) && soi[0] == 0xFF && soi[1] == 0xD8 && soi[2] == 0xFF)
+        {
+            // libultrahdr copies the data and only reads it
+            const StreamBytes data{is};
+            ret = ::is_uhdr_image(const_cast<uint8_t *>(data.data()), (int)data.size());
+        }
     }
     catch (...)
     {
-        // spdlog::debug("Cannot load image with UltraHDR: {}", e.what());
         ret = false;
     }
 
@@ -180,28 +145,18 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
     };
 
     {
-        // calculate size of stream
-        is.seekg(0, ios::end);
-        size_t size = (size_t)is.tellg();
-        is.seekg(0, ios::beg);
-        if (size <= 0)
+        const StreamBytes data{is};
+        if (data.size() == 0)
             throw invalid_argument{fmt::format("File '{}' is empty", filename)};
 
-        // allocate memory to store contents of file and read it in
-        unique_ptr<char[]> data(new char[size]);
-        is.read(reinterpret_cast<char *>(data.get()), size);
-
-        if ((size_t)is.gcount() != size)
-            throw invalid_argument{
-                fmt::format("Failed to read : {} bytes, read : {} bytes", size, (size_t)is.gcount())};
-
+        // libultrahdr copies the data and only reads it
         uhdr_compressed_image_t compressed_image{
-            data.get(),          /**< Pointer to a block of data to decode */
-            size,                /**< size of the data buffer */
-            size,                /**< maximum size of the data buffer */
-            UHDR_CG_UNSPECIFIED, /**< Color Gamut */
-            UHDR_CT_UNSPECIFIED, /**< Color Transfer */
-            UHDR_CR_UNSPECIFIED  /**< Color Range */
+            const_cast<uint8_t *>(data.data()), /**< Pointer to a block of data to decode */
+            data.size(),                        /**< size of the data buffer */
+            data.size(),                        /**< maximum size of the data buffer */
+            UHDR_CG_UNSPECIFIED,                /**< Color Gamut */
+            UHDR_CT_UNSPECIFIED,                /**< Color Transfer */
+            UHDR_CR_UNSPECIFIED                 /**< Color Range */
         };
         throw_if_error(uhdr_dec_set_image(decoder.get(), &compressed_image));
         throw_if_error(uhdr_dec_set_out_color_transfer(decoder.get(), UHDR_CT_LINEAR));

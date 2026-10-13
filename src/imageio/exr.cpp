@@ -415,32 +415,16 @@ vector<ImagePtr> load_exr_image(istream &is, string_view filename, const ImageLo
 
     // OpenEXR decodes chunks on many threads but reads them through one lock unless its stream supports
     // stateless reads, which its own file reader and MemoryIStream do. So let it open a file on disk itself,
-    // and otherwise read the bytes from memory, copying them there only if the stream doesn't already hold them.
-    vector<char>                             copy;
+    // and otherwise read the bytes from memory.
+    std::optional<StreamBytes>               bytes;
     std::optional<MemoryIStream>             mem_is;
     std::unique_ptr<Imf::MultiPartInputFile> infile_ptr;
     if (auto file = dynamic_cast<FileIStream *>(&is))
         infile_ptr = std::make_unique<Imf::MultiPartInputFile>(file->path().u8string().c_str());
     else
     {
-        string_view bytes;
-        if (auto span = dynamic_cast<SpanIStream *>(&is))
-            bytes = span->view();
-        else
-        {
-            is.clear();
-            is.seekg(0, ios::end);
-            auto end = is.tellg();
-            if (end < 0)
-                throw invalid_argument{"Cannot determine the size of the EXR stream"};
-            copy.resize(static_cast<size_t>(end));
-            is.seekg(0, ios::beg);
-            if (!is.read(copy.data(), copy.size()))
-                throw invalid_argument{
-                    fmt::format("Failed to read file: expected {} bytes, got {}", copy.size(), is.gcount())};
-            bytes = string_view{copy.data(), copy.size()};
-        }
-        mem_is.emplace(bytes, string(filename).c_str());
+        bytes.emplace(is);
+        mem_is.emplace(bytes->view(), string(filename).c_str());
         infile_ptr = std::make_unique<Imf::MultiPartInputFile>(*mem_is);
     }
     auto &infile = *infile_ptr;

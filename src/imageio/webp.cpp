@@ -11,6 +11,7 @@
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 #include "webp.h"
 
 using namespace std;
@@ -126,26 +127,14 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
     if (!check_webp_signature(is))
         throw invalid_argument{"Invalid WebP signature"};
 
-    // Calculate size of stream
-    is.clear();
-    is.seekg(0, ios::end);
-    size_t file_size = static_cast<size_t>(is.tellg());
-    is.seekg(0, ios::beg);
-
-    if (file_size == 0)
+    const StreamBytes data{is};
+    if (data.size() == 0)
         throw invalid_argument{"Empty file"};
-
-    // Read entire file into memory
-    vector<uint8_t> data(file_size);
-    is.read(reinterpret_cast<char *>(data.data()), file_size);
-    if (static_cast<size_t>(is.gcount()) != file_size)
-        throw runtime_error{
-            fmt::format("Failed to read file: expected {} bytes, got {} bytes", file_size, is.gcount())};
 
     Timer timer;
 
     // Setup demuxer for metadata and animation info
-    WebPData     webp_data = {data.data(), file_size};
+    WebPData     webp_data = {data.data(), data.size()};
     WebPDemuxer *demux     = WebPDemux(&webp_data);
     if (!demux)
         throw runtime_error{"Failed to demux WebP image"};

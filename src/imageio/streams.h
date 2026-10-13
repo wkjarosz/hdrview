@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <istream>
+#include <memory>
 #include <streambuf>
 #include <string_view>
 
@@ -67,4 +69,27 @@ private:
     };
 
     Buf m_buf;
+};
+
+/// The whole of a stream's bytes, from its start: a view when the stream already holds them, else a copy.
+/**
+    A SpanIStream yields its bytes without a copy. A FileIStream's file is read with one fread(), since libc++'s
+    std::ifstream::read() copies a large read through its small buffer at about a third of the speed; any other
+    stream is read through itself.
+    A view is only as long-lived as the stream's own bytes, so a StreamBytes must not outlive its stream.
+*/
+class StreamBytes
+{
+public:
+    explicit StreamBytes(std::istream &is);
+    StreamBytes(const StreamBytes &)            = delete;
+    StreamBytes &operator=(const StreamBytes &) = delete;
+
+    const uint8_t   *data() const { return reinterpret_cast<const uint8_t *>(m_view.data()); }
+    size_t           size() const { return m_view.size(); }
+    std::string_view view() const { return m_view; }
+
+private:
+    std::unique_ptr<char[]> m_copy; ///< left uninitialized, since reading fills all of it
+    std::string_view        m_view;
 };
