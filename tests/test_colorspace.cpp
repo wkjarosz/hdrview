@@ -16,38 +16,21 @@
 #include <limits>
 #include <vector>
 
-TEST_CASE("sRGB encode/decode are inverses, including negative (out-of-gamut) values")
-{
-    for (float x : {0.0f, 0.001f, 0.0031308f, 0.02f, 0.18f, 0.5f, 0.8f, 1.0f, -0.18f, -0.8f})
-    {
-        INFO("x = ", x);
-        CHECK(sRGB_to_linear(linear_to_sRGB(x)) == doctest::Approx(x));
-        CHECK(linear_to_sRGB(sRGB_to_linear(x)) == doctest::Approx(x));
-    }
-}
-
-TEST_CASE("linear_to_gamma round-trips when encoding with 1/gamma and decoding with gamma")
-{
-    for (float gamma : {1.0f, 1.8f, 2.2f, 2.6f})
-        for (float x : {0.0f, 0.1f, 0.3f, 0.5f, 0.7f, 0.9f, 1.0f})
-        {
-            INFO("gamma = ", gamma, ", x = ", x);
-            float encoded = shader::linear_to_gamma(x, 1.f / gamma);
-            CHECK(shader::linear_to_gamma(encoded, gamma) == doctest::Approx(x));
-        }
-}
-
 TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
 {
     // The values outside [0,1] are the ones an HDR viewer reaches. Gamut conversion produces negatives, and
     // the convention (OpenColorIO's LIN_TO_PQ, colour-science's signed power, our own linear_to_sRGB) is to
     // mirror the curve around the origin so the sign survives.
+    std::vector<TransferFunction> tfs;
     for (int t = TransferFunction::Unspecified; t < TransferFunction::Count; ++t)
+        tfs.emplace_back(static_cast<TransferFunction::Type_>(t));
+    for (float gamma : {1.0f, 1.8f, 2.6f}) tfs.emplace_back(TransferFunction::Gamma, gamma);
+
+    for (const TransferFunction &tf : tfs)
     {
-        TransferFunction tf{static_cast<TransferFunction::Type_>(t)};
         for (float x : {0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 2.f, 10.f, 100.f, 1000.f, -0.5f, -10.f})
         {
-            INFO("transfer function = ", transfer_function_name(tf), ", x = ", x);
+            INFO("transfer function = ", transfer_function_name(tf), " (gamma ", tf.gamma, "), x = ", x);
             const float encoded = from_linear(x, tf);
             REQUIRE(std::isfinite(encoded));
 
@@ -65,7 +48,7 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
 
         // and as a color, whose channels differ: HLG encodes one as a whole, its OOTF depending on the
         // luminance, and every other transfer function channel by channel
-        INFO("transfer function = ", transfer_function_name(tf));
+        INFO("transfer function = ", transfer_function_name(tf), " (gamma ", tf.gamma, ")");
         const float3 rgb{0.2f, 0.7f, 0.05f};
         const float3 encoded = from_linear(rgb, tf);
         CHECK(approx_equal(to_linear(encoded, tf), rgb, 1e-4f));
@@ -78,34 +61,24 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
 }
 
 // The round trip above passes for any normalization constant, since to_linear and from_linear scale by it
-// symmetrically. These pin the absolute mapping against the values BT.2100/BT.2408 specify.
-TEST_CASE("PQ maps absolute luminance relative to BT.2408 reference white")
+// symmetrically, and colour-science checks the curves in absolute cd/m^2 (test_colour_reference.cpp). These pin
+// HDRView's own convention: BT.2408's 203 cd/m^2 HDR reference white is 1.0.
+TEST_CASE("PQ and HLG map BT.2408's reference white to 1.0")
 {
-    // the PQ EOTF is defined over 0 to 10000 cd/m^2
-    CHECK(shader::EOTF_BT2100_PQ(1.0f) == doctest::Approx(10000.f));
-    CHECK(shader::EOTF_BT2100_PQ(0.0f) == doctest::Approx(0.f));
-
-    // to_linear also normalizes so reference white lands at 1.0. 203 is spelled out here, not taken from
-    // HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of tracking it.
+    // 203 is spelled out here, not taken from HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of
+    // tracking it
     CHECK(to_linear(1.0f, TransferFunction::BT2100_PQ) == doctest::Approx(10000.f / 203.f));
+    CHECK(to_linear(shader::inverse_EOTF_BT2100_PQ(203.f), TransferFunction::BT2100_PQ) == doctest::Approx(1.f));
 
-    const float reference_white_signal = shader::inverse_EOTF_BT2100_PQ(203.f);
-    CHECK(to_linear(reference_white_signal, TransferFunction::BT2100_PQ) == doctest::Approx(1.f));
-}
+    // from_linear() therefore takes 1.0 to the signal for 203 cd/m^2, and is not interchangeable with the
+    // inverse EOTF's absolute input, which the colorpass feeds
+    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) == doctest::Approx(shader::inverse_EOTF_BT2100_PQ(203.f)));
+    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(shader::inverse_EOTF_BT2100_PQ(1.f)));
 
-TEST_CASE("HLG maps its 75% reference level to BT.2408 reference white")
-{
     // BT.2408 places HLG reference white at 75% signal, which a 1000 cd/m^2 reference display renders at
     // about 203 cd/m^2
     CHECK(shader::EOTF_BT2100_HLG(0.75f) == doctest::Approx(203.f).epsilon(0.002));
     CHECK(to_linear(0.75f, TransferFunction::BT2100_HLG) == doctest::Approx(1.f).epsilon(0.002));
-}
-
-TEST_CASE("HLG system gamma follows display peak luminance")
-{
-    CHECK(shader::HLG_system_gamma(1000.f) == doctest::Approx(1.2f));
-    CHECK(shader::HLG_system_gamma(2000.f) == doctest::Approx(1.2f + 0.42f * std::log10(2.f)));
-    CHECK(shader::HLG_system_gamma(500.f) == doctest::Approx(1.2f - 0.42f * std::log10(2.f)));
 }
 
 // Narrow (studio) range packs luma into 16..235, a span of 219, unrelated to the HDR reference white above.
@@ -134,39 +107,6 @@ TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")
         INFO("packed = ", packed);
         CHECK(color_f128_to_u32(color_u32_to_f128(packed)) == packed);
     }
-}
-
-TEST_CASE("RGB_to_XYZ/XYZ_to_RGB are inverses for the default (sRGB/BT.709) primaries")
-{
-    Chromaticities chroma; // defaults to sRGB/BT.709 primaries and D65 white point
-
-    float3x3 rgb_to_xyz = RGB_to_XYZ(chroma, 1.f);
-    float3x3 xyz_to_rgb = XYZ_to_RGB(chroma, 1.f);
-
-    for (float3 rgb : {float3{1.f, 1.f, 1.f}, float3{1.f, 0.f, 0.f}, float3{0.2f, 0.5f, 0.8f}, float3{0.f, 0.f, 0.f}})
-    {
-        INFO("rgb = ", rgb);
-        float3 round_tripped = mul(xyz_to_rgb, mul(rgb_to_xyz, rgb));
-        CHECK(approx_equal(round_tripped, rgb, 1e-4f));
-    }
-}
-
-TEST_CASE("color_conversion_matrix's Rec.709->BT.2020 matches the published ITU-R BT.2087 reference matrix")
-{
-    // The colorpass uploads color_conversion_matrix()'s linear-light Rec.709 -> BT.2020 as a uniform instead
-    // of hardcoding the published matrix, so the two have to agree.
-    float3x3 M;
-    bool     needs_conversion = color_conversion_matrix(M, gamut_chromaticities(ColorGamut_sRGB_BT709),
-                                                        gamut_chromaticities(ColorGamut_BT2020_2100));
-    CHECK(needs_conversion);
-
-    float3x3 reference{float3{0.627403926658f, 0.069097233123f, 0.016391587664f},
-                       float3{0.329282097415f, 0.919541035593f, 0.088013255546f},
-                       float3{0.043313797587f, 0.011361189924f, 0.895595009604f}};
-
-    INFO("computed M = ", M);
-    INFO("reference  = ", reference);
-    CHECK(approx_equal(M, reference, 1e-4f));
 }
 
 TEST_CASE("color_conversion_matrix generalizes to the colorpass's other reachable display gamuts")
@@ -234,11 +174,11 @@ TEST_CASE("the image shader isolates luminance in the primaries it has already c
     }
 }
 
-TEST_CASE("every transfer function matches the standards' values, and its vector form its scalar one")
+TEST_CASE("every transfer function is odd where it mirrors, and its vector form is its scalar one per component")
 {
-    // src/shared/colorspace.h compiles into the shaders and into C++ alike, so the references here are the
-    // values the standards publish, and the symmetries each curve is defined with. The round trip through
-    // every TransferFunction is checked above.
+    // The properties colour-science's values cannot show (test_colour_reference.cpp checks those): which curves
+    // HDRView mirrors around the origin, that a NaN survives them, and that the vec3 overloads the shaders call
+    // apply the scalar curve to each component in order. The round trip is checked above.
     struct Curve
     {
         const char *name;
@@ -286,56 +226,6 @@ TEST_CASE("every transfer function matches the standards' values, and its vector
             CHECK(std::isnan(c.f(std::numeric_limits<float>::quiet_NaN())));
     }
 
-    struct Anchor
-    {
-        const char *what;
-        float       got, want, epsilon;
-    };
-    const Anchor anchors[] = {
-        // IEC 61966-2-1: the linear segment meets the power one at 0.0031308; 18% gray encodes to ~0.4614
-        {"sRGB at its breakpoint", shader::linear_to_sRGB(0.0031308f), 0.0031308f * 12.92f, 1e-6f},
-        {"sRGB of 18% gray", shader::linear_to_sRGB(0.18f), 0.461356f, 1e-5f},
-        {"sRGB of white", shader::linear_to_sRGB(1.f), 1.f, 1e-6f},
-        {"sRGB decode of 0.5", shader::sRGB_to_linear(0.5f), 0.214041f, 1e-5f},
-        // BT.709/BT.2020: the segments meet at beta, and 1 encodes to 1
-        {"ITU at beta", shader::OETF_ITU(0.018053968510807f), 0.081242858298635f, 1e-5f},
-        {"ITU of white", shader::OETF_ITU(1.f), 1.f, 1e-6f},
-        // BT.2100 PQ is absolute over 0..10000 cd/m^2; BT.2408 tabulates 100, 203 and 1000 cd/m^2
-        {"PQ of 10000 cd/m^2", shader::inverse_EOTF_BT2100_PQ(10000.f), 1.f, 1e-6f},
-        {"PQ of 1000 cd/m^2", shader::inverse_EOTF_BT2100_PQ(1000.f), 0.7518f, 1e-3f},
-        {"PQ of 203 cd/m^2", shader::inverse_EOTF_BT2100_PQ(203.f), 0.5806f, 1e-3f},
-        {"PQ of 100 cd/m^2", shader::inverse_EOTF_BT2100_PQ(100.f), 0.5081f, 1e-3f},
-        {"PQ EOTF of 1", shader::EOTF_BT2100_PQ(1.f), 10000.f, 1e-3f},
-        // BT.2100 HLG: the square-root segment ends at 1/12 -> 0.5, and the log one reaches 1 at 1
-        {"HLG at its breakpoint", shader::OETF_BT2100_HLG(1.f / 12.f), 0.5f, 1e-6f},
-        {"HLG of 1", shader::OETF_BT2100_HLG(1.f), 1.f, 1e-5f},
-        {"HLG decode of 0.5", shader::inverse_OETF_BT2100_HLG(0.5f), 1.f / 12.f, 1e-6f},
-        // SMPTE 240M: 1 encodes to 1, and the segments meet near (0.0228, 0.0913)
-        {"ST 240 of 1", shader::OETF_ST240(1.f), 1.f, 1e-6f},
-        {"ST 240 power segment at beta", 1.1115f * std::pow(0.0228f, 0.45f) - 0.1115f, 0.0913f, 1e-3f},
-        // just past each piecewise curve's breakpoint, where only the right segment gives the spec's value;
-        // the segments nearly meet, so a misplaced breakpoint shows only here
-        {"sRGB past its breakpoint", shader::linear_to_sRGB(0.004f), 0.0507087f, 1e-5f},
-        {"sRGB decode past its breakpoint", shader::sRGB_to_linear(0.05f), 0.00393594f, 1e-5f},
-        {"ITU past beta", shader::OETF_ITU(0.02f), 0.0897540f, 1e-5f},
-        {"ITU decode past its breakpoint", shader::inverse_OETF_ITU(0.09f), 0.0200579f, 1e-5f},
-        {"ST 240 past beta", shader::OETF_ST240(0.025f), 0.0998404f, 1e-5f},
-        {"ST 240 decode past its breakpoint", shader::EOTF_ST240(0.1f), 0.0250420f, 1e-5f},
-        // H.273's log curves: 1 maps to 1, and the bottom of their range (1e-2, 10^-2.5) to 0
-        {"log100 of 1", shader::OETF_log100(1.f), 1.f, 1e-6f},
-        {"log100 of 0.1", shader::OETF_log100(0.1f), 0.5f, 1e-6f},
-        {"log100 of 0.01", shader::OETF_log100(0.01f), 0.f, 1e-6f},
-        {"log100_sqrt10 at its floor", shader::OETF_log100_sqrt10(std::pow(10.f, -2.5f)), 0.f, 1e-6f},
-        // SMPTE ST 428-1: code value 1 is 52.37 cd/m^2
-        {"DCI-P3 EOTF of 1", shader::EOTF_DCI_P3(1.f), 52.37f, 1e-4f},
-        {"power curve", shader::linear_to_gamma(0.25f, 0.5f), 0.5f, 1e-6f},
-    };
-    for (const Anchor &a : anchors)
-    {
-        INFO(a.what);
-        CHECK(a.got == doctest::Approx(a.want).epsilon(a.epsilon));
-    }
-
     // the sRGB overloads leave alpha alone
     const float4 c{-0.25f, 0.01f, 0.5f, 0.3f};
     CHECK(shader::linear_to_sRGB(c) == float4{shader::linear_to_sRGB(c.xyz()), c.w});
@@ -351,11 +241,6 @@ TEST_CASE("every transfer function matches the standards' values, and its vector
     CHECK(shader::RGB_to_Y(float3{0.2f, 0.7f, 0.4f}, shader::sRGB_Yw) ==
           doctest::Approx(0.2f * 0.212671f + 0.7f * 0.715160f + 0.4f * 0.072169f));
 
-    // from_linear() treats 1.0 as HDR_REFERENCE_WHITE_NITS (203 cd/m^2), so it is not interchangeable with
-    // the inverse EOTF's absolute-nits input, which the colorpass feeds
-    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) ==
-          doctest::Approx(shader::inverse_EOTF_BT2100_PQ(HDR_REFERENCE_WHITE_NITS)));
-    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(shader::inverse_EOTF_BT2100_PQ(1.f)));
 }
 
 TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say")

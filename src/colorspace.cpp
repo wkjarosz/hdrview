@@ -430,7 +430,7 @@ static const Chromaticities s_gamut_chromaticities[] = {
     {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, s_white_point_values[WhitePoint_D65]},
     {{0.6810f, 0.3190f}, {0.2430f, 0.6920f}, {0.1450f, 0.0490f}, s_white_point_values[WhitePoint_C]},
     {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, s_white_point_values[WhitePoint_D65]},
-    {{0.7350f, 0.2650f}, {0.2740f, 0.7170f}, {0.1670f, 0.0090f}, s_white_point_values[WhitePoint_E]},
+    {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, s_white_point_values[WhitePoint_E]}, // H.273: CIE 1931 XYZ itself
     {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, s_white_point_values[WhitePoint_DCI]},
     {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, s_white_point_values[WhitePoint_D65]},
     {{0.6300f, 0.3400f}, {0.2950f, 0.6050f}, {0.1550f, 0.0770f}, s_white_point_values[WhitePoint_D65]},

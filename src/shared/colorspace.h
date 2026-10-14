@@ -99,9 +99,9 @@ SHARED_FN float inverse_OETF_ITU(float bt2020)
 }
 SHARED_PER_COMPONENT(inverse_OETF_ITU)
 
-/** Defines The ITU-T BT.601, BT.709 and BT.2020 optical-electro transfer function (OETF).
+/** Defines the ITU-T BT.601, BT.709 and BT.2020 opto-electronic transfer function (OETF).
 
-    The opto-electrical transfer function (OETF) in ITU-T BT.601, BT.709 and BT.2020 specifications (for standard
+    The opto-electronic transfer function (OETF) in ITU-T BT.601, BT.709 and BT.2020 specifications (for standard
    definition television, HDTV and UHDTV respectively), and SMPTE 170M, which defines NTSC broadcasts.
 
     \param linear A linear color value R_S, G_S, B_S in the range of [0,1]
@@ -150,7 +150,7 @@ SHARED_FN float EOTF_BT2100_PQ_positive(float a)
 
     \param E_p Denotes a non-linear color value R', G', B' in PQ space.
 
-    \returns Luminance of a displayed linear component R_D, G_D, B_D in cd/m^2/
+    \returns Luminance of a displayed linear component R_D, G_D, B_D in cd/m^2
 
     see:
     https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
@@ -173,7 +173,7 @@ SHARED_FN float inverse_EOTF_BT2100_PQ_positive(float a)
 
 /** Defines Recommendation ITU-R BT.2100-2 Reference PQ inverse electro-optical transfer function (EOTF^-1).
 
-    \param F_D Luminance of a displayed linear component R_D, G_D, B_D in cd/m^2/
+    \param F_D Luminance of a displayed linear component R_D, G_D, B_D in cd/m^2
 
     \returns A non-linear color value R', G', B' in PQ space.
 
@@ -194,7 +194,7 @@ SHARED_FN float inverse_OETF_BT2100_HLG_positive(float v)
     return (v < 0.5f) ? (v * v) / 3.0f : (exp((v - c) / a) + b) / 12.0f;
 }
 
-/** Recommendation ITU-R BT.2100-2 Reference HLG inverse optical-electro transfer function (OETF^-1).
+/** Recommendation ITU-R BT.2100-2 Reference HLG inverse opto-electronic transfer function (OETF^-1).
 
     \param x A non-linear color value R', G', B' in HLG space in the range of [0,1]
 
@@ -221,7 +221,7 @@ SHARED_FN float OETF_BT2100_HLG_positive(float v)
     return (v <= 1.0f / 12.0f) ? sqrt(3.0f * v) : (a * log(12.0f * v - b) + c);
 }
 
-/** Recommendation ITU-R BT.2100-2 Reference HLG optical-electro transfer function (OETF).
+/** Recommendation ITU-R BT.2100-2 Reference HLG opto-electronic transfer function (OETF).
 
     \param E The R_S, G_S, B_S color component of linear scene light, normalized to [0,1]
 
@@ -234,7 +234,7 @@ SHARED_FN float OETF_BT2100_HLG_positive(float v)
 SHARED_FN float OETF_BT2100_HLG(float E) { return SHARED_ODD(OETF_BT2100_HLG_positive, E); }
 SHARED_PER_COMPONENT(OETF_BT2100_HLG)
 
-/** Recommendation ITU-R BT.2100-2 Reference HLG opto-optical transfer function (OOTF^-1).
+/** Recommendation ITU-R BT.2100-2 Reference HLG opto-optical transfer function (OOTF).
 
     \param E_S   Signal for a color component R_S, G_S, B_S proportional to scene linear light normalized to the range
                  [0,1].
@@ -243,7 +243,7 @@ SHARED_PER_COMPONENT(OETF_BT2100_HLG)
                  pixels.
     \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
 
-    \returns  Luminance of a displayed linear component {R_D, G_D, or B_D}, in cd/m^2.
+    \returns Luminance of a displayed linear component {R_D, G_D, or B_D}, in cd/m^2.
 
     see:
     https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
@@ -301,7 +301,7 @@ SHARED_FN float HLG_beta(float L_B, float L_W, float gamma)
     \param L_B Display luminance for black in cd/m^2.
     \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
 
-    \returns Luminance of a displayed linear component {R_D, G_D, or B_D} in cd/m^2/.
+    \returns Luminance of a displayed linear component {R_D, G_D, or B_D} in cd/m^2.
 
     see:
     https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
@@ -352,10 +352,10 @@ SHARED_FN vec3 EOTF_BT2100_HLG(vec3 E_p) { return EOTF_BT2100_HLG(E_p, 0.0f, 100
 
 /** Recommendation ITU-R BT.2100-2 Reference HLG inverse electro-optical transfer function (EOTF^-1).
 
-    Computes the inverse of the HLG EOTF, mapping displayed linear values {R'_D, G'_D, B'_D} in cd/m^2
+    Computes the inverse of the HLG EOTF, mapping displayed linear values {R_D, G_D, B_D} in cd/m^2
     back to non-linear HLG signal values {R'_S, G'_S, B'_S} in [0,1].
 
-    \param E_D Displayed linear value (R'_D, G'_D, B'_D) in cd/m^2
+    \param E_D Displayed linear value (R_D, G_D, B_D) in cd/m^2
     \param L_B Display luminance for black in cd/m^2.
     \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
 
@@ -440,7 +440,7 @@ SHARED_PER_COMPONENT(OETF_log100_sqrt10)
 
     Implements the transfer function as specified in IEC 61966-2-4.
 
-    This is imply the ITU OETF which mirrors negative values.
+    This is simply the ITU OETF which mirrors negative values.
 
     \param linear Linear input value (R, G, or B channel)
     \returns Non-linear encoded value
@@ -452,7 +452,7 @@ SHARED_PER_COMPONENT(OETF_IEC61966_2_4)
 
     Implements the inverse transfer function as specified in IEC 61966-2-4.
 
-    This is imply the ITU inverse OETF which mirrors negative values.
+    This is simply the ITU inverse OETF which mirrors negative values.
 
     \param nonlinear Non-linear encoded value (R', G', or B' channel)
     \returns Linear output value
