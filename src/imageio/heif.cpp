@@ -52,6 +52,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 #include "gainmap.h"
 #include "heif.h"
 #include "icc.h"
+#include "streams.h"
 
 #include "imgui_ext.h"
 #include "json.h"
@@ -657,27 +658,16 @@ static void apply_heif_gainmap(const heif_image_handle *ihandle, Image &image, c
 
 vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
-    ScopedMDC mdc{"IO", "HEIF"};
-    // calculate size of stream
-    is.clear();
-    is.seekg(0, is.end);
-    size_t raw_size = is.tellg();
-    is.seekg(0, is.beg);
-
-    // read in the whole stream
-    vector<char> raw_data(raw_size);
-    is.read(raw_data.data(), raw_size);
-    if ((size_t)is.gcount() != raw_size)
-        throw invalid_argument{
-            fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
+    ScopedMDC   mdc{"IO", "HEIF"};
+    StreamBytes raw{is};
 
     // Extract file-level metadata: MIME type and main brand
-    const char *mime          = heif_get_file_mime_type(reinterpret_cast<const uint8_t *>(raw_data.data()),
-                                                        (int)std::min<size_t>(raw_size, std::numeric_limits<int>::max()));
+    const char *mime =
+        heif_get_file_mime_type(raw.data(), (int)std::min<size_t>(raw.size(), std::numeric_limits<int>::max()));
     char        main_brand[5] = {0, 0, 0, 0, 0};
-    heif_brand_to_fourcc(heif_read_main_brand(reinterpret_cast<const uint8_t *>(raw_data.data()),
-                                              (int)std::min<size_t>(raw_size, std::numeric_limits<int>::max())),
-                         main_brand);
+    heif_brand_to_fourcc(
+        heif_read_main_brand(raw.data(), (int)std::min<size_t>(raw.size(), std::numeric_limits<int>::max())),
+        main_brand);
 
     vector<ImagePtr> images;
     try
@@ -687,8 +677,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
         if (!ctx)
             throw std::runtime_error("Failed to allocate heif context");
 
-        throw_on_error(heif_context_read_from_memory_without_copy(
-                           ctx.get(), reinterpret_cast<const void *>(raw_data.data()), raw_size, nullptr),
+        throw_on_error(heif_context_read_from_memory_without_copy(ctx.get(), raw.data(), raw.size(), nullptr),
                        "Failed to read HEIF memory");
 
         ImGuiTextFilter filter{opts.channel_selector.c_str()};

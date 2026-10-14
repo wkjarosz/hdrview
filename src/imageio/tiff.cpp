@@ -10,6 +10,7 @@
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 
 #include <cmath>
 
@@ -1028,7 +1029,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
 /**
     An "Exif\0\0" header followed by a minimal TIFF structure, or empty if extraction is not possible.
 */
-vector<uint8_t> extract_tiff_exif_blob(const vector<uint8_t> &data, bool reverse_endian)
+vector<uint8_t> extract_tiff_exif_blob(const StreamBytes &data, bool reverse_endian)
 {
     if (data.size() < 8)
         return {};
@@ -1038,7 +1039,7 @@ vector<uint8_t> extract_tiff_exif_blob(const vector<uint8_t> &data, bool reverse
         // Determine TIFF endianness
         Endian   tiff_endian      = reverse_endian ? (is_little_endian() ? Endian::Big : Endian::Little)
                                                    : (is_little_endian() ? Endian::Little : Endian::Big);
-        uint32_t first_ifd_offset = read_as<uint32_t>(&data[4], tiff_endian);
+        uint32_t first_ifd_offset = read_as<uint32_t>(data.data() + 4, tiff_endian);
 
         spdlog::debug("First IFD offset: {} (0x{:08X})", first_ifd_offset, first_ifd_offset);
 
@@ -1219,21 +1220,11 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
     TIFFSetErrorHandler(error_handler);
     TIFFSetWarningHandler(warning_handler);
 
-    // Read entire file into memory
-    is.clear();
-    is.seekg(0, ios::end);
-    size_t file_size = static_cast<size_t>(is.tellg());
-    is.seekg(0, ios::beg);
-
-    if (file_size == 0)
+    const StreamBytes data{is};
+    if (data.size() == 0)
         throw runtime_error("Empty TIFF file.");
 
-    vector<uint8_t> data(file_size);
-    is.read(reinterpret_cast<char *>(data.data()), file_size);
-    if (static_cast<size_t>(is.gcount()) != file_size)
-        throw runtime_error("Failed to read TIFF file completely.");
-
-    TiffInput tiff_data(data.data(), file_size);
+    TiffInput tiff_data(data.data(), data.size());
     TIFF     *tif = TIFFClientOpen(string(filename).c_str(), "rMc", reinterpret_cast<thandle_t>(&tiff_data),
                                    TiffInput::read, TiffInput::write, TiffInput::seek, TiffInput::close,
                                    TiffInput::get_size, TiffInput::map, TiffInput::unmap);

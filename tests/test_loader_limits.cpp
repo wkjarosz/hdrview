@@ -34,6 +34,61 @@ using namespace hdrview_test;
 namespace
 {
 
+/// An istream over bytes that hands them out a small window at a time, counting how many it delivers.
+class WindowedIStream : public std::istream
+{
+public:
+    explicit WindowedIStream(const std::string &bytes) : std::istream{nullptr}, m_buf{bytes} { rdbuf(&m_buf); }
+
+    size_t delivered() const { return m_buf.delivered; }
+
+private:
+    struct Buf : std::streambuf
+    {
+        const std::string &bytes;
+        size_t             base      = 0; ///< offset of the current window
+        size_t             delivered = 0;
+
+        explicit Buf(const std::string &b) : bytes{b} {}
+
+        size_t pos() const { return base + size_t(gptr() - eback()); }
+
+        void window_at(size_t p, size_t len)
+        {
+            base   = p;
+            auto w = const_cast<char *>(bytes.data()) + p;
+            setg(w, w, w + len);
+        }
+
+        int_type underflow() override
+        {
+            const size_t p = pos();
+            if (p >= bytes.size())
+                return traits_type::eof();
+            const size_t len = std::min<size_t>(4096, bytes.size() - p);
+            delivered += len;
+            window_at(p, len);
+            return traits_type::to_int_type(*gptr());
+        }
+
+        pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode) override
+        {
+            const off_type p = dir == std::ios_base::beg   ? off
+                               : dir == std::ios_base::cur ? off_type(pos()) + off
+                                                           : off_type(bytes.size()) + off;
+            if (p < 0 || p > off_type(bytes.size()))
+                return pos_type(off_type(-1));
+            window_at(size_t(p), 0);
+            return pos_type(p);
+        }
+
+        pos_type seekpos(pos_type p, std::ios_base::openmode which) override
+        { return seekoff(off_type(p), std::ios_base::beg, which); }
+    };
+
+    Buf m_buf;
+};
+
 std::string as_stream_contents(const std::vector<uint8_t> &bytes)
 {
     return std::string(reinterpret_cast<const char *>(bytes.data()), bytes.size());
@@ -244,3 +299,21 @@ TEST_CASE("A file that only LibRaw claims is declined when too little data backs
     CHECK_FALSE(is_raw_image(f));
 }
 #endif
+
+TEST_CASE("No loader reads much more than a header to decide a file is not its own")
+{
+    // load_image() asks every registered loader in turn, so one whose check reads the whole file makes every
+    // file a later loader claims cost that much more to open. Noise is claimed by none of them.
+    std::string bytes(8u << 20, '\0');
+    uint32_t    state = 12345;
+    for (auto &b : bytes)
+    {
+        state = state * 1664525u + 1013904223u;
+        b     = char(state >> 24);
+    }
+
+    WindowedIStream is{bytes};
+    CHECK(load_image(is, "noise.bin").empty());
+    CHECK_MESSAGE(is.delivered() < bytes.size() / 16, "the loaders read ", is.delivered(), " of ", bytes.size(),
+                  " bytes");
+}

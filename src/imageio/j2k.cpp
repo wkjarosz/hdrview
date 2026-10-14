@@ -66,6 +66,7 @@ void save_j2k_image(const Image &, ostream &, string_view, float, bool, int, J2K
 #include "imageio/exif.h"
 #include "imageio/icc.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 #include "timer.h"
 
 #include <openjpeg.h>
@@ -664,19 +665,10 @@ vector<ImagePtr> load_j2k_image(istream &is, string_view filename, const ImageLo
     if (!is_j2k_image(is))
         throw invalid_argument{"Not a JPEG 2000 file"};
 
-    is.clear();
-    is.seekg(0, ios::end);
-    const size_t raw_size = (size_t)is.tellg();
-    is.seekg(0, ios::beg);
-
-    vector<uint8_t> raw(raw_size);
-    is.read(reinterpret_cast<char *>(raw.data()), raw_size);
-    if ((size_t)is.gcount() != raw_size)
-        throw invalid_argument{fmt::format("Failed to read {} bytes, got {}", raw_size, (size_t)is.gcount())};
-
-    const Bytes all{raw.data(), raw_size};
-    const bool  boxed =
-        raw_size >= sizeof(k_jp2_signature) && memcmp(raw.data(), k_jp2_signature, sizeof(k_jp2_signature)) == 0;
+    const StreamBytes raw{is};
+    const Bytes       all{raw.data(), raw.size()};
+    const bool        boxed =
+        raw.size() >= sizeof(k_jp2_signature) && memcmp(raw.data(), k_jp2_signature, sizeof(k_jp2_signature)) == 0;
 
     Jp2Boxes boxes;
     if (boxed)

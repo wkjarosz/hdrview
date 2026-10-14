@@ -14,6 +14,7 @@
 
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 
 #include "colorspace.h"
 #include "image.h"
@@ -63,34 +64,20 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
     if (!is_qoi_image(is))
         throw invalid_argument{"Invalid magic string"};
 
-    // calculate size of stream
-    is.clear();
-    is.seekg(0, is.end);
-    size_t raw_size = is.tellg();
-    is.seekg(0, is.beg);
-
-    // read in the whole stream
-    vector<char> raw_data(raw_size);
-    is.read(raw_data.data(), raw_size);
-    if ((size_t)is.gcount() != raw_size)
-        throw invalid_argument{
-            fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
+    const StreamBytes raw{is};
 
     // qoi_decode() sizes its output from the header, so check the dimensions first; bytes 4..12 are
     // big-endian width and height
-    if (raw_size >= 12)
+    if (raw.size() >= 12)
     {
-        auto be32 = [&raw_data](size_t o)
-        {
-            return (int64_t)((uint8_t)raw_data[o] << 24 | (uint8_t)raw_data[o + 1] << 16 |
-                             (uint8_t)raw_data[o + 2] << 8 | (uint8_t)raw_data[o + 3]);
-        };
+        auto be32 = [p = raw.data()](size_t o)
+        { return (int64_t)((uint32_t)p[o] << 24 | (uint32_t)p[o + 1] << 16 | (uint32_t)p[o + 2] << 8 | p[o + 3]); };
         check_image_dimensions(be32(4), be32(8), "QOI");
     }
 
     qoi_desc                                     desc;
     std::unique_ptr<void, decltype(std::free) *> decoded_data{
-        qoi_decode(raw_data.data(), static_cast<int>(raw_size), &desc, 0), std::free};
+        qoi_decode(raw.data(), static_cast<int>(raw.size()), &desc, 0), std::free};
     if (!decoded_data.get())
         throw invalid_argument{"Failed to decode data from the QOI format."};
 

@@ -11,6 +11,7 @@
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -394,19 +395,8 @@ static void apply_jxl_gainmap(const vector<uint8_t> &jhgm, Image &image, const I
 
 vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
-    ScopedMDC mdc{"IO", "JXL"};
-    // calculate size of stream
-    is.clear();
-    is.seekg(0, is.end);
-    size_t raw_size = is.tellg();
-    is.seekg(0, is.beg);
-
-    // read in the whole stream
-    vector<char> raw_data(raw_size);
-    is.read(raw_data.data(), raw_size);
-    if ((size_t)is.gcount() != raw_size)
-        throw invalid_argument{
-            fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
+    ScopedMDC         mdc{"IO", "JXL"};
+    const StreamBytes raw{is};
 
     std::vector<float>               pixels;
     JxlColorEncoding                 file_enc{};
@@ -448,8 +438,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
     JxlPixelFormat format;
 
-    if (JXL_DEC_SUCCESS !=
-        JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size()))
+    if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), raw.data(), raw.size()))
         throw invalid_argument{"Failed to set input for decoder."};
 
     JxlDecoderCloseInput(dec.get());

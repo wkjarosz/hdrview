@@ -14,9 +14,11 @@
 #include "icc.h"
 #include "image.h"
 #include "imageio/image_loader.h"
+#include "imageio/streams.h"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/fmt/ranges.h>
 #include <sstream>
@@ -360,17 +362,18 @@ static std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view f
 */
 static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOptions &opts)
 {
-    is.clear();
-    is.seekg(0, is.end);
-    const auto file_size = (size_t)is.tellg();
-    is.seekg(0, is.beg);
-
-    vector<uint8_t> file(file_size);
-    is.read(reinterpret_cast<char *>(file.data()), (std::streamsize)file_size);
-    if ((size_t)is.gcount() != file_size)
+    // the gain map is optional, so a file that cannot be re-read keeps just its base image
+    std::optional<StreamBytes> file;
+    try
+    {
+        file.emplace(is);
+    }
+    catch (const std::exception &)
+    {
         return;
+    }
 
-    const auto mp_images = parse_mpf_index(file.data(), file_size);
+    const auto mp_images = parse_mpf_index(file->data(), file->size());
     if (mp_images.size() < 2)
         return;
 
@@ -382,7 +385,7 @@ static void apply_jpg_gainmap(std::istream &is, Image &image, const ImageLoadOpt
         if (mp.is_primary() || mp.is_thumbnail())
             continue;
 
-        const uint8_t *bytes = file.data() + mp.offset;
+        const uint8_t *bytes = file->data() + mp.offset;
 
         // a map may declare itself in the index, or leave the type Undefined and say so in its own
         // metadata, as Google and Apple both do
