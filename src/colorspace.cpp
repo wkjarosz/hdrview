@@ -385,7 +385,7 @@ static float2 s_white_point_values[] = {
     {0.31292f, 0.32933f}, // F7:	D65 simulator, daylight simulator
     {0.34588f, 0.35875f}, // F8:	D50 simulator, Sylvania F40 Design 50
     {0.37417f, 0.37281f}, // F9:	cool white deluxe fluorescent
-    {0.34609f, 0.35986f}, // F10:	Philips TL85, Ultralume 50
+    {0.34579f, 0.35875f}, // F10:	Philips TL85, Ultralume 50
     {0.38052f, 0.37713f}, // F11:	Philips TL84, Ultralume 40
     {0.43695f, 0.40441f}, // F12:	Philips TL83, Ultralume 30
     {0.44757f, 0.40745f}, // A:	incandescent / tungsten
