@@ -5,8 +5,6 @@
 // GLSL uniform blocks cannot contain `bool` members (glslang rejects it), so booleans below are `int`
 // (0/1); C++ call sites pass 0/1 and shader code compares with `!= 0`.
 
-@include colorspaces.sglsl
-
 @block constants
 // These need to stay in sync with the various enums in fwd.h
 #define Channels_RGBA   0
@@ -71,7 +69,9 @@ void main()
 
 @fs fs
 @include_block constants
-@include_block colorspaces
+// color math shared with C++; see src/shared/shim.h
+@include ../../src/shared/shim.h
+@include ../../src/shared/colorspace.h
 
 layout(binding=1) uniform fs_params {
     int   has_reference;
@@ -141,7 +141,7 @@ vec4 tonemap(vec4 color)
         float t         = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, dot(color.rgb, vec3(1.0 / 3.0)));
         if (fsp.reverse_colormap != 0)
             t = 1.0 - t;
-        return vec4(sRGBToLinear(texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb) * color.a, color.a);
+        return vec4(sRGB_to_linear(texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb) * color.a, color.a);
     }
     case Tonemap_PositiveNegative:
     {
@@ -149,7 +149,7 @@ vec4 tonemap(vec4 color)
         float t = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, 0.5 * dot(color.rgb, vec3(1.0 / 3.0)) + 0.5);
         if (fsp.reverse_colormap != 0)
             t = 1.0 - t;
-        return vec4(sRGBToLinear(texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb) * color.a, color.a);
+        return vec4(sRGB_to_linear(texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb) * color.a, color.a);
     }
     }
 }
@@ -193,7 +193,7 @@ vec4 choose_channel(vec4 rgba, int straight_alpha)
     case Channels_Green: return isolate(rgba.ggga, straight_alpha);
     case Channels_Blue: return isolate(rgba.bbba, straight_alpha);
     case Channels_Alpha: return vec4(rgba.aaa, 1.0);
-    case Channels_Y: return vec4(vec3(RGBToY(rgba.rgb, sRGB_Yw)), rgba.a);
+    case Channels_Y: return vec4(vec3(RGB_to_Y(rgba.rgb, sRGB_Yw)), rgba.a);
     }
     return rgba;
 }
@@ -246,7 +246,7 @@ void main()
         float dark_gray    = (fsp.bg_mode == BGMode_Dark_Checker) ? 0.1 : 0.5;
         float light_gray   = (fsp.bg_mode == BGMode_Dark_Checker) ? 0.2 : 0.55;
         float checkerboard = mod(floor(pixel.x / 8.0) + floor(pixel.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
-        background.rgb     = sRGBToLinear(vec3(checkerboard));
+        background.rgb     = sRGB_to_linear(vec3(checkerboard));
     }
 
     float zebra1 = (mod(float(int(floor((pixel.x + pixel.y - 30.0 * fsp.time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
@@ -287,7 +287,7 @@ void main()
     vec4  tonemapped = tonemap(foreground) + background * (1.0 - foreground.a);
     bvec3 clipped    = greaterThan(foreground.rgb, fsp.clip_range.yyy);
     bvec3 crushed    = lessThan(foreground.rgb, fsp.clip_range.xxx);
-    vec4  blended    = linearToSRGB(tonemapped);
+    vec4  blended    = linear_to_sRGB(tonemapped);
     vec4  dithered   = dither(blended);
     dithered         = clamp(dithered, fsp.clamp_to_LDR != 0 ? 0.0 : -64.0, fsp.clamp_to_LDR != 0 ? 1.0 : 64.0);
     // Stripe only where the value came from real image data: sample_channel() returns 0 outside a data

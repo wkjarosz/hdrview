@@ -13,6 +13,7 @@
 #include "dithermatrix256.h"
 
 #include "fwd.h"
+#include "shared/colorspace.h"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -810,7 +811,6 @@ inline Real inverse_EOTF_DCI_P3(Real linear)
     return spow(linear / Real(52.37), Real(1.0) / Real(2.6));
 }
 
-float3 YC_to_RGB(float3 input, float3 Yw);
 float3 RGB_to_YC(float3 input, float3 Yw);
 
 /// Hue, saturation and lightness, in the double-hexcone form, extended to values outside [0,1].
@@ -878,10 +878,13 @@ float3 normalize_Lab(float3 Lab);
 /// Inverse of normalize_Lab().
 float3 unnormalize_Lab(float3 Lab);
 /// @}
-Color3 sRGB_to_linear(const Color3 &c);
-Color4 sRGB_to_linear(const Color4 &c);
-Color3 linear_to_sRGB(const Color3 &c);
-Color4 linear_to_sRGB(const Color4 &c);
+
+// The shaders' own functions (src/shared/colorspace.h), so that a color computed here matches the one on
+// screen. For a float they are the same arithmetic as the templates above; double still reaches the templates.
+using shader::linear_to_sRGB;
+using shader::sRGB_to_linear;
+using shader::YC_to_RGB;
+
 Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma);
 

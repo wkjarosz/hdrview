@@ -1023,24 +1023,6 @@ float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness
     return lightness < 0.f ? la::lerp(out, float3{0.f}, -lightness) : la::lerp(out, float3{1.f}, lightness);
 }
 
-float3 YC_to_RGB(float3 input, float3 Yw)
-{
-    if (input[0] == 0.f && input[2] == 0.f)
-        //
-        // Special case -- both chroma channels are 0.  To avoid
-        // rounding errors, we explicitly set the output R, G and B
-        // channels equal to the input luminance.
-        //
-        return float3(input[1], input[1], input[1]);
-
-    float Y = input[1];
-    float r = (input[0] + 1.f) * input[1];
-    float b = (input[2] + 1.f) * input[1];
-    float g = (Y - r * Yw.x - b * Yw.z) / Yw.y;
-
-    return float3(r, g, b);
-}
-
 float3 RGB_to_YC(float3 input, float3 Yw)
 {
     //
@@ -1074,8 +1056,8 @@ float3 RGB_to_YC(float3 input, float3 Yw)
     {
         output[1] = dot(input, Yw);
         float Y   = output[1];
-        input[0]  = (std::abs(input[0] - Y) < FLT_MAX * Y) ? (input[0] - Y) / Y : 0;
-        input[2]  = (std::abs(input[2] - Y) < FLT_MAX * Y) ? (input[2] - Y) / Y : 0;
+        output[0] = (std::abs(input[0] - Y) < FLT_MAX * Y) ? (input[0] - Y) / Y : 0;
+        output[2] = (std::abs(input[2] - Y) < FLT_MAX * Y) ? (input[2] - Y) / Y : 0;
     }
     return output;
 }
@@ -1098,10 +1080,6 @@ const float3 &sRGB_Yw()
     return Yw;
 }
 
-Color3 linear_to_sRGB(const Color3 &c) { return la::apply(linear_to_sRGB<float>, c); }
-Color4 linear_to_sRGB(const Color4 &c) { return {linear_to_sRGB(c.xyz()), c.w}; }
-Color3 sRGB_to_linear(const Color3 &c) { return la::apply(sRGB_to_linear<float>, c); }
-Color4 sRGB_to_linear(const Color4 &c) { return {sRGB_to_linear(c.xyz()), c.w}; }
 
 Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma)
 {

@@ -332,8 +332,11 @@ endfunction()
 # =====================================================================================
 include(cmake/SokolShaderCompiler.cmake)
 
+# Headers under src/shared/ that the shaders @include, compiled as C++ too (see src/shared/shim.h)
+set(HDRVIEW_SHARED_SHADER_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/shim.h
+                                  ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/colorspace.h)
+
 # Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime.
-# colorspaces.sglsl is @include_block'd into the compiled output, so it needs no build step of its own.
 # The output goes into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders, which hello_imgui_add_app(...
 # ASSETS_LOCATION ...) below already treats as the runtime asset root.
 #
@@ -357,7 +360,7 @@ sokol_shdc_generate(
   NAME image-shader
   PROGRAM image_shader
   SLANG ${HDRVIEW_SHADER_SLANG}
-  EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
+  EXTRA_DEPENDS ${HDRVIEW_SHARED_SHADER_HEADERS}
   RENAME image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_vertex.${HDRVIEW_SHADER_EXT}
          image-shader_vert.${HDRVIEW_SHADER_EXT}
          image-shader_image_shader_${HDRVIEW_SHADER_SLANG}_fragment.${HDRVIEW_SHADER_EXT}
@@ -373,7 +376,7 @@ if(NOT APPLE AND NOT EMSCRIPTEN)
     NAME colorpass
     PROGRAM colorpass
     SLANG glsl410
-    EXTRA_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/colorspaces.sglsl
+    EXTRA_DEPENDS ${HDRVIEW_SHARED_SHADER_HEADERS}
     RENAME colorpass_colorpass_glsl410_vertex.glsl colorpass_vert.glsl
            colorpass_colorpass_glsl410_fragment.glsl colorpass_frag.glsl
   )

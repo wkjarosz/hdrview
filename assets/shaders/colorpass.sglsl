@@ -4,8 +4,6 @@
 // Only built for the desktop OpenGL backend (glsl410): macOS EDR consumes extended sRGB directly, and the
 // HDR-enabling GLFW fork is excluded on Emscripten.
 
-@include colorspaces.sglsl
-
 @block colorpass_constants
 // Mirrors TransferFunction::Type_ in src/colorspace.h. query_display_colorspace() translates the display's
 // transfer function out of wp_color_manager_v1's numbering, so no protocol code points appear here.
@@ -30,8 +28,9 @@ void main()
 
 @fs fs
 @include_block colorpass_constants
-@include_block colorspaces
-@include_block hdr_transfer
+// color math shared with C++; see src/shared/shim.h
+@include ../../src/shared/shim.h
+@include ../../src/shared/colorspace.h
 
 layout(binding=0) uniform colorpass_params {
     int   tf_type;        // TransferFunction::Type_ the display wants
@@ -56,7 +55,7 @@ void main()
 
     // decode HDRView's extended-sRGB convention (1.0 == sdr_white_nits) to absolute nits, preserving the
     // sign of out-of-gamut colors, then move to the display's primaries
-    vec3 nits = cpp.gamut_matrix * (cpp.sdr_white_nits * sRGBToLinear(color.rgb));
+    vec3 nits = cpp.gamut_matrix * (cpp.sdr_white_nits * sRGB_to_linear(color.rgb));
 
     // Some displays tonemap out-of-range values, so hard-clip to their own reported limits instead, as
     // nanogui-1's ColorPass does. 0.0 means "unknown", not "no limit", so only clamp when one is reported.
@@ -66,7 +65,7 @@ void main()
     vec3 encoded;
     if (cpp.tf_type == TF_BT2100_PQ)
         // PQ is absolute: it consumes nits directly and does its own normalization, so do not divide by
-        // tf_white_nits first (see pq_encode() in colorspaces.sglsl)
+        // tf_white_nits first (see pq_encode() in src/shared/colorspace.h)
         encoded = pq_encode(nits);
     else
     {
@@ -77,7 +76,7 @@ void main()
         else if (cpp.tf_type == TF_SRGB)
             // also covers wp_color_manager_v1's ext_srgb, which shares the curve and which our sRGB
             // encoders sign-extend
-            encoded = linearToSRGB(relative);
+            encoded = linear_to_sRGB(relative);
         else if (cpp.tf_type == TF_ITU || cpp.tf_type == TF_IEC61966_2_4)
             encoded = itu_encode(relative);
         else // TF_LINEAR, or a transfer we don't implement -- scRGB-style linear is the safest fallback

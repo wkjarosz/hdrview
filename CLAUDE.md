@@ -324,6 +324,15 @@ false-color palettes (Viridis, Turbo, etc., listed in `HDRViewApp::m_colormaps`)
 mode. `dithermatrix256.*` supplies the blue-noise dithering used when downconverting HDR to an SDR display or
 file format.
 
+**Math shared by C++ and the shaders.** `src/shared/` holds per-pixel functions that the shaders and C++
+compile from one source: each `.sglsl` `@include`s them into its `@fs` section (by a relative path, since
+sokol-shdc has no include path), and C++ `#include`s them into `namespace shader`.
+`src/shared/shim.h` sets up the dialect and lists its rules, chief among them `mul(M, v)` for a matrix product,
+since linalg's `M * v` is component-wise where GLSL's is a matrix product. `colorspace.h` brings the shared
+sRGB curves and `YC_to_RGB` into the global namespace with `using`, so C++ computes what the screen shows;
+its `Real` templates stay the double-precision reference that `tests/test_colorspace.cpp` holds the shared
+versions to. Shader math belongs there rather than copied into an `.sglsl` and mirrored in C++.
+
 **Working color space and the HDR display "colorpass".** Everything HDRView draws — image content *and*
 Dear ImGui's own UI, which has no notion of display color space — is emitted in **extended sRGB**: sRGB
 encoding over an unbounded signed range, with `1.0` meaning the display's SDR reference white (see the tail
