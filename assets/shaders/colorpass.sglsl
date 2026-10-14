@@ -4,19 +4,6 @@
 // Only built for the desktop OpenGL backend (glsl410): macOS EDR consumes extended sRGB directly, and the
 // HDR-enabling GLFW fork is excluded on Emscripten.
 
-@include colorspaces.sglsl
-
-@block colorpass_constants
-// Mirrors TransferFunction::Type_ in src/colorspace.h. query_display_colorspace() translates the display's
-// transfer function out of wp_color_manager_v1's numbering, so no protocol code points appear here.
-#define TF_LINEAR       1
-#define TF_GAMMA        2
-#define TF_SRGB         3
-#define TF_ITU          4
-#define TF_BT2100_PQ    5
-#define TF_IEC61966_2_4 10
-@end
-
 @vs vs
 in vec2 position;
 out vec2 uv;
@@ -29,14 +16,14 @@ void main()
 @end
 
 @fs fs
-@include_block colorpass_constants
-@include_block colorspaces
-@include_block hdr_transfer
+// color math shared with C++; see src/shared/shim.h
+@include ../../src/shared/shim.h
+@include ../../src/shared/colorspace.h
 
 layout(binding=0) uniform colorpass_params {
     int   tf_type;        // TransferFunction::Type_ the display wants
     float tf_gamma;       // the exponent, when tf_type == TF_GAMMA
-    float tf_white_nits;  // reference white of tf_type itself, in nits; 0.0 for absolute transfers (PQ)
+    float tf_white_nits;  // reference white of tf_type itself, in nits (HLG: the peak its EOTF assumes; PQ: 0.0)
     float sdr_white_nits; // display's configured SDR reference white, in nits
     float min_nits;       // display's reported minimum luminance, in nits (0.0 == unknown)
     float max_nits;       // display's reported maximum luminance, in nits (0.0 == unknown)
@@ -56,7 +43,7 @@ void main()
 
     // decode HDRView's extended-sRGB convention (1.0 == sdr_white_nits) to absolute nits, preserving the
     // sign of out-of-gamut colors, then move to the display's primaries
-    vec3 nits = cpp.gamut_matrix * (cpp.sdr_white_nits * sRGBToLinear(color.rgb));
+    vec3 nits = cpp.gamut_matrix * (cpp.sdr_white_nits * sRGB_to_linear(color.rgb));
 
     // Some displays tonemap out-of-range values, so hard-clip to their own reported limits instead, as
     // nanogui-1's ColorPass does. 0.0 means "unknown", not "no limit", so only clamp when one is reported.
@@ -66,23 +53,17 @@ void main()
     vec3 encoded;
     if (cpp.tf_type == TF_BT2100_PQ)
         // PQ is absolute: it consumes nits directly and does its own normalization, so do not divide by
-        // tf_white_nits first (see pq_encode() in colorspaces.sglsl)
-        encoded = pq_encode(nits);
+        // tf_white_nits first (see inverse_EOTF_BT2100_PQ() in src/shared/colorspace.h). It has no negative
+        // representation, so luminance below zero is clipped.
+        encoded = inverse_EOTF_BT2100_PQ(max(nits, vec3(0.0)));
+    else if (cpp.tf_type == TF_BT2100_HLG)
+        // HLG is display-referred here too: its EOTF depends on the peak it renders to, which tf_white_nits
+        // holds, and it has no negative representation either
+        encoded = inverse_EOTF_BT2100_HLG(max(nits, vec3(0.0)), 0.0, cpp.tf_white_nits);
     else
-    {
-        // everything below is defined relative to a reference white
-        vec3 relative = nits / cpp.tf_white_nits;
-        if (cpp.tf_type == TF_GAMMA)
-            encoded = gamma_encode(relative, cpp.tf_gamma);
-        else if (cpp.tf_type == TF_SRGB)
-            // also covers wp_color_manager_v1's ext_srgb, which shares the curve and which our sRGB
-            // encoders sign-extend
-            encoded = linearToSRGB(relative);
-        else if (cpp.tf_type == TF_ITU || cpp.tf_type == TF_IEC61966_2_4)
-            encoded = itu_encode(relative);
-        else // TF_LINEAR, or a transfer we don't implement -- scRGB-style linear is the safest fallback
-            encoded = relative;
-    }
+        // everything else is defined relative to a reference white. wp_color_manager_v1's ext_srgb shares
+        // sRGB's curve, which from_linear() sign-extends; a transfer it does not know is left linear.
+        encoded = from_linear(nits / cpp.tf_white_nits, cpp.tf_type, cpp.tf_gamma);
 
     frag_color = vec4(encoded, color.a);
 }

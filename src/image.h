@@ -34,12 +34,6 @@
 namespace fs = std::filesystem;
 using namespace stp;
 
-// A very small value to avoid divisions by zero when converting to unpremultiplied alpha. The technical introduction to
-// OpenEXR (https://openexr.com/en/latest/TechnicalIntroduction.html#premultiplied-vs-un-premultiplied-color-channels)
-// recommends "a power of two" that is "less than half of the smallest positive 16-bit floating-point value". That
-// smallest value happens to be the denormal number 2^-24, so 2^-26 should be a good choice.
-static constexpr float k_small_alpha = 1.f / (1u << 26u);
-
 // Knee of the histogram x axis's nonlinear scales: below roughly this magnitude they stay near-linear,
 // and above it they turn logarithmic.
 inline constexpr double axis_scale_eps     = 0.0001;

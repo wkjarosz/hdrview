@@ -1,19 +1,24 @@
 /** \file test_gui_display.cpp
     \author Wojciech Jarosz
 
-    The display pipeline as the readouts reproduce it: HDRViewApp::tonemap_value() and the colormap lookup
-    under it are a CPU re-implementation of assets/shaders/image-shader.sglsl. Both tests transcribe the
-    shader's arithmetic and sweep it against theirs; if you edit either side, edit both.
+    The display pipeline as the readouts reproduce it: HDRViewApp::pixel_value() and tonemap_value() run the
+    image shader's own steps (src/shared/pipeline.h), except for the colormap lookup, which reads
+    Colormap::sample() where the shader reads a texture. These tests transcribe that texture fetch, check the
+    CPU lookup and the whole composition against it, and check that the readouts follow the viewer's channel
+    and blend controls as the screen does.
 */
 
 #include "app.h"
 #include "colormap.h"
 #include "test_gui_registry.h"
+#include "test_gui_support.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
 #include <cmath>
+
+using namespace hdrview_test;
 
 namespace
 {
@@ -26,13 +31,10 @@ bool is_continuous(Colormap_ cmap) { return cmap > ImPlotColormap_Paired; }
 
 /// The colormap fetch as the fragment shader performs it, returning the stored, sRGB-encoded color.
 /**
-    tonemap()'s texel-center remap of \p t, then a bilinear lookup into the N-texel ClampToEdge texture.
+    apply_tonemap()'s texel-center remap of \p t, then a bilinear lookup into the N-texel ClampToEdge texture.
 */
-float3 glsl_colormap_fetch(Colormap_ cmap, float t, bool reverse)
+float3 glsl_colormap_fetch(Colormap_ cmap, float t)
 {
-    if (reverse)
-        t = 1.f - t;
-
     const auto &values = Colormap::values(cmap);
     const float n      = (float)values.size();
     // mix(0.5 / n, (n - 0.5) / n, t) in texel coordinates is t * (n - 1); ClampToEdge bounds it outside [0, 1]
@@ -94,7 +96,7 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
             for (float x : {0.f, 0.01f, 0.1f, 0.25f, 1.f / 3.f, 0.5f, 0.625f, 0.75f, 0.9f, 0.99f, 1.f})
             {
                 const ImVec4 got = Colormap::sample(cmap, x);
-                IM_CHECK(approx(float3{got.x, got.y, got.z}, glsl_colormap_fetch(cmap, x, false), 3.f / 255.f));
+                IM_CHECK(approx(float3{got.x, got.y, got.z}, glsl_colormap_fetch(cmap, x), 3.f / 255.f));
             }
 
             // out of range clamps, as ClampToEdge does
@@ -112,22 +114,16 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
     {
         TonemapState restore;
 
-        // transcribed from main() and tonemap() in assets/shaders/image-shader.sglsl
-        auto glsl_tonemap =
+        // main() in image-shader.sglsl: the shared steps, with the colormap fetched as the shader fetches it
+        auto shader_tonemap =
             [](float4 value, float exposure, float offset, float gamma, Tonemap_ mode, Colormap_ cmap, bool reverse)
         {
-            const float3 rgb = std::pow(2.f, exposure) * value.xyz() + offset * value.w;
-            if (mode == Tonemap_Gamma)
-            {
-                auto sign_pow = [](float a, float p) {
-                    return (a > 0.f ? 1.f : a < 0.f ? -1.f : 0.f) * std::pow(std::fabs(a), p);
-                };
-                return float4{la::apply(sign_pow, rgb, float3{1.f / gamma}), value.w};
-            }
-
-            const float avg = la::dot(rgb, float3{1.f / 3.f});
-            const float t   = (mode == Tonemap_FalseColor) ? avg : 0.5f * avg + 0.5f;
-            return float4{sRGB_to_linear(glsl_colormap_fetch(cmap, t, reverse)) * value.w, value.w};
+            const float4 exposed = shader::expose(value, std::pow(2.f, exposure), offset);
+            const float3 colormap_sRGB =
+                mode == Tonemap_Gamma
+                    ? float3{0.f}
+                    : glsl_colormap_fetch(cmap, shader::colormap_coordinate(exposed.xyz(), mode, reverse));
+            return shader::tonemap(exposed, mode, gamma, colormap_sRGB);
         };
 
         const float4 samples[] = {{0.4f, 0.4f, 0.4f, 1.f},   {0.4f, 0.4f, 0.4f, 0.5f}, {0.f, 0.f, 0.f, 0.f},
@@ -147,10 +143,98 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
                                 hdrview()->reverse_colormap() = reverse;
 
                                 const float4 got = hdrview()->tonemap_value(value);
-                                const float4 want =
-                                    glsl_tonemap(value, exposure, offset, gamma, mode, hdrview()->colormap(), reverse);
+                                const float4 want = shader_tonemap(value, exposure, offset, gamma, mode,
+                                                                   hdrview()->colormap(), reverse);
                                 IM_CHECK(approx(got.xyz(), want.xyz(), 3.f / 255.f));
                                 IM_CHECK(approx(got.w, want.w));
                             }
+    };
+
+    // The status bar, the pixel inspector's watched pixels and the pixel grid all read pixel_value(), so they
+    // show what the screen shows: each image's selected channels, isolated with its own alpha, and a
+    // composite that blends only when there is a reference to blend with.
+    t           = IM_REGISTER_TEST(engine, "display", "pixel_value_follows_the_channel_and_blend_controls");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        TonemapState     restore;
+        const Channels_  channel = hdrview()->channel();
+        const BlendMode_ blend   = hdrview()->blend_mode();
+
+        reset_images(ctx);
+        IM_CHECK_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE}) == 1, );
+        hdrview()->set_current_image_index(0);
+        auto img = hdrview()->current_image();
+        IM_CHECK_RETV(img != nullptr, );
+        const bool straight = img->transparency == TransparencyType_Straight;
+
+        // a pixel whose channels all differ, so a readout showing the wrong one is caught
+        int2   p{-1};
+        float4 rgba;
+        for (int y = 0; y < img->size().y && p.x < 0; ++y)
+            for (int x = 0; x < img->size().x && p.x < 0; ++x)
+            {
+                rgba = img->rgba_pixel({x, y}, Target_Primary);
+                if (rgba.w > 0.1f && std::fabs(rgba.x - rgba.y) > 0.05f && std::fabs(rgba.y - rgba.z) > 0.05f &&
+                    std::fabs(rgba.x - rgba.z) > 0.05f)
+                    p = {x, y};
+            }
+        IM_CHECK_RETV(p.x >= 0, );
+        const float4 raw = hdrview()->pixel_value(p, true, 0);
+
+        for (int ch = 0; ch < Channels_COUNT; ++ch)
+        {
+            hdrview()->channel() = Channels_(ch);
+            const float4 want    = hdrview()->tonemap_value(shader::choose_channel(rgba, Channels_(ch), straight));
+            const float4 got     = hdrview()->pixel_value(p, false, 0);
+            IM_CHECK(approx(got.xyz(), want.xyz(), 1e-5f) && approx(got.w, want.w, 1e-5f));
+
+            // raw values are the file's own, whatever the viewer isolates
+            IM_CHECK(hdrview()->pixel_value(p, true, 0) == raw);
+
+            // with no reference there is nothing to blend, whatever the blend mode says
+            for (int m = 0; m < BlendMode_COUNT; ++m)
+            {
+                hdrview()->blend_mode() = BlendMode_(m);
+                const float4 composite  = hdrview()->pixel_value(p, false, 2);
+                IM_CHECK(approx(composite.xyz(), got.xyz(), 1e-5f) && approx(composite.w, got.w, 1e-5f));
+            }
+        }
+
+        // isolating one channel shows it as an opaque gray, independently of how the shared code computes it
+        hdrview()->channel()       = Channels_Red;
+        hdrview()->tonemap()       = Tonemap_Gamma;
+        hdrview()->gamma_live()    = 1.f;
+        hdrview()->exposure_live() = 0.f;
+        hdrview()->offset_live()   = 0.f;
+        const float4 red           = hdrview()->pixel_value(p, false, 0);
+        const float  want_red      = straight ? rgba.x / rgba.w : rgba.x;
+        IM_CHECK(approx(red.xyz(), float3{want_red}, 1e-5f) && red.w == 1.f);
+
+        // with a reference, the composite blends the two images' isolated channels
+        IM_CHECK_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}) == 2, );
+        const int ref = hdrview()->current_image_index() == 0 ? 1 : 0;
+        hdrview()->set_current_image_index(1 - ref);
+        hdrview()->set_reference_image_index(ref);
+        auto cur = hdrview()->current_image(), other = hdrview()->reference_image();
+        IM_CHECK_RETV(cur && other, );
+        const int2 q = la::min(cur->size(), other->size()) / 2;
+        for (Channels_ c : {Channels_RGBA, Channels_Green})
+            for (BlendMode_ m : {BlendMode_Normal, BlendMode_Difference})
+            {
+                hdrview()->channel()    = c;
+                hdrview()->blend_mode() = m;
+                const float4 want       = hdrview()->tonemap_value(
+                    shader::blend(shader::choose_channel(cur->rgba_pixel(q, Target_Primary), c,
+                                                         cur->transparency == TransparencyType_Straight),
+                                  shader::choose_channel(other->rgba_pixel(q, Target_Secondary), c,
+                                                         other->transparency == TransparencyType_Straight),
+                                  m));
+                const float4 got = hdrview()->pixel_value(q, false, 2);
+                IM_CHECK(approx(got.xyz(), want.xyz(), 1e-5f) && approx(got.w, want.w, 1e-5f));
+            }
+
+        hdrview()->channel()    = channel;
+        hdrview()->blend_mode() = blend;
+        reset_images(ctx);
     };
 }

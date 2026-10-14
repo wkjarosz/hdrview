@@ -12,40 +12,25 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
-
-TEST_CASE("sRGB encode/decode are inverses, including negative (out-of-gamut) values")
-{
-    for (float x : {0.0f, 0.001f, 0.0031308f, 0.02f, 0.18f, 0.5f, 0.8f, 1.0f, -0.18f, -0.8f})
-    {
-        INFO("x = ", x);
-        CHECK(sRGB_to_linear(linear_to_sRGB(x)) == doctest::Approx(x));
-        CHECK(linear_to_sRGB(sRGB_to_linear(x)) == doctest::Approx(x));
-    }
-}
-
-TEST_CASE("linear_to_gamma round-trips when encoding with 1/gamma and decoding with gamma")
-{
-    for (float gamma : {1.0f, 1.8f, 2.2f, 2.6f})
-        for (float x : {0.0f, 0.1f, 0.3f, 0.5f, 0.7f, 0.9f, 1.0f})
-        {
-            INFO("gamma = ", gamma, ", x = ", x);
-            float encoded = linear_to_gamma(x, 1.f / gamma);
-            CHECK(linear_to_gamma(encoded, gamma) == doctest::Approx(x));
-        }
-}
+#include <vector>
 
 TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
 {
     // The values outside [0,1] are the ones an HDR viewer reaches. Gamut conversion produces negatives, and
     // the convention (OpenColorIO's LIN_TO_PQ, colour-science's signed power, our own linear_to_sRGB) is to
     // mirror the curve around the origin so the sign survives.
+    std::vector<TransferFunction> tfs;
     for (int t = TransferFunction::Unspecified; t < TransferFunction::Count; ++t)
+        tfs.emplace_back(static_cast<TransferFunction::Type_>(t));
+    for (float gamma : {1.0f, 1.8f, 2.6f}) tfs.emplace_back(TransferFunction::Gamma, gamma);
+
+    for (const TransferFunction &tf : tfs)
     {
-        TransferFunction tf{static_cast<TransferFunction::Type_>(t)};
         for (float x : {0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 2.f, 10.f, 100.f, 1000.f, -0.5f, -10.f})
         {
-            INFO("transfer function = ", transfer_function_name(tf), ", x = ", x);
+            INFO("transfer function = ", transfer_function_name(tf), " (gamma ", tf.gamma, "), x = ", x);
             const float encoded = from_linear(x, tf);
             REQUIRE(std::isfinite(encoded));
 
@@ -60,38 +45,40 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
                 expected.epsilon(1e-3);
             CHECK(to_linear(encoded, tf) == expected);
         }
+
+        // and as a color, whose channels differ: HLG encodes one as a whole, its OOTF depending on the
+        // luminance, and every other transfer function channel by channel
+        INFO("transfer function = ", transfer_function_name(tf), " (gamma ", tf.gamma, ")");
+        const float3 rgb{0.2f, 0.7f, 0.05f};
+        const float3 encoded = from_linear(rgb, tf);
+        CHECK(approx_equal(to_linear(encoded, tf), rgb, 1e-4f));
+        if (tf.type != TransferFunction::BT2100_HLG)
+            CHECK(encoded == float3{from_linear(rgb.x, tf), from_linear(rgb.y, tf), from_linear(rgb.z, tf)});
+        else
+            CHECK_FALSE(approx_equal(
+                encoded, float3{from_linear(rgb.x, tf), from_linear(rgb.y, tf), from_linear(rgb.z, tf)}, 1e-3f));
     }
 }
 
 // The round trip above passes for any normalization constant, since to_linear and from_linear scale by it
-// symmetrically. These pin the absolute mapping against the values BT.2100/BT.2408 specify.
-TEST_CASE("PQ maps absolute luminance relative to BT.2408 reference white")
+// symmetrically, and colour-science checks the curves in absolute cd/m^2 (test_colour_reference.cpp). These pin
+// HDRView's own convention: BT.2408's 203 cd/m^2 HDR reference white is 1.0.
+TEST_CASE("PQ and HLG map BT.2408's reference white to 1.0")
 {
-    // the PQ EOTF is defined over 0 to 10000 cd/m^2
-    CHECK(EOTF_BT2100_PQ(1.0f) == doctest::Approx(10000.f));
-    CHECK(EOTF_BT2100_PQ(0.0f) == doctest::Approx(0.f));
-
-    // to_linear also normalizes so reference white lands at 1.0. 203 is spelled out here, not taken from
-    // HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of tracking it.
+    // 203 is spelled out here, not taken from HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of
+    // tracking it
     CHECK(to_linear(1.0f, TransferFunction::BT2100_PQ) == doctest::Approx(10000.f / 203.f));
+    CHECK(to_linear(shader::inverse_EOTF_BT2100_PQ(203.f), TransferFunction::BT2100_PQ) == doctest::Approx(1.f));
 
-    const float reference_white_signal = inverse_EOTF_BT2100_PQ(203.f);
-    CHECK(to_linear(reference_white_signal, TransferFunction::BT2100_PQ) == doctest::Approx(1.f));
-}
+    // from_linear() therefore takes 1.0 to the signal for 203 cd/m^2, and is not interchangeable with the
+    // inverse EOTF's absolute input, which the colorpass feeds
+    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) == doctest::Approx(shader::inverse_EOTF_BT2100_PQ(203.f)));
+    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(shader::inverse_EOTF_BT2100_PQ(1.f)));
 
-TEST_CASE("HLG maps its 75% reference level to BT.2408 reference white")
-{
     // BT.2408 places HLG reference white at 75% signal, which a 1000 cd/m^2 reference display renders at
     // about 203 cd/m^2
-    CHECK(EOTF_BT2100_HLG(0.75f) == doctest::Approx(203.f).epsilon(0.002));
+    CHECK(shader::EOTF_BT2100_HLG(0.75f) == doctest::Approx(203.f).epsilon(0.002));
     CHECK(to_linear(0.75f, TransferFunction::BT2100_HLG) == doctest::Approx(1.f).epsilon(0.002));
-}
-
-TEST_CASE("HLG system gamma follows display peak luminance")
-{
-    CHECK(HLG_system_gamma(1000.f) == doctest::Approx(1.2f));
-    CHECK(HLG_system_gamma(2000.f) == doctest::Approx(1.2f + 0.42f * std::log10(2.f)));
-    CHECK(HLG_system_gamma(500.f) == doctest::Approx(1.2f - 0.42f * std::log10(2.f)));
 }
 
 // Narrow (studio) range packs luma into 16..235, a span of 219, unrelated to the HDR reference white above.
@@ -120,39 +107,6 @@ TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")
         INFO("packed = ", packed);
         CHECK(color_f128_to_u32(color_u32_to_f128(packed)) == packed);
     }
-}
-
-TEST_CASE("RGB_to_XYZ/XYZ_to_RGB are inverses for the default (sRGB/BT.709) primaries")
-{
-    Chromaticities chroma; // defaults to sRGB/BT.709 primaries and D65 white point
-
-    float3x3 rgb_to_xyz = RGB_to_XYZ(chroma, 1.f);
-    float3x3 xyz_to_rgb = XYZ_to_RGB(chroma, 1.f);
-
-    for (float3 rgb : {float3{1.f, 1.f, 1.f}, float3{1.f, 0.f, 0.f}, float3{0.2f, 0.5f, 0.8f}, float3{0.f, 0.f, 0.f}})
-    {
-        INFO("rgb = ", rgb);
-        float3 round_tripped = mul(xyz_to_rgb, mul(rgb_to_xyz, rgb));
-        CHECK(approx_equal(round_tripped, rgb, 1e-4f));
-    }
-}
-
-TEST_CASE("color_conversion_matrix's Rec.709->BT.2020 matches the published ITU-R BT.2087 reference matrix")
-{
-    // The colorpass uploads color_conversion_matrix()'s linear-light Rec.709 -> BT.2020 as a uniform instead
-    // of hardcoding the published matrix, so the two have to agree.
-    float3x3 M;
-    bool     needs_conversion = color_conversion_matrix(M, gamut_chromaticities(ColorGamut_sRGB_BT709),
-                                                        gamut_chromaticities(ColorGamut_BT2020_2100));
-    CHECK(needs_conversion);
-
-    float3x3 reference{float3{0.627403926658f, 0.069097233123f, 0.016391587664f},
-                       float3{0.329282097415f, 0.919541035593f, 0.088013255546f},
-                       float3{0.043313797587f, 0.011361189924f, 0.895595009604f}};
-
-    INFO("computed M = ", M);
-    INFO("reference  = ", reference);
-    CHECK(approx_equal(M, reference, 1e-4f));
 }
 
 TEST_CASE("color_conversion_matrix generalizes to the colorpass's other reachable display gamuts")
@@ -187,14 +141,13 @@ TEST_CASE("color_conversion_matrix generalizes to the colorpass's other reachabl
 TEST_CASE("the image shader isolates luminance in the primaries it has already converted to")
 {
     // assets/shaders/image-shader.sglsl converts every image into sRGB/BT.709 primaries before
-    // choose_channel() runs, so Channels_Y weighs with sRGB's own luminance weights, spelled out in
-    // colorspaces.sglsl as sRGB_Yw since GLSL cannot include colorspace.h. Edit either side, edit both.
-    // The shader takes them from the middle row of the classic rounded sRGB matrix and colorspace.h derives
-    // them from the BT.709 chromaticities; the two agree to about 3e-5 per weight.
-    const float3 glsl_sRGB_Yw{0.212671f, 0.715160f, 0.072169f};
+    // choose_channel() runs, so Channels_Y weighs with shader::sRGB_Yw, the middle row of the classic rounded
+    // sRGB matrix. colorspace.h derives sRGB_Yw() from the BT.709 chromaticities instead; the two agree to
+    // about 3e-5 per weight.
+    const float3 shader_Yw = shader::sRGB_Yw;
     INFO("colorspace.h says ", sRGB_Yw().x, ", ", sRGB_Yw().y, ", ", sRGB_Yw().z);
-    CHECK(approx_equal(sRGB_Yw(), glsl_sRGB_Yw, 1e-4f));
-    CHECK(glsl_sRGB_Yw.x + glsl_sRGB_Yw.y + glsl_sRGB_Yw.z == doctest::Approx(1.f).epsilon(1e-5));
+    CHECK(approx_equal(sRGB_Yw(), shader_Yw, 1e-4f));
+    CHECK(shader_Yw.x + shader_Yw.y + shader_Yw.z == doctest::Approx(1.f).epsilon(1e-5));
 
     // Luminance is a property of the color, not of the primaries it is written in, so converting into sRGB
     // and weighing with sRGB's weights recovers what the source gamut's own weights describe. Restricted to
@@ -221,83 +174,177 @@ TEST_CASE("the image shader isolates luminance in the primaries it has already c
     }
 }
 
-TEST_CASE("colorpass GLSL PQ constants match colorspace.h's inverse_EOTF_BT2100_PQ")
+TEST_CASE("every transfer function is odd where it mirrors, and its vector form is its scalar one per component")
 {
-    // assets/shaders/colorspaces.sglsl's pq_encode() hand-duplicates the five ST.2084 constants as decimal
-    // literals, since GLSL cannot include colorspace.h; nothing in the build keeps them in sync. Edit either
-    // side, edit both.
-    //
-    // First, the decimals in the shader are the rationals in colorspace.h and not approximations. Each has a
-    // power-of-two denominator, so it is exactly representable and == is the right test.
-    CHECK(0.1593017578125 == 2610.0 / 16384.0);
-    CHECK(78.84375 == 2523.0 * 128.0 / 4096.0);
-    CHECK(0.8359375 == 3424.0 / 4096.0);
-    CHECK(18.8515625 == 2413.0 / 4096.0 * 32.0);
-    CHECK(18.6875 == 2392.0 / 4096.0 * 32.0);
-
-    // Second, the calling convention: pq_encode() consumes absolute nits and does its own /10000
-    // normalization, matching inverse_EOTF_BT2100_PQ(). That is not from_linear()'s convention, which
-    // pre-multiplies by HDR_REFERENCE_WHITE_NITS; feeding the shader one of those shifts the screen 2.7 stops.
-    auto glsl_pq_encode = [](float nits)
+    // The properties colour-science's values cannot show (test_colour_reference.cpp checks those): which curves
+    // HDRView mirrors around the origin, that a NaN survives them, and that the vec3 overloads the shaders call
+    // apply the scalar curve to each component in order. The round trip is checked above.
+    struct Curve
     {
-        // transcribed from pq_encode() in assets/shaders/colorspaces.sglsl
-        const float m1  = 0.1593017578125f;
-        const float m2  = 78.84375f;
-        const float c1  = 0.8359375f;
-        const float c2  = 18.8515625f;
-        const float c3  = 18.6875f;
-        float       Y   = std::max(nits, 0.0f) / 10000.0f;
-        float       Ym1 = std::pow(Y, m1);
-        return std::pow((c1 + c2 * Ym1) / (1.0f + c3 * Ym1), m2);
+        const char *name;
+        float (*f)(float);
+        float3 (*v)(float3);
+        bool odd; ///< mirrored around the origin, rather than extended linearly or clamped
+    };
+    const Curve curves[] = {
+        {"linear_to_sRGB", shader::linear_to_sRGB, shader::linear_to_sRGB, true},
+        {"sRGB_to_linear", shader::sRGB_to_linear, shader::sRGB_to_linear, true},
+        {"OETF_ITU", shader::OETF_ITU, shader::OETF_ITU, false},
+        {"inverse_OETF_ITU", shader::inverse_OETF_ITU, shader::inverse_OETF_ITU, false},
+        {"OETF_IEC61966_2_4", shader::OETF_IEC61966_2_4, shader::OETF_IEC61966_2_4, true},
+        {"EOTF_IEC61966_2_4", shader::EOTF_IEC61966_2_4, shader::EOTF_IEC61966_2_4, true},
+        {"EOTF_BT2100_PQ", shader::EOTF_BT2100_PQ, shader::EOTF_BT2100_PQ, true},
+        {"inverse_EOTF_BT2100_PQ", shader::inverse_EOTF_BT2100_PQ, shader::inverse_EOTF_BT2100_PQ, true},
+        {"OETF_BT2100_HLG", shader::OETF_BT2100_HLG, shader::OETF_BT2100_HLG, true},
+        {"OETF_ST240", shader::OETF_ST240, shader::OETF_ST240, false},
+        {"EOTF_ST240", shader::EOTF_ST240, shader::EOTF_ST240, false},
+        {"OETF_log100", shader::OETF_log100, shader::OETF_log100, false},
+        {"EOTF_log100", shader::EOTF_log100, shader::EOTF_log100, false},
+        {"OETF_log100_sqrt10", shader::OETF_log100_sqrt10, shader::OETF_log100_sqrt10, false},
+        {"EOTF_log100_sqrt10", shader::EOTF_log100_sqrt10, shader::EOTF_log100_sqrt10, false},
+        {"EOTF_DCI_P3", shader::EOTF_DCI_P3, shader::EOTF_DCI_P3, true},
+        {"inverse_EOTF_DCI_P3", shader::inverse_EOTF_DCI_P3, shader::inverse_EOTF_DCI_P3, true},
     };
 
-    for (float nits : {0.f, 0.005f, 1.f, 80.f, 203.f, 1000.f, 4000.f, 10000.f})
+    // straddling each curve's breakpoint
+    const float values[] = {1e-6f, 0.0031308f, 0.004f, 0.018f, 0.019f, 0.0228f, 0.04045f, 0.0913f, 0.18f, 0.5f, 1.f};
+    for (const Curve &c : curves)
     {
-        INFO("nits = ", nits);
-        CHECK(glsl_pq_encode(nits) == doctest::Approx(inverse_EOTF_BT2100_PQ(nits)).epsilon(1e-5));
+        INFO("curve = ", std::string(c.name));
+        for (float x : values)
+        {
+            INFO("x = ", x);
+            if (c.odd)
+                CHECK(c.f(-x) == -c.f(x));
+            // the vector overload applies the curve per component, in order; bitwise, since 2x leaves PQ's
+            // [0,1] domain, where both give NaN
+            const float3 got = c.v(float3{x, 0.5f * x, 2.f * x}), want{c.f(x), c.f(0.5f * x), c.f(2.f * x)};
+            CHECK(std::memcmp(&got, &want, sizeof(got)) == 0);
+        }
+        // a NaN pixel stays NaN on the CPU, rather than turning into a color
+        if (c.odd)
+            CHECK(std::isnan(c.f(std::numeric_limits<float>::quiet_NaN())));
     }
 
-    // PQ has no negative representation; both sides clip instead of producing NaN from pow()
-    CHECK(glsl_pq_encode(-100.f) == doctest::Approx(0.f));
+    // the sRGB overloads leave alpha alone
+    const float4 c{-0.25f, 0.01f, 0.5f, 0.3f};
+    CHECK(shader::linear_to_sRGB(c) == float4{shader::linear_to_sRGB(c.xyz()), c.w});
+    CHECK(shader::sRGB_to_linear(c) == float4{shader::sRGB_to_linear(c.xyz()), c.w});
 
-    // anchors, so an edit that keeps the two implementations consistent but wrong still fails: PQ is
-    // absolute, with 10000 nits at the top of the range and the SDR reference at ~0.58
-    CHECK(inverse_EOTF_BT2100_PQ(10000.f) == doctest::Approx(1.f));
-    CHECK(inverse_EOTF_BT2100_PQ(0.f) == doctest::Approx(0.f));
-    CHECK(inverse_EOTF_BT2100_PQ(203.f) == doctest::Approx(0.5806f).epsilon(1e-3));
+    // luminance-chroma undoes RGB_to_YC, for weights that are not symmetric in R and B
+    for (const float3 &Yw : {sRGB_Yw(), computeYw(gamut_chromaticities(ColorGamut_BT2020_2100))})
+        for (const float3 &rgb : {float3{0.2f, 0.7f, 0.4f}, float3{1.f, 0.f, 0.f}, float3{0.f, 0.f, 1.f}, float3{0.5f}})
+        {
+            INFO("rgb = ", rgb, ", Yw = ", Yw);
+            CHECK(approx_equal(shader::YC_to_RGB(RGB_to_YC(rgb, Yw), Yw), rgb, 1e-5f));
+        }
+    CHECK(shader::RGB_to_Y(float3{0.2f, 0.7f, 0.4f}, shader::sRGB_Yw) ==
+          doctest::Approx(0.2f * 0.212671f + 0.7f * 0.715160f + 0.4f * 0.072169f));
 
-    // from_linear() treats 1.0 as HDR_REFERENCE_WHITE_NITS (203 cd/m^2), so it is not interchangeable with
-    // the shader's absolute-nits input
-    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) ==
-          doctest::Approx(inverse_EOTF_BT2100_PQ(HDR_REFERENCE_WHITE_NITS)));
-    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(inverse_EOTF_BT2100_PQ(1.f)));
+}
+
+TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say")
+{
+    // src/shared/pipeline.h, which the image shader runs and HDRViewApp reproduces the display with. Colors
+    // are premultiplied, and every component differs, so a step that mixes up channels is caught.
+    const float4 c{0.12f, 0.34f, 0.56f, 0.5f};
+    const float3 straight = c.xyz() / c.w;
+
+    for (int ch = 0; ch < Channels_COUNT; ++ch)
+        for (bool straight_alpha : {false, true})
+        {
+            INFO("channel = ", ch, ", straight_alpha = ", straight_alpha);
+            const float4 got = shader::choose_channel(c, Channels_(ch), straight_alpha);
+            // isolating channels shows them opaque, undoing the premultiply only of a file that stored
+            // straight alpha
+            const float3 shown = straight_alpha ? straight : c.xyz();
+            switch (Channels_(ch))
+            {
+            case Channels_RGBA: CHECK(got == c); break;
+            case Channels_RGB: CHECK(approx_equal(got, float4{shown, 1.f}, 1e-6f)); break;
+            case Channels_Red: CHECK(approx_equal(got, float4{float3{shown.x}, 1.f}, 1e-6f)); break;
+            case Channels_Green: CHECK(approx_equal(got, float4{float3{shown.y}, 1.f}, 1e-6f)); break;
+            case Channels_Blue: CHECK(approx_equal(got, float4{float3{shown.z}, 1.f}, 1e-6f)); break;
+            case Channels_Alpha: CHECK(got == float4{c.w, c.w, c.w, 1.f}); break;
+            // luminance keeps the image's alpha, and weighs as colorspace.h's derived sRGB weights do
+            case Channels_Y: CHECK(approx_equal(got, float4{float3{dot(c.xyz(), sRGB_Yw())}, c.w}, 1e-4f)); break;
+            default: FAIL("no expectation for channel mode ", ch);
+            }
+        }
+
+    // a straight-alpha pixel with no alpha left still isolates to a finite color
+    const float4 no_alpha = shader::choose_channel(float4{0.1f, 0.2f, 0.3f, 0.f}, Channels_RGB, true);
+    CHECK((std::isfinite(no_alpha.x) && std::isfinite(no_alpha.y) && std::isfinite(no_alpha.z)));
+
+    // exposure scales the color and not its coverage; the offset applies to the straight color
+    const float4 exposed = shader::expose(c, 4.f, 0.1f);
+    CHECK(exposed.w == c.w);
+    CHECK(approx_equal(exposed.xyz() / exposed.w, straight * 4.f + float3{0.1f}, 1e-5f));
+
+    // the colormap coordinate is the channel average, mapped so the positive/negative map centers zero, and
+    // reversing it runs the colormap the other way
+    CHECK(shader::colormap_coordinate(float3{0.f, 0.3f, 0.9f}, Tonemap_FalseColor, false) == doctest::Approx(0.4f));
+    for (float v : {-1.f, 0.f, 0.25f, 1.f})
+    {
+        INFO("v = ", v);
+        CHECK(shader::colormap_coordinate(float3{v}, Tonemap_FalseColor, false) == doctest::Approx(v));
+        CHECK(shader::colormap_coordinate(float3{v}, Tonemap_PositiveNegative, false) ==
+              doctest::Approx(0.5f * v + 0.5f));
+        for (Tonemap_ mode : {Tonemap_FalseColor, Tonemap_PositiveNegative})
+            CHECK(shader::colormap_coordinate(float3{v}, mode, true) ==
+                  doctest::Approx(1.f - shader::colormap_coordinate(float3{v}, mode, false)));
+    }
+
+    // every tonemap mode: gamma encodes the color itself, and the colormap modes show the colormap's color,
+    // premultiplied, whatever the input
+    const float3 colormap_sRGB{0.9f, 0.4f, 0.1f};
+    for (int m = 0; m < Tonemap_COUNT; ++m)
+    {
+        INFO("tonemap mode = ", m);
+        const float4 got = shader::tonemap(c, Tonemap_(m), 2.2f, colormap_sRGB);
+        CHECK(got.w == c.w);
+        if (Tonemap_(m) == Tonemap_Gamma)
+        {
+            for (int i = 0; i < 3; ++i)
+                CHECK(got[i] == doctest::Approx(std::pow(double(c[i]), 1.0 / 2.2)).epsilon(1e-5));
+            CHECK(shader::tonemap(c, Tonemap_(m), 2.2f, float3{0.f}) == got);
+        }
+        else
+        {
+            CHECK(approx_equal(got.xyz(), sRGB_to_linear(colormap_sRGB) * c.w, 1e-6f));
+            CHECK(shader::tonemap(float4{5.f, -1.f, 0.f, c.w}, Tonemap_(m), 2.2f, colormap_sRGB) == got);
+        }
+    }
 }
 
 TEST_CASE("blend()'s overloads agree on every blend mode")
 {
     // the three overloads are separate switches over the same enum, so a mode present in one and missing
-    // from another blends as whatever its `default:` is
-    const float top = 0.6f, bottom = 0.25f, top_a = 0.75f, bottom_a = 0.5f;
+    // from another blends as whatever its `default:` is. The RGBA one is the image shader's own
+    // (src/shared/pipeline.h); its channels differ, so one that reads another's value is caught too.
+    const float4 top{0.6f, 0.15f, 1.3f, 0.75f}, bottom{0.25f, 0.8f, 0.05f, 0.5f};
 
     for (int m = 0; m < BlendMode_COUNT; ++m)
     {
         auto mode = (BlendMode_)m;
         CAPTURE(blend_mode_names()[m]);
 
-        float  s  = blend(top, bottom, mode);
-        float2 v2 = blend(float2{top, top_a}, float2{bottom, bottom_a}, mode);
-        float4 v4 = blend(float4{top, top, top, top_a}, float4{bottom, bottom, bottom, bottom_a}, mode);
+        float4 v4 = blend(top, bottom, mode);
+        for (int c = 0; c < 3; ++c)
+        {
+            CAPTURE(c);
+            float  s  = blend(top[c], bottom[c], mode);
+            float2 v2 = blend(float2{top[c], top.w}, float2{bottom[c], bottom.w}, mode);
 
-        // the two vector overloads carry the same alpha and must agree on both color and alpha
-        CHECK(v2.x == doctest::Approx(v4.x));
-        CHECK(v4.x == doctest::Approx(v4.y));
-        CHECK(v4.x == doctest::Approx(v4.z));
-        CHECK(v2.y == doctest::Approx(v4.w));
+            // the two vector overloads carry the same alpha and must agree on both color and alpha
+            CHECK(v2.x == doctest::Approx(v4[c]));
+            CHECK(v2.y == doctest::Approx(v4.w));
 
-        // the scalar overload has no alpha to composite with, so Normal keeps the top sample, as the
-        // statistics pass wants; every other mode is per-channel arithmetic and must match
-        if (mode != BlendMode_Normal)
-            CHECK(v4.x == doctest::Approx(s));
+            // the scalar overload has no alpha to composite with, so Normal keeps the top sample, as the
+            // statistics pass wants; every other mode is per-channel arithmetic and must match
+            if (mode != BlendMode_Normal)
+                CHECK(v4[c] == doctest::Approx(s));
+        }
     }
 }
 
@@ -741,6 +788,8 @@ TEST_CASE("axis_scale_fwd/inv round-trip across the range the histogram spans")
             INFO("scale = ", s, ", x = ", x);
             double f = axis_scale_fwd(x, (AxisScale)s);
             REQUIRE(std::isfinite(f));
-            CHECK(axis_scale_inv(f, (AxisScale)s) == doctest::Approx(x).epsilon(1e-9));
+            // the sRGB scale runs the shaders' curve, which is float; ample for placing bins on screen
+            const double epsilon = s == AxisScale_SRGB ? 1e-6 : 1e-9;
+            CHECK(axis_scale_inv(f, (AxisScale)s) == doctest::Approx(x).epsilon(epsilon));
         }
 }

@@ -74,7 +74,10 @@ cmake --build --preset macos-arm64-cpm-release
 ctest --test-dir build/macos-arm64-cpm -C Release --output-on-failure
 ```
 Coverage is roughly two dozen files: color math (`test_colorspace.cpp`, `test_icc_cicp.cpp`,
-`test_gainmap.cpp`), the loaders and their edge cases
+`test_gainmap.cpp`, and `test_colour_reference.cpp`, which checks the transfer functions, gamuts, adaptation,
+L\*a\*b\*, HSL and color temperatures against [colour-science](https://www.colour-science.org)'s values; those
+are generated offline into `tests/colour_reference.h` by `tests/reference/generate_colour_reference.py`, so the
+tests need no Python), the loaders and their edge cases
 (`test_exr_io.cpp`/`test_png_io.cpp`/`test_tiff_io.cpp`/`test_dds_io.cpp`/`test_heif_io.cpp`/`test_qoi_io.cpp`,
 `test_loader_limits.cpp`), metadata (`test_exif.cpp`, `test_xmp.cpp`,
 `test_psd_metadata.cpp`), export round-trips (`test_export_roundtrip.cpp`), and assorted helpers.
@@ -328,6 +331,23 @@ new cross-cutting enum or type alias.
 false-color palettes (Viridis, Turbo, etc., listed in `HDRViewApp::m_colormaps`) for the `Tonemap_FalseColor`
 mode. `dithermatrix256.*` supplies the blue-noise dithering used when downconverting HDR to an SDR display or
 file format.
+
+**Math shared by C++ and the shaders.** `src/shared/` holds what the shaders and C++ compile from one source:
+each `.sglsl` `@include`s the headers into its `@fs` section (by a relative path, since sokol-shdc has no
+include path), and C++ `#include`s them into `namespace shader`. `shim.h` sets up the dialect and lists its
+rules, chief among them `mul(M, v)` for a matrix product, since linalg's `M * v` is component-wise where GLSL's
+is a matrix product. `colorspace.h` there has every transfer function HDRView reads or writes, and the
+`from_linear()`/`to_linear()` dispatch over them, which `src/colorspace.cpp`'s versions and the colorpass
+both call; `pipeline.h` has the image shader's per-pixel steps (channel isolation, blending, exposure,
+tonemapping), all but the colormap lookup, which is a texture on the GPU and `Colormap::sample()` on the CPU.
+`constants.h` lists the enum values the shader branches on: GLSL gets them as constants, and C++
+`static_assert`s each against `fwd.h`, so an enum reordered there without a matching edit fails to compile
+(the transfer functions' `TF_*` constants are checked the same way in `colorspace.cpp`). `src/colorspace.h`
+brings a few shared names into the global namespace with `using`, and its `tonemap()` and
+`HDRViewApp::tonemap_value()` compose the shared steps, so C++ computes what the screen shows. The shared
+code is float only, as shading languages have no double; `tests/test_colour_reference.cpp` holds it to
+colour-science's values, and `tests/test_colorspace.cpp` to its own inverses and symmetries. Shader math belongs in `src/shared/`
+rather than copied into an `.sglsl` and mirrored in C++.
 
 **Working color space and the HDR display "colorpass".** Everything HDRView draws — image content *and*
 Dear ImGui's own UI, which has no notion of display color space — is emitted in **extended sRGB**: sRGB
