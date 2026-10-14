@@ -15,6 +15,15 @@ std::string nits_or_unknown(float nits) { return nits > 0.f ? fmt::format("{:g} 
 
 } // namespace
 
+void add_white_luminance(json &header, float nits, std::string_view source)
+{
+    header[k_white_luminance_key] = {
+        {"value", nits},
+        {"string", nits_or_unknown(nits)},
+        {"type", "white luminance"},
+        {"description", fmt::format("From the {}: the luminance the image's (1, 1, 1) stands for", source)}};
+}
+
 void add_content_light_level(json &header, float max_cll, float max_fall, std::string_view source)
 {
     header[k_content_light_level_key] = {

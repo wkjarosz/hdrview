@@ -273,10 +273,10 @@ magic-byte sniff (not file extension) and an `#if HDRVIEW_ENABLE_<FORMAT>` compi
 CMake options above. To add a new format: implement `is_X_image()` + `load_X_image()` in a new
 `imageio/x.{h,cpp}`, add a CMake option/target wiring, and register it in `default_loaders()`.
 
-A loader that finds HDR light-level metadata (a content light level, or a mastering display's color volume)
-records it through `imageio/hdr_metadata.h`, so every format reports it under the same keys; PNG's `cLLI`/`mDCV`
-chunks and HEIF/AVIF's `clli`/`mdcv` boxes do so today. OpenEXR's `whiteLuminance` and JPEG XL's intensity target
-appear among those formats' own header fields.
+A loader that finds HDR light-level metadata (a content light level, a mastering display's color volume, or the
+luminance its (1, 1, 1) stands for) records it through `imageio/hdr_metadata.h`, so every format reports it under
+the same keys: PNG's `cLLI`/`mDCV` chunks, HEIF/AVIF's `clli`/`mdcv` boxes, and OpenEXR's `whiteLuminance` do so
+today. JPEG XL's intensity target appears among its own header fields.
 
 Loaders take a plain `std::istream`, but the background loader passes one of two subclasses from
 `imageio/streams.h`: a `FileIStream` for a file on disk, which remembers its path, or a `SpanIStream` over bytes

@@ -4,8 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-// The HDR light-level metadata loaders record: a content light level (MaxCLL, MaxFALL) and the mastering
-// display's color volume, read back from files that carry them.
+// The HDR light-level metadata loaders record: a content light level (MaxCLL, MaxFALL), the mastering display's
+// color volume, and a white luminance, read back from files that carry them.
 
 #include <doctest/doctest.h>
 
@@ -13,7 +13,14 @@
 #include "imageio/hdr_metadata.h"
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
+
 #include "test_support.h"
+#include <ImfChannelList.h>
+#include <ImfFrameBuffer.h>
+#include <ImfHeader.h>
+#include <ImfOutputFile.h>
+#include <ImfStandardAttributes.h>
+#include <ImfStdIO.h>
 
 #include <png.h>
 #if HDRVIEW_ENABLE_LIBHEIF
@@ -87,6 +94,28 @@ std::string png_with_light_levels()
     return bytes.substr(0, after_IHDR) + png_chunk("cLLI", cLLI) + png_chunk("mDCV", mDCV) + bytes.substr(after_IHDR);
 }
 
+/// A 4x4 OpenEXR, with a whiteLuminance attribute if \p nits is positive.
+std::string exr_with_white_luminance(float nits)
+{
+    Imf::Header header{4, 4};
+    for (auto name : {"R", "G", "B"}) header.channels().insert(name, Imf::Channel{Imf::FLOAT});
+    if (nits > 0.f)
+        Imf::addWhiteLuminance(header, nits);
+
+    std::vector<float> pixels(16, 0.5f);
+    Imf::FrameBuffer   fb;
+    for (auto name : {"R", "G", "B"})
+        fb.insert(name, Imf::Slice{Imf::FLOAT, (char *)pixels.data(), sizeof(float), 4 * sizeof(float)});
+
+    Imf::StdOSStream out;
+    {
+        Imf::OutputFile file{out, header};
+        file.setFrameBuffer(fb);
+        file.writePixels(4);
+    }
+    return out.str();
+}
+
 #if HDRVIEW_ENABLE_LIBHEIF
 /// An AVIF whose clli and mdcv boxes say the same as png_with_light_levels(), or "" without an AV1 encoder.
 std::string avif_with_light_levels()
@@ -141,7 +170,7 @@ std::string avif_with_light_levels()
 
 } // namespace
 
-TEST_CASE("Every format that carries HDR light levels reports them the same way")
+TEST_CASE("Every format that carries HDR light levels or a white luminance reports them the same way")
 {
     struct Case
     {
@@ -193,6 +222,16 @@ TEST_CASE("Every format that carries HDR light levels reports them the same way"
             CHECK(first_md == md);
         }
     }
+
+    // OpenEXR has no light levels, but says what its (1, 1, 1) stands for, under the shared key rather than as a
+    // raw attribute
+    auto exr = load_bytes(exr_with_white_luminance(300.f), "a.exr");
+    REQUIRE(exr);
+    CHECK(exr->metadata["header"][k_white_luminance_key]["value"].get<float>() == 300.f);
+    CHECK_FALSE(exr->metadata["header"].contains("whiteLuminance"));
+    auto exr_without = load_bytes(exr_with_white_luminance(0.f), "a.exr");
+    REQUIRE(exr_without);
+    CHECK_FALSE(exr_without->metadata["header"].contains(k_white_luminance_key));
 
     // a file that carries neither reports neither, rather than zeros
     auto plain = std::make_shared<Image>(int2{4, 4}, 3);

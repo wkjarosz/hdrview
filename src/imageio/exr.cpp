@@ -11,6 +11,7 @@
 #include "exr_streams.h"
 #include "image.h"
 #include "imageio/alpha.h"
+#include "imageio/hdr_metadata.h"
 #include "imageio/image_loader.h"
 #include "imgui.h"
 #include "imgui_ext.h"
@@ -464,6 +465,13 @@ vector<ImagePtr> load_exr_image(istream &is, string_view filename, const ImageLo
                                    {a->value().white.x, a->value().white.y}};
         img->metadata["loader"] = "OpenEXR";
         img->metadata["header"] = exr_header_to_json(part.header());
+        // under the key every format records its white level by, in place of the generic attribute entry
+        if (Imf::hasWhiteLuminance(part.header()))
+        {
+            img->metadata["header"].erase("whiteLuminance");
+            add_white_luminance(img->metadata["header"], Imf::whiteLuminance(part.header()),
+                                "OpenEXR whiteLuminance attribute");
+        }
 
         img->metadata["header"]["version"] = {
             {"type", "version"},
