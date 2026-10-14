@@ -12,8 +12,8 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include <ImfMisc.h>
 #include <OpenEXRConfig.h>
+#include <openexr.h>
 #include <png.h>
 #include <zlib.h>
 
@@ -48,8 +48,12 @@ TEST_CASE("Every linked library is the version its headers say")
         const char *name;
         std::string compiled, linked;
     };
+    int exr_major = 0, exr_minor = 0, exr_patch = 0;
+    exr_get_library_version(&exr_major, &exr_minor, &exr_patch, nullptr);
+
     std::vector<Library> libraries{
-        {"OpenEXR", OPENEXR_VERSION_STRING, Imf::getLibraryVersion()},
+        {"OpenEXR", fmt::format("{}.{}.{}", OPENEXR_VERSION_MAJOR, OPENEXR_VERSION_MINOR, OPENEXR_VERSION_PATCH),
+         fmt::format("{}.{}.{}", exr_major, exr_minor, exr_patch)},
         {"libpng", std::to_string(PNG_LIBPNG_VER), std::to_string(png_access_version_number())},
         {"zlib", ZLIB_VERSION, zlibVersion()},
 #if HDRVIEW_ENABLE_LIBRAW
