@@ -18,26 +18,26 @@
 - [x] figure our threading while considering emscripten
 - [x] selection support
   - [x] compute statistics also over selection
-- [ ] command palette/improved hotkey support
-- [ ] save as support for OpenEXR
+- [x] command palette/improved hotkey support
+- [x] save as support for OpenEXR
 - [ ] handle multi-view EXRs better
 - [x] pinch-zoom and pan support in emscripten with SDL
 - [ ] move shader, texture, renderpass and others into separate library
-- [ ] merge metal/glsl shaders + C++ colorspace stuff?
+- [x] merge metal/glsl shaders + C++ colorspace stuff?
 - [ ] express app/viewport/image coordinate transforms using 2x2 matrices
 - [x] flip and mirror image view
 
 
 ## Old
 
-- [ ] Improve responsiveness during long operations
+- [x] Improve responsiveness during long operations
    - [x] Add progress bars
    - [x] Run them in a separate thread and avoid freezing the main application
    - [x] Send texture data to GL in smaller tiles, across several re-draws to avoid stalling main app
-   - [ ] Allow canceling/aborting long operations
+   - [x] Allow canceling/aborting long operations
 - [ ] Improved DNG/demosaicing pipeline
    - [ ] Improve DNG color correction
-   - [ ] Allow skipping DNG demosaicing during load
+   - [x] Allow skipping DNG demosaicing during load (load only the "CFA" part via the channel selector)
    - [ ] Add demosaicing/color correction/white balancing post-load filters
    - [ ] Will require storing DNG metadata to apply correct color-correction matrix
 - [x] Selection support
@@ -62,10 +62,10 @@
    - [x] Clone stamp
    - [x] Airbrush
    - [x] Cropping
-- [ ] GUI improvements
+- [x] GUI improvements
    - [x] Add support for resizing side panel
-   - [ ] Allow error logging to output to a debug status panel in the GUI.
+   - [x] Allow error logging to output to a debug status panel in the GUI.
    - [x] Improved drop-down menus
    - [x] Save all
    - [x] Close all
-   - [ ] Show command history and allow undoing/redoing multiple steps at once
+   - [x] Show command history and allow undoing/redoing multiple steps at once
