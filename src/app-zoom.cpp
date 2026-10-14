@@ -206,11 +206,9 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
 
 float4 HDRViewApp::tonemap_value(float4 value) const
 {
-    // The exposure/offset step the image shader applies, on the same premultiplied values: the offset is a
-    // straight-color quantity, so it enters scaled by alpha (see main() in image-shader.sglsl).
-    float3 exposed = powf(2.f, m_exposure_live) * value.xyz() + m_offset_live * value.w;
-    return ::tonemap(float4{exposed, value.w}, m_gamma_live, m_tonemap, m_colormaps[m_colormap_index],
-                     m_reverse_colormap);
+    // the image shader's exposure and tonemap steps, as main() in image-shader.sglsl applies them
+    return ::tonemap(shader::expose(value, powf(2.f, m_exposure_live), m_offset_live), m_gamma_live, m_tonemap,
+                     m_colormaps[m_colormap_index], m_reverse_colormap);
 }
 
 void HDRViewApp::calculate_viewport()

@@ -13,7 +13,7 @@
 #include "dithermatrix256.h"
 
 #include "fwd.h"
-#include "shared/colorspace.h"
+#include "shared/pipeline.h"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -905,22 +905,13 @@ void from_linear(float *pixels, int3 size, TransferFunction tf);
 void convert_primaries(float *pixels, int3 size, const Chromaticities &src, const Chromaticities &dst,
                        AdaptationMethod m = AdaptationMethod_Bradford);
 
-Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap);
-inline Color4 tonemap(const Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
-{
-    Color3 rgb = tonemap(color.xyz(), gamma, tonemap_mode, colormap, reverse_colormap);
-    // A colormap lookup answers with a straight color while everything around it is premultiplied, so the
-    // two false-color modes premultiply their result; the gamma curve, applied to values that already are,
-    // does not. Mirrors tonemap() in assets/shaders/image-shader.sglsl.
-    if (tonemap_mode == Tonemap_FalseColor || tonemap_mode == Tonemap_PositiveNegative)
-        rgb *= color.w;
-    return Color4(rgb, color.w);
-}
+/// The image shader's tonemap step, with the colormap read through Colormap::sample() instead of a texture.
+Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap);
 
 float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode);
 
-// inline, unlike its float2/float4 siblings: called per pixel from PixelStats::calculate(), in another
-// translation unit, and the project builds without LTO.
+// inline, unlike its float2 sibling: called per pixel from PixelStats::calculate(), in another translation
+// unit, and the project builds without LTO.
 inline float blend(float top, float bottom, BlendMode_ blend_mode)
 {
     using std::abs; // ::abs is the integer one on libstdc++, and would truncate
@@ -942,7 +933,8 @@ inline float blend(float top, float bottom, BlendMode_ blend_mode)
     // return float(0.f);
 }
 
-float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode);
+// the image shader's own, for RGBA (src/shared/pipeline.h); the overloads above are for single channels
+using shader::blend;
 
 /// see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
 template <typename T>

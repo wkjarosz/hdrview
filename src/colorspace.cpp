@@ -1168,23 +1168,14 @@ float3 to_linear(const float3 &encoded, const TransferFunction tf)
     }
 }
 
-Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
+Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
-    switch (tonemap_mode)
-    {
-    default: [[fallthrough]];
-    case Tonemap_Gamma: return linear_to_gamma(color, float3{1.f / gamma});
-    case Tonemap_FalseColor: [[fallthrough]];
-    case Tonemap_PositiveNegative:
-    {
-        auto  xform = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
-        float avg   = sum(color) * (1.f / 3.f);
-        float t     = xform.x * avg + xform.y;
-        if (reverse_colormap)
-            t = 1.f - t;
-        return sRGB_to_linear(float4{Colormap::sample(colormap, t)}.xyz());
-    }
-    }
+    float3 colormap_sRGB{0.f};
+    if (tonemap_mode != Tonemap_Gamma)
+        colormap_sRGB =
+            float4{Colormap::sample(colormap, shader::colormap_coordinate(color.xyz(), tonemap_mode, reverse_colormap))}
+                .xyz();
+    return shader::tonemap(color, tonemap_mode, gamma, colormap_sRGB);
 }
 
 float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
@@ -1203,25 +1194,6 @@ float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
     case BlendMode_Relative_Subtract: return float2(diff / (bottom.x + 0.01f), alpha);
     case BlendMode_Difference: return float2(abs(diff), alpha);
     case BlendMode_Relative_Difference: return float2(abs(diff) / (bottom.x + 0.01f), alpha);
-    }
-}
-
-float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
-{
-    float3 diff  = top.xyz() - bottom.xyz();
-    float  alpha = top.w + bottom.w * (1.f - top.w);
-    switch (blend_mode)
-    {
-    default: [[fallthrough]];
-    case BlendMode_Normal: return float4(top.xyz() + bottom.xyz() * (1.f - top.w), alpha);
-    case BlendMode_Multiply: return float4(top.xyz() * bottom.xyz(), alpha);
-    case BlendMode_Divide: return float4(top.xyz() / bottom.xyz(), alpha);
-    case BlendMode_Add: return float4(top.xyz() + bottom.xyz(), alpha);
-    case BlendMode_Average: return 0.5f * (top + bottom);
-    case BlendMode_Subtract: return float4(diff, alpha);
-    case BlendMode_Relative_Subtract: return float4(diff / (bottom.xyz() + float3(0.01f)), alpha);
-    case BlendMode_Difference: return float4(abs(diff), alpha);
-    case BlendMode_Relative_Difference: return float4(abs(diff) / (bottom.xyz() + float3(0.01f)), alpha);
     }
 }
 

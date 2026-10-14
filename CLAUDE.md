@@ -324,14 +324,19 @@ false-color palettes (Viridis, Turbo, etc., listed in `HDRViewApp::m_colormaps`)
 mode. `dithermatrix256.*` supplies the blue-noise dithering used when downconverting HDR to an SDR display or
 file format.
 
-**Math shared by C++ and the shaders.** `src/shared/` holds per-pixel functions that the shaders and C++
-compile from one source: each `.sglsl` `@include`s them into its `@fs` section (by a relative path, since
-sokol-shdc has no include path), and C++ `#include`s them into `namespace shader`.
-`src/shared/shim.h` sets up the dialect and lists its rules, chief among them `mul(M, v)` for a matrix product,
-since linalg's `M * v` is component-wise where GLSL's is a matrix product. `colorspace.h` brings the shared
-sRGB curves and `YC_to_RGB` into the global namespace with `using`, so C++ computes what the screen shows;
-its `Real` templates stay the double-precision reference that `tests/test_colorspace.cpp` holds the shared
-versions to. Shader math belongs there rather than copied into an `.sglsl` and mirrored in C++.
+**Math shared by C++ and the shaders.** `src/shared/` holds what the shaders and C++ compile from one source:
+each `.sglsl` `@include`s the headers into its `@fs` section (by a relative path, since sokol-shdc has no
+include path), and C++ `#include`s them into `namespace shader`. `shim.h` sets up the dialect and lists its
+rules, chief among them `mul(M, v)` for a matrix product, since linalg's `M * v` is component-wise where GLSL's
+is a matrix product. `colorspace.h` there has the color curves, and `pipeline.h` the image shader's per-pixel
+steps (channel isolation, blending, exposure, tonemapping), all but the colormap lookup, which is a texture on
+the GPU and `Colormap::sample()` on the CPU. `constants.h` lists the enum values the shader branches on: GLSL
+gets them as constants, and C++ `static_assert`s each against `fwd.h`, so an enum reordered there without a
+matching edit fails to compile. `src/colorspace.h` brings the shared sRGB curves, `YC_to_RGB` and RGBA
+`blend` into the global namespace with `using`, and its `tonemap()` and `HDRViewApp::tonemap_value()` compose
+the shared steps, so C++ computes what the screen shows; the `Real` templates stay the double-precision
+reference that `tests/test_colorspace.cpp` holds the shared versions to. Shader math belongs in `src/shared/`
+rather than copied into an `.sglsl` and mirrored in C++.
 
 **Working color space and the HDR display "colorpass".** Everything HDRView draws — image content *and*
 Dear ImGui's own UI, which has no notion of display color space — is emitted in **extended sRGB**: sRGB

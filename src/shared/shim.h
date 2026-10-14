@@ -38,6 +38,7 @@ using std::pow;
 
 // clang-format off
 #define SHARED_FN    inline
+#define SHARED_CONST inline constexpr
 #define SHARED_BEGIN namespace shader {
 #define SHARED_END   }
 // clang-format on
@@ -45,6 +46,7 @@ using std::pow;
 #else
 
 #define SHARED_FN
+#define SHARED_CONST const
 #define SHARED_BEGIN
 #define SHARED_END
 #define mul(a, b) ((a) * (b))

@@ -5,43 +5,6 @@
 // GLSL uniform blocks cannot contain `bool` members (glslang rejects it), so booleans below are `int`
 // (0/1); C++ call sites pass 0/1 and shader code compares with `!= 0`.
 
-@block constants
-// These need to stay in sync with the various enums in fwd.h
-#define Channels_RGBA   0
-#define Channels_RGB    1
-#define Channels_Red    2
-#define Channels_Green  3
-#define Channels_Blue   4
-#define Channels_Alpha  5
-#define Channels_Y      6
-
-#define Tonemap_Gamma            0
-#define Tonemap_FalseColor       1
-#define Tonemap_PositiveNegative 2
-
-#define BlendMode_Normal              0
-#define BlendMode_Multiply            1
-#define BlendMode_Divide              2
-#define BlendMode_Add                 3
-#define BlendMode_Average             4
-#define BlendMode_Subtract            5
-#define BlendMode_Relative_Subtract   6
-#define BlendMode_Difference          7
-#define BlendMode_Relative_Difference 8
-
-#define BGMode_Black         0
-#define BGMode_White         1
-#define BGMode_Dark_Checker  2
-#define BGMode_Light_Checker 3
-#define BGMode_Custom_Color  4
-
-#define YCA_Channels    4
-#define YC_Channels     5
-
-// Keep in sync with k_small_alpha in image.h: guards the divide when undoing a premultiply.
-#define k_small_alpha (1.0 / 67108864.0)
-@end
-
 @vs vs
 layout(binding=0) uniform vs_params {
     vec2 primary_scale;
@@ -68,10 +31,11 @@ void main()
 @end
 
 @fs fs
-@include_block constants
-// color math shared with C++; see src/shared/shim.h
+// constants and per-pixel math shared with C++; see src/shared/shim.h
 @include ../../src/shared/shim.h
+@include ../../src/shared/constants.h
 @include ../../src/shared/colorspace.h
+@include ../../src/shared/pipeline.h
 
 layout(binding=1) uniform fs_params {
     int   has_reference;
@@ -88,10 +52,10 @@ layout(binding=1) uniform fs_params {
     vec4  bg_color;
     int   reverse_colormap;
     vec3  primary_yw;
-    int   primary_channels_type;
+    int   primary_luminance_chroma;
     mat4  primary_M_to_sRGB;
     vec3  secondary_yw;
-    int   secondary_channels_type;
+    int   secondary_luminance_chroma;
     mat4  secondary_M_to_sRGB;
     float time;
     ivec2 clip_warnings;
@@ -129,29 +93,18 @@ in vec2 secondary_uv;
 
 out vec4 frag_color;
 
-vec4 tonemap(vec4 color)
+// The tonemap step with the colormap read from its texture; the rest is tonemap() in src/shared/pipeline.h.
+vec4 apply_tonemap(vec4 color)
 {
-    switch (fsp.tonemap_mode)
+    vec3 colormap_sRGB = vec3(0.0);
+    if (fsp.tonemap_mode != Tonemap_Gamma)
     {
-    default:
-    case Tonemap_Gamma: return vec4(sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / fsp.gamma)), color.a);
-    case Tonemap_FalseColor:
-    {
-        float cmap_size = float(textureSize(sampler2D(colormap, colormap_sampler), 0).x);
-        float t         = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, dot(color.rgb, vec3(1.0 / 3.0)));
-        if (fsp.reverse_colormap != 0)
-            t = 1.0 - t;
-        return vec4(sRGB_to_linear(texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb) * color.a, color.a);
+        // texel centers, so that 0 and 1 land on the colormap's first and last colors
+        float n = float(textureSize(sampler2D(colormap, colormap_sampler), 0).x);
+        float t = mix(0.5 / n, (n - 0.5) / n, colormap_coordinate(color.rgb, fsp.tonemap_mode, fsp.reverse_colormap != 0));
+        colormap_sRGB = texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb;
     }
-    case Tonemap_PositiveNegative:
-    {
-        float cmap_size = float(textureSize(sampler2D(colormap, colormap_sampler), 0).x);
-        float t = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, 0.5 * dot(color.rgb, vec3(1.0 / 3.0)) + 0.5);
-        if (fsp.reverse_colormap != 0)
-            t = 1.0 - t;
-        return vec4(sRGB_to_linear(texture(sampler2D(colormap, colormap_sampler), vec2(t, 0.5)).rgb) * color.a, color.a);
-    }
-    }
+    return tonemap(color, fsp.tonemap_mode, fsp.gamma, colormap_sRGB);
 }
 
 float rand_box(vec2 xy)
@@ -169,52 +122,6 @@ float rand_tent(vec2 xy)
     float rp = sqrt(2.0 * r);             // positive triangle
     float rn = sqrt(2.0 * r + 1.0) - 1.0; // negative triangle
     return (r < 0.0) ? 0.5 * rn : 0.5 * rp;
-}
-
-// Isolating color channels shows them opaque, so undo the premultiply Image::finalize() applied on load.
-// Only for files that stored straight alpha: a premultiplied file's alpha=0 pixels carry real color.
-vec4 isolate(vec4 rgba, int straight_alpha)
-{
-    return vec4(straight_alpha != 0 ? rgba.rgb / max(k_small_alpha, rgba.a) : rgba.rgb, 1.0);
-}
-
-// Applied to each image separately, before any blending, so an isolated channel is undone with its own
-// file's alpha and comparison blend modes see unpremultiplied values.
-//
-// Runs after the gamut conversion, so Channels_Y weighs with sRGB's luminance weights; the source gamut's
-// belong to the YC decode above, the one step that still sees the file's own primaries.
-vec4 choose_channel(vec4 rgba, int straight_alpha)
-{
-    switch (fsp.channel)
-    {
-    case Channels_RGBA: return rgba;
-    case Channels_RGB: return isolate(rgba, straight_alpha);
-    case Channels_Red: return isolate(rgba.rrra, straight_alpha);
-    case Channels_Green: return isolate(rgba.ggga, straight_alpha);
-    case Channels_Blue: return isolate(rgba.bbba, straight_alpha);
-    case Channels_Alpha: return vec4(rgba.aaa, 1.0);
-    case Channels_Y: return vec4(vec3(RGB_to_Y(rgba.rgb, sRGB_Yw)), rgba.a);
-    }
-    return rgba;
-}
-
-vec4 blend(vec4 top, vec4 bottom)
-{
-    vec3  diff  = top.rgb - bottom.rgb;
-    float alpha = top.a + bottom.a * (1.0 - top.a);
-    switch (fsp.blend_mode)
-    {
-    case BlendMode_Normal: return vec4(top.rgb + bottom.rgb * (1.0 - top.a), alpha);
-    case BlendMode_Multiply: return vec4(top.rgb * bottom.rgb, alpha);
-    case BlendMode_Divide: return vec4(top.rgb / bottom.rgb, alpha);
-    case BlendMode_Add: return vec4(top.rgb + bottom.rgb, alpha);
-    case BlendMode_Average: return 0.5 * (top + bottom);
-    case BlendMode_Subtract: return vec4(diff, alpha);
-    case BlendMode_Relative_Subtract: return vec4(diff / (bottom.rgb + vec3(0.01)), alpha);
-    case BlendMode_Difference: return vec4(abs(diff), alpha);
-    case BlendMode_Relative_Difference: return vec4(abs(diff) / (bottom.rgb + vec3(0.01)), alpha);
-    }
-    return vec4(0.0);
 }
 
 vec4 dither(vec4 color)
@@ -261,11 +168,11 @@ void main()
         sample_channel(primary_2_texture, primary_2_sampler, primary_uv, in_img),
         sample_channel(primary_3_texture, primary_3_sampler, primary_uv, in_img));
 
-    if (fsp.primary_channels_type == YCA_Channels || fsp.primary_channels_type == YC_Channels)
+    if (fsp.primary_luminance_chroma != 0)
         value.xyz = YC_to_RGB(value.xyz, fsp.primary_yw);
 
     value = fsp.primary_M_to_sRGB * value;
-    value = choose_channel(value, fsp.primary_straight_alpha);
+    value = choose_channel(value, fsp.channel, fsp.primary_straight_alpha != 0);
 
     if (fsp.has_reference != 0)
     {
@@ -274,17 +181,17 @@ void main()
                                   sample_channel(secondary_2_texture, secondary_2_sampler, secondary_uv, in_ref),
                                   sample_channel(secondary_3_texture, secondary_3_sampler, secondary_uv, in_ref));
 
-        if (fsp.secondary_channels_type == YCA_Channels || fsp.secondary_channels_type == YC_Channels)
+        if (fsp.secondary_luminance_chroma != 0)
             reference_val.xyz = YC_to_RGB(reference_val.xyz, fsp.secondary_yw);
 
         reference_val = fsp.secondary_M_to_sRGB * reference_val;
-        reference_val = choose_channel(reference_val, fsp.secondary_straight_alpha);
+        reference_val = choose_channel(reference_val, fsp.channel, fsp.secondary_straight_alpha != 0);
 
-        value = blend(value, reference_val);
+        value = blend(value, reference_val, fsp.blend_mode);
     }
 
-    vec4  foreground = value * vec4(vec3(fsp.gain), 1.0) + vec4(vec3(fsp.offset * value.a), 0.0);
-    vec4  tonemapped = tonemap(foreground) + background * (1.0 - foreground.a);
+    vec4  foreground = expose(value, fsp.gain, fsp.offset);
+    vec4  tonemapped = apply_tonemap(foreground) + background * (1.0 - foreground.a);
     bvec3 clipped    = greaterThan(foreground.rgb, fsp.clip_range.yyy);
     bvec3 crushed    = lessThan(foreground.rgb, fsp.clip_range.xxx);
     vec4  blended    = linear_to_sRGB(tonemapped);

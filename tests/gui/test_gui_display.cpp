@@ -1,9 +1,10 @@
 /** \file test_gui_display.cpp
     \author Wojciech Jarosz
 
-    The display pipeline as the readouts reproduce it: HDRViewApp::tonemap_value() and the colormap lookup
-    under it are a CPU re-implementation of assets/shaders/image-shader.sglsl. Both tests transcribe the
-    shader's arithmetic and sweep it against theirs; if you edit either side, edit both.
+    The display pipeline as the readouts reproduce it: HDRViewApp::tonemap_value() runs the image shader's own
+    steps (src/shared/pipeline.h), except for the colormap lookup, which reads Colormap::sample() where the
+    shader reads a texture. These tests transcribe that texture fetch, and check the CPU lookup and the whole
+    composition against it.
 */
 
 #include "app.h"
@@ -26,13 +27,10 @@ bool is_continuous(Colormap_ cmap) { return cmap > ImPlotColormap_Paired; }
 
 /// The colormap fetch as the fragment shader performs it, returning the stored, sRGB-encoded color.
 /**
-    tonemap()'s texel-center remap of \p t, then a bilinear lookup into the N-texel ClampToEdge texture.
+    apply_tonemap()'s texel-center remap of \p t, then a bilinear lookup into the N-texel ClampToEdge texture.
 */
-float3 glsl_colormap_fetch(Colormap_ cmap, float t, bool reverse)
+float3 glsl_colormap_fetch(Colormap_ cmap, float t)
 {
-    if (reverse)
-        t = 1.f - t;
-
     const auto &values = Colormap::values(cmap);
     const float n      = (float)values.size();
     // mix(0.5 / n, (n - 0.5) / n, t) in texel coordinates is t * (n - 1); ClampToEdge bounds it outside [0, 1]
@@ -94,7 +92,7 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
             for (float x : {0.f, 0.01f, 0.1f, 0.25f, 1.f / 3.f, 0.5f, 0.625f, 0.75f, 0.9f, 0.99f, 1.f})
             {
                 const ImVec4 got = Colormap::sample(cmap, x);
-                IM_CHECK(approx(float3{got.x, got.y, got.z}, glsl_colormap_fetch(cmap, x, false), 3.f / 255.f));
+                IM_CHECK(approx(float3{got.x, got.y, got.z}, glsl_colormap_fetch(cmap, x), 3.f / 255.f));
             }
 
             // out of range clamps, as ClampToEdge does
@@ -112,22 +110,16 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
     {
         TonemapState restore;
 
-        // transcribed from main() and tonemap() in assets/shaders/image-shader.sglsl
-        auto glsl_tonemap =
+        // main() in image-shader.sglsl: the shared steps, with the colormap fetched as the shader fetches it
+        auto shader_tonemap =
             [](float4 value, float exposure, float offset, float gamma, Tonemap_ mode, Colormap_ cmap, bool reverse)
         {
-            const float3 rgb = std::pow(2.f, exposure) * value.xyz() + offset * value.w;
-            if (mode == Tonemap_Gamma)
-            {
-                auto sign_pow = [](float a, float p) {
-                    return (a > 0.f ? 1.f : a < 0.f ? -1.f : 0.f) * std::pow(std::fabs(a), p);
-                };
-                return float4{la::apply(sign_pow, rgb, float3{1.f / gamma}), value.w};
-            }
-
-            const float avg = la::dot(rgb, float3{1.f / 3.f});
-            const float t   = (mode == Tonemap_FalseColor) ? avg : 0.5f * avg + 0.5f;
-            return float4{sRGB_to_linear(glsl_colormap_fetch(cmap, t, reverse)) * value.w, value.w};
+            const float4 exposed = shader::expose(value, std::pow(2.f, exposure), offset);
+            const float3 colormap_sRGB =
+                mode == Tonemap_Gamma
+                    ? float3{0.f}
+                    : glsl_colormap_fetch(cmap, shader::colormap_coordinate(exposed.xyz(), mode, reverse));
+            return shader::tonemap(exposed, mode, gamma, colormap_sRGB);
         };
 
         const float4 samples[] = {{0.4f, 0.4f, 0.4f, 1.f},   {0.4f, 0.4f, 0.4f, 0.5f}, {0.f, 0.f, 0.f, 0.f},
@@ -147,8 +139,8 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
                                 hdrview()->reverse_colormap() = reverse;
 
                                 const float4 got = hdrview()->tonemap_value(value);
-                                const float4 want =
-                                    glsl_tonemap(value, exposure, offset, gamma, mode, hdrview()->colormap(), reverse);
+                                const float4 want = shader_tonemap(value, exposure, offset, gamma, mode,
+                                                                   hdrview()->colormap(), reverse);
                                 IM_CHECK(approx(got.xyz(), want.xyz(), 3.f / 255.f));
                                 IM_CHECK(approx(got.w, want.w));
                             }

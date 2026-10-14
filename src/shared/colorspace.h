@@ -49,7 +49,7 @@ SHARED_FN vec4  sRGB_to_linear(vec4 c) { return vec4(sRGB_to_linear(vec3(c.x, c.
 SHARED_FN float RGB_to_Y(vec3 rgb, vec3 weights) { return dot(weights, rgb); }
 
 /// Luminance weights of linear sRGB/BT.709: the middle row of the classic rounded sRGB-to-XYZ matrix.
-const vec3 sRGB_Yw = vec3(0.212671f, 0.715160f, 0.072169f);
+SHARED_CONST vec3 sRGB_Yw = vec3(0.212671f, 0.715160f, 0.072169f);
 
 /// The BT.2100 PQ inverse EOTF, from absolute luminance in nits.
 /**

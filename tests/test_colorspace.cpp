@@ -301,31 +301,108 @@ TEST_CASE("the shaders' color functions agree with colorspace.h's, across signs 
     CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(inverse_EOTF_BT2100_PQ(1.f)));
 }
 
+TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say")
+{
+    // src/shared/pipeline.h, which the image shader runs and HDRViewApp reproduces the display with. Colors
+    // are premultiplied, and every component differs, so a step that mixes up channels is caught.
+    const float4 c{0.12f, 0.34f, 0.56f, 0.5f};
+    const float3 straight = c.xyz() / c.w;
+
+    for (int ch = 0; ch < Channels_COUNT; ++ch)
+        for (bool straight_alpha : {false, true})
+        {
+            INFO("channel = ", ch, ", straight_alpha = ", straight_alpha);
+            const float4 got = shader::choose_channel(c, Channels_(ch), straight_alpha);
+            // isolating channels shows them opaque, undoing the premultiply only of a file that stored
+            // straight alpha
+            const float3 shown = straight_alpha ? straight : c.xyz();
+            switch (Channels_(ch))
+            {
+            case Channels_RGBA: CHECK(got == c); break;
+            case Channels_RGB: CHECK(approx_equal(got, float4{shown, 1.f}, 1e-6f)); break;
+            case Channels_Red: CHECK(approx_equal(got, float4{float3{shown.x}, 1.f}, 1e-6f)); break;
+            case Channels_Green: CHECK(approx_equal(got, float4{float3{shown.y}, 1.f}, 1e-6f)); break;
+            case Channels_Blue: CHECK(approx_equal(got, float4{float3{shown.z}, 1.f}, 1e-6f)); break;
+            case Channels_Alpha: CHECK(got == float4{c.w, c.w, c.w, 1.f}); break;
+            // luminance keeps the image's alpha, and weighs as colorspace.h's derived sRGB weights do
+            case Channels_Y: CHECK(approx_equal(got, float4{float3{dot(c.xyz(), sRGB_Yw())}, c.w}, 1e-4f)); break;
+            default: FAIL("no expectation for channel mode ", ch);
+            }
+        }
+
+    // a straight-alpha pixel with no alpha left still isolates to a finite color
+    const float4 no_alpha = shader::choose_channel(float4{0.1f, 0.2f, 0.3f, 0.f}, Channels_RGB, true);
+    CHECK((std::isfinite(no_alpha.x) && std::isfinite(no_alpha.y) && std::isfinite(no_alpha.z)));
+
+    // exposure scales the color and not its coverage; the offset applies to the straight color
+    const float4 exposed = shader::expose(c, 4.f, 0.1f);
+    CHECK(exposed.w == c.w);
+    CHECK(approx_equal(exposed.xyz() / exposed.w, straight * 4.f + float3{0.1f}, 1e-5f));
+
+    // the colormap coordinate is the channel average, mapped so the positive/negative map centers zero, and
+    // reversing it runs the colormap the other way
+    CHECK(shader::colormap_coordinate(float3{0.f, 0.3f, 0.9f}, Tonemap_FalseColor, false) == doctest::Approx(0.4f));
+    for (float v : {-1.f, 0.f, 0.25f, 1.f})
+    {
+        INFO("v = ", v);
+        CHECK(shader::colormap_coordinate(float3{v}, Tonemap_FalseColor, false) == doctest::Approx(v));
+        CHECK(shader::colormap_coordinate(float3{v}, Tonemap_PositiveNegative, false) ==
+              doctest::Approx(0.5f * v + 0.5f));
+        for (Tonemap_ mode : {Tonemap_FalseColor, Tonemap_PositiveNegative})
+            CHECK(shader::colormap_coordinate(float3{v}, mode, true) ==
+                  doctest::Approx(1.f - shader::colormap_coordinate(float3{v}, mode, false)));
+    }
+
+    // every tonemap mode: gamma encodes the color itself, and the colormap modes show the colormap's color,
+    // premultiplied, whatever the input
+    const float3 colormap_sRGB{0.9f, 0.4f, 0.1f};
+    for (int m = 0; m < Tonemap_COUNT; ++m)
+    {
+        INFO("tonemap mode = ", m);
+        const float4 got = shader::tonemap(c, Tonemap_(m), 2.2f, colormap_sRGB);
+        CHECK(got.w == c.w);
+        if (Tonemap_(m) == Tonemap_Gamma)
+        {
+            for (int i = 0; i < 3; ++i)
+                CHECK(got[i] == doctest::Approx(linear_to_gamma<double>(c[i], 1.0 / 2.2)).epsilon(1e-5));
+            CHECK(shader::tonemap(c, Tonemap_(m), 2.2f, float3{0.f}) == got);
+        }
+        else
+        {
+            CHECK(approx_equal(got.xyz(), sRGB_to_linear(colormap_sRGB) * c.w, 1e-6f));
+            CHECK(shader::tonemap(float4{5.f, -1.f, 0.f, c.w}, Tonemap_(m), 2.2f, colormap_sRGB) == got);
+        }
+    }
+}
+
 TEST_CASE("blend()'s overloads agree on every blend mode")
 {
     // the three overloads are separate switches over the same enum, so a mode present in one and missing
-    // from another blends as whatever its `default:` is
-    const float top = 0.6f, bottom = 0.25f, top_a = 0.75f, bottom_a = 0.5f;
+    // from another blends as whatever its `default:` is. The RGBA one is the image shader's own
+    // (src/shared/pipeline.h); its channels differ, so one that reads another's value is caught too.
+    const float4 top{0.6f, 0.15f, 1.3f, 0.75f}, bottom{0.25f, 0.8f, 0.05f, 0.5f};
 
     for (int m = 0; m < BlendMode_COUNT; ++m)
     {
         auto mode = (BlendMode_)m;
         CAPTURE(blend_mode_names()[m]);
 
-        float  s  = blend(top, bottom, mode);
-        float2 v2 = blend(float2{top, top_a}, float2{bottom, bottom_a}, mode);
-        float4 v4 = blend(float4{top, top, top, top_a}, float4{bottom, bottom, bottom, bottom_a}, mode);
+        float4 v4 = blend(top, bottom, mode);
+        for (int c = 0; c < 3; ++c)
+        {
+            CAPTURE(c);
+            float  s  = blend(top[c], bottom[c], mode);
+            float2 v2 = blend(float2{top[c], top.w}, float2{bottom[c], bottom.w}, mode);
 
-        // the two vector overloads carry the same alpha and must agree on both color and alpha
-        CHECK(v2.x == doctest::Approx(v4.x));
-        CHECK(v4.x == doctest::Approx(v4.y));
-        CHECK(v4.x == doctest::Approx(v4.z));
-        CHECK(v2.y == doctest::Approx(v4.w));
+            // the two vector overloads carry the same alpha and must agree on both color and alpha
+            CHECK(v2.x == doctest::Approx(v4[c]));
+            CHECK(v2.y == doctest::Approx(v4.w));
 
-        // the scalar overload has no alpha to composite with, so Normal keeps the top sample, as the
-        // statistics pass wants; every other mode is per-channel arithmetic and must match
-        if (mode != BlendMode_Normal)
-            CHECK(v4.x == doctest::Approx(s));
+            // the scalar overload has no alpha to composite with, so Normal keeps the top sample, as the
+            // statistics pass wants; every other mode is per-channel arithmetic and must match
+            if (mode != BlendMode_Normal)
+                CHECK(v4[c] == doctest::Approx(s));
+        }
     }
 }
 
