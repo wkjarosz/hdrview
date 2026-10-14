@@ -376,18 +376,18 @@ static float2 s_white_point_values[] = {
     {0.29902f, 0.31485f}, // D75:	North sky daylight
     {0.28315f, 0.29711f}, // D93:	high-efficiency blue phosphor monitors, BT.2035
     {0.3140f, 0.3510f},   // DCI: ~6300 K
-    {0.31310f, 0.33727f}, // F1:	daylight fluorescent
-    {0.37208f, 0.37529f}, // F2:	cool white fluorescent
-    {0.40910f, 0.39430f}, // F3:	white fluorescent
-    {0.44018f, 0.40329f}, // F4:	warm white fluorescent
-    {0.31379f, 0.34531f}, // F5:	daylight fluorescent
-    {0.37790f, 0.38835f}, // F6:	light white fluorescent
-    {0.31292f, 0.32933f}, // F7:	D65 simulator, daylight simulator
-    {0.34588f, 0.35875f}, // F8:	D50 simulator, Sylvania F40 Design 50
-    {0.37417f, 0.37281f}, // F9:	cool white deluxe fluorescent
-    {0.34609f, 0.35986f}, // F10:	Philips TL85, Ultralume 50
-    {0.38052f, 0.37713f}, // F11:	Philips TL84, Ultralume 40
-    {0.43695f, 0.40441f}, // F12:	Philips TL83, Ultralume 30
+    {0.31306f, 0.33710f}, // F1:	daylight fluorescent
+    {0.37207f, 0.37512f}, // F2:	cool white fluorescent
+    {0.40909f, 0.39411f}, // F3:	white fluorescent
+    {0.44018f, 0.40309f}, // F4:	warm white fluorescent
+    {0.31375f, 0.34515f}, // F5:	daylight fluorescent
+    {0.37788f, 0.38819f}, // F6:	light white fluorescent
+    {0.31285f, 0.32917f}, // F7:	D65 simulator, daylight simulator
+    {0.34580f, 0.35861f}, // F8:	D50 simulator, Sylvania F40 Design 50
+    {0.37410f, 0.37268f}, // F9:	cool white deluxe fluorescent
+    {0.34579f, 0.35875f}, // F10:	Philips TL85, Ultralume 50
+    {0.38054f, 0.37691f}, // F11:	Philips TL84, Ultralume 40
+    {0.43702f, 0.40421f}, // F12:	Philips TL83, Ultralume 30
     {0.44757f, 0.40745f}, // A:	incandescent / tungsten
     {0.34842f, 0.35161f}, // B:	obsolete, direct sunlight at noon
     {0.31006f, 0.31616f}, // C:	obsolete, average / North sky daylight
@@ -430,7 +430,7 @@ static const Chromaticities s_gamut_chromaticities[] = {
     {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, s_white_point_values[WhitePoint_D65]},
     {{0.6810f, 0.3190f}, {0.2430f, 0.6920f}, {0.1450f, 0.0490f}, s_white_point_values[WhitePoint_C]},
     {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, s_white_point_values[WhitePoint_D65]},
-    {{0.7350f, 0.2650f}, {0.2740f, 0.7170f}, {0.1670f, 0.0090f}, s_white_point_values[WhitePoint_E]},
+    {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, s_white_point_values[WhitePoint_E]}, // H.273: CIE 1931 XYZ itself
     {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, s_white_point_values[WhitePoint_DCI]},
     {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, s_white_point_values[WhitePoint_D65]},
     {{0.6300f, 0.3400f}, {0.2950f, 0.6050f}, {0.1550f, 0.0770f}, s_white_point_values[WhitePoint_D65]},
@@ -1023,24 +1023,6 @@ float3 adjust_HSL(float3 rgb, float hue_turns, float saturation, float lightness
     return lightness < 0.f ? la::lerp(out, float3{0.f}, -lightness) : la::lerp(out, float3{1.f}, lightness);
 }
 
-float3 YC_to_RGB(float3 input, float3 Yw)
-{
-    if (input[0] == 0.f && input[2] == 0.f)
-        //
-        // Special case -- both chroma channels are 0.  To avoid
-        // rounding errors, we explicitly set the output R, G and B
-        // channels equal to the input luminance.
-        //
-        return float3(input[1], input[1], input[1]);
-
-    float Y = input[1];
-    float r = (input[0] + 1.f) * input[1];
-    float b = (input[2] + 1.f) * input[1];
-    float g = (Y - r * Yw.x - b * Yw.z) / Yw.y;
-
-    return float3(r, g, b);
-}
-
 float3 RGB_to_YC(float3 input, float3 Yw)
 {
     //
@@ -1074,8 +1056,8 @@ float3 RGB_to_YC(float3 input, float3 Yw)
     {
         output[1] = dot(input, Yw);
         float Y   = output[1];
-        input[0]  = (std::abs(input[0] - Y) < FLT_MAX * Y) ? (input[0] - Y) / Y : 0;
-        input[2]  = (std::abs(input[2] - Y) < FLT_MAX * Y) ? (input[2] - Y) / Y : 0;
+        output[0] = (std::abs(input[0] - Y) < FLT_MAX * Y) ? (input[0] - Y) / Y : 0;
+        output[2] = (std::abs(input[2] - Y) < FLT_MAX * Y) ? (input[2] - Y) / Y : 0;
     }
     return output;
 }
@@ -1098,115 +1080,32 @@ const float3 &sRGB_Yw()
     return Yw;
 }
 
-Color3 linear_to_sRGB(const Color3 &c) { return la::apply(linear_to_sRGB<float>, c); }
-Color4 linear_to_sRGB(const Color4 &c) { return {linear_to_sRGB(c.xyz()), c.w}; }
-Color3 sRGB_to_linear(const Color3 &c) { return la::apply(sRGB_to_linear<float>, c); }
-Color4 sRGB_to_linear(const Color4 &c) { return {sRGB_to_linear(c.xyz()), c.w}; }
+// the shaders switch on src/shared/colorspace.h's plain-int copy of TransferFunction::Type_
+static_assert(shader::TF_UNSPECIFIED == TransferFunction::Unspecified &&
+                  shader::TF_LINEAR == TransferFunction::Linear && shader::TF_GAMMA == TransferFunction::Gamma &&
+                  shader::TF_SRGB == TransferFunction::sRGB && shader::TF_ITU == TransferFunction::ITU &&
+                  shader::TF_BT2100_PQ == TransferFunction::BT2100_PQ &&
+                  shader::TF_BT2100_HLG == TransferFunction::BT2100_HLG &&
+                  shader::TF_ST240 == TransferFunction::ST240 && shader::TF_LOG100 == TransferFunction::Log100 &&
+                  shader::TF_LOG100_SQRT10 == TransferFunction::Log100_Sqrt10 &&
+                  shader::TF_IEC61966_2_4 == TransferFunction::IEC61966_2_4 &&
+                  shader::TF_DCI_P3 == TransferFunction::DCI_P3 && TransferFunction::Count == 12,
+              "TransferFunction::Type_ differs from src/shared/colorspace.h's TF_ constants, which the shaders use");
 
-Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma)
-{
-    return la::apply(linear_to_gamma<float>, c, inv_gamma);
-}
-Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma) { return {linear_to_gamma(c.xyz(), inv_gamma), c.w}; }
-
-float from_linear(float linear, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return linear_to_sRGB(linear);
-    case TransferFunction::Gamma: return linear_to_gamma(linear, 1.f / tf.gamma);
-    case TransferFunction::ITU: return OETF_ITU(linear);
-    case TransferFunction::BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::ST240: return OETF_ST240(linear);
-    case TransferFunction::Log100: return OETF_log100(linear);
-    case TransferFunction::Log100_Sqrt10: return OETF_log100_sqrt10(linear);
-    case TransferFunction::IEC61966_2_4: return OETF_IEC61966_2_4(linear);
-    case TransferFunction::DCI_P3: return inverse_EOTF_DCI_P3(linear);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return linear;
-    }
-}
-
-float3 from_linear(float3 linear, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return linear_to_sRGB(linear);
-    case TransferFunction::Gamma: return linear_to_gamma(linear, float3{1.f / tf.gamma});
-    case TransferFunction::ITU: return la::apply(OETF_ITU<float>, linear);
-    case TransferFunction::BT2100_PQ:
-        return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::ST240: return la::apply(OETF_ST240<float>, linear);
-    case TransferFunction::Log100: return la::apply(OETF_log100<float>, linear);
-    case TransferFunction::Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, linear);
-    case TransferFunction::IEC61966_2_4: return la::apply(OETF_IEC61966_2_4<float>, linear);
-    case TransferFunction::DCI_P3: return la::apply(inverse_EOTF_DCI_P3<float>, linear);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return linear;
-    }
-}
-
-float to_linear(float encoded, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction::Gamma: return linear_to_gamma(encoded, tf.gamma);
-    case TransferFunction::ITU: return inverse_OETF_ITU(encoded);
-    case TransferFunction::BT2100_PQ: return EOTF_BT2100_PQ(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::ST240: return EOTF_ST240(encoded);
-    case TransferFunction::Log100: return EOTF_log100(encoded);
-    case TransferFunction::Log100_Sqrt10: return EOTF_log100_sqrt10(encoded);
-    case TransferFunction::IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
-    case TransferFunction::DCI_P3: return EOTF_DCI_P3(encoded);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return encoded;
-    }
-}
-
+float  from_linear(float linear, const TransferFunction tf) { return shader::from_linear(linear, tf.type, tf.gamma); }
+float3 from_linear(float3 linear, const TransferFunction tf) { return shader::from_linear(linear, tf.type, tf.gamma); }
+float  to_linear(float encoded, const TransferFunction tf) { return shader::to_linear(encoded, tf.type, tf.gamma); }
 float3 to_linear(const float3 &encoded, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction::Gamma: return linear_to_gamma(encoded, float3{tf.gamma});
-    case TransferFunction::ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
-    case TransferFunction::BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::ST240: return la::apply(EOTF_ST240<float>, encoded);
-    case TransferFunction::Log100: return la::apply(EOTF_log100<float>, encoded);
-    case TransferFunction::Log100_Sqrt10: return la::apply(EOTF_log100_sqrt10<float>, encoded);
-    case TransferFunction::IEC61966_2_4: return la::apply(EOTF_IEC61966_2_4<float>, encoded);
-    case TransferFunction::DCI_P3: return la::apply(EOTF_DCI_P3<float>, encoded);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return encoded;
-    }
-}
+{ return shader::to_linear(encoded, tf.type, tf.gamma); }
 
-Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
+Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
-    switch (tonemap_mode)
-    {
-    default: [[fallthrough]];
-    case Tonemap_Gamma: return linear_to_gamma(color, float3{1.f / gamma});
-    case Tonemap_FalseColor: [[fallthrough]];
-    case Tonemap_PositiveNegative:
-    {
-        auto  xform = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
-        float avg   = sum(color) * (1.f / 3.f);
-        float t     = xform.x * avg + xform.y;
-        if (reverse_colormap)
-            t = 1.f - t;
-        return sRGB_to_linear(float4{Colormap::sample(colormap, t)}.xyz());
-    }
-    }
+    float3 colormap_sRGB{0.f};
+    if (tonemap_mode != Tonemap_Gamma)
+        colormap_sRGB =
+            float4{Colormap::sample(colormap, shader::colormap_coordinate(color.xyz(), tonemap_mode, reverse_colormap))}
+                .xyz();
+    return shader::tonemap(color, tonemap_mode, gamma, colormap_sRGB);
 }
 
 float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
@@ -1225,25 +1124,6 @@ float2 blend(float2 top, float2 bottom, BlendMode_ blend_mode)
     case BlendMode_Relative_Subtract: return float2(diff / (bottom.x + 0.01f), alpha);
     case BlendMode_Difference: return float2(abs(diff), alpha);
     case BlendMode_Relative_Difference: return float2(abs(diff) / (bottom.x + 0.01f), alpha);
-    }
-}
-
-float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
-{
-    float3 diff  = top.xyz() - bottom.xyz();
-    float  alpha = top.w + bottom.w * (1.f - top.w);
-    switch (blend_mode)
-    {
-    default: [[fallthrough]];
-    case BlendMode_Normal: return float4(top.xyz() + bottom.xyz() * (1.f - top.w), alpha);
-    case BlendMode_Multiply: return float4(top.xyz() * bottom.xyz(), alpha);
-    case BlendMode_Divide: return float4(top.xyz() / bottom.xyz(), alpha);
-    case BlendMode_Add: return float4(top.xyz() + bottom.xyz(), alpha);
-    case BlendMode_Average: return 0.5f * (top + bottom);
-    case BlendMode_Subtract: return float4(diff, alpha);
-    case BlendMode_Relative_Subtract: return float4(diff / (bottom.xyz() + float3(0.01f)), alpha);
-    case BlendMode_Difference: return float4(abs(diff), alpha);
-    case BlendMode_Relative_Difference: return float4(abs(diff) / (bottom.xyz() + float3(0.01f)), alpha);
     }
 }
 
@@ -1387,7 +1267,7 @@ void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, T
                      {
                          for (int i = start; i < end; ++i)
                          {
-                             auto rgb      = EOTF_BT2100_HLG(float3{r[i * stride], g[i * stride], b[i * stride]});
+                             auto rgb = shader::EOTF_BT2100_HLG(float3{r[i * stride], g[i * stride], b[i * stride]});
                              r[i * stride] = rgb[0] / HDR_REFERENCE_WHITE_NITS;
                              g[i * stride] = rgb[1] / HDR_REFERENCE_WHITE_NITS;
                              b[i * stride] = rgb[2] / HDR_REFERENCE_WHITE_NITS;
@@ -1417,7 +1297,7 @@ void from_linear(float *pixels, int3 size, TransferFunction tf)
                          [rgb = reinterpret_cast<float3 *>(pixels)](int start, int end, int, int)
                          {
                              for (int i = start; i < end; ++i)
-                                 rgb[i] = inverse_EOTF_BT2100_HLG(rgb[i] * HDR_REFERENCE_WHITE_NITS);
+                                 rgb[i] = shader::inverse_EOTF_BT2100_HLG(rgb[i] * HDR_REFERENCE_WHITE_NITS);
                          });
         else // size.z == 4
             // don't modify the alpha channel
@@ -1425,7 +1305,8 @@ void from_linear(float *pixels, int3 size, TransferFunction tf)
                          [rgba = reinterpret_cast<float4 *>(pixels)](int start, int end, int, int)
                          {
                              for (int i = start; i < end; ++i)
-                                 rgba[i].xyz() = inverse_EOTF_BT2100_HLG(rgba[i].xyz() * HDR_REFERENCE_WHITE_NITS);
+                                 rgba[i].xyz() =
+                                     shader::inverse_EOTF_BT2100_HLG(rgba[i].xyz() * HDR_REFERENCE_WHITE_NITS);
                          });
     }
     else

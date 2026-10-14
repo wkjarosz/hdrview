@@ -353,9 +353,9 @@ void HDRViewApp::draw_image() const
     auto set_color = [this](Target_ target, ConstImagePtr img)
     {
         float4x4 M_to_sRGB{la::identity};
-        int      channels_type  = (int)ChannelGroup::Single_Channel;
-        int      straight_alpha = 0;
-        float3   yw             = sRGB_Yw();
+        int      luminance_chroma = 0;
+        int      straight_alpha   = 0;
+        float3   yw               = sRGB_Yw();
 
         if (img)
         {
@@ -366,16 +366,17 @@ void HDRViewApp::draw_image() const
             // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
             M_to_sRGB = float4x4{
                 {img->M_to_sRGB[0], 0.f}, {img->M_to_sRGB[1], 0.f}, {img->M_to_sRGB[2], 0.f}, {0.f, 0.f, 0.f, 1.f}};
-            channels_type  = (int)group.type;
+            luminance_chroma =
+                (int)(group.type == ChannelGroup::YC_Channels || group.type == ChannelGroup::YCA_Channels);
             straight_alpha = (int)(img->transparency == TransparencyType_Straight);
             yw             = img->luminance_weights;
         }
 
-        // Both targets report their alpha convention: choose_channel() runs after blend(), so undoing the
-        // premultiply on an isolated channel is only safe when the reference qualifies too.
+        // Each target reports its own alpha convention, since choose_channel() isolates each image's channels
+        // with that image's alpha, before the two are blended.
         const string prefix = (target == Target_Primary) ? "fsp.primary_" : "fsp.secondary_";
         m_shader->set_uniform(prefix + "M_to_sRGB", M_to_sRGB);
-        m_shader->set_uniform(prefix + "channels_type", channels_type);
+        m_shader->set_uniform(prefix + "luminance_chroma", luminance_chroma);
         m_shader->set_uniform(prefix + "yw", yw);
         m_shader->set_uniform(prefix + "straight_alpha", straight_alpha);
     };
