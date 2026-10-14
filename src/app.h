@@ -433,6 +433,12 @@ public:
     float zoom() const { return m_zoom; }
     //-----------------------------------------------------------------------------
 
+    /// The value at \p pixel of the current image (0), the reference (1), or their composite (2).
+    /**
+        Unless \p raw, the value the viewer displays there, through the image shader's own steps: each image's
+        selected channels, the blend, exposure and tonemap. A raw image value is the file's own data; a raw
+        composite stops short of the exposure.
+    */
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;
 
     /// Applies the same exposure/tonemap/gamma pipeline as pixel_value(..., raw=false, ...).
@@ -465,6 +471,7 @@ public:
     Colormap_   colormap() { return m_colormaps[m_colormap_index]; }
     bool       &reverse_colormap() { return m_reverse_colormap; }
     BlendMode_ &blend_mode() { return m_blend_mode; }
+    Channels_  &channel() { return m_channel; }
     bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
     bool       &dithering_on() { return m_dither; }
     bool       &draw_grid_on() { return m_draw_grid; }

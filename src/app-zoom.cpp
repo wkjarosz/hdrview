@@ -187,19 +187,23 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
     auto img1 = current_image();
     auto img2 = reference_image();
 
-    float4 value;
-
-    if (which_image == 0)
-        value = img1 ? (raw ? img1->raw_pixel(p, Target_Primary) : img1->rgba_pixel(p, Target_Primary)) : float4{0.f};
-    else if (which_image == 1)
-        value =
-            img2 ? (raw ? img2->raw_pixel(p, Target_Secondary) : img2->rgba_pixel(p, Target_Secondary)) : float4{0.f};
-    else if (which_image == 2)
+    // the channels the viewer shows of one image, isolated with that image's own alpha as the shader does
+    auto shown = [&](const ConstImagePtr &img, Target_ target)
     {
-        auto rgba1 = img1 ? img1->rgba_pixel(p, Target_Primary) : float4{0.f};
-        auto rgba2 = img2 ? img2->rgba_pixel(p, Target_Secondary) : float4{0.f};
-        value      = blend(rgba1, rgba2, m_blend_mode);
-    }
+        return img ? shader::choose_channel(img->rgba_pixel(p, target), m_channel,
+                                            img->transparency == TransparencyType_Straight)
+                   : float4{0.f};
+    };
+
+    float4 value{0.f};
+    if (which_image == 0)
+        value = raw ? (img1 ? img1->raw_pixel(p, Target_Primary) : float4{0.f}) : shown(img1, Target_Primary);
+    else if (which_image == 1)
+        value = raw ? (img2 ? img2->raw_pixel(p, Target_Secondary) : float4{0.f}) : shown(img2, Target_Secondary);
+    else if (which_image == 2)
+        // the shader blends only when there is a reference to blend with
+        value = img2 ? blend(shown(img1, Target_Primary), shown(img2, Target_Secondary), m_blend_mode)
+                     : shown(img1, Target_Primary);
 
     return raw ? value : tonemap_value(value);
 }

@@ -1,20 +1,24 @@
 /** \file test_gui_display.cpp
     \author Wojciech Jarosz
 
-    The display pipeline as the readouts reproduce it: HDRViewApp::tonemap_value() runs the image shader's own
-    steps (src/shared/pipeline.h), except for the colormap lookup, which reads Colormap::sample() where the
-    shader reads a texture. These tests transcribe that texture fetch, and check the CPU lookup and the whole
-    composition against it.
+    The display pipeline as the readouts reproduce it: HDRViewApp::pixel_value() and tonemap_value() run the
+    image shader's own steps (src/shared/pipeline.h), except for the colormap lookup, which reads
+    Colormap::sample() where the shader reads a texture. These tests transcribe that texture fetch, check the
+    CPU lookup and the whole composition against it, and check that the readouts follow the viewer's channel
+    and blend controls as the screen does.
 */
 
 #include "app.h"
 #include "colormap.h"
 #include "test_gui_registry.h"
+#include "test_gui_support.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
 #include <cmath>
+
+using namespace hdrview_test;
 
 namespace
 {
@@ -144,5 +148,93 @@ void RegisterTests_Display(ImGuiTestEngine *engine)
                                 IM_CHECK(approx(got.xyz(), want.xyz(), 3.f / 255.f));
                                 IM_CHECK(approx(got.w, want.w));
                             }
+    };
+
+    // The status bar, the pixel inspector's watched pixels and the pixel grid all read pixel_value(), so they
+    // show what the screen shows: each image's selected channels, isolated with its own alpha, and a
+    // composite that blends only when there is a reference to blend with.
+    t           = IM_REGISTER_TEST(engine, "display", "pixel_value_follows_the_channel_and_blend_controls");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        TonemapState     restore;
+        const Channels_  channel = hdrview()->channel();
+        const BlendMode_ blend   = hdrview()->blend_mode();
+
+        reset_images(ctx);
+        IM_CHECK_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE}) == 1, );
+        hdrview()->set_current_image_index(0);
+        auto img = hdrview()->current_image();
+        IM_CHECK_RETV(img != nullptr, );
+        const bool straight = img->transparency == TransparencyType_Straight;
+
+        // a pixel whose channels all differ, so a readout showing the wrong one is caught
+        int2   p{-1};
+        float4 rgba;
+        for (int y = 0; y < img->size().y && p.x < 0; ++y)
+            for (int x = 0; x < img->size().x && p.x < 0; ++x)
+            {
+                rgba = img->rgba_pixel({x, y}, Target_Primary);
+                if (rgba.w > 0.1f && std::fabs(rgba.x - rgba.y) > 0.05f && std::fabs(rgba.y - rgba.z) > 0.05f &&
+                    std::fabs(rgba.x - rgba.z) > 0.05f)
+                    p = {x, y};
+            }
+        IM_CHECK_RETV(p.x >= 0, );
+        const float4 raw = hdrview()->pixel_value(p, true, 0);
+
+        for (int ch = 0; ch < Channels_COUNT; ++ch)
+        {
+            hdrview()->channel() = Channels_(ch);
+            const float4 want    = hdrview()->tonemap_value(shader::choose_channel(rgba, Channels_(ch), straight));
+            const float4 got     = hdrview()->pixel_value(p, false, 0);
+            IM_CHECK(approx(got.xyz(), want.xyz(), 1e-5f) && approx(got.w, want.w, 1e-5f));
+
+            // raw values are the file's own, whatever the viewer isolates
+            IM_CHECK(hdrview()->pixel_value(p, true, 0) == raw);
+
+            // with no reference there is nothing to blend, whatever the blend mode says
+            for (int m = 0; m < BlendMode_COUNT; ++m)
+            {
+                hdrview()->blend_mode() = BlendMode_(m);
+                const float4 composite  = hdrview()->pixel_value(p, false, 2);
+                IM_CHECK(approx(composite.xyz(), got.xyz(), 1e-5f) && approx(composite.w, got.w, 1e-5f));
+            }
+        }
+
+        // isolating one channel shows it as an opaque gray, independently of how the shared code computes it
+        hdrview()->channel()       = Channels_Red;
+        hdrview()->tonemap()       = Tonemap_Gamma;
+        hdrview()->gamma_live()    = 1.f;
+        hdrview()->exposure_live() = 0.f;
+        hdrview()->offset_live()   = 0.f;
+        const float4 red           = hdrview()->pixel_value(p, false, 0);
+        const float  want_red      = straight ? rgba.x / rgba.w : rgba.x;
+        IM_CHECK(approx(red.xyz(), float3{want_red}, 1e-5f) && red.w == 1.f);
+
+        // with a reference, the composite blends the two images' isolated channels
+        IM_CHECK_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}) == 2, );
+        const int ref = hdrview()->current_image_index() == 0 ? 1 : 0;
+        hdrview()->set_current_image_index(1 - ref);
+        hdrview()->set_reference_image_index(ref);
+        auto cur = hdrview()->current_image(), other = hdrview()->reference_image();
+        IM_CHECK_RETV(cur && other, );
+        const int2 q = la::min(cur->size(), other->size()) / 2;
+        for (Channels_ c : {Channels_RGBA, Channels_Green})
+            for (BlendMode_ m : {BlendMode_Normal, BlendMode_Difference})
+            {
+                hdrview()->channel()    = c;
+                hdrview()->blend_mode() = m;
+                const float4 want       = hdrview()->tonemap_value(
+                    shader::blend(shader::choose_channel(cur->rgba_pixel(q, Target_Primary), c,
+                                                         cur->transparency == TransparencyType_Straight),
+                                  shader::choose_channel(other->rgba_pixel(q, Target_Secondary), c,
+                                                         other->transparency == TransparencyType_Straight),
+                                  m));
+                const float4 got = hdrview()->pixel_value(q, false, 2);
+                IM_CHECK(approx(got.xyz(), want.xyz(), 1e-5f) && approx(got.w, want.w, 1e-5f));
+            }
+
+        hdrview()->channel()    = channel;
+        hdrview()->blend_mode() = blend;
+        reset_images(ctx);
     };
 }
