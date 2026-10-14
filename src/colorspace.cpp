@@ -376,18 +376,18 @@ static float2 s_white_point_values[] = {
     {0.29902f, 0.31485f}, // D75:	North sky daylight
     {0.28315f, 0.29711f}, // D93:	high-efficiency blue phosphor monitors, BT.2035
     {0.3140f, 0.3510f},   // DCI: ~6300 K
-    {0.31310f, 0.33727f}, // F1:	daylight fluorescent
-    {0.37208f, 0.37529f}, // F2:	cool white fluorescent
-    {0.40910f, 0.39430f}, // F3:	white fluorescent
-    {0.44018f, 0.40329f}, // F4:	warm white fluorescent
-    {0.31379f, 0.34531f}, // F5:	daylight fluorescent
-    {0.37790f, 0.38835f}, // F6:	light white fluorescent
-    {0.31292f, 0.32933f}, // F7:	D65 simulator, daylight simulator
-    {0.34588f, 0.35875f}, // F8:	D50 simulator, Sylvania F40 Design 50
-    {0.37417f, 0.37281f}, // F9:	cool white deluxe fluorescent
+    {0.31306f, 0.33710f}, // F1:	daylight fluorescent
+    {0.37207f, 0.37512f}, // F2:	cool white fluorescent
+    {0.40909f, 0.39411f}, // F3:	white fluorescent
+    {0.44018f, 0.40309f}, // F4:	warm white fluorescent
+    {0.31375f, 0.34515f}, // F5:	daylight fluorescent
+    {0.37788f, 0.38819f}, // F6:	light white fluorescent
+    {0.31285f, 0.32917f}, // F7:	D65 simulator, daylight simulator
+    {0.34580f, 0.35861f}, // F8:	D50 simulator, Sylvania F40 Design 50
+    {0.37410f, 0.37268f}, // F9:	cool white deluxe fluorescent
     {0.34579f, 0.35875f}, // F10:	Philips TL85, Ultralume 50
-    {0.38052f, 0.37713f}, // F11:	Philips TL84, Ultralume 40
-    {0.43695f, 0.40441f}, // F12:	Philips TL83, Ultralume 30
+    {0.38054f, 0.37691f}, // F11:	Philips TL84, Ultralume 40
+    {0.43702f, 0.40421f}, // F12:	Philips TL83, Ultralume 30
     {0.44757f, 0.40745f}, // A:	incandescent / tungsten
     {0.34842f, 0.35161f}, // B:	obsolete, direct sunlight at noon
     {0.31006f, 0.31616f}, // C:	obsolete, average / North sky daylight

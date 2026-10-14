@@ -144,10 +144,8 @@ TEST_CASE("the named gamuts and white points, and the matrices they define, agre
     {
         INFO("white point = ", std::string(white_point_name(s.white_point)),
              fmt::format(": got {}, want {}", white_point(s.white_point), s.xy));
-        // HDRView's fluorescent illuminants come from a five-decimal table, colour-science's from CIE 15's
-        // four-decimal one, and the two differ by up to 2.3e-4
-        const bool fluorescent = s.white_point >= WhitePoint_F1 && s.white_point <= WhitePoint_F12;
-        CHECK(approx_equal(white_point(s.white_point), s.xy, fluorescent ? 2.5e-4f : 1e-4f));
+        // published to four decimals
+        CHECK(approx_equal(white_point(s.white_point), s.xy, 1e-4f));
     }
 }
 
