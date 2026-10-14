@@ -42,7 +42,10 @@ dependencies via [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake); `-local` p
 system-installed packages (`find_package` first, via `CPM_USE_LOCAL_PACKAGES`). Build type suffixes are
 `-debug`, `-release`, `-minsizerel`, `-relwithdebinfo`. Even `-cpm` presets need several system packages
 pre-installed, since CPM-fetched deps still `find_package()` dependencies of their own; the relevant
-`.github/workflows/ci-*.yml` has the list per platform.
+`.github/workflows/ci-*.yml` has the list per platform. Those system packages' include directories are often a
+shared prefix (`/opt/homebrew/include`) that can also hold an installed copy of a library CPM builds here, so
+`hdrview_prefer_bundled_headers()` in `CMakeLists.txt` puts every bundled dependency's headers ahead of them;
+`tests/test_library_versions.cpp` checks each linked library against the headers it was compiled with.
 
 After building, verify the binary runs, e.g.:
 ```bash
