@@ -1080,93 +1080,23 @@ const float3 &sRGB_Yw()
     return Yw;
 }
 
+// the shaders switch on src/shared/colorspace.h's plain-int copy of TransferFunction::Type_
+static_assert(shader::TF_UNSPECIFIED == TransferFunction::Unspecified &&
+                  shader::TF_LINEAR == TransferFunction::Linear && shader::TF_GAMMA == TransferFunction::Gamma &&
+                  shader::TF_SRGB == TransferFunction::sRGB && shader::TF_ITU == TransferFunction::ITU &&
+                  shader::TF_BT2100_PQ == TransferFunction::BT2100_PQ &&
+                  shader::TF_BT2100_HLG == TransferFunction::BT2100_HLG &&
+                  shader::TF_ST240 == TransferFunction::ST240 && shader::TF_LOG100 == TransferFunction::Log100 &&
+                  shader::TF_LOG100_SQRT10 == TransferFunction::Log100_Sqrt10 &&
+                  shader::TF_IEC61966_2_4 == TransferFunction::IEC61966_2_4 &&
+                  shader::TF_DCI_P3 == TransferFunction::DCI_P3 && TransferFunction::Count == 12,
+              "TransferFunction::Type_ differs from src/shared/colorspace.h's TF_ constants, which the shaders use");
 
-Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma)
-{
-    return la::apply(linear_to_gamma<float>, c, inv_gamma);
-}
-Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma) { return {linear_to_gamma(c.xyz(), inv_gamma), c.w}; }
-
-float from_linear(float linear, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return linear_to_sRGB(linear);
-    case TransferFunction::Gamma: return linear_to_gamma(linear, 1.f / tf.gamma);
-    case TransferFunction::ITU: return OETF_ITU(linear);
-    case TransferFunction::BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::ST240: return OETF_ST240(linear);
-    case TransferFunction::Log100: return OETF_log100(linear);
-    case TransferFunction::Log100_Sqrt10: return OETF_log100_sqrt10(linear);
-    case TransferFunction::IEC61966_2_4: return OETF_IEC61966_2_4(linear);
-    case TransferFunction::DCI_P3: return inverse_EOTF_DCI_P3(linear);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return linear;
-    }
-}
-
-float3 from_linear(float3 linear, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return linear_to_sRGB(linear);
-    case TransferFunction::Gamma: return linear_to_gamma(linear, float3{1.f / tf.gamma});
-    case TransferFunction::ITU: return la::apply(OETF_ITU<float>, linear);
-    case TransferFunction::BT2100_PQ:
-        return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
-    case TransferFunction::ST240: return la::apply(OETF_ST240<float>, linear);
-    case TransferFunction::Log100: return la::apply(OETF_log100<float>, linear);
-    case TransferFunction::Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, linear);
-    case TransferFunction::IEC61966_2_4: return la::apply(OETF_IEC61966_2_4<float>, linear);
-    case TransferFunction::DCI_P3: return la::apply(inverse_EOTF_DCI_P3<float>, linear);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return linear;
-    }
-}
-
-float to_linear(float encoded, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction::Gamma: return linear_to_gamma(encoded, tf.gamma);
-    case TransferFunction::ITU: return inverse_OETF_ITU(encoded);
-    case TransferFunction::BT2100_PQ: return EOTF_BT2100_PQ(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::ST240: return EOTF_ST240(encoded);
-    case TransferFunction::Log100: return EOTF_log100(encoded);
-    case TransferFunction::Log100_Sqrt10: return EOTF_log100_sqrt10(encoded);
-    case TransferFunction::IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
-    case TransferFunction::DCI_P3: return EOTF_DCI_P3(encoded);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return encoded;
-    }
-}
-
+float  from_linear(float linear, const TransferFunction tf) { return shader::from_linear(linear, tf.type, tf.gamma); }
+float3 from_linear(float3 linear, const TransferFunction tf) { return shader::from_linear(linear, tf.type, tf.gamma); }
+float  to_linear(float encoded, const TransferFunction tf) { return shader::to_linear(encoded, tf.type, tf.gamma); }
 float3 to_linear(const float3 &encoded, const TransferFunction tf)
-{
-    switch (tf.type)
-    {
-    case TransferFunction::Unspecified: [[fallthrough]];
-    case TransferFunction::sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction::Gamma: return linear_to_gamma(encoded, float3{tf.gamma});
-    case TransferFunction::ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
-    case TransferFunction::BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
-    case TransferFunction::ST240: return la::apply(EOTF_ST240<float>, encoded);
-    case TransferFunction::Log100: return la::apply(EOTF_log100<float>, encoded);
-    case TransferFunction::Log100_Sqrt10: return la::apply(EOTF_log100_sqrt10<float>, encoded);
-    case TransferFunction::IEC61966_2_4: return la::apply(EOTF_IEC61966_2_4<float>, encoded);
-    case TransferFunction::DCI_P3: return la::apply(EOTF_DCI_P3<float>, encoded);
-    case TransferFunction::Linear: [[fallthrough]];
-    default: return encoded;
-    }
-}
+{ return shader::to_linear(encoded, tf.type, tf.gamma); }
 
 Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
@@ -1337,7 +1267,7 @@ void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, T
                      {
                          for (int i = start; i < end; ++i)
                          {
-                             auto rgb      = EOTF_BT2100_HLG(float3{r[i * stride], g[i * stride], b[i * stride]});
+                             auto rgb = shader::EOTF_BT2100_HLG(float3{r[i * stride], g[i * stride], b[i * stride]});
                              r[i * stride] = rgb[0] / HDR_REFERENCE_WHITE_NITS;
                              g[i * stride] = rgb[1] / HDR_REFERENCE_WHITE_NITS;
                              b[i * stride] = rgb[2] / HDR_REFERENCE_WHITE_NITS;
@@ -1367,7 +1297,7 @@ void from_linear(float *pixels, int3 size, TransferFunction tf)
                          [rgb = reinterpret_cast<float3 *>(pixels)](int start, int end, int, int)
                          {
                              for (int i = start; i < end; ++i)
-                                 rgb[i] = inverse_EOTF_BT2100_HLG(rgb[i] * HDR_REFERENCE_WHITE_NITS);
+                                 rgb[i] = shader::inverse_EOTF_BT2100_HLG(rgb[i] * HDR_REFERENCE_WHITE_NITS);
                          });
         else // size.z == 4
             // don't modify the alpha channel
@@ -1375,7 +1305,8 @@ void from_linear(float *pixels, int3 size, TransferFunction tf)
                          [rgba = reinterpret_cast<float4 *>(pixels)](int start, int end, int, int)
                          {
                              for (int i = start; i < end; ++i)
-                                 rgba[i].xyz() = inverse_EOTF_BT2100_HLG(rgba[i].xyz() * HDR_REFERENCE_WHITE_NITS);
+                                 rgba[i].xyz() =
+                                     shader::inverse_EOTF_BT2100_HLG(rgba[i].xyz() * HDR_REFERENCE_WHITE_NITS);
                          });
     }
     else

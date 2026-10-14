@@ -95,7 +95,7 @@ SHARED_FN vec4 tonemap(vec4 color, Tonemap_ mode, float gamma, vec3 colormap_sRG
 {
     if (mode == Tonemap_FalseColor || mode == Tonemap_PositiveNegative)
         return vec4(sRGB_to_linear(colormap_sRGB) * color.w, color.w);
-    return vec4(gamma_encode(rgb_of(color), gamma), color.w);
+    return vec4(linear_to_gamma(rgb_of(color), 1.0f / gamma), color.w);
 }
 
 SHARED_END

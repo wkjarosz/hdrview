@@ -8,7 +8,10 @@
     - mul(M, v) for a matrix product, since linalg's operator* is component-wise where GLSL's is not;
     - components as .x/.y/.z/.w and vectors built by constructors, since linalg has no .rgb or swizzles;
     - no assignment to a parameter, which SPIRV-Cross turns into an inout (in Metal, thread&) parameter;
-    - no templates, `out` parameters or recursion, and only the builtins this file provides to C++.
+    - no templates, lambdas, default arguments, `out` parameters or recursion, and only the builtins this
+      file provides to C++. SHARED_PER_COMPONENT() below, and SHARED_ODD() in colorspace.h, stand in for
+      the higher-order helpers a template would use; GLSL has no variadic macros, so they take a
+      one-argument function.
 */
 
 #ifndef HDRVIEW_SHARED_SHIM_H
@@ -31,9 +34,13 @@ using mat3 = float3x3;
 using la::dot;
 using la::mul;
 using std::abs;
+using std::exp;
+using std::log;
+using std::log10;
 using std::max;
 using std::min;
 using std::pow;
+using std::sqrt;
 } // namespace shader
 
 // clang-format off
@@ -50,7 +57,12 @@ using std::pow;
 #define SHARED_BEGIN
 #define SHARED_END
 #define mul(a, b) ((a) * (b))
+#define log10(x)  (log(x) * 0.43429448190325182f)
 
 #endif
+
+/// Defines the vec3 overload of the one-argument float function \p f, applying it to each component.
+#define SHARED_PER_COMPONENT(f)                                                                                        \
+    SHARED_FN vec3 f(vec3 v) { return vec3(f(v.x), f(v.y), f(v.z)); }
 
 #endif // HDRVIEW_SHARED_SHIM_H

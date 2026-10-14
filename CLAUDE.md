@@ -328,14 +328,17 @@ file format.
 each `.sglsl` `@include`s the headers into its `@fs` section (by a relative path, since sokol-shdc has no
 include path), and C++ `#include`s them into `namespace shader`. `shim.h` sets up the dialect and lists its
 rules, chief among them `mul(M, v)` for a matrix product, since linalg's `M * v` is component-wise where GLSL's
-is a matrix product. `colorspace.h` there has the color curves, and `pipeline.h` the image shader's per-pixel
-steps (channel isolation, blending, exposure, tonemapping), all but the colormap lookup, which is a texture on
-the GPU and `Colormap::sample()` on the CPU. `constants.h` lists the enum values the shader branches on: GLSL
-gets them as constants, and C++ `static_assert`s each against `fwd.h`, so an enum reordered there without a
-matching edit fails to compile. `src/colorspace.h` brings the shared sRGB curves, `YC_to_RGB` and RGBA
-`blend` into the global namespace with `using`, and its `tonemap()` and `HDRViewApp::tonemap_value()` compose
-the shared steps, so C++ computes what the screen shows; the `Real` templates stay the double-precision
-reference that `tests/test_colorspace.cpp` holds the shared versions to. Shader math belongs in `src/shared/`
+is a matrix product. `colorspace.h` there has every transfer function HDRView reads or writes, and the
+`from_linear()`/`to_linear()` dispatch over them, which `src/colorspace.cpp`'s versions and the colorpass
+both call; `pipeline.h` has the image shader's per-pixel steps (channel isolation, blending, exposure,
+tonemapping), all but the colormap lookup, which is a texture on the GPU and `Colormap::sample()` on the CPU.
+`constants.h` lists the enum values the shader branches on: GLSL gets them as constants, and C++
+`static_assert`s each against `fwd.h`, so an enum reordered there without a matching edit fails to compile
+(the transfer functions' `TF_*` constants are checked the same way in `colorspace.cpp`). `src/colorspace.h`
+brings a few shared names into the global namespace with `using`, and its `tonemap()` and
+`HDRViewApp::tonemap_value()` compose the shared steps, so C++ computes what the screen shows. The shared
+code is float only, as shading languages have no double; `tests/test_colorspace.cpp` holds it to the
+standards' published values and to its own inverses and symmetries. Shader math belongs in `src/shared/`
 rather than copied into an `.sglsl` and mirrored in C++.
 
 **Working color space and the HDR display "colorpass".** Everything HDRView draws — image content *and*
