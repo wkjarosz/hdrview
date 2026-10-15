@@ -50,6 +50,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 #include "exif.h"
 #include "fonts.h"
 #include "gainmap.h"
+#include "hdr_metadata.h"
 #include "heif.h"
 #include "icc.h"
 #include "streams.h"
@@ -411,6 +412,37 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         {"string", fmt::format("{} ({})", chroma_name(heif_image_get_chroma_format(himage)),
                                int(heif_image_get_chroma_format(himage)))},
         {"type", "int"}};
+
+#if LIBHEIF_NUMERIC_VERSION >= ((1 << 24) | (15 << 16) | (0 << 8) | 0) // 1.15.0
+    // HDR light levels, from the clli and mdcv item properties, which libheif attaches to the decoded image
+    if (heif_image_has_content_light_level(himage))
+    {
+        heif_content_light_level clli{};
+        heif_image_get_content_light_level(himage, &clli);
+        add_content_light_level(image->metadata["header"], clli.max_content_light_level,
+                                clli.max_pic_average_light_level, "HEIF clli box");
+    }
+    if (heif_image_has_mastering_display_colour_volume(himage))
+    {
+        heif_mastering_display_colour_volume         raw{};
+        heif_decoded_mastering_display_colour_volume mdcv{};
+        heif_image_get_mastering_display_colour_volume(himage, &raw);
+        if (heif_mastering_display_colour_volume_decode(&raw, &mdcv).code == heif_error_Ok)
+        {
+            // H.265 suggests storing the primaries green, blue, red but does not require it, so tell them apart
+            // by where they lie: red has the largest x, and green the largest y of the other two
+            float2 p[3];
+            for (int i = 0; i < 3; ++i) p[i] = float2{mdcv.display_primaries_x[i], mdcv.display_primaries_y[i]};
+            const int r = int(std::max_element(p, p + 3, [](float2 a, float2 b) { return a.x < b.x; }) - p);
+            const int g = p[(r + 1) % 3].y > p[(r + 2) % 3].y ? (r + 1) % 3 : (r + 2) % 3;
+            const int b = 3 - r - g;
+            add_mastering_display(image->metadata["header"],
+                                  Chromaticities{p[r], p[g], p[b], float2{mdcv.white_point_x, mdcv.white_point_y}},
+                                  (float)mdcv.min_display_mastering_luminance,
+                                  (float)mdcv.max_display_mastering_luminance, "HEIF mdcv box");
+        }
+    }
+#endif
 
     // NCLX: prefer image-level then fall back to handle-level
     auto image_level_nclx = HeifNCLXPtr(
