@@ -1908,6 +1908,11 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   )
   hdrview_setup_target(hdrview_tests)
   target_link_libraries(hdrview_tests PRIVATE doctest::doctest)
+  # tests/test_library_versions.cpp asks OpenEXRCore for its version, which an installed OpenEXR::OpenEXR links
+  # only privately
+  if(TARGET OpenEXR::OpenEXRCore)
+    target_link_libraries(hdrview_tests PRIVATE OpenEXR::OpenEXRCore)
+  endif()
   # fuzzer-found inputs that can't be synthesized; see tests/fuzz/artifacts/README.md
   target_compile_definitions(
     hdrview_tests PRIVATE HDRVIEW_TEST_ARTIFACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/artifacts"
