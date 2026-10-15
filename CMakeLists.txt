@@ -1805,6 +1805,52 @@ endif()
 message(STATUS "HDRView build dependencies: ${HDRVIEW_DEPENDENCIES}")
 message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")
 
+# Puts the headers of every dependency built here ahead of all other include directories. A system package's
+# include directory is often a shared prefix (/opt/homebrew/include, /usr/local/include) that also holds an
+# installed copy of a library CPM builds here, and include order follows link order, so whichever dependency
+# brings that prefix in first would otherwise hand the build that copy's headers, of another version than the
+# library actually linked: for LibRaw, whose structs HDRView reads directly, a different memory layout. A
+# directory counts as built here if it lies in the source tree, the build tree or CPM's source cache.
+#
+# The directories are read off each dependency here rather than through $<TARGET_PROPERTY:dep,
+# INTERFACE_INCLUDE_DIRECTORIES>: once that expression has visited a dependency's usage requirements, CMake
+# does not propagate them again through target_link_libraries(), so whatever a filter on it dropped, the
+# system directories included, would be lost from the build altogether.
+set(bundled_roots "${CMAKE_SOURCE_DIR}/" "${CMAKE_BINARY_DIR}/")
+if(CPM_SOURCE_CACHE)
+  list(APPEND bundled_roots "${CPM_SOURCE_CACHE}/")
+endif()
+set(HDRVIEW_BUNDLED_INCLUDE_DIRS "")
+# lcms2 is libjxl's, which HDRView reaches without linking it directly
+foreach(dep IN LISTS HDRVIEW_DEPENDENCIES ITEMS hello_imgui lcms2)
+  if(NOT TARGET ${dep})
+    continue()
+  endif()
+  get_target_property(aliased ${dep} ALIASED_TARGET)
+  if(aliased)
+    set(dep ${aliased})
+  endif()
+  get_target_property(dirs ${dep} INTERFACE_INCLUDE_DIRECTORIES)
+  foreach(dir IN LISTS dirs)
+    if(dir MATCHES "^\\$<BUILD_INTERFACE:([^$]*)>$")
+      set(dir "${CMAKE_MATCH_1}")
+    endif()
+    foreach(root IN LISTS bundled_roots)
+      string(FIND "${dir}" "${root}" at)
+      if(at EQUAL 0)
+        list(APPEND HDRVIEW_BUNDLED_INCLUDE_DIRS "${dir}")
+        break()
+      endif()
+    endforeach()
+  endforeach()
+endforeach()
+list(REMOVE_DUPLICATES HDRVIEW_BUNDLED_INCLUDE_DIRS)
+
+function(hdrview_prefer_bundled_headers name)
+  target_include_directories(${name} SYSTEM BEFORE PRIVATE ${HDRVIEW_BUNDLED_INCLUDE_DIRS})
+endfunction()
+
+hdrview_prefer_bundled_headers(HDRView)
 target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES} hdrview_version)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
@@ -1830,6 +1876,7 @@ function(hdrview_setup_target name)
   target_compile_definitions(${name} PRIVATE ${HDRVIEW_ICONSET} ${HDRVIEW_DEFINITIONS})
   # mirrors the HDRVIEW_BUILD_TREE_ASSETS_DIR on HDRView above, so the app's own asset lookup is exercised
   target_compile_definitions(${name} PRIVATE HDRVIEW_BUILD_TREE_ASSETS_DIR="${CMAKE_CURRENT_BINARY_DIR}/assets")
+  hdrview_prefer_bundled_headers(${name})
   target_link_libraries(${name} PRIVATE ${HDRVIEW_DEPENDENCIES} hello_imgui hdrview_version)
 
   if(WIN32)
@@ -1853,7 +1900,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   list(REMOVE_ITEM HDRVIEW_SOURCES src/hdrview.cpp)
   add_executable(hdrview_tests ${HDRVIEW_SOURCES} tests/test_pixel_stats.cpp tests/test_colorspace.cpp
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
-                                tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp tests/test_streams.cpp tests/test_colour_reference.cpp
+                                tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp tests/test_streams.cpp tests/test_library_versions.cpp tests/test_colour_reference.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
                                 tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_jxl_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
                                 tests/test_vector_overlay.cpp tests/test_annotations.cpp
@@ -1861,6 +1908,11 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   )
   hdrview_setup_target(hdrview_tests)
   target_link_libraries(hdrview_tests PRIVATE doctest::doctest)
+  # tests/test_library_versions.cpp asks OpenEXRCore for its version, which an installed OpenEXR::OpenEXR links
+  # only privately
+  if(TARGET OpenEXR::OpenEXRCore)
+    target_link_libraries(hdrview_tests PRIVATE OpenEXR::OpenEXRCore)
+  endif()
   # fuzzer-found inputs that can't be synthesized; see tests/fuzz/artifacts/README.md
   target_compile_definitions(
     hdrview_tests PRIVATE HDRVIEW_TEST_ARTIFACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/artifacts"
