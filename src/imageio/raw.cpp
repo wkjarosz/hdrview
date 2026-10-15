@@ -72,6 +72,19 @@ json get_raw_info()
 namespace
 {
 
+/// Throws unless the LibRaw linked is the one whose headers this file was compiled against.
+/**
+    HDRView constructs LibRaw objects and reads their imgdata directly, so a library of another version than its
+    headers, which lay those structs out differently, crashes or quietly reads the wrong fields.
+*/
+void require_matching_libraw()
+{
+    if (LibRaw::versionNumber() != LIBRAW_VERSION)
+        throw std::runtime_error(fmt::format("HDRView was compiled against LibRaw {} but is running LibRaw {}; RAW "
+                                             "loading is disabled, since the two lay out their data differently.",
+                                             LIBRAW_VERSION_STR, LibRaw::version()));
+}
+
 // Custom LibRaw datastream that wraps std::std::istream
 class LibRawIStream : public LibRaw_abstract_datastream
 {
@@ -714,6 +727,17 @@ bool is_raw_image(std::istream &is) noexcept
 {
     try
     {
+        require_matching_libraw();
+    }
+    catch (const std::exception &e)
+    {
+        static std::once_flag logged;
+        std::call_once(logged, [&] { spdlog::error("{}", e.what()); });
+        return false;
+    }
+
+    try
+    {
         unique_ptr<LibRaw> raw(new LibRaw());
         LibRawIStream      ds(is);
 
@@ -742,6 +766,7 @@ bool is_raw_image(std::istream &is) noexcept
 vector<ImagePtr> load_raw_image(std::istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "RAW"};
+    require_matching_libraw();
 
     // Create and configure LibRaw processor (use heap allocation for thread-safe version)
     unique_ptr<LibRaw> raw;
