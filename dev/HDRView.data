@@ -36180,6 +36180,11 @@ struct fs_params
     highp float gamma;
     int tonemap_mode;
     int clamp_to_LDR;
+    int rolloff;
+    highp float rolloff_preserve_hue;
+    highp float rolloff_ceiling;
+    int rolloff_has_peak;
+    highp float rolloff_peak;
     int bg_mode;
     highp vec4 bg_color;
     int reverse_colormap;
@@ -36227,18 +36232,18 @@ highp float sRGB_to_linear_positive(highp float sRGB)
 
 highp float sRGB_to_linear(highp float sRGB)
 {
-    highp float _332;
+    highp float _360;
     if (sRGB < 0.0)
     {
         highp float param = -sRGB;
-        _332 = -sRGB_to_linear_positive(param);
+        _360 = -sRGB_to_linear_positive(param);
     }
     else
     {
         highp float param_1 = sRGB;
-        _332 = sRGB_to_linear_positive(param_1);
+        _360 = sRGB_to_linear_positive(param_1);
     }
-    return _332;
+    return _360;
 }
 
 highp vec3 sRGB_to_linear(highp vec3 v)
@@ -36256,23 +36261,23 @@ highp float sample_channel(highp vec2 uv, bool within_image, highp sampler2D SPI
 
 highp vec3 YC_to_RGB(highp vec3 c, highp vec3 Yw)
 {
-    bool _135 = c.x == 0.0;
-    bool _142;
-    if (_135)
+    bool _163 = c.x == 0.0;
+    bool _170;
+    if (_163)
     {
-        _142 = c.z == 0.0;
+        _170 = c.z == 0.0;
     }
     else
     {
-        _142 = _135;
+        _170 = _163;
     }
-    if (_142)
+    if (_170)
     {
         return vec3(c.y, c.y, c.y);
     }
-    highp float _161 = (c.x + 1.0) * c.y;
-    highp float _168 = (c.z + 1.0) * c.y;
-    return vec3(_161, ((c.y - (_161 * Yw.x)) - (_168 * Yw.z)) / Yw.y, _168);
+    highp float _189 = (c.x + 1.0) * c.y;
+    highp float _196 = (c.z + 1.0) * c.y;
+    return vec3(_189, ((c.y - (_189 * Yw.x)) - (_196 * Yw.z)) / Yw.y, _196);
 }
 
 highp vec3 rgb_of(highp vec4 c)
@@ -36283,17 +36288,17 @@ highp vec3 rgb_of(highp vec4 c)
 highp vec4 isolate(highp vec4 rgba, bool straight_alpha)
 {
     highp vec4 param = rgba;
-    highp vec3 _374 = rgb_of(param);
-    highp vec3 _376;
+    highp vec3 _402 = rgb_of(param);
+    highp vec3 _404;
     if (straight_alpha)
     {
-        _376 = _374 / vec3(max(1.490116119384765625e-08, rgba.w));
+        _404 = _402 / vec3(max(1.490116119384765625e-08, rgba.w));
     }
     else
     {
-        _376 = _374;
+        _404 = _402;
     }
-    return vec4(_376, 1.0);
+    return vec4(_404, 1.0);
 }
 
 highp float RGB_to_Y(highp vec3 rgb, highp vec3 weights)
@@ -36338,8 +36343,8 @@ highp vec4 choose_channel(highp vec4 rgba, int channel, bool straight_alpha)
             highp vec4 param_8 = rgba;
             highp vec3 param_9 = rgb_of(param_8);
             highp vec3 param_10 = vec3(0.21267099678516387939453125, 0.71516001224517822265625, 0.072168998420238494873046875);
-            highp float _471 = RGB_to_Y(param_9, param_10);
-            return vec4(_471, _471, _471, rgba.w);
+            highp float _499 = RGB_to_Y(param_9, param_10);
+            return vec4(_499, _499, _499, rgba.w);
         }
         default:
         {
@@ -36351,24 +36356,24 @@ highp vec4 choose_channel(highp vec4 rgba, int channel, bool straight_alpha)
 highp vec4 blend(highp vec4 top, highp vec4 bottom, int mode)
 {
     highp vec4 param = top;
-    highp vec3 _485 = rgb_of(param);
+    highp vec3 _513 = rgb_of(param);
     highp vec4 param_1 = bottom;
-    highp vec3 _489 = rgb_of(param_1);
-    highp vec3 _493 = _485 - _489;
-    highp float _503 = top.w + (bottom.w * (1.0 - top.w));
+    highp vec3 _517 = rgb_of(param_1);
+    highp vec3 _521 = _513 - _517;
+    highp float _531 = top.w + (bottom.w * (1.0 - top.w));
     switch (mode)
     {
         case 1:
         {
-            return vec4(_485 * _489, _503);
+            return vec4(_513 * _517, _531);
         }
         case 2:
         {
-            return vec4(_485 / _489, _503);
+            return vec4(_513 / _517, _531);
         }
         case 3:
         {
-            return vec4(_485 + _489, _503);
+            return vec4(_513 + _517, _531);
         }
         case 4:
         {
@@ -36376,23 +36381,23 @@ highp vec4 blend(highp vec4 top, highp vec4 bottom, int mode)
         }
         case 5:
         {
-            return vec4(_493, _503);
+            return vec4(_521, _531);
         }
         case 6:
         {
-            return vec4(_493 / (_489 + vec3(0.00999999977648258209228515625)), _503);
+            return vec4(_521 / (_517 + vec3(0.00999999977648258209228515625)), _531);
         }
         case 7:
         {
-            return vec4(abs(_493), _503);
+            return vec4(abs(_521), _531);
         }
         case 8:
         {
-            return vec4(abs(_493) / (_489 + vec3(0.00999999977648258209228515625)), _503);
+            return vec4(abs(_521) / (_517 + vec3(0.00999999977648258209228515625)), _531);
         }
         default:
         {
-            return vec4(_485 + (_489 * (1.0 - top.w)), _503);
+            return vec4(_513 + (_517 * (1.0 - top.w)), _531);
         }
     }
 }
@@ -36405,26 +36410,26 @@ highp vec4 expose(highp vec4 value, highp float gain, highp float offset)
 
 highp float colormap_coordinate(highp vec3 rgb, int mode, bool reverse)
 {
-    highp float _624 = dot(rgb, vec3(0.3333333432674407958984375));
-    highp float _629;
+    highp float _652 = dot(rgb, vec3(0.3333333432674407958984375));
+    highp float _657;
     if (mode == 2)
     {
-        _629 = (0.5 * _624) + 0.5;
+        _657 = (0.5 * _652) + 0.5;
     }
     else
     {
-        _629 = _624;
+        _657 = _652;
     }
-    highp float _639;
+    highp float _667;
     if (reverse)
     {
-        _639 = 1.0 - _629;
+        _667 = 1.0 - _657;
     }
     else
     {
-        _639 = _629;
+        _667 = _657;
     }
-    return _639;
+    return _667;
 }
 
 highp float linear_to_gamma_positive(highp float linear, highp float inv_gamma)
@@ -36434,20 +36439,20 @@ highp float linear_to_gamma_positive(highp float linear, highp float inv_gamma)
 
 highp float linear_to_gamma(highp float linear, highp float inv_gamma)
 {
-    highp float _272;
+    highp float _300;
     if (linear < 0.0)
     {
         highp float param = -linear;
         highp float param_1 = inv_gamma;
-        _272 = -linear_to_gamma_positive(param, param_1);
+        _300 = -linear_to_gamma_positive(param, param_1);
     }
     else
     {
         highp float param_2 = linear;
         highp float param_3 = inv_gamma;
-        _272 = linear_to_gamma_positive(param_2, param_3);
+        _300 = linear_to_gamma_positive(param_2, param_3);
     }
-    return _272;
+    return _300;
 }
 
 highp vec3 linear_to_gamma(highp vec3 linear, highp float inv_gamma)
@@ -36479,17 +36484,119 @@ highp vec4 apply_tonemap(highp vec4 color)
     highp vec3 colormap_sRGB = vec3(0.0);
     if (fsp.tonemap_mode != 0)
     {
-        highp float _711 = float(textureSize(colormap_colormap_sampler, 0).x);
+        highp float _965 = float(textureSize(colormap_colormap_sampler, 0).x);
         highp vec3 param = color.xyz;
         int param_1 = fsp.tonemap_mode;
         bool param_2 = fsp.reverse_colormap != 0;
-        colormap_sRGB = texture(colormap_colormap_sampler, vec2(mix(0.5 / _711, (_711 - 0.5) / _711, colormap_coordinate(param, param_1, param_2)), 0.5)).xyz;
+        colormap_sRGB = texture(colormap_colormap_sampler, vec2(mix(0.5 / _965, (_965 - 0.5) / _965, colormap_coordinate(param, param_1, param_2)), 0.5)).xyz;
     }
     highp vec4 param_3 = color;
     int param_4 = fsp.tonemap_mode;
     highp float param_5 = fsp.gamma;
     highp vec3 param_6 = colormap_sRGB;
     return tonemap(param_3, param_4, param_5, param_6);
+}
+
+highp float rolloff_knee(highp float ceiling, bool has_peak, highp float peak)
+{
+    if ((!has_peak) || (peak <= ceiling))
+    {
+        return 3.0000000054977557577780399428115e+38;
+    }
+    return ceiling - (0.5 * (peak - ceiling));
+}
+
+highp float rolloff_stops(highp float stops, highp float ceiling, bool has_peak, highp float peak)
+{
+    highp float param = ceiling;
+    bool param_1 = has_peak;
+    highp float param_2 = peak;
+    highp float _739 = rolloff_knee(param, param_1, param_2);
+    if (stops <= _739)
+    {
+        return min(stops, ceiling);
+    }
+    if (stops >= peak)
+    {
+        return ceiling;
+    }
+    highp float _759 = peak - _739;
+    highp float _765 = (stops - _739) / _759;
+    highp float _769 = _765 * _765;
+    highp float _773 = _769 * _765;
+    highp float _776 = 2.0 * _773;
+    highp float _779 = 3.0 * _769;
+    return ((((_776 - _779) + 1.0) * _739) + (((_773 - (2.0 * _769)) + _765) * _759)) + ((_779 - _776) * ceiling);
+}
+
+highp float roll_off_value(highp float v, highp float ceiling, bool has_peak, highp float peak)
+{
+    if (v <= 0.0)
+    {
+        return v;
+    }
+    highp float _811 = log2(v);
+    highp float param = _811;
+    highp float param_1 = ceiling;
+    bool param_2 = has_peak;
+    highp float param_3 = peak;
+    highp float _821 = rolloff_stops(param, param_1, param_2, param_3);
+    highp float _825;
+    if (_821 >= _811)
+    {
+        _825 = v;
+    }
+    else
+    {
+        _825 = exp2(_821);
+    }
+    return _825;
+}
+
+highp vec4 roll_off(highp vec4 color, int mode, highp float preserve_hue, highp float ceiling, bool has_peak, highp float peak)
+{
+    if (mode != 0)
+    {
+        return color;
+    }
+    highp float _846;
+    if (color.w > 1.490116119384765625e-08)
+    {
+        _846 = color.w;
+    }
+    else
+    {
+        _846 = 1.0;
+    }
+    highp vec4 param = color;
+    highp vec3 _859 = rgb_of(param) / vec3(_846);
+    highp float _862 = _859.x;
+    highp float _864 = _859.y;
+    highp float _866 = _859.z;
+    highp float _868 = max(_862, max(_864, _866));
+    highp float param_1 = _868;
+    highp float param_2 = ceiling;
+    bool param_3 = has_peak;
+    highp float param_4 = peak;
+    highp float _878 = roll_off_value(param_1, param_2, param_3, param_4);
+    if (_878 == _868)
+    {
+        return color;
+    }
+    highp float param_5 = _862;
+    highp float param_6 = ceiling;
+    bool param_7 = has_peak;
+    highp float param_8 = peak;
+    highp float param_9 = _864;
+    highp float param_10 = ceiling;
+    bool param_11 = has_peak;
+    highp float param_12 = peak;
+    highp float param_13 = _866;
+    highp float param_14 = ceiling;
+    bool param_15 = has_peak;
+    highp float param_16 = peak;
+    highp vec3 _923 = vec3(roll_off_value(param_5, param_6, param_7, param_8), roll_off_value(param_9, param_10, param_11, param_12), roll_off_value(param_13, param_14, param_15, param_16));
+    return vec4((_923 + (((_859 * (_878 / _868)) - _923) * preserve_hue)) * _846, color.w);
 }
 
 highp float linear_to_sRGB_positive(highp float linear)
@@ -36506,18 +36613,18 @@ highp float linear_to_sRGB_positive(highp float linear)
 
 highp float linear_to_sRGB(highp float linear)
 {
-    highp float _217;
+    highp float _245;
     if (linear < 0.0)
     {
         highp float param = -linear;
-        _217 = -linear_to_sRGB_positive(param);
+        _245 = -linear_to_sRGB_positive(param);
     }
     else
     {
         highp float param_1 = linear;
-        _217 = linear_to_sRGB_positive(param_1);
+        _245 = linear_to_sRGB_positive(param_1);
     }
-    return _217;
+    return _245;
 }
 
 highp vec3 linear_to_sRGB(highp vec3 v)
@@ -36542,18 +36649,18 @@ highp float rand_box(highp vec2 xy)
 highp float rand_tent(highp vec2 xy)
 {
     highp vec2 param = xy;
-    highp float _774 = rand_box(param);
-    highp float _778 = 2.0 * _774;
-    highp float _788;
-    if (_774 < 0.0)
+    highp float _1028 = rand_box(param);
+    highp float _1031 = 2.0 * _1028;
+    highp float _1041;
+    if (_1028 < 0.0)
     {
-        _788 = 0.5 * (sqrt(_778 + 1.0) - 1.0);
+        _1041 = 0.5 * (sqrt(_1031 + 1.0) - 1.0);
     }
     else
     {
-        _788 = 0.5 * sqrt(_778);
+        _1041 = 0.5 * sqrt(_1031);
     }
-    return _788;
+    return _1041;
 }
 
 highp vec4 dither(highp vec4 color)
@@ -36563,236 +36670,247 @@ highp vec4 dither(highp vec4 color)
         return color;
     }
     highp vec2 param = gl_FragCoord.xy + fsp.randomness;
-    highp float _817 = rand_tent(param) * 0.00390625;
-    return color + vec4(_817, _817, _817, 0.0);
+    highp float _1070 = rand_tent(param) * 0.00390625;
+    return color + vec4(_1070, _1070, _1070, 0.0);
 }
 
 void main()
 {
-    highp float _844 = -gl_FragCoord.y;
+    highp float _1097 = -gl_FragCoord.y;
     highp vec4 background = vec4(fsp.bg_color.xyz, 1.0);
     if (fsp.bg_mode == 0)
     {
-        highp vec4 _1290 = background;
-        _1290.x = 0.0;
-        _1290.y = 0.0;
-        _1290.z = 0.0;
-        background = _1290;
+        highp vec4 _1574 = background;
+        _1574.x = 0.0;
+        _1574.y = 0.0;
+        _1574.z = 0.0;
+        background = _1574;
     }
     else
     {
         if (fsp.bg_mode == 1)
         {
-            highp vec4 _1296 = background;
-            _1296.x = 1.0;
-            _1296.y = 1.0;
-            _1296.z = 1.0;
-            background = _1296;
+            highp vec4 _1580 = background;
+            _1580.x = 1.0;
+            _1580.y = 1.0;
+            _1580.z = 1.0;
+            background = _1580;
         }
         else
         {
-            bool _884 = fsp.bg_mode == 2;
-            bool _892;
-            if (!_884)
+            bool _1137 = fsp.bg_mode == 2;
+            bool _1145;
+            if (!_1137)
             {
-                _892 = fsp.bg_mode == 3;
+                _1145 = fsp.bg_mode == 3;
             }
             else
             {
-                _892 = _884;
+                _1145 = _1137;
             }
-            if (_892)
+            if (_1145)
             {
-                highp vec3 param = vec3((mod(floor(gl_FragCoord.x * 0.125) + floor(gl_FragCoord.y * (-0.125)), 2.0) == 0.0) ? (_884 ? 0.100000001490116119384765625 : 0.5) : (_884 ? 0.20000000298023223876953125 : 0.550000011920928955078125));
-                highp vec3 _927 = sRGB_to_linear(param);
-                highp vec4 _1304 = background;
-                _1304.x = _927.x;
-                _1304.y = _927.y;
-                _1304.z = _927.z;
-                background = _1304;
+                highp vec3 param = vec3((mod(floor(gl_FragCoord.x * 0.125) + floor(gl_FragCoord.y * (-0.125)), 2.0) == 0.0) ? (_1137 ? 0.100000001490116119384765625 : 0.5) : (_1137 ? 0.20000000298023223876953125 : 0.550000011920928955078125));
+                highp vec3 _1180 = sRGB_to_linear(param);
+                highp vec4 _1588 = background;
+                _1588.x = _1180.x;
+                _1588.y = _1180.y;
+                _1588.z = _1180.z;
+                background = _1588;
             }
         }
     }
-    highp float _944 = 30.0 * fsp.time;
-    bool _975 = primary_uv.x < 1.0;
-    bool _981;
-    if (_975)
+    highp float _1197 = 30.0 * fsp.time;
+    bool _1228 = primary_uv.x < 1.0;
+    bool _1234;
+    if (_1228)
     {
-        _981 = primary_uv.y < 1.0;
+        _1234 = primary_uv.y < 1.0;
     }
     else
     {
-        _981 = _975;
+        _1234 = _1228;
     }
-    bool _987;
-    if (_981)
+    bool _1240;
+    if (_1234)
     {
-        _987 = primary_uv.x > 0.0;
-    }
-    else
-    {
-        _987 = _981;
-    }
-    bool _993;
-    if (_987)
-    {
-        _993 = primary_uv.y > 0.0;
+        _1240 = primary_uv.x > 0.0;
     }
     else
     {
-        _993 = _987;
+        _1240 = _1234;
     }
-    bool _998 = secondary_uv.x < 1.0;
-    bool _1004;
-    if (_998)
+    bool _1246;
+    if (_1240)
     {
-        _1004 = secondary_uv.y < 1.0;
-    }
-    else
-    {
-        _1004 = _998;
-    }
-    bool _1010;
-    if (_1004)
-    {
-        _1010 = secondary_uv.x > 0.0;
+        _1246 = primary_uv.y > 0.0;
     }
     else
     {
-        _1010 = _1004;
+        _1246 = _1240;
     }
-    bool _1016;
-    if (_1010)
+    bool _1251 = secondary_uv.x < 1.0;
+    bool _1257;
+    if (_1251)
     {
-        _1016 = secondary_uv.y > 0.0;
+        _1257 = secondary_uv.y < 1.0;
     }
     else
     {
-        _1016 = _1010;
+        _1257 = _1251;
+    }
+    bool _1263;
+    if (_1257)
+    {
+        _1263 = secondary_uv.x > 0.0;
+    }
+    else
+    {
+        _1263 = _1257;
+    }
+    bool _1269;
+    if (_1263)
+    {
+        _1269 = secondary_uv.y > 0.0;
+    }
+    else
+    {
+        _1269 = _1263;
     }
     highp vec2 param_1 = primary_uv;
-    bool param_2 = _993;
+    bool param_2 = _1246;
     highp vec2 param_3 = primary_uv;
-    bool param_4 = _993;
+    bool param_4 = _1246;
     highp vec2 param_5 = primary_uv;
-    bool param_6 = _993;
+    bool param_6 = _1246;
     highp vec2 param_7 = primary_uv;
-    bool param_8 = _993;
+    bool param_8 = _1246;
     highp vec4 value = vec4(sample_channel(param_1, param_2, primary_0_texture_primary_0_sampler), sample_channel(param_3, param_4, primary_1_texture_primary_1_sampler), sample_channel(param_5, param_6, primary_2_texture_primary_2_sampler), sample_channel(param_7, param_8, primary_3_texture_primary_3_sampler));
     if (fsp.primary_luminance_chroma != 0)
     {
         highp vec3 param_9 = value.xyz;
         highp vec3 param_10 = fsp.primary_yw;
-        highp vec3 _1061 = YC_to_RGB(param_9, param_10);
-        highp vec4 _1314 = value;
-        _1314.x = _1061.x;
-        _1314.y = _1061.y;
-        _1314.z = _1061.z;
-        value = _1314;
+        highp vec3 _1314 = YC_to_RGB(param_9, param_10);
+        highp vec4 _1598 = value;
+        _1598.x = _1314.x;
+        _1598.y = _1314.y;
+        _1598.z = _1314.z;
+        value = _1598;
     }
-    highp vec4 _1072 = value;
-    highp vec4 _1073 = fsp.primary_M_to_sRGB * _1072;
-    value = _1073;
-    highp vec4 param_11 = _1073;
+    highp vec4 _1325 = value;
+    highp vec4 _1326 = fsp.primary_M_to_sRGB * _1325;
+    value = _1326;
+    highp vec4 param_11 = _1326;
     int param_12 = fsp.channel;
     bool param_13 = fsp.primary_straight_alpha != 0;
     value = choose_channel(param_11, param_12, param_13);
-    bool _1088 = fsp.has_reference != 0;
-    if (_1088)
+    bool _1341 = fsp.has_reference != 0;
+    if (_1341)
     {
         highp vec2 param_14 = secondary_uv;
-        bool param_15 = _1016;
+        bool param_15 = _1269;
         highp vec2 param_16 = secondary_uv;
-        bool param_17 = _1016;
+        bool param_17 = _1269;
         highp vec2 param_18 = secondary_uv;
-        bool param_19 = _1016;
+        bool param_19 = _1269;
         highp vec2 param_20 = secondary_uv;
-        bool param_21 = _1016;
+        bool param_21 = _1269;
         highp vec4 reference_val = vec4(sample_channel(param_14, param_15, secondary_0_texture_secondary_0_sampler), sample_channel(param_16, param_17, secondary_1_texture_secondary_1_sampler), sample_channel(param_18, param_19, secondary_2_texture_secondary_2_sampler), sample_channel(param_20, param_21, secondary_3_texture_secondary_3_sampler));
         if (fsp.secondary_luminance_chroma != 0)
         {
             highp vec3 param_22 = reference_val.xyz;
             highp vec3 param_23 = fsp.secondary_yw;
-            highp vec3 _1134 = YC_to_RGB(param_22, param_23);
-            highp vec4 _1320 = reference_val;
-            _1320.x = _1134.x;
-            _1320.y = _1134.y;
-            _1320.z = _1134.z;
-            reference_val = _1320;
+            highp vec3 _1387 = YC_to_RGB(param_22, param_23);
+            highp vec4 _1604 = reference_val;
+            _1604.x = _1387.x;
+            _1604.y = _1387.y;
+            _1604.z = _1387.z;
+            reference_val = _1604;
         }
-        highp vec4 _1144 = reference_val;
-        highp vec4 _1145 = fsp.secondary_M_to_sRGB * _1144;
-        reference_val = _1145;
-        highp vec4 param_24 = _1145;
+        highp vec4 _1397 = reference_val;
+        highp vec4 _1398 = fsp.secondary_M_to_sRGB * _1397;
+        reference_val = _1398;
+        highp vec4 param_24 = _1398;
         int param_25 = fsp.channel;
         bool param_26 = fsp.secondary_straight_alpha != 0;
-        highp vec4 _1156 = choose_channel(param_24, param_25, param_26);
-        reference_val = _1156;
+        highp vec4 _1409 = choose_channel(param_24, param_25, param_26);
+        reference_val = _1409;
         highp vec4 param_27 = value;
-        highp vec4 param_28 = _1156;
+        highp vec4 param_28 = _1409;
         int param_29 = fsp.blend_mode;
         value = blend(param_27, param_28, param_29);
     }
     highp vec4 param_30 = value;
     highp float param_31 = fsp.gain;
     highp float param_32 = fsp.offset;
-    highp vec4 _1176 = expose(param_30, param_31, param_32);
-    highp vec4 param_33 = _1176;
-    highp vec3 _1191 = _1176.xyz;
-    bvec3 _1196 = greaterThan(_1191, fsp.clip_range.yyy);
-    bvec3 _1203 = lessThan(_1191, fsp.clip_range.xxx);
-    highp vec4 param_34 = apply_tonemap(param_33) + (background * (1.0 - _1176.w));
-    highp vec4 param_35 = linear_to_sRGB(param_34);
-    bool _1216 = fsp.clamp_to_LDR != 0;
-    highp vec4 dithered = clamp(dither(param_35), vec4(_1216 ? 0.0 : (-64.0)), vec4(_1216 ? 1.0 : 64.0));
-    bool _1237;
-    if (!_993)
+    highp vec4 _1429 = expose(param_30, param_31, param_32);
+    highp vec4 param_33 = _1429;
+    highp vec4 shown = apply_tonemap(param_33);
+    if (fsp.rolloff != 0)
     {
-        _1237 = _1088 && _1016;
+        highp vec4 param_34 = shown;
+        int param_35 = fsp.tonemap_mode;
+        highp float param_36 = fsp.rolloff_preserve_hue;
+        highp float param_37 = fsp.rolloff_ceiling;
+        bool param_38 = fsp.rolloff_has_peak != 0;
+        highp float param_39 = fsp.rolloff_peak;
+        shown = roll_off(param_34, param_35, param_36, param_37, param_38, param_39);
+    }
+    highp vec3 _1475 = _1429.xyz;
+    bvec3 _1480 = greaterThan(_1475, fsp.clip_range.yyy);
+    bvec3 _1487 = lessThan(_1475, fsp.clip_range.xxx);
+    highp vec4 param_40 = shown + (background * (1.0 - _1429.w));
+    highp vec4 param_41 = linear_to_sRGB(param_40);
+    bool _1500 = fsp.clamp_to_LDR != 0;
+    highp vec4 dithered = clamp(dither(param_41), vec4(_1500 ? 0.0 : (-64.0)), vec4(_1500 ? 1.0 : 64.0));
+    bool _1521;
+    if (!_1246)
+    {
+        _1521 = _1341 && _1269;
     }
     else
     {
-        _1237 = _993;
+        _1521 = _1246;
     }
-    bool _1245;
-    if (_1237)
+    bool _1529;
+    if (_1521)
     {
-        _1245 = fsp.clip_warnings.y != 0;
-    }
-    else
-    {
-        _1245 = _1237;
-    }
-    if (_1245)
-    {
-        highp vec4 _1248 = dithered;
-        highp vec3 _1251 = vec3((mod(float(int(floor(((gl_FragCoord.x + _844) - _944) * 0.125))), 2.0) == 0.0) ? 0.0 : 1.0);
-        highp vec3 _1253 = vec3(_1196.x ? _1251.x : _1248.xyz.x, _1196.y ? _1251.y : _1248.xyz.y, _1196.z ? _1251.z : _1248.xyz.z);
-        highp vec4 _1328 = _1248;
-        _1328.x = _1253.x;
-        _1328.y = _1253.y;
-        _1328.z = _1253.z;
-        dithered = _1328;
-    }
-    bool _1266;
-    if (_1237)
-    {
-        _1266 = fsp.clip_warnings.x != 0;
+        _1529 = fsp.clip_warnings.y != 0;
     }
     else
     {
-        _1266 = _1237;
+        _1529 = _1521;
     }
-    if (_1266)
+    if (_1529)
     {
-        highp vec4 _1269 = dithered;
-        highp vec3 _1272 = vec3((mod(float(int(floor(((gl_FragCoord.x - _844) - _944) * 0.125))), 2.0) == 0.0) ? 0.0 : 1.0);
-        highp vec3 _1274 = vec3(_1203.x ? _1272.x : _1269.xyz.x, _1203.y ? _1272.y : _1269.xyz.y, _1203.z ? _1272.z : _1269.xyz.z);
-        highp vec4 _1334 = _1269;
-        _1334.x = _1274.x;
-        _1334.y = _1274.y;
-        _1334.z = _1274.z;
-        dithered = _1334;
+        highp vec4 _1532 = dithered;
+        highp vec3 _1535 = vec3((mod(float(int(floor(((gl_FragCoord.x + _1097) - _1197) * 0.125))), 2.0) == 0.0) ? 0.0 : 1.0);
+        highp vec3 _1537 = vec3(_1480.x ? _1535.x : _1532.xyz.x, _1480.y ? _1535.y : _1532.xyz.y, _1480.z ? _1535.z : _1532.xyz.z);
+        highp vec4 _1612 = _1532;
+        _1612.x = _1537.x;
+        _1612.y = _1537.y;
+        _1612.z = _1537.z;
+        dithered = _1612;
+    }
+    bool _1550;
+    if (_1521)
+    {
+        _1550 = fsp.clip_warnings.x != 0;
+    }
+    else
+    {
+        _1550 = _1521;
+    }
+    if (_1550)
+    {
+        highp vec4 _1553 = dithered;
+        highp vec3 _1556 = vec3((mod(float(int(floor(((gl_FragCoord.x - _1097) - _1197) * 0.125))), 2.0) == 0.0) ? 0.0 : 1.0);
+        highp vec3 _1558 = vec3(_1487.x ? _1556.x : _1553.xyz.x, _1487.y ? _1556.y : _1553.xyz.y, _1487.z ? _1556.z : _1553.xyz.z);
+        highp vec4 _1618 = _1553;
+        _1618.x = _1558.x;
+        _1618.y = _1558.y;
+        _1618.z = _1558.z;
+        dithered = _1618;
     }
     frag_color = vec4(dithered.xyz, 1.0);
 }
