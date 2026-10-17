@@ -510,6 +510,98 @@ public:
     */
     float display_headroom() const;
 
+    /// Where the highlight rolloff takes the content's peak from.
+    enum PeakSource : int
+    {
+        PeakSource_Auto = 0, ///< The file's light-level metadata if it agrees with the pixels, else the measured peak
+        PeakSource_Metadata,
+        PeakSource_Measured, ///< The channels' maximum, unless it is an outlier; see update_rolloff()
+        PeakSource_Custom,
+        PeakSource_COUNT
+    };
+
+    /// Where the highlight rolloff's ceiling sits.
+    enum RolloffCeiling : int
+    {
+        RolloffCeiling_SDRWhite = 0,
+        RolloffCeiling_Display, ///< The display's headroom, as it reports it each frame
+        RolloffCeiling_Custom,
+        RolloffCeiling_COUNT
+    };
+
+    /// What a highlight rolloff preset fixes; see shader::roll_off() for what each does.
+    struct RolloffParams
+    {
+        RolloffCeiling ceiling        = RolloffCeiling_Display;
+        float          custom_ceiling = 2.f; ///< In stops above SDR white
+        PeakSource     peak_source    = PeakSource_Auto;
+        float          custom_peak    = 4.f; ///< In stops above SDR white
+        float          preserve_hue   = 1.f; ///< 1 rolls off the brightest channel, 0 each channel separately
+    };
+
+    /// The highlight rolloff's presets: two fixed ones, and one the user's own changes go into.
+    enum RolloffPreset : int
+    {
+        RolloffPreset_SDRWhite = 0,
+        RolloffPreset_Display,
+        RolloffPreset_Custom,
+        RolloffPreset_COUNT
+    };
+
+    /// The highlight rolloff's settings, as chosen.
+    struct RolloffSettings
+    {
+        bool          enabled = false;
+        RolloffPreset preset  = RolloffPreset_Display;
+        RolloffParams custom; ///< What the Custom preset rolls off with
+
+        /// These settings as JSON, with string ids, as app settings and session files store them.
+        json to_json() const;
+        /// Takes the settings \p j gives, keeping the current value of any it lacks or gives out of range.
+        void from_json(const json &j);
+
+        /// The parameters in force: a fixed preset's defaults, or the custom ones.
+        RolloffParams params() const
+        {
+            if (preset == RolloffPreset_Custom)
+                return custom;
+            RolloffParams p;
+            p.ceiling = preset == RolloffPreset_SDRWhite ? RolloffCeiling_SDRWhite : RolloffCeiling_Display;
+            return p;
+        }
+    };
+
+    /// The highlight rolloff's parameters for the current frame, with where each came from.
+    struct Rolloff
+    {
+        bool        enabled         = false;
+        float       preserve_hue    = 1.f;
+        float       ceiling         = 0.f; ///< In stops above SDR white
+        float       display_ceiling = 0.f; ///< The display's headroom in stops, whatever the ceiling
+        bool        has_peak        = false;
+        float       peak            = 0.f;   ///< In stops above SDR white
+        bool        has_auto_peak   = false; ///< Whether the Auto source finds a peak, whichever source is chosen
+        float       auto_peak       = 0.f;   ///< The peak Auto would give, which the settings' plot is scaled to
+        std::string ceiling_note, peak_note;
+        std::string peak_detail; ///< The figures behind peak_note, for its tooltip
+    };
+
+    /// Which of the highlight modes is chosen: pass through, clip at SDR white, or one of the rolloff presets.
+    int highlight_mode() const;
+    /// The chosen highlight mode's name, as the settings list it.
+    const char *highlight_mode_name() const;
+    /// Works out this frame's rolloff parameters from its settings, the display and the current image.
+    /**
+        Must run on the main thread, since measuring the peak can start the current image's statistics.
+    */
+    void update_rolloff();
+    /// The highlight choice and the rolloff's settings, as the toolbar's popup, the View menu and the panel show them.
+    /**
+        \param in_panel Drawn in the Highlights panel, which they then fill, rather than at the popup's fixed width
+                        and with the button that turns the popup into the panel.
+    */
+    void draw_highlight_settings(bool in_panel = false);
+
 private:
     //-----------------------------------------------------------------------------
     // Subsystem state, defined in the .cpp file that owns it
@@ -785,6 +877,11 @@ private:
     float2 m_clip_range{0.f, 1.f};
     Box2i  m_roi{int2{0}}, m_roi_live{int2{0}};
 
+    RolloffSettings m_rolloff_settings;
+    Rolloff         m_rolloff; ///< What update_rolloff() last worked out, which the shader and tonemap_value() apply
+    /// Whether the highlight settings were on screen last frame, so the peak is worked out for them.
+    bool m_highlight_settings_shown = false;
+
     Tonemap_                   m_tonemap     = Tonemap_Gamma;
     static constexpr Colormap_ m_colormaps[] = {
         Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,      Colormap_Cool,    Colormap_Pink,
@@ -874,6 +971,8 @@ private:
     float2         m_annotation_grab{0.f};  ///< Where in the image the drag began, for a move
 
     HelloImGui::DockableWindow *m_log_window = nullptr; ///< Pointer to log window, captured when constructed
+    /// The Highlights panel, which while open stands in for the toolbar's highlights popup.
+    HelloImGui::DockableWindow *m_highlights_window = nullptr;
 
     //-----------------------------------------------------------------------------
     // Hello ImGui / app framework state

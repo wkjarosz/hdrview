@@ -233,6 +233,14 @@ struct PixelStats
                          linear scale ignores it, having no room to spare
     */
     float2 x_limits(float exposure, AxisScale x_scale, float headroom = 0.f) const;
+
+    /// The value that a \p fraction of the measured samples exceed, or NaN before anything is measured.
+    /**
+        Read off the asinh histogram, interpolating within the bin it falls in, so it is exact to within a bin:
+        that scale is near-logarithmic away from zero, which keeps a bin's width a near-constant fraction of the
+        values in it. A fraction of 0 gives the maximum.
+    */
+    float value_exceeded_by(float fraction) const;
 };
 
 struct Channel : public Array2Df

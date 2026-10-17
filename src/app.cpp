@@ -234,6 +234,10 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
     // palette is how the feature is reached.
     DockableWindow annotations_window{"Annotations", "RightBottomSpace", [this] { draw_annotations_window(); }, false};
 
+    // Hidden by default: the toolbar's highlights button shows the same settings as a popup, and their pop-out
+    // button opens this panel in its place until it is closed.
+    DockableWindow highlights_window{"Highlights", "RightSpace", [this] { draw_highlight_settings(true); }, false};
+
     DockableWindow log_window{
         "Log", "LogSpace",
         [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
@@ -264,6 +268,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                               colorspace_window,
                                               history_window,
                                               annotations_window,
+                                              highlights_window,
                                               log_window
 #if !defined(__EMSCRIPTEN__)
                                               ,
@@ -274,6 +279,11 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
         std::find_if(m_params.dockingParams.dockableWindows.begin(), m_params.dockingParams.dockableWindows.end(),
                      [](const DockableWindow &w) { return w.label == "Log"; });
     m_log_window = log_window_it != m_params.dockingParams.dockableWindows.end() ? &*log_window_it : nullptr;
+    auto highlights_window_it =
+        std::find_if(m_params.dockingParams.dockableWindows.begin(), m_params.dockingParams.dockableWindows.end(),
+                     [](const DockableWindow &w) { return w.label == "Highlights"; });
+    m_highlights_window =
+        highlights_window_it != m_params.dockingParams.dockableWindows.end() ? &*highlights_window_it : nullptr;
 
     // Order here must match the order of dockableWindows above.
     vector<DockableWindowExtraInfo> window_info = {{ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
@@ -282,6 +292,7 @@ HDRViewApp::WindowSetupInfo HDRViewApp::setup_dockable_windows()
                                                    {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
                                                    {ImGuiKey_F9, ICON_MY_HISTORY},
                                                    {ImGuiKey_F10, ICON_MY_ANNOTATE},
+                                                   {ImGuiKey_None, ICON_MY_HDR_ON},
                                                    {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
 #if !defined(__EMSCRIPTEN__)
                                                    ,
@@ -447,6 +458,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
                 m_gamma_live = m_gamma = std::max(MIN_GAMMA, j.value<float>("gamma", m_gamma));
                 m_tonemap        = (Tonemap_)clamp<int>(j.value<Tonemap_>("tonemap", m_tonemap), 0, Tonemap_COUNT - 1);
                 m_clamp_to_LDR   = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
+                m_rolloff_settings.from_json(j.value<json>("highlight rolloff", json::object()));
                 m_dither         = j.value<bool>("dither", m_dither);
                 m_file_list_mode = clamp<int>(j.value<int>("file list mode", m_file_list_mode), 0, 2);
                 m_short_names    = j.value<bool>("short names", m_short_names);
@@ -529,6 +541,7 @@ void HDRViewApp::setup_persistence_callbacks(optional<float> force_exposure, opt
         j["gamma"]                   = m_gamma;
         j["tonemap"]                 = m_tonemap;
         j["clamp to LDR"]            = m_clamp_to_LDR;
+        j["highlight rolloff"]       = m_rolloff_settings.to_json();
         j["dither"]                  = m_dither;
         j["verbosity"]               = spdlog::get_level();
         j["file list mode"]          = m_file_list_mode;
@@ -1222,6 +1235,20 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    [this]() { return supports_hdr(); },
                    false,
                    &m_clamp_to_LDR});
+        add(Action{{"Roll off highlights", "Highlight rolloff", "Fit highlights to display"},
+                   ICON_MY_BRIGHTNESS_CONTRAST,
+                   0,
+                   0,
+                   // turning the rolloff on turns the clip off, which would otherwise hide it
+                   [this]()
+                   {
+                       if (m_rolloff_settings.enabled)
+                           m_clamp_to_LDR = false;
+                   },
+                   [this]() { return m_tonemap == Tonemap_Gamma; },
+                   false,
+                   &m_rolloff_settings.enabled,
+                   "Compress highlights to fit the display instead of clipping them."});
         add(Action{{"Dither"}, ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
         add(Action{{"Shadow clipping", "Zebra stripes: shadows"},
                    ICON_MY_ZEBRA_STRIPES,

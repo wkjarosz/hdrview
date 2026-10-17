@@ -959,6 +959,7 @@ json HDRViewApp::build_session_manifest(const std::function<string(ConstImagePtr
     view["colormap_index"]     = m_colormap_index;
     view["reverse_colormap"]   = m_reverse_colormap;
     view["clamp_to_LDR"]       = m_clamp_to_LDR;
+    view["highlight_rolloff"]  = m_rolloff_settings.to_json();
     view["dither"]             = m_dither;
     view["bg_mode"]            = enum_to_id(m_bg_mode, g_bg_mode_ids);
     view["bg_color"]           = m_bg_color.xyz();
@@ -1395,6 +1396,8 @@ void HDRViewApp::finish_loading_session()
         clamp<int>(view.value<int>("colormap_index", m_colormap_index), 0, (int)std::size(m_colormaps) - 1);
     m_reverse_colormap = view.value<bool>("reverse_colormap", m_reverse_colormap);
     m_clamp_to_LDR     = view.value<bool>("clamp_to_LDR", m_clamp_to_LDR);
+    if (view.contains("highlight_rolloff"))
+        m_rolloff_settings.from_json(view["highlight_rolloff"]);
     m_dither           = view.value<bool>("dither", m_dither);
     m_bg_mode          = id_to_enum(view, "bg_mode", g_bg_mode_ids, m_bg_mode);
     m_bg_color.xyz()   = view.value<float3>("bg_color", m_bg_color.xyz());

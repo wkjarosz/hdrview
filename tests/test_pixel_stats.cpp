@@ -10,6 +10,8 @@
 #include "image.h"
 
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 // PixelStats::calculate() lazily spins up stp::ThreadPool::singleton()'s workers. Their static destructor's
 // order against other statics the workers touch (spdlog's logger registry) is unspecified, so the pool is
@@ -356,6 +358,44 @@ TEST_CASE("Histogram bins hold plain counts of the valid pixels")
     auto stats = compute(c);
     CHECK(stats.summary.valid_pixels == 400);
     CHECK(total_bin_count(stats, AxisScale_Linear) == doctest::Approx(400.0));
+}
+
+TEST_CASE("value_exceeded_by() agrees with the exact order statistic to within an asinh bin")
+{
+    // a gentle ramp, and a heavy-tailed one spanning many stops, whose top fraction a linear binning would lump
+    // into one bin
+    for (bool heavy_tail : {false, true})
+    {
+        INFO("heavy tail = ", heavy_tail);
+        Channel c("test", int2{100, 100});
+        c.apply(
+            [heavy_tail](float, int x, int y)
+            {
+                const float t = (x * 100 + y) / 10000.f;
+                return heavy_tail ? std::exp2(t * 16.f - 4.f) : t;
+            });
+        std::vector<float> sorted;
+        for (int y = 0; y < c.height(); ++y)
+            for (int x = 0; x < c.width(); ++x) sorted.push_back(c(x, y));
+        std::sort(sorted.begin(), sorted.end());
+
+        auto stats = compute(c);
+        REQUIRE(stats.computed);
+        CHECK(stats.value_exceeded_by(0.f) == stats.summary.maximum);
+
+        const double bin_width = stats.hist_normalization[AxisScale_Asinh][1] / stats.num_bins;
+        for (float fraction : {1e-3f, 1e-2f, 0.1f, 0.5f, 0.9f})
+        {
+            INFO("fraction = ", fraction);
+            const float exact = sorted[size_t(std::lround((1.0 - fraction) * (sorted.size() - 1)))];
+            const float got   = stats.value_exceeded_by(fraction);
+            CHECK(std::abs(axis_scale_fwd(got, AxisScale_Asinh) - axis_scale_fwd(exact, AxisScale_Asinh)) <=
+                  1.01 * bin_width);
+        }
+    }
+
+    // nothing measured, nothing to report
+    CHECK(std::isnan(PixelStats{}.value_exceeded_by(1e-3f)));
 }
 
 TEST_CASE("NaN and Inf pixels are counted apart and left out of the histogram and the range")

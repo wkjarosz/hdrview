@@ -240,7 +240,6 @@ TEST_CASE("every transfer function is odd where it mirrors, and its vector form 
         }
     CHECK(shader::RGB_to_Y(float3{0.2f, 0.7f, 0.4f}, shader::sRGB_Yw) ==
           doctest::Approx(0.2f * 0.212671f + 0.7f * 0.715160f + 0.4f * 0.072169f));
-
 }
 
 TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say")
@@ -315,6 +314,92 @@ TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say"
             CHECK(shader::tonemap(float4{5.f, -1.f, 0.f, c.w}, Tonemap_(m), 2.2f, colormap_sRGB) == got);
         }
     }
+
+    // The highlight rolloff's curve, across ceilings and peaks: below the knee it changes nothing, above it it
+    // climbs monotonically toward the ceiling, leaving the knee at slope 1, and it never passes the ceiling; a known
+    // peak above the ceiling lands exactly on it, and one at or below it, or none at all, needs no rolloff, only
+    // holding anything brighter at the ceiling, so the curve does not jump as the peak crosses the ceiling.
+    const float peak_offsets[] = {-1.f, 0.5f, 3.f, 12.f}; //< from the ceiling
+    for (float ceiling : {0.f, 1.f, 2.5f})
+        for (int p = -1; p < 4; ++p)
+        {
+            // without a peak, a value one would roll off is passed anyway, which the curve has to ignore
+            const bool  has_peak = p >= 0;
+            const float peak     = ceiling + (has_peak ? peak_offsets[p] : 3.f);
+            INFO("ceiling = ", ceiling, ", peak = ", peak, ", has peak = ", has_peak);
+            auto f = [&](float x) { return shader::rolloff_stops(x, ceiling, has_peak, peak); };
+
+            const bool  identity = !has_peak || peak <= ceiling;
+            const float knee     = shader::rolloff_knee(ceiling, has_peak, peak);
+            // BT.2390's knee placement, half the gap below the ceiling
+            if (!identity)
+                CHECK(knee == doctest::Approx(ceiling - 0.5f * (peak - ceiling)));
+            float prev = -INFINITY;
+            for (float x = ceiling - 20.f; x <= ceiling + 20.f; x += 1.f / 64)
+            {
+                const float y = f(x);
+                if (identity || x <= knee)
+                    REQUIRE(y == std::min(x, ceiling));
+                REQUIRE(y <= ceiling);
+                REQUIRE(y >= prev - 1e-5f); //< float rounding where the Hermite flattens into the ceiling
+                prev = y;
+            }
+            if (!identity)
+            {
+                // just above and just below the ceiling, a peak gives nearly the same curve
+                for (float x : {ceiling - 1.f, ceiling + 0.5f, ceiling + 4.f})
+                    CHECK(shader::rolloff_stops(x, ceiling, true, ceiling + 1e-3f) ==
+                          doctest::Approx(shader::rolloff_stops(x, ceiling, true, ceiling - 1e-3f)).epsilon(1e-2));
+                CHECK(f(peak) == doctest::Approx(ceiling).epsilon(1e-6));
+                CHECK(f(peak + 5.f) == ceiling);
+                const float h = 1e-3f;
+                CHECK((f(knee + h) - f(knee)) / h == doctest::Approx(1.f).epsilon(0.01));
+            }
+        }
+
+    // and of a color: at preserve_hue 1, on the brightest channel, which goes through the curve while the others
+    // keep their ratios to it, so hues hold; at 0, on each channel, which goes through the curve on its own; and
+    // between, the mix of the two. Always, no channel ends above the ceiling, coverage is untouched, the curve sees
+    // the straight color, only the gamma tonemap is rolled off, and a gray, all of whose channels are the
+    // brightest, comes out the same.
+    const float ceiling = 1.f;
+    const float peak    = 3.f; //< a knee at SDR white, with 6.0 inside the Hermite
+    auto        curve   = [&](float v) { return std::exp2(shader::rolloff_stops(std::log2(v), ceiling, true, peak)); };
+    for (float preserve_hue : {0.f, 0.5f, 1.f})
+        for (float alpha : {1.f, 0.5f})
+            for (int rotation = 0; rotation < 3; ++rotation)
+            {
+                INFO("preserve hue = ", preserve_hue, ", alpha = ", alpha, ", rotation = ", rotation);
+                auto roll = [&](float4 c, float hue, Tonemap_ mode = Tonemap_Gamma)
+                { return shader::roll_off(c, mode, hue, ceiling, true, peak); };
+
+                // the brightest channel in each position in turn
+                const float  v[3] = {6.f, 3.f, 1.5f};
+                const float3 straight_hot{v[rotation], v[(rotation + 1) % 3], v[(rotation + 2) % 3]};
+                const float4 hot{straight_hot * alpha, alpha};
+                const float4 rolled = roll(hot, preserve_hue);
+                CHECK(rolled.w == alpha);
+                CHECK(la::maxelem(rolled.xyz()) / alpha == doctest::Approx(curve(6.f)));
+                CHECK(la::maxelem(rolled.xyz()) / alpha <= std::exp2(ceiling));
+                for (int i = 0; i < 3; ++i)
+                {
+                    const float each     = curve(straight_hot[i]);
+                    const float together = straight_hot[i] * curve(6.f) / 6.f;
+                    CHECK(rolled[i] / alpha == doctest::Approx(each + (together - each) * preserve_hue));
+                }
+                if (preserve_hue == 1.f)
+                    for (int i = 0; i < 3; ++i)
+                        CHECK(rolled[i] / rolled[(i + 1) % 3] == doctest::Approx(hot[i] / hot[(i + 1) % 3]));
+
+                const float4 gray{float3{6.f * alpha}, alpha};
+                CHECK(approx_equal(roll(gray, preserve_hue), roll(gray, 1.f - preserve_hue), 1e-6f));
+                for (Tonemap_ mode : {Tonemap_FalseColor, Tonemap_PositiveNegative})
+                    CHECK(roll(hot, preserve_hue, mode) == hot);
+                // nothing at or below the knee, and nothing without light to judge, changes
+                CHECK(roll(float4{0.5f * alpha, 0.f, 0.f, alpha}, preserve_hue) ==
+                      float4{0.5f * alpha, 0.f, 0.f, alpha});
+                CHECK(roll(float4{-1.f, 0.f, 0.f, alpha}, preserve_hue) == float4{-1.f, 0.f, 0.f, alpha});
+            }
 }
 
 TEST_CASE("blend()'s overloads agree on every blend mode")

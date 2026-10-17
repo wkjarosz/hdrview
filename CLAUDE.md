@@ -342,7 +342,9 @@ rules, chief among them `mul(M, v)` for a matrix product, since linalg's `M * v`
 is a matrix product. `colorspace.h` there has every transfer function HDRView reads or writes, and the
 `from_linear()`/`to_linear()` dispatch over them, which `src/colorspace.cpp`'s versions and the colorpass
 both call; `pipeline.h` has the image shader's per-pixel steps (channel isolation, blending, exposure,
-tonemapping), all but the colormap lookup, which is a texture on the GPU and `Colormap::sample()` on the CPU.
+tonemapping, and the highlight rolloff: BT.2390's EETF taken in stops of SDR white, whose ceiling and content
+peak `app-rolloff.cpp` works out each frame), all but the colormap lookup, which is a texture on the GPU and
+`Colormap::sample()` on the CPU.
 `constants.h` lists the enum values the shader branches on: GLSL gets them as constants, and C++
 `static_assert`s each against `fwd.h`, so an enum reordered there without a matching edit fails to compile
 (the transfer functions' `TF_*` constants are checked the same way in `colorspace.cpp`). `src/colorspace.h`

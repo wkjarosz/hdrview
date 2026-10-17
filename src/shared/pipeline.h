@@ -98,6 +98,78 @@ SHARED_FN vec4 tonemap(vec4 color, Tonemap_ mode, float gamma, vec3 colormap_sRG
     return vec4(linear_to_gamma(rgb_of(color), 1.0f / gamma), color.w);
 }
 
+/// Where the highlight rolloff's curve leaves the identity, in stops above SDR white; see rolloff_stops().
+/**
+    Half the gap between \p peak and \p ceiling below the ceiling: where BT.2390's EETF (now in BT.2408 Annex 5)
+    puts it, at 1.5 times the target less half the source peak in PQ, and the highest a Hermite leaving the knee at
+    slope 1 can start and stay monotone. Taken in stops of SDR white rather than PQ, it lands within a tenth of a
+    stop of the same place for the headrooms and peaks displays have, and needs no absolute luminance. Without a
+    peak, or with one that fits under the ceiling, there is nothing to roll off, and the knee is out of reach.
+*/
+SHARED_FN float rolloff_knee(float ceiling, bool has_peak, float peak)
+{
+    if (!has_peak || peak <= ceiling)
+        return 3.0e38f;
+    return ceiling - 0.5f * (peak - ceiling);
+}
+
+/// The highlight rolloff's curve, BT.2390's EETF, from and to stops of display light above SDR white.
+/**
+    Stops below rolloff_knee() pass unchanged; above it a cubic Hermite leaves the knee at slope 1, so there is no
+    kink, and carries \p peak exactly onto \p ceiling, arriving flat. Nothing ends above the ceiling, even with no
+    rolloff needed, which keeps the curve continuous as the peak crosses the ceiling.
+*/
+SHARED_FN float rolloff_stops(float stops, float ceiling, bool has_peak, float peak)
+{
+    float knee = rolloff_knee(ceiling, has_peak, peak);
+    if (stops <= knee)
+        return min(stops, ceiling);
+    if (stops >= peak)
+        return ceiling;
+    float span = peak - knee;
+    float t    = (stops - knee) / span;
+    float t2   = t * t;
+    float t3   = t2 * t;
+    return (2.0f * t3 - 3.0f * t2 + 1.0f) * knee + (t3 - 2.0f * t2 + t) * span + (3.0f * t2 - 2.0f * t3) * ceiling;
+}
+
+/// A display-linear value through rolloff_stops(), returned bit for bit where the curve is the identity.
+SHARED_FN float roll_off_value(float v, float ceiling, bool has_peak, float peak)
+{
+    if (v <= 0.0f)
+        return v;
+    float stops  = log2(v);
+    float rolled = rolloff_stops(stops, ceiling, has_peak, peak);
+    return rolled >= stops ? v : exp2(rolled);
+}
+
+/// The highlight rolloff of a tonemapped color, keeping its hue to the degree \p preserve_hue asks.
+/**
+    At \p preserve_hue 1 the curve takes the brightest channel and the others are scaled by the same ratio, which
+    keeps hue and saturation; at 0 each channel goes through the curve on its own, so bright channels are
+    compressed more and saturated highlights shift toward white, as a film shoulder does. Between, the two results
+    are mixed, as BT.2408 Annex 5 suggests for controlling desaturation; either keeps every channel under the
+    ceiling, so any mix does too. \p color is display-linear and premultiplied, so the curve applies to the
+    straight color. Only the gamma tonemap is rolled off: a colormap's colors are a legend for the data.
+*/
+SHARED_FN vec4 roll_off(vec4 color, Tonemap_ mode, float preserve_hue, float ceiling, bool has_peak, float peak)
+{
+    if (mode != Tonemap_Gamma)
+        return color;
+    float a         = color.w > k_small_alpha ? color.w : 1.0f;
+    vec3  straight  = rgb_of(color) / a;
+    float brightest = max(straight.x, max(straight.y, straight.z));
+    float rolled    = roll_off_value(brightest, ceiling, has_peak, peak);
+    // below the knee, where the brightest channel is, so is every other
+    if (rolled == brightest)
+        return color;
+    vec3 together = straight * (rolled / brightest);
+    vec3 each =
+        vec3(roll_off_value(straight.x, ceiling, has_peak, peak), roll_off_value(straight.y, ceiling, has_peak, peak),
+             roll_off_value(straight.z, ceiling, has_peak, peak));
+    return vec4((each + (together - each) * preserve_hue) * a, color.w);
+}
+
 SHARED_END
 
 #endif // HDRVIEW_SHARED_PIPELINE_H

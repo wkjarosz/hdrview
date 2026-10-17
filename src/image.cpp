@@ -318,6 +318,28 @@ float2 PixelStats::x_limits(float e, AxisScale scale, float headroom) const
     return ret;
 }
 
+float PixelStats::value_exceeded_by(float fraction) const
+{
+    if (!computed || summary.valid_pixels <= 0)
+        return std::numeric_limits<float>::quiet_NaN();
+
+    const AxisScale s      = AxisScale_Asinh;
+    const double    target = std::clamp(double(fraction), 0.0, 1.0) * summary.valid_pixels;
+    double          above  = 0.0; // samples in the bins above bin i
+    for (int i = num_bins - 1; i >= 0; --i)
+    {
+        const double count = hist_ys[s][i];
+        if (above + count >= target)
+        {
+            // within bin i, the samples are taken to spread evenly across its width in the axis's own space
+            const double from_top = count > 0.0 ? (target - above) / count : 0.0;
+            return std::min(summary.maximum, (float)bin_to_value(i + 1 - from_top, s));
+        }
+        above += count;
+    }
+    return summary.minimum;
+}
+
 void PixelStats::calculate(const Channel &img, const Channel *alpha, int2 img_data_origin, const Channel *ref,
                            const Channel *ref_alpha, int2 ref_data_origin, const Settings &desired,
                            std::atomic<bool> &canceled)
