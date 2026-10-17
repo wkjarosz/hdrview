@@ -515,8 +515,10 @@ void Image::draw_histogram()
 
         ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
         // ImPlot only assigns these when they differ from what was passed last frame, so this positions the
-        // legend once and still lets the user relocate it via the legend's own right-click menu.
-        ImPlot::SetupLegend(ImPlotLocation_North, ImPlotLegendFlags_Horizontal);
+        // legend once and still lets the user relocate it via the legend's own right-click menu. A hovered
+        // entry would otherwise paint its axes in its color, which, with the tick-label axis making two x axes,
+        // fills the whole bottom axis.
+        ImPlot::SetupLegend(ImPlotLocation_North, ImPlotLegendFlags_Horizontal | ImPlotLegendFlags_NoHighlightAxis);
         switch (hdrview()->histogram_x_scale())
         {
         case AxisScale_Linear: ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear); break;
