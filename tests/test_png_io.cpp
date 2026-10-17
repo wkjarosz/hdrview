@@ -14,7 +14,7 @@
 
 using namespace hdrview_test;
 
-// For PNG_cICP_SUPPORTED. libpng gained the cICP chunk in 1.6.46 and Ubuntu 24.04 still ships 1.6.43, so a
+// For PNG_cICP_SUPPORTED. libpng gained the cICP chunk in 1.6.45 and Ubuntu 24.04 still ships 1.6.43, so a
 // -local build can link a libpng without it; src/imageio/png.cpp guards png_set_cICP() on the same macro,
 // and without the chunk a saved PNG records no transfer function at all.
 #include <png.h>
@@ -222,7 +222,7 @@ TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
 #else
 TEST_CASE("saving a curve this libpng cannot record fails instead of mislabelling the file")
 {
-    // without cICP there is nowhere to put PQ; only reachable on a libpng older than 1.6.46
+    // without cICP there is nowhere to put PQ; only reachable on a libpng older than 1.6.45
     auto img = make_test_image(int2{4, 3});
 
     std::ostringstream out(std::ios::binary);

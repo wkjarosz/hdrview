@@ -9,6 +9,7 @@
 #include "colorspace.h"
 #include "image.h"
 #include "imageio/alpha.h"
+#include "imageio/hdr_metadata.h"
 #include "imageio/image_loader.h"
 
 #include <stdexcept>
@@ -227,6 +228,16 @@ string_view get_exif_text_as_binary(char *text, size_t len)
 #else
 #define PNG_cICP_SUPPORTED_ENABLED 0
 #endif
+#ifdef PNG_cLLI_SUPPORTED
+#define PNG_cLLI_SUPPORTED_ENABLED 1
+#else
+#define PNG_cLLI_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_mDCV_SUPPORTED
+#define PNG_mDCV_SUPPORTED_ENABLED 1
+#else
+#define PNG_mDCV_SUPPORTED_ENABLED 0
+#endif
 #ifdef PNG_iCCP_SUPPORTED
 #define PNG_iCCP_SUPPORTED_ENABLED 1
 #else
@@ -256,6 +267,8 @@ json get_png_info()
     features["PROGRESSIVE_READ"] = (bool)PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED;
     features["iCCP"]             = (bool)PNG_iCCP_SUPPORTED_ENABLED;
     features["cICP"]             = (bool)PNG_cICP_SUPPORTED_ENABLED;
+    features["cLLI"]             = (bool)PNG_cLLI_SUPPORTED_ENABLED;
+    features["mDCV"]             = (bool)PNG_mDCV_SUPPORTED_ENABLED;
 
     j["features"] = features;
     return j;
@@ -444,6 +457,22 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                                       {"type", "chromaticities"},
                                       {"description", "PNG cHRM chunk specifies the chromaticities of the image"}};
     }
+
+    // HDR light levels, which libpng only knows from 1.6.46 (PNG Third Edition); a -local build may link an
+    // older one
+#ifdef PNG_cLLI_SUPPORTED
+    double max_cll = 0., max_fall = 0.;
+    if (png_get_cLLI(png_ptr, info_ptr.get(), &max_cll, &max_fall))
+        add_content_light_level(metadata["header"], (float)max_cll, (float)max_fall, "PNG cLLI chunk");
+#endif
+#ifdef PNG_mDCV_SUPPORTED
+    double mwx, mwy, mrx, mry, mgx, mgy, mbx, mby, max_lum, min_lum;
+    if (png_get_mDCV(png_ptr, info_ptr.get(), &mwx, &mwy, &mrx, &mry, &mgx, &mgy, &mbx, &mby, &max_lum, &min_lum))
+        add_mastering_display(metadata["header"],
+                              Chromaticities{float2((float)mrx, (float)mry), float2((float)mgx, (float)mgy),
+                                             float2((float)mbx, (float)mby), float2((float)mwx, (float)mwy)},
+                              (float)min_lum, (float)max_lum, "PNG mDCV chunk");
+#endif
 
     CICPProfile cicp;
     bool        is_sRGB = false;
@@ -844,7 +873,7 @@ TransferSignalling transfer_signaling(TransferFunction tf)
     }
 }
 
-// cICP expresses any curve exactly, but libpng before 1.6.46 cannot write it and most readers still ignore
+// cICP expresses any curve exactly, but libpng before 1.6.45 cannot write it and most readers still ignore
 // it, so the older chunks go in alongside.
 constexpr bool k_can_write_cicp = PNG_cICP_SUPPORTED_ENABLED;
 
@@ -970,7 +999,7 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, flo
         // writing anyway would encode the pixels with this curve while recording no curve at all
         throw runtime_error(fmt::format("PNG: cannot record the {} transfer function. It has no gAMA or sRGB "
                                         "equivalent, and this build's libpng ({}) predates the cICP chunk added "
-                                        "in 1.6.46. Save to a format that can carry it, or rebuild against a "
+                                        "in 1.6.45. Save to a format that can carry it, or rebuild against a "
                                         "newer libpng.",
                                         transfer_function_name(tf), PNG_LIBPNG_VER_STRING));
     else
