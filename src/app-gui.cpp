@@ -540,6 +540,11 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Reset tonemapping"));
         if (supports_hdr())
             MenuItem(action("Clamp to LDR"));
+        if (m_tonemap == Tonemap_Gamma && ImGui::BeginMenu("Highlights"))
+        {
+            draw_highlight_settings();
+            ImGui::EndMenu();
+        }
         MenuItem(action("Dither"));
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
@@ -749,12 +754,35 @@ void HDRViewApp::draw_top_toolbar()
         if (ImGui::IsItemDeactivatedAfterEdit())
             m_gamma = m_gamma_live;
         ImGui::SetItemTooltip("Set the exponent for gamma correction.");
+
+        // What happens to values above SDR white, behind one button whose icon says only whether the output
+        // reaches past SDR white. The colormaps never do, so only the gamma tonemap has the button.
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        const bool sdr = m_clamp_to_LDR || (m_rolloff_settings.enabled && m_rolloff.ceiling < 0.05f);
+        // While the Highlights panel is open the button brings it forward; otherwise it is a combo, so it opens,
+        // lights up and closes as one, as the log panel's verbosity button does.
+        const char *icon = sdr ? ICON_MY_HDR_OFF : ICON_MY_HDR_ON;
+        if (m_highlights_window && m_highlights_window->isVisible)
+        {
+            if (ImGui::IconButton(fmt::format("{}##Highlights", icon).c_str()))
+                m_highlights_window->focusWindowAtNextFrame = true;
+            ImGui::Tooltip(fmt::format("Highlights: {}. Click to show the Highlights panel.", highlight_mode_name())
+                               .c_str());
+        }
+        else if (ImGui::BeginComboButton("##Highlights", icon))
+        {
+            draw_highlight_settings();
+            ImGui::EndCombo();
+        }
+        else
+            ImGui::Tooltip(fmt::format("Highlights: {}", highlight_mode_name()).c_str());
     }
     break;
     case Tonemap_FalseColor: [[fallthrough]];
     case Tonemap_PositiveNegative:
     {
-        ImGui::SetNextItemWidth(tonemap_width - ImGui::IconButtonSize().x - ImGui::GetStyle().ItemInnerSpacing.x);
+        // as wide as the gamma slider, so the buttons after it hold their place across the modes
+        ImGui::SetNextItemWidth(tonemap_width);
         ImGuiComboFlags combo_flags = ImGuiComboFlags_HeightLargest | ImGuiComboFlags_NoArrowButton;
 
         auto colormap = m_colormaps[m_colormap_index];
@@ -804,12 +832,6 @@ void HDRViewApp::draw_top_toolbar()
     }
 
     ImGui::SameLine();
-
-    if (supports_hdr())
-    {
-        IconButton(action("Clamp to LDR"));
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    }
 
     IconButton(action("Draw pixel grid"));
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);

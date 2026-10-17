@@ -48,6 +48,11 @@ layout(binding=1) uniform fs_params {
     float gamma;
     int   tonemap_mode;
     int   clamp_to_LDR;
+    int   rolloff;
+    float rolloff_preserve_hue;
+    float rolloff_ceiling;
+    int   rolloff_has_peak;
+    float rolloff_peak;
     int   bg_mode;
     vec4  bg_color;
     int   reverse_colormap;
@@ -191,7 +196,11 @@ void main()
     }
 
     vec4  foreground = expose(value, fsp.gain, fsp.offset);
-    vec4  tonemapped = apply_tonemap(foreground) + background * (1.0 - foreground.a);
+    vec4  shown      = apply_tonemap(foreground);
+    if (fsp.rolloff != 0)
+        shown = roll_off(shown, fsp.tonemap_mode, fsp.rolloff_preserve_hue, fsp.rolloff_ceiling,
+                         fsp.rolloff_has_peak != 0, fsp.rolloff_peak);
+    vec4  tonemapped = shown + background * (1.0 - foreground.a);
     bvec3 clipped    = greaterThan(foreground.rgb, fsp.clip_range.yyy);
     bvec3 crushed    = lessThan(foreground.rgb, fsp.clip_range.xxx);
     vec4  blended    = linear_to_sRGB(tonemapped);

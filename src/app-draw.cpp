@@ -404,6 +404,11 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.gamma", m_gamma_live);
         m_shader->set_uniform("fsp.tonemap_mode", (int)m_tonemap);
         m_shader->set_uniform("fsp.clamp_to_LDR", (int)m_clamp_to_LDR);
+        m_shader->set_uniform("fsp.rolloff", (int)m_rolloff.enabled);
+        m_shader->set_uniform("fsp.rolloff_preserve_hue", m_rolloff.preserve_hue);
+        m_shader->set_uniform("fsp.rolloff_ceiling", m_rolloff.ceiling);
+        m_shader->set_uniform("fsp.rolloff_has_peak", (int)m_rolloff.has_peak);
+        m_shader->set_uniform("fsp.rolloff_peak", m_rolloff.peak);
         m_shader->set_uniform("fsp.do_dither", (int)m_dither);
         m_shader->set_uniform("fsp.blend_mode", (int)m_blend_mode);
         m_shader->set_uniform("fsp.channel", (int)m_channel);
@@ -440,6 +445,10 @@ void HDRViewApp::draw_background()
     // frame is presented. Both no-op otherwise.
     update_colorpass();
     begin_colorpass_frame();
+
+    // before anything this frame draws or reads a displayed value; the settings set the flag again if shown
+    update_rolloff();
+    m_highlight_settings_shown = false;
 
     static auto prev_frame                   = chrono::steady_clock::now();
     static auto last_file_changes_check_time = chrono::steady_clock::now();
