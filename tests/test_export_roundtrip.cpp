@@ -42,6 +42,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -55,6 +56,10 @@
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
 #include <libheif/heif.h>
+#endif
+#if defined(__APPLE__)
+#include <CoreGraphics/CoreGraphics.h>
+#include <ImageIO/ImageIO.h>
 #endif
 
 // AddressSanitizer reports a spurious stack-use-after-scope inside libjxl's SizeHeader::Set ->
@@ -277,6 +282,67 @@ float3 straight_rgb(const float4 &premultiplied)
     return float3{premultiplied[0] / a, premultiplied[1] / a, premultiplied[2] / a};
 }
 
+#if defined(__APPLE__)
+/// What macOS's ImageIO, the decoder Preview uses, reads \p bytes as at \p pixel: linear BT.709 light, 1.0 at SDR
+/// white.
+/**
+    Drawn into a float bitmap in extended linear sRGB, so the file's labels are honored, or ignored, as every
+    macOS application would. None when ImageIO cannot decode the file at all.
+*/
+std::optional<float4> apple_decode(const std::string &bytes, int2 pixel)
+{
+    CFDataRef        data = CFDataCreate(nullptr, reinterpret_cast<const UInt8 *>(bytes.data()), (CFIndex)bytes.size());
+    CGImageSourceRef source = data ? CGImageSourceCreateWithData(data, nullptr) : nullptr;
+    CGImageRef       image  = source ? CGImageSourceCreateImageAtIndex(source, 0, nullptr) : nullptr;
+    std::optional<float4> result;
+    if (image)
+    {
+        const size_t       w = CGImageGetWidth(image), h = CGImageGetHeight(image);
+        std::vector<float> rgba(w * h * 4);
+        CGColorSpaceRef    space = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearSRGB);
+        CGContextRef       ctx   = CGBitmapContextCreate(rgba.data(), w, h, 32, w * 16, space,
+                                                         kCGImageAlphaPremultipliedLast | kCGBitmapFloatComponents |
+                                                             kCGBitmapByteOrder32Little);
+        if (ctx)
+        {
+            CGContextSetBlendMode(ctx, kCGBlendModeCopy);
+            CGContextDrawImage(ctx, CGRectMake(0, 0, (CGFloat)w, (CGFloat)h), image);
+            // the bitmap's first row is the image's bottom one
+            const size_t i = ((h - 1 - (size_t)pixel.y) * w + (size_t)pixel.x) * 4;
+            result         = float4{rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]};
+            CGContextRelease(ctx);
+        }
+        CGColorSpaceRelease(space);
+        CGImageRelease(image);
+    }
+    if (source)
+        CFRelease(source);
+    if (data)
+        CFRelease(data);
+    return result;
+}
+#endif
+
+#if defined(__APPLE__)
+/// Why macOS is known to read a file written with \p variant and \p tf as other values, or null when it should not.
+const char *apple_misreads(const Variant &variant, const TransferFunction &tf)
+{
+    const std::string ext = variant.ext;
+    if (tf.type == TransferFunction::ITU && (ext == ".png" || ext == ".heif" || ext == ".avif" || ext == ".jxl"))
+        return "macOS displays BT.709 content through BT.1886's gamma 2.4, not the inverse camera curve CICP's code 1 "
+               "names";
+    if (ext == ".tif")
+        return "macOS ignores TIFF's primaries tags, so takes a wide-gamut TIFF without an ICC profile for sRGB's";
+    if (ext == ".heif" || ext == ".avif")
+    {
+        if (tf.type == TransferFunction::Log100 || tf.type == TransferFunction::Log100_Sqrt10 ||
+            tf.type == TransferFunction::ST240 || tf.type == TransferFunction::IEC61966_2_4)
+            return "macOS does not know this curve's nclx code, and a HEIF carries no ICC profile to fall back on";
+    }
+    return nullptr;
+}
+#endif
+
 /// The layout sweep's relative tolerance, on straight color at the default setting.
 float tolerance(const Variant &v)
 {
@@ -479,6 +545,20 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
             const auto ref  = from_linear(mul(M, want.xyz()), tf);
             for (int c = 0; c < 3; ++c) CHECK(std::abs(got[c] - ref[c]) <= variant.step);
 
+#if defined(__APPLE__)
+            // and as macOS reads it, which is how every application there sees the file
+            if (const auto apple = apple_decode(out.str(), int2{1, 0}))
+            {
+                const auto a_code = from_linear(apple->xyz(), tf), w_code = from_linear(want.xyz(), tf);
+                float      worst = 0.f;
+                for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(a_code[c] - w_code[c]));
+                // Apple's own path quantizes and converts at 8 bits or so, which room for that covers; a known
+                // misread is left unchecked, its reason recorded in apple_misreads()
+                if (!apple_misreads(variant, tf))
+                    CHECK_MESSAGE(worst <= std::max(variant.step, 0.025f),
+                                  "macOS reads this file as other values, off by ", worst);
+            }
+#endif
             const json header = back->metadata.value("header", json::object());
             if (!hdr_curve && (variant.caps & Cap_White))
                 CHECK(white_luminance(header).value_or(0.f) == doctest::Approx(150.f));
