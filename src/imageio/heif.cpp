@@ -1268,6 +1268,38 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         nclx->full_range_flag          = true;
         if (heif_image_set_nclx_color_profile(heif_img.get(), nclx.get()).code != heif_error_Ok)
             spdlog::warn("HEIF: Failed to attach NCLX profile to image");
+
+#if LIBHEIF_NUMERIC_VERSION >= ((1 << 24) | (15 << 16) | (0 << 8) | 0) // 1.15.0
+        // An HDR encoding says how bright its content is, and on what display it was mastered when that is known;
+        // libheif writes them as the item's clli and mdcv properties
+        if (is_hdr_encoding(tf))
+        {
+            const auto               cll = measure_content_light_level(img, convert_to_sRGB);
+            heif_content_light_level clli{};
+            clli.max_content_light_level     = (uint16_t)std::clamp(std::lround(cll.max_cll), 0l, 65535l);
+            clli.max_pic_average_light_level = (uint16_t)std::clamp(std::lround(cll.max_fall), 0l, 65535l);
+            heif_image_set_content_light_level(heif_img.get(), &clli);
+
+            if (const auto md = mastering_display(img.metadata.value("header", json::object())))
+            {
+                // chromaticities in units of 0.00002, luminance in units of 0.0001 cd/m^2, and the primaries in
+                // the green, blue, red order H.265 suggests
+                auto xy = [](float v) { return (uint16_t)std::clamp(std::lround(v * 50000.f), 0l, 50000l); };
+                heif_mastering_display_colour_volume mdcv{};
+                const float2 primaries[3] = {md->primaries.green, md->primaries.blue, md->primaries.red};
+                for (int i = 0; i < 3; ++i)
+                {
+                    mdcv.display_primaries_x[i] = xy(primaries[i].x);
+                    mdcv.display_primaries_y[i] = xy(primaries[i].y);
+                }
+                mdcv.white_point_x                   = xy(md->primaries.white.x);
+                mdcv.white_point_y                   = xy(md->primaries.white.y);
+                mdcv.max_display_mastering_luminance = (uint32_t)std::lround(std::max(0.f, md->max_nits) * 10000.f);
+                mdcv.min_display_mastering_luminance = (uint32_t)std::lround(std::max(0.f, md->min_nits) * 10000.f);
+                heif_image_set_mastering_display_colour_volume(heif_img.get(), &mdcv);
+            }
+        }
+#endif
         std::unique_ptr<heif_encoding_options, void (*)(heif_encoding_options *)> encoding_options(
             heif_encoding_options_alloc(), heif_encoding_options_free);
         encoding_options->output_nclx_profile = nclx.get();

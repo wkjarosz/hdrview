@@ -978,6 +978,21 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     png_set_cICP(png_ptr, info_ptr.get(), color_primaries, transfer_function, matrix_coefficients, video_full_range);
 #endif
 
+    // An HDR encoding says how bright its content is, and on what display it was mastered when that is known
+    if (is_hdr_encoding(tf))
+    {
+#ifdef PNG_cLLI_SUPPORTED
+        const auto cll = measure_content_light_level(img, cicp_primaries < 0);
+        png_set_cLLI(png_ptr, info_ptr.get(), cll.max_cll, cll.max_fall);
+#endif
+#ifdef PNG_mDCV_SUPPORTED
+        if (const auto md = mastering_display(img.metadata.value("header", json::object())))
+            png_set_mDCV(png_ptr, info_ptr.get(), md->primaries.white.x, md->primaries.white.y, md->primaries.red.x,
+                         md->primaries.red.y, md->primaries.green.x, md->primaries.green.y, md->primaries.blue.x,
+                         md->primaries.blue.y, md->max_nits, md->min_nits);
+#endif
+    }
+
     // the sRGB chunk asserts the whole colorspace, primaries included, so it may only be written when those
     // are sRGB's: BT.709 (1), unspecified (2, where no cHRM is written and a reader assumes sRGB), or
     // unrecognized (< 0, where the pixels were converted to sRGB above). A wide gamut gets cHRM and gAMA.

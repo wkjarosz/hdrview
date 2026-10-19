@@ -7,6 +7,7 @@
 #include "imageio/jxl.h"
 #include "endian-utils.h"
 #include "exif.h"
+#include "hdr_metadata.h"
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
@@ -1068,6 +1069,10 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     // libjxl rejects lossless encoding of an XYB-encoded frame, and it uses XYB whenever the original
     // profile is not kept
     info.uses_original_profile = lossless ? JXL_TRUE : JXL_FALSE;
+    // For PQ and HLG, the intensity target is the peak the content was graded for: the mastering display's
+    if (is_hdr_encoding(tf))
+        if (const auto md = mastering_display(img.metadata.value("header", json::object())); md && md->max_nits > 0.f)
+            info.intensity_target = md->max_nits;
 
     JxlEncoderPtr enc    = JxlEncoderMake(nullptr);
     auto          runner = JxlResizableParallelRunnerMake(nullptr);

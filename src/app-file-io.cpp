@@ -31,6 +31,7 @@
 #include <emscripten/emscripten.h>
 #include <emscripten_browser_file.h>
 #else
+#include "imageio/hdr_metadata.h"
 #include "portable-file-dialogs.h"
 #endif
 
@@ -589,6 +590,21 @@ ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool include_comparison, 
     if (bounds != img->data_window)
         out->data_window = out->display_window = bounds;
     const float3x3 M_from_sRGB = inverse(out->M_to_sRGB);
+
+    // A rendition is mastered for the target display, with SDR white at 203 cd/m^2; a comparison keeps the
+    // image's own account of what its values mean. The savers record these where a format has room for them.
+    json       &header = out->metadata["header"];
+    const json &source = img->metadata.value("header", json::object());
+    if (rendition)
+    {
+        add_mastering_display(header, *out->chromaticities, k_mastering_display_min_nits,
+                              HDR_REFERENCE_WHITE_NITS * std::exp2(target_ceiling), "rendition's target display");
+        add_white_luminance(header, HDR_REFERENCE_WHITE_NITS, "rendition's target display");
+    }
+    else
+        for (auto key : {k_mastering_display_key, k_white_luminance_key})
+            if (source.contains(key))
+                header[key] = source[key];
 
     // A rendition's highlights are handled for the target display and clipped at its ceiling (at SDR white in
     // Clip at SDR white). The clip bounds the straight color, so premultiplied values stay under limit * alpha.
