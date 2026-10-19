@@ -365,9 +365,9 @@ TEST_CASE("A bit depth the writer does not offer is refused, not quietly changed
     for (int bits : {8, 10, 12, 16})
     {
         CAPTURE(bits);
-        CHECK_NOTHROW(save_j2k_image(*img, out, "a.jp2", 1.f, true, bits));
+        CHECK_NOTHROW(save_j2k_image(*img, out, "a.jp2", true, bits));
     }
-    CHECK_THROWS_AS(save_j2k_image(*img, out, "a.jp2", 1.f, true, 11), std::exception);
+    CHECK_THROWS_AS(save_j2k_image(*img, out, "a.jp2", true, 11), std::exception);
 }
 
 TEST_CASE("A lossy write is smaller than a lossless one and stays close to the samples")
@@ -379,8 +379,8 @@ TEST_CASE("A lossy write is smaller than a lossless one and stays close to the s
                           { return 0.1f + 0.8f * float(x + y + 4 * c) / float(size.x + size.y + 8); });
 
     std::ostringstream lossless(std::ios::binary), lossy(std::ios::binary);
-    save_j2k_image(*img, lossless, "a.jp2", 1.f, true, 8, J2KContainer::JP2, TransferFunction::Linear, false);
-    save_j2k_image(*img, lossy, "b.jp2", 1.f, false, 8, J2KContainer::JP2, TransferFunction::Linear, false);
+    save_j2k_image(*img, lossless, "a.jp2", true, 8, J2KContainer::JP2, TransferFunction::Linear, false);
+    save_j2k_image(*img, lossy, "b.jp2", false, 8, J2KContainer::JP2, TransferFunction::Linear, false);
     CHECK(lossy.str().size() < lossless.str().size());
 
     const auto decoded = load_bytes(load_j2k_image, lossy.str(), "b.jp2", raw_load_options());

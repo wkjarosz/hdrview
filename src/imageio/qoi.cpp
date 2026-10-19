@@ -32,7 +32,6 @@ using namespace std;
 
 struct QOISaveOptions
 {
-    float            gain   = 1.f;
     TransferFunction tf     = TransferFunction::sRGB;
     bool             dither = true; // only used for LDR formats
 };
@@ -137,8 +136,8 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved<uint8_t>(
-        &w, &h, &n, opts->gain,
-        opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, opts->dither);
+        &w, &h, &n, opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear,
+        opts->dither);
 
     // QOI's header describes only 3 = RGB and 4 = RGBA, so widen a narrower group to what the viewport
     // shows
@@ -175,9 +174,9 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
     spdlog::info("Saved QOI image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_qoi_image(const Image &img, ostream &os, string_view filename, float gain, bool sRGB, bool dither)
+void save_qoi_image(const Image &img, ostream &os, string_view filename, bool sRGB, bool dither)
 {
-    QOISaveOptions opts{gain, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither};
+    QOISaveOptions opts{sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither};
     save_qoi_image(img, os, filename, &opts);
 }
 
@@ -188,24 +187,6 @@ QOISaveOptions *qoi_parameters_gui()
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
-
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -241,6 +222,5 @@ QOISaveOptions *qoi_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = QOISaveOptions{};
-
     return &s_opts;
 }

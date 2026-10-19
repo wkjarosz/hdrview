@@ -271,7 +271,7 @@ TEST_CASE("A saved TIFF multiplies alpha into its encoded samples")
     auto img = test_image(int2{1, 1}, 4, [](int c, int, int) { return 0.5f; }); // premultiplied linear
 
     std::ostringstream out(std::ios::binary);
-    save_tiff_image(*img, out, "assoc.tif", /*gain*/ 1.f, TransferFunction::sRGB, /*compression*/ 0,
+    save_tiff_image(*img, out, "assoc.tif", TransferFunction::sRGB, /*compression*/ 0,
                     /*data_type*/ 0);
 
     auto samples = tiff_raw_samples(out.str());
@@ -300,7 +300,7 @@ TEST_CASE("TIFF save/load round-trips alpha without repeated premultiplication")
     // draw_save_as_dialog() renders into an ostringstream and writes the buffer out, so that is the only
     // save path there is. Float samples keep the comparison about alpha, not quantization.
     std::ostringstream out(std::ios::binary);
-    save_tiff_image(*original, out, "roundtrip.tif", /*gain*/ 1.f, TransferFunction::Linear,
+    save_tiff_image(*original, out, "roundtrip.tif", TransferFunction::Linear,
                     /*compression*/ 0, /*data_type*/ 2);
     REQUIRE(out.str().size() > 64);
 
@@ -543,7 +543,7 @@ TEST_CASE("A wide-gamut image saved as TIFF records the primaries its samples ar
 
     // 32-bit float, so the transfer function plays no part in what comes back
     std::ostringstream out(std::ios::binary);
-    REQUIRE_NOTHROW(save_tiff_image(*original, out, "wide.tif", /*gain*/ 1.f, TransferFunction::Linear,
+    REQUIRE_NOTHROW(save_tiff_image(*original, out, "wide.tif", TransferFunction::Linear,
                                     /*compression*/ 0, /*data_type*/ 2));
 
     auto reloaded = load_tiff(out.str());

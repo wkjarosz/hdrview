@@ -197,7 +197,7 @@ TEST_CASE("An associated-alpha PNG can be read as premultiplied, against the PNG
     auto img = rgba_pixel_image(0.5f * to_linear(0.5f, TransferFunction::sRGB), 0.5f);
 
     std::ostringstream out(std::ios::binary);
-    save_png_image(*img, out, "premul.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+    save_png_image(*img, out, "premul.png", /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ false, TransferFunction::sRGB);
 
     // read as the spec says: the samples are taken as straight and multiplied by alpha again
@@ -266,18 +266,16 @@ TEST_CASE("Every loader reports the alpha kind its format settles")
 
     const std::vector<Case> cases = {
         {"a.png", [](const Image &i, std::ostream &o)
-         { save_png_image(i, o, "a.png", 1.f, false, false, false, TransferFunction::sRGB); },
-         TransparencyType_Straight},
+         { save_png_image(i, o, "a.png", false, false, false, TransferFunction::sRGB); }, TransparencyType_Straight},
         {"a.exr", [](const Image &i, std::ostream &o) { save_exr_image(i, o, "a.exr"); },
          TransparencyType_PremultipliedLinear},
-        {"a.qoi", [](const Image &i, std::ostream &o) { save_qoi_image(i, o, "a.qoi", 1.f, true, false); },
+        {"a.qoi", [](const Image &i, std::ostream &o) { save_qoi_image(i, o, "a.qoi", true, false); },
          TransparencyType_Straight},
-        {"a.tga", [](const Image &i, std::ostream &o)
-         { save_stb_tga(i, o, "a.tga", 1.f, TransferFunction::sRGB, false); }, TransparencyType_Straight},
+        {"a.tga", [](const Image &i, std::ostream &o) { save_stb_tga(i, o, "a.tga", TransferFunction::sRGB, false); },
+         TransparencyType_Straight},
 #if HDRVIEW_ENABLE_LIBTIFF
         // written with an EXTRASAMPLES tag, so the file itself carries the signal
-        {"a.tif",
-         [](const Image &i, std::ostream &o) { save_tiff_image(i, o, "a.tif", 1.f, TransferFunction::sRGB, 0, 0); },
+        {"a.tif", [](const Image &i, std::ostream &o) { save_tiff_image(i, o, "a.tif", TransferFunction::sRGB, 0, 0); },
          TransparencyType_PremultipliedNonLinear},
 #endif
     };

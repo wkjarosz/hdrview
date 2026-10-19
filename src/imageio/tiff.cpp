@@ -18,7 +18,6 @@ using namespace std;
 
 struct TIFFSaveOptions
 {
-    float            gain            = 1.f;
     TransferFunction tf              = TransferFunction::Linear;
     int              compression     = 1; // 0=None, 1=LZW, 2=ZIP, 3=PackBits
     int              data_type_index = 0; // 0=8bit, 1=16bit, 2=float
@@ -37,7 +36,7 @@ vector<ImagePtr> load_tiff_image(istream &is, string_view filename, const ImageL
     throw runtime_error("TIFF support not enabled in this build.");
 }
 
-void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename, float gain, TransferFunction tf,
+void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename, TransferFunction tf,
                      int compression, int data_type)
 {
     throw runtime_error("TIFF support not enabled in this build.");
@@ -1392,7 +1391,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, opts->gain, opts->tf, false, true, false, true);
+        auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, opts->tf, false, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1406,8 +1405,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
 
         int  w_out, h_out, n_out;
-        auto pixels =
-            img.as_interleaved<uint16_t>(&w_out, &h_out, &n_out, opts->gain, opts->tf, true, true, false, true);
+        auto pixels = img.as_interleaved<uint16_t>(&w_out, &h_out, &n_out, opts->tf, true, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1421,8 +1419,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
 
         int  w_out, h_out, n_out;
-        auto pixels =
-            img.as_interleaved<uint8_t>(&w_out, &h_out, &n_out, opts->gain, opts->tf, true, true, false, true);
+        auto pixels = img.as_interleaved<uint8_t>(&w_out, &h_out, &n_out, opts->tf, true, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1443,11 +1440,10 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
                   opts->data_type_index == 2 ? 32 : (opts->data_type_index == 1 ? 16 : 8), timer.elapsed());
 }
 
-void save_tiff_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction tf,
-                     int compression, int data_type)
+void save_tiff_image(const Image &img, ostream &os, string_view filename, TransferFunction tf, int compression,
+                     int data_type)
 {
     TIFFSaveOptions opts;
-    opts.gain            = gain;
     opts.tf              = tf;
     opts.compression     = compression;
     opts.data_type_index = data_type;
@@ -1460,25 +1456,6 @@ TIFFSaveOptions *tiff_parameters_gui()
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed =
-                    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.001f, 100.f, "%.3f", ImGuiSliderFlags_Logarithmic);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
-
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -1530,7 +1507,6 @@ TIFFSaveOptions *tiff_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = TIFFSaveOptions{};
-
     return &s_opts;
 }
 

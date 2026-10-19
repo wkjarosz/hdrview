@@ -29,5 +29,5 @@ TIFFSaveOptions *tiff_parameters_gui();
 void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename, const TIFFSaveOptions *params);
 
 // simplified wrapper with explicit parameters
-void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f,
+void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename,
                      TransferFunction tf = TransferFunction::Linear, int compression = 1, int data_type = 0);

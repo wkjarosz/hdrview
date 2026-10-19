@@ -32,7 +32,6 @@ using namespace std;
 
 struct UHDRSaveOptions
 {
-    float gain              = 1.f;
     int   quality           = 95;
     int   gainmap_quality   = 95;
     bool  use_multi_channel = false;
@@ -57,7 +56,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain, float base_quality,
+void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float base_quality,
                      float gainmap_quality, bool use_multi_channel_gainmap, int gainmap_scale_factor,
                      float gainmap_gamma)
 {
@@ -411,7 +410,7 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
     // get interleaved HDR pixel data
     int                     w = 0, h = 0, n = 0;
     std::unique_ptr<half[]> pixels_f16 =
-        img.as_interleaved<half>(&w, &h, &n, opts->gain, TransferFunction::Linear, false, true, true);
+        img.as_interleaved<half>(&w, &h, &n, TransferFunction::Linear, false, true, true);
     void *pixels = pixels_f16.get();
 
     if (n != 3 && n != 4)
@@ -473,11 +472,11 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
     spdlog::info("Writing UltraHDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain, int base_quality,
-                     int gainmap_quality, bool use_multi_channel_gainmap, int gainmap_scale_factor, float gainmap_gamma)
+void save_uhdr_image(const Image &img, ostream &os, const string_view filename, int base_quality, int gainmap_quality,
+                     bool use_multi_channel_gainmap, int gainmap_scale_factor, float gainmap_gamma)
 {
     UHDRSaveOptions opts = {
-        gain, base_quality, gainmap_quality, use_multi_channel_gainmap, gainmap_scale_factor, gainmap_gamma,
+        base_quality, gainmap_quality, use_multi_channel_gainmap, gainmap_scale_factor, gainmap_gamma,
     };
 
     save_uhdr_image(img, os, filename, &opts);
@@ -492,23 +491,6 @@ UHDRSaveOptions *uhdr_parameters_gui()
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         // Gain
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
-
         // Base quality
         ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0,
                              "The quality factor to be used while encoding SDR intent.\n[0-100]");
@@ -541,7 +523,6 @@ UHDRSaveOptions *uhdr_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = UHDRSaveOptions{};
-
     return &s_opts;
 }
 

@@ -14,7 +14,6 @@
 /// Options for writing a JPEG 2000 file. \see j2k_parameters_gui()
 struct J2KSaveOptions
 {
-    float            gain            = 1.f;
     TransferFunction tf              = TransferFunction::sRGB;
     bool             dither          = true;
     int              bit_depth_index = 3; ///< index into k_bit_depths, defaulting to 16-bit
@@ -732,7 +731,7 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
     const int bit_depth = k_bit_depths[std::clamp(params->bit_depth_index, 0, k_num_bit_depths - 1)];
 
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, params->gain, params->tf, params->dither);
+    auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, params->tf, params->dither);
     if (!pixels || w <= 0 || h <= 0 || n < 1 || n > 4)
         throw runtime_error{"JPEG 2000: unsupported image dimensions or channel count"};
 
@@ -831,11 +830,10 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
     spdlog::info("Saved JPEG 2000 image to \"{}\" in {} seconds.", filename, timer.elapsed() / 1000.f);
 }
 
-void save_j2k_image(const Image &img, ostream &os, string_view filename, float gain, bool lossless, int bit_depth,
+void save_j2k_image(const Image &img, ostream &os, string_view filename, bool lossless, int bit_depth,
                     J2KContainer container, TransferFunction tf, bool dither)
 {
     J2KSaveOptions opts;
-    opts.gain       = gain;
     opts.tf         = tf;
     opts.dither     = dither;
     opts.reversible = lossless;
@@ -859,24 +857,6 @@ J2KSaveOptions *j2k_parameters_gui()
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
-
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -939,7 +919,6 @@ J2KSaveOptions *j2k_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = J2KSaveOptions{};
-
     return &s_opts;
 }
 

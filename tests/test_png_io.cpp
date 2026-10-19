@@ -46,7 +46,7 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
     SUBCASE("8-bit")
     {
         std::ostringstream out(std::ios::binary);
-        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ false, TransferFunction::Linear);
 
         auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -60,7 +60,7 @@ TEST_CASE("PNG save/load round-trips 8-bit and 16-bit pixel data without ditheri
     SUBCASE("16-bit")
     {
         std::ostringstream out(std::ios::binary);
-        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::Linear);
 
         auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -85,7 +85,7 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
 
         std::ostringstream out(std::ios::binary);
         // HDR transfer functions need far more than 8-bit precision to avoid banding
-        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, tf);
 
         auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -117,7 +117,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
     SUBCASE("linear is recorded as gAMA 1.0")
     {
         std::ostringstream out(std::ios::binary);
-        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::Linear);
 
         auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -132,7 +132,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
     SUBCASE("a pure power curve is recorded exactly")
     {
         std::ostringstream out(std::ios::binary);
-        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction{TransferFunction::Gamma, 2.4f});
 
         auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -146,7 +146,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
     SUBCASE("sRGB content carries the sRGB chunk and a gAMA companion")
     {
         std::ostringstream out(std::ios::binary);
-        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ false, TransferFunction::sRGB);
 
         auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -169,7 +169,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         wide->chromaticities = gamut_chromaticities(ColorGamut_BT2020_2100);
 
         std::ostringstream out(std::ios::binary);
-        save_png_image(*wide, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*wide, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::sRGB);
 
         auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -185,7 +185,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
     SUBCASE("the ITU curve is approximated as gAMA 2.2")
     {
         std::ostringstream out(std::ios::binary);
-        save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::ITU);
 
         auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -207,7 +207,7 @@ TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
     auto img = make_test_image(int2{4, 3});
 
     std::ostringstream out(std::ios::binary);
-    save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+    save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ true, TransferFunction::BT2100_PQ);
 
     auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
@@ -226,7 +226,7 @@ TEST_CASE("saving a curve this libpng cannot record fails instead of mislabellin
     auto img = make_test_image(int2{4, 3});
 
     std::ostringstream out(std::ios::binary);
-    CHECK_THROWS_AS(save_png_image(*img, out, "test.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+    CHECK_THROWS_AS(save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
                                    /*sixteen_bit*/ true, TransferFunction::BT2100_PQ),
                     std::runtime_error);
 }
@@ -261,7 +261,7 @@ TEST_CASE("channel_selector drops channels in formats that don't filter during d
     img->finalize();
 
     std::ostringstream out(std::ios::binary);
-    save_png_image(*img, out, "rgba.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+    save_png_image(*img, out, "rgba.png", /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ false, TransferFunction::Linear);
 
     SUBCASE("excluding the alpha channel by name")
@@ -429,7 +429,7 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
         REQUIRE(original->transparency == TransparencyType_Straight);
 
         std::ostringstream out(std::ios::binary);
-        save_png_image(*original, out, file, /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+        save_png_image(*original, out, file, /*dither*/ false, /*interlaced*/ false,
                        /*sixteen_bit*/ true, TransferFunction::sRGB);
 
         auto reloaded = load_bytes(load_png_image, out.str(), file);
@@ -457,7 +457,7 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
 TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha channel")
 {
     // A Y,A group takes as_interleaved()'s n < 3 path, which loops uniformly over every channel. Alpha takes
-    // neither the exposure gain nor the transfer function, and the other channels are divided back out by it.
+    // no transfer function, and the other channels are divided back out by it.
     constexpr int2 size{4, 4};
 
     auto img = std::make_shared<Image>(size, 2);
@@ -491,7 +491,7 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
     // a linear transfer function is the identity, and could not tell an alpha that went through the transfer
     // function from one that did not
     std::ostringstream out(std::ios::binary);
-    save_png_image(*img, out, "gray_alpha.png", /*gain*/ 1.f, /*dither*/ false, /*interlaced*/ false,
+    save_png_image(*img, out, "gray_alpha.png", /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ true, TransferFunction::sRGB);
 
     auto reloaded = load_bytes(load_png_image, out.str(), "gray_alpha.png");
@@ -504,42 +504,10 @@ TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha cha
         {
             int i = y * size.x + x;
             CAPTURE(i);
-            // alpha survives untouched: no gain, no transfer function
+            // alpha survives untouched: no transfer function
             CHECK(reloaded->channels[1](x, y) == doctest::Approx(alpha[i]).epsilon(1e-4));
             // Y comes back premultiplied by that same alpha, i.e. what finalize() produced here
             CHECK(reloaded->channels[0](x, y) ==
                   doctest::Approx(straight_y[i] * std::max(k_small_alpha, alpha[i])).epsilon(1e-3));
-        }
-}
-
-TEST_CASE("saving gray+alpha applies the exposure gain to the color channel only")
-{
-    constexpr int2  size{2, 2};
-    constexpr float straight_y = 0.4f, a = 0.5f, gain = 2.f;
-
-    auto img = std::make_shared<Image>(size, 2);
-    for (int y = 0; y < size.y; ++y)
-        for (int x = 0; x < size.x; ++x)
-        {
-            img->channels[0](x, y) = straight_y;
-            img->channels[1](x, y) = a; // a gain of 2 would saturate this to 1
-        }
-    img->transparency = TransparencyType_Straight;
-    img->finalize(); // premultiplies Y by A
-
-    std::ostringstream out(std::ios::binary);
-    save_png_image(*img, out, "gray_alpha_gain.png", gain, /*dither*/ false, /*interlaced*/ false,
-                   /*sixteen_bit*/ true, TransferFunction::Linear);
-
-    auto reloaded = load_bytes(load_png_image, out.str(), "gray_alpha_gain.png");
-    REQUIRE(reloaded);
-
-    for (int y = 0; y < size.y; ++y)
-        for (int x = 0; x < size.x; ++x)
-        {
-            // the file holds straight values, so the gain lands on the straight Y; the two are chosen so a
-            // gained alpha would saturate to 1
-            CHECK(reloaded->channels[0](x, y) == doctest::Approx(straight_y * gain).epsilon(1e-4));
-            CHECK(reloaded->channels[1](x, y) == doctest::Approx(a).epsilon(1e-4));
         }
 }

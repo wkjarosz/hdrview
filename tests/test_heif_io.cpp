@@ -49,7 +49,7 @@ TEST_CASE("The HEIF and AVIF save entries write files branded as what their exte
         std::ostringstream out(std::ios::binary);
         try
         {
-            save_heif_image(*img, out, "a.heif", 1.f, 90, false, true, HEIFCodec::HEIF, TransferFunction::sRGB);
+            save_heif_image(*img, out, "a.heif", 90, false, true, HEIFCodec::HEIF, TransferFunction::sRGB);
         }
         catch (const std::exception &e)
         {
@@ -65,7 +65,7 @@ TEST_CASE("The HEIF and AVIF save entries write files branded as what their exte
         std::ostringstream out(std::ios::binary);
         try
         {
-            save_heif_image(*img, out, "a.avif", 1.f, 90, false, true, HEIFCodec::AV1, TransferFunction::sRGB);
+            save_heif_image(*img, out, "a.avif", 90, false, true, HEIFCodec::AV1, TransferFunction::sRGB);
         }
         catch (const std::exception &e)
         {

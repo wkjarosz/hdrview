@@ -30,7 +30,7 @@ enum class HEIFCodec
     AV1,      ///< AV1, which libheif brands 'avif' whatever the file is named
 };
 
-void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f, int quality = 95,
+void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, int quality = 95,
                      bool lossless = false, bool use_alpha = true, HEIFCodec codec = HEIFCodec::HEIF,
                      TransferFunction tf = TransferFunction::sRGB);
 

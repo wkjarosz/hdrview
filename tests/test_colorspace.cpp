@@ -856,8 +856,7 @@ TEST_CASE("Saving wide-gamut content through an HDR transfer function stays fini
     img.finalize();
 
     int  w, h, n;
-    auto px =
-        img.as_interleaved<float>(&w, &h, &n, 1.f, TransferFunction{TransferFunction::BT2100_PQ}, false, true, true);
+    auto px = img.as_interleaved<float>(&w, &h, &n, TransferFunction{TransferFunction::BT2100_PQ}, false, true, true);
     for (int i = 0; i < w * h * n; ++i)
     {
         INFO("sample ", i);

@@ -16,7 +16,6 @@
 
 struct PNGSaveOptions
 {
-    float            gain            = 1.f;
     bool             dither          = true;
     TransferFunction tf              = TransferFunction::sRGB;
     int              data_type_index = 0;
@@ -39,7 +38,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     throw runtime_error("PNG support not enabled in this build.");
 }
 
-void save_png_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool sRGB, bool dither)
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, bool sRGB, bool dither)
 {
     throw runtime_error("PNG support not enabled in this build.");
 }
@@ -879,7 +878,7 @@ constexpr bool k_can_write_cicp = PNG_cICP_SUPPORTED_ENABLED;
 
 } // namespace
 
-void save_png_image(const Image &img, ostream &os, string_view /*filename*/, float gain, bool dither, bool interlaced,
+void save_png_image(const Image &img, ostream &os, string_view /*filename*/, bool dither, bool interlaced,
                     bool sixteen_bit, TransferFunction tf)
 {
     Timer                       timer;
@@ -895,7 +894,7 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, flo
 
     if (sixteen_bit)
     {
-        pixels16 = img.as_interleaved<uint16_t>(&w, &h, &n, gain, tf, dither, true, cicp_primaries < 0);
+        pixels16 = img.as_interleaved<uint16_t>(&w, &h, &n, tf, dither, true, cicp_primaries < 0);
         if (is_little_endian())
         {
             // Swap bytes for each 16-bit pixel (big-endian required by PNG)
@@ -909,7 +908,7 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, flo
     }
     else
     {
-        pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, dither, true, cicp_primaries < 0);
+        pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither, true, cicp_primaries < 0);
         pixels  = pixels8.get();
     }
 
@@ -1032,24 +1031,6 @@ PNGSaveOptions *png_parameters_gui()
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
-
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -1109,7 +1090,6 @@ PNGSaveOptions *png_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = PNGSaveOptions{};
-
     return &s_opts;
 }
 
@@ -1119,7 +1099,7 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
     if (opts == nullptr)
         throw std::invalid_argument("PNGSaveOptions pointer is null");
 
-    save_png_image(img, os, filename, opts->gain, opts->dither, opts->interlaced, opts->data_type_index, opts->tf);
+    save_png_image(img, os, filename, opts->dither, opts->interlaced, opts->data_type_index, opts->tf);
 }
 
 #endif
