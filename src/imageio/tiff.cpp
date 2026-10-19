@@ -1323,6 +1323,12 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     ScopedMDC mdc{"IO", "TIFF"};
     Timer     timer;
 
+    // TIFF records no transfer function here, and is read back as sRGB when integer and linear when float
+    const TransferFunction tf = opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
+    if (opts->tf.type != tf.type)
+        spdlog::warn("TIFF cannot record the {} transfer function; writing {} instead.",
+                     transfer_function_name(opts->tf), transfer_function_name(tf));
+
     // Set custom error/warning handlers
     TIFFSetErrorHandler(error_handler);
     TIFFSetWarningHandler(warning_handler);
@@ -1391,7 +1397,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, opts->tf, false, true, false, true);
+        auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, tf, false, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1405,7 +1411,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<uint16_t>(&w_out, &h_out, &n_out, opts->tf, true, true, false, true);
+        auto pixels = img.as_interleaved<uint16_t>(&w_out, &h_out, &n_out, tf, true, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1419,7 +1425,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<uint8_t>(&w_out, &h_out, &n_out, opts->tf, true, true, false, true);
+        auto pixels = img.as_interleaved<uint8_t>(&w_out, &h_out, &n_out, tf, true, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1457,32 +1463,6 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Apply this transfer function to RGB channels when encoding.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
-
-        ImGui::PE::Entry(
             "Compression",
             [&]
             {
@@ -1508,7 +1488,8 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = TIFFSaveOptions{};
 
-    ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index == 2);
+    s_opts.tf = s_opts.data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
+    ctx.hdr   = s_opts.data_type_index == 2; //< float
     return &s_opts;
 }
 

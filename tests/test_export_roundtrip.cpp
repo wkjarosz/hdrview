@@ -63,7 +63,8 @@ enum Caps : unsigned
 {
     Cap_Float = 1u << 0, ///< stores unbounded values, and is therefore written linear
     Cap_Alpha = 1u << 1, ///< can store an alpha channel
-    Cap_Lossy = 1u << 2, ///< moves samples even at maximum quality
+    Cap_Lossy  = 1u << 2, ///< moves samples even at maximum quality
+    Cap_Curves = 1u << 3, ///< encodes every transfer function it can name, and records which
 };
 
 struct Writer
@@ -83,9 +84,9 @@ const Writer k_writers[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_pfm_image(i, o, "a.pfm", t); }},
     {"hdr_stb", ".hdr", Cap_Float,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_hdr(i, o, "a.hdr", t); }},
-    {"png16", ".png", Cap_Alpha,
+    {"png16", ".png", Cap_Alpha | Cap_Curves,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, true, t); }},
-    {"png8", ".png", Cap_Alpha,
+    {"png8", ".png", Cap_Alpha | Cap_Curves,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, false, t); }},
     {"png_stb", ".png", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_png(i, o, "a.png", t); }},
@@ -129,16 +130,16 @@ const Writer k_writers[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},
 #endif
 #if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN)
-    {"jxl", ".jxl", Cap_Alpha,
+    {"jxl", ".jxl", Cap_Alpha | Cap_Curves,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_jxl_image(i, o, "a.jxl", /*lossless*/ true, 100.f, t, JXL_TYPE_UINT16); }},
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
     // both codecs the dialog offers, since they take different paths through libheif
-    {"heif", ".heif", Cap_Alpha | Cap_Lossy,
+    {"heif", ".heif", Cap_Alpha | Cap_Lossy | Cap_Curves,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t); }},
-    {"avif", ".avif", Cap_Alpha | Cap_Lossy,
+    {"avif", ".avif", Cap_Alpha | Cap_Lossy | Cap_Curves,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t); }},
 #endif
@@ -311,55 +312,80 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
         }
 }
 
-TEST_CASE("every writer either converts a wide-gamut image to sRGB or records the gamut it kept")
+TEST_CASE("every writer records the gamut and transfer function its samples are in, or converts to ones it can")
 {
     // as_interleaved() converts to sRGB unless a writer opts out, and one that opts out has to record the
-    // primaries its samples are in; doing neither leaves a file that reads back as sRGB
+    // primaries its samples are in; doing neither leaves a file that reads back as sRGB. The same goes for a
+    // transfer function: a writer that encodes any curve has to say which, or the file reads back as sRGB.
     const Chromaticities bt2020{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
 
     for (const auto &writer : k_writers)
-    {
-        INFO("writer = ", std::string{writer.name});
-
-        auto img            = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f);
-        img->chromaticities = bt2020;
-        color_conversion_matrix(img->M_to_sRGB, bt2020, gamut_chromaticities(ColorGamut_sRGB_BT709));
-
-        const float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
-
-        const TransferFunction tf = (writer.caps & Cap_Float) ? TransferFunction{TransferFunction::Linear}
-                                                              : TransferFunction{TransferFunction::sRGB};
-        std::ostringstream     out(std::ios::binary);
-        std::string            error;
-        try
+        for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
         {
-            writer.save(*img, out, tf);
-        }
-        catch (const std::exception &e)
-        {
-            error = e.what();
-        }
-        if (error.find("no encoder available") != std::string::npos)
-            continue; // see the note on codec availability in the layout table above
-        CHECK_MESSAGE(error.empty(), "save threw: ", error);
-        if (!error.empty())
-            continue;
+            // Unspecified stands for the writer's default; one that encodes any curve is also tried on every
+            // curve it can name (gamma takes a parameter, which no writer records)
+            const auto curve = (TransferFunction::Type_)i;
+            if (curve != TransferFunction::Unspecified &&
+                (!(writer.caps & Cap_Curves) || curve == TransferFunction::Gamma))
+                continue;
+#if HDRVIEW_ENABLE_LIBJXL
+            if (std::string{writer.name} == "jxl" && curve != TransferFunction::Unspecified && !jxl_supported_tf(curve))
+                continue;
+#endif
+            INFO("writer = ", std::string{writer.name}, ", curve = ", transfer_function_name(curve));
 
-        std::istringstream    in(out.str(), std::ios::binary);
-        std::vector<ImagePtr> reloaded;
-        try
-        {
-            reloaded = load_image(in, std::string("a") + writer.ext);
-        }
-        catch (const std::exception &e)
-        {
-            error = e.what();
-        }
-        CHECK_MESSAGE(error.empty(), "load threw: ", error);
-        if (!error.empty() || reloaded.size() != 1)
-            continue;
+            auto img            = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f);
+            img->chromaticities = bt2020;
+            color_conversion_matrix(img->M_to_sRGB, bt2020, gamut_chromaticities(ColorGamut_sRGB_BT709));
 
-        const float4 got = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
-        for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(tolerance(writer)));
-    }
+            const float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
+
+            // the writer's default: linear for a float format, sRGB otherwise
+            const TransferFunction tf = curve != TransferFunction::Unspecified ? TransferFunction{curve}
+                                        : (writer.caps & Cap_Float) ? TransferFunction{TransferFunction::Linear}
+                                                                    : TransferFunction{TransferFunction::sRGB};
+            std::ostringstream     out(std::ios::binary);
+            std::string            error;
+            try
+            {
+                writer.save(*img, out, tf);
+            }
+            catch (const std::exception &e)
+            {
+                error = e.what();
+            }
+            if (error.find("no encoder available") != std::string::npos)
+                continue; // see the note on codec availability in the layout table above
+            CHECK_MESSAGE(error.empty(), "save threw: ", error);
+            if (!error.empty())
+                continue;
+
+            std::istringstream    in(out.str(), std::ios::binary);
+            std::vector<ImagePtr> reloaded;
+            try
+            {
+                reloaded = load_image(in, std::string("a") + writer.ext);
+            }
+            catch (const std::exception &e)
+            {
+                error = e.what();
+            }
+            CHECK_MESSAGE(error.empty(), "load threw: ", error);
+            if (!error.empty() || reloaded.size() != 1)
+                continue;
+
+            const float4 got = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
+            if (curve == TransferFunction::Unspecified)
+                for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(tolerance(writer)));
+            else
+            {
+                // in the curve's code values, where an 8-bit step is 1/255 whatever the level; a file read back
+                // with the wrong curve is off by a tenth or more
+                const float    step        = (writer.caps & Cap_Lossy) ? 0.02f : 2.f / 255.f;
+                const float3x3 M_from_sRGB = inverse(img->M_to_sRGB);
+                const float3   got_code    = from_linear(mul(M_from_sRGB, got.xyz()), tf);
+                const float3   want_code   = from_linear(mul(M_from_sRGB, want.xyz()), tf);
+                for (int c = 0; c < 3; ++c) CHECK(std::abs(got_code[c] - want_code[c]) <= step);
+            }
+        }
 }

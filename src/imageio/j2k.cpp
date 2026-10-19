@@ -730,7 +730,11 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
     const int bit_depth = k_bit_depths[std::clamp(params->bit_depth_index, 0, k_num_bit_depths - 1)];
 
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, params->tf, params->dither);
+    // JPEG 2000 records no transfer function here, and is read back as sRGB
+    if (params->tf.type != TransferFunction::sRGB)
+        spdlog::warn("JPEG 2000 cannot record the {} transfer function; writing sRGB instead.",
+                     transfer_function_name(params->tf));
+    auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, TransferFunction::sRGB, params->dither);
     if (!pixels || w <= 0 || h <= 0 || n < 1 || n > 4)
         throw runtime_error{"JPEG 2000: unsupported image dimensions or channel count"};
 
@@ -856,33 +860,6 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Encode the pixel values using this transfer function.\nWARNING: JPEG 2000 records no transfer "
-            "function of its own, so other software will read this file as sRGB.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
-
         {
             int container = (int)s_opts.container;
             ImGui::PE::Combo("Container", &container,
@@ -919,7 +896,7 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = J2KSaveOptions{};
 
-    ctx.hdr = is_hdr_encoding(s_opts.tf);
+    ctx.hdr = false; //< sRGB
     return &s_opts;
 }
 
