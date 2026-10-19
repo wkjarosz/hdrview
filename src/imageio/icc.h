@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <sys/types.h>
+#include <vector>
 
 class CICPProfile;
 
@@ -65,6 +66,22 @@ public:
     static ICCProfile linear_RGB(const Chromaticities &chr = Chromaticities{});
     /// Construct a linear Gray ICC profile with the specified white point (or D65 if none is provided).
     static ICCProfile linear_Gray(const float2 &whitepoint = white_point(WhitePoint_D65));
+
+    /// An RGB profile with the primaries and white \p chr and the transfer function \p tf, if ICC can express it.
+    /**
+        Linear, gamma, sRGB and BT.709 get their exact parametric curves; the others a sampled one, clipped to
+        [0, 1] as every ICC curve is (DCI-P3's code values run past its white). PQ and HLG, whose meaning an ICC
+        curve cannot carry, get an invalid profile, as does any curve when built without LCMS2. The profile's
+        description names its primaries and curve.
+    */
+    static ICCProfile RGB(const Chromaticities &chr, const TransferFunction &tf);
+    /// A Gray profile with the white \p whitepoint and the transfer function \p tf, as RGB() builds them.
+    static ICCProfile Gray(const float2 &whitepoint, const TransferFunction &tf);
+    /// Whether RGB() and Gray() can describe the transfer function \p tf in this build.
+    static bool can_describe(const TransferFunction &tf);
+
+    /// The profile as the bytes of an ICC file, or none for an invalid profile.
+    std::vector<uint8_t> bytes() const;
 
     /// Get the version of the linked LCMS2 library (or 0 if not built with LCMS2).
     static int lcms_version();

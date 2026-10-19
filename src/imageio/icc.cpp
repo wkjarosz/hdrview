@@ -155,6 +155,98 @@ ICCProfile ICCProfile::linear_Gray(const float2 &whitepoint)
     return ICCProfile{cmsCreateGrayProfileTHR(CmsContext::thread_local_instance().get(), &wp, linear_curve.get())};
 }
 
+namespace
+{
+
+/// The ICC tone curve for \p tf, or none for one ICC cannot express.
+ToneCurve tone_curve(const TransferFunction &tf)
+{
+    auto ctx = CmsContext::thread_local_instance().get();
+    switch (tf.type)
+    {
+    case TransferFunction::Linear: return ToneCurve{cmsBuildGamma(ctx, 1.0)};
+    case TransferFunction::Gamma: return ToneCurve{cmsBuildGamma(ctx, tf.gamma)};
+    case TransferFunction::sRGB:
+    {
+        // ICC parametric type 4: Y = (aX + b)^g for X >= d, else cX
+        const double p[] = {2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045};
+        return ToneCurve{cmsBuildParametricToneCurve(ctx, 4, p)};
+    }
+    case TransferFunction::ITU:
+    {
+        const double p[] = {1.0 / 0.45, 1.0 / 1.099, 0.099 / 1.099, 1.0 / 4.5, 0.081};
+        return ToneCurve{cmsBuildParametricToneCurve(ctx, 4, p)};
+    }
+    case TransferFunction::BT2100_PQ:
+    case TransferFunction::BT2100_HLG:
+    case TransferFunction::Unspecified:
+    case TransferFunction::Invalid: return nullptr;
+    default:
+    {
+        constexpr int      num = 4096;
+        std::vector<float> samples(num);
+        for (int i = 0; i < num; ++i) samples[i] = std::clamp(to_linear(float(i) / (num - 1), tf), 0.f, 1.f);
+        return ToneCurve{cmsBuildTabulatedToneCurveFloat(ctx, num, samples.data())};
+    }
+    }
+}
+
+void set_description(cmsHPROFILE profile, const std::string &text)
+{
+    cmsMLU *mlu = cmsMLUalloc(CmsContext::thread_local_instance().get(), 1);
+    if (!mlu)
+        return;
+    cmsMLUsetASCII(mlu, "en", "US", text.c_str());
+    cmsWriteTag(profile, cmsSigProfileDescriptionTag, mlu);
+    cmsMLUfree(mlu);
+}
+
+std::string description_of(const Chromaticities &chr, const TransferFunction &tf)
+{ return fmt::format("{}, {}", color_gamut_name(named_color_gamut(chr)), transfer_function_name(tf)); }
+
+} // namespace
+
+bool ICCProfile::can_describe(const TransferFunction &tf) { return tone_curve(tf) != nullptr; }
+
+ICCProfile ICCProfile::RGB(const Chromaticities &chr, const TransferFunction &tf)
+{
+    const ToneCurve curve = tone_curve(tf);
+    if (!curve)
+        return ICCProfile{};
+    cmsCIExyY       whitepoint = {chr.white.x, chr.white.y, 1.0};
+    cmsCIExyYTRIPLE primaries  = {
+        {chr.red.x, chr.red.y, 1.0}, {chr.green.x, chr.green.y, 1.0}, {chr.blue.x, chr.blue.y, 1.0}};
+    cmsToneCurve *curves[3] = {curve.get(), curve.get(), curve.get()};
+    cmsHPROFILE   profile =
+        cmsCreateRGBProfileTHR(CmsContext::thread_local_instance().get(), &whitepoint, &primaries, curves);
+    if (profile)
+        set_description(profile, description_of(chr, tf));
+    return ICCProfile{profile};
+}
+
+ICCProfile ICCProfile::Gray(const float2 &whitepoint, const TransferFunction &tf)
+{
+    const ToneCurve curve = tone_curve(tf);
+    if (!curve)
+        return ICCProfile{};
+    cmsCIExyY   wp      = {whitepoint.x, whitepoint.y, 1.0};
+    cmsHPROFILE profile = cmsCreateGrayProfileTHR(CmsContext::thread_local_instance().get(), &wp, curve.get());
+    if (profile)
+        set_description(profile, fmt::format("Gray, {}", transfer_function_name(tf)));
+    return ICCProfile{profile};
+}
+
+std::vector<uint8_t> ICCProfile::bytes() const
+{
+    cmsUInt32Number size = 0;
+    if (!m_profile || !cmsSaveProfileToMem(static_cast<cmsHPROFILE>(m_profile), nullptr, &size) || size == 0)
+        return {};
+    std::vector<uint8_t> out(size);
+    if (!cmsSaveProfileToMem(static_cast<cmsHPROFILE>(m_profile), out.data(), &size))
+        return {};
+    return out;
+}
+
 // NOTE: we can't just use cmsSigMediaWhitePointTag because its interpretation differs between ICC versions.
 // The white-point extraction logic is adapted from the UnadaptedWhitePoint function in libjxl.
 bool ICCProfile::extract_chromaticities(Chromaticities *c) const
@@ -325,20 +417,20 @@ ICCProfile ICCProfile::linearized_profile(Chromaticities *c) const
     if (!valid())
         return nullptr;
 
+    // a gray profile has no colorants to read, and its linear twin needs only a white, which leaves the gray
+    // values alone in a gray-to-gray transform whichever it is
     Chromaticities chr;
-    if (!extract_chromaticities(&chr))
+    const bool     have_chr = extract_chromaticities(&chr);
+    if (c && have_chr)
+        *c = chr;
+    if (is_Gray())
+        return ICCProfile::linear_Gray(have_chr ? chr.white : white_point(WhitePoint_D65));
+    if (!have_chr)
     {
         spdlog::error("Could not extract chromaticities from ICC profile.");
         return nullptr;
     }
-
-    if (c)
-        *c = chr;
-
-    if (is_Gray())
-        return ICCProfile::linear_Gray(chr.white);
-    else
-        return ICCProfile::linear_RGB(chr);
+    return ICCProfile::linear_RGB(chr);
 }
 
 bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &profile_in, const ICCProfile &profile_out,
@@ -463,6 +555,10 @@ ICCProfile::ICCProfile(const uint8_t *icc_profile, size_t icc_profile_size) : m_
 ICCProfile::~ICCProfile() {}
 ICCProfile  ICCProfile::linear_RGB(const Chromaticities  &/*chr*/) { return ICCProfile(nullptr); }
 ICCProfile  ICCProfile::linear_Gray(const float2  &/*whitepoint*/) { return ICCProfile(nullptr); }
+ICCProfile           ICCProfile::RGB(const Chromaticities &, const TransferFunction &) { return ICCProfile(nullptr); }
+ICCProfile           ICCProfile::Gray(const float2 &, const TransferFunction &) { return ICCProfile(nullptr); }
+bool                 ICCProfile::can_describe(const TransferFunction &) { return false; }
+std::vector<uint8_t> ICCProfile::bytes() const { return {}; }
 ICCProfile  ICCProfile::linearized_profile(Chromaticities  */*c*/) const { return ICCProfile(nullptr); }
 int         ICCProfile::lcms_version() { return 0; }
 std::string ICCProfile::description() const { return std::string(); }

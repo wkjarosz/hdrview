@@ -241,6 +241,68 @@ TEST_CASE("icc_cicp_tag reports the video range flag")
     CHECK(!icc_cicp_tag(nullptr, 0).valid());
 }
 
+TEST_CASE("A profile built for a curve reads back as that curve and those primaries")
+{
+    // every curve, gamma at an exponent no other curve shares, both an RGB and a gray profile, and a wide gamut
+    // beside BT.709, read back through the same path a loader takes
+    std::vector<TransferFunction> curves;
+    for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
+        if (i != TransferFunction::Gamma)
+            curves.push_back({(TransferFunction::Type_)i});
+    curves.push_back({TransferFunction::Gamma, 1.8f});
+
+    const Chromaticities gamuts[] = {Chromaticities{}, gamut_chromaticities(ColorGamut_Display_P3_SMPTE432)};
+    constexpr int        num      = 64;
+
+    for (const auto &tf : curves)
+    {
+        CAPTURE(transfer_function_name(tf));
+        const bool expressible = tf.type != TransferFunction::Unspecified && tf.type != TransferFunction::BT2100_PQ &&
+                                 tf.type != TransferFunction::BT2100_HLG;
+        CHECK(ICCProfile::can_describe(tf) == (expressible && ICCProfile::lcms_version() > 0));
+        if (!ICCProfile::can_describe(tf))
+        {
+            CHECK_FALSE(ICCProfile::RGB(Chromaticities{}, tf).valid());
+            continue;
+        }
+
+        // what the curve decodes a ramp of code values to, clipped to the white an ICC curve ends at
+        std::vector<float> want(num);
+        for (int i = 0; i < num; ++i) want[i] = std::clamp(to_linear(float(i) / (num - 1), tf), 0.f, 1.f);
+
+        for (const auto &chr : gamuts)
+        {
+            const auto bytes = ICCProfile::RGB(chr, tf).bytes();
+            REQUIRE_FALSE(bytes.empty());
+            ICCProfile read{bytes};
+            REQUIRE(read.valid());
+            CHECK(read.description().find(transfer_function_name(tf)) != std::string::npos);
+
+            Chromaticities got;
+            REQUIRE(read.extract_chromaticities(&got));
+            for (auto [g, w] : {std::pair{got.red, chr.red}, std::pair{got.green, chr.green},
+                                std::pair{got.blue, chr.blue}, std::pair{got.white, chr.white}})
+                CHECK(la::maxelem(la::abs(g - w)) <= 1e-3f);
+
+            std::vector<float> pixels(num * 3);
+            for (int i = 0; i < num; ++i) pixels[3 * i] = pixels[3 * i + 1] = pixels[3 * i + 2] = float(i) / (num - 1);
+            REQUIRE(read.linearize_pixels(pixels.data(), int3{num, 1, 3}, true));
+            float worst = 0.f;
+            for (int i = 0; i < num * 3; ++i) worst = std::max(worst, std::abs(pixels[i] - want[i / 3]));
+            CHECK(worst <= 2e-3f);
+        }
+
+        ICCProfile gray{ICCProfile::Gray(white_point(WhitePoint_D65), tf).bytes()};
+        REQUIRE(gray.is_Gray());
+        std::vector<float> pixels(num);
+        for (int i = 0; i < num; ++i) pixels[i] = float(i) / (num - 1);
+        REQUIRE(gray.linearize_pixels(pixels.data(), int3{num, 1, 1}, true));
+        float worst = 0.f;
+        for (int i = 0; i < num; ++i) worst = std::max(worst, std::abs(pixels[i] - want[i]));
+        CHECK(worst <= 2e-3f);
+    }
+}
+
 #ifdef HDRVIEW_TEST_LIBJXL_DIR
 
 // The Compact-ICC-Profiles set libjxl vendors writes each color space four ways, over ICC v2 and v4 and in
