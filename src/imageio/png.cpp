@@ -1006,6 +1006,20 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     if (signaling.srgb_chunk && primaries_are_srgb)
         png_set_sRGB(png_ptr, info_ptr.get(), PNG_sRGB_INTENT_PERCEPTUAL);
 
+    // A curve neither the sRGB chunk nor an exact gAMA states also gets an ICC profile, which a reader that does
+    // not know the cICP code falls back on. The PNG spec forbids an sRGB chunk in the same file as an iCCP chunk;
+    // that is no conflict here, since only the sRGB curve gets an sRGB chunk.
+    std::vector<uint8_t> icc;
+    const bool           exact_gama = signaling.file_gamma > 0.0 && signaling.gamma_is_exact;
+    if (!is_hdr_encoding(tf) && !signaling.srgb_chunk && !exact_gama)
+    {
+        const auto chr = (cicp_primaries < 0 || !img.chromaticities) ? Chromaticities{} : *img.chromaticities;
+        icc            = (n <= 2 ? ICCProfile::Gray(chr.white, tf) : ICCProfile::RGB(chr, tf)).bytes();
+        if (!icc.empty())
+            png_set_iCCP(png_ptr, info_ptr.get(), "ICC profile", PNG_COMPRESSION_TYPE_BASE, icc.data(),
+                         (png_uint_32)icc.size());
+    }
+
     if (signaling.file_gamma > 0.0)
     {
         png_set_gAMA(png_ptr, info_ptr.get(), signaling.file_gamma);
@@ -1013,6 +1027,8 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
             spdlog::debug("PNG: approximating the {} curve as gAMA {:.5f} for readers that ignore cICP",
                           transfer_function_name(tf), signaling.file_gamma);
     }
+    else if (!icc.empty())
+        ; // the ICC profile states the curve
     else if (!k_can_write_cicp)
         // writing anyway would encode the pixels with this curve while recording no curve at all
         throw runtime_error(fmt::format("PNG: cannot record the {} transfer function. It has no gAMA or sRGB "

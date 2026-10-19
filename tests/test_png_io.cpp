@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 
 #include "image.h"
+#include "imageio/icc.h"
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
 
@@ -108,11 +109,47 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
 
 #endif // PNG_cICP_SUPPORTED
 
-TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in cICP")
+TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profile, not only in cICP")
 {
     // cICP is recent enough that most readers ignore it, so every curve gAMA or the sRGB chunk can express
-    // is written through those too
+    // is written through those too, and every other SDR curve in an ICC profile
     auto img = make_test_image(int2{4, 3});
+
+    SUBCASE("a curve gAMA and the sRGB chunk cannot state exactly gets an ICC profile, and only such a curve")
+    {
+        for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+        {
+            const TransferFunction tf{(TransferFunction::Type_)i, 2.4f};
+            if (tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG)
+                continue;
+            CAPTURE(transfer_function_name(tf));
+            std::ostringstream out(std::ios::binary);
+            save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false, /*sixteen_bit*/ true, tf);
+            auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+            REQUIRE(reloaded);
+
+            const bool stated = tf.type == TransferFunction::Linear || tf.type == TransferFunction::Gamma ||
+                                tf.type == TransferFunction::sRGB;
+            if (stated || !ICCProfile::can_describe(tf))
+            {
+                CHECK(reloaded->icc_data.empty());
+                continue;
+            }
+            REQUIRE_FALSE(reloaded->icc_data.empty());
+
+            // the profile decodes code values as the curve does, up to the white an ICC curve ends at
+            ICCProfile         profile{reloaded->icc_data};
+            constexpr int      num = 32;
+            std::vector<float> ramp(num * 3);
+            for (int j = 0; j < num * 3; ++j) ramp[j] = float(j / 3) / (num - 1);
+            REQUIRE(profile.linearize_pixels(ramp.data(), int3{num, 1, 3}, true));
+            float worst = 0.f;
+            for (int j = 0; j < num * 3; ++j)
+                worst =
+                    std::max(worst, std::abs(ramp[j] - std::clamp(to_linear(float(j / 3) / (num - 1), tf), 0.f, 1.f)));
+            CHECK(worst <= 2e-3f);
+        }
+    }
 
     SUBCASE("linear is recorded as gAMA 1.0")
     {
