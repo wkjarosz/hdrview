@@ -18,9 +18,7 @@
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
-#include "app.h"
 
-#include "fonts.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 
@@ -214,7 +212,7 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
         throw std::invalid_argument("PFMSaveOptions pointer is null");
 
     Timer timer;
-    // get interleaved LDR pixel data
+    // get interleaved float pixel data
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved<float>(&w, &h, &n, opts->tf);
     write_pfm_image(os, filename, w, h, n, pixels.get());

@@ -5,7 +5,6 @@
 //
 
 #include "uhdr.h"
-#include "app.h"
 #include "colorspace.h"
 #include "exif.h"
 #include "gainmap.h"
@@ -25,7 +24,6 @@
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
-#include "fonts.h"
 #include "icc.h"
 #include "imgui_ext.h"
 
@@ -57,14 +55,12 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float base_quality,
-                     float gainmap_quality, bool use_multi_channel_gainmap, int gainmap_scale_factor,
-                     float gainmap_gamma)
+void save_uhdr_image(const Image &, ostream &, string_view, int, int, bool, int, float)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx) { return &s_opts; }
+UHDRSaveOptions *uhdr_parameters_gui(SaveContext &) { return &s_opts; }
 
 void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *params)
 {
@@ -491,7 +487,6 @@ UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx)
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
-        // Gain
         // Base quality
         ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0,
                              "The quality factor to be used while encoding SDR intent.\n[0-100]");

@@ -12,7 +12,6 @@
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
-#include "app.h"
 #include "heif.h" // for HEIFCodec, which the stubs below need too
 #include "imgui.h"
 
@@ -30,8 +29,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
     throw runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, float, int, bool, bool, HEIFCodec,
-                     TransferFunction)
+void save_heif_image(const Image &, std::ostream &, std::string_view, int, bool, bool, HEIFCodec, TransferFunction)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
@@ -48,7 +46,6 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec, SaveContext &) { return nullptr;
 #include "colorspace.h"
 #include "common.h"
 #include "exif.h"
-#include "fonts.h"
 #include "gainmap.h"
 #include "hdr_metadata.h"
 #include "heif.h"
@@ -62,6 +59,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec, SaveContext &) { return nullptr;
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <hello_imgui/dpi_aware.h>
 #include <map>
 #include <mutex>
 
@@ -1322,7 +1320,6 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
-        // Gain (custom widget with button)
         // Transfer function
         ImGui::PE::Entry(
             "Transfer function",

@@ -6,7 +6,7 @@
 
 /** \file test_export_roundtrip.cpp
 
-    Every writer against every channel-group layout HDRView can select for export.
+    Every writer against every channel-group layout HDRView can save.
 
     Each cell saves an image, reads it back, and compares against what Image::rgba_pixel() shows for it.
     The comparison is on straight (unpremultiplied) color, so a format that cannot store alpha is judged on

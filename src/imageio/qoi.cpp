@@ -4,12 +4,10 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "app.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 #include "save_options.h"
 
-#include "fonts.h"
 
 #include <qoi.h>
 
@@ -209,8 +207,7 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
                 return true;
             },
             "Encode the pixel values using this transfer function.\nWARNING: The QOI image format header can only "
-            "indicate sRGB or Linear transfer functions. If you choose a different transfer function, we will store "
-            "Linear in the QOI header, and the file will likely not be displayed correctly by other software.");
+            "indicate sRGB or Linear transfer functions. Any other choice is written as Linear.");
 
         if (s_opts.tf.type == TransferFunction::Gamma)
             ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
@@ -224,6 +221,6 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = QOISaveOptions{};
 
-    ctx.hdr = is_hdr_encoding(s_opts.tf);
+    ctx.hdr = false; //< 8-bit, sRGB or linear
     return &s_opts;
 }

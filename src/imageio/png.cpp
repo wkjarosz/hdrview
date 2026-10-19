@@ -5,7 +5,6 @@
 //
 
 #include "png.h"
-#include "app.h"
 #include "colorspace.h"
 #include "image.h"
 #include "imageio/alpha.h"
@@ -39,12 +38,12 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     throw runtime_error("PNG support not enabled in this build.");
 }
 
-void save_png_image(const Image &img, std::ostream &os, std::string_view filename, bool sRGB, bool dither)
+void save_png_image(const Image &, std::ostream &, std::string_view, bool, bool, bool, TransferFunction)
 {
     throw runtime_error("PNG support not enabled in this build.");
 }
 
-PNGSaveOptions *png_parameters_gui(SaveContext &ctx) { return &s_opts; }
+PNGSaveOptions *png_parameters_gui(SaveContext &) { return &s_opts; }
 
 void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params)
 {

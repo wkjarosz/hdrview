@@ -5,7 +5,6 @@
 //
 
 #include "jpg.h"
-#include "app.h"
 #include "colorspace.h"
 #include "common.h"
 #include "endian-utils.h"
@@ -27,7 +26,6 @@
 #include <string>
 #include <vector>
 
-#include "fonts.h"
 #include "imgui_ext.h"
 
 using namespace std;
@@ -60,7 +58,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
                     bool progressive)
 { return save_stb_jpg(img, os, filename, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither, quality); }
 
-JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx) { return &s_opts; }
+JPGSaveOptions *jpg_parameters_gui(SaveContext &) { return &s_opts; }
 
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, const JPGSaveOptions *params)
 {

@@ -7,8 +7,6 @@
 #include "imageio/j2k.h"
 #include "save_options.h"
 
-#include "app.h"
-#include "fonts.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 
@@ -40,7 +38,7 @@ vector<ImagePtr> load_j2k_image(istream &, string_view, const ImageLoadOptions &
     throw runtime_error("JPEG 2000 support not enabled in this build.");
 }
 
-J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx) { return &s_opts; }
+J2KSaveOptions *j2k_parameters_gui(SaveContext &) { return &s_opts; }
 
 const char *j2k_extension(const J2KSaveOptions *params)
 {
@@ -52,7 +50,7 @@ void save_j2k_image(const Image &, ostream &, string_view, const J2KSaveOptions 
     throw runtime_error("JPEG 2000 support not enabled in this build.");
 }
 
-void save_j2k_image(const Image &, ostream &, string_view, float, bool, int, J2KContainer, TransferFunction, bool)
+void save_j2k_image(const Image &, ostream &, string_view, bool, int, J2KContainer, TransferFunction, bool)
 {
     throw runtime_error("JPEG 2000 support not enabled in this build.");
 }

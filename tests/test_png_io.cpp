@@ -456,8 +456,8 @@ TEST_CASE("PngSuite's gray+alpha files survive a save/reload round trip")
 
 TEST_CASE("PNG save/load round-trips gray+alpha without corrupting the alpha channel")
 {
-    // A Y,A group takes as_interleaved()'s n < 3 path, which loops uniformly over every channel. Alpha takes
-    // no transfer function, and the other channels are divided back out by it.
+    // A Y,A group takes as_interleaved()'s n < 3 path, where alpha takes no transfer function and the color
+    // channel is divided back out by it.
     constexpr int2 size{4, 4};
 
     auto img = std::make_shared<Image>(size, 2);

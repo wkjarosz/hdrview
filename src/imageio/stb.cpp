@@ -17,9 +17,7 @@
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
-#include "app.h"
 
-#include "fonts.h"
 #include "icc.h"
 #include "imgui.h"
 #include "imgui_ext.h"

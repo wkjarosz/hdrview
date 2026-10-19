@@ -134,8 +134,9 @@ SHARED_CONST float HDR_REFERENCE_WHITE_NITS = 203.0f;
 
 /** DCI cinema reference white luminance in cd/m^2, per SMPTE ST 428-1.
 
-    The DCI-P3 EOTF, like PQ's, produces absolute luminance. Dividing by this maps the cinema's reference white,
-    code value (48/52.37)^(1/2.6), to 1.0, so a DCI-coded image's white is HDRView's SDR white.
+    The DCI-P3 EOTF, like PQ's and HLG's, produces absolute luminance. Dividing its output by this (and multiplying
+    before the inverse EOTF) maps the cinema's reference white, code value (48/52.37)^(1/2.6), to 1.0, HDRView's SDR
+    white.
 */
 SHARED_CONST float DCI_REFERENCE_WHITE_NITS = 48.0f;
 
@@ -475,7 +476,7 @@ SHARED_PER_COMPONENT(EOTF_IEC61966_2_4)
     Z = Z'^2.6 * 52.37
 
     \param nonlinear Non-linear encoded value (R', G', or B' channel)
-    \returns Linear output value
+    \returns Absolute luminance in cd/m^2, 52.37 at code value 1.0
 */
 SHARED_FN float EOTF_DCI_P3(float nonlinear)
 {
@@ -491,7 +492,7 @@ SHARED_PER_COMPONENT(EOTF_DCI_P3)
     Y' = (Y / 52.37)^(1/2.6)
     Z' = (Z / 52.37)^(1/2.6)
 
-    \param linear Linear input value (R, G, or B channel)
+    \param linear Absolute luminance in cd/m^2 (R, G, or B channel)
     \returns Non-linear encoded value
 */
 SHARED_FN float inverse_EOTF_DCI_P3(float linear) { return spow(linear / 52.37f, 1.0f / 2.6f); }

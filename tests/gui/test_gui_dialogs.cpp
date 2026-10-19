@@ -1,7 +1,8 @@
 /** \file test_gui_dialogs.cpp
     \author Wojciech Jarosz
 
-    Opens and closes the File-menu dialogs and asserts on their visibility.
+    Opens and closes the File-menu dialogs, runs every save format's options panel, and checks what each kind of
+    save writes.
 */
 
 #include "app.h"
@@ -100,7 +101,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             IM_CHECK(ctx->WindowInfo(dialog).Window != nullptr);
 
             // the format list is a BeginListBox(), whose child window carries a runtime ID-hash suffix
-            // ("Save as.../<hex>"), so the entries have no written-out path: gather them and click by id
+            // ("<dialog>/<hex>"), so the entries have no written-out path: gather them and click by id
             ImGuiTestItemList items;
             ctx->GatherItems(&items, window.c_str(), -1);
             ImVector<ImGuiID> format_ids;
@@ -127,8 +128,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         };
     }
 
-    // What each kind of save writes: the image itself, a copy of the selection, the comparison before the view's
-    // exposure, or the view itself, clipped where the target display would clip it.
+    // What each kind of save writes: the image itself, a copy of the selection, the view clipped where the target
+    // display would clip it, in the image's own primaries and with alpha only when the image has it, or the
+    // comparison before the view's exposure.
     t           = IM_REGISTER_TEST(engine, "dialogs", "image_to_save_writes_what_each_mode_says");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -144,17 +146,35 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         // the image's own data, whole
         IM_CHECK(app->image_to_save(HDRViewApp::SaveMode_Data, false, false, 0.f) == img);
 
+        // A lit, opaque pixel, for the checks below: the fixture's corners are transparent black, which would
+        // match a copy from the wrong place or an exposure applied where it should not be.
+        const int2 lit = [&]
+        {
+            for (int y = 0; y < img->size().y; y += 7)
+                for (int x = 0; x < img->size().x; x += 7)
+                {
+                    const int2   p = int2{x, y} + img->data_window.min;
+                    const float4 v = app->pixel_value(p, true, 2);
+                    if (v.w == 1.f && v.x + v.y + v.z > 0.5f)
+                        return p;
+                }
+            return img->data_window.min;
+        }();
+        IM_CHECK(lit != img->data_window.min);
+
         // and under a selection, which keeps its place in the frame
-        const Box2i roi{img->data_window.min + int2{1, 1}, img->data_window.min + int2{4, 3}};
+        const Box2i roi{lit, lit + int2{3, 2}};
         app->set_selection(roi);
         auto part = app->image_to_save(HDRViewApp::SaveMode_Data, false, true, 0.f);
         IM_CHECK(part != nullptr && part->size() == roi.size() && part->data_window == roi);
-        IM_CHECK_EQ(part->channels[0](0, 0), img->channels[0](1, 1));
+        const int2 at = roi.min - img->data_window.min;
+        for (int c = 0; c < (int)img->channels.size(); ++c)
+            IM_CHECK_EQ(part->channels[c](0, 0), img->channels[c](at.x, at.y));
         app->set_selection(Box2i{});
 
-        // A rendition for SDR, two stops up in plain gamma: the exposed value, clipped at SDR white. The fixture
-        // has partly transparent pixels, whose premultiplied colors the clip holds to the ceiling times alpha.
-        // passing highlights through, whatever the saved settings chose, so only the target's clip applies
+        // A rendition for SDR, two stops up in plain gamma with highlights passed through whatever the saved settings
+        // chose, so only the target's clip applies: the exposed value, clipped at SDR white. The fixture has partly
+        // transparent pixels, whose premultiplied colors the clip holds to the ceiling times alpha.
         bool       &roll_off = *app->action("Roll off highlights").p_selected;
         const float exposure = app->exposure_live(), gamma = app->gamma_live();
         const auto  tonemap = app->tonemap();
@@ -207,10 +227,15 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         IM_CHECK_EQ(app->image_to_save(HDRViewApp::SaveMode_Rendition, false, false, 0.f)->channels.size(), 3u);
         group.type = type;
 
-        // the comparison, with no reference to compare with, is the image's shown channels before the exposure
+        // the comparison, with no reference to compare with, is the image's shown channels before the exposure,
+        // which is still two stops up
         auto cmp = app->image_to_save(HDRViewApp::SaveMode_Data, true, false, 0.f);
         IM_CHECK(cmp != nullptr && cmp != img);
-        IM_CHECK_FLOAT_NEAR_EQ(cmp->channels[0](0, 0), app->pixel_value(img->data_window.min, true, 2)[0], 1e-6f);
+        const float4 raw   = app->pixel_value(lit, true, 2);
+        const int2   c     = lit - img->data_window.min;
+        const float3 shown = mul(
+            cmp->M_to_sRGB, float3{cmp->channels[0](c.x, c.y), cmp->channels[1](c.x, c.y), cmp->channels[2](c.x, c.y)});
+        for (int i = 0; i < 3; ++i) IM_CHECK_FLOAT_NEAR_EQ(shown[i], raw[i], 1e-5f);
 
         app->exposure_live() = exposure;
         app->gamma_live()    = gamma;

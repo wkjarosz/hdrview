@@ -1,19 +1,17 @@
-#include "webp.h"
-#include "json.h"
-#include "save_options.h"
 //
 // Copyright (C) Wojciech Jarosz. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can
 // be found in the LICENSE.txt file.
 //
 
-#include "app.h"
+#include "webp.h"
 #include "common.h"
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
-#include "webp.h"
+#include "json.h"
+#include "save_options.h"
 
 using namespace std;
 
@@ -43,7 +41,7 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
     throw runtime_error("WebP support not enabled in this build.");
 }
 
-WebPSaveOptions *webp_parameters_gui(SaveContext &ctx) { return &s_opts; }
+WebPSaveOptions *webp_parameters_gui(SaveContext &) { return &s_opts; }
 
 void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *params)
 {
@@ -66,7 +64,6 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
 
 #include "colorspace.h"
 #include "exif.h"
-#include "fonts.h"
 #include "icc.h"
 #include "imgui_ext.h"
 #include "timer.h"
@@ -611,7 +608,8 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
                 }
                 return true;
             },
-            "Encode the pixel values using this transfer function.");
+            "Encode the pixel values using this transfer function. WebP stores sRGB or linear samples; any other "
+            "choice is written as linear.");
 
         if (s_opts.tf.type == TransferFunction::Gamma)
             ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
@@ -631,7 +629,7 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = WebPSaveOptions{};
 
-    ctx.hdr = is_hdr_encoding(s_opts.tf);
+    ctx.hdr = false; //< 8-bit, sRGB or linear
     return &s_opts;
 }
 

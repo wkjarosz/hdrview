@@ -5,7 +5,6 @@
 //
 
 #include "imageio/jxl.h"
-#include "app.h"
 #include "endian-utils.h"
 #include "exif.h"
 #include "image.h"
@@ -48,7 +47,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
 
-JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx) { return &s_opts; }
+JXLSaveOptions *jxl_parameters_gui(SaveContext &) { return &s_opts; }
 
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
 {
@@ -84,7 +83,6 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 #endif
 
 #include "colorspace.h"
-#include "fonts.h"
 #include "icc.h"
 #include "timer.h"
 
@@ -1205,7 +1203,7 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = JXLSaveOptions{};
 
-    ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index <= 1);
+    ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index <= 1); // the first two are the float formats
     return &s_opts;
 }
 

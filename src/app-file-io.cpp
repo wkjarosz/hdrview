@@ -231,8 +231,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         // ImGui::PushItemWidth(-HelloImGui::EmSize(10));
 
-        // What is saved: the image's data, or with the comparison against the reference before the view's
-        // exposure, or a rendition of the view; and all of it, or the part under the selection.
+        // What is saved: the image's data, optionally blended with the reference before the view's exposure, or a
+        // rendition of the view; whole, or only the part under the selection.
         static bool include_comparison = false, selection_only = false;
         if (!rendition)
         {
@@ -345,8 +345,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         case Format_EXR:
         {
-            // A comparison or a rendition is one RGBA group, which the options list in place of the image's
-            // own groups; this stands in for the image that is only made once the file is chosen.
+            // A comparison or a rendition is a single color group, which the options list in place of the image's
+            // own groups; this stands in for that image, which is only built once the file is chosen.
             static const ImagePtr rgba = []
             {
                 auto img = make_shared<Image>(int2{1, 1}, 4);
@@ -435,9 +435,9 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::Dummy(HelloImGui::EmToVec2(25.f, 0.f)); // ensure minimum size even for no options
         ImGui::EndGroup();
 
-        // A rendition is written for a display: one at SDR white when the encoding cannot hold more, which the
-        // format's options say, else one of a chosen headroom. Its highlight handling resolves against that
-        // display's ceiling rather than this one's, and nothing goes above it.
+        // A rendition is written for a target display: SDR white when the format's encoding cannot hold more
+        // (ctx.hdr), else a chosen peak. The view's highlight mode resolves against that display's ceiling rather
+        // than this one's, and nothing is written above it.
         float target_ceiling = 0.f; //< in stops above SDR white
         if (rendition)
         {
@@ -590,8 +590,8 @@ ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool include_comparison, 
         out->data_window = out->display_window = bounds;
     const float3x3 M_from_sRGB = inverse(out->M_to_sRGB);
 
-    // A rendition's highlights are handled for the target display, and clipped at its ceiling, or at SDR white
-    // when clipping is the mode, as that display would; the clip applies to the straight color.
+    // A rendition's highlights are handled for the target display and clipped at its ceiling (at SDR white in
+    // Clip at SDR white). The clip bounds the straight color, so premultiplied values stay under limit * alpha.
     const Rolloff rolloff = rolloff_for(target_ceiling);
     const float   limit   = std::exp2(m_clamp_to_LDR ? 0.f : target_ceiling);
     const int     width   = bounds.size().x;

@@ -5,7 +5,6 @@
 //
 
 #include "tiff.h"
-#include "app.h"
 #include "common.h"
 #include "image.h"
 #include "imageio/alpha.h"
@@ -43,7 +42,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     throw runtime_error("TIFF support not enabled in this build.");
 }
 
-TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx) { return &s_opts; }
+TIFFSaveOptions *tiff_parameters_gui(SaveContext &) { return &s_opts; }
 
 void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename, const TIFFSaveOptions *params)
 {
