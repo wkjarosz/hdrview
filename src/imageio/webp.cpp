@@ -19,7 +19,7 @@ struct WebPSaveOptions
 {
     bool             lossless = false;
     float            quality  = 95.f;
-    TransferFunction tf       = TransferFunction::sRGB;
+    TransferFunction tf       = TransferFunction::sRGB; ///< sRGB from the dialog: no ICC profile says otherwise
 };
 
 static WebPSaveOptions s_opts;
@@ -588,32 +588,6 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Encode the pixel values using this transfer function. WebP stores sRGB or linear samples; any other "
-            "choice is written as linear.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
 
         ImGui::PE::Checkbox(
             "Lossless", &s_opts.lossless,

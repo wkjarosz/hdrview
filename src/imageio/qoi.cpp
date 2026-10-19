@@ -192,13 +192,12 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
+                    // the only two the encoder writes
+                    for (auto type : {TransferFunction::Linear, TransferFunction::sRGB})
                     {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
+                        bool is_selected = s_opts.tf.type == type;
+                        if (ImGui::Selectable(transfer_function_name(type).c_str(), is_selected))
+                            s_opts.tf = type;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -206,12 +205,7 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
                 }
                 return true;
             },
-            "Encode the pixel values using this transfer function.\nWARNING: The QOI image format header can only "
-            "indicate sRGB or Linear transfer functions. Any other choice is written as Linear.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
+            "Encode the pixel values using this transfer function, which the QOI header records.");
 
         ImGui::PE::Checkbox("Dither", &s_opts.dither);
 
