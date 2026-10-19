@@ -968,14 +968,18 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     }
 
 #ifdef PNG_cICP_SUPPORTED
-    // if cicp_primaries are unrecognized (< 0), we already converted values to sRGB/BT.709
-    png_byte color_primaries = png_byte(cicp_primaries < 0 ? 1 : cicp_primaries); // e.g. 1 for BT.709, 9 for BT.2020
+    // Primaries HDRView does not know were converted to BT.709 above, and an image that records none is taken
+    // to be in BT.709's, so both are written as BT.709. A curve with no CICP code, such as most gammas, gets no
+    // cICP at all: a reader would let it override the gAMA chunk that does describe the curve.
+    png_byte color_primaries = png_byte(cicp_primaries <= 2 ? 1 : cicp_primaries); // e.g. 1 for BT.709, 9 for BT.2020
     png_byte transfer_function =
         (png_byte)transfer_function_to_CICP(tf); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
     png_byte matrix_coefficients = 0;            // e.g. 0 for RGB
     png_byte video_full_range    = 1;            // 1 for full range, 0 for limited
 
-    png_set_cICP(png_ptr, info_ptr.get(), color_primaries, transfer_function, matrix_coefficients, video_full_range);
+    if (transfer_function != 0)
+        png_set_cICP(png_ptr, info_ptr.get(), color_primaries, transfer_function, matrix_coefficients,
+                     video_full_range);
 #endif
 
     // An HDR encoding says how bright its content is, and on what display it was mastered when that is known

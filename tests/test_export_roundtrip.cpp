@@ -75,6 +75,7 @@ enum Caps : unsigned
     Cap_Curves = 1u << 3, ///< encodes every transfer function it can name, and records which
     Cap_Levels = 1u << 4, ///< records a PQ or HLG image's content light level and mastering display
     Cap_White  = 1u << 5, ///< records the luminance the values' (1, 1, 1) stands for
+    Cap_Gamma  = 1u << 6, ///< records a gamma curve's exponent
 };
 
 #if defined(PNG_cICP_SUPPORTED)
@@ -110,9 +111,9 @@ const Writer k_writers[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_pfm_image(i, o, "a.pfm", t); }},
     {"hdr_stb", ".hdr", Cap_Float,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_hdr(i, o, "a.hdr", t); }},
-    {"png16", ".png", Cap_Alpha | k_png_curves | k_png_levels,
+    {"png16", ".png", Cap_Alpha | k_png_curves | k_png_levels | Cap_Gamma,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, true, t); }},
-    {"png8", ".png", Cap_Alpha | k_png_curves | k_png_levels,
+    {"png8", ".png", Cap_Alpha | k_png_curves | k_png_levels | Cap_Gamma,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, false, t); }},
     {"png_stb", ".png", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_png(i, o, "a.png", t); }},
@@ -156,7 +157,7 @@ const Writer k_writers[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},
 #endif
 #if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN)
-    {"jxl", ".jxl", Cap_Alpha | Cap_Curves,
+    {"jxl", ".jxl", Cap_Alpha | Cap_Curves | Cap_Gamma,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_jxl_image(i, o, "a.jxl", /*lossless*/ true, 100.f, t, JXL_TYPE_UINT16); }},
 #endif
@@ -345,20 +346,28 @@ TEST_CASE("every writer records the gamut and transfer function its samples are 
     // transfer function: a writer that encodes any curve has to say which, or the file reads back as sRGB.
     const Chromaticities bt2020{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
 
+    // every curve, with gamma at an exponent no sRGB fallback could pass for and at 2.6, JPEG XL's DCI
+    std::vector<TransferFunction> curves;
+    for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
+        if (i != TransferFunction::Gamma)
+            curves.push_back({(TransferFunction::Type_)i});
+    curves.push_back({TransferFunction::Gamma, 1.8f});
+    curves.push_back({TransferFunction::Gamma, 2.6f});
+
     for (const auto &writer : k_writers)
-        for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
+        for (const auto &requested : curves)
         {
             // Unspecified stands for the writer's default; one that encodes any curve is also tried on every
-            // curve it can name (gamma takes a parameter, which no writer records)
-            const auto curve = (TransferFunction::Type_)i;
+            // curve it can name
+            const auto curve = requested.type;
             if (curve != TransferFunction::Unspecified &&
-                (!(writer.caps & Cap_Curves) || curve == TransferFunction::Gamma))
+                (!(writer.caps & Cap_Curves) || (curve == TransferFunction::Gamma && !(writer.caps & Cap_Gamma))))
                 continue;
 #if HDRVIEW_ENABLE_LIBJXL
             if (std::string{writer.name} == "jxl" && curve != TransferFunction::Unspecified && !jxl_supported_tf(curve))
                 continue;
 #endif
-            INFO("writer = ", std::string{writer.name}, ", curve = ", transfer_function_name(curve));
+            INFO("writer = ", std::string{writer.name}, ", curve = ", transfer_function_name(requested));
 
             auto img            = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f);
             img->chromaticities = bt2020;
@@ -377,7 +386,7 @@ TEST_CASE("every writer records the gamut and transfer function its samples are 
                 add_white_luminance(img->metadata["header"], 150.f, "test");
 
             // the writer's default: linear for a float format, sRGB otherwise
-            const TransferFunction tf = curve != TransferFunction::Unspecified ? TransferFunction{curve}
+            const TransferFunction tf = curve != TransferFunction::Unspecified ? requested
                                         : (writer.caps & Cap_Float) ? TransferFunction{TransferFunction::Linear}
                                                                     : TransferFunction{TransferFunction::sRGB};
             std::ostringstream     out(std::ios::binary);

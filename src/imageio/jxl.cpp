@@ -132,17 +132,19 @@ static inline float hdrview_JxlEncoderDistanceFromQuality(float quality)
 #endif
 }
 
+// JPEG XL's gamma is the exponent that encodes, 1/2.2 for a 2.2 curve; HDRView's is the one that decodes. Its DCI is
+// SMPTE RP 431-2's projector, a plain gamma of 2.6, and not ST 428-1's XYZ encoding that CICP's code 17 names.
 static TransferFunction transfer_function_from_color_encoding(const JxlColorEncoding &enc)
 {
     switch (enc.transfer_function)
     {
     case JXL_TRANSFER_FUNCTION_709: return TransferFunction::ITU;
     case JXL_TRANSFER_FUNCTION_SRGB: return TransferFunction::sRGB;
-    case JXL_TRANSFER_FUNCTION_GAMMA: return {TransferFunction::Gamma, (float)enc.gamma};
+    case JXL_TRANSFER_FUNCTION_GAMMA: return {TransferFunction::Gamma, enc.gamma > 0. ? float(1. / enc.gamma) : 1.f};
+    case JXL_TRANSFER_FUNCTION_DCI: return {TransferFunction::Gamma, 2.6f};
     case JXL_TRANSFER_FUNCTION_LINEAR: return TransferFunction::Linear;
     case JXL_TRANSFER_FUNCTION_PQ: return TransferFunction::BT2100_PQ;
     case JXL_TRANSFER_FUNCTION_HLG: return TransferFunction::BT2100_HLG;
-    case JXL_TRANSFER_FUNCTION_DCI: return TransferFunction::DCI_P3;
     case JXL_TRANSFER_FUNCTION_UNKNOWN: return TransferFunction::Unspecified;
     default: return TransferFunction::Invalid;
     }
@@ -158,7 +160,6 @@ static JxlTransferFunction jxl_tf(TransferFunction tf) noexcept
     case TransferFunction::ITU: return JXL_TRANSFER_FUNCTION_709;
     case TransferFunction::BT2100_PQ: return JXL_TRANSFER_FUNCTION_PQ;
     case TransferFunction::BT2100_HLG: return JXL_TRANSFER_FUNCTION_HLG;
-    case TransferFunction::DCI_P3: return JXL_TRANSFER_FUNCTION_DCI;
     default: return JXL_TRANSFER_FUNCTION_UNKNOWN;
     }
 }
@@ -255,12 +256,13 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 {
     spdlog::info("Linearizing pixel values using encoded profile.");
     Chromaticities file_chr = file_chromaticities(file_enc);
-    auto           tf       = file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA
-                                  ? TransferFunction{TransferFunction::Gamma, (float)file_enc.gamma}
-                                  : transfer_function_from_CICP((int)file_enc.transfer_function);
+    const bool     power    = file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA ||
+                              file_enc.transfer_function == JXL_TRANSFER_FUNCTION_DCI;
+    auto           tf       = power ? transfer_function_from_color_encoding(file_enc)
+                                    : transfer_function_from_CICP((int)file_enc.transfer_function);
 
-    // this needs to use our general linearization function
-    if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA || file_enc.primaries == JXL_PRIMARIES_CUSTOM)
+    // a power curve has no CICP code (DCI's 17 means another curve there), so it takes the general path
+    if (power || file_enc.primaries == JXL_PRIMARIES_CUSTOM)
         return linearize_pixels(pixels, size, file_chr, tf, keep_primaries, profile_description, c);
     else // we can map to a CICP profile
     {
@@ -657,10 +659,13 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 spdlog::info("File has an encoded color profile:\n{}", color_encoding_info(file_enc));
             }
 
-            // only prefer the encoded profile if it exists and it specifies an HDR transfer function
+            // Prefer the encoded profile when it has one of the curves the synthesized ICC profile misstates: an
+            // HDR one, which ICC cannot express, or DCI, whose ICC libjxl tags cicp 17 (ST 428-1) though its curve
+            // is RP 431-2's plain gamma 2.6.
             prefer_icc = !icc_profile.empty() &&
                          (!has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
-                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG));
+                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG &&
+                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_DCI));
             spdlog::info("Will {}prefer ICC profile for linearization.", prefer_icc ? "" : "not ");
         }
         else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER)
@@ -1087,7 +1092,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     memset(&color_encoding, 0, sizeof(color_encoding));
     color_encoding.color_space       = n <= 2 ? JXL_COLOR_SPACE_GRAY : JXL_COLOR_SPACE_RGB;
     color_encoding.transfer_function = jtf;
-    color_encoding.gamma             = tf.gamma;
+    color_encoding.gamma             = tf.type == TransferFunction::Gamma ? 1.0 / tf.gamma : 0.0; //< libjxl's encodes
     color_encoding.rendering_intent  = JXL_RENDERING_INTENT_RELATIVE;
 
     Chromaticities c{}; // sRGB/Rec709, D65
