@@ -28,5 +28,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 struct JPGSaveOptions;
 struct SaveContext;
 JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx);
+/// Whether the JPEG save options offer \p tf: only sRGB, which a reader assumes.
+bool jpg_offers_curve(TransferFunction tf);
 // throws on error
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, const JPGSaveOptions *params);

@@ -201,7 +201,8 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, Transfe
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<float>(&w, &h, &n, tf);
+    // PFM records no transfer function, and is read back as linear
+    auto pixels = img.as_interleaved<float>(&w, &h, &n, labeled_curve(tf, TransferFunction::Linear, "PFM"));
     write_pfm_image(os, filename, w, h, n, pixels.get());
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
@@ -214,7 +215,7 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
     Timer timer;
     // get interleaved float pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<float>(&w, &h, &n, opts->tf);
+    auto pixels = img.as_interleaved<float>(&w, &h, &n, labeled_curve(opts->tf, TransferFunction::Linear, "PFM"));
     write_pfm_image(os, filename, w, h, n, pixels.get());
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
@@ -226,33 +227,6 @@ PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx)
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Encode the pixel values using this transfer function.\nWARNING: values in a PFM "
-            "file are typically assumed linear, and there is no way to signal in the file "
-            "that the values are encoded with a different transfer function.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
         ImGui::PE::End();
     }
 
@@ -262,3 +236,5 @@ PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx)
     ctx.hdr = true;
     return &s_opts;
 }
+
+bool pfm_offers_curve(TransferFunction tf) { return tf.type == TransferFunction::Linear; }

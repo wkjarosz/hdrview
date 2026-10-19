@@ -45,6 +45,8 @@ void save_png_image(const Image &, std::ostream &, std::string_view, bool, bool,
 
 PNGSaveOptions *png_parameters_gui(SaveContext &) { return &s_opts; }
 
+bool png_offers_curve(TransferFunction) { return false; }
+
 void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params)
 {
     throw runtime_error("PNG support not enabled in this build.");
@@ -878,6 +880,16 @@ constexpr bool k_can_write_cicp = PNG_cICP_SUPPORTED_ENABLED;
 
 } // namespace
 
+bool png_offers_curve(TransferFunction tf)
+{
+    if (tf.type == TransferFunction::Unspecified || tf.type == TransferFunction::Invalid)
+        return false;
+    // cICP names every curve; without it, a curve needs the sRGB chunk, an exact gAMA or an ICC profile
+    const auto signaling = transfer_signaling(tf);
+    return k_can_write_cicp || signaling.srgb_chunk || (signaling.file_gamma > 0.0 && signaling.gamma_is_exact) ||
+           ICCProfile::can_describe(tf);
+}
+
 void save_png_image(const Image &img, ostream &os, string_view /*filename*/, bool dither, bool interlaced,
                     bool sixteen_bit, TransferFunction tf)
 {
@@ -1074,6 +1086,8 @@ PNGSaveOptions *png_parameters_gui(SaveContext &ctx)
                 {
                     for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
+                        if (!png_offers_curve({(TransferFunction::Type_)i, s_opts.tf.gamma}))
+                            continue;
                         bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
                         if (ImGui::Selectable(
                                 transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),

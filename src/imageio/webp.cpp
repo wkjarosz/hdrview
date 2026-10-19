@@ -608,3 +608,5 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 }
 
 #endif
+
+bool webp_offers_curve(TransferFunction tf) { return tf.type == TransferFunction::sRGB; }

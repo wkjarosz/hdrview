@@ -1722,6 +1722,7 @@ set(HDRVIEW_SOURCES
     src/imageio/streams.cpp
     src/imageio/qoi.cpp
     src/imageio/raw.cpp
+    src/imageio/save_options.cpp
     src/imageio/tiff.cpp
     src/imageio/uhdr.cpp
     src/imageio/webp.cpp

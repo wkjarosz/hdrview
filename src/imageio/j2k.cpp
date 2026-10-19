@@ -731,10 +731,8 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
 
     int  w = 0, h = 0, n = 0;
     // JPEG 2000 records no transfer function here, and is read back as sRGB
-    if (params->tf.type != TransferFunction::sRGB)
-        spdlog::warn("JPEG 2000 cannot record the {} transfer function; writing sRGB instead.",
-                     transfer_function_name(params->tf));
-    auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, TransferFunction::sRGB, params->dither);
+    auto pixels = img.as_interleaved<uint16_t>(
+        &w, &h, &n, labeled_curve(params->tf, TransferFunction::sRGB, "JPEG 2000"), params->dither);
     if (!pixels || w <= 0 || h <= 0 || n < 1 || n > 4)
         throw runtime_error{"JPEG 2000: unsupported image dimensions or channel count"};
 
@@ -901,3 +899,5 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
 }
 
 #endif // HDRVIEW_ENABLE_J2K
+
+bool j2k_offers_curve(TransferFunction tf, J2KContainer) { return tf.type == TransferFunction::sRGB; }

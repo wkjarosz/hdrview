@@ -45,4 +45,6 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
 void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
 STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &ctx);
+/// Whether the stb save options offer \p tf: linear for .hdr and sRGB otherwise, which readers assume.
+bool stb_offers_curve(TransferFunction tf, bool is_hdr);
 void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);

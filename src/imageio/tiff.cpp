@@ -977,7 +977,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 // else if (photometric == PHOTOMETRIC_MINISBLACK || photometric == PHOTOMETRIC_MINISWHITE)
                 //     tf = TransferFunction::Linear; // TIFF spec: grayscale is typically linear
                 else
-                    tf = TransferFunction::Gamma; // RGB and palette default to gamma 2.2
+                    tf = TransferFunction::sRGB; // as other readers take an untagged RGB or palette TIFF
 
                 Chromaticities file_chr;
                 if (photometric == PHOTOMETRIC_LOGLUV || photometric == PHOTOMETRIC_LOGL)
@@ -1324,10 +1324,8 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     Timer     timer;
 
     // TIFF records no transfer function here, and is read back as sRGB when integer and linear when float
-    const TransferFunction tf = opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
-    if (opts->tf.type != tf.type)
-        spdlog::warn("TIFF cannot record the {} transfer function; writing {} instead.",
-                     transfer_function_name(opts->tf), transfer_function_name(tf));
+    const TransferFunction tf =
+        labeled_curve(opts->tf, opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB, "TIFF");
 
     // Set custom error/warning handlers
     TIFFSetErrorHandler(error_handler);
@@ -1494,3 +1492,6 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 }
 
 #endif
+
+bool tiff_offers_curve(TransferFunction tf, int data_type_index)
+{ return tf.type == (data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB); }

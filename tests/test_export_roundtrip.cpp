@@ -6,11 +6,15 @@
 
 /** \file test_export_roundtrip.cpp
 
-    Every writer against every channel-group layout HDRView can save.
+    Every format HDRView writes, at each setting of its options, saved and read back.
 
-    Each cell saves an image, reads it back, and compares against what Image::rgba_pixel() shows for it.
-    The comparison is on straight (unpremultiplied) color, so a format that cannot store alpha is judged on
-    the same footing as one that can, and alpha itself is checked only where it survives.
+    k_variants lists the settings and what each promises. Two sweeps hold them to it:
+    - every setting a dialog opens with, against every channel-group layout HDRView can save, compared on
+      straight (unpremultiplied) color so a format that cannot store alpha is judged on the same footing as
+      one that can;
+    - every setting, against every transfer function its dialog offers, compared in code values within the
+      quantization step or the lossy codec's error the setting declares, with the primaries, light levels and
+      white luminance it records.
 */
 
 #include <doctest/doctest.h>
@@ -18,6 +22,7 @@
 #include "colorspace.h"
 #include "image.h"
 #include "imageio/exr.h"
+#include "imageio/exr_save_options.h"
 #include "imageio/hdr_metadata.h"
 #include "imageio/heif.h"
 #include "imageio/image_loader.h"
@@ -69,20 +74,14 @@ namespace
 
 enum Caps : unsigned
 {
-    Cap_Float = 1u << 0, ///< stores unbounded values, and is therefore written linear
-    Cap_Alpha = 1u << 1, ///< can store an alpha channel
-    Cap_Lossy  = 1u << 2, ///< moves samples even at maximum quality
-    Cap_Curves = 1u << 3, ///< encodes every transfer function it can name, and records which
-    Cap_Levels = 1u << 4, ///< records a PQ or HLG image's content light level and mastering display
-    Cap_White  = 1u << 5, ///< records the luminance the values' (1, 1, 1) stands for
-    Cap_Gamma  = 1u << 6, ///< records a gamma curve's exponent
+    Cap_Default = 1u << 0, ///< the setting the save dialog opens with, which the layout sweep runs
+    Cap_Float   = 1u << 1, ///< stores unbounded values, and is therefore written linear
+    Cap_Alpha   = 1u << 2, ///< can store an alpha channel
+    Cap_Lossy   = 1u << 3, ///< moves samples even at maximum quality
+    Cap_Levels  = 1u << 4, ///< records a PQ or HLG image's content light level and mastering display
+    Cap_White   = 1u << 5, ///< records the luminance the values' (1, 1, 1) stands for
 };
 
-#if defined(PNG_cICP_SUPPORTED)
-constexpr unsigned k_png_curves = Cap_Curves;
-#else
-constexpr unsigned k_png_curves = 0u;
-#endif
 #if defined(PNG_cICP_SUPPORTED) && defined(PNG_cLLI_SUPPORTED) && defined(PNG_mDCV_SUPPORTED)
 constexpr unsigned k_png_levels = Cap_Levels;
 #else
@@ -94,81 +93,136 @@ constexpr unsigned k_heif_levels = Cap_Levels;
 constexpr unsigned k_heif_levels = 0u;
 #endif
 
-struct Writer
+using Save   = void (*)(const Image &, std::ostream &, TransferFunction);
+using Offers = bool (*)(TransferFunction);
+
+/// One setting of a format's options, and what it promises.
+struct Variant
 {
     const char *name;
     const char *ext;
     unsigned    caps;
-    void (*save)(const Image &, std::ostream &, TransferFunction);
+    float       step;   ///< how far a code value may move: the quantization step, or the lossy codec's error
+    Offers      offers; ///< the transfer functions its dialog offers, each of which it must label
+    Save        save;
 };
 
+constexpr float k_8bit  = 1.f / 255.f; ///< a code value step at 8 bits, which rounding stays within
+constexpr float k_10bit = 1.f / 1023.f;
+
+bool offers_linear(TransferFunction tf) { return tf.type == TransferFunction::Linear; }
+
+template <int pixel_type, Imf::Compression compression>
+void save_exr(const Image &img, std::ostream &os, TransferFunction)
+{
+    auto opts        = exr_default_save_options(img);
+    opts.pixel_type  = pixel_type;
+    opts.compression = compression;
+    save_exr_image(img, os, "a.exr", &opts);
+}
+
 // clang-format off
-const Writer k_writers[] = {
-    {"exr", ".exr", Cap_Float | Cap_Alpha | Cap_White,
-     // the default-argument form, which has to fall back to something sized for this image
+const Variant k_variants[] = {
+    // the default-argument form, which has to fall back to something sized for this image
+    {"exr", ".exr", Cap_Default | Cap_Float | Cap_Alpha | Cap_White, 1e-3f, offers_linear,
      [](const Image &i, std::ostream &o, TransferFunction) { save_exr_image(i, o, "a.exr"); }},
-    {"pfm", ".pfm", Cap_Float,
+    {"exr float zip", ".exr", Cap_Float | Cap_Alpha | Cap_White, 1e-6f, offers_linear, save_exr<0, Imf::ZIP_COMPRESSION>},
+    {"exr half rle", ".exr", Cap_Float | Cap_Alpha | Cap_White, 1e-3f, offers_linear, save_exr<1, Imf::RLE_COMPRESSION>},
+    {"exr half dwaa", ".exr", Cap_Float | Cap_Alpha | Cap_White | Cap_Lossy, 0.02f, offers_linear, save_exr<1, Imf::DWAA_COMPRESSION>},
+    {"pfm", ".pfm", Cap_Default | Cap_Float, 1e-6f, pfm_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_pfm_image(i, o, "a.pfm", t); }},
-    {"hdr_stb", ".hdr", Cap_Float,
+    {"hdr_stb", ".hdr", Cap_Default | Cap_Float, 0.008f, [](TransferFunction t) { return stb_offers_curve(t, true); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_hdr(i, o, "a.hdr", t); }},
-    {"png16", ".png", Cap_Alpha | k_png_curves | k_png_levels | Cap_Gamma,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, true, t); }},
-    {"png8", ".png", Cap_Alpha | k_png_curves | k_png_levels | Cap_Gamma,
+    {"png8", ".png", Cap_Default | Cap_Alpha | k_png_levels, k_8bit, png_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, false, t); }},
-    {"png_stb", ".png", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_png(i, o, "a.png", t); }},
-    {"tga_stb", ".tga", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_tga(i, o, "a.tga", t); }},
-    {"bmp_stb", ".bmp", 0u,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_bmp(i, o, "a.bmp", t); }},
-    {"jpg_stb", ".jpg", Cap_Lossy,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_jpg(i, o, "a.jpg", t); }},
+    {"png8 interlaced", ".png", Cap_Alpha | k_png_levels, k_8bit, png_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, true, false, t); }},
+    {"png16", ".png", Cap_Alpha | k_png_levels, 1e-4f, png_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, true, t); }},
+    {"png_stb", ".png", Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_curve(t, false); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_png(i, o, "a.png", t, false); }},
+    {"tga_stb", ".tga", Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return stb_offers_curve(t, false); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_tga(i, o, "a.tga", t, false); }},
+    {"bmp_stb", ".bmp", Cap_Default, k_8bit, [](TransferFunction t) { return stb_offers_curve(t, false); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_bmp(i, o, "a.bmp", t, false); }},
+    {"jpg_stb", ".jpg", Cap_Default | Cap_Lossy, 0.03f, [](TransferFunction t) { return stb_offers_curve(t, false); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_jpg(i, o, "a.jpg", t, false); }},
 #if HDRVIEW_ENABLE_LIBTIFF
-    {"tiff8", ".tif", Cap_Alpha,
+    // the save dialog's data types and compressions: 0 none, 1 LZW, 2 ZIP, 3 PackBits
+    {"tiff8 lzw", ".tif", Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return tiff_offers_curve(t, 0); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 0); }},
-    {"tiff_float", ".tif", Cap_Float | Cap_Alpha,
+    {"tiff8 none", ".tif", Cap_Alpha, k_8bit, [](TransferFunction t) { return tiff_offers_curve(t, 0); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 0, 0); }},
+    {"tiff16 zip", ".tif", Cap_Alpha, 1e-4f, [](TransferFunction t) { return tiff_offers_curve(t, 1); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 2, 1); }},
+    {"tiff16 packbits", ".tif", Cap_Alpha, 1e-4f, [](TransferFunction t) { return tiff_offers_curve(t, 1); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 3, 1); }},
+    {"tiff float lzw", ".tif", Cap_Float | Cap_Alpha, 1e-6f, [](TransferFunction t) { return tiff_offers_curve(t, 2); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 2); }},
 #endif
-    {"qoi", ".qoi", Cap_Alpha,
+    {"qoi", ".qoi", Cap_Default | Cap_Alpha, k_8bit, qoi_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t)
      { save_qoi_image(i, o, "a.qoi", t.type == TransferFunction::sRGB, false); }},
 #if HDRVIEW_ENABLE_LIBJPEG
-    {"jpg", ".jpg", Cap_Lossy,
+    {"jpg q95", ".jpg", Cap_Default | Cap_Lossy, 0.03f, jpg_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_jpg_image(i, o, "a.jpg", t.type == TransferFunction::sRGB, false, 100, false); }},
+     { save_jpg_image(i, o, "a.jpg", t.type == TransferFunction::sRGB, false, 95, false); }},
+    {"jpg q60 progressive", ".jpg", Cap_Lossy, 0.06f, jpg_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t)
+     { save_jpg_image(i, o, "a.jpg", t.type == TransferFunction::sRGB, false, 60, true); }},
 #endif
 #if HDRVIEW_ENABLE_J2K
-    // both syntaxes, and both ends of the bit depths the dialog offers
-    {"jp2_16", ".jp2", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_j2k_image(i, o, "a.jp2", true, 16, J2KContainer::JP2, t, false); }},
-    {"jp2_10", ".jp2", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_j2k_image(i, o, "a.jp2", true, 10, J2KContainer::JP2, t, false); }},
-    {"jp2_8", ".jp2", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_j2k_image(i, o, "a.jp2", true, 8, J2KContainer::JP2, t, false); }},
-    {"j2k", ".j2k", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_j2k_image(i, o, "a.j2k", true, 16, J2KContainer::J2K, t, false); }},
+    // both syntaxes, every bit depth the dialog offers, and its lossy mode
+    {"jp2 16", ".jp2", Cap_Default | Cap_Alpha, 1e-4f, [](TransferFunction t) { return j2k_offers_curve(t, J2KContainer::JP2); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 16, J2KContainer::JP2, t, false); }},
+    {"jp2 12", ".jp2", Cap_Alpha, 1.f / 4095.f, [](TransferFunction t) { return j2k_offers_curve(t, J2KContainer::JP2); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 12, J2KContainer::JP2, t, false); }},
+    {"jp2 10", ".jp2", Cap_Alpha, k_10bit, [](TransferFunction t) { return j2k_offers_curve(t, J2KContainer::JP2); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 10, J2KContainer::JP2, t, false); }},
+    {"jp2 8", ".jp2", Cap_Alpha, k_8bit, [](TransferFunction t) { return j2k_offers_curve(t, J2KContainer::JP2); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", true, 8, J2KContainer::JP2, t, false); }},
+    {"jp2 16 lossy", ".jp2", Cap_Alpha | Cap_Lossy, 0.03f, [](TransferFunction t) { return j2k_offers_curve(t, J2KContainer::JP2); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.jp2", false, 16, J2KContainer::JP2, t, false); }},
+    {"j2k 16", ".j2k", Cap_Alpha, 1e-4f, [](TransferFunction t) { return j2k_offers_curve(t, J2KContainer::J2K); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.j2k", true, 16, J2KContainer::J2K, t, false); }},
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
-    {"webp", ".webp", Cap_Alpha,
+    {"webp q95", ".webp", Cap_Default | Cap_Alpha | Cap_Lossy, 0.04f, webp_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 95.f, false, t); }},
+    {"webp lossless", ".webp", Cap_Alpha, k_8bit, webp_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},
 #endif
 #if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN)
-    {"jxl", ".jxl", Cap_Alpha | Cap_Curves | Cap_Gamma,
-     [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_jxl_image(i, o, "a.jxl", /*lossless*/ true, 100.f, t, JXL_TYPE_UINT16); }},
+    // a gamma decodes through the ICC profile libjxl synthesizes, whose fixed-point curve moves a lossless
+    // file's samples by about 1e-4
+    {"jxl f32 q95", ".jxl", Cap_Default | Cap_Alpha | Cap_Lossy, 0.03f, [](TransferFunction t) { return jxl_offers_curve(t); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", false, 95.f, t, JXL_TYPE_FLOAT); }},
+    {"jxl f32 lossless", ".jxl", Cap_Alpha, 3e-4f, [](TransferFunction t) { return jxl_offers_curve(t); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_FLOAT); }},
+    {"jxl f16 lossless", ".jxl", Cap_Alpha, 1e-3f, [](TransferFunction t) { return jxl_offers_curve(t); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_FLOAT16); }},
+    {"jxl u16 lossless", ".jxl", Cap_Alpha, 3e-4f, [](TransferFunction t) { return jxl_offers_curve(t); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_UINT16); }},
+    {"jxl u8 lossless", ".jxl", Cap_Alpha, k_8bit, [](TransferFunction t) { return jxl_offers_curve(t); },
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_UINT8); }},
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
-    // both codecs the dialog offers, since they take different paths through libheif
-    {"heif", ".heif", Cap_Alpha | Cap_Lossy | Cap_Curves | k_heif_levels,
-     [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t); }},
-    {"avif", ".avif", Cap_Alpha | Cap_Lossy | Cap_Curves | k_heif_levels,
-     [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t); }},
+    // both codecs the dialog offers, since they take different paths through libheif; "lossless" still converts
+    // to YCbCr, which moves samples by a few steps
+    {"heif", ".heif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.03f, heif_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 95, false, true, HEIFCodec::HEVC, t); }},
+    {"heif lossless 8", ".heif", Cap_Alpha | Cap_Lossy | k_heif_levels, 4 * k_8bit, heif_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 8); }},
+    {"heif lossless 10", ".heif", Cap_Alpha | Cap_Lossy | k_heif_levels, 4 * k_10bit, heif_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 10); }},
+    {"avif", ".avif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.03f, heif_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 95, false, true, HEIFCodec::AV1, t); }},
+    {"avif lossless 8", ".avif", Cap_Alpha | Cap_Lossy | k_heif_levels, 4 * k_8bit, heif_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 8); }},
+    {"avif lossless 10", ".avif", Cap_Alpha | Cap_Lossy | k_heif_levels, 4 * k_10bit, heif_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 10); }},
+    {"avif lossless 12", ".avif", Cap_Alpha | Cap_Lossy | k_heif_levels, 4.f / 4095.f, heif_offers_curve,
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 12); }},
 #endif
 };
 
@@ -223,20 +277,23 @@ float3 straight_rgb(const float4 &premultiplied)
     return float3{premultiplied[0] / a, premultiplied[1] / a, premultiplied[2] / a};
 }
 
-float tolerance(const Writer &w)
+/// The layout sweep's relative tolerance, on straight color at the default setting.
+float tolerance(const Variant &v)
 {
-    if (w.caps & Cap_Lossy)
+    if (v.caps & Cap_Lossy)
         return 0.04f;
-    return (w.caps & Cap_Float) ? 2e-3f : 0.012f; // 8-bit writers quantize, and some dither
+    return (v.caps & Cap_Float) ? 2e-3f : 0.012f; // 8-bit writers quantize, and some dither
 }
 
 } // namespace
 
 TEST_CASE("every writer round-trips every channel-group layout as the viewport shows it")
 {
-    for (const auto &writer : k_writers)
+    for (const auto &writer : k_variants)
         for (const auto &layout : k_layouts)
         {
+            if (!(writer.caps & Cap_Default))
+                continue;
             INFO("writer = ", std::string{writer.name}, ", layout = ", std::string{layout.label});
 
             auto img = make_image(layout, /*alpha*/ 0.75f);
@@ -339,45 +396,42 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
         }
 }
 
-TEST_CASE("every writer records the gamut and transfer function its samples are in, or converts to ones it can")
+TEST_CASE("every setting of every writer round-trips each curve its dialog offers, labeled as it promises")
 {
-    // as_interleaved() converts to sRGB unless a writer opts out, and one that opts out has to record the
-    // primaries its samples are in; doing neither leaves a file that reads back as sRGB. The same goes for a
-    // transfer function: a writer that encodes any curve has to say which, or the file reads back as sRGB.
-    const Chromaticities bt2020{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
+    // A wide gamut, kept and recorded or converted to sRGB's, and every transfer function, with gamma at an
+    // exponent no other curve shares and at 2.6, JPEG XL's DCI. A setting must label each curve its dialog
+    // offers, or the file reads back as some other curve; one it does not offer is the saver's to refuse or
+    // write as a curve it can label, which the dialog never asks for.
+    const Chromaticities bt2020 = gamut_chromaticities(ColorGamut_BT2020_2100);
 
-    // every curve, with gamma at an exponent no sRGB fallback could pass for and at 2.6, JPEG XL's DCI
     std::vector<TransferFunction> curves;
-    for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
+    for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
         if (i != TransferFunction::Gamma)
             curves.push_back({(TransferFunction::Type_)i});
     curves.push_back({TransferFunction::Gamma, 1.8f});
     curves.push_back({TransferFunction::Gamma, 2.6f});
 
-    for (const auto &writer : k_writers)
-        for (const auto &requested : curves)
+    for (const auto &variant : k_variants)
+    {
+        INFO("setting = ", std::string{variant.name});
+        // the curve the dialog opens with, linear for a float format and sRGB otherwise, is always offered
+        CHECK(variant.offers(
+            TransferFunction{(variant.caps & Cap_Float) ? TransferFunction::Linear : TransferFunction::sRGB}));
+
+        for (const auto &tf : curves)
         {
-            // Unspecified stands for the writer's default; one that encodes any curve is also tried on every
-            // curve it can name
-            const auto curve = requested.type;
-            if (curve != TransferFunction::Unspecified &&
-                (!(writer.caps & Cap_Curves) || (curve == TransferFunction::Gamma && !(writer.caps & Cap_Gamma))))
+            if (!variant.offers(tf))
                 continue;
-#if HDRVIEW_ENABLE_LIBJXL
-            if (std::string{writer.name} == "jxl" && curve != TransferFunction::Unspecified && !jxl_supported_tf(curve))
-                continue;
-#endif
-            INFO("writer = ", std::string{writer.name}, ", curve = ", transfer_function_name(requested));
+            INFO("curve = ", transfer_function_name(tf));
 
             auto img            = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f);
             img->chromaticities = bt2020;
-            color_conversion_matrix(img->M_to_sRGB, bt2020, gamut_chromaticities(ColorGamut_sRGB_BT709));
-
+            img->compute_color_transform();
             const float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
 
-            // what a writer that has room for it records: a white luminance, and for an HDR curve the display
+            // what a setting that has room for it records: a white luminance, and for an HDR curve the display
             // the image was mastered on
-            const bool hdr_curve = curve == TransferFunction::BT2100_PQ || curve == TransferFunction::BT2100_HLG;
+            const bool hdr_curve = tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG;
             const MasteringDisplay mastered{bt2020, k_mastering_display_min_nits, 1000.f};
             if (hdr_curve)
                 add_mastering_display(img->metadata["header"], mastered.primaries, mastered.min_nits, mastered.max_nits,
@@ -385,22 +439,18 @@ TEST_CASE("every writer records the gamut and transfer function its samples are 
             else
                 add_white_luminance(img->metadata["header"], 150.f, "test");
 
-            // the writer's default: linear for a float format, sRGB otherwise
-            const TransferFunction tf = curve != TransferFunction::Unspecified ? requested
-                                        : (writer.caps & Cap_Float) ? TransferFunction{TransferFunction::Linear}
-                                                                    : TransferFunction{TransferFunction::sRGB};
-            std::ostringstream     out(std::ios::binary);
-            std::string            error;
+            std::ostringstream out(std::ios::binary);
+            std::string        error;
             try
             {
-                writer.save(*img, out, tf);
+                variant.save(*img, out, tf);
             }
             catch (const std::exception &e)
             {
                 error = e.what();
             }
             if (error.find("no encoder available") != std::string::npos)
-                continue; // see the note on codec availability in the layout table above
+                continue; // which codecs libheif can encode depends on the plugins the build found
             CHECK_MESSAGE(error.empty(), "save threw: ", error);
             if (!error.empty())
                 continue;
@@ -409,7 +459,7 @@ TEST_CASE("every writer records the gamut and transfer function its samples are 
             std::vector<ImagePtr> reloaded;
             try
             {
-                reloaded = load_image(in, std::string("a") + writer.ext);
+                reloaded = load_image(in, std::string("a") + variant.ext);
             }
             catch (const std::exception &e)
             {
@@ -418,25 +468,21 @@ TEST_CASE("every writer records the gamut and transfer function its samples are 
             CHECK_MESSAGE(error.empty(), "load threw: ", error);
             if (!error.empty() || reloaded.size() != 1)
                 continue;
+            const auto &back = reloaded[0];
 
-            const float4 got = reloaded[0]->rgba_pixel(int2{1, 0}, Target_Primary);
-            if (curve == TransferFunction::Unspecified)
-                for (int c = 0; c < 3; ++c) CHECK(got[c] == doctest::Approx(want[c]).epsilon(tolerance(writer)));
-            else
-            {
-                // in the curve's code values, where an 8-bit step is 1/255 whatever the level; a file read back
-                // with the wrong curve is off by a tenth or more
-                const float    step        = (writer.caps & Cap_Lossy) ? 0.02f : 2.f / 255.f;
-                const float3x3 M_from_sRGB = inverse(img->M_to_sRGB);
-                const float3   got_code    = from_linear(mul(M_from_sRGB, got.xyz()), tf);
-                const float3   want_code   = from_linear(mul(M_from_sRGB, want.xyz()), tf);
-                for (int c = 0; c < 3; ++c) CHECK(std::abs(got_code[c] - want_code[c]) <= step);
-            }
+            // Compared in code values, where the setting's step is a step whatever the level, and in the
+            // primaries the samples were quantized in: the image's own when the file kept and recorded them,
+            // sRGB's when it converted. A file read back with the wrong curve or primaries is off by far more.
+            const bool kept = back->chromaticities && approx_equal(*back->chromaticities, bt2020, 1e-3f);
+            const auto M    = kept ? inverse(img->M_to_sRGB) : float3x3{la::identity};
+            const auto got  = from_linear(mul(M, back->rgba_pixel(int2{1, 0}, Target_Primary).xyz()), tf);
+            const auto ref  = from_linear(mul(M, want.xyz()), tf);
+            for (int c = 0; c < 3; ++c) CHECK(std::abs(got[c] - ref[c]) <= variant.step);
 
-            const json header = reloaded[0]->metadata.value("header", json::object());
-            if (!hdr_curve && (writer.caps & Cap_White))
+            const json header = back->metadata.value("header", json::object());
+            if (!hdr_curve && (variant.caps & Cap_White))
                 CHECK(white_luminance(header).value_or(0.f) == doctest::Approx(150.f));
-            if (hdr_curve && (writer.caps & Cap_Levels))
+            if (hdr_curve && (variant.caps & Cap_Levels))
             {
                 // the content light level of the samples, measured here from the channels themselves
                 double     brightest = 0., total = 0.;
@@ -457,18 +503,19 @@ TEST_CASE("every writer records the gamut and transfer function its samples are 
 
                 const auto md = mastering_display(header);
                 REQUIRE(md);
-                for (auto [got_xy, want_xy] : {std::pair{md->primaries.red, mastered.primaries.red},
-                                               std::pair{md->primaries.green, mastered.primaries.green},
-                                               std::pair{md->primaries.blue, mastered.primaries.blue},
-                                               std::pair{md->primaries.white, mastered.primaries.white}})
-                    CHECK(la::maxelem(la::abs(got_xy - want_xy)) <= 1e-4f);
+                for (auto [g, w] : {std::pair{md->primaries.red, mastered.primaries.red},
+                                    std::pair{md->primaries.green, mastered.primaries.green},
+                                    std::pair{md->primaries.blue, mastered.primaries.blue},
+                                    std::pair{md->primaries.white, mastered.primaries.white}})
+                    CHECK(la::maxelem(la::abs(g - w)) <= 1e-4f);
                 CHECK(md->max_nits == doctest::Approx(mastered.max_nits));
                 CHECK(md->min_nits == doctest::Approx(mastered.min_nits));
             }
 #if HDRVIEW_ENABLE_LIBJXL
             // JPEG XL has only the peak, as its intensity target
-            if (hdr_curve && std::string{writer.name} == "jxl")
+            if (hdr_curve && std::string{variant.ext} == ".jxl")
                 CHECK(header.at("intensity target").at("value").get<float>() == doctest::Approx(mastered.max_nits));
 #endif
         }
+    }
 }

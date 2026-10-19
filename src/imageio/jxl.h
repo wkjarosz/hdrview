@@ -19,7 +19,7 @@ json get_jxl_info();
 
 // should not throw
 bool is_jxl_image(std::istream &is) noexcept;
-bool jxl_supported_tf(TransferFunction tf) noexcept;
+bool jxl_offers_curve(TransferFunction tf) noexcept;
 // throws on error
 std::vector<ImagePtr> load_jxl_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 // throws on error

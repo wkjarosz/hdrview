@@ -29,7 +29,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
     throw runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, int, bool, bool, HEIFCodec, TransferFunction)
+void save_heif_image(const Image &, std::ostream &, std::string_view, int, bool, bool, HEIFCodec, TransferFunction, int)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
@@ -40,6 +40,8 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
 }
 
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec, SaveContext &) { return nullptr; }
+
+bool heif_offers_curve(TransferFunction) { return false; }
 
 #else
 
@@ -277,7 +279,12 @@ static heif_transfer_characteristics transfer_function_to_heif(TransferFunction 
     case TransferFunction::Log100_Sqrt10: return heif_transfer_characteristic_logarithmic_100_sqrt10;
     case TransferFunction::IEC61966_2_4: return heif_transfer_characteristic_IEC_61966_2_4;
     case TransferFunction::DCI_P3: return heif_transfer_characteristic_SMPTE_ST_428_1;
-    default: return heif_transfer_characteristic_IEC_61966_2_1; // fallback to sRGB
+    // nclx names only these two gammas
+    case TransferFunction::Gamma:
+        return tf.gamma == 2.2f   ? heif_transfer_characteristic_ITU_R_BT_470_6_System_M
+               : tf.gamma == 2.8f ? heif_transfer_characteristic_ITU_R_BT_470_6_System_B_G
+                                  : heif_transfer_characteristic_unspecified;
+    default: return heif_transfer_characteristic_unspecified;
     }
 }
 
@@ -294,10 +301,14 @@ static bool is_heif_transfer_supported(TransferFunction tf)
     case heif_transfer_characteristic_logarithmic_100:
     case heif_transfer_characteristic_logarithmic_100_sqrt10:
     case heif_transfer_characteristic_IEC_61966_2_4:
-    case heif_transfer_characteristic_SMPTE_ST_428_1: return true;
+    case heif_transfer_characteristic_SMPTE_ST_428_1:
+    case heif_transfer_characteristic_ITU_R_BT_470_6_System_M:
+    case heif_transfer_characteristic_ITU_R_BT_470_6_System_B_G: return true;
     default: return false;
     }
 }
+
+bool heif_offers_curve(TransferFunction tf) { return is_heif_transfer_supported(tf); }
 
 static bool linearize_colors(float *pixels, int3 size, bool keep_primaries, const heif_color_profile_nclx *nclx,
                              string *profile_description = nullptr, Chromaticities *c = nullptr)
@@ -1355,7 +1366,7 @@ static void set_heif_lossless(heif_encoder *enc, bool lossless)
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool lossless,
-                     bool use_alpha, HEIFCodec codec, TransferFunction tf)
+                     bool use_alpha, HEIFCodec codec, TransferFunction tf, int bit_depth)
 {
     // the encoder table is built lazily, and only heif_parameters_gui() does it
     init_heif_supported_formats();
@@ -1368,6 +1379,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     params.use_alpha = use_alpha;
     params.tf        = tf;
     params.codec     = codec;
+    params.bit_depth = bit_depth;
     params.encoder   = default_encoder_for(codec, use_alpha);
     set_heif_lossless(s_encoders[params.encoder].get(), lossless);
     heif_encoder_set_lossy_quality(s_encoders[params.encoder].get(), quality);
@@ -1406,7 +1418,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
                 {
                     for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
                     {
-                        if (!is_heif_transfer_supported((TransferFunction::Type_)i))
+                        if (!heif_offers_curve((TransferFunction::Type_)i))
                             continue;
                         bool selected = (s_opts.tf.type == (TransferFunction::Type_)i);
                         if (ImGui::Selectable(

@@ -404,8 +404,11 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     return images;
 }
 
+// stb records no transfer function, and readers take .hdr for linear and the rest for sRGB, so each writer
+// settles on that
 void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf)
 {
+    tf = labeled_curve(tf, TransferFunction::Linear, "HDR");
     spdlog::debug("Saving stb HDR with tf {}, gamma {}.", (int)tf.type, tf.gamma);
     Timer timer;
     int   w = 0, h = 0, n = 0;
@@ -425,6 +428,7 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
 void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither,
                   float quality)
 {
+    tf = labeled_curve(tf, TransferFunction::sRGB, "JPG");
     spdlog::debug("Saving stb JPG with tf {}, gamma {}, dither {}, quality {}.", (int)tf.type, tf.gamma,
                   dither ? "true" : "false", quality);
     Timer timer;
@@ -444,6 +448,7 @@ void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view fil
 
 void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
 {
+    tf = labeled_curve(tf, TransferFunction::sRGB, "TGA");
     spdlog::debug("Saving stb TGA with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
@@ -462,6 +467,7 @@ void save_stb_tga(const Image &img, std::ostream &os, const std::string_view fil
 
 void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
 {
+    tf = labeled_curve(tf, TransferFunction::sRGB, "BMP");
     spdlog::debug("Saving stb BMP with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
@@ -480,6 +486,7 @@ void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view fil
 
 void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
 {
+    tf = labeled_curve(tf, TransferFunction::sRGB, "PNG");
     spdlog::debug("Saving stb PNG with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
@@ -525,35 +532,6 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, opts.tf.gamma}).c_str(),
-                                is_selected))
-                            opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Encode the pixel values using this transfer function.\nWARNING: The STB library does not "
-            "provide a way to signal what transfer function the files were saved with. Without this "
-            "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
-
-        if (opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::Entry(
-                "Gamma", [&] { return ImGui::SliderFloat("##Gamma", &opts.tf.gamma, 0.1f, 5.f); },
-                "When using a gamma transfer function, this is the gamma value to use.");
-
         if (!is_hdr)
             ImGui::PE::Entry("Dither", [&] { return ImGui::Checkbox("##Dither", &opts.dither); });
 
@@ -571,3 +549,6 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
     ctx.hdr = is_hdr || is_hdr_encoding(opts.tf);
     return &opts;
 }
+
+bool stb_offers_curve(TransferFunction tf, bool is_hdr)
+{ return tf.type == (is_hdr ? TransferFunction::Linear : TransferFunction::sRGB); }

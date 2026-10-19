@@ -29,5 +29,7 @@ void save_webp_image(const Image &img, std::ostream &os, const std::string_view 
 struct WebPSaveOptions;
 struct SaveContext;
 WebPSaveOptions *webp_parameters_gui(SaveContext &ctx);
+/// Whether the WebP save options offer \p tf: only sRGB, which a reader assumes.
+bool webp_offers_curve(TransferFunction tf);
 // throws on error
 void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *params);

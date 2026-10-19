@@ -13,6 +13,7 @@
 
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
+#include "imageio/qoi.h"
 #include "imageio/streams.h"
 
 #include "colorspace.h"
@@ -192,9 +193,11 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
-                    // the only two the encoder writes
-                    for (auto type : {TransferFunction::Linear, TransferFunction::sRGB})
+                    for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
                     {
+                        const auto type = (TransferFunction::Type_)i;
+                        if (!qoi_offers_curve(type))
+                            continue;
                         bool is_selected = s_opts.tf.type == type;
                         if (ImGui::Selectable(transfer_function_name(type).c_str(), is_selected))
                             s_opts.tf = type;
@@ -218,3 +221,6 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
     ctx.hdr = false; //< 8-bit, sRGB or linear
     return &s_opts;
 }
+
+bool qoi_offers_curve(TransferFunction tf)
+{ return tf.type == TransferFunction::sRGB || tf.type == TransferFunction::Linear; }
