@@ -590,6 +590,25 @@ public:
     int highlight_mode() const;
     /// The chosen highlight mode's name, as the settings list it.
     const char *highlight_mode_name() const;
+    /// What a save writes: the image's own data, or a rendition of the view.
+    enum SaveMode : int
+    {
+        SaveMode_Data = 0,
+        SaveMode_Rendition
+    };
+
+    /// The image a save writes, or null when a selection misses the image.
+    /**
+        The current image itself, or the part of it under the selection when \p selection_only; or a new RGBA
+        image of the view, with \p include_comparison, before its exposure, and for a rendition all of it, with
+        the highlights handled for a display whose ceiling sits \p target_ceiling stops above SDR white.
+    */
+    ConstImagePtr image_to_save(SaveMode mode, bool include_comparison, bool selection_only,
+                                float target_ceiling) const;
+    /// The rolloff in force, with a ceiling taken from the display resolved against \p display_ceiling instead.
+    Rolloff rolloff_for(float display_ceiling) const;
+    /// tonemap_value() with the highlights rolled off as \p rolloff says, rather than as the viewport shows.
+    float4 tonemap_value(float4 value, const Rolloff &rolloff) const;
     /// Works out this frame's rolloff parameters from its settings, the display and the current image.
     /**
         Must run on the main thread, since measuring the peak can start the current image's statistics.
@@ -640,7 +659,8 @@ private:
     void draw_font_popup(Annotation &a, const ImVec2 &frame_padding, float item_spacing_x);
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
-    void draw_save_as_dialog(bool &);
+    /// The save dialog, Save as... for SaveMode_Data and Export rendition... for SaveMode_Rendition.
+    void draw_save_dialog(bool &open, SaveMode mode);
     void draw_confirm_load_session_dialog(bool &open);
     void draw_loading_session_dialog(bool &open);
     void draw_pixel_info() const;

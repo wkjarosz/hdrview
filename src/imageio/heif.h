@@ -35,7 +35,8 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
                      TransferFunction tf = TransferFunction::sRGB);
 
 struct HEIFSaveOptions;
+struct SaveContext;
 /// Draws the options for `codec`, listing only the encoders that implement it.
-HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec);
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx);
 // throws on error
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, const HEIFSaveOptions *params);

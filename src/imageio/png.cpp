@@ -11,6 +11,7 @@
 #include "imageio/alpha.h"
 #include "imageio/hdr_metadata.h"
 #include "imageio/image_loader.h"
+#include "save_options.h"
 
 #include <stdexcept>
 
@@ -43,7 +44,7 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
     throw runtime_error("PNG support not enabled in this build.");
 }
 
-PNGSaveOptions *png_parameters_gui() { return &s_opts; }
+PNGSaveOptions *png_parameters_gui(SaveContext &ctx) { return &s_opts; }
 
 void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params)
 {
@@ -1025,7 +1026,7 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     png_write_end(png_ptr, info_ptr.get());
 }
 
-PNGSaveOptions *png_parameters_gui()
+PNGSaveOptions *png_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("libPNG Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
@@ -1090,6 +1091,8 @@ PNGSaveOptions *png_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = PNGSaveOptions{};
+
+    ctx.hdr = is_hdr_encoding(s_opts.tf);
     return &s_opts;
 }
 

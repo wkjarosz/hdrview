@@ -11,6 +11,7 @@
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
+#include "save_options.h"
 
 #include <cmath>
 
@@ -42,7 +43,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     throw runtime_error("TIFF support not enabled in this build.");
 }
 
-TIFFSaveOptions *tiff_parameters_gui() { return &s_opts; }
+TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx) { return &s_opts; }
 
 void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename, const TIFFSaveOptions *params)
 {
@@ -1450,7 +1451,7 @@ void save_tiff_image(const Image &img, ostream &os, string_view filename, Transf
     save_tiff_image(img, os, filename, &opts);
 }
 
-TIFFSaveOptions *tiff_parameters_gui()
+TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("TIFF Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
@@ -1507,6 +1508,8 @@ TIFFSaveOptions *tiff_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = TIFFSaveOptions{};
+
+    ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index == 2);
     return &s_opts;
 }
 

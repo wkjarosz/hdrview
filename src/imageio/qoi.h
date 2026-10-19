@@ -22,6 +22,7 @@ void save_qoi_image(const Image &img, std::ostream &os, const std::string_view f
                     bool dither = true);
 
 struct QOISaveOptions;
-QOISaveOptions *qoi_parameters_gui();
+struct SaveContext;
+QOISaveOptions *qoi_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_qoi_image(const Image &img, std::ostream &os, std::string_view filename, const QOISaveOptions *opts);

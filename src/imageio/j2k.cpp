@@ -5,6 +5,7 @@
 //
 
 #include "imageio/j2k.h"
+#include "save_options.h"
 
 #include "app.h"
 #include "fonts.h"
@@ -39,7 +40,7 @@ vector<ImagePtr> load_j2k_image(istream &, string_view, const ImageLoadOptions &
     throw runtime_error("JPEG 2000 support not enabled in this build.");
 }
 
-J2KSaveOptions *j2k_parameters_gui() { return &s_opts; }
+J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx) { return &s_opts; }
 
 const char *j2k_extension(const J2KSaveOptions *params)
 {
@@ -850,7 +851,7 @@ const char *j2k_extension(const J2KSaveOptions *params)
     return params && params->container == J2KContainer::J2K ? ".j2k" : ".jp2";
 }
 
-J2KSaveOptions *j2k_parameters_gui()
+J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("JPEG 2000 Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
@@ -919,6 +920,8 @@ J2KSaveOptions *j2k_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = J2KSaveOptions{};
+
+    ctx.hdr = is_hdr_encoding(s_opts.tf);
     return &s_opts;
 }
 

@@ -38,6 +38,18 @@ constexpr float k_metadata_tolerance = 1.f;
 /// How far above the 99.9th percentile the measured maximum may lie, as a ratio, before it counts as an outlier.
 constexpr float k_outlier_ratio = 2.f;
 
+/// Where a rolloff's ceiling sits, in stops above SDR white, for a display whose ceiling is \p display_ceiling.
+float ceiling_of(const HDRViewApp::RolloffParams &p, float display_ceiling)
+{
+    switch (p.ceiling)
+    {
+    case HDRViewApp::RolloffCeiling_SDRWhite: return 0.f;
+    case HDRViewApp::RolloffCeiling_Custom: return std::max(0.f, p.custom_ceiling);
+    default:
+    case HDRViewApp::RolloffCeiling_Display: return display_ceiling;
+    }
+}
+
 /// A line of disabled text set in a little from the widgets above it, with an optional tooltip.
 void info_text(const string &text, const string &tooltip = {})
 {
@@ -206,6 +218,18 @@ void HDRViewApp::RolloffSettings::from_json(const json &j)
     custom.preserve_hue   = std::clamp(number(c, "preserve_hue", custom.preserve_hue), 0.f, 1.f);
 }
 
+HDRViewApp::Rolloff HDRViewApp::rolloff_for(float display_ceiling) const
+{
+    const auto p      = m_rolloff_settings.params();
+    Rolloff    r      = m_rolloff;
+    r.display_ceiling = display_ceiling;
+    r.ceiling         = ceiling_of(p, display_ceiling);
+    // as update_rolloff() keeps it: a custom peak is never below the ceiling
+    if (p.peak_source == PeakSource_Custom)
+        r.peak = std::max(p.custom_peak, r.ceiling);
+    return r;
+}
+
 int HDRViewApp::highlight_mode() const
 { return m_clamp_to_LDR ? 1 : !m_rolloff_settings.enabled ? 0 : 2 + int(m_rolloff_settings.preset); }
 
@@ -221,17 +245,9 @@ void HDRViewApp::update_rolloff()
 
     const float headroom = display_headroom();
     r.display_ceiling    = headroom > 0.f ? std::log2(std::max(1.f, headroom)) : 0.f;
-    switch (p.ceiling)
-    {
-    case RolloffCeiling_SDRWhite: break;
-    case RolloffCeiling_Custom: r.ceiling = std::max(0.f, p.custom_ceiling); break;
-    default:
-    case RolloffCeiling_Display:
-        r.ceiling = r.display_ceiling;
-        if (!(headroom > 0.f))
-            r.ceiling_note = "the display reports no headroom";
-        break;
-    }
+    r.ceiling            = ceiling_of(p, r.display_ceiling);
+    if (p.ceiling == RolloffCeiling_Display && !(headroom > 0.f))
+        r.ceiling_note = "the display reports no headroom";
 
     // Stops of display light above SDR white, from a value in the image's own units: the shader's exposure and
     // gamma steps, which the rolloff follows.
@@ -462,24 +478,19 @@ void HDRViewApp::draw_highlight_settings(bool in_panel)
     info_text(relative_to_white(r.ceiling) + (r.ceiling_note.empty() ? "" : ", " + r.ceiling_note));
 
     // where the settings as edited so far put the ceiling, below which a custom peak may not be dragged
-    auto ceiling_of = [&](const RolloffParams &q)
-    {
-        return q.ceiling == RolloffCeiling_SDRWhite ? 0.f
-               : q.ceiling == RolloffCeiling_Custom ? q.custom_ceiling
-                                                    : r.display_ceiling;
-    };
+    auto edited_ceiling = [&](const RolloffParams &q) { return ceiling_of(q, r.display_ceiling); };
 
     // A custom peak set from a knee: the two are tied through the ceiling, the peak sitting twice as far above it as
     // the knee sits below it, so either one fixes the curve.
     auto set_custom_peak = [&](float peak)
     {
         p.peak_source = PeakSource_Custom;
-        p.custom_peak = std::clamp(peak, ceiling_of(p), top);
+        p.custom_peak = std::clamp(peak, edited_ceiling(p), top);
         edited        = true;
     };
     auto peak_from_knee = [&](float knee)
     {
-        const float c = ceiling_of(p);
+        const float c = edited_ceiling(p);
         return 3.f * c - 2.f * std::min(knee, c);
     };
 
@@ -590,13 +601,13 @@ void HDRViewApp::draw_highlight_settings(bool in_panel)
             double knee_x = shown_knee;
             if (ImPlot::DragLineX(2, &knee_x, knee_color, 2.f, ImPlotDragToolFlags_Delayed))
             {
-                knee_x = std::clamp(knee_x, double(x_min), double(ceiling_of(p)));
+                knee_x = std::clamp(knee_x, double(x_min), double(edited_ceiling(p)));
                 set_custom_peak(peak_from_knee(float(knee_x)));
             }
             double peak_x = r.has_peak ? r.peak : r.ceiling;
             if (ImPlot::DragLineX(1, &peak_x, peak_color, 2.f, ImPlotDragToolFlags_Delayed))
             {
-                peak_x = std::clamp(peak_x, double(ceiling_of(p)), double(x_max));
+                peak_x = std::clamp(peak_x, double(edited_ceiling(p)), double(x_max));
                 set_custom_peak(float(peak_x));
             }
         }

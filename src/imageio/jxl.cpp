@@ -12,6 +12,7 @@
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
+#include "save_options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -47,7 +48,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
 
-JXLSaveOptions *jxl_parameters_gui() { return &s_opts; }
+JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx) { return &s_opts; }
 
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
 {
@@ -1154,7 +1155,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
 static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
 
-JXLSaveOptions *jxl_parameters_gui()
+JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("JPEG-XL Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
@@ -1203,6 +1204,8 @@ JXLSaveOptions *jxl_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = JXLSaveOptions{};
+
+    ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index <= 1);
     return &s_opts;
 }
 

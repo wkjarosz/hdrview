@@ -15,6 +15,7 @@
 #include "imageio/image_loader.h"
 #include "imgui.h"
 #include "imgui_ext.h"
+#include "save_options.h"
 #include "streams.h"
 #include "timer.h"
 #include <ImfBoxAttribute.h>
@@ -666,7 +667,7 @@ void save_exr_image(const Image &img, ostream &os_, string_view filename, const 
     }
 }
 
-EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
+EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
 {
     static ImGuiSelectionBasicStorage group_selection;
 
@@ -815,5 +816,6 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = EXRSaveOptions{};
 
+    ctx.hdr = true; //< always floating point
     return &s_opts;
 }

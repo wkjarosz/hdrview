@@ -29,6 +29,7 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
                      float gainmap_gamma = 1.f);
 
 struct UHDRSaveOptions;
-UHDRSaveOptions *uhdr_parameters_gui();
+struct SaveContext;
+UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *params);

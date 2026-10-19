@@ -7,6 +7,7 @@
 #include "app.h"
 #include "imgui.h"
 #include "imgui_ext.h"
+#include "save_options.h"
 
 #include "fonts.h"
 
@@ -181,7 +182,7 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, bool sR
 }
 
 // GUI parameter function
-QOISaveOptions *qoi_parameters_gui()
+QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("QOI Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
@@ -222,5 +223,7 @@ QOISaveOptions *qoi_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = QOISaveOptions{};
+
+    ctx.hdr = is_hdr_encoding(s_opts.tf);
     return &s_opts;
 }

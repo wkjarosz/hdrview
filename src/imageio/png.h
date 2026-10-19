@@ -28,6 +28,7 @@ void save_png_image(const Image &img, std::ostream &os, const std::string_view f
                     bool interlaced = false, bool sixteen_bit = false, TransferFunction tf = TransferFunction::sRGB);
 
 struct PNGSaveOptions;
-PNGSaveOptions *png_parameters_gui();
+struct SaveContext;
+PNGSaveOptions *png_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params);

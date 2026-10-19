@@ -1,5 +1,6 @@
 #include "webp.h"
 #include "json.h"
+#include "save_options.h"
 //
 // Copyright (C) Wojciech Jarosz. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can
@@ -42,7 +43,7 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
     throw runtime_error("WebP support not enabled in this build.");
 }
 
-WebPSaveOptions *webp_parameters_gui() { return &s_opts; }
+WebPSaveOptions *webp_parameters_gui(SaveContext &ctx) { return &s_opts; }
 
 void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *params)
 {
@@ -584,7 +585,7 @@ void save_webp_image(const Image &img, ostream &os, string_view filename, float 
     save_webp_image(img, os, filename, &opts);
 }
 
-WebPSaveOptions *webp_parameters_gui()
+WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("WebP Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
@@ -629,6 +630,8 @@ WebPSaveOptions *webp_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = WebPSaveOptions{};
+
+    ctx.hdr = is_hdr_encoding(s_opts.tf);
     return &s_opts;
 }
 

@@ -41,7 +41,7 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec, SaveContext &) { return nullptr; }
 
 #else
 
@@ -53,6 +53,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 #include "hdr_metadata.h"
 #include "heif.h"
 #include "icc.h"
+#include "save_options.h"
 #include "streams.h"
 
 #include "imgui_ext.h"
@@ -1300,7 +1301,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 // GUI parameter function
-HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
 {
     init_heif_supported_formats();
 
@@ -1544,6 +1545,8 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = HEIFSaveOptions{};
+
+    ctx.hdr = is_hdr_encoding(s_opts.tf);
     return &s_opts;
 }
 

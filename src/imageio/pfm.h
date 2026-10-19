@@ -26,6 +26,7 @@ void save_pfm_image(const Image &img, std::ostream &os, std::string_view filenam
                     TransferFunction tf = {TransferFunction::Linear, 1.f});
 
 struct PFMSaveOptions;
-PFMSaveOptions *pfm_parameters_gui();
+struct SaveContext;
+PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename, const PFMSaveOptions *opts);

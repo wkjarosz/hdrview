@@ -14,6 +14,7 @@
 #include <string_view>
 
 struct STBSaveOptions;
+struct SaveContext;
 
 // should not throw
 bool is_stb_image(std::istream &is) noexcept;
@@ -43,5 +44,5 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
                   TransferFunction tf = TransferFunction::sRGB, bool dither = true);
 void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality);
+STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &ctx);
 void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);

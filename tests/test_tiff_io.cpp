@@ -297,7 +297,7 @@ TEST_CASE("TIFF save/load round-trips alpha without repeated premultiplication")
 {
     auto original = load_tiff(rgba_tiff(2));
 
-    // draw_save_as_dialog() renders into an ostringstream and writes the buffer out, so that is the only
+    // draw_save_dialog() renders into an ostringstream and writes the buffer out, so that is the only
     // save path there is. Float samples keep the comparison about alpha, not quantization.
     std::ostringstream out(std::ios::binary);
     save_tiff_image(*original, out, "roundtrip.tif", TransferFunction::Linear,

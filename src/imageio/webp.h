@@ -27,6 +27,7 @@ void save_webp_image(const Image &img, std::ostream &os, const std::string_view 
                      bool lossless = false, TransferFunction tf = TransferFunction::sRGB);
 
 struct WebPSaveOptions;
-WebPSaveOptions *webp_parameters_gui();
+struct SaveContext;
+WebPSaveOptions *webp_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *params);

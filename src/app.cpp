@@ -742,7 +742,10 @@ void HDRViewApp::setup_dialogs(const vector<string> &in_files)
         make_unique<PopupDialog>("About", [this](bool &open) { draw_about_dialog(open); }, in_files.empty()));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Command palette...", [this](bool &open) { draw_command_palette(open); }));
-    m_dialogs.push_back(make_unique<PopupDialog>("Save as...", [this](bool &open) { draw_save_as_dialog(open); }));
+    m_dialogs.push_back(
+        make_unique<PopupDialog>("Save as...", [this](bool &open) { draw_save_dialog(open, SaveMode_Data); }));
+    m_dialogs.push_back(make_unique<PopupDialog>("Export rendition...",
+                                                 [this](bool &open) { draw_save_dialog(open, SaveMode_Rendition); }));
     m_dialogs.push_back(
         make_unique<PopupDialog>("Image loading options...", [](bool &open) { draw_load_image_options_dialog(open); }));
     m_dialogs.push_back(
@@ -1456,6 +1459,12 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S,
                    0,
                    [this]() { dialog("Save as...").open = true; },
+                   if_img});
+        add(Action{{"Export rendition...", "Save as displayed", "Export as displayed"},
+                   ICON_MY_SAVE_AS,
+                   ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_E,
+                   0,
+                   [this]() { dialog("Export rendition...").open = true; },
                    if_img});
 
 #if !defined(__EMSCRIPTEN__)

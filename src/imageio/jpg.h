@@ -26,6 +26,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
                     int quality = 95, bool progressive = false);
 
 struct JPGSaveOptions;
-JPGSaveOptions *jpg_parameters_gui();
+struct SaveContext;
+JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, const JPGSaveOptions *params);

@@ -8,6 +8,7 @@
 #include "colorspace.h"
 #include "image.h"
 #include "imageio/image_loader.h"
+#include "save_options.h"
 #include "timer.h"
 #include <cmath>
 #include <cstdint>
@@ -221,7 +222,7 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
 }
 
 // GUI parameter function
-PFMSaveOptions *pfm_parameters_gui()
+PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("PFM Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
@@ -259,5 +260,7 @@ PFMSaveOptions *pfm_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = PFMSaveOptions{};
+
+    ctx.hdr = true;
     return &s_opts;
 }

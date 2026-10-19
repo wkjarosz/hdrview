@@ -9,6 +9,7 @@
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
+#include "save_options.h"
 #include "timer.h"
 #include <cstdint>
 #include <cstring>
@@ -518,7 +519,7 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
 // }
 
 // GUI parameter function
-STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
+STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &ctx)
 {
     auto &opts = is_hdr ? s_hdr_opts : s_opts;
 
@@ -568,5 +569,7 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
 
     if (ImGui::Button("Reset options to defaults"))
         opts = is_hdr ? STBSaveOptions{{TransferFunction::Linear, 1.f}, false, 95} : STBSaveOptions{};
+
+    ctx.hdr = is_hdr || is_hdr_encoding(opts.tf);
     return &opts;
 }

@@ -31,7 +31,8 @@ enum class J2KContainer
 };
 
 struct J2KSaveOptions;
-J2KSaveOptions *j2k_parameters_gui();
+struct SaveContext;
+J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx);
 /// The extension for the syntax `params` asks for, since the two share one entry in the save dialog.
 const char *j2k_extension(const J2KSaveOptions *params);
 // throws on error

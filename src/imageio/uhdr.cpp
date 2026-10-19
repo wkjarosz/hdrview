@@ -14,6 +14,7 @@
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
 #include "imgui.h"
+#include "save_options.h"
 #include "timer.h"
 #include <cmath>
 #include <cstdint>
@@ -63,7 +64,7 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-UHDRSaveOptions *uhdr_parameters_gui() { return &s_opts; }
+UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx) { return &s_opts; }
 
 void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *params)
 {
@@ -482,7 +483,7 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     save_uhdr_image(img, os, filename, &opts);
 }
 
-UHDRSaveOptions *uhdr_parameters_gui()
+UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("UltraHDR Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
@@ -523,6 +524,8 @@ UHDRSaveOptions *uhdr_parameters_gui()
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = UHDRSaveOptions{};
+
+    ctx.hdr = true;
     return &s_opts;
 }
 

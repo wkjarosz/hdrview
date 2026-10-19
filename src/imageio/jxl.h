@@ -27,6 +27,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
                     float quality = 95.f, TransferFunction tf = TransferFunction::sRGB, int data_type = 0);
 
 struct JXLSaveOptions;
-JXLSaveOptions *jxl_parameters_gui();
+struct SaveContext;
+JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *opts);

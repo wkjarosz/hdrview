@@ -15,6 +15,7 @@
 #include "image.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
+#include "save_options.h"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -59,7 +60,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
                     bool progressive)
 { return save_stb_jpg(img, os, filename, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither, quality); }
 
-JPGSaveOptions *jpg_parameters_gui() { return &s_opts; }
+JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx) { return &s_opts; }
 
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, const JPGSaveOptions *params)
 {
@@ -828,7 +829,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
     jpeg_finish_compress(&cinfo);
 }
 
-JPGSaveOptions *jpg_parameters_gui()
+JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("libJPEG Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
@@ -849,6 +850,7 @@ JPGSaveOptions *jpg_parameters_gui()
         s_opts = JPGSaveOptions{};
 
     ImGui::Unindent();
+    ctx.hdr = false;
     return &s_opts;
 }
 

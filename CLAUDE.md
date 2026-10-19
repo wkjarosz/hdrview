@@ -284,6 +284,15 @@ luminance its (1, 1, 1) stands for) records it through `imageio/hdr_metadata.h`,
 the same keys: PNG's `cLLI`/`mDCV` chunks, HEIF/AVIF's `clli`/`mdcv` boxes, and OpenEXR's `whiteLuminance` do so
 today. JPEG XL's intensity target appears among its own header fields.
 
+Saving has two entries, each opening `draw_save_dialog()` in a fixed `SaveMode`. **Save as...** writes image data:
+the pixels as loaded, optionally blended with the reference ("Include comparison", before exposure) or cropped to
+the selection. **Export rendition...** writes what the view shows: exposure, tonemap and highlight rolloff baked
+in, the rolloff resolved against the ceiling the dialog targets (SDR white for an SDR encoding, a chosen HDR
+headroom for PQ/HLG/float) and clipped there. `image_to_save()` builds the image for either; a format's options GUI
+receives a `SaveContext` (`imageio/save_options.h`), through which it reports whether the encoding keeps values
+above SDR white. Scaling the data is an edit (Exposure/gamma...) rather than a save option, so it applies the same
+way to every format.
+
 Loaders take a plain `std::istream`, but the background loader passes one of two subclasses from
 `imageio/streams.h`: a `FileIStream` for a file on disk, which remembers its path, or a `SpanIStream` over bytes
 already in memory (zip entries, downloads, every web load), whose `view()` reaches them without a copy. A loader
