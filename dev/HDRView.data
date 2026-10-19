@@ -36680,21 +36680,21 @@ void main()
     highp vec4 background = vec4(fsp.bg_color.xyz, 1.0);
     if (fsp.bg_mode == 0)
     {
-        highp vec4 _1574 = background;
-        _1574.x = 0.0;
-        _1574.y = 0.0;
-        _1574.z = 0.0;
-        background = _1574;
+        highp vec4 _1575 = background;
+        _1575.x = 0.0;
+        _1575.y = 0.0;
+        _1575.z = 0.0;
+        background = _1575;
     }
     else
     {
         if (fsp.bg_mode == 1)
         {
-            highp vec4 _1580 = background;
-            _1580.x = 1.0;
-            _1580.y = 1.0;
-            _1580.z = 1.0;
-            background = _1580;
+            highp vec4 _1581 = background;
+            _1581.x = 1.0;
+            _1581.y = 1.0;
+            _1581.z = 1.0;
+            background = _1581;
         }
         else
         {
@@ -36712,11 +36712,11 @@ void main()
             {
                 highp vec3 param = vec3((mod(floor(gl_FragCoord.x * 0.125) + floor(gl_FragCoord.y * (-0.125)), 2.0) == 0.0) ? (_1137 ? 0.100000001490116119384765625 : 0.5) : (_1137 ? 0.20000000298023223876953125 : 0.550000011920928955078125));
                 highp vec3 _1180 = sRGB_to_linear(param);
-                highp vec4 _1588 = background;
-                _1588.x = _1180.x;
-                _1588.y = _1180.y;
-                _1588.z = _1180.z;
-                background = _1588;
+                highp vec4 _1589 = background;
+                _1589.x = _1180.x;
+                _1589.y = _1180.y;
+                _1589.z = _1180.z;
+                background = _1589;
             }
         }
     }
@@ -36791,11 +36791,11 @@ void main()
         highp vec3 param_9 = value.xyz;
         highp vec3 param_10 = fsp.primary_yw;
         highp vec3 _1314 = YC_to_RGB(param_9, param_10);
-        highp vec4 _1598 = value;
-        _1598.x = _1314.x;
-        _1598.y = _1314.y;
-        _1598.z = _1314.z;
-        value = _1598;
+        highp vec4 _1599 = value;
+        _1599.x = _1314.x;
+        _1599.y = _1314.y;
+        _1599.z = _1314.z;
+        value = _1599;
     }
     highp vec4 _1325 = value;
     highp vec4 _1326 = fsp.primary_M_to_sRGB * _1325;
@@ -36821,11 +36821,11 @@ void main()
             highp vec3 param_22 = reference_val.xyz;
             highp vec3 param_23 = fsp.secondary_yw;
             highp vec3 _1387 = YC_to_RGB(param_22, param_23);
-            highp vec4 _1604 = reference_val;
-            _1604.x = _1387.x;
-            _1604.y = _1387.y;
-            _1604.z = _1387.z;
-            reference_val = _1604;
+            highp vec4 _1605 = reference_val;
+            _1605.x = _1387.x;
+            _1605.y = _1387.y;
+            _1605.z = _1387.z;
+            reference_val = _1605;
         }
         highp vec4 _1397 = reference_val;
         highp vec4 _1398 = fsp.secondary_M_to_sRGB * _1397;
@@ -36886,11 +36886,11 @@ void main()
         highp vec4 _1532 = dithered;
         highp vec3 _1535 = vec3((mod(float(int(floor(((gl_FragCoord.x + _1097) - _1197) * 0.125))), 2.0) == 0.0) ? 0.0 : 1.0);
         highp vec3 _1537 = vec3(_1480.x ? _1535.x : _1532.xyz.x, _1480.y ? _1535.y : _1532.xyz.y, _1480.z ? _1535.z : _1532.xyz.z);
-        highp vec4 _1612 = _1532;
-        _1612.x = _1537.x;
-        _1612.y = _1537.y;
-        _1612.z = _1537.z;
-        dithered = _1612;
+        highp vec4 _1613 = _1532;
+        _1613.x = _1537.x;
+        _1613.y = _1537.y;
+        _1613.z = _1537.z;
+        dithered = _1613;
     }
     bool _1550;
     if (_1521)
@@ -36906,11 +36906,11 @@ void main()
         highp vec4 _1553 = dithered;
         highp vec3 _1556 = vec3((mod(float(int(floor(((gl_FragCoord.x - _1097) - _1197) * 0.125))), 2.0) == 0.0) ? 0.0 : 1.0);
         highp vec3 _1558 = vec3(_1487.x ? _1556.x : _1553.xyz.x, _1487.y ? _1556.y : _1553.xyz.y, _1487.z ? _1556.z : _1553.xyz.z);
-        highp vec4 _1618 = _1553;
-        _1618.x = _1558.x;
-        _1618.y = _1558.y;
-        _1618.z = _1558.z;
-        dithered = _1618;
+        highp vec4 _1619 = _1553;
+        _1619.x = _1558.x;
+        _1619.y = _1558.y;
+        _1619.z = _1558.z;
+        dithered = _1619;
     }
     frag_color = vec4(dithered.xyz, 1.0);
 }
