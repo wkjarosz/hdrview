@@ -62,8 +62,9 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
 
 // The round trip above passes for any normalization constant, since to_linear and from_linear scale by it
 // symmetrically, and colour-science checks the curves in absolute cd/m^2 (test_colour_reference.cpp). These pin
-// HDRView's own convention: BT.2408's 203 cd/m^2 HDR reference white is 1.0.
-TEST_CASE("PQ and HLG map BT.2408's reference white to 1.0")
+// HDRView's own convention for the curves in absolute luminance: their reference white is 1.0, BT.2408's
+// 203 cd/m^2 for PQ and HLG, and ST 428-1's 48 cd/m^2 for DCI-P3.
+TEST_CASE("The absolute transfer functions map their reference white to 1.0")
 {
     // 203 is spelled out here, not taken from HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of
     // tracking it
@@ -79,6 +80,11 @@ TEST_CASE("PQ and HLG map BT.2408's reference white to 1.0")
     // about 203 cd/m^2
     CHECK(shader::EOTF_BT2100_HLG(0.75f) == doctest::Approx(203.f).epsilon(0.002));
     CHECK(to_linear(0.75f, TransferFunction::BT2100_HLG) == doctest::Approx(1.f).epsilon(0.002));
+
+    // DCI's white is code value 3960 of 4095, the signal for 48 cd/m^2, and its full signal is 52.37 cd/m^2
+    CHECK(from_linear(1.f, TransferFunction::DCI_P3) == doctest::Approx(std::pow(48.f / 52.37f, 1.f / 2.6f)));
+    CHECK(from_linear(1.f, TransferFunction::DCI_P3) * 4095.f == doctest::Approx(3960.f).epsilon(5e-4));
+    CHECK(to_linear(1.0f, TransferFunction::DCI_P3) == doctest::Approx(52.37f / 48.f));
 }
 
 // Narrow (studio) range packs luma into 16..235, a span of 219, unrelated to the HDR reference white above.

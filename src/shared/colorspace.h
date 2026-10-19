@@ -132,6 +132,13 @@ SHARED_PER_COMPONENT(OETF_ITU)
 */
 SHARED_CONST float HDR_REFERENCE_WHITE_NITS = 203.0f;
 
+/** DCI cinema reference white luminance in cd/m^2, per SMPTE ST 428-1.
+
+    The DCI-P3 EOTF, like PQ's, produces absolute luminance. Dividing by this maps the cinema's reference white,
+    code value (48/52.37)^(1/2.6), to 1.0, so a DCI-coded image's white is HDRView's SDR white.
+*/
+SHARED_CONST float DCI_REFERENCE_WHITE_NITS = 48.0f;
+
 SHARED_FN float EOTF_BT2100_PQ_positive(float a)
 {
     const float m1inv = 16384.0f / 2610.0f;
@@ -523,7 +530,7 @@ SHARED_FN float from_linear(float linear, int tf, float gamma)
     case TF_LOG100: return OETF_log100(linear);
     case TF_LOG100_SQRT10: return OETF_log100_sqrt10(linear);
     case TF_IEC61966_2_4: return OETF_IEC61966_2_4(linear);
-    case TF_DCI_P3: return inverse_EOTF_DCI_P3(linear);
+    case TF_DCI_P3: return inverse_EOTF_DCI_P3(linear * DCI_REFERENCE_WHITE_NITS);
     case TF_LINEAR:
     default: return linear;
     }
@@ -544,7 +551,7 @@ SHARED_FN vec3 from_linear(vec3 linear, int tf, float gamma)
     case TF_LOG100: return OETF_log100(linear);
     case TF_LOG100_SQRT10: return OETF_log100_sqrt10(linear);
     case TF_IEC61966_2_4: return OETF_IEC61966_2_4(linear);
-    case TF_DCI_P3: return inverse_EOTF_DCI_P3(linear);
+    case TF_DCI_P3: return inverse_EOTF_DCI_P3(linear * DCI_REFERENCE_WHITE_NITS);
     case TF_LINEAR:
     default: return linear;
     }
@@ -565,7 +572,7 @@ SHARED_FN float to_linear(float encoded, int tf, float gamma)
     case TF_LOG100: return EOTF_log100(encoded);
     case TF_LOG100_SQRT10: return EOTF_log100_sqrt10(encoded);
     case TF_IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
-    case TF_DCI_P3: return EOTF_DCI_P3(encoded);
+    case TF_DCI_P3: return EOTF_DCI_P3(encoded) / DCI_REFERENCE_WHITE_NITS;
     case TF_LINEAR:
     default: return encoded;
     }
@@ -586,7 +593,7 @@ SHARED_FN vec3 to_linear(vec3 encoded, int tf, float gamma)
     case TF_LOG100: return EOTF_log100(encoded);
     case TF_LOG100_SQRT10: return EOTF_log100_sqrt10(encoded);
     case TF_IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
-    case TF_DCI_P3: return EOTF_DCI_P3(encoded);
+    case TF_DCI_P3: return EOTF_DCI_P3(encoded) / DCI_REFERENCE_WHITE_NITS;
     case TF_LINEAR:
     default: return encoded;
     }
