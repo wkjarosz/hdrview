@@ -32,7 +32,6 @@ enum Misreader_ : unsigned
     Misreader_macOS    = 1u << 0, ///< Apple's ImageIO, so Preview, Safari and every other macOS application
     Misreader_Chromium = 1u << 1, ///< Chrome, Edge and the other Chromium browsers
     Misreader_Firefox  = 1u << 2, ///< Firefox
-    Misreader_libjxl   = 1u << 3, ///< tools that take a JPEG XL's colors from the ICC profile libjxl synthesizes
 };
 
 /// A warning that some applications misread a file saved so, naming them and what they do instead.
