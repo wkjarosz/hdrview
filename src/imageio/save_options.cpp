@@ -29,3 +29,10 @@ void caveat_entry(const Caveat &caveat)
     ImGui::PopTextWrapPos();
     ImGui::PopStyleColor();
 }
+
+void no_options_entry()
+{
+    ImGui::BeginDisabled();
+    ImGui::TextUnformatted("This format has no options.");
+    ImGui::EndDisabled();
+}

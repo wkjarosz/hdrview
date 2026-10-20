@@ -223,16 +223,8 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
 // GUI parameter function
 PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("PFM Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
-    {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::End();
-    }
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = PFMSaveOptions{};
-
+    // PFM stores linear 32-bit floats, with nothing to choose
+    no_options_entry();
     ctx.hdr = true;
     return &s_opts;
 }

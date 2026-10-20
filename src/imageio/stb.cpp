@@ -528,12 +528,19 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
 {
     auto &opts = is_hdr ? s_hdr_opts : s_opts;
 
+    // stb writes Radiance's .hdr with nothing to choose: run-length-encoded RGBE, linear
+    if (is_hdr)
+    {
+        no_options_entry();
+        ctx.hdr = true;
+        return &opts;
+    }
+
     if (ImGui::PE::Begin("STB Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        if (!is_hdr)
-            ImGui::PE::Entry("Dither", [&] { return ImGui::Checkbox("##Dither", &opts.dither); });
+        ImGui::PE::Entry("Dither", [&] { return ImGui::Checkbox("##Dither", &opts.dither); });
 
         if (has_quality)
             ImGui::PE::Entry(
@@ -544,9 +551,9 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
     }
 
     if (ImGui::Button("Reset options to defaults"))
-        opts = is_hdr ? STBSaveOptions{{TransferFunction::Linear, 1.f}, false, 95} : STBSaveOptions{};
+        opts = STBSaveOptions{};
 
-    ctx.hdr = is_hdr || is_hdr_encoding(opts.tf);
+    ctx.hdr = false; //< 8-bit sRGB
     return &opts;
 }
 

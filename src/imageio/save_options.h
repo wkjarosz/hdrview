@@ -46,3 +46,6 @@ struct Caveat
 
 /// Draws \p caveat's warning below a format's options, if it has one.
 void caveat_entry(const Caveat &caveat);
+
+/// Says, in place of a format's options, that it has none.
+void no_options_entry();
