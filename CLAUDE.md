@@ -322,6 +322,12 @@ receives a `SaveContext` (`imageio/save_options.h`), through which it reports wh
 above SDR white and whether the file can record its primaries. Scaling the data is an edit (Exposure/gamma...), not
 a save option, so it applies the same way to every format.
 
+A gain-map format holds two renditions, an SDR base and a map that brightens it toward the HDR one, so only Export
+rendition offers one (Ultra HDR JPEG today). Its options set `SaveContext::sdr_base` to ask for the base, which the
+dialog builds as the same view resolved at SDR white and passes to the writer beside the HDR rendition; Ultra HDR
+can instead leave the base to libultrahdr's own tone mapping. The map reaches the peak the HDR rendition's mastering
+display names.
+
 A format offers only the transfer functions it can label, through its `X_offers_tf()`, which both its options
 GUI and `tests/test_export_roundtrip.cpp` use; TIFF, JP2 and WebP label one with an ICC profile, which names PQ
 and HLG through a `cicp` tag (`ICCProfile::can_label()`). Its `X_caveat()` names applications known to misread a

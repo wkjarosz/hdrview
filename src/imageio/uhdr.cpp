@@ -8,6 +8,7 @@
 #include "colorspace.h"
 #include "exif.h"
 #include "gainmap.h"
+#include "hdr_metadata.h"
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
@@ -37,6 +38,7 @@ struct UHDRSaveOptions
     int   gainmap_scale     = 1;
     float gainmap_gamma     = 1.f;
     int   preset            = 1;
+    int   sdr_base          = 0; ///< 0: HDRView's SDR rendition of the view, 1: libultrahdr's tone map
 };
 
 static UHDRSaveOptions s_opts;
@@ -55,14 +57,14 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-void save_uhdr_image(const Image &, ostream &, string_view, int, int, bool, int, float)
+void save_uhdr_image(const Image &, ostream &, string_view, int, int, bool, int, float, const Image *)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
 UHDRSaveOptions *uhdr_parameters_gui(SaveContext &) { return &s_opts; }
 
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *params)
+void save_uhdr_image(const Image &, std::ostream &, std::string_view, const UHDRSaveOptions *, const Image *)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
@@ -396,42 +398,57 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageL
     return {image};
 }
 
-// throws on error
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *opts)
+namespace
+{
+
+/// The gamut libultrahdr names \p chr by, or BT.709's when it names no gamut those primaries match.
+uhdr_color_gamut_t uhdr_gamut(const std::optional<Chromaticities> &chr)
+{
+    switch (chr ? named_color_gamut(*chr) : ColorGamut_sRGB_BT709)
+    {
+    case ColorGamut_Display_P3_SMPTE432: return UHDR_CG_DISPLAY_P3;
+    case ColorGamut_BT2020_2100: return UHDR_CG_BT_2100;
+    default: return UHDR_CG_BT_709;
+    }
+}
+
+/// \p pixels, \p n channels each, widened to the RGBA libultrahdr's packed formats take, opaque.
+template <typename T>
+std::unique_ptr<T[]> to_rgba(std::unique_ptr<T[]> pixels, int w, int h, int n, T opaque)
+{
+    if (n == 4)
+        return pixels;
+    const size_t num  = size_t(w) * size_t(h);
+    auto         rgba = std::make_unique<T[]>(num * 4);
+    for (size_t i = 0; i < num; ++i)
+    {
+        for (int c = 0; c < 3; ++c) rgba[4 * i + c] = pixels[n * i + c];
+        rgba[4 * i + 3] = opaque;
+    }
+    return rgba;
+}
+
+} // namespace
+
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *opts,
+                     const Image *sdr_base)
 {
     if (opts == nullptr)
         throw std::invalid_argument("UHDRSaveOptions pointer is null");
 
     Timer timer;
 
-    // get interleaved HDR pixel data
-    int                     w = 0, h = 0, n = 0;
-    std::unique_ptr<half[]> pixels_f16 =
-        img.as_interleaved<half>(&w, &h, &n, TransferFunction::Linear, false, true, true);
-    void *pixels = pixels_f16.get();
+    // in the image's primaries where libultrahdr can name them, else converted to BT.709's
+    const uhdr_color_gamut_t gamut   = uhdr_gamut(img.chromaticities);
+    const bool               convert = gamut == UHDR_CG_BT_709 && img.chromaticities &&
+                                       named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
 
+    // the HDR rendition as libultrahdr takes it: linear half floats, 1.0 at SDR white
+    int  w = 0, h = 0, n = 0;
+    auto hdr = img.as_interleaved<half>(&w, &h, &n, TransferFunction::Linear, false, true, convert);
     if (n != 3 && n != 4)
         throw invalid_argument("Can only save images with 3 or 4 channels in UltraHDR right now.");
-
-    // The UHDR API expects a packed RGBA half-float buffer for UHDR_IMG_FMT_64bppRGBAHalfFloat.
-    // If we were given only RGB (n==3) expand to RGBA and set alpha to 1.0.
-    if (n == 3)
-    {
-        const size_t       npixels = size_t(w) * size_t(h);
-        unique_ptr<half[]> expanded_rgba(new half[npixels * 4]);
-        auto               src = pixels_f16.get();
-        for (size_t i = 0; i < npixels; ++i)
-        {
-            expanded_rgba[4 * i + 0] = src[3 * i + 0];
-            expanded_rgba[4 * i + 1] = src[3 * i + 1];
-            expanded_rgba[4 * i + 2] = src[3 * i + 2];
-            expanded_rgba[4 * i + 3] = half(1.0f); // opaque alpha
-        }
-        pixels_f16.swap(expanded_rgba);
-        pixels = pixels_f16.get();
-
-        n = 4; // Treat as 4-channel data from now on
-    }
+    hdr = to_rgba(std::move(hdr), w, h, n, half(1.f));
 
     auto throw_if_error = [](uhdr_error_info_t status)
     {
@@ -442,24 +459,49 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
     using Encoder = unique_ptr<uhdr_codec_private_t, decltype(&uhdr_release_encoder)>;
     auto encoder  = Encoder{uhdr_create_encoder(), &uhdr_release_encoder};
 
-    uhdr_raw_image_t raw_image{
-        UHDR_IMG_FMT_64bppRGBAHalfFloat, /**< Image Format */
-        UHDR_CG_BT_709,                  /**< Color Gamut */
-        UHDR_CT_LINEAR,                  /**< Color Transfer */
-        UHDR_CR_FULL_RANGE,              /**< Color Range */
-        (unsigned)w,                     /**< Stored image width */
-        (unsigned)h,                     /**< Stored image height */
-        {pixels, nullptr, nullptr},      /**< pointer to the top left pixel for each plane */
-        {(unsigned)w, 0u, 0u}            /**< stride in pixels between rows for each plane */
-    };
+    uhdr_raw_image_t hdr_image{UHDR_IMG_FMT_64bppRGBAHalfFloat,
+                               gamut,
+                               UHDR_CT_LINEAR,
+                               UHDR_CR_FULL_RANGE,
+                               (unsigned)w,
+                               (unsigned)h,
+                               {hdr.get(), nullptr, nullptr},
+                               {(unsigned)w, 0u, 0u}};
+    throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &hdr_image, UHDR_HDR_IMG));
 
-    throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &raw_image, UHDR_HDR_IMG));
+    // the SDR base, as the view shows it at SDR white; without one, libultrahdr tone-maps the HDR rendition
+    std::unique_ptr<uint8_t[]> sdr;
+    uhdr_raw_image_t           sdr_image{};
+    if (sdr_base && opts->sdr_base == 0)
+    {
+        int sw = 0, sh = 0, sn = 0;
+        sdr = sdr_base->as_interleaved<uint8_t>(&sw, &sh, &sn, TransferFunction::sRGB, true, true, convert);
+        if (sw != w || sh != h || (sn != 3 && sn != 4))
+            throw invalid_argument("UltraHDR: the SDR rendition does not match the HDR one.");
+        sdr       = to_rgba(std::move(sdr), w, h, sn, uint8_t(255));
+        sdr_image = {UHDR_IMG_FMT_32bppRGBA8888,
+                     gamut,
+                     UHDR_CT_SRGB,
+                     UHDR_CR_FULL_RANGE,
+                     (unsigned)w,
+                     (unsigned)h,
+                     {sdr.get(), nullptr, nullptr},
+                     {(unsigned)w, 0u, 0u}};
+        throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &sdr_image, UHDR_SDR_IMG));
+    }
+
+    // the gain map reaches the peak the rendition was made for
+    if (const auto md = mastering_display(img.metadata.value("header", json::object())); md && md->max_nits > 0.f)
+        throw_if_error(uhdr_enc_set_target_display_peak_brightness(
+            encoder.get(), std::clamp(md->max_nits, HDR_REFERENCE_WHITE_NITS, 10000.f)));
+
     throw_if_error(uhdr_enc_set_quality(encoder.get(), opts->quality, UHDR_BASE_IMG));
     throw_if_error(uhdr_enc_set_quality(encoder.get(), opts->gainmap_quality, UHDR_GAIN_MAP_IMG));
     throw_if_error(uhdr_enc_set_using_multi_channel_gainmap(encoder.get(), opts->use_multi_channel));
     throw_if_error(uhdr_enc_set_gainmap_scale_factor(encoder.get(), opts->gainmap_scale));
     throw_if_error(uhdr_enc_set_gainmap_gamma(encoder.get(), opts->gainmap_gamma));
-    throw_if_error(uhdr_enc_set_preset(encoder.get(), UHDR_USAGE_BEST_QUALITY));
+    throw_if_error(
+        uhdr_enc_set_preset(encoder.get(), opts->preset == 0 ? UHDR_USAGE_REALTIME : UHDR_USAGE_BEST_QUALITY));
 
     throw_if_error(uhdr_encode(encoder.get()));
 
@@ -470,19 +512,28 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 void save_uhdr_image(const Image &img, ostream &os, const string_view filename, int base_quality, int gainmap_quality,
-                     bool use_multi_channel_gainmap, int gainmap_scale_factor, float gainmap_gamma)
+                     bool use_multi_channel_gainmap, int gainmap_scale_factor, float gainmap_gamma,
+                     const Image *sdr_base)
 {
-    UHDRSaveOptions opts = {
-        base_quality, gainmap_quality, use_multi_channel_gainmap, gainmap_scale_factor, gainmap_gamma,
-    };
-
-    save_uhdr_image(img, os, filename, &opts);
+    UHDRSaveOptions opts;
+    opts.quality           = base_quality;
+    opts.gainmap_quality   = gainmap_quality;
+    opts.use_multi_channel = use_multi_channel_gainmap;
+    opts.gainmap_scale     = gainmap_scale_factor;
+    opts.gainmap_gamma     = gainmap_gamma;
+    opts.sdr_base          = sdr_base ? 0 : 1;
+    save_uhdr_image(img, os, filename, &opts, sdr_base);
 }
 
 UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx)
 {
     if (begin_options_table(ctx))
     {
+
+        ImGui::PE::Combo("SDR base", &s_opts.sdr_base, "HDRView's rendition\0libultrahdr's tone map\0", 2,
+                         "The SDR image every reader shows, which the gain map brightens on an HDR display.\n\n"
+                         "HDRView's rendition: the view as it looks at SDR white.\n"
+                         "libultrahdr's tone map: libultrahdr's own tone mapping of the HDR rendition.");
 
         // Base quality
         ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0,
@@ -517,7 +568,9 @@ UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx)
         ImGui::PE::End();
     }
 
-    ctx.hdr = true;
+    ctx.hdr               = true;
+    ctx.records_primaries = true; //< BT.709, Display P3 or BT.2100, else converted to BT.709's
+    ctx.sdr_base          = s_opts.sdr_base == 0;
     return &s_opts;
 }
 

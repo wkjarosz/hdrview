@@ -123,9 +123,17 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->GatherItems(&items, window.c_str(), -1);
             ImVector<ImGuiID> format_ids;
             const std::string child = std::string(dialog) + "/";
+            bool              lists_gainmap_format = false;
             for (auto &item : items)
                 if (item.Depth == 1 && strstr(item.Window->Name, child.c_str()) != nullptr)
+                {
                     format_ids.push_back(item.ID);
+                    lists_gainmap_format |= strcmp(item.DebugLabel, "JPEG (UltraHDR)") == 0;
+                }
+#if HDRVIEW_ENABLE_LIBUHDR
+            // a gain map is two renditions of the view, so only Export rendition offers one
+            IM_CHECK(lists_gainmap_format == (dialog[0] == 'E'));
+#endif
             // eight entries are present whatever the build enables (BMP, HDR, JPEG and PNG via stb, OpenEXR,
             // PFM, QOI, TGA); the rest are gated on their HDRVIEW_ENABLE_* option
             ctx->LogInfo("format list holds %d entries", format_ids.Size);

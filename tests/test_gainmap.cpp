@@ -19,6 +19,7 @@
 
 #include "image.h"
 #include "imageio/gainmap.h"
+#include "imageio/hdr_metadata.h"
 #include "imageio/heif.h"
 #include "imageio/image_loader.h"
 #include "imageio/jpg.h"
@@ -418,6 +419,82 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
         for (int x = 0; x < size.x; ++x) (x < size.x / 2 ? left : right) += out.channels[gm](x, y);
 
     CHECK(left != doctest::Approx(right));
+}
+
+TEST_CASE("An Ultra HDR file reads back as the renditions it was written from, for the peak it was written for")
+{
+    // A gain map takes an SDR base to an HDR rendition: decoded with no headroom the file is its base, and decoded in
+    // full it is the HDR rendition, up to the peak the rendition's mastering display names. Each channel ramps across
+    // the frame at its own level, from deep shadow to past SDR white, and the SDR rendition clips there, as an SDR
+    // export does. Both bases (the SDR rendition given, or libultrahdr's own tone map), over BT.709 and a wide gamut.
+    const int2  size{64, 16};
+    const float peak_nits = 1000.f;
+    const float headroom  = std::log2(peak_nits / HDR_REFERENCE_WHITE_NITS);
+
+    for (auto gamut : {ColorGamut_sRGB_BT709, ColorGamut_Display_P3_SMPTE432})
+        for (bool given_base : {true, false})
+        {
+            CAPTURE(color_gamut_name(gamut));
+            CAPTURE(given_base);
+            const Chromaticities chr = gamut_chromaticities(gamut);
+
+            auto hdr = std::make_shared<Image>(size, 3), sdr = std::make_shared<Image>(size, 3);
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        const float stops      = -6.f + (headroom - 0.25f + 6.f) * x / (size.x - 1) - 0.5f * c;
+                        hdr->channels[c](x, y) = std::exp2(stops);
+                        sdr->channels[c](x, y) = std::min(std::exp2(stops), 1.f);
+                    }
+            for (auto &img : {hdr, sdr})
+            {
+                img->chromaticities = chr;
+                img->finalize();
+            }
+            add_mastering_display(hdr->metadata["header"], chr, k_mastering_display_min_nits, peak_nits, "test");
+
+            std::stringstream ss;
+            REQUIRE_NOTHROW(save_uhdr_image(*hdr, ss, "a.jpg", 95, 95, true, 1, 1.f, given_base ? sdr.get() : nullptr));
+
+            const auto decode = [&](float gainmap_headroom)
+            {
+                std::istringstream in(ss.str(), std::ios::binary);
+                ImageLoadOptions   opts;
+                opts.gainmap_headroom = gainmap_headroom;
+                auto images           = load_uhdr_image(in, "a.jpg", opts);
+                REQUIRE(images.size() == 1);
+                return images.front();
+            };
+            const auto base = decode(0.f), full = decode(k_full_gainmap_headroom);
+
+            // the primaries it was written in, and the capacity the target peak gives
+            REQUIRE(full->chromaticities);
+            CHECK(la::maxelem(la::abs(full->chromaticities->red - chr.red)) <= 1e-3f);
+            CHECK(full->metadata["header"]["HDR capacity max"]["value"].get<float>() ==
+                  doctest::Approx(peak_nits / HDR_REFERENCE_WHITE_NITS).epsilon(0.01));
+
+            // In full, the HDR rendition: in stops in the highlights, where a wrong peak shows as a fraction of a
+            // stop or more, and in sRGB code values below SDR white, where the 8-bit base sets the precision. With no
+            // headroom, the base, which is the SDR rendition when one was given.
+            float worst_stops = 0.f, worst_code = 0.f, worst_base = 0.f;
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        const float want = hdr->channels[c](x, y), got = full->channels[c](x, y);
+                        if (want >= 0.25f)
+                            worst_stops = std::max(worst_stops, std::abs(std::log2(std::max(got, 1e-6f) / want)));
+                        if (want <= 1.f)
+                            worst_code = std::max(worst_code, std::abs(linear_to_sRGB(got) - linear_to_sRGB(want)));
+                        if (given_base)
+                            worst_base = std::max(worst_base, std::abs(linear_to_sRGB(base->channels[c](x, y)) -
+                                                                       linear_to_sRGB(sdr->channels[c](x, y))));
+                    }
+            CHECK(worst_stops <= 0.1f);
+            CHECK(worst_code <= 0.03f);
+            CHECK(worst_base <= 0.03f);
+        }
 }
 #endif
 
