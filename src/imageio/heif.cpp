@@ -1315,6 +1315,17 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             heif_encoding_options_alloc(), heif_encoding_options_free);
         encoding_options->output_nclx_profile = nclx.get();
 
+        // An SDR curve other than sRGB also gets an ICC profile, which a reader that does not know its nclx code falls
+        // back on; libheif writes a second colr box for it only when asked to
+        if (!is_hdr_encoding(tf) && tf.type != TransferFunction::sRGB)
+        {
+            const auto chr = convert_to_sRGB || !img.chromaticities ? Chromaticities{} : *img.chromaticities;
+            const auto icc = (mono ? ICCProfile::Gray(chr.white, tf) : ICCProfile::RGB(chr, tf)).bytes();
+            if (!icc.empty() &&
+                heif_image_set_raw_color_profile(heif_img.get(), "prof", icc.data(), icc.size()).code == heif_error_Ok)
+                encoding_options->save_two_colr_boxes_when_ICC_and_nclx_available = 1;
+        }
+
         // Encode
         HeifImageHandlePtr out_handle(
             [&]
@@ -1674,23 +1685,11 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
 
 #endif
 
-// Chromium 155 and Firefox 158 measured by hand; macOS's ImageIO by test_export_roundtrip.cpp
+// Firefox 158 measured by hand, on an AVIF; macOS's ImageIO by test_export_roundtrip.cpp. With the ICC profile an SDR
+// curve other than sRGB carries beside its nclx box, macOS and Chromium 155 read every one right.
 Caveat heif_caveat(TransferFunction tf)
 {
-    switch (tf.type)
-    {
-    case TransferFunction::ITU:
-        return {Misreader_macOS | Misreader_Chromium | Misreader_Firefox,
-                "Safari and other macOS apps, Chrome and Firefox read BT.709 in a HEIF or AVIF with the sRGB curve, "
-                "rather than BT.1886's gamma 2.4."};
-    case TransferFunction::Log100:
-    case TransferFunction::Log100_Sqrt10:
-    case TransferFunction::ST240:
-        return {Misreader_macOS, "macOS apps do not know this curve's code, and read the file as sRGB."};
-    case TransferFunction::IEC61966_2_4: return {Misreader_macOS, "macOS apps read this curve slightly differently."};
-    case TransferFunction::DCI_P3:
-        return {Misreader_macOS, "macOS apps read this curve as a plain gamma of 2.6, without ST 428-1's 48/52.37 "
-                                 "scaling, so about 8% darker."};
-    default: return {};
-    }
+    if (tf.type == TransferFunction::ITU)
+        return {Misreader_Firefox, "Firefox reads BT.709 in an AVIF slightly differently."};
+    return {};
 }

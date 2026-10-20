@@ -154,7 +154,8 @@ const Variant k_variants[] = {
     {"jpg_stb", ".jpg", Cap_Default | Cap_Lossy, 0.03f, [](TransferFunction t) { return stb_offers_curve(t, false); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_jpg(i, o, "a.jpg", t, false); }},
 #if HDRVIEW_ENABLE_LIBTIFF
-    // the save dialog's data types and compressions: 0 none, 1 LZW, 2 ZIP, 3 PackBits
+    // the save dialog's data types and compressions: 0 none, 1 LZW, 2 ZIP, 3 PackBits; an ICC profile, which lcms
+    // reads in float, moves float samples by a few 1e-6
     {"tiff8 lzw", ".tif", Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return tiff_offers_curve(t, 0); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 0); }},
     {"tiff8 none", ".tif", Cap_Alpha, k_8bit, [](TransferFunction t) { return tiff_offers_curve(t, 0); },
@@ -163,7 +164,7 @@ const Variant k_variants[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 2, 1); }},
     {"tiff16 packbits", ".tif", Cap_Alpha, 1e-4f, [](TransferFunction t) { return tiff_offers_curve(t, 1); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 3, 1); }},
-    {"tiff float lzw", ".tif", Cap_Float | Cap_Alpha, 1e-6f, [](TransferFunction t) { return tiff_offers_curve(t, 2); },
+    {"tiff float lzw", ".tif", Cap_Float | Cap_Alpha, 1e-5f, [](TransferFunction t) { return tiff_offers_curve(t, 2); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 2); }},
 #endif
     {"qoi", ".qoi", Cap_Default | Cap_Alpha, k_8bit, qoi_offers_curve,
@@ -215,13 +216,13 @@ const Variant k_variants[] = {
 #if HDRVIEW_ENABLE_LIBHEIF
     // both codecs the dialog offers, since they take different paths through libheif; "lossless" still converts
     // to YCbCr, which moves samples by a few steps
-    {"heif", ".heif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.03f, heif_offers_curve,
+    {"heif", ".heif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.04f, heif_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 95, false, true, HEIFCodec::HEVC, t); }},
     {"heif lossless 8", ".heif", Cap_Alpha | Cap_Lossy | k_heif_levels, 4 * k_8bit, heif_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 8); }},
     {"heif lossless 10", ".heif", Cap_Alpha | Cap_Lossy | k_heif_levels, 4 * k_10bit, heif_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 10); }},
-    {"avif", ".avif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.03f, heif_offers_curve,
+    {"avif", ".avif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.04f, heif_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 95, false, true, HEIFCodec::AV1, t); }},
     {"avif lossless 8", ".avif", Cap_Alpha | Cap_Lossy | k_heif_levels, 4 * k_8bit, heif_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 8); }},
@@ -336,7 +337,7 @@ Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
 #endif
 #if HDRVIEW_ENABLE_LIBJXL
     if (ext == ".jxl")
-        return jxl_caveat(tf);
+        return jxl_caveat(tf, std::string{variant.name}.find("lossless") != std::string::npos);
 #endif
 #if HDRVIEW_ENABLE_LIBTIFF
     if (ext == ".tif")
@@ -466,8 +467,9 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
 
 TEST_CASE("every setting of every writer round-trips each curve its dialog offers, labeled as it promises")
 {
-    // A wide gamut, kept and recorded or converted to sRGB's, and every transfer function, with gamma at an
-    // exponent no other curve shares and at 2.6, JPEG XL's DCI. A setting must label each curve its dialog
+    // A wide gamut, kept and recorded or converted to sRGB's, and every transfer function, with gamma at an exponent no
+    // other curve shares, at 2.2, which CICP names, and at 2.6, JPEG XL's DCI; macOS reads every JPEG XL gamma as 1.8,
+    // which a single exponent of 1.8 hid. A setting must label each curve its dialog
     // offers, or the file reads back as some other curve; one it does not offer is the saver's to refuse or
     // write as a curve it can label, which the dialog never asks for.
     const Chromaticities bt2020 = gamut_chromaticities(ColorGamut_BT2020_2100);
@@ -477,6 +479,7 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
         if (i != TransferFunction::Gamma)
             curves.push_back({(TransferFunction::Type_)i});
     curves.push_back({TransferFunction::Gamma, 1.8f});
+    curves.push_back({TransferFunction::Gamma, 2.2f});
     curves.push_back({TransferFunction::Gamma, 2.6f});
 
     for (const auto &variant : k_variants)

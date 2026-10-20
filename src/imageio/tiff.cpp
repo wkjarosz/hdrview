@@ -1323,9 +1323,11 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     ScopedMDC mdc{"IO", "TIFF"};
     Timer     timer;
 
-    // TIFF records no transfer function here, and is read back as sRGB when integer and linear when float
+    // A TIFF names its curve and primaries only through an ICC profile; without one a reader takes integer samples
+    // for sRGB and float ones for linear, over BT.709's primaries
+    const auto default_curve = opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
     const TransferFunction tf =
-        labeled_curve(opts->tf, opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB, "TIFF");
+        tiff_offers_curve(opts->tf, opts->data_type_index) ? opts->tf : labeled_curve(opts->tf, default_curve, "TIFF");
 
     // Set custom error/warning handlers
     TIFFSetErrorHandler(error_handler);
@@ -1375,6 +1377,16 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
                                     img.chromaticities->blue.x,  img.chromaticities->blue.y};
         TIFFSetField(tif, TIFFTAG_WHITEPOINT, white);
         TIFFSetField(tif, TIFFTAG_PRIMARYCHROMATICITIES, primaries);
+    }
+
+    // which most readers, macOS's among them, take over those tags, and which alone names a curve
+    const bool wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
+    if (tf.type != default_curve || wide)
+    {
+        const auto chr = img.chromaticities.value_or(Chromaticities{});
+        const auto icc = (n <= 2 ? ICCProfile::Gray(chr.white, tf) : ICCProfile::RGB(chr, tf)).bytes();
+        if (!icc.empty())
+            TIFFSetField(tif, TIFFTAG_ICCPROFILE, (uint32_t)icc.size(), icc.data());
     }
 
     // Set compression
@@ -1480,6 +1492,37 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
             },
             "Bit depth for pixel values.");
 
+        // float samples are linear; integer ones take any curve an ICC profile can name
+        if (!tiff_offers_curve(s_opts.tf, s_opts.data_type_index))
+            s_opts.tf = s_opts.data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
+        if (s_opts.data_type_index != 2 && ICCProfile::can_describe(TransferFunction::Linear))
+            ImGui::PE::Entry(
+                "Transfer function",
+                [&]
+                {
+                    bool changed = false;
+                    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
+                    {
+                        for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+                        {
+                            const TransferFunction tf{(TransferFunction::Type_)i, s_opts.tf.gamma};
+                            if (!tiff_offers_curve(tf, s_opts.data_type_index))
+                                continue;
+                            const bool selected = s_opts.tf.type == tf.type;
+                            if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
+                                s_opts.tf = tf, changed = true;
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    return changed;
+                },
+                "Encode the pixel values using this transfer function, which an ICC profile records.");
+        if (s_opts.data_type_index != 2 && s_opts.tf.type == TransferFunction::Gamma)
+            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
+                                   "When using a gamma transfer function, this is the gamma value to use.");
+
         ImGui::PE::End();
     }
 
@@ -1496,12 +1539,18 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 #endif
 
 bool tiff_offers_curve(TransferFunction tf, int data_type_index)
-{ return tf.type == (data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB); }
+{
+    // float samples are linear; integer ones are sRGB, or any curve an ICC profile names
+    if (data_type_index == 2)
+        return tf.type == TransferFunction::Linear;
+    return tf.type == TransferFunction::sRGB || ICCProfile::can_describe(tf);
+}
 
 // macOS's ImageIO measured by test_export_roundtrip.cpp
-Caveat tiff_caveat(TransferFunction, bool wide_gamut)
+Caveat tiff_caveat(TransferFunction tf, bool wide_gamut)
 {
-    if (wide_gamut)
+    // an ICC profile names the primaries to macOS, which ignores TIFF's own tags for them
+    if (wide_gamut && !ICCProfile::can_describe(tf))
         return {Misreader_macOS, "macOS apps ignore TIFF's primaries tags, and read a wide-gamut TIFF as sRGB's."};
     return {};
 }

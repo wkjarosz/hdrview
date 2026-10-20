@@ -21,8 +21,8 @@ json get_jxl_info();
 bool is_jxl_image(std::istream &is) noexcept;
 bool jxl_offers_curve(TransferFunction tf) noexcept;
 struct Caveat;
-/// Which applications misread a JPEG XL with the curve \p tf, and how.
-Caveat jxl_caveat(TransferFunction tf);
+/// Which applications misread a JPEG XL with the curve \p tf, lossless or not, and how.
+Caveat jxl_caveat(TransferFunction tf, bool lossless);
 // throws on error
 std::vector<ImagePtr> load_jxl_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 // throws on error

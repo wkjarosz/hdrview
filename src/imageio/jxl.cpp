@@ -1119,7 +1119,17 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     color_encoding.primaries_blue_xy[0]  = c.blue.x;
     color_encoding.primaries_blue_xy[1]  = c.blue.y;
 
-    if (JXL_ENC_SUCCESS != JxlEncoderSetColorEncoding(enc.get(), &color_encoding))
+    // JPEG XL's own codes for BT.709 and a custom gamma are misread: macOS takes 709 for sRGB and any gamma for 1.8,
+    // and libjxl inverts the camera's OETF for 709 where viewers apply BT.1886. An ICC profile both read right instead.
+    std::vector<uint8_t> icc;
+    if (tf.type == TransferFunction::ITU || tf.type == TransferFunction::Gamma)
+        icc = (n <= 2 ? ICCProfile::Gray(c.white, tf) : ICCProfile::RGB(c, tf)).bytes();
+    if (!icc.empty())
+    {
+        if (JXL_ENC_SUCCESS != JxlEncoderSetICCProfile(enc.get(), icc.data(), icc.size()))
+            throw std::runtime_error("JxlEncoderSetICCProfile failed");
+    }
+    else if (JXL_ENC_SUCCESS != JxlEncoderSetColorEncoding(enc.get(), &color_encoding))
         throw std::runtime_error("JxlEncoderSetColorEncoding failed");
 
     JxlEncoderFrameSettings *frame_settings = JxlEncoderFrameSettingsCreate(enc.get(), nullptr);
@@ -1214,7 +1224,7 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
         ImGui::PE::End();
     }
 
-    caveat_entry(jxl_caveat(s_opts.tf));
+    caveat_entry(jxl_caveat(s_opts.tf, s_opts.lossless));
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = JXLSaveOptions{};
@@ -1235,12 +1245,16 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
 #endif
 
-// macOS's ImageIO measured by test_export_roundtrip.cpp; libjxl 0.11's djxl by hand
-Caveat jxl_caveat(TransferFunction tf)
+// macOS's ImageIO measured by test_export_roundtrip.cpp. It reads every gamma in JPEG XL's own codes as 1.8, and 709 as
+// sRGB, so those curves are written through an ICC profile, which a lossless file keeps. A lossy one is encoded in XYB,
+// and libjxl turns the profile back into its codes where they can state it, which leaves macOS misreading the gammas
+// other than its own 1.8 and DCI's 2.6, BT.1886's 2.4 among them.
+Caveat jxl_caveat(TransferFunction tf, bool lossless)
 {
-    if (tf.type == TransferFunction::ITU)
-        return {Misreader_macOS | Misreader_libjxl,
-                "macOS apps read a BT.709 JPEG XL with the sRGB curve, and tools that take its colors from libjxl's "
-                "profile invert BT.709's camera curve, rather than applying BT.1886's gamma 2.4."};
+    const bool misread_gamma = tf.type == TransferFunction::ITU ||
+                               (tf.type == TransferFunction::Gamma && tf.gamma != 1.8f && tf.gamma != 2.6f);
+    if (!lossless && misread_gamma)
+        return {Misreader_macOS, "macOS apps read a lossy JPEG XL with this curve as a gamma of 1.8; they read a "
+                                 "lossless one right."};
     return {};
 }
