@@ -530,7 +530,7 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
 
     if (ImGui::PE::Begin("STB Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         if (!is_hdr)
             ImGui::PE::Entry("Dither", [&] { return ImGui::Checkbox("##Dither", &opts.dither); });

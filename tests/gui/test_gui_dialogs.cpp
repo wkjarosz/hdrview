@@ -57,18 +57,29 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "dialogs", "save_as_open_close");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        if (hdrview()->num_images() == 0)
+        // two images, so a Down that reached the shortcuts behind the dialog would change the current one
+        if (hdrview()->num_images() < 2)
         {
-            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
+            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2});
             wait_for_loads(ctx);
         }
-        IM_CHECK(hdrview()->num_images() > 0);
+        IM_CHECK(hdrview()->num_images() >= 2);
+        const int current = hdrview()->current_image_index();
 
         ctx->SetRef("##MainMenuBar");
         ctx->MenuClick("File/Save as...");
 
         ctx->SetRef("");
         IM_CHECK(ctx->WindowInfo("Save as...").Window != nullptr);
+
+        // the dialog's keys are its own: Down steps through its formats, not through the images behind it, and a
+        // shortcut it does not claim, H for a horizontal flip, stands down while it is open
+        const bool flipped = *hdrview()->action("Flip horizontally").p_selected;
+        ctx->KeyPress(ImGuiKey_DownArrow);
+        ctx->KeyPress(ImGuiKey_H);
+        ctx->Yield(2);
+        IM_CHECK_EQ(hdrview()->current_image_index(), current);
+        IM_CHECK_EQ(*hdrview()->action("Flip horizontally").p_selected, flipped);
 
         ctx->SetRef("Save as...");
         ctx->ItemClick("Cancel");

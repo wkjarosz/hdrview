@@ -684,7 +684,7 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
     if (ImGui::PE::Begin("OpenEXR Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         // Channels (custom multi-select widget)

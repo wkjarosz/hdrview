@@ -1928,10 +1928,11 @@ void HDRViewApp::process_shortcuts()
 
     for (auto &a : m_actions)
         if (a.second.chord)
-            // Held off only while something is taking typed characters, so a letter meant for a text field
-            // is not also read as a shortcut. Not conditioned on keyboard navigation being idle: arriving
-            // from the command palette or a dialog leaves navigation showing.
-            if (a.second.enabled() && !ImGui::GetIO().WantTextInput &&
+            // Held off while something is taking typed characters, so a letter meant for a text field is not
+            // also read as a shortcut, and while a modal dialog is open, whose own keys they would act behind.
+            // Not conditioned on keyboard navigation being idle: arriving from the command palette or a dialog
+            // leaves navigation showing.
+            if (a.second.enabled() && !ImGui::GetIO().WantTextInput && !ImGui::AnyModalDialogOpen() &&
                 ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {
                 spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.names[0],

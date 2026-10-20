@@ -647,7 +647,7 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("WebP Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         if (ICCProfile::can_describe(TransferFunction::Linear))

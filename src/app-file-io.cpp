@@ -242,6 +242,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
             ImGui::EndDisabled();
             ImGui::Tooltip("Save the current image blended with the reference, in the channels shown, as the "
                            "viewport compares them, but before its exposure and tonemap.");
+            ImGui::SameLine();
         }
         ImGui::BeginDisabled(!m_roi.has_volume());
         ImGui::Checkbox("Save selection only", &selection_only);
@@ -262,6 +263,20 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::TextUnformatted("File format:");
         ImGui::PopFont();
         // ImGui::SetNextItemWidth(HelloImGui::EmSize(10.f));
+        // Up and Down step through the formats. Keyboard navigation is off app-wide, so the dialog claims the keys
+        // itself; routed to the focused window, they outrank the global shortcuts for them. A route counts only from
+        // the focused window or its parents, so this is claimed here rather than from the list box, a child.
+        const int step    = int(ImGui::Shortcut(ImGuiKey_DownArrow, ImGuiInputFlags_Repeat)) -
+                            int(ImGui::Shortcut(ImGuiKey_UpArrow, ImGuiInputFlags_Repeat));
+        bool      stepped = false;
+        if (step)
+            for (int i = save_format + step; i >= 0 && i <= Format_Last; i += step)
+                if (format_enabled[i])
+                {
+                    save_format = (Format_)i;
+                    stepped     = true;
+                    break;
+                }
         if (ImGui::BeginListBox("##File format", HelloImGui::EmToVec2(8.f, 17.f)))
         {
             for (int i = 0; i <= Format_Last; ++i)
@@ -272,7 +287,11 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 if (ImGui::Selectable(save_format_names[i], is_selected))
                     save_format = (Format_)i;
                 if (is_selected)
+                {
                     ImGui::SetItemDefaultFocus();
+                    if (stepped)
+                        ImGui::SetScrollHereY();
+                }
             }
             ImGui::EndListBox();
         }
@@ -447,30 +466,24 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         if (rendition)
         {
             ImGui::SeparatorText("Rendition");
+            // The display it is written for, and the primaries it is written in, share a row: the first only for an
+            // encoding that can hold more than SDR white, the second only where the format can say which they are.
+            static int         target  = 0;
+            static float       nits    = 1000.f;
+            static const char *targets = "1000 cd/m\xc2\xb2 display\0002000 cd/m\xc2\xb2 display\0004000 "
+                                         "cd/m\xc2\xb2 display\0This display\0Custom\0";
             if (ctx.hdr)
             {
-                static int         target  = 0;
-                static float       nits    = 1000.f;
-                static const char *targets = "1000 cd/m\xc2\xb2 display\0002000 cd/m\xc2\xb2 display\0004000 "
-                                             "cd/m\xc2\xb2 display\0This display\0Custom\0";
                 ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
                 ImGui::Combo("Written for", &target, targets);
                 ImGui::Tooltip("The display the rendition's highlights are fitted to. The peaks are in cd/m\xc2\xb2, "
                                "with SDR white at the 203 cd/m\xc2\xb2 of BT.2408.");
-                if (target == 4)
-                {
-                    ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
-                    ImGui::DragFloat("Peak", &nits, 10.f, HDR_REFERENCE_WHITE_NITS, 10000.f, "%.0f cd/m\xc2\xb2",
-                                     ImGuiSliderFlags_AlwaysClamp);
-                }
-                const float peak_nits = target == 0 ? 1000.f : target == 1 ? 2000.f : target == 2 ? 4000.f : nits;
-                target_ceiling        = target == 3 ? m_rolloff.display_ceiling
-                                                    : std::log2(std::max(1.f, peak_nits / HDR_REFERENCE_WHITE_NITS));
             }
-            // the primaries the rendition is written in, where the format can say which they are
             static int gamut = 0;
             if (ctx.records_primaries)
             {
+                if (ctx.hdr)
+                    ImGui::SameLine();
                 const auto  source  = current_image() && current_image()->chromaticities
                                           ? named_color_gamut(*current_image()->chromaticities)
                                           : ColorGamut_sRGB_BT709;
@@ -482,6 +495,18 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 ImGui::Combo("Primaries", &gamut, items, IM_ARRAYSIZE(items));
                 ImGui::Tooltip("The primaries the rendition is written in. Colors outside them clip, in a format that "
                                "stores no negative values.");
+            }
+            if (ctx.hdr)
+            {
+                if (target == 4)
+                {
+                    ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
+                    ImGui::DragFloat("Peak", &nits, 10.f, HDR_REFERENCE_WHITE_NITS, 10000.f, "%.0f cd/m\xc2\xb2",
+                                     ImGuiSliderFlags_AlwaysClamp);
+                }
+                const float peak_nits = target == 0 ? 1000.f : target == 1 ? 2000.f : target == 2 ? 4000.f : nits;
+                target_ceiling        = target == 3 ? m_rolloff.display_ceiling
+                                                    : std::log2(std::max(1.f, peak_nits / HDR_REFERENCE_WHITE_NITS));
             }
             constexpr ColorGamut_ k_gamuts[] = {ColorGamut_sRGB_BT709, ColorGamut_sRGB_BT709,
                                                 ColorGamut_Display_P3_SMPTE432, ColorGamut_BT2020_2100};

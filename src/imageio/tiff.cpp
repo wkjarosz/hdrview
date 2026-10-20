@@ -1470,7 +1470,7 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("TIFF Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Entry(
             "Compression",

@@ -874,7 +874,7 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
     if (ImGui::PE::Begin("JPEG 2000 Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         {
             int container = (int)s_opts.container;

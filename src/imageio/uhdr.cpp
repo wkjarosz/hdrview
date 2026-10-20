@@ -484,7 +484,7 @@ UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx)
     if (ImGui::PE::Begin("UltraHDR Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         // Base quality

@@ -147,6 +147,9 @@ enum class DialogPosition
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position = DialogPosition::TopCenter,
                       ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize);
 
+/// Whether a BeginModalDialog() dialog showed this frame or the last, for what should stand down behind one.
+bool AnyModalDialogOpen();
+
 enum class DialogResult
 {
     None,
