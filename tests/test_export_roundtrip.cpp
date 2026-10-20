@@ -194,7 +194,8 @@ const Variant k_variants[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.j2k", true, 16, J2KContainer::J2K, t, false); }},
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
-    {"webp q95", ".webp", Cap_Default | Cap_Alpha | Cap_Lossy, 0.04f, webp_offers_curve,
+    // 8-bit 4:2:0 at 95, which a steep curve such as Log 100 amplifies
+    {"webp q95", ".webp", Cap_Default | Cap_Alpha | Cap_Lossy, 0.05f, webp_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 95.f, false, t); }},
     {"webp lossless", ".webp", Cap_Alpha, k_8bit, webp_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},

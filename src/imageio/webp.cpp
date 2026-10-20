@@ -19,7 +19,7 @@ struct WebPSaveOptions
 {
     bool             lossless = false;
     float            quality  = 95.f;
-    TransferFunction tf       = TransferFunction::sRGB; ///< sRGB from the dialog: no ICC profile says otherwise
+    TransferFunction tf       = TransferFunction::sRGB;
 };
 
 static WebPSaveOptions s_opts;
@@ -488,6 +488,56 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
     return images;
 }
 
+namespace
+{
+
+void put_le(std::string &s, size_t at, uint32_t v, int bytes)
+{
+    for (int i = 0; i < bytes; ++i) s[at + i] = char((v >> (8 * i)) & 0xff);
+}
+
+std::string riff_chunk(const char *fourcc, const std::string &payload)
+{
+    std::string c = std::string(fourcc, 4) + std::string(4, '\0') + payload;
+    put_le(c, 4, (uint32_t)payload.size(), 4);
+    if (payload.size() % 2)
+        c += '\0'; // chunks are padded to an even size
+    return c;
+}
+
+/// \p webp, an encoder's output, with \p icc in an ICCP chunk, in the extended layout that needs.
+/**
+    A simple file, one VP8 or VP8L chunk, gains the VP8X header that announces the profile, with the alpha flag for an
+    image that has it; an extended one, which libwebp writes for lossy alpha, gets the flag set and the chunk after its
+    header. See https://developers.google.com/speed/webp/docs/riff_container.
+*/
+std::string with_icc_chunk(std::string webp, const std::vector<uint8_t> &icc, int w, int h, bool alpha)
+{
+    constexpr uint8_t icc_flag = 0x20, alpha_flag = 0x10;
+    if (webp.size() < 20 || webp.compare(0, 4, "RIFF") != 0 || webp.compare(8, 4, "WEBP") != 0)
+        throw std::runtime_error{"WebP: unexpected encoder output"};
+
+    const std::string iccp = riff_chunk("ICCP", std::string(icc.begin(), icc.end()));
+    std::string       out;
+    if (webp.compare(12, 4, "VP8X") == 0)
+    {
+        webp[20] = char(uint8_t(webp[20]) | icc_flag);
+        out      = webp.substr(0, 30) + iccp + webp.substr(30); // RIFF, WEBP and the 18-byte VP8X chunk
+    }
+    else
+    {
+        std::string vp8x(10, '\0');
+        vp8x[0] = char(icc_flag | (alpha ? alpha_flag : 0));
+        put_le(vp8x, 4, uint32_t(w - 1), 3);
+        put_le(vp8x, 7, uint32_t(h - 1), 3);
+        out = webp.substr(0, 12) + riff_chunk("VP8X", vp8x) + iccp + webp.substr(12);
+    }
+    put_le(out, 4, uint32_t(out.size() - 8), 4);
+    return out;
+}
+
+} // namespace
+
 void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *opts)
 {
     if (!opts)
@@ -495,10 +545,18 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
 
     Timer timer;
 
+    // WebP names its curve and primaries only through an ICC profile in an ICCP chunk; without one a reader takes it
+    // for sRGB over BT.709's primaries
+    const TransferFunction tf =
+        webp_offers_curve(opts->tf) ? opts->tf : labeled_curve(opts->tf, TransferFunction::sRGB, "WebP");
+    const bool           wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
+    std::vector<uint8_t> icc;
+    if (tf.type != TransferFunction::sRGB || wide)
+        icc = ICCProfile::RGB(img.chromaticities.value_or(Chromaticities{}), tf).bytes();
+
     // Get interleaved RGBA data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<uint8_t>(
-        &w, &h, &n, opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, true);
+    auto pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, true, true, /*convert_to_sRGB*/ icc.empty());
 
     // libwebp's API takes only RGB/RGBA, so widen a narrower group to what the viewport shows
     if (n < 3)
@@ -566,8 +624,11 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
     }
 
     // Write to output stream
-    os.write(reinterpret_cast<const char *>(writer.mem), writer.size);
+    std::string bytes(reinterpret_cast<const char *>(writer.mem), writer.size);
     WebPMemoryWriterClear(&writer);
+    if (!icc.empty())
+        bytes = with_icc_chunk(std::move(bytes), icc, w, h, n == 4);
+    os.write(bytes.data(), (std::streamsize)bytes.size());
 
     if (!os.good())
         throw runtime_error{"Failed to write WebP data to output stream"};
@@ -589,6 +650,36 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
+        if (ICCProfile::can_describe(TransferFunction::Linear))
+        {
+            ImGui::PE::Entry(
+                "Transfer function",
+                [&]
+                {
+                    bool changed = false;
+                    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
+                    {
+                        for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+                        {
+                            const TransferFunction tf{(TransferFunction::Type_)i, s_opts.tf.gamma};
+                            if (!webp_offers_curve(tf))
+                                continue;
+                            const bool selected = s_opts.tf.type == tf.type;
+                            if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
+                                s_opts.tf = tf, changed = true;
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    return changed;
+                },
+                "Encode the pixel values using this transfer function, which an ICC profile records.");
+            if (s_opts.tf.type == TransferFunction::Gamma)
+                ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
+                                       "When using a gamma transfer function, this is the gamma value to use.");
+        }
+
         ImGui::PE::Checkbox(
             "Lossless", &s_opts.lossless,
             "If enabled, the image will be saved using lossless compression. Quality setting will be ignored.");
@@ -609,4 +700,8 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 
 #endif
 
-bool webp_offers_curve(TransferFunction tf) { return tf.type == TransferFunction::sRGB; }
+bool webp_offers_curve(TransferFunction tf)
+{
+    // any curve an ICC profile names, and sRGB, which needs none
+    return tf.type == TransferFunction::sRGB || ICCProfile::can_describe(tf);
+}
