@@ -871,11 +871,8 @@ const char *j2k_extension(const J2KSaveOptions *params)
 
 J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("JPEG 2000 Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         {
             int container = (int)s_opts.container;
             ImGui::PE::Combo("Container", &container,
@@ -939,11 +936,11 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
                             "Decorrelate the three color components before the wavelet, which compresses RGB "
                             "images considerably better.");
 
+        if (reset_entry())
+            s_opts = J2KSaveOptions{};
+
         ImGui::PE::End();
     }
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = J2KSaveOptions{};
 
     ctx.hdr               = false; //< SDR curves only
     ctx.records_primaries = s_opts.container == J2KContainer::JP2 && ICCProfile::can_describe(s_opts.tf);

@@ -7,6 +7,7 @@
 #include "save_options.h"
 #include "fonts.h"
 #include "imgui.h"
+#include "imgui_ext.h"
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
@@ -35,4 +36,23 @@ void no_options_entry()
     ImGui::BeginDisabled();
     ImGui::TextUnformatted("This format has no options.");
     ImGui::EndDisabled();
+}
+
+bool begin_options_table(const SaveContext &ctx)
+{
+    if (!ImGui::PE::Begin(ctx.table.c_str(), ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize |
+                                                 ImGuiTableFlags_NoSavedSettings))
+        return false;
+    // the Advanced node sits a tree level in, under Encoder, with its arrow, and the cell's padding either side
+    const auto &style = ImGui::GetStyle();
+    ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed,
+                            style.IndentSpacing + ImGui::GetTreeNodeToLabelSpacing() +
+                                ImGui::CalcTextSize("Advanced").x + 2 * style.CellPadding.x);
+    ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
+    return true;
+}
+
+bool reset_entry()
+{
+    return ImGui::PE::Entry("", [] { return ImGui::Button("Reset options to defaults"); });
 }

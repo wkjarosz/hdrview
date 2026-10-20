@@ -536,10 +536,8 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
         return &opts;
     }
 
-    if (ImGui::PE::Begin("STB Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Entry("Dither", [&] { return ImGui::Checkbox("##Dither", &opts.dither); });
 
         if (has_quality)
@@ -547,11 +545,11 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
                 "Quality", [&] { return ImGui::SliderInt("##Quality", &opts.quality, 1, 100); },
                 "For JPEG images, controls the quality of the saved image (1 = worst, 100 = best).");
 
+        if (reset_entry())
+            opts = STBSaveOptions{};
+
         ImGui::PE::End();
     }
-
-    if (ImGui::Button("Reset options to defaults"))
-        opts = STBSaveOptions{};
 
     ctx.hdr = false; //< 8-bit sRGB
     return &opts;

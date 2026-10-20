@@ -599,13 +599,13 @@ public:
 
     /// The image a save writes, or null when a selection misses the image.
     /**
-        In Data mode, the current image itself, or a copy of the part under the selection when \p selection_only.
-        With \p include_comparison, or in Rendition mode, a new image of the view in the current image's primaries,
-        or a rendition's in \p primaries when given, with alpha only when the current or reference image has it: a
-        comparison stops before the exposure, while a rendition bakes in exposure, tonemap and highlights, handled
-        for a display whose ceiling sits \p target_ceiling stops above SDR white and clipped there.
+        In Data mode, the current image itself, or a copy of the part under the selection when \p selection_only. In
+        Rendition mode, a new image of the view, blended with the reference when there is one, in \p primaries or else
+        the current image's, with alpha only when the current or reference image has it. It bakes in exposure, tonemap
+        and highlights, handled for a display whose ceiling sits \p target_ceiling stops above SDR white; only Clip at
+        SDR white clips.
     */
-    ConstImagePtr image_to_save(SaveMode mode, bool include_comparison, bool selection_only, float target_ceiling,
+    ConstImagePtr image_to_save(SaveMode mode, bool selection_only, float target_ceiling,
                                 const Chromaticities *primaries = nullptr) const;
     /// The rolloff in force, applied for a display whose ceiling sits \p display_ceiling stops above SDR white.
     Rolloff rolloff_for(float display_ceiling) const;

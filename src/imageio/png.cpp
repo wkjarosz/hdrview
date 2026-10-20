@@ -1074,10 +1074,8 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
 
 PNGSaveOptions *png_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("libPNG Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -1110,13 +1108,13 @@ PNGSaveOptions *png_parameters_gui(SaveContext &ctx)
         ImGui::PE::Checkbox("Interlaced", &s_opts.interlaced);
         ImGui::PE::Combo("Pixel format", &s_opts.data_type_index, "UInt8\0UInt16\0");
 
+        if (reset_entry())
+            s_opts = PNGSaveOptions{};
+
         ImGui::PE::End();
     }
 
     caveat_entry(png_caveat(s_opts.tf));
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = PNGSaveOptions{};
 
     ctx.hdr = is_hdr_encoding(s_opts.tf);
     ctx.records_primaries = true; //< in cICP, cHRM and any ICC profile

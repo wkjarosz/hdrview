@@ -183,10 +183,8 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, bool sR
 // GUI parameter function
 QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("QOI Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -212,11 +210,11 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
 
         ImGui::PE::Checkbox("Dither", &s_opts.dither);
 
+        if (reset_entry())
+            s_opts = QOISaveOptions{};
+
         ImGui::PE::End();
     }
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = QOISaveOptions{};
 
     ctx.hdr = false; //< 8-bit, sRGB or linear
     return &s_opts;

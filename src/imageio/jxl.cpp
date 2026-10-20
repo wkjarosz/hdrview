@@ -1177,11 +1177,8 @@ static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, J
 
 JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("JPEG-XL Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -1221,13 +1218,13 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
                                "Quality level for lossy compression.");
         ImGui::EndDisabled();
 
+        if (reset_entry())
+            s_opts = JXLSaveOptions{};
+
         ImGui::PE::End();
     }
 
     caveat_entry(jxl_caveat(s_opts.tf, s_opts.lossless));
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = JXLSaveOptions{};
 
     ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index <= 1); // the first two are the float formats
     ctx.records_primaries = true; //< in its color encoding or ICC profile

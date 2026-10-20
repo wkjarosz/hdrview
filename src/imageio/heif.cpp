@@ -1414,11 +1414,8 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
         remembered = default_encoder_for(codec, s_opts.use_alpha);
     s_opts.encoder = remembered;
 
-    if (ImGui::PE::Begin("HEIF/AVIF Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         // Transfer function
         ImGui::PE::Entry(
@@ -1671,13 +1668,13 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
             ImGui::PE::TreePop();
         }
 
+        if (reset_entry())
+            s_opts = HEIFSaveOptions{};
+
         ImGui::PE::End();
     }
 
     caveat_entry(heif_caveat(s_opts.tf));
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = HEIFSaveOptions{};
 
     ctx.hdr = is_hdr_encoding(s_opts.tf);
     ctx.records_primaries = true; //< in nclx

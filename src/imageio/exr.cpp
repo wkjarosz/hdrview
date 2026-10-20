@@ -681,11 +681,8 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
         for (int i = 0; i < (int)img->groups.size(); ++i) group_selection.SetItemSelected(i, true);
     }
 
-    if (ImGui::PE::Begin("OpenEXR Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         // Channels (custom multi-select widget)
         ImGui::PE::Entry(
@@ -813,11 +810,11 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
             },
             "Enable to save as a tiled EXR file (recommended for large images).");
 
+        if (reset_entry())
+            s_opts = EXRSaveOptions{};
+
         ImGui::PE::End();
     }
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = EXRSaveOptions{};
 
     ctx.hdr = true; //< always floating point
     ctx.records_primaries = true; //< in the chromaticities attribute

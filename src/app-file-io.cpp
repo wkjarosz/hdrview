@@ -232,27 +232,10 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         // ImGui::PushItemWidth(-HelloImGui::EmSize(10));
 
-        // What is saved: the image's data, optionally blended with the reference before the view's exposure, or a
-        // rendition of the view; whole, or only the part under the selection.
-        static bool include_comparison = false, selection_only = false;
-        if (!rendition)
-        {
-            ImGui::BeginDisabled(!reference_image());
-            ImGui::Checkbox("Include comparison", &include_comparison);
-            ImGui::EndDisabled();
-            ImGui::Tooltip("Save the current image blended with the reference, in the channels shown, as the "
-                           "viewport compares them, but before its exposure and tonemap.");
-            ImGui::SameLine();
-        }
-        ImGui::BeginDisabled(!m_roi.has_volume());
-        ImGui::Checkbox("Save selection only", &selection_only);
-        ImGui::EndDisabled();
-        ImGui::Tooltip("Save only the part of the image under the selection.");
-        const bool comparing = !rendition && include_comparison && reference_image();
-        const bool cropping  = selection_only && m_roi.has_volume();
-
         // what the format's options are told about the image, and say about the encoding they chose
         SaveContext ctx;
+        // every format's options and the rendition's share a table ID, which syncs their columns' widths
+        ctx.table = "##save options";
         if (auto img = current_image())
             ctx.wide_gamut = img->chromaticities && named_color_gamut(*img->chromaticities) != ColorGamut_sRGB_BT709;
 
@@ -263,7 +246,10 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::TextUnformatted("File format:");
         ImGui::PopFont();
         // ImGui::SetNextItemWidth(HelloImGui::EmSize(10.f));
-        if (ImGui::BeginListBox("##File format", HelloImGui::EmToVec2(8.f, 17.f)))
+        // the list and the options beside it are the same height, each scrolling what does not fit, which is tall
+        // enough for most formats' options not to
+        const float column_height = HelloImGui::EmSize(17.f) + 3 * ImGui::GetFrameHeightWithSpacing();
+        if (ImGui::BeginListBox("##File format", ImVec2{HelloImGui::EmSize(8.f), column_height}))
         {
             for (int i = 0; i <= Format_Last; ++i)
             {
@@ -288,6 +274,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::PushFont(font("sans bold"), 0.f);
         ImGui::TextUnformatted("Options:");
         ImGui::PopFont();
+        ImGui::BeginChild("##Options", ImVec2{HelloImGui::EmSize(28.f), column_height}, ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoBackground);
 
         std::function<void(const Image &, std::ostream &, const std::string_view)> save_func;
         // what the format writes unless one of its options says otherwise
@@ -358,7 +346,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 img->finalize();
                 return img;
             }();
-            auto opts = exr_parameters_gui(comparing || rendition ? rgba : current_image(), ctx);
+            auto opts = exr_parameters_gui(rendition ? rgba : current_image(), ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_exr_image(img, os, filename, opts); };
         }
@@ -437,9 +425,6 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         break;
         }
 
-        ImGui::Dummy(HelloImGui::EmToVec2(25.f, 0.f)); // ensure minimum size even for no options
-        ImGui::EndGroup();
-
         // A rendition is written for a target display: SDR white when the format's encoding cannot hold more
         // (ctx.hdr), else a chosen peak. The view's highlight mode resolves against that display's ceiling rather
         // than this one's, and nothing is written above it.
@@ -448,79 +433,112 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         bool           use_rendition_primaries = false; //< else the image's own
         if (rendition)
         {
-            ImGui::SeparatorText("Rendition");
-            // The display it is written for, and the primaries it is written in, share a row: the first only for an
-            // encoding that can hold more than SDR white, the second only where the format can say which they are.
-            static int         target  = 0;
-            static float       nits    = 1000.f;
-            static const char *targets = "1000 cd/m\xc2\xb2 display\0002000 cd/m\xc2\xb2 display\0004000 "
-                                         "cd/m\xc2\xb2 display\0This display\0Custom\0";
-            if (ctx.hdr)
+            ImGui::Spacing();
+            ImGui::PushFont(font("sans bold"), 0.f);
+            ImGui::TextUnformatted("Rendition:");
+            ImGui::PopFont();
+            static int   target = 0;
+            static float nits   = 1000.f;
+            static int   gamut  = 0;
+            if (begin_options_table(ctx))
             {
-                ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
-                ImGui::Combo("Written for", &target, targets);
-                ImGui::Tooltip("The display the rendition's highlights are fitted to. The peaks are in cd/m\xc2\xb2, "
-                               "with SDR white at the 203 cd/m\xc2\xb2 of BT.2408.");
-            }
-            static int gamut = 0;
-            if (ctx.records_primaries)
-            {
+                // the display only for an encoding that can hold more than SDR white
                 if (ctx.hdr)
-                    ImGui::SameLine();
-                const auto  source  = current_image() && current_image()->chromaticities
-                                          ? named_color_gamut(*current_image()->chromaticities)
-                                          : ColorGamut_sRGB_BT709;
-                const auto  name    = fmt::format("Source ({})", color_gamut_name(source));
-                const char *items[] = {name.c_str(), color_gamut_name(ColorGamut_sRGB_BT709),
-                                       color_gamut_name(ColorGamut_Display_P3_SMPTE432),
-                                       color_gamut_name(ColorGamut_BT2020_2100)};
-                ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
-                ImGui::Combo("Primaries", &gamut, items, IM_ARRAYSIZE(items));
-                ImGui::Tooltip("The primaries the rendition is written in. Colors outside them clip, in a format that "
-                               "stores no negative values.");
-            }
-            if (ctx.hdr)
-            {
-                if (target == 4)
                 {
-                    ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
-                    ImGui::DragFloat("Peak", &nits, 10.f, HDR_REFERENCE_WHITE_NITS, 10000.f, "%.0f cd/m\xc2\xb2",
-                                     ImGuiSliderFlags_AlwaysClamp);
+                    ImGui::PE::Combo("Written for", &target,
+                                     "1000 cd/m\xc2\xb2 display\0002000 cd/m\xc2\xb2 display\0004000 cd/m\xc2\xb2 "
+                                     "display\0This display\0Custom\0",
+                                     -1,
+                                     "The display the rendition's highlights are fitted to. The peaks are in "
+                                     "cd/m\xc2\xb2, with SDR white at the 203 cd/m\xc2\xb2 of BT.2408.");
+                    if (target == 4)
+                        ImGui::PE::Entry(
+                            "Peak",
+                            [&]
+                            {
+                                return ImGui::DragFloat("##Peak", &nits, 10.f, HDR_REFERENCE_WHITE_NITS, 10000.f,
+                                                        "%.0f cd/m\xc2\xb2", ImGuiSliderFlags_AlwaysClamp);
+                            },
+                            "The custom display's peak.");
+                    const float peak_nits = target == 0 ? 1000.f : target == 1 ? 2000.f : target == 2 ? 4000.f : nits;
+                    target_ceiling = target == 3 ? m_rolloff.display_ceiling
+                                                 : std::log2(std::max(1.f, peak_nits / HDR_REFERENCE_WHITE_NITS));
                 }
-                const float peak_nits = target == 0 ? 1000.f : target == 1 ? 2000.f : target == 2 ? 4000.f : nits;
-                target_ceiling        = target == 3 ? m_rolloff.display_ceiling
-                                                    : std::log2(std::max(1.f, peak_nits / HDR_REFERENCE_WHITE_NITS));
+                // the primaries only where the format can say which they are
+                if (ctx.records_primaries)
+                {
+                    const auto  source  = current_image() && current_image()->chromaticities
+                                              ? named_color_gamut(*current_image()->chromaticities)
+                                              : ColorGamut_sRGB_BT709;
+                    const auto  name    = fmt::format("Source ({})", color_gamut_name(source));
+                    const char *items[] = {name.c_str(), color_gamut_name(ColorGamut_sRGB_BT709),
+                                           color_gamut_name(ColorGamut_Display_P3_SMPTE432),
+                                           color_gamut_name(ColorGamut_BT2020_2100)};
+                    ImGui::PE::Entry(
+                        "Primaries",
+                        [&]
+                        {
+                            ImGui::SetNextItemWidth(-FLT_MIN);
+                            return ImGui::Combo("##Primaries", &gamut, items, IM_ARRAYSIZE(items));
+                        },
+                        "The primaries the rendition is written in. Colors outside them clip, in a format that stores "
+                        "no negative values.");
+                }
+                // what the view's highlight mode does at the target; a colormap has no highlights to handle
+                if (m_tonemap == Tonemap_Gamma)
+                {
+                    auto level = [](float stops)
+                    {
+                        return stops < 0.01f
+                                   ? std::string("SDR white")
+                                   : fmt::format("{:.0f} cd/m\xc2\xb2", HDR_REFERENCE_WHITE_NITS * std::exp2(stops));
+                    };
+                    const int   mode    = highlight_mode();
+                    const float ceiling = rolloff_for(target_ceiling).ceiling;
+                    const auto  outcome = mode == 0
+                                              ? std::string("Written unchanged; a display clips what it cannot show.")
+                                          : mode == 1 ? std::string("Values above SDR white clip.")
+                                                      : fmt::format("Compressed to fit under {}.", level(ceiling));
+                    ImGui::PE::Entry(
+                        "Highlights",
+                        [&]
+                        {
+                            ImGui::BeginDisabled();
+                            ImGui::TextWrapped("%s: %s", highlight_mode_name(), outcome.c_str());
+                            ImGui::EndDisabled();
+                            return false;
+                        },
+                        "The view's highlight mode, applied for the display the rendition is written for.");
+                }
+                ImGui::PE::End();
             }
             constexpr ColorGamut_ k_gamuts[] = {ColorGamut_sRGB_BT709, ColorGamut_sRGB_BT709,
                                                 ColorGamut_Display_P3_SMPTE432, ColorGamut_BT2020_2100};
             rendition_primaries              = gamut_chromaticities(k_gamuts[gamut]);
             use_rendition_primaries          = ctx.records_primaries && gamut != 0;
-
-            // what the view's highlight mode does at the target; a colormap has no highlights to handle
-            if (m_tonemap == Tonemap_Gamma)
-            {
-                auto level = [](float stops)
-                {
-                    return stops < 0.01f
-                               ? std::string("SDR white")
-                               : fmt::format("{:.0f} cd/m\xc2\xb2", HDR_REFERENCE_WHITE_NITS * std::exp2(stops));
-                };
-                const int   mode    = highlight_mode();
-                const float ceiling = rolloff_for(target_ceiling).ceiling;
-                const auto  outcome = mode == 0   ? fmt::format("values above {} clip.", level(target_ceiling))
-                                      : mode == 1 ? std::string("values above SDR white clip.")
-                                      : ceiling > target_ceiling + 0.01f
-                                          ? fmt::format("highlights are compressed to fit under {}, then clip at {}.",
-                                                        level(ceiling), level(target_ceiling))
-                                          : fmt::format("highlights are compressed to fit under {}.", level(ceiling));
-                ImGui::BeginDisabled();
-                ImGui::TextWrapped("%s: %s", highlight_mode_name(), outcome.c_str());
-                ImGui::EndDisabled();
-                ImGui::Tooltip("The view's highlight mode, applied for the display the rendition is written for.");
-            }
         }
 
+        ImGui::EndChild();
+        ImGui::EndGroup();
+
         ImGui::Spacing();
+
+        // What is saved, beside the buttons that save it: whole or only the part under the selection on the left,
+        // Cancel and Save on the right.
+        static bool selection_only = false;
+        ImGui::BeginDisabled(!m_roi.has_volume());
+        ImGui::Checkbox("Selection only", &selection_only);
+        ImGui::EndDisabled();
+        ImGui::Tooltip("Save only the part of the image under the selection.");
+        const bool cropping = selection_only && m_roi.has_volume();
+
+        static string save_as_name;
+        save_as_name          = fmt::format("Save as {}...", save_format_names[save_format]).c_str();
+        const auto &style     = ImGui::GetStyle();
+        const float buttons_w = ImGui::CalcTextSize("Cancel").x + ImGui::CalcTextSize(save_as_name.c_str()).x +
+                                4 * style.FramePadding.x + style.ItemSpacing.x;
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, ImGui::GetContentRegionAvail().x - buttons_w));
 
         if (ImGui::Button("Cancel") ||
             (!ImGui::GetIO().NavVisible &&
@@ -529,9 +547,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         ImGui::SameLine();
 
-        string        filename;
-        static string save_as_name;
-        save_as_name = fmt::format("Save as {}...", save_format_names[save_format]).c_str();
+        string filename;
         if (ImGui::Button(save_as_name.c_str()))
         {
             filename = current_image()->path.stem().u8string() + save_extension;
@@ -551,7 +567,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
             {
                 ostringstream os;
 
-                ConstImagePtr img = image_to_save(mode, comparing, cropping, target_ceiling,
+                ConstImagePtr img = image_to_save(mode, cropping, target_ceiling,
                                                   use_rendition_primaries ? &rendition_primaries : nullptr);
                 if (!img)
                     throw runtime_error("the selection does not cover any of the image");
@@ -577,7 +593,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
                 // The file now holds what the image holds, so its edits count as saved. Not for part of it,
                 // a comparison or a rendition, which reopening would not give the image back from.
-                if (!rendition && !comparing && !cropping)
+                if (!rendition && !cropping)
                     current_image()->history.mark_saved();
             }
             catch (const exception &e)
@@ -594,20 +610,19 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
     }
 }
 
-ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool include_comparison, bool selection_only,
-                                        float target_ceiling, const Chromaticities *primaries) const
+ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool selection_only, float target_ceiling,
+                                        const Chromaticities *primaries) const
 {
     auto img = current_image();
     if (!img)
         return nullptr;
-    const Box2i region    = selection_only && m_roi.has_volume() ? m_roi : Box2i{};
-    const bool  rendition = mode == SaveMode_Rendition;
-    if (!rendition && !include_comparison)
+    const Box2i region = selection_only && m_roi.has_volume() ? m_roi : Box2i{};
+    if (mode == SaveMode_Data)
         return region.has_volume() ? img->duplicate(region) : img;
 
-    // A new image of the comparison or of the view, over the image's data window or the part of it under the
-    // selection, which keeps its place in the frame as duplicate() keeps it. It has alpha only if what it shows
-    // does: the current image, or the reference blended with it.
+    // A new image of the view, blended with the reference when there is one, over the image's data window or the
+    // part of it under the selection, which keeps its place in the frame as duplicate() keeps it. It has alpha only
+    // if what it shows does: the current image, or the reference blended with it.
     Box2i bounds = img->data_window;
     if (region.has_volume())
         bounds.intersect(region);
@@ -617,33 +632,24 @@ ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool include_comparison, 
     { return i && group_has_alpha(i->groups[i->active_group_index(target)].type); };
     const int num_channels = has_alpha(img, Target_Primary) || has_alpha(reference_image(), Target_Secondary) ? 4 : 3;
     auto      out          = make_shared<Image>(bounds.size(), num_channels);
-    // pixel_value() is linear BT.709; the result goes to the rendition's chosen primaries or else back to the current
-    // image's, labeled with them, so a wide gamut survives in a format that can record it
-    out->chromaticities = rendition && primaries ? *primaries : img->chromaticities.value_or(Chromaticities{});
+    // pixel_value() is linear BT.709; the result goes to the chosen primaries or else back to the current image's,
+    // labeled with them, so a wide gamut survives in a format that can record it
+    out->chromaticities = primaries ? *primaries : img->chromaticities.value_or(Chromaticities{});
     out->finalize();
     if (bounds != img->data_window)
         out->data_window = out->display_window = bounds;
     const float3x3 M_from_sRGB = inverse(out->M_to_sRGB);
 
-    // A rendition is mastered for the target display, with SDR white at 203 cd/m^2; a comparison keeps the
-    // image's own account of what its values mean. The savers record these where a format has room for them.
-    json       &header = out->metadata["header"];
-    const json &source = img->metadata.value("header", json::object());
-    if (rendition)
-    {
-        add_mastering_display(header, *out->chromaticities, k_mastering_display_min_nits,
-                              HDR_REFERENCE_WHITE_NITS * std::exp2(target_ceiling), "rendition's target display");
-        add_white_luminance(header, HDR_REFERENCE_WHITE_NITS, "rendition's target display");
-    }
-    else
-        for (auto key : {k_mastering_display_key, k_white_luminance_key})
-            if (source.contains(key))
-                header[key] = source[key];
+    // mastered for the target display, with SDR white at 203 cd/m^2, which the savers record where a format has room
+    json &header = out->metadata["header"];
+    add_mastering_display(header, *out->chromaticities, k_mastering_display_min_nits,
+                          HDR_REFERENCE_WHITE_NITS * std::exp2(target_ceiling), "rendition's target display");
+    add_white_luminance(header, HDR_REFERENCE_WHITE_NITS, "rendition's target display");
 
-    // A rendition's highlights are handled for the target display and clipped at its ceiling (at SDR white in
-    // Clip at SDR white). The clip bounds the straight color, so premultiplied values stay under limit * alpha.
+    // The highlights are handled for the target display. Only Clip at SDR white clips, as it does on screen, bounding
+    // the straight color so premultiplied values stay under alpha; Pass through writes the values unchanged, for the
+    // file's encoding or its reader's display to bound, and a rolloff stops at its own ceiling.
     const Rolloff rolloff = rolloff_for(target_ceiling);
-    const float   limit   = std::exp2(m_clamp_to_LDR ? 0.f : target_ceiling);
     const int     width   = bounds.size().x;
     parallel_for(blocked_range<int>(0, bounds.size().y, std::max(1, 1024 * 1024 / width)),
                  [&](int begin_y, int end_y, int, int)
@@ -651,12 +657,11 @@ ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool include_comparison, 
                      for (int y = begin_y; y < end_y; ++y)
                          for (int x = 0; x < width; ++x)
                          {
-                             float4 v = pixel_value(int2{x, y} + bounds.min, true, 2);
-                             if (rendition)
+                             float4 v = tonemap_value(pixel_value(int2{x, y} + bounds.min, true, 2), rolloff);
+                             if (m_clamp_to_LDR)
                              {
-                                 v             = tonemap_value(v, rolloff);
                                  const float a = v.w > k_small_alpha ? v.w : 1.f;
-                                 for (int c = 0; c < 3; ++c) v[c] = std::min(v[c], limit * a);
+                                 for (int c = 0; c < 3; ++c) v[c] = std::min(v[c], a);
                              }
                              v.xyz() = mul(M_from_sRGB, v.xyz());
                              for (int c = 0; c < num_channels; ++c) out->channels[c](x, y) = v[c];

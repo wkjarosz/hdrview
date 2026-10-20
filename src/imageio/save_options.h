@@ -8,10 +8,13 @@
 
 #include "colorspace.h"
 
+#include <string>
+
 /// What the save dialog and a format's options tell each other about what is being saved.
 struct SaveContext
 {
     bool hdr        = false; ///< Set by the options: whether the encoding keeps values above SDR white
+    std::string table;              ///< Set by the dialog: the ID of the options' table, which it syncs its own with
     bool wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
     bool records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
 };
@@ -49,3 +52,14 @@ void caveat_entry(const Caveat &caveat);
 
 /// Says, in place of a format's options, that it has none.
 void no_options_entry();
+
+/// Begins a save dialog's options table, as ImGui::PE::Begin() does; end it with ImGui::PE::End().
+/**
+    Every format's table and the rendition's share \p ctx's ID, so their columns' widths stay in step, starting wide
+    enough for the HEIF/AVIF options' Advanced tree node, a level in under Encoder, but not the rows inside it. The
+   widths are not saved, so a width dragged once does not stand in for that next time.
+*/
+bool begin_options_table(const SaveContext &ctx);
+
+/// A table row whose button resets a format's options to their defaults; returns whether it was pressed.
+bool reset_entry();

@@ -1468,10 +1468,8 @@ void save_tiff_image(const Image &img, ostream &os, string_view filename, Transf
 
 TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("TIFF Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Entry(
             "Compression",
             [&]
@@ -1523,15 +1521,14 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
             ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
 
+        if (reset_entry())
+            s_opts = TIFFSaveOptions{};
+
         ImGui::PE::End();
     }
 
     caveat_entry(tiff_caveat(s_opts.tf, ctx.wide_gamut));
 
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = TIFFSaveOptions{};
-
-    s_opts.tf = s_opts.data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
     ctx.hdr   = s_opts.data_type_index == 2; //< float
     ctx.records_primaries = ICCProfile::can_describe(s_opts.tf); //< in an ICC profile
     return &s_opts;

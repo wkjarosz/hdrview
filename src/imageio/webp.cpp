@@ -645,10 +645,8 @@ void save_webp_image(const Image &img, ostream &os, string_view filename, float 
 
 WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("WebP Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         if (ICCProfile::can_describe(TransferFunction::Linear))
         {
@@ -688,11 +686,11 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
         ImGui::PE::SliderFloat("Quality", &s_opts.quality, 1, 100, "%.3f", 0, "Quality level for lossy compression.");
         ImGui::EndDisabled();
 
+        if (reset_entry())
+            s_opts = WebPSaveOptions{};
+
         ImGui::PE::End();
     }
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = WebPSaveOptions{};
 
     ctx.hdr               = false;                               //< 8-bit SDR
     ctx.records_primaries = ICCProfile::can_describe(s_opts.tf); //< in an ICC profile

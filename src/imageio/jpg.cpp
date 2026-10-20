@@ -830,23 +830,19 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
 
 JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("libJPEG Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Checkbox("Dither", &s_opts.dither);
 
         ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100);
         ImGui::PE::Checkbox("Progressive", &s_opts.progressive);
 
+        if (reset_entry())
+            s_opts = JPGSaveOptions{};
+
         ImGui::PE::End();
     }
 
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = JPGSaveOptions{};
-
-    ImGui::Unindent();
     ctx.hdr = false;
     return &s_opts;
 }
