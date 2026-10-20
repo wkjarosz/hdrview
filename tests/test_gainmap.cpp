@@ -560,13 +560,13 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
             // its own: within one and a half times those bounds where the writer's options do not warn that macOS
             // misreads the file, and outside them where they do, or the warning has gone stale. The misreads it warns
             // of are off by ten times that.
-            // The caveats name the macOS they were measured on, 27, and hold from there: macOS 15 decodes these
-            // Ultra HDR files' HDR rendition otherwise, at least on CI's displayless runners.
-            constexpr int k_caveats_measured_on = 27;
+            // The caveats name the macOS versions they were measured on, 26 and 27, and hold from there: macOS 15
+            // decodes these Ultra HDR files' HDR rendition otherwise, though its SDR one matches.
+            constexpr int k_caveats_measured_on = 26;
             const int     os                    = apple_os_major();
             if (os < k_caveats_measured_on)
                 MESSAGE("macOS ", os, " predates the macOS ", k_caveats_measured_on,
-                        " the gain-map caveats were measured on; skipping its decode");
+                        " and later the gain-map caveats were measured on; skipping its decode");
             const auto apple_hdr =
                            os >= k_caveats_measured_on ? apple_decode(ss.str(), AppleDecode::HDR) : std::nullopt,
                        apple_sdr =

@@ -1373,13 +1373,13 @@ Caveat jxl_caveat(TransferFunction tf, bool lossless)
     return {};
 }
 
-// macOS 27's ImageIO measured by test_gainmap.cpp, and on Adobe's samples: it applies the gain maps of Ultra HDR JPEGs
-// and AVIFs, but not a JPEG XL's jhgm box, whichever rendition is the base.
+// macOS 26's and 27's ImageIO measured by test_gainmap.cpp, and on Adobe's samples: it applies the gain maps of Ultra
+// HDR JPEGs and AVIFs, but not a JPEG XL's jhgm box, whichever rendition is the base.
 Caveat jxl_gainmap_caveat(bool hdr_base)
 {
-    return {Misreader_macOS, hdr_base
-                                 ? "macOS 27 apps ignore a JPEG XL's gain map: on an SDR display they tone-map the "
-                                   "HDR base themselves."
-                                 : "macOS 27 apps ignore a JPEG XL's gain map: on an HDR display they show the SDR "
-                                   "base."};
+    return {Misreader_macOS,
+            hdr_base ? "macOS 26 and 27 apps ignore a JPEG XL's gain map: on an SDR display they tone-map the "
+                       "HDR base themselves."
+                     : "macOS 26 and 27 apps ignore a JPEG XL's gain map: on an HDR display they show the SDR "
+                       "base."};
 }
