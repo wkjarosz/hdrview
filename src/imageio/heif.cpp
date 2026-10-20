@@ -1315,8 +1315,8 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             heif_encoding_options_alloc(), heif_encoding_options_free);
         encoding_options->output_nclx_profile = nclx.get();
 
-        // An SDR curve other than sRGB also gets an ICC profile, which a reader that does not know its nclx code falls
-        // back on; libheif writes a second colr box for it only when asked to
+        // An SDR transfer function other than sRGB also gets an ICC profile, which a reader that does not know its nclx
+        // code falls back on; libheif writes a second colr box for it only when asked to
         if (!is_hdr_encoding(tf) && tf.type != TransferFunction::sRGB)
         {
             const auto chr = convert_to_sRGB || !img.chromaticities ? Chromaticities{} : *img.chromaticities;
@@ -1680,7 +1680,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
 #endif
 
 // Firefox 158 measured by hand, on an AVIF; macOS's ImageIO by test_export_roundtrip.cpp. With the ICC profile an SDR
-// curve other than sRGB carries beside its nclx box, macOS and Chromium 155 read every one right.
+// transfer function other than sRGB carries beside its nclx box, macOS and Chromium 155 read every one right.
 Caveat heif_caveat(TransferFunction tf)
 {
     if (tf.type == TransferFunction::ITU)

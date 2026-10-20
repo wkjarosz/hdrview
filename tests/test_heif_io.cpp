@@ -76,14 +76,14 @@ TEST_CASE("The HEIF and AVIF save entries write files branded and labeled as wha
     auto img = make_rgb();
 
     for (auto codec : {HEIFCodec::HEIF, HEIFCodec::AV1})
-        for (auto curve : {TransferFunction::sRGB, TransferFunction::BT2100_PQ})
+        for (auto tf : {TransferFunction::sRGB, TransferFunction::BT2100_PQ})
         {
             const bool avif = codec == HEIFCodec::AV1;
-            INFO(std::string(avif ? "AVIF" : "HEIF"), ", ", transfer_function_name(curve));
+            INFO(std::string(avif ? "AVIF" : "HEIF"), ", ", transfer_function_name(tf));
             std::ostringstream out(std::ios::binary);
             try
             {
-                save_heif_image(*img, out, avif ? "a.avif" : "a.heif", 90, false, true, codec, curve);
+                save_heif_image(*img, out, avif ? "a.avif" : "a.heif", 90, false, true, codec, tf);
             }
             catch (const std::exception &e)
             {
@@ -95,12 +95,12 @@ TEST_CASE("The HEIF and AVIF save entries write files branded and labeled as wha
             CHECK((brand == "avif") == avif);
 
             const Written w = written(out.str());
-            CHECK(w.transfer == (curve == TransferFunction::sRGB ? heif_transfer_characteristic_IEC_61966_2_1
-                                                                 : heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
+            CHECK(w.transfer == (tf == TransferFunction::sRGB ? heif_transfer_characteristic_IEC_61966_2_1
+                                                              : heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
             CHECK(w.primaries == heif_color_primaries_ITU_R_BT_709_5); // the image records none, so sRGB's
             // the automatic bit depth is 10 for PQ; a .heif may hold JPEG, which has only 8, so only HEVC is held to it
             if (avif || brand.rfind("hei", 0) == 0)
-                CHECK(w.bit_depth == (curve == TransferFunction::sRGB ? 8 : 10));
+                CHECK(w.bit_depth == (tf == TransferFunction::sRGB ? 8 : 10));
         }
 }
 

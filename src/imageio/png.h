@@ -33,7 +33,7 @@ struct Caveat;
 PNGSaveOptions *png_parameters_gui(SaveContext &ctx);
 /// Whether the PNG save options offer \p tf: whether this build can label a PNG with it.
 bool png_offers_tf(TransferFunction tf);
-/// Which applications misread a PNG with the curve \p tf, and how.
+/// Which applications misread a PNG with the transfer function \p tf, and how.
 Caveat png_caveat(TransferFunction tf);
 // throws on error
 void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params);

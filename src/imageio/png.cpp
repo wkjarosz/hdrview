@@ -856,8 +856,8 @@ namespace
 // (1/2.2 for a 2.2 encode), so only a pure power curve has an exact gAMA representation.
 struct TransferSignalling
 {
-    double file_gamma     = 0.0;   ///< gAMA value to write; 0 when the curve has no gAMA equivalent
-    bool   gamma_is_exact = true;  ///< false when gAMA merely approximates the curve
+    double file_gamma     = 0.0;   ///< gAMA value to write; 0 when the transfer function has no gAMA equivalent
+    bool   gamma_is_exact = true;  ///< false when gAMA merely approximates the transfer function
     bool   srgb_chunk     = false; ///< the sRGB chunk describes it, if the primaries are sRGB's too
 };
 
@@ -874,8 +874,8 @@ TransferSignalling transfer_signaling(TransferFunction tf)
     }
 }
 
-// cICP names a curve exactly, but libpng before 1.6.45 cannot write it and most readers still ignore it, so
-// the older chunks go in alongside.
+// cICP names a transfer function exactly, but libpng before 1.6.45 cannot write it and most readers still ignore
+// it, so the older chunks go in alongside.
 constexpr bool k_can_write_cicp = PNG_cICP_SUPPORTED_ENABLED;
 
 } // namespace
@@ -884,8 +884,8 @@ bool png_offers_tf(TransferFunction tf)
 {
     if (tf.type == TransferFunction::Unspecified || tf.type == TransferFunction::Invalid)
         return false;
-    // cICP names every curve that gAMA cannot state exactly; without it, a curve needs the sRGB chunk, an exact
-    // gAMA or an ICC profile
+    // cICP names every transfer function that gAMA cannot state exactly; without it, one needs the sRGB chunk, an
+    // exact gAMA or an ICC profile
     const auto signaling = transfer_signaling(tf);
     return k_can_write_cicp || signaling.srgb_chunk || (signaling.file_gamma > 0.0 && signaling.gamma_is_exact) ||
            ICCProfile::can_describe(tf);
@@ -982,8 +982,8 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
 
 #ifdef PNG_cICP_SUPPORTED
     // Primaries HDRView does not know were converted to BT.709 above, and an image that records none is taken
-    // to be in BT.709's, so both are written as BT.709. A curve with no CICP code, such as most gammas, gets no
-    // cICP at all: a reader would let it override the gAMA chunk that does describe the curve.
+    // to be in BT.709's, so both are written as BT.709. A transfer function with no CICP code, such as most gammas,
+    // gets no cICP at all, since a reader would let one override the gAMA chunk that does describe it.
     png_byte color_primaries = png_byte(cicp_primaries <= 2 ? 1 : cicp_primaries); // e.g. 1 for BT.709, 9 for BT.2020
     png_byte transfer_function =
         (png_byte)transfer_function_to_CICP(tf); // e.g. 13 for sRGB, 1 for BT.709, 8 for linear, 16 for PQ
@@ -1013,7 +1013,7 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     // the sRGB chunk asserts the whole colorspace, primaries included, so it may only be written when those
     // are sRGB's: BT.709 (1), unspecified (2, where no cHRM is written and a reader assumes sRGB), or
     // unrecognized (< 0, where the pixels were converted to sRGB above). A wide gamut gets cHRM instead, with
-    // the curve in gAMA or the ICC profile below.
+    // the transfer function in gAMA or the ICC profile below.
     const bool primaries_are_srgb = cicp_primaries < 0 || cicp_primaries == 1 || cicp_primaries == 2;
     const auto signaling          = transfer_signaling(tf);
 
@@ -1021,9 +1021,9 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     if (srgb_chunk)
         png_set_sRGB(png_ptr, info_ptr.get(), PNG_sRGB_INTENT_PERCEPTUAL);
 
-    // An SDR curve that neither an sRGB chunk nor an exact gAMA states, the sRGB curve over wide primaries among
-    // them, also gets an ICC profile, for a reader that ignores the curve's cICP code to fall back on. The PNG spec
-    // forbids an sRGB chunk beside an iCCP chunk, and such a file has none.
+    // An SDR transfer function that neither an sRGB chunk nor an exact gAMA states, the sRGB curve over wide
+    // primaries among them, also gets an ICC profile, for a reader that ignores its cICP code to fall back on. The
+    // PNG spec forbids an sRGB chunk beside an iCCP chunk, and such a file has none.
     std::vector<uint8_t> icc;
     const bool           exact_gama = signaling.file_gamma > 0.0 && signaling.gamma_is_exact;
     if (!is_hdr_encoding(tf) && !srgb_chunk && !exact_gama)
@@ -1043,9 +1043,9 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
                           transfer_function_name(tf), signaling.file_gamma);
     }
     else if (!icc.empty())
-        ; // the ICC profile states the curve
+        ; // the ICC profile states the transfer function
     else if (!k_can_write_cicp)
-        // writing anyway would encode the pixels with this curve while recording no curve at all
+        // writing anyway would encode the pixels with this transfer function while recording none at all
         throw runtime_error(fmt::format("PNG: cannot record the {} transfer function. It has no gAMA or sRGB "
                                         "equivalent, and this build's libpng ({}) predates the cICP chunk added "
                                         "in 1.6.45. Save to a format that can carry it, or rebuild against a "

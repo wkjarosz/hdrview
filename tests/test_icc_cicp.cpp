@@ -133,7 +133,7 @@ TEST_CASE("An ICC profile whose cicp tag declares PQ keeps its HDR range")
     // fully-encoded PQ is far above SDR white
     CHECK(pixels[0] > 40.f);
     CHECK(pixels[0] == doctest::Approx(10000.f / 203.f).epsilon(1e-3)); // PQ 1.0 is 10000 nits over a 203-nit white
-    // mid-code PQ is a much dimmer absolute level, so this is the curve and not a scale factor
+    // mid-code PQ is a much dimmer absolute level, so this is the transfer function and not a scale factor
     CHECK(pixels[3] < 1.f);
     CHECK(pixels[3] > 0.f);
 }
@@ -241,11 +241,11 @@ TEST_CASE("icc_cicp_tag reports the video range flag")
     CHECK(!icc_cicp_tag(nullptr, 0).valid());
 }
 
-TEST_CASE("A profile built for a curve reads back as that curve and those primaries")
+TEST_CASE("A profile built for a transfer function reads back as that transfer function and those primaries")
 {
-    // Every curve, with gamma at an exponent no other curve shares, as an RGB profile over BT.709 and a wide gamut
-    // and as a gray one, read back through the path a loader takes. PQ and HLG read back through their cicp tag,
-    // and through their curves as the SDR clip a reader that ignores the tag sees.
+    // Every transfer function, with gamma at an exponent no other one shares, as an RGB profile over BT.709 and a
+    // wide gamut and as a gray one, read back through the path a loader takes. PQ and HLG read back through their
+    // cicp tag, and through their tone curves as the SDR clip a reader that ignores the tag sees.
     std::vector<TransferFunction> tfs;
     for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
         if (i != TransferFunction::Gamma)
@@ -268,7 +268,7 @@ TEST_CASE("A profile built for a curve reads back as that curve and those primar
             continue;
         }
 
-        // what the curve decodes a ramp of code values to, and that clipped to the white an ICC curve ends at
+        // a ramp of code values decoded by the transfer function, and that clipped to the white an ICC curve ends at
         std::vector<float> want(num), clipped(num);
         for (int i = 0; i < num; ++i)
         {

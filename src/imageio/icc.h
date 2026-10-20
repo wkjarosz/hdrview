@@ -69,7 +69,7 @@ public:
         one, clipped to [0, 1] as every ICC curve is (DCI-P3's code values run past its white). PQ and HLG, whose
         meaning an ICC curve cannot carry, are named instead by a cicp tag (ICC.1:2022, so an ICC v4.4 profile), over
         a curve that clips them at SDR white for a reader that ignores the tag. Without LCMS2 the profile is invalid.
-        Its description names its primaries and curve.
+        Its description names its primaries and transfer function.
     */
     static ICCProfile RGB(const Chromaticities &chr, const TransferFunction &tf);
     /// A Gray profile with the white \p whitepoint and the transfer function \p tf, as RGB() builds them.

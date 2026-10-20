@@ -729,8 +729,8 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
 
     const int bit_depth = k_bit_depths[std::clamp(params->bit_depth_index, 0, k_num_bit_depths - 1)];
 
-    // A JP2 names its curve and primaries through an ICC profile in its colr box. A file without one, a raw codestream
-    // among them, reads back as sRGB over BT.709's primaries, so its pixels are converted to those primaries
+    // A JP2 names its transfer function and primaries through an ICC profile in its colr box. A file without one, a
+    // raw codestream among them, reads back as sRGB over BT.709's primaries, so its pixels are converted to them
     const bool             jp2  = params->container == J2KContainer::JP2;
     const TransferFunction tf   = j2k_offers_tf(params->tf, params->container)
                                       ? params->tf
@@ -885,7 +885,7 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
             s_opts.container = (J2KContainer)container;
         }
 
-        // a JP2 takes any curve an ICC profile can name; a raw codestream is sRGB
+        // a JP2 takes any transfer function an ICC profile can name; a raw codestream is sRGB
         if (!j2k_offers_tf(s_opts.tf, s_opts.container))
             s_opts.tf = TransferFunction::sRGB;
         if (s_opts.container == J2KContainer::JP2 && ICCProfile::can_describe(TransferFunction::Linear))

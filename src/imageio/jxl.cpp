@@ -264,7 +264,7 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     auto           tf       = power ? transfer_function_from_color_encoding(file_enc)
                                     : transfer_function_from_CICP((int)file_enc.transfer_function);
 
-    // a power curve has no CICP code (DCI's 17 means another curve there), so it takes the general path
+    // a power curve has no CICP code (DCI's 17 means another transfer function there), so it takes the general path
     if (power || file_enc.primaries == JXL_PRIMARIES_CUSTOM)
         return linearize_pixels(pixels, size, file_chr, tf, keep_primaries, profile_description, c);
     else // we can map to a CICP profile
@@ -662,10 +662,10 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 spdlog::info("File has an encoded color profile:\n{}", color_encoding_info(file_enc));
             }
 
-            // Prefer the encoded profile when it has one of the curves the synthesized ICC profile misstates: an
-            // HDR one, which ICC cannot express; DCI, whose ICC libjxl tags cicp 17 (ST 428-1) though its curve
-            // is RP 431-2's plain gamma 2.6; or 709, whose ICC curve inverts the camera's OETF where viewers, and
-            // HDRView, decode it as BT.1886's display gamma (see EOTF_BT1886()).
+            // Prefer the encoded profile when it has one of the transfer functions the synthesized ICC profile
+            // misstates: an HDR one, which ICC cannot express; DCI, whose ICC libjxl tags cicp 17 (ST 428-1) though
+            // its curve is RP 431-2's plain gamma 2.6; or 709, whose ICC curve inverts the camera's OETF where
+            // viewers, and HDRView, decode it as BT.1886's display gamma (see EOTF_BT1886()).
             prefer_icc = !icc_profile.empty() &&
                          (!has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
                                                    file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG &&
@@ -1247,7 +1247,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 #endif
 
 // macOS's ImageIO measured by test_export_roundtrip.cpp. It reads every gamma in JPEG XL's own codes as 1.8, and 709 as
-// sRGB, so those curves are written through an ICC profile, which a lossless file keeps. A lossy one is encoded in XYB,
+// sRGB, so those are written through an ICC profile, which a lossless file keeps. A lossy one is encoded in XYB,
 // and libjxl turns the profile back into its codes where they can state it, which leaves macOS misreading the gammas
 // other than its own 1.8 and DCI's 2.6, BT.1886's 2.4 among them.
 Caveat jxl_caveat(TransferFunction tf, bool lossless)
@@ -1255,7 +1255,7 @@ Caveat jxl_caveat(TransferFunction tf, bool lossless)
     const bool misread_gamma = tf.type == TransferFunction::ITU ||
                                (tf.type == TransferFunction::Gamma && tf.gamma != 1.8f && tf.gamma != 2.6f);
     if (!lossless && misread_gamma)
-        return {Misreader_macOS, "macOS apps read a lossy JPEG XL with this curve as a gamma of 1.8; they read a "
-                                 "lossless one right."};
+        return {Misreader_macOS, "macOS apps read a lossy JPEG XL with this transfer function as a gamma of 1.8; "
+                                 "they read a lossless one right."};
     return {};
 }

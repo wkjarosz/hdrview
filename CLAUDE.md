@@ -323,13 +323,13 @@ above SDR white and whether the file can record its primaries. Scaling the data 
 a save option, so it applies the same way to every format.
 
 A format offers only the transfer functions it can label, through its `X_offers_tf()`, which both its options
-GUI and `tests/test_export_roundtrip.cpp` use; TIFF, JP2 and WebP label a curve with an ICC profile, which names PQ
+GUI and `tests/test_export_roundtrip.cpp` use; TIFF, JP2 and WebP label one with an ICC profile, which names PQ
 and HLG through a `cicp` tag (`ICCProfile::can_label()`). Its `X_caveat()` names applications known to misread a
 file anyway (`Caveat` and the `Misreader_` flags in `save_options.h`: macOS's ImageIO, Chromium, Firefox), which the
-dialog shows as a warning. That test sweeps every setting of every writer against every curve its dialog offers,
-checking the pixels, the labels and the HDR metadata through HDRView's own reader and, on macOS, through ImageIO,
-the decoder every macOS application uses; it holds each caveat naming macOS to what ImageIO does, both ways, while
-the browsers' are checked by hand.
+dialog shows as a warning. That test sweeps every setting of every writer against every transfer function its
+dialog offers, checking the pixels, the labels and the HDR metadata through HDRView's own reader and, on macOS,
+through ImageIO, the decoder every macOS application uses; it holds each caveat naming macOS to what ImageIO does,
+both ways, while the browsers' are checked by hand.
 
 ### Rendering backend abstraction (GL vs Metal)
 `renderpass.h`, `shader.h`, and `texture.h` declare platform-agnostic interfaces (adapted from NanoGUI),

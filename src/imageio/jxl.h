@@ -22,7 +22,7 @@ bool is_jxl_image(std::istream &is) noexcept;
 /// Whether the JPEG XL save options offer \p tf: whether its color encoding or an ICC profile can state it.
 bool jxl_offers_tf(TransferFunction tf) noexcept;
 struct Caveat;
-/// Which applications misread a JPEG XL with the curve \p tf, lossless or not, and how.
+/// Which applications misread a JPEG XL with the transfer function \p tf, lossless or not, and how.
 Caveat jxl_caveat(TransferFunction tf, bool lossless);
 // throws on error
 std::vector<ImagePtr> load_jxl_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});

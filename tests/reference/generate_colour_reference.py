@@ -10,9 +10,9 @@ colour-science, and commit the result:
     /tmp/colour-venv/bin/pip install colour-science==0.4.7 scipy
     /tmp/colour-venv/bin/python tests/reference/generate_colour_reference.py
 
-Inputs stay where colour-science and HDRView agree on the convention: HDRView mirrors every curve around the
-origin, colour-science extends most of them linearly, so negative inputs are left to HDRView's own tests, but
-for sRGB, whose sign-extended form H.273 defines as sYCC.
+Inputs stay where colour-science and HDRView agree on the convention: HDRView mirrors every transfer function
+around the origin, colour-science extends most of them linearly, so negative inputs are left to HDRView's own
+tests, but for sRGB, whose sign-extended form H.273 defines as sYCC.
 """
 
 import pathlib
@@ -53,7 +53,7 @@ emit("struct ColorSample { float3 in, out; };\n\n")
 
 # --- transfer functions -----------------------------------------------------------------------------------
 
-# dense around the piecewise curves' breakpoints, where their segments nearly meet and a misplaced one shows
+# dense around piecewise transfer functions' breakpoints, where their segments nearly meet and a misplaced one shows
 unit = sorted({0.0, 1e-5, 1e-4, 1e-3, 0.002, 0.0031308, 0.004, 0.01, 0.018053968510807, 0.02, 0.0228, 0.025, 0.03,
                0.04045, 0.05, 0.085, 0.0913, 0.095, 0.1, 0.18, 0.25, 0.5, 0.75, 0.9, 1.0})
 extended = unit + [2.0, 10.0]

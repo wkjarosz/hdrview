@@ -111,11 +111,11 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
 
 TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profile, not only in cICP")
 {
-    // cICP is recent enough that most readers ignore it, so every curve gAMA or the sRGB chunk can express
-    // is written through those too, and every other SDR curve in an ICC profile
+    // cICP is recent enough that most readers ignore it, so every transfer function gAMA or the sRGB chunk can
+    // express is written through those too, and every other SDR one in an ICC profile
     auto img = make_test_image(int2{4, 3});
 
-    SUBCASE("a curve gAMA and the sRGB chunk cannot state exactly gets an ICC profile, and only such a curve")
+    SUBCASE("a transfer function gAMA and the sRGB chunk cannot state exactly gets an ICC profile, and no other does")
     {
         for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
         {
@@ -137,7 +137,7 @@ TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profil
             }
             REQUIRE_FALSE(reloaded->icc_data.empty());
 
-            // the profile decodes code values as the curve does, up to the white an ICC curve ends at
+            // the profile decodes code values as the transfer function does, up to the white an ICC curve ends at
             ICCProfile         profile{reloaded->icc_data};
             constexpr int      num = 32;
             std::vector<float> ramp(num * 3);
@@ -200,7 +200,7 @@ TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profil
 
     SUBCASE("an sRGB curve over a wide gamut does not claim the sRGB chunk")
     {
-        // the sRGB chunk asserts BT.709 primaries as well as the curve, so gAMA carries the curve here and
+        // the sRGB chunk asserts BT.709 primaries as well as the transfer function, so gAMA carries that here and
         // cHRM the primaries
         auto wide            = make_test_image(int2{4, 3});
         wide->chromaticities = gamut_chromaticities(ColorGamut_BT2020_2100);
@@ -237,10 +237,10 @@ TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profil
 }
 
 #ifdef PNG_cICP_SUPPORTED
-TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
+TEST_CASE("a transfer function only cICP can express is saved with no gAMA claim")
 {
     // PQ has no power-curve equivalent, so nothing is written that would let a gAMA-only reader believe it
-    // knows the curve
+    // knows the transfer function
     auto img = make_test_image(int2{4, 3});
 
     std::ostringstream out(std::ios::binary);
@@ -257,7 +257,7 @@ TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
     CHECK(header["sRGB"]["value"].get<int>() < 0);
 }
 #else
-TEST_CASE("saving a curve this libpng cannot record fails instead of mislabelling the file")
+TEST_CASE("saving a transfer function this libpng cannot record fails instead of mislabeling the file")
 {
     // without cICP there is nowhere to put PQ; only reachable on a libpng older than 1.6.45
     auto img = make_test_image(int2{4, 3});

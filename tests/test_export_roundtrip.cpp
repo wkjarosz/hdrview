@@ -194,7 +194,7 @@ const Variant k_variants[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.j2k", true, 16, J2KContainer::J2K, t, false); }},
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
-    // lossy WebP is 8-bit 4:2:0, whose error at quality 95 a steep curve such as Log 100 amplifies
+    // lossy WebP is 8-bit 4:2:0, whose error at quality 95 a steep transfer function such as Log 100 amplifies
     {"webp q95", ".webp", Cap_Default | Cap_Alpha | Cap_Lossy, 0.05f, webp_offers_tf,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 95.f, false, t); }},
     {"webp lossless", ".webp", Cap_Alpha, k_8bit, webp_offers_tf,
@@ -465,13 +465,13 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
         }
 }
 
-TEST_CASE("every setting of every writer round-trips each curve its dialog offers, labeled as it promises")
+TEST_CASE("every setting of every writer round-trips each transfer function its dialog offers, labeled as it promises")
 {
     // A wide-gamut image, which a setting keeps and records or converts to sRGB's primaries, under every transfer
-    // function. Gamma takes four exponents, since a reader may read them all as one (macOS reads every JPEG XL gamma
-    // as 1.8): 1.8, which no other curve shares, 2.2 and 2.8, which CICP names, and 2.6, JPEG XL's DCI. A setting must
-    // label each curve its dialog offers, or the file reads back as some other curve; one it does not offer is the
-    // saver's to refuse or write as a curve it can label, which the dialog never asks for.
+    // function. Gamma takes four exponents, since a reader may read them all as one (macOS reads every JPEG XL gamma as
+    // 1.8): 1.8, which no other transfer function shares, 2.2 and 2.8, which CICP names, and 2.6, JPEG XL's DCI. A
+    // setting must label each transfer function its dialog offers, or the file reads back as some other one; one it
+    // does not offer is the saver's to refuse or write as one it can label, which the dialog never asks for.
     const Chromaticities bt2020 = gamut_chromaticities(ColorGamut_BT2020_2100);
 
     std::vector<TransferFunction> tfs;
@@ -486,7 +486,7 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
     for (const auto &variant : k_variants)
     {
         INFO("setting = ", std::string{variant.name});
-        // the curve the dialog opens with, linear for a float format and sRGB otherwise, is always offered
+        // the transfer function the dialog opens with, linear for a float format and sRGB otherwise, is always offered
         CHECK(variant.offers(
             TransferFunction{(variant.caps & Cap_Float) ? TransferFunction::Linear : TransferFunction::sRGB}));
 
@@ -494,18 +494,18 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
         {
             if (!variant.offers(tf))
                 continue;
-            INFO("curve = ", transfer_function_name(tf));
+            INFO("transfer function = ", transfer_function_name(tf));
 
-            // for an HDR curve, an image brightened 8x so its channels straddle SDR white, which a curve clipping
-            // there misses
+            // for an HDR transfer function, an image brightened 8x so its channels straddle SDR white, which one
+            // clipping there misses
             const bool hdr_tf    = tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG;
             auto       img       = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f, hdr_tf ? 8.f : 1.f);
             img->chromaticities  = bt2020;
             img->compute_color_transform();
             const float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
 
-            // what a setting that has room for it records: a white luminance, and for an HDR curve the display
-            // the image was mastered on
+            // what a setting that has room for it records: a white luminance, and for an HDR transfer function the
+            // display the image was mastered on
             const MasteringDisplay mastered{bt2020, k_mastering_display_min_nits, 1000.f};
             if (hdr_tf)
                 add_mastering_display(img->metadata["header"], mastered.primaries, mastered.min_nits, mastered.max_nits,
@@ -544,9 +544,9 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
                 continue;
             const auto &back = reloaded[0];
 
-            // Compared in code values, where the setting's step is a step whatever the level, and in the
-            // primaries the samples were quantized in: the image's own when the file kept and recorded them,
-            // sRGB's when it converted. A file read back with the wrong curve or primaries is off by far more.
+            // Compared in code values, where the setting's step is a step whatever the level, and in the primaries the
+            // samples were quantized in: the image's own when the file kept and recorded them, sRGB's when it
+            // converted. A file read back with the wrong transfer function or primaries is off by far more.
             const bool kept = back->chromaticities && approx_equal(*back->chromaticities, bt2020, 1e-3f);
             const auto M    = kept ? inverse(img->M_to_sRGB) : float3x3{la::identity};
             const auto got  = from_linear(mul(M, back->rgba_pixel(int2{1, 0}, Target_Primary).xyz()), tf);

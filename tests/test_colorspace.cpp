@@ -20,7 +20,7 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
 {
     // The values outside [0,1] are the ones an HDR viewer reaches. Gamut conversion produces negatives, and
     // the convention (OpenColorIO's LIN_TO_PQ, colour-science's signed power, our own linear_to_sRGB) is to
-    // mirror the curve around the origin so the sign survives.
+    // mirror the transfer function around the origin so the sign survives.
     std::vector<TransferFunction> tfs;
     for (int t = TransferFunction::Unspecified; t < TransferFunction::Count; ++t)
         tfs.emplace_back(static_cast<TransferFunction::Type_>(t));
@@ -61,8 +61,8 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
 }
 
 // The round trip above passes for any normalization constant, since to_linear and from_linear scale by it
-// symmetrically, and colour-science checks the curves in absolute cd/m^2 (test_colour_reference.cpp). These pin
-// HDRView's own convention for the curves in absolute luminance: their reference white is 1.0, BT.2408's
+// symmetrically, and colour-science checks the transfer functions in absolute cd/m^2 (test_colour_reference.cpp).
+// These pin HDRView's own convention for the ones in absolute luminance: their reference white is 1.0, BT.2408's
 // 203 cd/m^2 for PQ and HLG, and ST 428-1's 48 cd/m^2 for DCI-P3.
 TEST_CASE("The absolute transfer functions map their reference white to 1.0")
 {
@@ -190,17 +190,17 @@ TEST_CASE("the image shader isolates luminance in the primaries it has already c
 
 TEST_CASE("every transfer function is odd where it mirrors, and its vector form is its scalar one per component")
 {
-    // The properties colour-science's values cannot show (test_colour_reference.cpp checks those): which curves
-    // HDRView mirrors around the origin, that a NaN survives them, and that the vec3 overloads the shaders call
-    // apply the scalar curve to each component in order. The round trip is checked above.
-    struct Curve
+    // The properties colour-science's values cannot show (test_colour_reference.cpp checks those): which transfer
+    // functions HDRView mirrors around the origin, that a NaN survives them, and that the vec3 overloads the shaders
+    // call apply the scalar function to each component in order. The round trip is checked above.
+    struct TransferCase
     {
         const char *name;
         float (*f)(float);
         float3 (*v)(float3);
         bool odd; ///< mirrored around the origin, rather than extended linearly or clamped
     };
-    const Curve curves[] = {
+    const TransferCase cases[] = {
         {"linear_to_sRGB", shader::linear_to_sRGB, shader::linear_to_sRGB, true},
         {"sRGB_to_linear", shader::sRGB_to_linear, shader::sRGB_to_linear, true},
         {"OETF_ITU", shader::OETF_ITU, shader::OETF_ITU, false},
@@ -222,18 +222,18 @@ TEST_CASE("every transfer function is odd where it mirrors, and its vector form 
         {"inverse_EOTF_DCI_P3", shader::inverse_EOTF_DCI_P3, shader::inverse_EOTF_DCI_P3, true},
     };
 
-    // straddling each curve's breakpoint
+    // straddling each transfer function's breakpoint
     const float values[] = {1e-6f, 0.0031308f, 0.004f, 0.018f, 0.019f, 0.0228f, 0.04045f, 0.0913f, 0.18f, 0.5f, 1.f};
-    for (const Curve &c : curves)
+    for (const TransferCase &c : cases)
     {
-        INFO("curve = ", std::string(c.name));
+        INFO("transfer function = ", std::string(c.name));
         for (float x : values)
         {
             INFO("x = ", x);
             if (c.odd)
                 CHECK(c.f(-x) == -c.f(x));
-            // the vector overload applies the curve per component, in order; bitwise, since 2x leaves PQ's
-            // [0,1] domain, where both give NaN
+            // the vector overload applies the transfer function per component, in order; bitwise, since 2x leaves
+            // PQ's [0,1] domain, where both give NaN
             const float3 got = c.v(float3{x, 0.5f * x, 2.f * x}), want{c.f(x), c.f(0.5f * x), c.f(2.f * x)};
             CHECK(std::memcmp(&got, &want, sizeof(got)) == 0);
         }
