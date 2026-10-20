@@ -535,8 +535,16 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         static string save_as_name;
         save_as_name          = fmt::format("Save as {}...", save_format_names[save_format]).c_str();
         const auto &style     = ImGui::GetStyle();
-        const float buttons_w = ImGui::CalcTextSize("Cancel").x + ImGui::CalcTextSize(save_as_name.c_str()).x +
-                                4 * style.FramePadding.x + style.ItemSpacing.x;
+        // the Save button is as wide as its longest label over the formats, so neither it nor Cancel moves as the
+        // format changes
+        float save_w = 0.f;
+        for (int i = 0; i <= Format_Last; ++i)
+            if (format_enabled[i])
+                save_w =
+                    std::max(save_w, ImGui::CalcTextSize(fmt::format("Save as {}...", save_format_names[i]).c_str()).x);
+        save_w += 2 * style.FramePadding.x;
+        const float buttons_w =
+            ImGui::CalcTextSize("Cancel").x + 2 * style.FramePadding.x + style.ItemSpacing.x + save_w;
         ImGui::SameLine();
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, ImGui::GetContentRegionAvail().x - buttons_w));
 
@@ -548,7 +556,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::SameLine();
 
         string filename;
-        if (ImGui::Button(save_as_name.c_str()))
+        if (ImGui::Button(save_as_name.c_str(), ImVec2{save_w, 0.f}))
         {
             filename = current_image()->path.stem().u8string() + save_extension;
 #if !defined(__EMSCRIPTEN__)
