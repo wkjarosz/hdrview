@@ -1680,6 +1680,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
         s_opts = HEIFSaveOptions{};
 
     ctx.hdr = is_hdr_encoding(s_opts.tf);
+    ctx.records_primaries = true; //< in nclx
     return &s_opts;
 }
 

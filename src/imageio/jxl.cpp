@@ -1230,6 +1230,7 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
         s_opts = JXLSaveOptions{};
 
     ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index <= 1); // the first two are the float formats
+    ctx.records_primaries = true; //< in its color encoding or ICC profile
     return &s_opts;
 }
 

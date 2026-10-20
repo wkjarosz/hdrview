@@ -1533,6 +1533,7 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 
     s_opts.tf = s_opts.data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
     ctx.hdr   = s_opts.data_type_index == 2; //< float
+    ctx.records_primaries = ICCProfile::can_describe(s_opts.tf); //< in an ICC profile
     return &s_opts;
 }
 

@@ -441,7 +441,9 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         // A rendition is written for a target display: SDR white when the format's encoding cannot hold more
         // (ctx.hdr), else a chosen peak. The view's highlight mode resolves against that display's ceiling rather
         // than this one's, and nothing is written above it.
-        float target_ceiling = 0.f; //< in stops above SDR white
+        float          target_ceiling = 0.f; //< in stops above SDR white
+        Chromaticities rendition_primaries;
+        bool           use_rendition_primaries = false; //< else the image's own
         if (rendition)
         {
             ImGui::SeparatorText("Rendition");
@@ -465,6 +467,27 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 target_ceiling        = target == 3 ? m_rolloff.display_ceiling
                                                     : std::log2(std::max(1.f, peak_nits / HDR_REFERENCE_WHITE_NITS));
             }
+            // the primaries the rendition is written in, where the format can say which they are
+            static int gamut = 0;
+            if (ctx.records_primaries)
+            {
+                const auto  source  = current_image() && current_image()->chromaticities
+                                          ? named_color_gamut(*current_image()->chromaticities)
+                                          : ColorGamut_sRGB_BT709;
+                const auto  name    = fmt::format("Source ({})", color_gamut_name(source));
+                const char *items[] = {name.c_str(), color_gamut_name(ColorGamut_sRGB_BT709),
+                                       color_gamut_name(ColorGamut_Display_P3_SMPTE432),
+                                       color_gamut_name(ColorGamut_BT2020_2100)};
+                ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
+                ImGui::Combo("Primaries", &gamut, items, IM_ARRAYSIZE(items));
+                ImGui::Tooltip("The primaries the rendition is written in. Colors outside them clip, in a format that "
+                               "stores no negative values.");
+            }
+            constexpr ColorGamut_ k_gamuts[] = {ColorGamut_sRGB_BT709, ColorGamut_sRGB_BT709,
+                                                ColorGamut_Display_P3_SMPTE432, ColorGamut_BT2020_2100};
+            rendition_primaries              = gamut_chromaticities(k_gamuts[gamut]);
+            use_rendition_primaries          = ctx.records_primaries && gamut != 0;
+
             // what the view's highlight mode does at the target; a colormap has no highlights to handle
             if (m_tonemap == Tonemap_Gamma)
             {
@@ -520,7 +543,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
             {
                 ostringstream os;
 
-                ConstImagePtr img = image_to_save(mode, comparing, cropping, target_ceiling);
+                ConstImagePtr img = image_to_save(mode, comparing, cropping, target_ceiling,
+                                                  use_rendition_primaries ? &rendition_primaries : nullptr);
                 if (!img)
                     throw runtime_error("the selection does not cover any of the image");
 
@@ -563,7 +587,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 }
 
 ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool include_comparison, bool selection_only,
-                                        float target_ceiling) const
+                                        float target_ceiling, const Chromaticities *primaries) const
 {
     auto img = current_image();
     if (!img)
@@ -585,9 +609,9 @@ ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool include_comparison, 
     { return i && group_has_alpha(i->groups[i->active_group_index(target)].type); };
     const int num_channels = has_alpha(img, Target_Primary) || has_alpha(reference_image(), Target_Secondary) ? 4 : 3;
     auto      out          = make_shared<Image>(bounds.size(), num_channels);
-    // pixel_value() is linear BT.709; the result goes back to the current image's primaries, labeled with them, so
-    // a wide gamut survives in a format that can record it
-    out->chromaticities = img->chromaticities.value_or(Chromaticities{});
+    // pixel_value() is linear BT.709; the result goes to the rendition's chosen primaries or else back to the current
+    // image's, labeled with them, so a wide gamut survives in a format that can record it
+    out->chromaticities = rendition && primaries ? *primaries : img->chromaticities.value_or(Chromaticities{});
     out->finalize();
     if (bounds != img->data_window)
         out->data_window = out->display_window = bounds;

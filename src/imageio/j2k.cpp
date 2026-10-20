@@ -945,7 +945,8 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = J2KSaveOptions{};
 
-    ctx.hdr = false; //< sRGB
+    ctx.hdr               = false; //< SDR curves only
+    ctx.records_primaries = s_opts.container == J2KContainer::JP2 && ICCProfile::can_describe(s_opts.tf);
     return &s_opts;
 }
 

@@ -186,13 +186,15 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         roll_off             = false;
         ctx->Yield(2); //< for update_rolloff() to see it
 
-        auto check = [&](float target_ceiling)
+        auto check = [&](float target_ceiling, const Chromaticities *primaries = nullptr)
         {
-            auto view = app->image_to_save(HDRViewApp::SaveMode_Rendition, false, false, target_ceiling);
+            auto view = app->image_to_save(HDRViewApp::SaveMode_Rendition, false, false, target_ceiling, primaries);
             IM_CHECK(view != nullptr && view->size() == img->size());
-            // in the image's own primaries, so what they convert back to is what the view computes
-            IM_CHECK(view->chromaticities &&
-                     view->chromaticities->red == img->chromaticities.value_or(Chromaticities{}).red);
+            // in the image's own primaries, or those chosen for it, so what they convert back to is what the view
+            // computes
+            const auto want = primaries ? *primaries : img->chromaticities.value_or(Chromaticities{});
+            IM_CHECK(view->chromaticities && view->chromaticities->red == want.red &&
+                     view->chromaticities->green == want.green);
             // the worst error over the image, checked once: the engine logs every check, passing ones too
             const float limit = std::exp2(target_ceiling);
             float       worst = 0.f;
@@ -210,6 +212,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         };
         check(0.f);
         check(1.f); //< an HDR target lets the view through up to its own ceiling
+        const auto bt2020 = gamut_chromaticities(ColorGamut_BT2020_2100);
+        check(1.f, &bt2020); //< in the primaries chosen for it
 
         // a wide-gamut image keeps its gamut
         const auto chromaticities = img->chromaticities;

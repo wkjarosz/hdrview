@@ -694,7 +694,8 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = WebPSaveOptions{};
 
-    ctx.hdr = false; //< 8-bit, sRGB or linear
+    ctx.hdr               = false;                               //< 8-bit SDR
+    ctx.records_primaries = ICCProfile::can_describe(s_opts.tf); //< in an ICC profile
     return &s_opts;
 }
 

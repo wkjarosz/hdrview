@@ -12,7 +12,8 @@
 struct SaveContext
 {
     bool hdr        = false; ///< Set by the options: whether the encoding keeps values above SDR white
-    bool wide_gamut = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
+    bool wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
+    bool records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
 };
 
 /// Whether an encoding keeps values above SDR white: an HDR transfer function, or floating-point samples.

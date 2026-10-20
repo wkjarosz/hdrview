@@ -820,5 +820,6 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
         s_opts = EXRSaveOptions{};
 
     ctx.hdr = true; //< always floating point
+    ctx.records_primaries = true; //< in the chromaticities attribute
     return &s_opts;
 }
