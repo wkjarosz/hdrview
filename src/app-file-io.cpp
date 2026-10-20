@@ -232,7 +232,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         // ImGui::PushItemWidth(-HelloImGui::EmSize(10));
 
-        // a gain-map format writes two renditions of the view, so Save as, which writes the data, has none
+        // Ultra HDR writes two renditions of the view, so Save as, which writes the data, does not offer it
         const auto offered = [&](int i)
         { return format_enabled[i] && (mode == SaveMode_Rendition || i != Format_JPEG_UHDR); };
         if (!offered(save_format))

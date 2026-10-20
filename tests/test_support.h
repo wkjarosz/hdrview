@@ -10,14 +10,13 @@
 #include "image.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
+#include "test_asan.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <sstream>
 #include <string>
-
-#include "test_asan.h"
 #include <utility>
 #include <vector>
 

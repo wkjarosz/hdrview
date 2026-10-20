@@ -36,7 +36,7 @@
     in-process NSOpenPanel/NSSavePanel on macOS and IFileDialog on Windows. On Linux it uses GTK3 or, with
     `NFD_PORTAL`, xdg-desktop-portal over D-Bus, a build dependency that pfd's zenity/kdialog child process avoids.
     The web build keeps emscripten-browser-file.
-- [ ] write HEIF/AVIF gain maps (ISO 21496-1 `tmap`) on Export rendition, as Ultra HDR does
+- [ ] write HEIF/AVIF gain maps (ISO 21496-1 `tmap`) on Export rendition, as Ultra HDR and JPEG XL do
   - libheif (1.23.3) has no API to write a gain map, or to read one: a `tmap` file needs a derived `tmap` item
     referencing the base and a hidden gain-map image item, and an `altr` entity group, none of which its API can
     create. Revisit when libheif adds one, rather than hand-building the boxes around its output.

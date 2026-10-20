@@ -486,8 +486,8 @@ GainmapImage compute_iso_gainmap(const float *base, const float *alternate, int2
     const size_t num = size_t(size.x) * size.y;
 
     // The gain each sample needs, in stops, as the boost from the darker rendition to the brighter one whichever is
-    // the base: a map down to a darker alternate applies it with negative weight (see weight()), as Adobe's
-    // base-HDR samples store it. A negative sample, outside the primaries, counts as black.
+    // the base: a map down to a darker alternate applies it with negative weight (see weight()), as Adobe's HDR-base
+    // files store it. A negative sample, outside the primaries, counts as black.
     const float        direction = params.base_headroom > params.alternate_headroom ? -1.f : 1.f;
     const auto         sample    = [](float v) { return std::max(v, 0.f); };
     std::vector<float> gain(num * 3);

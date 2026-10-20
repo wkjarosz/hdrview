@@ -13,10 +13,10 @@
 /// What the save dialog and a format's options tell each other about what is being saved.
 struct SaveContext
 {
-    bool hdr        = false; ///< Set by the options: whether the encoding keeps values above SDR white
-    std::string table;              ///< Set by the dialog: the ID its own table shares with the options' table
-    bool wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
-    bool records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
+    bool        hdr = false;               ///< Set by the options: whether the encoding keeps values above SDR white
+    std::string table;                     ///< Set by the dialog: the ID its own table shares with the options' table
+    bool        wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
+    bool        records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
     bool        rendition = false; ///< Set by the dialog: whether it exports a rendition of the view, not the data
     bool        sdr_base = false; ///< Set by the options: whether the file also needs the SDR rendition, for a gain map
 };

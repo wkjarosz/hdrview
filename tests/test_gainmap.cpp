@@ -431,9 +431,10 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
 {
     // A gain map takes the file's image to the other rendition: decoded with no headroom the file is the SDR
     // rendition, decoded in full the HDR one, and halfway the geometric mean of the two, which only the headroom the
-    // map was written for puts there. Each channel ramps across the frame at its own level, from deep shadow to past
-    // SDR white, where the SDR rendition reads back clipped: it is handed over unclipped, as image_to_save() builds
-    // it with highlights passing through, and clips where an SDR file or display does. Over BT.709 and a wide gamut.
+    // map was written for puts there. Each channel ramps across the frame at its own level, from deep shadow to a
+    // quarter stop below the peak, well past SDR white, where the SDR rendition reads back clipped: it is handed over
+    // unclipped, as image_to_save() builds it with highlights passing through, and clips where an SDR file or display
+    // does. In BT.709 and in Display P3.
     struct Writer
     {
         const char *name;
@@ -478,8 +479,8 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
             CAPTURE(std::string(color_gamut_name(gamut)));
             const Chromaticities chr = gamut_chromaticities(gamut);
 
-            // with alpha, as a rendition of an image that has it is: the top rows are fully transparent, and compared
-            // from two rows below, past the ringing a lossy codec leaves at their edge
+            // with alpha, which the rendition of an image that has it carries: the top rows are fully transparent, and
+            // the comparisons start two rows below them, past the ringing a lossy codec leaves at their edge
             const auto rgba = [&]
             {
                 auto img = std::make_shared<Image>();
@@ -520,14 +521,18 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
             };
             const auto none = decode(0.f), half = decode(headroom / 2), full = decode(k_full_gainmap_headroom);
 
-            // the primaries it was written in
+            // the file records the primaries it was written in
             REQUIRE(full->chromaticities);
-            CHECK(la::maxelem(la::abs(full->chromaticities->red - chr.red)) <= 1e-3f);
+            for (auto [got, want] :
+                 {std::pair{full->chromaticities->red, chr.red}, std::pair{full->chromaticities->green, chr.green},
+                  std::pair{full->chromaticities->blue, chr.blue}, std::pair{full->chromaticities->white, chr.white}})
+                CHECK(la::maxelem(la::abs(got - want)) <= 1e-3f);
 
-            // Each decode against what it should be: in stops in the highlights, where a wrong headroom shows as a
-            // fraction of a stop or more, and in sRGB code values below SDR white, where 8 bits set the precision.
-            // Halfway is the geometric mean of the two ends, offset as the map's gains are (ISO 21496-1's 1/64).
-            // The error is in units of those bounds, so 1 is as far off as a right decode may be.
+            // Each decode against what it should be: within a tenth of a stop from two stops below SDR white up, where
+            // a wrong headroom shows as a fraction of a stop or more, and within 0.03 in sRGB code values up to SDR
+            // white, where 8 bits set the precision. Halfway is the geometric mean of the two ends, offset as the map's
+            // gains are (ISO 21496-1's 1/64). The SDR end has a known answer only when the writer was handed it. The
+            // error is in units of those bounds, so 1 is as far off as a right decode may be.
             struct Error
             {
                 float stops = 0.f, code = 0.f;
@@ -556,12 +561,12 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
             CHECK(error.worst() <= 1.f);
 
 #if defined(__APPLE__)
-            // and as macOS reads it, HDR and SDR, in extended linear sRGB, which adds a conversion at 8 bits or so of
+            // And as macOS reads it, HDR and SDR, in extended linear sRGB, which adds a conversion at 8 bits or so of
             // its own: within one and a half times those bounds where the writer's options do not warn that macOS
-            // misreads the file, and outside them where they do, or the warning has gone stale. The misreads it warns
-            // of are off by ten times that.
-            // The caveats name the macOS versions they were measured on, 26 and 27, and hold from there: macOS 15
-            // decodes these Ultra HDR files' HDR rendition otherwise, though its SDR one matches.
+            // misreads the file, and outside them where they do, or the warning has gone stale. The misreads warned of
+            // are off by ten times that. The caveats name the macOS versions they were measured on, 26 and 27, so the
+            // check runs from 26 on: macOS 15 decodes these Ultra HDR files' HDR rendition otherwise, though its SDR
+            // one matches.
             constexpr int k_caveats_measured_on = 26;
             const int     os                    = apple_os_major();
             if (os < k_caveats_measured_on)
@@ -574,7 +579,7 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
             if (apple_hdr && apple_sdr)
             {
                 // the SDR rendition clips in the file's primaries, and both are compared in sRGB's, which ImageIO
-                // decodes into
+                // decodes into; HDRView's own SDR decode stands in for a rendition the writer made itself
                 Error      apple_hdr_error, apple_sdr_error;
                 const auto rgb = [&](const Image &img, int x, int y)
                 { return float3{img.channels[0](x, y), img.channels[1](x, y), img.channels[2](x, y)}; };

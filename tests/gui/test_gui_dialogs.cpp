@@ -27,6 +27,7 @@ using namespace hdrview_test;
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <limits>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
@@ -314,6 +315,23 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const float exposure = app->exposure_live(), gamma = app->gamma_live();
             const auto  tonemap = app->tonemap();
             const bool  clamp = app->clamp_to_LDR(), rolling = roll_off;
+            // a failed check returns early, so the view and the test hooks are put back however the test ends
+            struct Restore
+            {
+                std::function<void()> undo;
+                ~Restore() { undo(); }
+            } restore{[&, exposure, gamma, tonemap, clamp, rolling]
+                      {
+                          app->test_save_path().clear();
+#if HDRVIEW_ENABLE_LIBJXL
+                          jxl_gain_map_option() = 0;
+#endif
+                          app->exposure_live() = exposure;
+                          app->gamma_live()    = gamma;
+                          app->tonemap()       = tonemap;
+                          app->clamp_to_LDR()  = clamp;
+                          roll_off             = rolling;
+                      }};
             app->exposure_live() = 2.f;
             app->gamma_live()    = 1.f;
             app->tonemap()       = Tonemap_Gamma;
@@ -372,11 +390,12 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const auto none = decode(0.f), full = decode(k_full_gainmap_headroom);
             IM_CHECK(none && full && full->size() == img->size());
 
-            // Against the view's own rendition, in the image's primaries, which the file was written in and an SDR
-            // base clips in, at the fixture's opaque pixels: in stops where the view is bright and in sRGB code
-            // values where it is dim. The 99th percentile, since a lossy codec always leaves some outliers (JPEG's
-            // 4:2:0 chroma most, on saturated colors); a missing or one-sided map is off by the two stops the view
-            // was raised across all the highlights.
+            // The full decode against the view's own rendition, and the no-headroom one against it clipped at SDR
+            // white, in the image's primaries, which the file was written in and an SDR base clips in, at the
+            // fixture's opaque pixels: in stops where the view is bright and in sRGB code values where it is dim. The
+            // 99th percentile, since a lossy codec always leaves some outliers (JPEG's 4:2:0 chroma most, on saturated
+            // colors); a missing or one-sided map is off by the two stops the view was raised across all the
+            // highlights.
             const auto         view = app->image_to_save(HDRViewApp::SaveMode_Rendition, false, 0.f);
             std::vector<float> stops, codes;
             for (int y = 0; y < img->size().y; ++y)
@@ -409,14 +428,6 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             IM_CHECK_LE(quantile(codes, 0.99f), 0.1f);
 
             std::filesystem::remove(path);
-#if HDRVIEW_ENABLE_LIBJXL
-            jxl_gain_map_option() = 0;
-#endif
-            app->exposure_live() = exposure;
-            app->gamma_live()    = gamma;
-            app->tonemap()       = tonemap;
-            app->clamp_to_LDR()  = clamp;
-            roll_off             = rolling;
         };
     }
 }

@@ -60,7 +60,6 @@
 #endif
 #include "test_apple.h"
 
-
 namespace
 {
 
@@ -186,7 +185,7 @@ const Variant k_variants[] = {
     {"webp lossless", ".webp", Cap_Alpha, k_8bit, webp_offers_tf,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},
 #endif
-#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN)
+#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
     // a gamma decodes through the ICC profile libjxl synthesizes, whose fixed-point curve moves a lossless
     // file's samples by about 1e-4
     {"jxl f32 q95", ".jxl", Cap_Default | Cap_Alpha | Cap_Lossy, 0.03f, [](TransferFunction t) { return jxl_offers_tf(t); },
@@ -270,7 +269,6 @@ float3 straight_rgb(const float4 &premultiplied)
     const float a = std::max(1e-4f, premultiplied[3]);
     return float3{premultiplied[0] / a, premultiplied[1] / a, premultiplied[2] / a};
 }
-
 
 /// The warning \p variant's dialog shows for \p tf, for the sweep's image, whose primaries are BT.2020's.
 Caveat caveat_of(const Variant &variant, const TransferFunction &tf)

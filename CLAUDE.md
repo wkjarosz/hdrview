@@ -86,7 +86,10 @@ tests need no Python), the loaders and their edge cases
 `test_psd_metadata.cpp`), export round-trips (`test_export_roundtrip.cpp`), and assorted helpers.
 `tests/test_support.h` holds the fixtures both suites share (byte writers over `endian-utils.h`, an image
 builder, loading from bytes, a TIFF builder); `tests/test_zip.h` holds the zip ones, kept apart because
-miniz declares zlib's names itself and a translation unit reaching zlib.h cannot see both. There are
+miniz declares zlib's names itself and a translation unit reaching zlib.h cannot see both. `tests/test_apple.h`
+decodes a file through macOS's ImageIO (`apple_decode()`), as an independent reader of what HDRView writes, and
+`tests/test_asan.h` defines `HDRVIEW_TEST_ASAN`, under which the tests that write JPEG XL are left out, since
+libjxl's encoder trips spurious AddressSanitizer reports. There are
 also libFuzzer targets for the loaders under `tests/fuzz/`, behind `HDRVIEW_BUILD_FUZZERS` (Clang only). The
 EXR/PNG tests conditionally compile in extra cases against vendored real-world test images (OpenEXR's test
 suite, libpng's pngsuite/testpngs), present only when CPM fetched those libraries from source: the
@@ -329,7 +332,9 @@ one; the map reaches the peak the HDR rendition's mastering display names. libul
 over an SDR base, and can tone-map that base itself instead. JPEG XL's base is either rendition, with the map from
 `compute_iso_gainmap()` and `serialize_iso_gainmap()` (`imageio/gainmap.h`) in a `jhgm` box; its gains are the
 boost from SDR to HDR whichever is the base, as ISO 21496-1 files store them, and a map down to SDR applies them
-with negative weight.
+with negative weight. macOS applies Ultra HDR's map but ignores JPEG XL's, which `jxl_gainmap_caveat()` warns of;
+`tests/test_gainmap.cpp` reads every gain-map writer's file back as both renditions, and on macOS 26 and later
+holds those caveats to ImageIO, as `tests/test_export_roundtrip.cpp` holds the others.
 
 A format offers only the transfer functions it can label, through its `X_offers_tf()`, which both its options
 GUI and `tests/test_export_roundtrip.cpp` use; TIFF, JP2 and WebP label one with an ICC profile, which names PQ

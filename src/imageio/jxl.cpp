@@ -45,9 +45,7 @@ bool is_jxl_image(istream &is) noexcept { return false; }
 bool jxl_offers_tf(TransferFunction) noexcept { return false; }
 
 vector<ImagePtr> load_jxl_image(istream &, string_view, const ImageLoadOptions &)
-{
-    throw runtime_error("JPEG-XL support not enabled in this build.");
-}
+{ throw runtime_error("JPEG-XL support not enabled in this build."); }
 
 JXLSaveOptions *jxl_parameters_gui(SaveContext &) { return &s_opts; }
 
@@ -56,9 +54,7 @@ void save_jxl_image(const Image &, std::ostream &, std::string_view, bool, float
 { throw runtime_error("JPEG-XL support not enabled in this build."); }
 
 void save_jxl_image(const Image &, std::ostream &, std::string_view, JXLSaveOptions *, const Image *)
-{
-    throw runtime_error("JPEG-XL support not enabled in this build.");
-}
+{ throw runtime_error("JPEG-XL support not enabled in this build."); }
 
 #else
 
@@ -266,14 +262,21 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     auto           tf       = power ? transfer_function_from_color_encoding(file_enc)
                                     : transfer_function_from_CICP((int)file_enc.transfer_function);
 
+    // JPEG XL names its white point apart from its primaries, and CICP does not: the P3 primaries are code 11 with
+    // DCI's white and 12 with D65's, and sRGB's and BT.2100's codes hold only with D65's
+    int cicp_primaries = -1;
+    if (file_enc.primaries == JXL_PRIMARIES_P3)
+        cicp_primaries = file_enc.white_point == JXL_WHITE_POINT_D65   ? 12
+                         : file_enc.white_point == JXL_WHITE_POINT_DCI ? 11
+                                                                       : -1;
+    else if (file_enc.primaries != JXL_PRIMARIES_CUSTOM && file_enc.white_point == JXL_WHITE_POINT_D65)
+        cicp_primaries = (int)file_enc.primaries;
+
     // a power curve has no CICP code (DCI's 17 means another transfer function there), so it takes the general path
-    if (power || file_enc.primaries == JXL_PRIMARIES_CUSTOM)
+    if (power || cicp_primaries < 0)
         return linearize_pixels(pixels, size, file_chr, tf, keep_primaries, profile_description, c);
-    else // we can map to a CICP profile
-    {
-        return CICPProfile((int)file_enc.primaries, (int)file_enc.transfer_function, 0, 1)
-            .linearize_pixels(pixels, size, keep_primaries, profile_description, c);
-    }
+    return CICPProfile(cicp_primaries, (int)file_enc.transfer_function, 0, 1)
+        .linearize_pixels(pixels, size, keep_primaries, profile_description, c);
 }
 
 //
@@ -1012,7 +1015,7 @@ namespace
 void encode_jxl(const Image &img, std::ostream &os, std::string_view filename, bool lossless, float quality,
                 TransferFunction tf, int data_type, const std::string *jhgm, bool clip_at_white = false)
 {
-    Timer     timer;
+    Timer timer;
 
     JxlBasicInfo info;
     JxlEncoderInitBasicInfo(&info);
@@ -1065,8 +1068,8 @@ void encode_jxl(const Image &img, std::ostream &os, std::string_view filename, b
             for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i)
                 if (int(i % n) < (n <= 2 ? 1 : 3))
                     pixels_f16[i] = std::min(float(pixels_f16[i]), from_linear(1.f, tf));
-        pixels                        = pixels_f16.get();
-        pixel_bytes                   = sizeof(half) * w * h * n;
+        pixels      = pixels_f16.get();
+        pixel_bytes = sizeof(half) * w * h * n;
         break;
     case JXL_TYPE_FLOAT:
         info.bits_per_sample          = 32;
@@ -1076,8 +1079,8 @@ void encode_jxl(const Image &img, std::ostream &os, std::string_view filename, b
             for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i)
                 if (int(i % n) < (n <= 2 ? 1 : 3))
                     pixels_f32[i] = std::min(pixels_f32[i], from_linear(1.f, tf));
-        pixels                        = pixels_f32.get();
-        pixel_bytes                   = sizeof(float) * w * h * n;
+        pixels      = pixels_f32.get();
+        pixel_bytes = sizeof(float) * w * h * n;
         break;
     }
     format.num_channels = n;
@@ -1224,7 +1227,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
     Timer timer;
 
-    // the two renditions as the file holds them: linear, in the same primaries, the SDR one ending at SDR white
+    // the two renditions the map relates: linear, in the same primaries, the SDR one clipped at SDR white
     int  w = 0, h = 0, n = 0, sw = 0, sh = 0, sn = 0;
     auto hdr = img.as_interleaved<float>(&w, &h, &n, TransferFunction::Linear, false, true, false);
     auto sdr = sdr_rendition->as_interleaved<float>(&sw, &sh, &sn, TransferFunction::Linear, false, true, false);

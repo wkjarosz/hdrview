@@ -139,9 +139,9 @@ std::vector<uint8_t> serialize_iso_gainmap(const IsoGainmapParams &params);
 /// The ISO 21496-1 gain map that takes the \p base rendition to the \p alternate one, a channel per color channel.
 /**
     Both are linear, \p channels interleaved samples per pixel (the first three color), \p size pixels, and in the
-    same primaries. \p params brings the two renditions' headrooms and the offsets, and gets the range of gains the
-    map spans, at a gamma of 1: the boost from the darker rendition to the brighter, whichever is the base. Returns
-    the map's normalized values.
+    same primaries. \p params supplies the two renditions' headrooms and the offsets, and receives the range of gains
+    the map spans, at a gamma of 1; each gain is the boost from the darker rendition to the brighter, whichever is
+    the base. Returns the map's normalized values.
 */
 GainmapImage compute_iso_gainmap(const float *base, const float *alternate, int2 size, int channels,
                                  IsoGainmapParams &params);

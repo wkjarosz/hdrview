@@ -490,10 +490,10 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
         throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &sdr_image, UHDR_SDR_IMG));
     }
 
-    // The gain map reaches the peak the rendition was made for, and spans no more: the HDR rendition is never darker
-    // than the SDR one, so its boosts run from 1 to that peak. Left to itself, libultrahdr spans whatever ratios it
-    // meets, offset by only 1e-7, and a black pixel the SDR base's dither lifts by one code value asks for 14 stops
-    // below 1, spreading the map's 8 bits over more than three times the range they need.
+    // The gain map's boosts run from 1 to the peak the HDR rendition was made for, and no further, since the HDR
+    // rendition is never darker than the SDR one. Left to itself, libultrahdr spans whatever ratios it meets, offset
+    // by only 1e-7: a black pixel that dither lifts by one code value in the SDR base asks for 14 stops below 1,
+    // spreading the map's 8 bits over more than three times the range they need.
     if (const auto md = mastering_display(img.metadata.value("header", json::object())); md && md->max_nits > 0.f)
     {
         const float peak = std::clamp(md->max_nits, HDR_REFERENCE_WHITE_NITS, 10000.f);
@@ -511,7 +511,7 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
 
     throw_if_error(uhdr_encode(encoder.get()));
 
-    auto output = uhdr_get_encoded_stream(encoder.get()); // freed by decoder destructor
+    auto output = uhdr_get_encoded_stream(encoder.get()); // owned by the encoder
 
     os.write(static_cast<char *>(output->data), output->data_sz);
     spdlog::info("Writing UltraHDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
