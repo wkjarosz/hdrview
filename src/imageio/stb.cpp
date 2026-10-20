@@ -72,13 +72,12 @@ using namespace std;
 
 struct STBSaveOptions
 {
-    TransferFunction tf      = TransferFunction::sRGB;
-    bool             dither  = true; // only used for LDR formats
-    int              quality = 95;   // only used for jpg
+    bool dither  = true; // only used for LDR formats
+    int  quality = 95;   // only used for jpg
 };
 
 static STBSaveOptions s_opts{};
-static STBSaveOptions s_hdr_opts{{TransferFunction::Linear, 1.f}, false, 95};
+static STBSaveOptions s_hdr_opts{false, 95};
 
 static const stbi_io_callbacks stbi_callbacks = {
     // read
@@ -422,7 +421,7 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_hdr(img, os, filename, opts->tf);
+    save_stb_hdr(img, os, filename, TransferFunction::Linear);
 }
 
 void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither,
@@ -443,7 +442,7 @@ void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_jpg(img, os, filename, opts->tf, opts->dither, float(opts->quality));
+    save_stb_jpg(img, os, filename, TransferFunction::sRGB, opts->dither, float(opts->quality));
 }
 
 void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
@@ -462,7 +461,7 @@ void save_stb_tga(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_tga(img, os, filename, opts->tf, opts->dither);
+    save_stb_tga(img, os, filename, TransferFunction::sRGB, opts->dither);
 }
 
 void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
@@ -481,7 +480,7 @@ void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_bmp(img, os, filename, opts->tf, opts->dither);
+    save_stb_bmp(img, os, filename, TransferFunction::sRGB, opts->dither);
 }
 
 void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
@@ -500,7 +499,7 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_png(img, os, filename, opts->tf, opts->dither);
+    save_stb_png(img, os, filename, TransferFunction::sRGB, opts->dither);
 }
 
 // void save_stb_image(const Image &img, ostream &os, const string_view filename, bool sRGB, bool dither)

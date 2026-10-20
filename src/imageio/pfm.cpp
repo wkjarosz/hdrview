@@ -26,8 +26,7 @@ using namespace std;
 
 struct PFMSaveOptions
 {
-    TransferFunction tf   = {TransferFunction::Linear, 1.f};
-};
+}; // PFM has no options
 
 static PFMSaveOptions s_opts;
 
@@ -212,12 +211,7 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
     if (!opts)
         throw std::invalid_argument("PFMSaveOptions pointer is null");
 
-    Timer timer;
-    // get interleaved float pixel data
-    int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<float>(&w, &h, &n, labeled_curve(opts->tf, TransferFunction::Linear, "PFM"));
-    write_pfm_image(os, filename, w, h, n, pixels.get());
-    spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
+    save_pfm_image(img, os, filename, TransferFunction::Linear);
 }
 
 // GUI parameter function

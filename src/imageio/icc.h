@@ -49,9 +49,7 @@ public:
     ICCProfile(const ICCProfile &)            = delete;
     ICCProfile &operator=(const ICCProfile &) = delete;
 
-    // movable (transfer ownership)
-    ICCProfile(ICCProfile &&other) noexcept : m_profile{other.m_profile}, m_cicp{other.m_cicp}
-    { other.m_profile = nullptr; }
+    // move-assignable only: a profile is built in place, so nothing needs to move one into a new object
     ICCProfile &operator=(ICCProfile &&other) noexcept
     {
         // swapped, so the moved-from object releases the old profile in its destructor

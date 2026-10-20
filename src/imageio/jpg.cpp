@@ -32,10 +32,9 @@ using namespace std;
 
 struct JPGSaveOptions
 {
-    int   tf          = 1; // Linear = 0; sRGB = 1
-    bool  dither      = true;
-    int   quality     = 95;
-    bool  progressive = false;
+    bool dither      = true;
+    int  quality     = 95;
+    bool progressive = false;
 };
 
 static JPGSaveOptions s_opts;
@@ -853,7 +852,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     if (params == nullptr)
         throw std::invalid_argument("JPGSaveOptions pointer is null");
 
-    save_jpg_image(img, os, filename, params->tf == 1, params->dither, params->quality, params->progressive);
+    save_jpg_image(img, os, filename, true, params->dither, params->quality, params->progressive);
 }
 
 #endif
