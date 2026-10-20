@@ -22,8 +22,21 @@ std::optional<AppleImage> apple_decode(const std::string &bytes, AppleDecode req
     CFMutableDictionaryRef options =
         CFDictionaryCreateMutable(nullptr, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     if (request != AppleDecode::Default)
-        CFDictionarySetValue(options, kCGImageSourceDecodeRequest,
-                             request == AppleDecode::HDR ? kCGImageSourceDecodeToHDR : kCGImageSourceDecodeToSDR);
+    {
+        // the renditions of a gain-map file are macOS 14's; an older one cannot ask for them
+        if (__builtin_available(macOS 14.0, *))
+            CFDictionarySetValue(options, kCGImageSourceDecodeRequest,
+                                 request == AppleDecode::HDR ? kCGImageSourceDecodeToHDR : kCGImageSourceDecodeToSDR);
+        else
+        {
+            CFRelease(options);
+            if (source)
+                CFRelease(source);
+            if (data)
+                CFRelease(data);
+            return std::nullopt;
+        }
+    }
     CGImageRef image = source ? CGImageSourceCreateImageAtIndex(source, 0, options) : nullptr;
 
     std::optional<AppleImage> result;
@@ -37,6 +50,9 @@ std::optional<AppleImage> apple_decode(const std::string &bytes, AppleDecode req
                                                              kCGBitmapByteOrder32Little);
         if (ctx)
         {
+            // with room for everything an HDR decode holds, whatever headroom a context defaults to
+            if (__builtin_available(macOS 15.0, *))
+                CGContextSetEDRTargetHeadroom(ctx, 64.f);
             CGContextSetBlendMode(ctx, kCGBlendModeCopy);
             CGContextDrawImage(ctx, CGRectMake(0, 0, (CGFloat)w, (CGFloat)h), image);
             AppleImage out;

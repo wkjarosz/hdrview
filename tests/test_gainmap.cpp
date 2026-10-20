@@ -457,7 +457,7 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
          { save_uhdr_image(hdr, os, "a.jpg", 95, 95, true, 1, 1.f); },
          [](std::istream &is, const ImageLoadOptions &opts) { return load_uhdr_image(is, "a.jpg", opts).front(); }},
 #endif
-#if HDRVIEW_ENABLE_LIBJXL
+#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_support.h
         {"JPEG XL, SDR base", true, jxl_gainmap_caveat(false), [](const Image &hdr, const Image &sdr, std::ostream &os)
          { save_jxl_image(hdr, os, "a.jxl", false, 95.f, TransferFunction::sRGB, 2 /* uint8 */, &sdr, false); },
          [](std::istream &is, const ImageLoadOptions &opts) { return load_jxl_image(is, "a.jxl", opts).front(); }},
@@ -564,32 +564,33 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
                        apple_sdr = apple_decode(ss.str(), AppleDecode::SDR);
             if (apple_hdr && apple_sdr)
             {
-                Error apple;
+                // the SDR rendition clips in the file's primaries, and both are compared in sRGB's, which ImageIO
+                // decodes into
+                Error      apple_hdr_error, apple_sdr_error;
+                const auto rgb = [&](const Image &img, int x, int y)
+                { return float3{img.channels[0](x, y), img.channels[1](x, y), img.channels[2](x, y)}; };
                 for (int y = transparent_rows + 2; y < size.y; ++y)
                     for (int x = 0; x < size.x; ++x)
                     {
-                        const auto in_srgb = [&](const Image &img)
-                        {
-                            return mul(hdr->M_to_sRGB,
-                                       float3{img.channels[0](x, y), img.channels[1](x, y), img.channels[2](x, y)});
-                        };
-                        const float3 want_hdr = in_srgb(*hdr),
-                                     want_sdr = writer.sdr_given ? la::min(in_srgb(*sdr), float3{1.f}) : in_srgb(*none);
+                        const float3 want_hdr = mul(hdr->M_to_sRGB, rgb(*hdr, x, y)),
+                                     want_sdr =
+                                         mul(hdr->M_to_sRGB, writer.sdr_given ? la::min(rgb(*sdr, x, y), float3{1.f})
+                                                                              : rgb(*none, x, y));
                         for (int c = 0; c < 3; ++c)
                         {
-                            apple.add((*apple_hdr)(x, y)[c], want_hdr[c]);
-                            apple.add((*apple_sdr)(x, y)[c], want_sdr[c]);
+                            apple_hdr_error.add((*apple_hdr)(x, y)[c], want_hdr[c]);
+                            apple_sdr_error.add((*apple_sdr)(x, y)[c], want_sdr[c]);
                         }
                     }
+                const float worst = std::max(apple_hdr_error.worst(), apple_sdr_error.worst());
                 MESSAGE(std::string(writer.name), ", ", std::string(color_gamut_name(gamut)), ": macOS off by ",
-                        apple.worst(), " of the bounds");
+                        apple_hdr_error.worst(), " (HDR) and ", apple_sdr_error.worst(), " (SDR) of the bounds");
                 if (writer.caveat.readers & Misreader_macOS)
-                    CHECK_MESSAGE(apple.worst() > 1.5f,
-                                  "the options warn that macOS misreads this file, which it reads right: the warning "
-                                  "is stale");
+                    CHECK_MESSAGE(worst > 1.5f, "the options warn that macOS misreads this file, which it reads "
+                                                "right: the warning is stale");
                 else
-                    CHECK_MESSAGE(apple.worst() <= 1.5f, "macOS reads this file as other values, and its options do "
-                                                         "not warn of it");
+                    CHECK_MESSAGE(worst <= 1.5f, "macOS reads this file as other values, and its options do not "
+                                                 "warn of it");
             }
 #endif
         }

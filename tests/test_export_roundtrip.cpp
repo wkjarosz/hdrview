@@ -60,17 +60,6 @@
 #endif
 #include "test_apple.h"
 
-// AddressSanitizer reports a spurious stack-use-after-scope inside libjxl's SizeHeader::Set ->
-// FixedAspectRatios (lib/jxl/headers.cc): the in-bounds read kRatios[ratio - 1] of a function-local
-// constexpr array the optimizer emitted into .rodata. No suppressions file can filter that class, so the
-// JPEG-XL row drops out of the table under ASan alone.
-#if defined(__SANITIZE_ADDRESS__)
-#define HDRVIEW_TEST_ASAN 1
-#elif defined(__has_feature)
-#if __has_feature(address_sanitizer)
-#define HDRVIEW_TEST_ASAN 1
-#endif
-#endif
 
 namespace
 {
