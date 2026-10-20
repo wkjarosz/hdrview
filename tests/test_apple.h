@@ -35,6 +35,9 @@ struct AppleImage
     float4 operator()(int x, int y) const { return pixels[size_t(y) * size.x + x]; }
 };
 
+/// The major version of the macOS the tests run on, e.g. 27, or 0 if it cannot be read.
+int apple_os_major();
+
 /// \p bytes as macOS's ImageIO decodes them, the decoder Preview and every macOS application use.
 /**
     Linear BT.709 light with 1.0 at SDR white, drawn into a float bitmap in extended linear sRGB, so the file's labels

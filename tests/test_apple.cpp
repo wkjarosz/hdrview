@@ -10,9 +10,18 @@
 
 #include <CoreGraphics/CoreGraphics.h>
 #include <ImageIO/ImageIO.h>
+#include <cstdlib>
+#include <sys/sysctl.h>
 
 namespace hdrview_test
 {
+
+int apple_os_major()
+{
+    char   version[32] = {};
+    size_t size        = sizeof(version);
+    return sysctlbyname("kern.osproductversion", version, &size, nullptr, 0) == 0 ? std::atoi(version) : 0;
+}
 
 std::optional<AppleImage> apple_decode(const std::string &bytes, AppleDecode request)
 {
