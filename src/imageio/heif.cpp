@@ -14,6 +14,7 @@
 
 #include "heif.h" // for HEIFCodec, which the stubs below need too
 #include "imgui.h"
+#include "save_options.h"
 
 using namespace std;
 
@@ -52,7 +53,6 @@ bool heif_offers_curve(TransferFunction) { return false; }
 #include "hdr_metadata.h"
 #include "heif.h"
 #include "icc.h"
-#include "save_options.h"
 #include "streams.h"
 
 #include "imgui_ext.h"

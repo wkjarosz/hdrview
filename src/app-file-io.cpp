@@ -12,6 +12,7 @@
 #include <string>
 
 #include "imageio/exr.h"
+#include "imageio/hdr_metadata.h"
 #include "imageio/heif.h"
 #include "imageio/j2k.h"
 #include "imageio/jpg.h"
@@ -31,7 +32,6 @@
 #include <emscripten/emscripten.h>
 #include <emscripten_browser_file.h>
 #else
-#include "imageio/hdr_metadata.h"
 #include "portable-file-dialogs.h"
 #endif
 

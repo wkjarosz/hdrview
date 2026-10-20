@@ -7,6 +7,7 @@
 #include "imageio/j2k.h"
 #include "save_options.h"
 
+#include "imageio/icc.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 
@@ -62,7 +63,6 @@ void save_j2k_image(const Image &, ostream &, string_view, bool, int, J2KContain
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/exif.h"
-#include "imageio/icc.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
 #include "timer.h"

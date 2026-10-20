@@ -6,6 +6,7 @@
 
 #include "webp.h"
 #include "common.h"
+#include "icc.h"
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
@@ -64,7 +65,6 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
 
 #include "colorspace.h"
 #include "exif.h"
-#include "icc.h"
 #include "imgui_ext.h"
 #include "timer.h"
 #include "xmp.h"

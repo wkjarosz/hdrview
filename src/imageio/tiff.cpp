@@ -12,6 +12,7 @@
 #include "imageio/streams.h"
 #include "save_options.h"
 
+#include "icc.h"
 #include <cmath>
 
 using namespace std;
@@ -55,7 +56,6 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
 #include "endian-utils.h"
 #include "exif.h"
 #include "fonts.h"
-#include "icc.h"
 #include "imgui_ext.h"
 #include "timer.h"
 
