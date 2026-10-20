@@ -571,7 +571,7 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
         throw runtime_error{fmt::format("WebP only supports RGB or RGBA images, but image has {} channels", n)};
 
     spdlog::info("Encoding {}-channel, {}x{} pixels {} WebP image (quality: {}, lossless: {})", n, w, h,
-                 opts->tf.type == TransferFunction::sRGB ? "sRGB" : "linear", opts->quality, opts->lossless);
+                 transfer_function_name(tf), opts->quality, opts->lossless);
 
     // Setup WebP encoder config
     WebPConfig config;
@@ -647,7 +647,7 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 {
     if (begin_options_table(ctx))
     {
-
+        // only a build that can write an ICC profile offers a curve other than sRGB
         if (ICCProfile::can_describe(TransferFunction::Linear))
         {
             ImGui::PE::Entry(

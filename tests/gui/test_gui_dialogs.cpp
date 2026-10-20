@@ -90,9 +90,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         ctx->SetRef("");
         wait_for_window_closed(ctx, "Save as...");
         IM_CHECK(ctx->WindowInfo("Save as...", ImGuiTestOpFlags_NoError).Window == nullptr);
+        // and once it closes, the arrows are the app's again
         ctx->Yield(2);
-        IM_CHECK((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) ==
-                 0); //< the arrows are the app's again
+        IM_CHECK((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) == 0);
     };
 
     // Selecting each format in turn is what runs every *_parameters_gui(): in both dialogs, since a rendition
@@ -189,9 +189,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             IM_CHECK_EQ(part->channels[c](0, 0), img->channels[c](at.x, at.y));
         app->set_selection(Box2i{});
 
-        // A rendition two stops up in plain gamma, with highlights passed through whatever the saved settings chose:
-        // the exposed value, unchanged at any target. Clipped at SDR white instead, the fixture's partly transparent
-        // pixels have premultiplied colors the clip holds to alpha.
+        // A rendition two stops up in plain gamma, with highlights passed through whatever the saved settings chose,
+        // is the exposed value at any target. Clipped at SDR white instead, it holds the premultiplied colors of the
+        // fixture's partly transparent pixels to their alpha.
         bool       &roll_off = *app->action("Roll off highlights").p_selected;
         const float exposure = app->exposure_live(), gamma = app->gamma_live();
         const auto  tonemap = app->tonemap();
@@ -211,7 +211,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             // computes
             const auto want = primaries ? *primaries : img->chromaticities.value_or(Chromaticities{});
             IM_CHECK(view->chromaticities && view->chromaticities->red == want.red &&
-                     view->chromaticities->green == want.green);
+                     view->chromaticities->green == want.green && view->chromaticities->blue == want.blue &&
+                     view->chromaticities->white == want.white);
             // the worst error over the image, checked once: the engine logs every check, passing ones too
             const float limit = app->clamp_to_LDR() ? 1.f : std::numeric_limits<float>::infinity();
             float       worst = 0.f;

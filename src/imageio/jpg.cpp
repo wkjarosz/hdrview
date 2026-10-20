@@ -736,7 +736,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filename*/, bool sRGB, bool dither,
                     int quality, bool progressive)
 {
-    // JPEG records no transfer function here, and is read back as sRGB
+    // this writer labels no transfer function, so the pixels are sRGB-encoded, as a reader assumes
     const auto tf =
         labeled_curve(sRGB ? TransferFunction::sRGB : TransferFunction::Linear, TransferFunction::sRGB, "JPEG");
     int  w = 0, h = 0, n = 0;

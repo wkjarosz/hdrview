@@ -977,7 +977,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 // else if (photometric == PHOTOMETRIC_MINISBLACK || photometric == PHOTOMETRIC_MINISWHITE)
                 //     tf = TransferFunction::Linear; // TIFF spec: grayscale is typically linear
                 else
-                    tf = TransferFunction::sRGB; // as other readers take an untagged RGB or palette TIFF
+                    tf = TransferFunction::sRGB; // as other readers take an untagged integer TIFF
 
                 Chromaticities file_chr;
                 if (photometric == PHOTOMETRIC_LOGLUV || photometric == PHOTOMETRIC_LOGL)
@@ -1379,7 +1379,8 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_PRIMARYCHROMATICITIES, primaries);
     }
 
-    // which most readers, macOS's among them, take over those tags, and which alone names a curve
+    // an ICC profile for any curve or primaries but the defaults: most readers, macOS's among them, take it over
+    // the tags above, and it alone names a curve
     const bool wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
     if (tf.type != default_curve || wide)
     {
@@ -1490,7 +1491,8 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
             },
             "Bit depth for pixel values.");
 
-        // float samples are linear; integer ones take any curve an ICC profile can name
+        // the chosen curve falls back on the default when the data type does not offer it; only integer samples
+        // offer a choice, and only where this build can write an ICC profile to record it
         if (!tiff_offers_curve(s_opts.tf, s_opts.data_type_index))
             s_opts.tf = s_opts.data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
         if (s_opts.data_type_index != 2 && ICCProfile::can_describe(TransferFunction::Linear))

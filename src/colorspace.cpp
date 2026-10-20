@@ -655,8 +655,7 @@ TransferFunction transfer_function_from_CICP(int tc)
     case 2: return TransferFunction::Unspecified;
     case 1: [[fallthrough]];
     case 6: [[fallthrough]];
-    // 12 is BT.1361 extended color gamut, which shares this curve for 1.33 > L >= -0.0045 and departs from it
-    // only for more negative values. Mapping it to ITU is therefore exact except deep into negative linear.
+    // 12 is BT.1361's extended-gamut curve, which agrees with BT.709's above -0.0045 and so decodes as it does
     case 12: [[fallthrough]];
     case 14: [[fallthrough]];
     case 15: return TransferFunction::ITU;

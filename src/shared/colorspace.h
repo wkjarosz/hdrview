@@ -124,9 +124,9 @@ SHARED_PER_COMPONENT(OETF_ITU)
 
 /** ITU-R BT.1886's reference EOTF for a display with a black level of 0: a plain gamma of 2.4.
 
-    How viewers decode the BT.709 curve (CICP codes 1, 6, 14 and 15): Apple's ImageIO, Chromium and OpenImageIO all
-    show content so labeled through it, rather than inverting the camera curve OETF_ITU() encodes, and so does every
-    display BT.709 video is graded for. Mirrored around the origin, as for PQ and sRGB.
+    HDRView decodes and encodes the BT.709 curve (CICP codes 1, 6, 14 and 15) through this display EOTF rather than
+    by inverting the camera OETF_ITU(), since BT.709 video is graded on such displays and Apple's ImageIO, Chromium
+    and OpenImageIO all show content so labeled this way. Mirrored around the origin, as for PQ and sRGB.
 */
 SHARED_FN float EOTF_BT1886(float nonlinear) { return spow(nonlinear, 2.4f); }
 SHARED_PER_COMPONENT(EOTF_BT1886)

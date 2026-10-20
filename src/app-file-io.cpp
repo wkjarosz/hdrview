@@ -241,13 +241,12 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         ImGui::BeginGroup();
 
-        // ImGui Combo using BeginCombo/EndCombo
         ImGui::PushFont(font("sans bold"), 0.f);
         ImGui::TextUnformatted("File format:");
         ImGui::PopFont();
         // ImGui::SetNextItemWidth(HelloImGui::EmSize(10.f));
-        // the list and the options beside it are the same height, each scrolling what does not fit, which is tall
-        // enough for most formats' options not to
+        // the list and the options beside it share one height, tall enough for most formats' options; each scrolls
+        // what does not fit
         const float column_height = HelloImGui::EmSize(17.f) + 3 * ImGui::GetFrameHeightWithSpacing();
         if (ImGui::BeginListBox("##File format", ImVec2{HelloImGui::EmSize(8.f), column_height}))
         {
@@ -338,8 +337,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         case Format_EXR:
         {
-            // A comparison or a rendition is a single color group, which the options list in place of the image's
-            // own groups; this stands in for that image, which is only built once the file is chosen.
+            // A rendition is a single color group, which the options list in place of the image's own groups; this
+            // stands in for it, since it is only built once the file is chosen.
             static const ImagePtr rgba = []
             {
                 auto img = make_shared<Image>(int2{1, 1}, 4);
@@ -427,7 +426,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         // A rendition is written for a target display: SDR white when the format's encoding cannot hold more
         // (ctx.hdr), else a chosen peak. The view's highlight mode resolves against that display's ceiling rather
-        // than this one's, and nothing is written above it.
+        // than this one's. Where the format records primaries, the rendition may also be written in others.
         float          target_ceiling = 0.f; //< in stops above SDR white
         Chromaticities rendition_primaries;
         bool           use_rendition_primaries = false; //< else the image's own
@@ -599,8 +598,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 );
 #endif
 
-                // The file now holds what the image holds, so its edits count as saved. Not for part of it,
-                // a comparison or a rendition, which reopening would not give the image back from.
+                // The file now holds what the image holds, so its edits count as saved. Not for part of it or a
+                // rendition, which reopening would not give the image back from.
                 if (!rendition && !cropping)
                     current_image()->history.mark_saved();
             }

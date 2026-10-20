@@ -1076,7 +1076,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     // libjxl rejects lossless encoding of an XYB-encoded frame, and it uses XYB whenever the original
     // profile is not kept
     info.uses_original_profile = lossless ? JXL_TRUE : JXL_FALSE;
-    // For PQ and HLG, the intensity target is the peak the content was graded for: the mastering display's
+    // for PQ and HLG, the intensity target is the peak the content was graded for: the mastering display's peak
     if (is_hdr_encoding(tf))
         if (const auto md = mastering_display(img.metadata.value("header", json::object())); md && md->max_nits > 0.f)
             info.intensity_target = md->max_nits;
@@ -1094,7 +1094,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     memset(&color_encoding, 0, sizeof(color_encoding));
     color_encoding.color_space       = n <= 2 ? JXL_COLOR_SPACE_GRAY : JXL_COLOR_SPACE_RGB;
     color_encoding.transfer_function = jtf;
-    color_encoding.gamma             = tf.type == TransferFunction::Gamma ? 1.0 / tf.gamma : 0.0; //< libjxl's encodes
+    color_encoding.gamma             = tf.type == TransferFunction::Gamma ? 1.0 / tf.gamma : 0.0; //< encoding exponent
     color_encoding.rendering_intent  = JXL_RENDERING_INTENT_RELATIVE;
 
     Chromaticities c{}; // sRGB/Rec709, D65
@@ -1120,7 +1120,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     color_encoding.primaries_blue_xy[1]  = c.blue.y;
 
     // JPEG XL's own codes for BT.709 and a custom gamma are misread: macOS takes 709 for sRGB and any gamma for 1.8,
-    // and libjxl inverts the camera's OETF for 709 where viewers apply BT.1886. An ICC profile both read right instead.
+    // and libjxl inverts the camera's OETF for 709 where viewers apply BT.1886. Both read an ICC profile right.
     std::vector<uint8_t> icc;
     if (tf.type == TransferFunction::ITU || tf.type == TransferFunction::Gamma)
         icc = (n <= 2 ? ICCProfile::Gray(c.white, tf) : ICCProfile::RGB(c, tf)).bytes();

@@ -243,8 +243,8 @@ TEST_CASE("icc_cicp_tag reports the video range flag")
 
 TEST_CASE("A profile built for a curve reads back as that curve and those primaries")
 {
-    // every curve, gamma at an exponent no other curve shares, both an RGB and a gray profile, and a wide gamut
-    // beside BT.709, read back through the same path a loader takes. PQ and HLG read back through their cicp tag,
+    // Every curve, with gamma at an exponent no other curve shares, as an RGB profile over BT.709 and a wide gamut
+    // and as a gray one, read back through the path a loader takes. PQ and HLG read back through their cicp tag,
     // and through their curves as the SDR clip a reader that ignores the tag sees.
     std::vector<TransferFunction> curves;
     for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)

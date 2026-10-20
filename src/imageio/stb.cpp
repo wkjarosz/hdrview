@@ -404,8 +404,8 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     return images;
 }
 
-// stb records no transfer function, and readers take .hdr for linear and the rest for sRGB, so each writer
-// settles on that
+// stb's files record no transfer function, and readers take .hdr for linear and the rest for sRGB, so each
+// writer encodes with the one its readers assume
 void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf)
 {
     tf = labeled_curve(tf, TransferFunction::Linear, "HDR");

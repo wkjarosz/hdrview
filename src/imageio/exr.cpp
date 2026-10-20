@@ -595,7 +595,7 @@ void save_exr_image(const Image &img, ostream &os_, string_view filename, const 
                                               Imath::V2f(img.chromaticities->green.x, img.chromaticities->green.y),
                                               Imath::V2f(img.chromaticities->blue.x, img.chromaticities->blue.y),
                                               Imath::V2f(img.chromaticities->white.x, img.chromaticities->white.y)}});
-        // the luminance the values' (1, 1, 1) stands for, when the image says
+        // the luminance that (1, 1, 1) stands for, when the image records one
         if (const auto nits = white_luminance(img.metadata.value("header", json::object())))
             Imf::addWhiteLuminance(header, *nits);
         header.insert("channels", Imf::ChannelListAttribute());

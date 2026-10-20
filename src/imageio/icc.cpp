@@ -14,7 +14,7 @@ namespace
 
 // Reads the four code points of an ICC `cicp` tag (ICC.1:2022, 9.2.16) out of a profile's bytes, leaving
 // `quad` untouched when the profile has no such tag. The tag table is walked directly since LCMS only
-// gained cmsSigcicpTag in 2.16.
+// gained cmsSigcicpTag in 2.14.
 void parse_icc_cicp_tag(const uint8_t *data, size_t size, std::array<int, 4> &quad)
 {
     // Header is 128 bytes, followed by a 4-byte tag count and that many 12-byte tag table entries.
@@ -225,8 +225,8 @@ ToneCurve profile_curve(const TransferFunction &tf)
 
 /// Tags \p profile, if \p tf is PQ or HLG, with the cicp code points of \p primaries and \p tf (ICC.1:2022).
 /**
-    A reader that knows the tag takes it over the profile's curves. It is written raw, since the LCMS libjxl bundles
-    predates it.
+    A reader that knows the tag takes it over the profile's curves. It is written raw, since LCMS only learned the
+    tag in 2.14.
 */
 void add_cicp_tag(cmsHPROFILE profile, int primaries, const TransferFunction &tf)
 {
@@ -460,8 +460,8 @@ ICCProfile ICCProfile::linearized_profile(Chromaticities *c) const
     if (!valid())
         return nullptr;
 
-    // a gray profile has no colorants to read, and its linear twin needs only a white, which leaves the gray
-    // values alone in a gray-to-gray transform whichever it is
+    // a gray profile has no colorants to extract, and its linear twin needs only a white, any of which leaves gray
+    // values unchanged in a gray-to-gray transform
     Chromaticities chr;
     const bool     have_chr = extract_chromaticities(&chr);
     if (c && have_chr)

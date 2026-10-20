@@ -19,6 +19,7 @@ json get_jxl_info();
 
 // should not throw
 bool is_jxl_image(std::istream &is) noexcept;
+/// Whether the JPEG XL save options offer \p tf: whether its color encoding or an ICC profile can state it.
 bool jxl_offers_curve(TransferFunction tf) noexcept;
 struct Caveat;
 /// Which applications misread a JPEG XL with the curve \p tf, lossless or not, and how.

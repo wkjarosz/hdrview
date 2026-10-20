@@ -14,7 +14,7 @@
 struct SaveContext
 {
     bool hdr        = false; ///< Set by the options: whether the encoding keeps values above SDR white
-    std::string table;              ///< Set by the dialog: the ID of the options' table, which it syncs its own with
+    std::string table;              ///< Set by the dialog: the ID its own table shares with the options' table
     bool wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
     bool records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
 };
@@ -23,10 +23,10 @@ struct SaveContext
 inline bool is_hdr_encoding(const TransferFunction &tf, bool floating_point = false)
 { return floating_point || tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG; }
 
-/// \p curve, the one a format can label, warning when \p asked was another; a reader would misread that one.
+/// Returns \p curve, the one transfer function \p format can label, warning when \p asked was another.
 TransferFunction labeled_curve(const TransferFunction &asked, TransferFunction::Type_ curve, const char *format);
 
-/// Applications known to read some file HDRView writes as other values than it means, for the save dialogs' warnings.
+/// Applications known to misread some files HDRView writes, which the save dialogs warn of.
 enum Misreader_ : unsigned
 {
     Misreader_macOS    = 1u << 0, ///< Apple's ImageIO, so Preview, Safari and every other macOS application
@@ -36,9 +36,9 @@ enum Misreader_ : unsigned
 
 /// A warning that some applications misread a file saved so, naming them and what they do instead.
 /**
-    Each format's X_caveat() gives them, from measurements of the readers. On macOS, test_export_roundtrip.cpp holds
-    every one naming macOS to what ImageIO does, both ways; the others record readers checked by hand, whose
-    versions the functions' comments give.
+    Each format's X_caveat() returns the one for its settings, from measurements of the readers. On macOS,
+    test_export_roundtrip.cpp holds every caveat naming macOS to what ImageIO does, both ways; the other readers
+    were checked by hand, at the versions each X_caveat()'s comment gives.
 */
 struct Caveat
 {
@@ -54,9 +54,9 @@ void no_options_entry();
 
 /// Begins a save dialog's options table, as ImGui::PE::Begin() does; end it with ImGui::PE::End().
 /**
-    Every format's table and the rendition's share \p ctx's ID, so their columns' widths stay in step, starting wide
-    enough for the HEIF/AVIF options' Advanced tree node, a level in under Encoder, but not the rows inside it. The
-   widths are not saved, so a width dragged once does not stand in for that next time.
+    Every format's table and the rendition's share \p ctx's ID, so their columns' widths stay in step. The first
+    column starts wide enough for the HEIF/AVIF options' Advanced tree node, a level in under Encoder, but not for
+    the rows inside it. The widths are not saved, so each dialog starts from these rather than a width once dragged.
 */
 bool begin_options_table(const SaveContext &ctx);
 

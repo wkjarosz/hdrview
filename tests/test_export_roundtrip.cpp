@@ -14,7 +14,7 @@
       one that can;
     - every setting, against every transfer function its dialog offers, compared in code values within the
       quantization step or the lossy codec's error the setting declares, with the primaries, light levels and
-      white luminance it records.
+      white luminance it records, and on macOS as ImageIO reads it, which each dialog's caveats must predict.
 */
 
 #include <doctest/doctest.h>
@@ -154,8 +154,8 @@ const Variant k_variants[] = {
     {"jpg_stb", ".jpg", Cap_Default | Cap_Lossy, 0.03f, [](TransferFunction t) { return stb_offers_curve(t, false); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_jpg(i, o, "a.jpg", t, false); }},
 #if HDRVIEW_ENABLE_LIBTIFF
-    // the save dialog's data types and compressions: 0 none, 1 LZW, 2 ZIP, 3 PackBits; an ICC profile, which lcms
-    // reads in float, moves float samples by a few 1e-6
+    // the save dialog's compressions (0 none, 1 LZW, 2 ZIP, 3 PackBits) and data types (0 8-bit, 1 16-bit, 2 float);
+    // an ICC profile, which lcms reads in float, moves float samples by a few 1e-6
     {"tiff8 lzw", ".tif", Cap_Default | Cap_Alpha, k_8bit, [](TransferFunction t) { return tiff_offers_curve(t, 0); },
      [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 0); }},
     {"tiff8 none", ".tif", Cap_Alpha, k_8bit, [](TransferFunction t) { return tiff_offers_curve(t, 0); },
@@ -194,7 +194,7 @@ const Variant k_variants[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_j2k_image(i, o, "a.j2k", true, 16, J2KContainer::J2K, t, false); }},
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
-    // 8-bit 4:2:0 at 95, which a steep curve such as Log 100 amplifies
+    // lossy WebP is 8-bit 4:2:0, whose error at quality 95 a steep curve such as Log 100 amplifies
     {"webp q95", ".webp", Cap_Default | Cap_Alpha | Cap_Lossy, 0.05f, webp_offers_curve,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 95.f, false, t); }},
     {"webp lossless", ".webp", Cap_Alpha, k_8bit, webp_offers_curve,
@@ -252,7 +252,7 @@ const Layout k_layouts[] = {
 };
 // clang-format on
 
-/// Values low enough that unpremultiplying on the way out cannot clamp, and distinct per channel.
+/// An image of \p layout, distinct per channel and at unit \p brightness too dim to clamp when unpremultiplied.
 ImagePtr make_image(const Layout &layout, float alpha, float brightness = 1.f)
 {
     // not square: a transposed stride is invisible in a square image
@@ -286,11 +286,10 @@ float3 straight_rgb(const float4 &premultiplied)
 }
 
 #if defined(__APPLE__)
-/// What macOS's ImageIO, the decoder Preview uses, reads \p bytes as at \p pixel: linear BT.709 light, 1.0 at SDR
-/// white.
+/// What macOS's ImageIO, the decoder Preview uses, reads \p bytes as at \p pixel.
 /**
-    Drawn into a float bitmap in extended linear sRGB, so the file's labels are honored, or ignored, as every
-    macOS application would. None when ImageIO cannot decode the file at all.
+    Linear BT.709 light with 1.0 at SDR white, drawn into a float bitmap in extended linear sRGB, so the file's
+    labels are honored, or ignored, as every macOS application would. None when ImageIO cannot decode the file.
 */
 std::optional<float4> apple_decode(const std::string &bytes, int2 pixel)
 {
@@ -468,11 +467,11 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
 
 TEST_CASE("every setting of every writer round-trips each curve its dialog offers, labeled as it promises")
 {
-    // A wide gamut, kept and recorded or converted to sRGB's, and every transfer function, with gamma at an exponent no
-    // other curve shares, at 2.2, which CICP names, and at 2.6, JPEG XL's DCI; macOS reads every JPEG XL gamma as 1.8,
-    // which a single exponent of 1.8 hid. A setting must label each curve its dialog
-    // offers, or the file reads back as some other curve; one it does not offer is the saver's to refuse or
-    // write as a curve it can label, which the dialog never asks for.
+    // A wide-gamut image, which a setting keeps and records or converts to sRGB's primaries, under every transfer
+    // function. Gamma takes three exponents, since a reader may read them all as one (macOS reads every JPEG XL gamma
+    // as 1.8): 1.8, which no other curve shares, 2.2, which CICP names, and 2.6, JPEG XL's DCI. A setting must label
+    // each curve its dialog offers, or the file reads back as some other curve; one it does not offer is the saver's
+    // to refuse or write as a curve it can label, which the dialog never asks for.
     const Chromaticities bt2020 = gamut_chromaticities(ColorGamut_BT2020_2100);
 
     std::vector<TransferFunction> curves;
@@ -496,7 +495,8 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
                 continue;
             INFO("curve = ", transfer_function_name(tf));
 
-            // for an HDR curve, an image whose channels straddle SDR white, which a curve that clips there misses
+            // for an HDR curve, an image brightened 8x so its channels straddle SDR white, which a curve clipping
+            // there misses
             const bool hdr_curve = tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG;
             auto       img       = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f, hdr_curve ? 8.f : 1.f);
             img->chromaticities  = bt2020;
@@ -576,7 +576,7 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
                 CHECK(white_luminance(header).value_or(0.f) == doctest::Approx(150.f));
             if (hdr_curve && (variant.caps & Cap_Levels))
             {
-                // the content light level of the samples, measured here from the channels themselves
+                // the content light level, measured here from the channels themselves
                 double     brightest = 0., total = 0.;
                 const int2 size = img->size();
                 for (int y = 0; y < size.y; ++y)

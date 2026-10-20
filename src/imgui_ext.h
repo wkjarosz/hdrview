@@ -131,7 +131,7 @@ void Checkbox(const Action &a);
 // ===== Modal dialog helpers =====
 // Shared boilerplate for HDRViewApp's "PopupDialog"-style modals: an OpenPopup-on-request shell plus a
 // Cancel/Confirm footer, used together (via ConfirmDialog) for simple yes/no prompts, or separately for
-// dialogs with custom bodies (see e.g. HDRViewApp::draw_save_as_dialog / draw_confirm_load_session_dialog).
+// dialogs with custom bodies (see e.g. HDRViewApp::draw_save_dialog / draw_confirm_load_session_dialog).
 
 enum class DialogPosition
 {

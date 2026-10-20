@@ -1096,7 +1096,8 @@ void Checkbox(const Action &a)
     }
 }
 
-// the last frame a BeginModalDialog() dialog showed; the shortcuts run before this frame's dialogs are drawn
+// the last frame a BeginModalDialog() dialog showed; AnyModalDialogOpen() also accepts the frame before, since the
+// shortcuts ask before this frame's dialogs are drawn
 static int s_modal_dialog_frame = -2;
 
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags)

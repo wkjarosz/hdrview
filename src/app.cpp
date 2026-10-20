@@ -1926,9 +1926,9 @@ void HDRViewApp::process_shortcuts()
 {
     // spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
 
-    // Keyboard navigation (Tab, the arrows, Space) only while a modal dialog is open, which the shortcuts below then
-    // stand down for: elsewhere the arrows are the app's own, which navigation would take over in a focused panel.
-    // Set from the dialogs of the frame before, so it starts the frame after one opens.
+    // Keyboard navigation (Tab, the arrows, Space) only while a modal dialog is open, when the shortcuts below stand
+    // down: elsewhere the arrows are the app's own, which navigation would take over in a focused panel. The
+    // dialogs this reads are the previous frame's, so navigation starts the frame after one opens.
     auto &io = ImGui::GetIO();
     if (ImGui::AnyModalDialogOpen())
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -1938,7 +1938,7 @@ void HDRViewApp::process_shortcuts()
     for (auto &a : m_actions)
         if (a.second.chord)
             // Held off while something is taking typed characters, so a letter meant for a text field is not
-            // also read as a shortcut, and while a modal dialog is open, whose own keys they would act behind.
+            // also read as a shortcut, and while a modal dialog is open, so its keys do not also act behind it.
             // Not conditioned on keyboard navigation being idle: arriving from the command palette or a dialog
             // leaves navigation showing.
             if (a.second.enabled() && !ImGui::GetIO().WantTextInput && !ImGui::AnyModalDialogOpen() &&

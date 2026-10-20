@@ -42,9 +42,9 @@ std::string major_brand(const std::string &bytes)
 /// What a saved file's primary image says about itself, read with libheif rather than HDRView's loader.
 struct Written
 {
-    int bit_depth = 0;
+    int bit_depth = 0;  ///< the luma's bits per sample
     int transfer  = -1; ///< the nclx transfer characteristics, or -1 when there is no nclx
-    int primaries = -1;
+    int primaries = -1; ///< the nclx color primaries, or -1 when there is no nclx
 };
 
 Written written(const std::string &bytes)
@@ -97,8 +97,8 @@ TEST_CASE("The HEIF and AVIF save entries write files branded and labeled as wha
             const Written w = written(out.str());
             CHECK(w.transfer == (curve == TransferFunction::sRGB ? heif_transfer_characteristic_IEC_61966_2_1
                                                                  : heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
-            CHECK(w.primaries == heif_color_primaries_ITU_R_BT_709_5); //< the image records none, so sRGB's
-            // Auto picks 10 bits for PQ; a .heif may hold JPEG, which has 8 only, so only HEVC is held to it
+            CHECK(w.primaries == heif_color_primaries_ITU_R_BT_709_5); // the image records none, so sRGB's
+            // the automatic bit depth is 10 for PQ; a .heif may hold JPEG, which has only 8, so only HEVC is held to it
             if (avif || brand.rfind("hei", 0) == 0)
                 CHECK(w.bit_depth == (curve == TransferFunction::sRGB ? 8 : 10));
         }

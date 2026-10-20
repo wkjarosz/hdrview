@@ -64,11 +64,11 @@ std::optional<MasteringDisplay> mastering_display(const json &header);
 /// The white luminance recorded in \p header, if one is.
 std::optional<float> white_luminance(const json &header);
 
-/// A content light level in cd/m^2: the brightest sample (MaxCLL) and the average pixel's brightest (MaxFALL).
+/// A content light level, as add_content_light_level() records it.
 struct ContentLightLevel
 {
-    float max_cll  = 0.f;
-    float max_fall = 0.f;
+    float max_cll  = 0.f; ///< MaxCLL: the brightest component of any pixel, in cd/m^2, or 0 when unknown
+    float max_fall = 0.f; ///< MaxFALL: the average of each pixel's brightest component, in cd/m^2, or 0 when unknown
 };
 
 /// The content light level recorded in \p header, if one is.
@@ -76,7 +76,8 @@ std::optional<ContentLightLevel> content_light_level(const json &header);
 
 /// Measures the content light level of the samples a writer gets from \p img, with SDR white at 203 cd/m^2.
 /**
-    The samples are the selected group's, linear and straight, in \p img's primaries or, with \p convert_to_sRGB, in
-   BT.709's, as Image::as_interleaved() gives them. Negative and non-finite samples count as 0; alpha does not count.
+    The samples are the selected group's, linear and unpremultiplied, in \p img's primaries or, with
+    \p convert_to_sRGB, in BT.709's, as Image::as_interleaved() gives them. Negative and non-finite samples count
+    as 0; alpha does not count.
 */
 ContentLightLevel measure_content_light_level(const Image &img, bool convert_to_sRGB);

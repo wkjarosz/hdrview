@@ -602,8 +602,8 @@ public:
         In Data mode, the current image itself, or a copy of the part under the selection when \p selection_only. In
         Rendition mode, a new image of the view, blended with the reference when there is one, in \p primaries or else
         the current image's, with alpha only when the current or reference image has it. It bakes in exposure, tonemap
-        and highlights, handled for a display whose ceiling sits \p target_ceiling stops above SDR white; only Clip at
-        SDR white clips.
+        and highlights, handled for a display whose ceiling sits \p target_ceiling stops above SDR white, and names
+        that display in its metadata as the one it was mastered for; only Clip at SDR white clips.
     */
     ConstImagePtr image_to_save(SaveMode mode, bool selection_only, float target_ceiling,
                                 const Chromaticities *primaries = nullptr) const;
