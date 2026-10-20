@@ -292,14 +292,20 @@ TEST_CASE("A profile built for a transfer function reads back as that transfer f
             return worst;
         };
 
+        // a built profile reports the code points it was tagged with, as its bytes read back do
+        const auto same_codes = [](const CICPProfile &a, const CICPProfile &b)
+        { return a.cp() == b.cp() && a.tc() == b.tc() && a.mc() == b.mc() && a.fr() == b.fr(); };
+
         for (const auto &chr : gamuts)
         {
-            const auto bytes = ICCProfile::RGB(chr, tf).bytes();
+            const ICCProfile built = ICCProfile::RGB(chr, tf);
+            const auto       bytes = built.bytes();
             REQUIRE_FALSE(bytes.empty());
             ICCProfile read; // assigned, as a loader holding it for several frames does
             read = ICCProfile{bytes};
             REQUIRE(read.valid());
             CHECK(read.cicp().valid() == hdr);
+            CHECK(same_codes(built.cicp(), read.cicp()));
             CHECK(read.description().find(transfer_function_name(tf)) != std::string::npos);
 
             Chromaticities got;
@@ -317,9 +323,11 @@ TEST_CASE("A profile built for a transfer function reads back as that transfer f
             CHECK(worst_error(pixels, clipped, 3) <= 2e-3f);
         }
 
-        ICCProfile gray{ICCProfile::Gray(white_point(WhitePoint_D65), tf).bytes()};
+        const ICCProfile built_gray = ICCProfile::Gray(white_point(WhitePoint_D65), tf);
+        ICCProfile       gray{built_gray.bytes()};
         REQUIRE(gray.is_Gray());
         CHECK(gray.cicp().valid() == hdr);
+        CHECK(same_codes(built_gray.cicp(), gray.cicp()));
         auto pixels = ramp(1);
         REQUIRE(gray.linearize_pixels(pixels.data(), int3{num, 1, 1}, true));
         CHECK(worst_error(pixels, want, 1) <= 2e-3f);

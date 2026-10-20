@@ -173,6 +173,8 @@ public:
 private:
     /// Internal constructor from raw profile pointer.
     ICCProfile(void *profile) : m_profile{profile} {}
+    /// Internal constructor from a raw profile pointer and the `cicp` code points it was tagged with.
+    ICCProfile(void *profile, const std::array<int, 4> &cicp) : m_profile{profile}, m_cicp{cicp} {}
     void *m_profile = nullptr;
 
     /// Raw `cicp` code points, filled in at construction; all -1 when the profile carries no such tag.

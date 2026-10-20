@@ -225,12 +225,12 @@ ToneCurve profile_curve(const TransferFunction &tf) { return is_hdr_tf(tf) ? hdr
 /// Tags \p profile, if \p tf is PQ or HLG, with the cicp code points of \p primaries and \p tf (ICC.1:2022).
 /**
     A reader that knows the tag takes it over the profile's curves. It is written raw, since LCMS only learned the
-    tag in 2.14.
+    tag in 2.14. Returns the code points written, as ICCProfile::cicp() reads them, or none.
 */
-void add_cicp_tag(cmsHPROFILE profile, int primaries, const TransferFunction &tf)
+std::array<int, 4> add_cicp_tag(cmsHPROFILE profile, int primaries, const TransferFunction &tf)
 {
     if (!is_hdr_tf(tf))
-        return;
+        return {{-1, -1, -1, -1}};
     uint8_t tag[12] = {'c', 'i', 'c', 'p'}; // the type signature, then four reserved bytes
     tag[8]          = uint8_t(primaries < 0 ? 2 : primaries);
     tag[9]          = uint8_t(transfer_function_to_CICP(tf));
@@ -238,6 +238,7 @@ void add_cicp_tag(cmsHPROFILE profile, int primaries, const TransferFunction &tf
     tag[11]         = 1; // full range
     cmsSetProfileVersion(profile, 4.4);
     cmsWriteRawTag(profile, (cmsTagSignature)0x63696370 /* 'cicp' */, tag, sizeof(tag));
+    return {{tag[8], tag[9], tag[10], tag[11]}};
 }
 
 } // namespace
@@ -255,12 +256,10 @@ ICCProfile ICCProfile::RGB(const Chromaticities &chr, const TransferFunction &tf
     cmsToneCurve *curves[3] = {curve.get(), curve.get(), curve.get()};
     cmsHPROFILE   profile =
         cmsCreateRGBProfileTHR(CmsContext::thread_local_instance().get(), &whitepoint, &primaries, curves);
-    if (profile)
-    {
-        set_description(profile, description_of(chr, tf));
-        add_cicp_tag(profile, chromaticities_to_CICP(chr), tf);
-    }
-    return ICCProfile{profile};
+    if (!profile)
+        return ICCProfile{};
+    set_description(profile, description_of(chr, tf));
+    return ICCProfile{profile, add_cicp_tag(profile, chromaticities_to_CICP(chr), tf)};
 }
 
 ICCProfile ICCProfile::Gray(const float2 &whitepoint, const TransferFunction &tf)
@@ -270,12 +269,10 @@ ICCProfile ICCProfile::Gray(const float2 &whitepoint, const TransferFunction &tf
         return ICCProfile{};
     cmsCIExyY   wp      = {whitepoint.x, whitepoint.y, 1.0};
     cmsHPROFILE profile = cmsCreateGrayProfileTHR(CmsContext::thread_local_instance().get(), &wp, curve.get());
-    if (profile)
-    {
-        set_description(profile, fmt::format("Gray, {}", transfer_function_name(tf)));
-        add_cicp_tag(profile, 2 /* a gray image has no primaries */, tf);
-    }
-    return ICCProfile{profile};
+    if (!profile)
+        return ICCProfile{};
+    set_description(profile, fmt::format("Gray, {}", transfer_function_name(tf)));
+    return ICCProfile{profile, add_cicp_tag(profile, 2 /* a gray image has no primaries */, tf)};
 }
 
 std::vector<uint8_t> ICCProfile::bytes() const
