@@ -35,30 +35,30 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # macos-14 is an arm64 runner
-          - {
-              name: "macOS 14 universal",
-              os: macos-14,
-              preset: "macos-universal",
-            }
+          # macos-15 and macos-26 are arm64 runners; macos-15-intel is the last Intel image
           - {
               name: "macOS 15 universal",
               os: macos-15,
               preset: "macos-universal",
             }
           - {
-              name: "macOS 14 Apple Silicon CPM",
-              os: macos-14,
-              preset: "macos-arm64-cpm",
-            }
-          - {
-              name: "macOS 14 Apple Silicon Local",
-              os: macos-14,
-              preset: "macos-arm64-local",
+              name: "macOS 26 universal",
+              os: macos-26,
+              preset: "macos-universal",
             }
           - {
               name: "macOS 15 Apple Silicon CPM",
               os: macos-15,
+              preset: "macos-arm64-cpm",
+            }
+          - {
+              name: "macOS 15 Apple Silicon Local",
+              os: macos-15,
+              preset: "macos-arm64-local",
+            }
+          - {
+              name: "macOS 26 Apple Silicon CPM",
+              os: macos-26,
               preset: "macos-arm64-cpm",
               # The one combo that builds and runs hdrview_tests (Release only). -cpm/-universal presets always
               # fetch OpenEXR/PNG from source, which is what the vendored-test-image tests in
@@ -66,8 +66,8 @@ jobs:
               run_tests: true,
             }
           - {
-              name: "macOS 15 Apple Silicon Local",
-              os: macos-15,
+              name: "macOS 26 Apple Silicon Local",
+              os: macos-26,
               preset: "macos-arm64-local",
             }
           - {
