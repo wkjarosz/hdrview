@@ -22,11 +22,13 @@ bool is_jpg_image(std::istream &is) noexcept;
 // throws on error
 std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 // throws on error
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, bool sRGB = true, bool dither = true,
-                    int quality = 95, bool progressive = false);
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, bool dither = true, int quality = 95,
+                    bool progressive = false);
 
 struct JPGSaveOptions;
 struct SaveContext;
 JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx);
+/// Whether the JPEG save options offer \p tf: only sRGB, which a reader assumes.
+bool jpg_offers_tf(TransferFunction tf);
 // throws on error
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, const JPGSaveOptions *params);

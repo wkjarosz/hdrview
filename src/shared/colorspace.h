@@ -122,6 +122,19 @@ SHARED_FN float OETF_ITU(float linear)
 }
 SHARED_PER_COMPONENT(OETF_ITU)
 
+/** ITU-R BT.1886's reference EOTF for a display with a black level of 0: a plain gamma of 2.4.
+
+    HDRView decodes and encodes the BT.709 curve (CICP codes 1, 6, 14 and 15) through this display EOTF rather than
+    by inverting the camera OETF_ITU(), since BT.709 video is graded on such displays and Apple's ImageIO, Chromium
+    and OpenImageIO all show content so labeled this way. Mirrored around the origin, as for PQ and sRGB.
+*/
+SHARED_FN float EOTF_BT1886(float nonlinear) { return spow(nonlinear, 2.4f); }
+SHARED_PER_COMPONENT(EOTF_BT1886)
+
+/// The inverse of EOTF_BT1886().
+SHARED_FN float inverse_EOTF_BT1886(float linear) { return spow(linear, 1.0f / 2.4f); }
+SHARED_PER_COMPONENT(inverse_EOTF_BT1886)
+
 /** HDR reference (diffuse) white luminance in cd/m^2, per Recommendation ITU-R BT.2408.
 
     The PQ and HLG EOTFs produce absolute luminance in cd/m^2, whereas HDRView works in values relative to
@@ -524,7 +537,7 @@ SHARED_FN float from_linear(float linear, int tf, float gamma)
     case TF_UNSPECIFIED:
     case TF_SRGB: return linear_to_sRGB(linear);
     case TF_GAMMA: return linear_to_gamma(linear, 1.0f / gamma);
-    case TF_ITU: return OETF_ITU(linear);
+    case TF_ITU: return inverse_EOTF_BT1886(linear);
     case TF_BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * HDR_REFERENCE_WHITE_NITS);
     case TF_BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
     case TF_ST240: return OETF_ST240(linear);
@@ -545,7 +558,7 @@ SHARED_FN vec3 from_linear(vec3 linear, int tf, float gamma)
     case TF_UNSPECIFIED:
     case TF_SRGB: return linear_to_sRGB(linear);
     case TF_GAMMA: return linear_to_gamma(linear, 1.0f / gamma);
-    case TF_ITU: return OETF_ITU(linear);
+    case TF_ITU: return inverse_EOTF_BT1886(linear);
     case TF_BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * HDR_REFERENCE_WHITE_NITS);
     case TF_BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * HDR_REFERENCE_WHITE_NITS);
     case TF_ST240: return OETF_ST240(linear);
@@ -566,7 +579,7 @@ SHARED_FN float to_linear(float encoded, int tf, float gamma)
     case TF_UNSPECIFIED:
     case TF_SRGB: return sRGB_to_linear(encoded);
     case TF_GAMMA: return linear_to_gamma(encoded, gamma);
-    case TF_ITU: return inverse_OETF_ITU(encoded);
+    case TF_ITU: return EOTF_BT1886(encoded);
     case TF_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / HDR_REFERENCE_WHITE_NITS;
     case TF_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
     case TF_ST240: return EOTF_ST240(encoded);
@@ -587,7 +600,7 @@ SHARED_FN vec3 to_linear(vec3 encoded, int tf, float gamma)
     case TF_UNSPECIFIED:
     case TF_SRGB: return sRGB_to_linear(encoded);
     case TF_GAMMA: return linear_to_gamma(encoded, gamma);
-    case TF_ITU: return inverse_OETF_ITU(encoded);
+    case TF_ITU: return EOTF_BT1886(encoded);
     case TF_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / HDR_REFERENCE_WHITE_NITS;
     case TF_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / HDR_REFERENCE_WHITE_NITS;
     case TF_ST240: return EOTF_ST240(encoded);

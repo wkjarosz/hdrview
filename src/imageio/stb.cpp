@@ -72,13 +72,12 @@ using namespace std;
 
 struct STBSaveOptions
 {
-    TransferFunction tf      = TransferFunction::sRGB;
-    bool             dither  = true; // only used for LDR formats
-    int              quality = 95;   // only used for jpg
+    bool dither  = true; // only used for LDR formats
+    int  quality = 95;   // only used for jpg
 };
 
 static STBSaveOptions s_opts{};
-static STBSaveOptions s_hdr_opts{{TransferFunction::Linear, 1.f}, false, 95};
+static STBSaveOptions s_hdr_opts{false, 95};
 
 static const stbi_io_callbacks stbi_callbacks = {
     // read
@@ -404,9 +403,12 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     return images;
 }
 
-void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf)
+// stb's files record no transfer function, and readers take .hdr for linear and the rest for sRGB, so each
+// writer encodes with the one its readers assume
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename)
 {
-    spdlog::debug("Saving stb HDR with tf {}, gamma {}.", (int)tf.type, tf.gamma);
+    const TransferFunction tf = TransferFunction::Linear;
+    spdlog::debug("Saving stb HDR.");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<float>(&w, &h, &n, tf, false);
@@ -419,14 +421,13 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_hdr(img, os, filename, opts->tf);
+    save_stb_hdr(img, os, filename);
 }
 
-void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither,
-                  float quality)
+void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, bool dither, float quality)
 {
-    spdlog::debug("Saving stb JPG with tf {}, gamma {}, dither {}, quality {}.", (int)tf.type, tf.gamma,
-                  dither ? "true" : "false", quality);
+    const TransferFunction tf = TransferFunction::sRGB;
+    spdlog::debug("Saving stb JPG with dither {}, quality {}.", dither ? "true" : "false", quality);
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
@@ -439,12 +440,13 @@ void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_jpg(img, os, filename, opts->tf, opts->dither, float(opts->quality));
+    save_stb_jpg(img, os, filename, opts->dither, float(opts->quality));
 }
 
-void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
+void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, bool dither)
 {
-    spdlog::debug("Saving stb TGA with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
+    const TransferFunction tf = TransferFunction::sRGB;
+    spdlog::debug("Saving stb TGA with dither {}.", dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
@@ -457,12 +459,13 @@ void save_stb_tga(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_tga(img, os, filename, opts->tf, opts->dither);
+    save_stb_tga(img, os, filename, opts->dither);
 }
 
-void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
+void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, bool dither)
 {
-    spdlog::debug("Saving stb BMP with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
+    const TransferFunction tf = TransferFunction::sRGB;
+    spdlog::debug("Saving stb BMP with dither {}.", dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
@@ -475,12 +478,13 @@ void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_bmp(img, os, filename, opts->tf, opts->dither);
+    save_stb_bmp(img, os, filename, opts->dither);
 }
 
-void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
+void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, bool dither)
 {
-    spdlog::debug("Saving stb PNG with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
+    const TransferFunction tf = TransferFunction::sRGB;
+    spdlog::debug("Saving stb PNG with dither {}.", dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
@@ -493,7 +497,7 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_png(img, os, filename, opts->tf, opts->dither);
+    save_stb_png(img, os, filename, opts->dither);
 }
 
 // void save_stb_image(const Image &img, ostream &os, const string_view filename, bool sRGB, bool dither)
@@ -521,53 +525,32 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
 {
     auto &opts = is_hdr ? s_hdr_opts : s_opts;
 
-    if (ImGui::PE::Begin("STB Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    // stb writes Radiance's .hdr with nothing to choose: run-length-encoded RGBE, linear
+    if (is_hdr)
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, opts.tf.gamma}).c_str(),
-                                is_selected))
-                            opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Encode the pixel values using this transfer function.\nWARNING: The STB library does not "
-            "provide a way to signal what transfer function the files were saved with. Without this "
-            "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
+        no_options_entry();
+        ctx.hdr = true;
+        return &opts;
+    }
 
-        if (opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::Entry(
-                "Gamma", [&] { return ImGui::SliderFloat("##Gamma", &opts.tf.gamma, 0.1f, 5.f); },
-                "When using a gamma transfer function, this is the gamma value to use.");
-
-        if (!is_hdr)
-            ImGui::PE::Entry("Dither", [&] { return ImGui::Checkbox("##Dither", &opts.dither); });
+    if (begin_options_table(ctx))
+    {
+        ImGui::PE::Entry("Dither", [&] { return ImGui::Checkbox("##Dither", &opts.dither); });
 
         if (has_quality)
             ImGui::PE::Entry(
                 "Quality", [&] { return ImGui::SliderInt("##Quality", &opts.quality, 1, 100); },
                 "For JPEG images, controls the quality of the saved image (1 = worst, 100 = best).");
 
+        if (reset_entry())
+            opts = STBSaveOptions{};
+
         ImGui::PE::End();
     }
 
-    if (ImGui::Button("Reset options to defaults"))
-        opts = is_hdr ? STBSaveOptions{{TransferFunction::Linear, 1.f}, false, 95} : STBSaveOptions{};
-
-    ctx.hdr = is_hdr || is_hdr_encoding(opts.tf);
+    ctx.hdr = false; //< 8-bit sRGB
     return &opts;
 }
+
+bool stb_offers_tf(TransferFunction tf, bool is_hdr)
+{ return tf.type == (is_hdr ? TransferFunction::Linear : TransferFunction::sRGB); }

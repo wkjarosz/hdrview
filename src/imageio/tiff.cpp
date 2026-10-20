@@ -12,6 +12,7 @@
 #include "imageio/streams.h"
 #include "save_options.h"
 
+#include "icc.h"
 #include <cmath>
 
 using namespace std;
@@ -55,7 +56,6 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
 #include "endian-utils.h"
 #include "exif.h"
 #include "fonts.h"
-#include "icc.h"
 #include "imgui_ext.h"
 #include "timer.h"
 
@@ -977,7 +977,7 @@ vector<ImagePtr> load_image(TIFF *tif, tdir_t dir, int sub_id, int sub_chain_id,
                 // else if (photometric == PHOTOMETRIC_MINISBLACK || photometric == PHOTOMETRIC_MINISWHITE)
                 //     tf = TransferFunction::Linear; // TIFF spec: grayscale is typically linear
                 else
-                    tf = TransferFunction::Gamma; // RGB and palette default to gamma 2.2
+                    tf = TransferFunction::sRGB; // as other readers take an untagged integer TIFF
 
                 Chromaticities file_chr;
                 if (photometric == PHOTOMETRIC_LOGLUV || photometric == PHOTOMETRIC_LOGL)
@@ -1323,6 +1323,12 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     ScopedMDC mdc{"IO", "TIFF"};
     Timer     timer;
 
+    // A TIFF names its transfer function and primaries only through an ICC profile; without one a reader takes
+    // integer samples for sRGB and float ones for linear, over BT.709's primaries
+    const auto             default_tf = opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
+    const TransferFunction tf =
+        tiff_offers_tf(opts->tf, opts->data_type_index) ? opts->tf : labeled_tf(opts->tf, default_tf, "TIFF");
+
     // Set custom error/warning handlers
     TIFFSetErrorHandler(error_handler);
     TIFFSetWarningHandler(warning_handler);
@@ -1373,6 +1379,17 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_PRIMARYCHROMATICITIES, primaries);
     }
 
+    // an ICC profile for any transfer function or primaries but the defaults: most readers, macOS's among them,
+    // take it over the tags above, and it alone names a transfer function
+    const bool wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
+    if (tf.type != default_tf || wide)
+    {
+        const auto chr = img.chromaticities.value_or(Chromaticities{});
+        const auto icc = (n <= 2 ? ICCProfile::Gray(chr.white, tf) : ICCProfile::RGB(chr, tf)).bytes();
+        if (!icc.empty())
+            TIFFSetField(tif, TIFFTAG_ICCPROFILE, (uint32_t)icc.size(), icc.data());
+    }
+
     // Set compression
     uint16_t compression = COMPRESSION_NONE;
     switch (opts->compression)
@@ -1391,7 +1408,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, opts->tf, false, true, false, true);
+        auto pixels = img.as_interleaved<float>(&w_out, &h_out, &n_out, tf, false, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1405,7 +1422,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<uint16_t>(&w_out, &h_out, &n_out, opts->tf, true, true, false, true);
+        auto pixels = img.as_interleaved<uint16_t>(&w_out, &h_out, &n_out, tf, true, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1419,7 +1436,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
         TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT);
 
         int  w_out, h_out, n_out;
-        auto pixels = img.as_interleaved<uint8_t>(&w_out, &h_out, &n_out, opts->tf, true, true, false, true);
+        auto pixels = img.as_interleaved<uint8_t>(&w_out, &h_out, &n_out, tf, true, true, false, true);
 
         for (int y = 0; y < h; ++y)
         {
@@ -1452,36 +1469,8 @@ void save_tiff_image(const Image &img, ostream &os, string_view filename, Transf
 
 TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("TIFF Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Apply this transfer function to RGB channels when encoding.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
-
         ImGui::PE::Entry(
             "Compression",
             [&]
@@ -1502,14 +1491,66 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
             },
             "Bit depth for pixel values.");
 
+        // the chosen transfer function falls back on the default when the data type does not offer it; only
+        // integer samples offer a choice, and only where this build can write an ICC profile to record it
+        if (!tiff_offers_tf(s_opts.tf, s_opts.data_type_index))
+            s_opts.tf = s_opts.data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
+        if (s_opts.data_type_index != 2 && ICCProfile::can_describe(TransferFunction::Linear))
+            ImGui::PE::Entry(
+                "Transfer function",
+                [&]
+                {
+                    bool changed = false;
+                    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
+                    {
+                        for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+                        {
+                            const TransferFunction tf{(TransferFunction::Type_)i, s_opts.tf.gamma};
+                            if (!tiff_offers_tf(tf, s_opts.data_type_index))
+                                continue;
+                            const bool selected = s_opts.tf.type == tf.type;
+                            if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
+                                s_opts.tf = tf, changed = true;
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    return changed;
+                },
+                "Encode the pixel values using this transfer function, which an ICC profile records.");
+        if (s_opts.data_type_index != 2 && s_opts.tf.type == TransferFunction::Gamma)
+            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
+                                   "When using a gamma transfer function, this is the gamma value to use.");
+
+        if (reset_entry())
+            s_opts = TIFFSaveOptions{};
+
         ImGui::PE::End();
     }
 
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = TIFFSaveOptions{};
+    caveat_entry(tiff_caveat(s_opts.tf, ctx.wide_gamut));
 
-    ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index == 2);
+    ctx.hdr               = is_hdr_encoding(s_opts.tf, s_opts.data_type_index == 2);
+    ctx.records_primaries = ICCProfile::can_label(s_opts.tf); //< in an ICC profile
     return &s_opts;
 }
 
 #endif
+
+bool tiff_offers_tf(TransferFunction tf, int data_type_index)
+{
+    // float samples are linear; integer ones are sRGB, or any transfer function an ICC profile names
+    if (data_type_index == 2)
+        return tf.type == TransferFunction::Linear;
+    return tf.type == TransferFunction::sRGB || ICCProfile::can_label(tf);
+}
+
+// macOS's ImageIO measured by test_export_roundtrip.cpp
+Caveat tiff_caveat(TransferFunction tf, bool wide_gamut)
+{
+    // an ICC profile names the primaries to macOS, which ignores TIFF's own tags for them
+    if (wide_gamut && !ICCProfile::can_label(tf))
+        return {Misreader_macOS, "macOS apps ignore TIFF's primaries tags, and read a wide-gamut TIFF as sRGB's."};
+    return {};
+}

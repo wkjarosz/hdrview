@@ -378,7 +378,7 @@ TEST_CASE("TIFF integer samples decode into the unit range at every supported wi
                 CAPTURE(sign_name);
 
                 // four well-separated samples in increasing numeric order, so the check is on ordering and
-                // endpoints and not on whatever curve the loader applies between them
+                // endpoints and not on whatever transfer function the loader applies between them
                 const uint64_t        one   = 1ull;
                 const uint64_t        range = bits >= 64 ? ~0ull : ((one << bits) - 1);
                 std::vector<uint64_t> samples;

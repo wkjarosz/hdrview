@@ -7,6 +7,7 @@
 #include "imageio/jxl.h"
 #include "endian-utils.h"
 #include "exif.h"
+#include "hdr_metadata.h"
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
@@ -40,16 +41,19 @@ json get_jxl_info() { return json{{"name", "libjxl"}}; }
 
 bool is_jxl_image(istream &is) noexcept { return false; }
 
-bool jxl_supported_tf(TransferFunction::Type tf) noexcept { return false; }
+bool jxl_offers_tf(TransferFunction) noexcept { return false; }
 
-vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
+vector<ImagePtr> load_jxl_image(istream &, string_view, const ImageLoadOptions &)
 {
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
 
 JXLSaveOptions *jxl_parameters_gui(SaveContext &) { return &s_opts; }
 
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
+void save_jxl_image(const Image &, std::ostream &, std::string_view, bool, float, TransferFunction, int)
+{ throw runtime_error("JPEG-XL support not enabled in this build."); }
+
+void save_jxl_image(const Image &, std::ostream &, std::string_view, JXLSaveOptions *)
 {
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
@@ -131,17 +135,19 @@ static inline float hdrview_JxlEncoderDistanceFromQuality(float quality)
 #endif
 }
 
+// JPEG XL's gamma is the exponent that encodes, 1/2.2 for a 2.2 curve; HDRView's is the one that decodes. Its DCI is
+// SMPTE RP 431-2's projector, a plain gamma of 2.6, and not ST 428-1's XYZ encoding that CICP's code 17 names.
 static TransferFunction transfer_function_from_color_encoding(const JxlColorEncoding &enc)
 {
     switch (enc.transfer_function)
     {
     case JXL_TRANSFER_FUNCTION_709: return TransferFunction::ITU;
     case JXL_TRANSFER_FUNCTION_SRGB: return TransferFunction::sRGB;
-    case JXL_TRANSFER_FUNCTION_GAMMA: return {TransferFunction::Gamma, (float)enc.gamma};
+    case JXL_TRANSFER_FUNCTION_GAMMA: return {TransferFunction::Gamma, enc.gamma > 0. ? float(1. / enc.gamma) : 1.f};
+    case JXL_TRANSFER_FUNCTION_DCI: return {TransferFunction::Gamma, 2.6f};
     case JXL_TRANSFER_FUNCTION_LINEAR: return TransferFunction::Linear;
     case JXL_TRANSFER_FUNCTION_PQ: return TransferFunction::BT2100_PQ;
     case JXL_TRANSFER_FUNCTION_HLG: return TransferFunction::BT2100_HLG;
-    case JXL_TRANSFER_FUNCTION_DCI: return TransferFunction::DCI_P3;
     case JXL_TRANSFER_FUNCTION_UNKNOWN: return TransferFunction::Unspecified;
     default: return TransferFunction::Invalid;
     }
@@ -157,12 +163,11 @@ static JxlTransferFunction jxl_tf(TransferFunction tf) noexcept
     case TransferFunction::ITU: return JXL_TRANSFER_FUNCTION_709;
     case TransferFunction::BT2100_PQ: return JXL_TRANSFER_FUNCTION_PQ;
     case TransferFunction::BT2100_HLG: return JXL_TRANSFER_FUNCTION_HLG;
-    case TransferFunction::DCI_P3: return JXL_TRANSFER_FUNCTION_DCI;
     default: return JXL_TRANSFER_FUNCTION_UNKNOWN;
     }
 }
 
-bool jxl_supported_tf(TransferFunction::Type_ tf) noexcept { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
+bool jxl_offers_tf(TransferFunction tf) noexcept { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
 
 // Return JSON describing libjxl availability and version
 json get_jxl_info()
@@ -254,12 +259,13 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 {
     spdlog::info("Linearizing pixel values using encoded profile.");
     Chromaticities file_chr = file_chromaticities(file_enc);
-    auto           tf       = file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA
-                                  ? TransferFunction{TransferFunction::Gamma, (float)file_enc.gamma}
-                                  : transfer_function_from_CICP((int)file_enc.transfer_function);
+    const bool     power    = file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA ||
+                              file_enc.transfer_function == JXL_TRANSFER_FUNCTION_DCI;
+    auto           tf       = power ? transfer_function_from_color_encoding(file_enc)
+                                    : transfer_function_from_CICP((int)file_enc.transfer_function);
 
-    // this needs to use our general linearization function
-    if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA || file_enc.primaries == JXL_PRIMARIES_CUSTOM)
+    // a power curve has no CICP code (DCI's 17 means another transfer function there), so it takes the general path
+    if (power || file_enc.primaries == JXL_PRIMARIES_CUSTOM)
         return linearize_pixels(pixels, size, file_chr, tf, keep_primaries, profile_description, c);
     else // we can map to a CICP profile
     {
@@ -656,10 +662,15 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 spdlog::info("File has an encoded color profile:\n{}", color_encoding_info(file_enc));
             }
 
-            // only prefer the encoded profile if it exists and it specifies an HDR transfer function
+            // Prefer the encoded profile when it has one of the transfer functions the synthesized ICC profile
+            // misstates: an HDR one, which ICC cannot express; DCI, whose ICC libjxl tags cicp 17 (ST 428-1) though
+            // its curve is RP 431-2's plain gamma 2.6; or 709, whose ICC curve inverts the camera's OETF where
+            // viewers, and HDRView, decode it as BT.1886's display gamma (see EOTF_BT1886()).
             prefer_icc = !icc_profile.empty() &&
                          (!has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
-                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG));
+                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG &&
+                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_DCI &&
+                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_709));
             spdlog::info("Will {}prefer ICC profile for linearization.", prefer_icc ? "" : "not ");
         }
         else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER)
@@ -1068,6 +1079,10 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     // libjxl rejects lossless encoding of an XYB-encoded frame, and it uses XYB whenever the original
     // profile is not kept
     info.uses_original_profile = lossless ? JXL_TRUE : JXL_FALSE;
+    // for PQ and HLG, the intensity target is the peak the content was graded for: the mastering display's peak
+    if (is_hdr_encoding(tf))
+        if (const auto md = mastering_display(img.metadata.value("header", json::object())); md && md->max_nits > 0.f)
+            info.intensity_target = md->max_nits;
 
     JxlEncoderPtr enc    = JxlEncoderMake(nullptr);
     auto          runner = JxlResizableParallelRunnerMake(nullptr);
@@ -1082,7 +1097,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     memset(&color_encoding, 0, sizeof(color_encoding));
     color_encoding.color_space       = n <= 2 ? JXL_COLOR_SPACE_GRAY : JXL_COLOR_SPACE_RGB;
     color_encoding.transfer_function = jtf;
-    color_encoding.gamma             = tf.gamma;
+    color_encoding.gamma             = tf.type == TransferFunction::Gamma ? 1.0 / tf.gamma : 0.0; //< encoding exponent
     color_encoding.rendering_intent  = JXL_RENDERING_INTENT_RELATIVE;
 
     Chromaticities c{}; // sRGB/Rec709, D65
@@ -1107,7 +1122,17 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     color_encoding.primaries_blue_xy[0]  = c.blue.x;
     color_encoding.primaries_blue_xy[1]  = c.blue.y;
 
-    if (JXL_ENC_SUCCESS != JxlEncoderSetColorEncoding(enc.get(), &color_encoding))
+    // JPEG XL's own codes for BT.709 and a custom gamma are misread: macOS takes 709 for sRGB and any gamma for 1.8,
+    // and libjxl inverts the camera's OETF for 709 where viewers apply BT.1886. Both read an ICC profile right.
+    std::vector<uint8_t> icc;
+    if (tf.type == TransferFunction::ITU || tf.type == TransferFunction::Gamma)
+        icc = (n <= 2 ? ICCProfile::Gray(c.white, tf) : ICCProfile::RGB(c, tf)).bytes();
+    if (!icc.empty())
+    {
+        if (JXL_ENC_SUCCESS != JxlEncoderSetICCProfile(enc.get(), icc.data(), icc.size()))
+            throw std::runtime_error("JxlEncoderSetICCProfile failed");
+    }
+    else if (JXL_ENC_SUCCESS != JxlEncoderSetColorEncoding(enc.get(), &color_encoding))
         throw std::runtime_error("JxlEncoderSetColorEncoding failed");
 
     JxlEncoderFrameSettings *frame_settings = JxlEncoderFrameSettingsCreate(enc.get(), nullptr);
@@ -1155,11 +1180,8 @@ static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, J
 
 JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("JPEG-XL Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -1168,6 +1190,8 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
                 {
                     for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
+                        if (!jxl_offers_tf({(TransferFunction::Type_)i, s_opts.tf.gamma}))
+                            continue;
                         bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
                         if (ImGui::Selectable(
                                 transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
@@ -1197,13 +1221,16 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
                                "Quality level for lossy compression.");
         ImGui::EndDisabled();
 
+        if (reset_entry())
+            s_opts = JXLSaveOptions{};
+
         ImGui::PE::End();
     }
 
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = JXLSaveOptions{};
+    caveat_entry(jxl_caveat(s_opts.tf, s_opts.lossless));
 
     ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index <= 1); // the first two are the float formats
+    ctx.records_primaries = true; //< in its color encoding or ICC profile
     return &s_opts;
 }
 
@@ -1218,3 +1245,17 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 }
 
 #endif
+
+// macOS's ImageIO measured by test_export_roundtrip.cpp. It reads every gamma in JPEG XL's own codes as 1.8, and 709 as
+// sRGB, so those are written through an ICC profile, which a lossless file keeps. A lossy one is encoded in XYB,
+// and libjxl turns the profile back into its codes where they can state it, which leaves macOS misreading the gammas
+// other than its own 1.8 and DCI's 2.6, BT.1886's 2.4 among them.
+Caveat jxl_caveat(TransferFunction tf, bool lossless)
+{
+    const bool misread_gamma = tf.type == TransferFunction::ITU ||
+                               (tf.type == TransferFunction::Gamma && tf.gamma != 1.8f && tf.gamma != 2.6f);
+    if (!lossless && misread_gamma)
+        return {Misreader_macOS, "macOS apps read a lossy JPEG XL with this transfer function as a gamma of 1.8; "
+                                 "they read a lossless one right."};
+    return {};
+}

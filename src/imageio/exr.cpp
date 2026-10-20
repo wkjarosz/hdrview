@@ -595,6 +595,9 @@ void save_exr_image(const Image &img, ostream &os_, string_view filename, const 
                                               Imath::V2f(img.chromaticities->green.x, img.chromaticities->green.y),
                                               Imath::V2f(img.chromaticities->blue.x, img.chromaticities->blue.y),
                                               Imath::V2f(img.chromaticities->white.x, img.chromaticities->white.y)}});
+        // the luminance that (1, 1, 1) stands for, when the image records one
+        if (const auto nits = white_luminance(img.metadata.value("header", json::object())))
+            Imf::addWhiteLuminance(header, *nits);
         header.insert("channels", Imf::ChannelListAttribute());
         header.displayWindow() = displayWindow;
         header.dataWindow()    = dataWindow;
@@ -678,11 +681,8 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
         for (int i = 0; i < (int)img->groups.size(); ++i) group_selection.SetItemSelected(i, true);
     }
 
-    if (ImGui::PE::Begin("OpenEXR Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         // Channels (custom multi-select widget)
         ImGui::PE::Entry(
@@ -810,12 +810,13 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
             },
             "Enable to save as a tiled EXR file (recommended for large images).");
 
+        if (reset_entry())
+            s_opts = EXRSaveOptions{};
+
         ImGui::PE::End();
     }
 
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = EXRSaveOptions{};
-
     ctx.hdr = true; //< always floating point
+    ctx.records_primaries = true; //< in the chromaticities attribute
     return &s_opts;
 }

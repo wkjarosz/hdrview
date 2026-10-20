@@ -32,10 +32,9 @@ using namespace std;
 
 struct JPGSaveOptions
 {
-    int   tf          = 1; // Linear = 0; sRGB = 1
-    bool  dither      = true;
-    int   quality     = 95;
-    bool  progressive = false;
+    bool dither      = true;
+    int  quality     = 95;
+    bool progressive = false;
 };
 
 static JPGSaveOptions s_opts;
@@ -54,9 +53,8 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, bool sRGB, bool dither, int quality,
-                    bool progressive)
-{ return save_stb_jpg(img, os, filename, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither, quality); }
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, bool dither, int quality, bool)
+{ return save_stb_jpg(img, os, filename, dither, quality); }
 
 JPGSaveOptions *jpg_parameters_gui(SaveContext &) { return &s_opts; }
 
@@ -733,13 +731,13 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     return load_jpg_image(is, filename, opts, true);
 }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filename*/, bool sRGB, bool dither,
-                    int quality, bool progressive)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filename*/, bool dither, int quality,
+                    bool progressive)
 {
-    // get interleaved LDR pixel data
+    // this writer labels no transfer function, so the pixels are sRGB-encoded, as a reader assumes
+    const TransferFunction tf = TransferFunction::sRGB;
     int  w = 0, h = 0, n = 0;
-    auto pixels =
-        img.as_interleaved<uint8_t>(&w, &h, &n, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither);
+    auto pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
     // Validation: ensure we actually have pixel data / valid dimensions
     if (!pixels || w <= 0 || h <= 0)
         throw runtime_error("JPEG: empty image or invalid image dimensions");
@@ -829,25 +827,19 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filen
 
 JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("libJPEG Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Combo("Transfer function", &s_opts.tf, "Linear\0sRGB IEC61966-2.1\0");
-
         ImGui::PE::Checkbox("Dither", &s_opts.dither);
 
         ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100);
         ImGui::PE::Checkbox("Progressive", &s_opts.progressive);
 
+        if (reset_entry())
+            s_opts = JPGSaveOptions{};
+
         ImGui::PE::End();
     }
 
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = JPGSaveOptions{};
-
-    ImGui::Unindent();
     ctx.hdr = false;
     return &s_opts;
 }
@@ -858,7 +850,9 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     if (params == nullptr)
         throw std::invalid_argument("JPGSaveOptions pointer is null");
 
-    save_jpg_image(img, os, filename, params->tf == 1, params->dither, params->quality, params->progressive);
+    save_jpg_image(img, os, filename, params->dither, params->quality, params->progressive);
 }
 
 #endif
+
+bool jpg_offers_tf(TransferFunction tf) { return tf.type == TransferFunction::sRGB; }

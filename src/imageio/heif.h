@@ -32,11 +32,16 @@ enum class HEIFCodec
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, int quality = 95,
                      bool lossless = false, bool use_alpha = true, HEIFCodec codec = HEIFCodec::HEIF,
-                     TransferFunction tf = TransferFunction::sRGB);
+                     TransferFunction tf = TransferFunction::sRGB, int bit_depth = 0);
 
 struct HEIFSaveOptions;
 struct SaveContext;
+struct Caveat;
 /// Draws the options for `codec`, listing only the encoders that implement it.
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx);
+/// Whether the HEIF/AVIF save options offer \p tf: whether an nclx box can name it.
+bool heif_offers_tf(TransferFunction tf);
+/// Which applications misread a HEIF or AVIF with the transfer function \p tf, and how.
+Caveat heif_caveat(TransferFunction tf);
 // throws on error
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, const HEIFSaveOptions *params);

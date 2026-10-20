@@ -312,14 +312,24 @@ being specified exactly. dav1d builds only under meson, so unlike libaom there i
 block finds a system dav1d or leaves AVIF on libaom, as currently happens on Windows and Emscripten.
 
 Saving has two entries, each opening `draw_save_dialog()` in a fixed `SaveMode`. **Save as...** writes the image's
-data, optionally blended with the reference in the channels shown ("Include comparison", before exposure) and
-optionally cropped to the selection. **Export rendition...** writes what the view shows: exposure, tonemap and
-highlight mode baked in, resolved against the display the dialog targets (SDR white for an SDR encoding, a chosen
-peak for PQ/HLG/float) and clipped at its ceiling. `image_to_save()` builds the image for either; a comparison or
-rendition is converted back into the current image's primaries and carries alpha only when a source has it. A
-format's options GUI receives a `SaveContext` (`imageio/save_options.h`), through which it reports whether its
-encoding keeps values above SDR white. Scaling the data is an edit (Exposure/gamma...), not a save option, so it
-applies the same way to every format.
+data, whole or cropped to the selection. **Export rendition...** writes what the view shows, blended with the
+reference when there is one: exposure, tonemap and highlight mode baked in, resolved against the display the dialog
+targets (SDR white for an SDR encoding, a chosen peak for PQ/HLG/float), which the file records as its mastering
+display where the format has room; Pass through writes the values unchanged, so a float rendition with exposure 0
+and gamma 1 is the comparison's data. `image_to_save()` builds the image for either; a rendition is converted into
+the chosen primaries, or the current image's, and carries alpha only when a source has it. A format's options GUI
+receives a `SaveContext` (`imageio/save_options.h`), through which it reports whether its encoding keeps values
+above SDR white and whether the file can record its primaries. Scaling the data is an edit (Exposure/gamma...), not
+a save option, so it applies the same way to every format.
+
+A format offers only the transfer functions it can label, through its `X_offers_tf()`, which both its options
+GUI and `tests/test_export_roundtrip.cpp` use; TIFF, JP2 and WebP label one with an ICC profile, which names PQ
+and HLG through a `cicp` tag (`ICCProfile::can_label()`). Its `X_caveat()` names applications known to misread a
+file anyway (`Caveat` and the `Misreader_` flags in `save_options.h`: macOS's ImageIO, Chromium, Firefox), which the
+dialog shows as a warning. That test sweeps every setting of every writer against every transfer function its
+dialog offers, checking the pixels, the labels and the HDR metadata through HDRView's own reader and, on macOS,
+through ImageIO, the decoder every macOS application uses; it holds each caveat naming macOS to what ImageIO does,
+both ways, while the browsers' are checked by hand.
 
 ### Rendering backend abstraction (GL vs Metal)
 `renderpass.h`, `shader.h`, and `texture.h` declare platform-agnostic interfaces (adapted from NanoGUI),

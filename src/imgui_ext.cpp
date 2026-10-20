@@ -1096,6 +1096,10 @@ void Checkbox(const Action &a)
     }
 }
 
+// the last frame a BeginModalDialog() dialog showed; AnyModalDialogOpen() also accepts the frame before, since the
+// shortcuts ask before this frame's dialogs are drawn
+static int s_modal_dialog_frame = -2;
+
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags)
 {
     // HelloImGui renders a couple of frames to figure out sizes before the first real frame; guard against
@@ -1118,8 +1122,13 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     case DialogPosition::None: break;
     }
 
-    return ImGui::BeginPopupModal(title, nullptr, flags);
+    const bool shown = ImGui::BeginPopupModal(title, nullptr, flags);
+    if (shown)
+        s_modal_dialog_frame = ImGui::GetFrameCount();
+    return shown;
 }
+
+bool AnyModalDialogOpen() { return ImGui::GetFrameCount() - s_modal_dialog_frame <= 1; }
 
 void RowSpan::take()
 {

@@ -39,47 +39,47 @@ float element(const float3x3 &M, int row, int col) { return M[col][row]; }
 TEST_CASE("every transfer function agrees with colour-science")
 {
     using namespace colour_reference;
-    struct Curve
+    struct TransferCase
     {
         const char   *name;
         const Sample *samples;
         size_t        count;
         float (*f)(float);
         float rel;
-        float abs = 1e-9f; ///< where a curve flattens toward zero, as the log curves do at their floor
+        float abs = 1e-9f; ///< where a transfer function flattens toward zero, as the log ones do at their floor
     };
-#define CURVE(table, fn, ...)                                                                                          \
+#define TRANSFER_CASE(table, fn, ...)                                                                                  \
     {                                                                                                                  \
         #table, table, std::size(table), fn, __VA_ARGS__                                                               \
     }
-    // float against double: a few ulps through pow/log/exp, more where a curve is steep
-    const Curve curves[] = {
-        CURVE(sRGB_encode, shader::linear_to_sRGB, 1e-6f),
-        CURVE(sRGB_decode, shader::sRGB_to_linear, 1e-6f),
+    // float against double: a few ulps through pow/log/exp, more where a transfer function is steep
+    const TransferCase cases[] = {
+        TRANSFER_CASE(sRGB_encode, shader::linear_to_sRGB, 1e-6f),
+        TRANSFER_CASE(sRGB_decode, shader::sRGB_to_linear, 1e-6f),
         // H.273's sYCC: sRGB extended to negative values by odd symmetry, which is HDRView's convention
-        CURVE(sYCC_encode, shader::linear_to_sRGB, 1e-6f),
-        CURVE(sYCC_decode, shader::sRGB_to_linear, 1e-6f),
-        CURVE(ITU_encode, shader::OETF_ITU, 1e-6f),
-        CURVE(ITU_decode, shader::inverse_OETF_ITU, 1e-5f),
-        CURVE(PQ_encode, shader::inverse_EOTF_BT2100_PQ, 1e-5f),
-        CURVE(PQ_decode, shader::EOTF_BT2100_PQ, 1e-4f),
-        CURVE(HLG_OETF, shader::OETF_BT2100_HLG, 1e-6f),
-        CURVE(HLG_inverse_OETF, shader::inverse_OETF_BT2100_HLG, 1e-5f),
-        CURVE(HLG_system_gamma, shader::HLG_system_gamma, 1e-6f),
-        CURVE(ST240_encode, shader::OETF_ST240, 1e-6f),
-        CURVE(ST240_decode, shader::EOTF_ST240, 1e-5f),
-        CURVE(log100_encode, shader::OETF_log100, 1e-6f, 1e-6f),
-        CURVE(log100_decode, shader::EOTF_log100, 1e-5f),
-        CURVE(log100_sqrt10_encode, shader::OETF_log100_sqrt10, 1e-6f, 1e-6f),
-        CURVE(log100_sqrt10_decode, shader::EOTF_log100_sqrt10, 1e-5f),
-        CURVE(DCI_P3_decode, shader::EOTF_DCI_P3, 1e-5f),
-        CURVE(DCI_P3_encode, shader::inverse_EOTF_DCI_P3, 1e-6f),
+        TRANSFER_CASE(sYCC_encode, shader::linear_to_sRGB, 1e-6f),
+        TRANSFER_CASE(sYCC_decode, shader::sRGB_to_linear, 1e-6f),
+        TRANSFER_CASE(ITU_encode, shader::OETF_ITU, 1e-6f),
+        TRANSFER_CASE(ITU_decode, shader::inverse_OETF_ITU, 1e-5f),
+        TRANSFER_CASE(PQ_encode, shader::inverse_EOTF_BT2100_PQ, 1e-5f),
+        TRANSFER_CASE(PQ_decode, shader::EOTF_BT2100_PQ, 1e-4f),
+        TRANSFER_CASE(HLG_OETF, shader::OETF_BT2100_HLG, 1e-6f),
+        TRANSFER_CASE(HLG_inverse_OETF, shader::inverse_OETF_BT2100_HLG, 1e-5f),
+        TRANSFER_CASE(HLG_system_gamma, shader::HLG_system_gamma, 1e-6f),
+        TRANSFER_CASE(ST240_encode, shader::OETF_ST240, 1e-6f),
+        TRANSFER_CASE(ST240_decode, shader::EOTF_ST240, 1e-5f),
+        TRANSFER_CASE(log100_encode, shader::OETF_log100, 1e-6f, 1e-6f),
+        TRANSFER_CASE(log100_decode, shader::EOTF_log100, 1e-5f),
+        TRANSFER_CASE(log100_sqrt10_encode, shader::OETF_log100_sqrt10, 1e-6f, 1e-6f),
+        TRANSFER_CASE(log100_sqrt10_decode, shader::EOTF_log100_sqrt10, 1e-5f),
+        TRANSFER_CASE(DCI_P3_decode, shader::EOTF_DCI_P3, 1e-5f),
+        TRANSFER_CASE(DCI_P3_encode, shader::inverse_EOTF_DCI_P3, 1e-6f),
     };
-#undef CURVE
+#undef TRANSFER_CASE
 
-    for (const Curve &c : curves)
+    for (const TransferCase &c : cases)
     {
-        INFO("curve = ", std::string(c.name));
+        INFO("transfer function = ", std::string(c.name));
         for (size_t i = 0; i < c.count; ++i)
         {
             const Sample &s = c.samples[i];

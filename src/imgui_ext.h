@@ -131,7 +131,7 @@ void Checkbox(const Action &a);
 // ===== Modal dialog helpers =====
 // Shared boilerplate for HDRViewApp's "PopupDialog"-style modals: an OpenPopup-on-request shell plus a
 // Cancel/Confirm footer, used together (via ConfirmDialog) for simple yes/no prompts, or separately for
-// dialogs with custom bodies (see e.g. HDRViewApp::draw_save_as_dialog / draw_confirm_load_session_dialog).
+// dialogs with custom bodies (see e.g. HDRViewApp::draw_save_dialog / draw_confirm_load_session_dialog).
 
 enum class DialogPosition
 {
@@ -146,6 +146,9 @@ enum class DialogPosition
 // ImGui::BeginPopupModal. Call ImGui::EndPopup() only when this returns true, as with BeginPopupModal.
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position = DialogPosition::TopCenter,
                       ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize);
+
+/// Whether a BeginModalDialog() dialog showed this frame or the last, for what should stand down behind one.
+bool AnyModalDialogOpen();
 
 enum class DialogResult
 {

@@ -481,11 +481,8 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
 
 UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("UltraHDR Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         // Base quality
         ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0,
@@ -514,11 +511,11 @@ UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx)
             ImGui::PE::TreePop();
         }
 
+        if (reset_entry())
+            s_opts = UHDRSaveOptions{};
+
         ImGui::PE::End();
     }
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = UHDRSaveOptions{};
 
     ctx.hdr = true;
     return &s_opts;

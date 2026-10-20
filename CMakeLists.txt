@@ -1722,6 +1722,7 @@ set(HDRVIEW_SOURCES
     src/imageio/streams.cpp
     src/imageio/qoi.cpp
     src/imageio/raw.cpp
+    src/imageio/save_options.cpp
     src/imageio/tiff.cpp
     src/imageio/uhdr.cpp
     src/imageio/webp.cpp
@@ -1910,6 +1911,11 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
   )
   hdrview_setup_target(hdrview_tests)
   target_link_libraries(hdrview_tests PRIVATE doctest::doctest)
+  # macOS's own decoders, an independent reader of the files HDRView writes (see test_export_roundtrip.cpp)
+  if(APPLE)
+    target_link_libraries(hdrview_tests PRIVATE "-framework ImageIO" "-framework CoreGraphics"
+                                                "-framework CoreFoundation")
+  endif()
   # tests/test_library_versions.cpp asks OpenEXRCore for its version, which an installed OpenEXR::OpenEXR links
   # only privately
   if(TARGET OpenEXR::OpenEXRCore)

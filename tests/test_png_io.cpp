@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 
 #include "image.h"
+#include "imageio/icc.h"
 #include "imageio/image_loader.h"
 #include "imageio/png.h"
 
@@ -108,11 +109,47 @@ TEST_CASE("PNG save/load round-trips HDR transfer functions (PQ, HLG) and wide g
 
 #endif // PNG_cICP_SUPPORTED
 
-TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in cICP")
+TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profile, not only in cICP")
 {
-    // cICP is recent enough that most readers ignore it, so every curve gAMA or the sRGB chunk can express
-    // is written through those too
+    // cICP is recent enough that most readers ignore it, so every transfer function gAMA or the sRGB chunk can
+    // express is written through those too, and every other SDR one in an ICC profile
     auto img = make_test_image(int2{4, 3});
+
+    SUBCASE("a transfer function gAMA and the sRGB chunk cannot state exactly gets an ICC profile, and no other does")
+    {
+        for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+        {
+            const TransferFunction tf{(TransferFunction::Type_)i, 2.4f};
+            if (tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG)
+                continue;
+            CAPTURE(transfer_function_name(tf));
+            std::ostringstream out(std::ios::binary);
+            save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false, /*sixteen_bit*/ true, tf);
+            auto reloaded = load_bytes(load_png_image, out.str(), "test.png");
+            REQUIRE(reloaded);
+
+            const bool stated = tf.type == TransferFunction::Linear || tf.type == TransferFunction::Gamma ||
+                                tf.type == TransferFunction::sRGB || tf.type == TransferFunction::ITU;
+            if (stated || !ICCProfile::can_describe(tf))
+            {
+                CHECK(reloaded->icc_data.empty());
+                continue;
+            }
+            REQUIRE_FALSE(reloaded->icc_data.empty());
+
+            // the profile decodes code values as the transfer function does, up to the white an ICC curve ends at
+            ICCProfile         profile{reloaded->icc_data};
+            constexpr int      num = 32;
+            std::vector<float> ramp(num * 3);
+            for (int j = 0; j < num * 3; ++j) ramp[j] = float(j / 3) / (num - 1);
+            REQUIRE(profile.linearize_pixels(ramp.data(), int3{num, 1, 3}, true));
+            float worst = 0.f;
+            for (int j = 0; j < num * 3; ++j)
+                worst =
+                    std::max(worst, std::abs(ramp[j] - std::clamp(to_linear(float(j / 3) / (num - 1), tf), 0.f, 1.f)));
+            CHECK(worst <= 2e-3f);
+        }
+    }
 
     SUBCASE("linear is recorded as gAMA 1.0")
     {
@@ -163,7 +200,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
 
     SUBCASE("an sRGB curve over a wide gamut does not claim the sRGB chunk")
     {
-        // the sRGB chunk asserts BT.709 primaries as well as the curve, so gAMA carries the curve here and
+        // the sRGB chunk asserts BT.709 primaries as well as the transfer function, so gAMA carries that here and
         // cHRM the primaries
         auto wide            = make_test_image(int2{4, 3});
         wide->chromaticities = gamut_chromaticities(ColorGamut_BT2020_2100);
@@ -182,7 +219,7 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
     }
 
-    SUBCASE("the ITU curve is approximated as gAMA 2.2")
+    SUBCASE("the BT.709 curve, BT.1886's gamma 2.4, is recorded exactly as gAMA")
     {
         std::ostringstream out(std::ios::binary);
         save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
@@ -193,17 +230,17 @@ TEST_CASE("PNG save records the transfer function in gAMA and sRGB, not only in 
         auto &header = reloaded->metadata["header"];
 
         REQUIRE(header.contains("gAMA"));
-        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
+        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.4f).epsilon(1e-3));
         // ITU is not sRGB, so the sRGB chunk must not appear even though the primaries are BT.709
         CHECK(header["sRGB"]["value"].get<int>() < 0);
     }
 }
 
 #ifdef PNG_cICP_SUPPORTED
-TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
+TEST_CASE("a transfer function only cICP can express is saved with no gAMA claim")
 {
     // PQ has no power-curve equivalent, so nothing is written that would let a gAMA-only reader believe it
-    // knows the curve
+    // knows the transfer function
     auto img = make_test_image(int2{4, 3});
 
     std::ostringstream out(std::ios::binary);
@@ -220,7 +257,7 @@ TEST_CASE("a curve only cICP can express is saved with no gAMA claim")
     CHECK(header["sRGB"]["value"].get<int>() < 0);
 }
 #else
-TEST_CASE("saving a curve this libpng cannot record fails instead of mislabelling the file")
+TEST_CASE("saving a transfer function this libpng cannot record fails instead of mislabeling the file")
 {
     // without cICP there is nowhere to put PQ; only reachable on a libpng older than 1.6.45
     auto img = make_test_image(int2{4, 3});

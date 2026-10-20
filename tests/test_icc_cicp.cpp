@@ -133,7 +133,7 @@ TEST_CASE("An ICC profile whose cicp tag declares PQ keeps its HDR range")
     // fully-encoded PQ is far above SDR white
     CHECK(pixels[0] > 40.f);
     CHECK(pixels[0] == doctest::Approx(10000.f / 203.f).epsilon(1e-3)); // PQ 1.0 is 10000 nits over a 203-nit white
-    // mid-code PQ is a much dimmer absolute level, so this is the curve and not a scale factor
+    // mid-code PQ is a much dimmer absolute level, so this is the transfer function and not a scale factor
     CHECK(pixels[3] < 1.f);
     CHECK(pixels[3] > 0.f);
 }
@@ -239,6 +239,99 @@ TEST_CASE("icc_cicp_tag reports the video range flag")
     CHECK(icc_cicp_tag(full.data(), full.size()).fr() == 1);
     CHECK(icc_cicp_tag(narrow.data(), narrow.size()).valid());
     CHECK(!icc_cicp_tag(nullptr, 0).valid());
+}
+
+TEST_CASE("A profile built for a transfer function reads back as that transfer function and those primaries")
+{
+    // Every transfer function, with gamma at an exponent no other one shares, as an RGB profile over BT.709 and a
+    // wide gamut and as a gray one, read back through the path a loader takes. PQ and HLG read back through their
+    // cicp tag, and through their tone curves as the SDR clip a reader that ignores the tag sees.
+    std::vector<TransferFunction> tfs;
+    for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
+        if (i != TransferFunction::Gamma)
+            tfs.push_back({(TransferFunction::Type_)i});
+    tfs.push_back({TransferFunction::Gamma, 1.8f});
+
+    const Chromaticities gamuts[] = {Chromaticities{}, gamut_chromaticities(ColorGamut_Display_P3_SMPTE432)};
+    constexpr int        num      = 64;
+
+    for (const auto &tf : tfs)
+    {
+        CAPTURE(transfer_function_name(tf));
+        const bool hdr  = tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG;
+        const bool lcms = ICCProfile::lcms_version() > 0;
+        CHECK(ICCProfile::can_describe(tf) == (tf.type != TransferFunction::Unspecified && !hdr && lcms));
+        CHECK(ICCProfile::can_label(tf) == (tf.type != TransferFunction::Unspecified && lcms));
+        if (!ICCProfile::can_label(tf))
+        {
+            CHECK_FALSE(ICCProfile::RGB(Chromaticities{}, tf).valid());
+            continue;
+        }
+
+        // a ramp of code values decoded by the transfer function, and that clipped to the white an ICC curve ends at
+        std::vector<float> want(num), clipped(num);
+        for (int i = 0; i < num; ++i)
+        {
+            want[i]    = to_linear(float(i) / (num - 1), tf);
+            clipped[i] = std::clamp(want[i], 0.f, 1.f);
+        }
+        if (!hdr)
+            want = clipped;
+        const auto ramp = [&](int channels)
+        {
+            std::vector<float> pixels(num * channels);
+            for (int i = 0; i < num * channels; ++i) pixels[i] = float(i / channels) / (num - 1);
+            return pixels;
+        };
+        const auto worst_error = [&](const std::vector<float> &pixels, const std::vector<float> &expected, int channels)
+        {
+            float worst = 0.f;
+            for (int i = 0; i < num * channels; ++i)
+                worst = std::max(worst,
+                                 std::abs(pixels[i] - expected[i / channels]) / std::max(1.f, expected[i / channels]));
+            return worst;
+        };
+
+        // a built profile reports the code points it was tagged with, as its bytes read back do
+        const auto same_codes = [](const CICPProfile &a, const CICPProfile &b)
+        { return a.cp() == b.cp() && a.tc() == b.tc() && a.mc() == b.mc() && a.fr() == b.fr(); };
+
+        for (const auto &chr : gamuts)
+        {
+            const ICCProfile built = ICCProfile::RGB(chr, tf);
+            const auto       bytes = built.bytes();
+            REQUIRE_FALSE(bytes.empty());
+            ICCProfile read; // assigned, as a loader holding it for several frames does
+            read = ICCProfile{bytes};
+            REQUIRE(read.valid());
+            CHECK(read.cicp().valid() == hdr);
+            CHECK(same_codes(built.cicp(), read.cicp()));
+            CHECK(read.description().find(transfer_function_name(tf)) != std::string::npos);
+
+            Chromaticities got;
+            REQUIRE(read.extract_chromaticities(&got));
+            for (auto [g, w] : {std::pair{got.red, chr.red}, std::pair{got.green, chr.green},
+                                std::pair{got.blue, chr.blue}, std::pair{got.white, chr.white}})
+                CHECK(la::maxelem(la::abs(g - w)) <= 1e-3f);
+
+            auto pixels = ramp(3);
+            REQUIRE(read.linearize_pixels(pixels.data(), int3{num, 1, 3}, true));
+            CHECK(worst_error(pixels, want, 3) <= 2e-3f);
+
+            pixels = ramp(3);
+            REQUIRE(ICCProfile::transform_pixels(pixels.data(), int3{num, 1, 3}, read, ICCProfile::linear_RGB(chr)));
+            CHECK(worst_error(pixels, clipped, 3) <= 2e-3f);
+        }
+
+        const ICCProfile built_gray = ICCProfile::Gray(white_point(WhitePoint_D65), tf);
+        ICCProfile       gray{built_gray.bytes()};
+        REQUIRE(gray.is_Gray());
+        CHECK(gray.cicp().valid() == hdr);
+        CHECK(same_codes(built_gray.cicp(), gray.cicp()));
+        auto pixels = ramp(1);
+        REQUIRE(gray.linearize_pixels(pixels.data(), int3{num, 1, 1}, true));
+        CHECK(worst_error(pixels, want, 1) <= 2e-3f);
+    }
 }
 
 #ifdef HDRVIEW_TEST_LIBJXL_DIR

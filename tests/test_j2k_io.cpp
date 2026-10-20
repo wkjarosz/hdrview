@@ -379,19 +379,21 @@ TEST_CASE("A lossy write is smaller than a lossless one and stays close to the s
                           { return 0.1f + 0.8f * float(x + y + 4 * c) / float(size.x + size.y + 8); });
 
     std::ostringstream lossless(std::ios::binary), lossy(std::ios::binary);
-    save_j2k_image(*img, lossless, "a.jp2", true, 8, J2KContainer::JP2, TransferFunction::Linear, false);
-    save_j2k_image(*img, lossy, "b.jp2", false, 8, J2KContainer::JP2, TransferFunction::Linear, false);
+    save_j2k_image(*img, lossless, "a.jp2", true, 8, J2KContainer::JP2, TransferFunction::sRGB, false);
+    save_j2k_image(*img, lossy, "b.jp2", false, 8, J2KContainer::JP2, TransferFunction::sRGB, false);
     CHECK(lossy.str().size() < lossless.str().size());
 
     const auto decoded = load_bytes(load_j2k_image, lossy.str(), "b.jp2", raw_load_options());
     REQUIRE(decoded);
 
+    // the decoded code values, against the sRGB encoding of the samples, so only the codec's error counts
     double worst = 0., total = 0.;
     for (int c = 0; c < 3; ++c)
         for (int y = 0; y < size.y; ++y)
             for (int x = 0; x < size.x; ++x)
             {
-                const double e = std::abs(double(decoded->channels[c](x, y) - img->channels[c](x, y)));
+                const double e = std::abs(
+                    double(decoded->channels[c](x, y) - from_linear(img->channels[c](x, y), TransferFunction::sRGB)));
                 worst          = std::max(worst, e);
                 total += e;
             }

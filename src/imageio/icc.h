@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <string>
 #include <sys/types.h>
+#include <utility>
+#include <vector>
 
 class CICPProfile;
 
@@ -47,17 +49,12 @@ public:
     ICCProfile(const ICCProfile &)            = delete;
     ICCProfile &operator=(const ICCProfile &) = delete;
 
-    // movable (transfer ownership)
-    // ColorProfile(ColorProfile &&other) noexcept : m_profile(other.m_profile) { other.m_profile = nullptr; }
+    // move-assignable only: a profile is built in place, so nothing needs to move one into a new object
     ICCProfile &operator=(ICCProfile &&other) noexcept
     {
-        if (this != &other)
-        {
-            // swap pointers so the moved-from object will clean up the old resource in its dtor
-            void *tmp       = m_profile;
-            m_profile       = other.m_profile;
-            other.m_profile = tmp;
-        }
+        // swapped, so the moved-from object releases the old profile in its destructor
+        std::swap(m_profile, other.m_profile);
+        std::swap(m_cicp, other.m_cicp);
         return *this;
     }
 
@@ -65,6 +62,25 @@ public:
     static ICCProfile linear_RGB(const Chromaticities &chr = Chromaticities{});
     /// Construct a linear Gray ICC profile with the specified white point (or D65 if none is provided).
     static ICCProfile linear_Gray(const float2 &whitepoint = white_point(WhitePoint_D65));
+
+    /// An RGB profile with the primaries and white \p chr and the transfer function \p tf.
+    /**
+        Linear, gamma, sRGB and BT.709 (as BT.1886's gamma 2.4) get exact parametric curves; the others a sampled
+        one, clipped to [0, 1] as every ICC curve is (DCI-P3's code values run past its white). PQ and HLG, whose
+        meaning an ICC curve cannot carry, are named instead by a cicp tag (ICC.1:2022, so an ICC v4.4 profile), over
+        a curve that clips them at SDR white for a reader that ignores the tag. Without LCMS2 the profile is invalid.
+        Its description names its primaries and transfer function.
+    */
+    static ICCProfile RGB(const Chromaticities &chr, const TransferFunction &tf);
+    /// A Gray profile with the white \p whitepoint and the transfer function \p tf, as RGB() builds them.
+    static ICCProfile Gray(const float2 &whitepoint, const TransferFunction &tf);
+    /// Whether RGB() and Gray() can describe the transfer function \p tf with an ICC curve alone, in this build.
+    static bool can_describe(const TransferFunction &tf);
+    /// Whether RGB() and Gray() can name \p tf in this build: exactly, or for PQ and HLG through a cicp tag.
+    static bool can_label(const TransferFunction &tf);
+
+    /// The profile as the bytes of an ICC file, or none for an invalid profile.
+    std::vector<uint8_t> bytes() const;
 
     /// Get the version of the linked LCMS2 library (or 0 if not built with LCMS2).
     static int lcms_version();
@@ -94,7 +110,7 @@ public:
 
     /** The code points from this profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
 
-        Read straight out of the profile bytes, since LCMS only learned the tag in 2.16.
+        Read straight out of the profile bytes, since LCMS only learned the tag in 2.14.
     */
     CICPProfile cicp() const;
 
@@ -157,6 +173,8 @@ public:
 private:
     /// Internal constructor from raw profile pointer.
     ICCProfile(void *profile) : m_profile{profile} {}
+    /// Internal constructor from a raw profile pointer and the `cicp` code points it was tagged with.
+    ICCProfile(void *profile, const std::array<int, 4> &cicp) : m_profile{profile}, m_cicp{cicp} {}
     void *m_profile = nullptr;
 
     /// Raw `cicp` code points, filled in at construction; all -1 when the profile carries no such tag.
@@ -300,7 +318,7 @@ private:
 
 /** The code points from an ICC profile's `cicp` tag (ICC.1:2022), or an invalid profile if it has none.
 
-    Reads the profile bytes directly, needing neither LCMS (which only learned the tag in 2.16) nor a
+    Reads the profile bytes directly, needing neither LCMS (which only learned the tag in 2.14) nor a
     constructed ICCProfile, so a caller can consult the range flag before deciding how to read the pixels.
 */
 CICPProfile icc_cicp_tag(const uint8_t *icc_profile, size_t icc_profile_size);

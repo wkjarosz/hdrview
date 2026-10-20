@@ -14,6 +14,7 @@
 
 #include "heif.h" // for HEIFCodec, which the stubs below need too
 #include "imgui.h"
+#include "save_options.h"
 
 using namespace std;
 
@@ -29,7 +30,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
     throw runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, int, bool, bool, HEIFCodec, TransferFunction)
+void save_heif_image(const Image &, std::ostream &, std::string_view, int, bool, bool, HEIFCodec, TransferFunction, int)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
@@ -41,6 +42,8 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
 
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec, SaveContext &) { return nullptr; }
 
+bool heif_offers_tf(TransferFunction) { return false; }
+
 #else
 
 #include "colorspace.h"
@@ -50,7 +53,6 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec, SaveContext &) { return nullptr;
 #include "hdr_metadata.h"
 #include "heif.h"
 #include "icc.h"
-#include "save_options.h"
 #include "streams.h"
 
 #include "imgui_ext.h"
@@ -91,9 +93,21 @@ struct HEIFSaveOptions
     TransferFunction tf        = {TransferFunction::sRGB, 2.2f};
     size_t           encoder   = 0u;
     HEIFCodec        codec     = HEIFCodec::HEIF;
+    int              bit_depth = 0; ///< 8, 10 or 12, or 0 for Auto
 };
 
 static HEIFSaveOptions s_opts;
+
+/// The bit depth a HEIF is written at: the options' choice, or for Auto, 10 for PQ, HLG and linear, else 8.
+static int heif_bit_depth(int chosen, const TransferFunction &tf, heif_compression_format format)
+{
+    // JPEG has 8-bit samples only
+    if (format == heif_compression_JPEG)
+        return 8;
+    if (chosen > 0)
+        return chosen;
+    return is_hdr_encoding(tf) || tf.type == TransferFunction::Linear ? 10 : 8;
+}
 
 static std::vector<const heif_encoder_descriptor *> s_encoder_descriptors;
 static std::vector<HeifEncoderPtr>                  s_encoders;
@@ -265,7 +279,12 @@ static heif_transfer_characteristics transfer_function_to_heif(TransferFunction 
     case TransferFunction::Log100_Sqrt10: return heif_transfer_characteristic_logarithmic_100_sqrt10;
     case TransferFunction::IEC61966_2_4: return heif_transfer_characteristic_IEC_61966_2_4;
     case TransferFunction::DCI_P3: return heif_transfer_characteristic_SMPTE_ST_428_1;
-    default: return heif_transfer_characteristic_IEC_61966_2_1; // fallback to sRGB
+    // nclx names only these two gammas
+    case TransferFunction::Gamma:
+        return tf.gamma == 2.2f   ? heif_transfer_characteristic_ITU_R_BT_470_6_System_M
+               : tf.gamma == 2.8f ? heif_transfer_characteristic_ITU_R_BT_470_6_System_B_G
+                                  : heif_transfer_characteristic_unspecified;
+    default: return heif_transfer_characteristic_unspecified;
     }
 }
 
@@ -282,10 +301,14 @@ static bool is_heif_transfer_supported(TransferFunction tf)
     case heif_transfer_characteristic_logarithmic_100:
     case heif_transfer_characteristic_logarithmic_100_sqrt10:
     case heif_transfer_characteristic_IEC_61966_2_4:
-    case heif_transfer_characteristic_SMPTE_ST_428_1: return true;
+    case heif_transfer_characteristic_SMPTE_ST_428_1:
+    case heif_transfer_characteristic_ITU_R_BT_470_6_System_M:
+    case heif_transfer_characteristic_ITU_R_BT_470_6_System_B_G: return true;
     default: return false;
     }
 }
+
+bool heif_offers_tf(TransferFunction tf) { return is_heif_transfer_supported(tf); }
 
 static bool linearize_colors(float *pixels, int3 size, bool keep_primaries, const heif_color_profile_nclx *nclx,
                              string *profile_description = nullptr, Chromaticities *c = nullptr)
@@ -1115,14 +1138,33 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     {
         Timer timer;
 
-        int                        w = 0, h = 0, n = 0;
-        std::unique_ptr<uint8_t[]> pixels8;
-        void                      *pixels = nullptr;
-        pixels8                           = img.as_interleaved<uint8_t>(&w, &h, &n, params->tf, true, true, true);
+        // a transfer function nclx cannot name is written as sRGB, both the pixels and their label
+        TransferFunction tf = params->tf;
+        if (!is_heif_transfer_supported(tf))
+        {
+            spdlog::warn("HEIF: Transfer function '{}' not supported, falling back to sRGB.",
+                         transfer_function_name(tf));
+            tf = TransferFunction::sRGB;
+        }
 
-        // not every codec a HEIF can hold has an alpha channel (JPEG does not), so warn before dropping it
+        // the image's own primaries when nclx can name them, else the pixels are converted to BT.709's
+        const int  cicp_primaries  = img.chromaticities ? chromaticities_to_CICP(*img.chromaticities) : 1;
+        const bool convert_to_sRGB = cicp_primaries < 0;
+
         const auto encoder_format =
             heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[encoder_index]);
+        const int bit_depth = heif_bit_depth(params->bit_depth, tf, encoder_format);
+
+        // 8-bit samples directly, or 16-bit ones that fill_plane() reduces to the file's depth
+        int                         w = 0, h = 0, n = 0;
+        std::unique_ptr<uint8_t[]>  pixels8;
+        std::unique_ptr<uint16_t[]> pixels16;
+        if (bit_depth > 8)
+            pixels16 = img.as_interleaved<uint16_t>(&w, &h, &n, tf, true, true, convert_to_sRGB);
+        else
+            pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, tf, true, true, convert_to_sRGB);
+
+        // not every codec a HEIF can hold has an alpha channel (JPEG does not), so warn before dropping it
         const bool group_alpha = group_has_alpha(img.groups[img.selected_group].type);
         bool       keep_alpha  = params->use_alpha;
         if (keep_alpha && group_alpha && !codec_stores_alpha(encoder_format))
@@ -1135,18 +1177,25 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         // HEIF stores one or three color channels, each optionally with alpha. A two-channel U,V pair has
         // no one-channel reading, so it pads out to RGB with a zero third channel, as the viewport draws it.
         const int n_out = (group_alpha && !keep_alpha) ? n - 1 : (n == 2 && !group_alpha ? 3 : n);
+        auto      repack = [&](auto &buffer)
+        {
+            using T                     = std::remove_reference_t<decltype(buffer[0])>;
+            const size_t         num_px = (size_t)w * h;
+            std::unique_ptr<T[]> repacked(new T[num_px * n_out]);
+            for (size_t i = 0; i < num_px; ++i)
+                for (int c = 0; c < n_out; ++c) repacked[i * n_out + c] = (c < n) ? buffer[i * n + c] : T(0);
+            buffer.swap(repacked);
+        };
         if (n_out != n)
         {
-            const size_t               num_pixels = (size_t)w * h;
-            std::unique_ptr<uint8_t[]> repacked(new uint8_t[num_pixels * n_out]);
-            for (size_t i = 0; i < num_pixels; ++i)
-                for (int c = 0; c < n_out; ++c) repacked[i * n_out + c] = (c < n) ? pixels8[i * n + c] : uint8_t(0);
-            pixels8.swap(repacked);
+            if (pixels16)
+                repack(pixels16);
+            else
+                repack(pixels8);
             n = n_out;
         }
-        pixels = pixels8.get();
 
-        if (!pixels || w <= 0 || h <= 0)
+        if ((!pixels8 && !pixels16) || w <= 0 || h <= 0)
             throw std::runtime_error("HEIF: empty image or invalid image dimensions");
 
         if (n < 1 || n > 4)
@@ -1161,71 +1210,120 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         if (!ctx)
             throw std::runtime_error("HEIF: Failed to allocate encoding context");
 
+        const heif_chroma chroma =
+            mono            ? heif_chroma_monochrome
+            : bit_depth > 8 ? (n == 4 ? heif_chroma_interleaved_RRGGBBAA_LE : heif_chroma_interleaved_RRGGBB_LE)
+                            : (n == 4 ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB);
         HeifImagePtr heif_img(
             [&]
             {
                 heif_image *raw_heif_img = nullptr;
-                throw_on_error(
-                    heif_image_create(w, h, mono ? heif_colorspace_monochrome : heif_colorspace_RGB,
-                                      mono ? heif_chroma_monochrome
-                                           : (n == 4 ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB),
-                                      &raw_heif_img),
-                    "HEIF: Failed to create heif image");
+                throw_on_error(heif_image_create(w, h, mono ? heif_colorspace_monochrome : heif_colorspace_RGB, chroma,
+                                                 &raw_heif_img),
+                               "HEIF: Failed to create heif image");
                 return raw_heif_img;
             }(),
             heif_image_release);
 
-        if (mono)
+        // copies channels [first, first + count) of every pixel into a plane, at the file's bit depth; samples
+        // above 8 bits are 16-bit words in the host's (little-endian) order, which the _LE chromas name
+        auto fill_plane = [&](heif_channel channel, int first, int count)
         {
-            // monochrome keeps its channels in separate planes, so split the interleaved buffer apart
-            throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Y, w, h, 8),
-                           "HEIF: Failed to add luma plane");
-            if (has_alpha)
-                throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Alpha, w, h, 8),
-                               "HEIF: Failed to add alpha plane");
-
-            int      y_stride = 0, a_stride = 0;
-            uint8_t *y_plane = heif_image_get_plane(heif_img.get(), heif_channel_Y, &y_stride);
-            uint8_t *a_plane =
-                has_alpha ? heif_image_get_plane(heif_img.get(), heif_channel_Alpha, &a_stride) : nullptr;
+            int       stride = 0;
+            uint8_t  *plane  = heif_image_get_plane(heif_img.get(), channel, &stride);
+            const int shift  = 16 - bit_depth;
             for (int y = 0; y < h; ++y)
                 for (int x = 0; x < w; ++x)
-                {
-                    const uint8_t *src                = pixels8.get() + ((size_t)y * w + x) * n;
-                    y_plane[y * (size_t)y_stride + x] = src[0];
-                    if (a_plane)
-                        a_plane[y * (size_t)a_stride + x] = src[1];
-                }
+                    for (int c = 0; c < count; ++c)
+                    {
+                        const size_t src = ((size_t)y * w + x) * n + first + c;
+                        const size_t dst = (size_t)x * count + c;
+                        if (pixels16)
+                            reinterpret_cast<uint16_t *>(plane + y * (size_t)stride)[dst] = uint16_t(
+                                std::min<int>((pixels16[src] + (1 << shift >> 1)) >> shift, (1 << bit_depth) - 1));
+                        else
+                            plane[y * (size_t)stride + dst] = pixels8[src];
+                    }
+        };
+
+        if (mono)
+        {
+            // monochrome keeps its channels in separate planes
+            throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Y, w, h, bit_depth),
+                           "HEIF: Failed to add luma plane");
+            fill_plane(heif_channel_Y, 0, 1);
+            if (has_alpha)
+            {
+                throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_Alpha, w, h, bit_depth),
+                               "HEIF: Failed to add alpha plane");
+                fill_plane(heif_channel_Alpha, 1, 1);
+            }
         }
         else
         {
-            throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_interleaved, w, h, 8),
+            throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_interleaved, w, h, bit_depth),
                            "HEIF: Failed to add interleaved plane");
-
-            int      stride    = 0;
-            uint8_t *plane     = heif_image_get_plane(heif_img.get(), heif_channel_interleaved, &stride);
-            size_t   row_bytes = w * n * sizeof(uint8_t);
-            for (int y = 0; y < h; ++y) memcpy(plane + y * (size_t)stride, pixels8.get() + y * w * n, row_bytes);
+            fill_plane(heif_channel_interleaved, 0, n);
         }
 
-        // Set color profile (nclx)
+        // The nclx profile both steers libheif's conversion to YCbCr and, through the encoding options, is
+        // written to the file's colr box; with no options libheif writes none.
+        auto nclx = HeifNCLXPtr(heif_nclx_color_profile_alloc(), heif_nclx_color_profile_free);
+        if (!nclx)
+            throw std::runtime_error("HEIF: Failed to allocate nclx profile");
+        nclx->color_primaries          = (heif_color_primaries)(convert_to_sRGB ? 1 : cicp_primaries);
+        nclx->transfer_characteristics = transfer_function_to_heif(tf);
+        nclx->matrix_coefficients      = nclx->color_primaries == heif_color_primaries_ITU_R_BT_2020_2_and_2100_0
+                                             ? heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance
+                                             : heif_matrix_coefficients_ITU_R_BT_709_5;
+        nclx->full_range_flag          = true;
+        if (heif_image_set_nclx_color_profile(heif_img.get(), nclx.get()).code != heif_error_Ok)
+            spdlog::warn("HEIF: Failed to attach NCLX profile to image");
+
+#if LIBHEIF_NUMERIC_VERSION >= ((1 << 24) | (15 << 16) | (0 << 8) | 0) // 1.15.0
+        // An HDR encoding says how bright its content is, and on what display it was mastered when that is known;
+        // libheif writes them as the item's clli and mdcv properties
+        if (is_hdr_encoding(tf))
         {
-            auto nclx = HeifNCLXPtr(heif_nclx_color_profile_alloc(), heif_nclx_color_profile_free);
-            if (!nclx)
-                throw std::runtime_error("HEIF: Failed to allocate nclx profile");
-            nclx->color_primaries = heif_color_primaries_ITU_R_BT_709_5; // TODO map from img.chromaticities
-            auto heif_tf          = transfer_function_to_heif(params->tf);
-            if (!is_heif_transfer_supported(params->tf))
+            const auto               cll = measure_content_light_level(img, convert_to_sRGB);
+            heif_content_light_level clli{};
+            clli.max_content_light_level     = (uint16_t)std::clamp(std::lround(cll.max_cll), 0l, 65535l);
+            clli.max_pic_average_light_level = (uint16_t)std::clamp(std::lround(cll.max_fall), 0l, 65535l);
+            heif_image_set_content_light_level(heif_img.get(), &clli);
+
+            if (const auto md = mastering_display(img.metadata.value("header", json::object())))
             {
-                spdlog::warn("HEIF: Transfer function '{}' not supported, falling back to sRGB.",
-                             transfer_function_name(params->tf));
-                heif_tf = heif_transfer_characteristic_IEC_61966_2_1;
+                // chromaticities in units of 0.00002, luminance in units of 0.0001 cd/m^2, and the primaries in
+                // the green, blue, red order H.265 suggests
+                auto xy = [](float v) { return (uint16_t)std::clamp(std::lround(v * 50000.f), 0l, 50000l); };
+                heif_mastering_display_colour_volume mdcv{};
+                const float2 primaries[3] = {md->primaries.green, md->primaries.blue, md->primaries.red};
+                for (int i = 0; i < 3; ++i)
+                {
+                    mdcv.display_primaries_x[i] = xy(primaries[i].x);
+                    mdcv.display_primaries_y[i] = xy(primaries[i].y);
+                }
+                mdcv.white_point_x                   = xy(md->primaries.white.x);
+                mdcv.white_point_y                   = xy(md->primaries.white.y);
+                mdcv.max_display_mastering_luminance = (uint32_t)std::lround(std::max(0.f, md->max_nits) * 10000.f);
+                mdcv.min_display_mastering_luminance = (uint32_t)std::lround(std::max(0.f, md->min_nits) * 10000.f);
+                heif_image_set_mastering_display_colour_volume(heif_img.get(), &mdcv);
             }
-            nclx->transfer_characteristics = heif_tf;
-            nclx->matrix_coefficients      = heif_matrix_coefficients_ITU_R_BT_709_5;
-            nclx->full_range_flag          = true;
-            if (heif_image_set_nclx_color_profile(heif_img.get(), nclx.get()).code != heif_error_Ok)
-                spdlog::warn("HEIF: Failed to attach NCLX profile to image");
+        }
+#endif
+        std::unique_ptr<heif_encoding_options, void (*)(heif_encoding_options *)> encoding_options(
+            heif_encoding_options_alloc(), heif_encoding_options_free);
+        encoding_options->output_nclx_profile = nclx.get();
+
+        // An SDR transfer function other than sRGB also gets an ICC profile, which a reader that does not know its nclx
+        // code falls back on; libheif writes a second colr box for it only when asked to
+        if (!is_hdr_encoding(tf) && tf.type != TransferFunction::sRGB)
+        {
+            const auto chr = convert_to_sRGB || !img.chromaticities ? Chromaticities{} : *img.chromaticities;
+            const auto icc = (mono ? ICCProfile::Gray(chr.white, tf) : ICCProfile::RGB(chr, tf)).bytes();
+            if (!icc.empty() &&
+                heif_image_set_raw_color_profile(heif_img.get(), "prof", icc.data(), icc.size()).code == heif_error_Ok)
+                encoding_options->save_two_colr_boxes_when_ICC_and_nclx_available = 1;
         }
 
         // Encode
@@ -1233,8 +1331,9 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             [&]
             {
                 heif_image_handle *out_handle_raw = nullptr;
-                throw_on_error(heif_context_encode_image(ctx.get(), heif_img.get(), enc, nullptr, &out_handle_raw),
-                               "HEIF: encode failed");
+                throw_on_error(
+                    heif_context_encode_image(ctx.get(), heif_img.get(), enc, encoding_options.get(), &out_handle_raw),
+                    "HEIF: encode failed");
                 if (!out_handle_raw)
                     throw std::runtime_error("HEIF: encode returned NULL handle");
                 return out_handle_raw;
@@ -1278,7 +1377,7 @@ static void set_heif_lossless(heif_encoder *enc, bool lossless)
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool lossless,
-                     bool use_alpha, HEIFCodec codec, TransferFunction tf)
+                     bool use_alpha, HEIFCodec codec, TransferFunction tf, int bit_depth)
 {
     // the encoder table is built lazily, and only heif_parameters_gui() does it
     init_heif_supported_formats();
@@ -1291,6 +1390,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     params.use_alpha = use_alpha;
     params.tf        = tf;
     params.codec     = codec;
+    params.bit_depth = bit_depth;
     params.encoder   = default_encoder_for(codec, use_alpha);
     set_heif_lossless(s_encoders[params.encoder].get(), lossless);
     heif_encoder_set_lossy_quality(s_encoders[params.encoder].get(), quality);
@@ -1314,11 +1414,8 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
         remembered = default_encoder_for(codec, s_opts.use_alpha);
     s_opts.encoder = remembered;
 
-    if (ImGui::PE::Begin("HEIF/AVIF Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
         // Transfer function
         ImGui::PE::Entry(
@@ -1327,34 +1424,64 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
+                    // nclx names gammas only by code, so each one it has is a choice of its own
+                    std::vector<TransferFunction> tfs;
                     for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+                        if (i == TransferFunction::Gamma)
+                            tfs.insert(tfs.end(), {{TransferFunction::Gamma, 2.2f}, {TransferFunction::Gamma, 2.8f}});
+                        else
+                            tfs.push_back({(TransferFunction::Type_)i});
+                    for (const auto &tf : tfs)
                     {
-                        if (!is_heif_transfer_supported((TransferFunction::Type_)i))
+                        if (!heif_offers_tf(tf))
                             continue;
-                        bool selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
+                        const bool selected = s_opts.tf.type == tf.type &&
+                                              (tf.type != TransferFunction::Gamma || s_opts.tf.gamma == tf.gamma);
+                        if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
+                            s_opts.tf = tf;
                         if (selected)
                             ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
                 }
                 ImGui::Tooltip("Encode the pixel values using this transfer function.");
-                if (s_opts.tf.type == TransferFunction::Gamma)
-                {
-                    ImGui::Indent();
-                    ImGui::AlignTextToFramePadding();
-                    ImGui::TextUnformatted("Gamma");
-                    ImGui::SameLine(HelloImGui::EmSize(9.f));
-                    ImGui::SetNextItemWidth(-FLT_MIN);
-                    ImGui::SliderFloat("##Gamma", &s_opts.tf.gamma, 0.1f, 5.f);
-                    ImGui::Unindent();
-                }
                 return true;
             },
             "Encode the pixel values using this transfer function.");
+
+        // JPEG has 8-bit samples only, so it has no choice to offer
+        const auto format = candidates.empty()
+                                ? heif_compression_undefined
+                                : heif_encoder_descriptor_get_compression_format(s_encoder_descriptors[s_opts.encoder]);
+        if (format != heif_compression_JPEG)
+        {
+            auto depth_name = [&](int d)
+            {
+                return d ? fmt::format("{}-bit", d)
+                         : fmt::format("Auto ({}-bit)", heif_bit_depth(0, s_opts.tf, format));
+            };
+            ImGui::PE::Entry(
+                "Bit depth",
+                [&]
+                {
+                    bool changed = false;
+                    if (ImGui::BeginCombo("##Bit depth", depth_name(s_opts.bit_depth).c_str()))
+                    {
+                        for (int d : {0, 8, 10, 12})
+                        {
+                            const bool selected = s_opts.bit_depth == d;
+                            if (ImGui::Selectable(depth_name(d).c_str(), selected))
+                                s_opts.bit_depth = d, changed = true;
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    return changed;
+                },
+                "Bits per sample. Auto picks 10 for PQ, HLG and linear, which band at 8, and 8 otherwise. Not every "
+                "encoder writes more than 8.");
+        }
 
         // Include alpha
         ImGui::PE::Checkbox("Include alpha", &s_opts.use_alpha);
@@ -1537,14 +1664,26 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
             ImGui::PE::TreePop();
         }
 
+        if (reset_entry())
+            s_opts = HEIFSaveOptions{};
+
         ImGui::PE::End();
     }
 
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = HEIFSaveOptions{};
+    caveat_entry(heif_caveat(s_opts.tf));
 
     ctx.hdr = is_hdr_encoding(s_opts.tf);
+    ctx.records_primaries = true; //< in nclx
     return &s_opts;
 }
 
 #endif
+
+// Firefox 158 measured by hand, on an AVIF; macOS's ImageIO by test_export_roundtrip.cpp. With the ICC profile an SDR
+// transfer function other than sRGB carries beside its nclx box, macOS and Chromium 155 read every one right.
+Caveat heif_caveat(TransferFunction tf)
+{
+    if (tf.type == TransferFunction::ITU)
+        return {Misreader_Firefox, "Firefox reads BT.709 in an AVIF slightly differently."};
+    return {};
+}

@@ -7,6 +7,7 @@
 #include "imageio/j2k.h"
 #include "save_options.h"
 
+#include "imageio/icc.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 
@@ -62,7 +63,6 @@ void save_j2k_image(const Image &, ostream &, string_view, bool, int, J2KContain
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/exif.h"
-#include "imageio/icc.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
 #include "timer.h"
@@ -729,8 +729,17 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
 
     const int bit_depth = k_bit_depths[std::clamp(params->bit_depth_index, 0, k_num_bit_depths - 1)];
 
+    // A JP2 names its transfer function and primaries through an ICC profile in its colr box. A file without one, a
+    // raw codestream among them, reads back as sRGB over BT.709's primaries, so its pixels are converted to them
+    const bool             jp2  = params->container == J2KContainer::JP2;
+    const TransferFunction tf   = j2k_offers_tf(params->tf, params->container)
+                                      ? params->tf
+                                      : labeled_tf(params->tf, TransferFunction::sRGB, "JPEG 2000");
+    const bool             wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
+    const bool             icc  = jp2 && (tf.type != TransferFunction::sRGB || wide) && ICCProfile::can_label(tf);
+
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, params->tf, params->dither);
+    auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, tf, params->dither, true, /*convert_to_sRGB*/ !icc);
     if (!pixels || w <= 0 || h <= 0 || n < 1 || n > 4)
         throw runtime_error{"JPEG 2000: unsupported image dimensions or channel count"};
 
@@ -768,6 +777,17 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
                       opj_image_destroy};
     if (!img_out)
         throw runtime_error{"JPEG 2000: failed to allocate the image"};
+    if (icc)
+    {
+        const auto chr   = img.chromaticities.value_or(Chromaticities{});
+        const auto bytes = (n <= 2 ? ICCProfile::Gray(chr.white, tf) : ICCProfile::RGB(chr, tf)).bytes();
+        // opj_image_destroy() frees the profile with free()
+        if (!bytes.empty() && (img_out->icc_profile_buf = (OPJ_BYTE *)malloc(bytes.size())))
+        {
+            memcpy(img_out->icc_profile_buf, bytes.data(), bytes.size());
+            img_out->icc_profile_len = (OPJ_UINT32)bytes.size();
+        }
+    }
 
     img_out->x0 = 0;
     img_out->y0 = 0;
@@ -851,38 +871,8 @@ const char *j2k_extension(const J2KSaveOptions *params)
 
 J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("JPEG 2000 Save Options",
-                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
+    if (begin_options_table(ctx))
     {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Encode the pixel values using this transfer function.\nWARNING: JPEG 2000 records no transfer "
-            "function of its own, so other software will read this file as sRGB.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
-
         {
             int container = (int)s_opts.container;
             ImGui::PE::Combo("Container", &container,
@@ -893,6 +883,39 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
                              "profile and any metadata go. A raw codestream carries none of that, and is what "
                              "a container of its own holds, such as a HEIF item or an MJ2 track.");
             s_opts.container = (J2KContainer)container;
+        }
+
+        // a JP2 takes any transfer function an ICC profile can name; a raw codestream is sRGB
+        if (!j2k_offers_tf(s_opts.tf, s_opts.container))
+            s_opts.tf = TransferFunction::sRGB;
+        if (s_opts.container == J2KContainer::JP2 && ICCProfile::can_describe(TransferFunction::Linear))
+        {
+            ImGui::PE::Entry(
+                "Transfer function",
+                [&]
+                {
+                    bool changed = false;
+                    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
+                    {
+                        for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+                        {
+                            const TransferFunction tf{(TransferFunction::Type_)i, s_opts.tf.gamma};
+                            if (!j2k_offers_tf(tf, s_opts.container))
+                                continue;
+                            const bool selected = s_opts.tf.type == tf.type;
+                            if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
+                                s_opts.tf = tf, changed = true;
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    return changed;
+                },
+                "Encode the pixel values using this transfer function, which an ICC profile records.");
+            if (s_opts.tf.type == TransferFunction::Gamma)
+                ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
+                                       "When using a gamma transfer function, this is the gamma value to use.");
         }
         ImGui::PE::Combo("Bit depth", &s_opts.bit_depth_index,
                          "8-bit\0"
@@ -913,14 +936,18 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
                             "Decorrelate the three color components before the wavelet, which compresses RGB "
                             "images considerably better.");
 
+        if (reset_entry())
+            s_opts = J2KSaveOptions{};
+
         ImGui::PE::End();
     }
 
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = J2KSaveOptions{};
-
-    ctx.hdr = is_hdr_encoding(s_opts.tf);
+    ctx.hdr               = is_hdr_encoding(s_opts.tf);
+    ctx.records_primaries = s_opts.container == J2KContainer::JP2 && ICCProfile::can_label(s_opts.tf);
     return &s_opts;
 }
 
 #endif // HDRVIEW_ENABLE_J2K
+
+bool j2k_offers_tf(TransferFunction tf, J2KContainer container)
+{ return tf.type == TransferFunction::sRGB || (container == J2KContainer::JP2 && ICCProfile::can_label(tf)); }

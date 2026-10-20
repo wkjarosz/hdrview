@@ -33,6 +33,8 @@ enum class J2KContainer
 struct J2KSaveOptions;
 struct SaveContext;
 J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx);
+/// Whether the JPEG 2000 save options offer \p tf for \p container: any ICC-labeled one in a JP2, else sRGB.
+bool j2k_offers_tf(TransferFunction tf, J2KContainer container);
 /// The extension for the syntax `params` asks for, since the two share one entry in the save dialog.
 const char *j2k_extension(const J2KSaveOptions *params);
 // throws on error

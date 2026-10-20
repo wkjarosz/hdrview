@@ -26,8 +26,7 @@ using namespace std;
 
 struct PFMSaveOptions
 {
-    TransferFunction tf   = {TransferFunction::Linear, 1.f};
-};
+}; // PFM has no options
 
 static PFMSaveOptions s_opts;
 
@@ -197,11 +196,12 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
     os.write((const char *)data, (std::streamsize)((size_t)width * height * num_channels * sizeof(float)));
 }
 
-void save_pfm_image(const Image &img, ostream &os, string_view filename, TransferFunction tf)
+void save_pfm_image(const Image &img, ostream &os, string_view filename)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<float>(&w, &h, &n, tf);
+    // PFM records no transfer function, and is read back as linear
+    auto pixels = img.as_interleaved<float>(&w, &h, &n, TransferFunction::Linear);
     write_pfm_image(os, filename, w, h, n, pixels.get());
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
@@ -211,54 +211,16 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
     if (!opts)
         throw std::invalid_argument("PFMSaveOptions pointer is null");
 
-    Timer timer;
-    // get interleaved float pixel data
-    int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<float>(&w, &h, &n, opts->tf);
-    write_pfm_image(os, filename, w, h, n, pixels.get());
-    spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
+    save_pfm_image(img, os, filename);
 }
 
 // GUI parameter function
 PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx)
 {
-    if (ImGui::PE::Begin("PFM Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
-    {
-        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
-        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Encode the pixel values using this transfer function.\nWARNING: values in a PFM "
-            "file are typically assumed linear, and there is no way to signal in the file "
-            "that the values are encoded with a different transfer function.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
-        ImGui::PE::End();
-    }
-
-    if (ImGui::Button("Reset options to defaults"))
-        s_opts = PFMSaveOptions{};
-
+    // PFM stores linear 32-bit floats, with nothing to choose
+    no_options_entry();
     ctx.hdr = true;
     return &s_opts;
 }
+
+bool pfm_offers_tf(TransferFunction tf) { return tf.type == TransferFunction::Linear; }
