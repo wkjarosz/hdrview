@@ -28,7 +28,7 @@ struct SaveContext;
 struct Caveat;
 TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx);
 /// Whether the TIFF save options offer \p tf at \p data_type_index (float: linear; integer: sRGB or ICC-labeled).
-bool tiff_offers_curve(TransferFunction tf, int data_type_index);
+bool tiff_offers_tf(TransferFunction tf, int data_type_index);
 /// Which applications misread a TIFF with the curve \p tf, over a gamut other than BT.709's when \p wide_gamut.
 Caveat tiff_caveat(TransferFunction tf, bool wide_gamut);
 // throws on error

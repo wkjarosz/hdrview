@@ -24,27 +24,22 @@ std::vector<ImagePtr> load_stb_image(std::istream &is, const std::string_view fi
 // throws on error
 // void save_stb_image(const Image &img, std::ostream &os, const std::string_view filename, bool sRGB = true,
 //                     bool dither = true);
-void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename,
-                  TransferFunction tf = TransferFunction::Linear);
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename);
 void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename,
-                  TransferFunction tf = TransferFunction::sRGB, bool dither = true, float quality = 95.f);
+void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, bool dither = true,
+                  float quality = 95.f);
 void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename,
-                  TransferFunction tf = TransferFunction::sRGB, bool dither = true);
+void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, bool dither = true);
 void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename,
-                  TransferFunction tf = TransferFunction::sRGB, bool dither = true);
+void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, bool dither = true);
 void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename,
-                  TransferFunction tf = TransferFunction::sRGB, bool dither = true);
+void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, bool dither = true);
 void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
 STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &ctx);
 /// Whether the stb save options offer \p tf: linear for .hdr and sRGB otherwise, which readers assume.
-bool stb_offers_curve(TransferFunction tf, bool is_hdr);
-void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
+bool stb_offers_tf(TransferFunction tf, bool is_hdr);

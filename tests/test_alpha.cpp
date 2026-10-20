@@ -271,7 +271,7 @@ TEST_CASE("Every loader reports the alpha kind its format settles")
          TransparencyType_PremultipliedLinear},
         {"a.qoi", [](const Image &i, std::ostream &o) { save_qoi_image(i, o, "a.qoi", true, false); },
          TransparencyType_Straight},
-        {"a.tga", [](const Image &i, std::ostream &o) { save_stb_tga(i, o, "a.tga", TransferFunction::sRGB, false); },
+        {"a.tga", [](const Image &i, std::ostream &o) { save_stb_tga(i, o, "a.tga", false); },
          TransparencyType_Straight},
 #if HDRVIEW_ENABLE_LIBTIFF
         // written with an EXTRASAMPLES tag, so the file itself carries the signal

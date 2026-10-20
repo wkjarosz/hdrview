@@ -40,7 +40,7 @@ struct Caveat;
 /// Draws the options for `codec`, listing only the encoders that implement it.
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx);
 /// Whether the HEIF/AVIF save options offer \p tf: whether an nclx box can name it.
-bool heif_offers_curve(TransferFunction tf);
+bool heif_offers_tf(TransferFunction tf);
 /// Which applications misread a HEIF or AVIF with the curve \p tf, and how.
 Caveat heif_caveat(TransferFunction tf);
 // throws on error

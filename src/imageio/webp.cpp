@@ -548,7 +548,7 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
     // WebP names its curve and primaries only through an ICC profile in an ICCP chunk; without one a reader takes it
     // for sRGB over BT.709's primaries
     const TransferFunction tf =
-        webp_offers_curve(opts->tf) ? opts->tf : labeled_curve(opts->tf, TransferFunction::sRGB, "WebP");
+        webp_offers_tf(opts->tf) ? opts->tf : labeled_tf(opts->tf, TransferFunction::sRGB, "WebP");
     const bool           wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
     std::vector<uint8_t> icc;
     if (tf.type != TransferFunction::sRGB || wide)
@@ -660,7 +660,7 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
                         for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
                         {
                             const TransferFunction tf{(TransferFunction::Type_)i, s_opts.tf.gamma};
-                            if (!webp_offers_curve(tf))
+                            if (!webp_offers_tf(tf))
                                 continue;
                             const bool selected = s_opts.tf.type == tf.type;
                             if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
@@ -699,7 +699,7 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 
 #endif
 
-bool webp_offers_curve(TransferFunction tf)
+bool webp_offers_tf(TransferFunction tf)
 {
     // any curve an ICC profile names, and sRGB, which needs none
     return tf.type == TransferFunction::sRGB || ICCProfile::can_label(tf);

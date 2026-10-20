@@ -25,6 +25,6 @@ struct QOISaveOptions;
 struct SaveContext;
 QOISaveOptions *qoi_parameters_gui(SaveContext &ctx);
 /// Whether the QOI save options offer \p tf: the sRGB and linear its header can name.
-bool qoi_offers_curve(TransferFunction tf);
+bool qoi_offers_tf(TransferFunction tf);
 // throws on error
 void save_qoi_image(const Image &img, std::ostream &os, std::string_view filename, const QOISaveOptions *opts);

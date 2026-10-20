@@ -405,10 +405,10 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
 
 // stb's files record no transfer function, and readers take .hdr for linear and the rest for sRGB, so each
 // writer encodes with the one its readers assume
-void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf)
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename)
 {
-    tf = labeled_curve(tf, TransferFunction::Linear, "HDR");
-    spdlog::debug("Saving stb HDR with tf {}, gamma {}.", (int)tf.type, tf.gamma);
+    const TransferFunction tf = TransferFunction::Linear;
+    spdlog::debug("Saving stb HDR.");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<float>(&w, &h, &n, tf, false);
@@ -421,15 +421,13 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_hdr(img, os, filename, TransferFunction::Linear);
+    save_stb_hdr(img, os, filename);
 }
 
-void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither,
-                  float quality)
+void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, bool dither, float quality)
 {
-    tf = labeled_curve(tf, TransferFunction::sRGB, "JPG");
-    spdlog::debug("Saving stb JPG with tf {}, gamma {}, dither {}, quality {}.", (int)tf.type, tf.gamma,
-                  dither ? "true" : "false", quality);
+    const TransferFunction tf = TransferFunction::sRGB;
+    spdlog::debug("Saving stb JPG with dither {}, quality {}.", dither ? "true" : "false", quality);
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
@@ -442,13 +440,13 @@ void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_jpg(img, os, filename, TransferFunction::sRGB, opts->dither, float(opts->quality));
+    save_stb_jpg(img, os, filename, opts->dither, float(opts->quality));
 }
 
-void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
+void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, bool dither)
 {
-    tf = labeled_curve(tf, TransferFunction::sRGB, "TGA");
-    spdlog::debug("Saving stb TGA with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
+    const TransferFunction tf = TransferFunction::sRGB;
+    spdlog::debug("Saving stb TGA with dither {}.", dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
@@ -461,13 +459,13 @@ void save_stb_tga(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_tga(img, os, filename, TransferFunction::sRGB, opts->dither);
+    save_stb_tga(img, os, filename, opts->dither);
 }
 
-void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
+void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, bool dither)
 {
-    tf = labeled_curve(tf, TransferFunction::sRGB, "BMP");
-    spdlog::debug("Saving stb BMP with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
+    const TransferFunction tf = TransferFunction::sRGB;
+    spdlog::debug("Saving stb BMP with dither {}.", dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
@@ -480,13 +478,13 @@ void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_bmp(img, os, filename, TransferFunction::sRGB, opts->dither);
+    save_stb_bmp(img, os, filename, opts->dither);
 }
 
-void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, TransferFunction tf, bool dither)
+void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, bool dither)
 {
-    tf = labeled_curve(tf, TransferFunction::sRGB, "PNG");
-    spdlog::debug("Saving stb PNG with tf {}, gamma {}, dither {}.", (int)tf.type, tf.gamma, dither ? "true" : "false");
+    const TransferFunction tf = TransferFunction::sRGB;
+    spdlog::debug("Saving stb PNG with dither {}.", dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
@@ -499,7 +497,7 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
 {
     if (!opts)
         throw std::invalid_argument("STBSaveOptions pointer is null.");
-    save_stb_png(img, os, filename, TransferFunction::sRGB, opts->dither);
+    save_stb_png(img, os, filename, opts->dither);
 }
 
 // void save_stb_image(const Image &img, ostream &os, const string_view filename, bool sRGB, bool dither)
@@ -554,5 +552,5 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
     return &opts;
 }
 
-bool stb_offers_curve(TransferFunction tf, bool is_hdr)
+bool stb_offers_tf(TransferFunction tf, bool is_hdr)
 { return tf.type == (is_hdr ? TransferFunction::Linear : TransferFunction::sRGB); }

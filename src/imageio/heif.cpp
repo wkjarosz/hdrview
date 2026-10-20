@@ -42,7 +42,7 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
 
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec, SaveContext &) { return nullptr; }
 
-bool heif_offers_curve(TransferFunction) { return false; }
+bool heif_offers_tf(TransferFunction) { return false; }
 
 #else
 
@@ -308,7 +308,7 @@ static bool is_heif_transfer_supported(TransferFunction tf)
     }
 }
 
-bool heif_offers_curve(TransferFunction tf) { return is_heif_transfer_supported(tf); }
+bool heif_offers_tf(TransferFunction tf) { return is_heif_transfer_supported(tf); }
 
 static bool linearize_colors(float *pixels, int3 size, bool keep_primaries, const heif_color_profile_nclx *nclx,
                              string *profile_description = nullptr, Chromaticities *c = nullptr)
@@ -1425,21 +1425,20 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
                     // nclx names gammas only by code, so each one it has is a choice of its own
-                    std::vector<TransferFunction> curves;
+                    std::vector<TransferFunction> tfs;
                     for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
                         if (i == TransferFunction::Gamma)
-                            curves.insert(curves.end(),
-                                          {{TransferFunction::Gamma, 2.2f}, {TransferFunction::Gamma, 2.8f}});
+                            tfs.insert(tfs.end(), {{TransferFunction::Gamma, 2.2f}, {TransferFunction::Gamma, 2.8f}});
                         else
-                            curves.push_back({(TransferFunction::Type_)i});
-                    for (const auto &curve : curves)
+                            tfs.push_back({(TransferFunction::Type_)i});
+                    for (const auto &tf : tfs)
                     {
-                        if (!heif_offers_curve(curve))
+                        if (!heif_offers_tf(tf))
                             continue;
-                        const bool selected = s_opts.tf.type == curve.type &&
-                                              (curve.type != TransferFunction::Gamma || s_opts.tf.gamma == curve.gamma);
-                        if (ImGui::Selectable(transfer_function_name(curve).c_str(), selected))
-                            s_opts.tf = curve;
+                        const bool selected = s_opts.tf.type == tf.type &&
+                                              (tf.type != TransferFunction::Gamma || s_opts.tf.gamma == tf.gamma);
+                        if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
+                            s_opts.tf = tf;
                         if (selected)
                             ImGui::SetItemDefaultFocus();
                     }

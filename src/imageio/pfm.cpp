@@ -196,12 +196,12 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
     os.write((const char *)data, (std::streamsize)((size_t)width * height * num_channels * sizeof(float)));
 }
 
-void save_pfm_image(const Image &img, ostream &os, string_view filename, TransferFunction tf)
+void save_pfm_image(const Image &img, ostream &os, string_view filename)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
     // PFM records no transfer function, and is read back as linear
-    auto pixels = img.as_interleaved<float>(&w, &h, &n, labeled_curve(tf, TransferFunction::Linear, "PFM"));
+    auto pixels = img.as_interleaved<float>(&w, &h, &n, TransferFunction::Linear);
     write_pfm_image(os, filename, w, h, n, pixels.get());
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
@@ -211,7 +211,7 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
     if (!opts)
         throw std::invalid_argument("PFMSaveOptions pointer is null");
 
-    save_pfm_image(img, os, filename, TransferFunction::Linear);
+    save_pfm_image(img, os, filename);
 }
 
 // GUI parameter function
@@ -223,4 +223,4 @@ PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx)
     return &s_opts;
 }
 
-bool pfm_offers_curve(TransferFunction tf) { return tf.type == TransferFunction::Linear; }
+bool pfm_offers_tf(TransferFunction tf) { return tf.type == TransferFunction::Linear; }

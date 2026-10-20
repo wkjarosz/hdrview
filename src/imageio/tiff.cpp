@@ -1325,9 +1325,9 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
 
     // A TIFF names its curve and primaries only through an ICC profile; without one a reader takes integer samples
     // for sRGB and float ones for linear, over BT.709's primaries
-    const auto default_curve = opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
+    const auto             default_tf = opts->data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
     const TransferFunction tf =
-        tiff_offers_curve(opts->tf, opts->data_type_index) ? opts->tf : labeled_curve(opts->tf, default_curve, "TIFF");
+        tiff_offers_tf(opts->tf, opts->data_type_index) ? opts->tf : labeled_tf(opts->tf, default_tf, "TIFF");
 
     // Set custom error/warning handlers
     TIFFSetErrorHandler(error_handler);
@@ -1382,7 +1382,7 @@ void save_tiff_image(const Image &img, std::ostream &os, std::string_view filena
     // an ICC profile for any curve or primaries but the defaults: most readers, macOS's among them, take it over
     // the tags above, and it alone names a curve
     const bool wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
-    if (tf.type != default_curve || wide)
+    if (tf.type != default_tf || wide)
     {
         const auto chr = img.chromaticities.value_or(Chromaticities{});
         const auto icc = (n <= 2 ? ICCProfile::Gray(chr.white, tf) : ICCProfile::RGB(chr, tf)).bytes();
@@ -1493,7 +1493,7 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 
         // the chosen curve falls back on the default when the data type does not offer it; only integer samples
         // offer a choice, and only where this build can write an ICC profile to record it
-        if (!tiff_offers_curve(s_opts.tf, s_opts.data_type_index))
+        if (!tiff_offers_tf(s_opts.tf, s_opts.data_type_index))
             s_opts.tf = s_opts.data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB;
         if (s_opts.data_type_index != 2 && ICCProfile::can_describe(TransferFunction::Linear))
             ImGui::PE::Entry(
@@ -1506,7 +1506,7 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
                         for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
                         {
                             const TransferFunction tf{(TransferFunction::Type_)i, s_opts.tf.gamma};
-                            if (!tiff_offers_curve(tf, s_opts.data_type_index))
+                            if (!tiff_offers_tf(tf, s_opts.data_type_index))
                                 continue;
                             const bool selected = s_opts.tf.type == tf.type;
                             if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
@@ -1538,7 +1538,7 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 
 #endif
 
-bool tiff_offers_curve(TransferFunction tf, int data_type_index)
+bool tiff_offers_tf(TransferFunction tf, int data_type_index)
 {
     // float samples are linear; integer ones are sRGB, or any curve an ICC profile names
     if (data_type_index == 2)

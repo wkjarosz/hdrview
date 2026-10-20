@@ -732,9 +732,9 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
     // A JP2 names its curve and primaries through an ICC profile in its colr box. A file without one, a raw codestream
     // among them, reads back as sRGB over BT.709's primaries, so its pixels are converted to those primaries
     const bool             jp2  = params->container == J2KContainer::JP2;
-    const TransferFunction tf   = j2k_offers_curve(params->tf, params->container)
+    const TransferFunction tf   = j2k_offers_tf(params->tf, params->container)
                                       ? params->tf
-                                      : labeled_curve(params->tf, TransferFunction::sRGB, "JPEG 2000");
+                                      : labeled_tf(params->tf, TransferFunction::sRGB, "JPEG 2000");
     const bool             wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
     const bool             icc  = jp2 && (tf.type != TransferFunction::sRGB || wide) && ICCProfile::can_label(tf);
 
@@ -886,7 +886,7 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
         }
 
         // a JP2 takes any curve an ICC profile can name; a raw codestream is sRGB
-        if (!j2k_offers_curve(s_opts.tf, s_opts.container))
+        if (!j2k_offers_tf(s_opts.tf, s_opts.container))
             s_opts.tf = TransferFunction::sRGB;
         if (s_opts.container == J2KContainer::JP2 && ICCProfile::can_describe(TransferFunction::Linear))
         {
@@ -900,7 +900,7 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
                         for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
                         {
                             const TransferFunction tf{(TransferFunction::Type_)i, s_opts.tf.gamma};
-                            if (!j2k_offers_curve(tf, s_opts.container))
+                            if (!j2k_offers_tf(tf, s_opts.container))
                                 continue;
                             const bool selected = s_opts.tf.type == tf.type;
                             if (ImGui::Selectable(transfer_function_name(tf).c_str(), selected))
@@ -949,5 +949,5 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
 
 #endif // HDRVIEW_ENABLE_J2K
 
-bool j2k_offers_curve(TransferFunction tf, J2KContainer container)
+bool j2k_offers_tf(TransferFunction tf, J2KContainer container)
 { return tf.type == TransferFunction::sRGB || (container == J2KContainer::JP2 && ICCProfile::can_label(tf)); }

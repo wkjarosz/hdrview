@@ -41,7 +41,7 @@ json get_jxl_info() { return json{{"name", "libjxl"}}; }
 
 bool is_jxl_image(istream &is) noexcept { return false; }
 
-bool jxl_offers_curve(TransferFunction) noexcept { return false; }
+bool jxl_offers_tf(TransferFunction) noexcept { return false; }
 
 vector<ImagePtr> load_jxl_image(istream &, string_view, const ImageLoadOptions &)
 {
@@ -167,7 +167,7 @@ static JxlTransferFunction jxl_tf(TransferFunction tf) noexcept
     }
 }
 
-bool jxl_offers_curve(TransferFunction tf) noexcept { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
+bool jxl_offers_tf(TransferFunction tf) noexcept { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
 
 // Return JSON describing libjxl availability and version
 json get_jxl_info()
@@ -1190,7 +1190,7 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
                 {
                     for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
-                        if (!jxl_offers_curve({(TransferFunction::Type_)i, s_opts.tf.gamma}))
+                        if (!jxl_offers_tf({(TransferFunction::Type_)i, s_opts.tf.gamma}))
                             continue;
                         bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
                         if (ImGui::Selectable(

@@ -246,16 +246,16 @@ TEST_CASE("A profile built for a curve reads back as that curve and those primar
     // Every curve, with gamma at an exponent no other curve shares, as an RGB profile over BT.709 and a wide gamut
     // and as a gray one, read back through the path a loader takes. PQ and HLG read back through their cicp tag,
     // and through their curves as the SDR clip a reader that ignores the tag sees.
-    std::vector<TransferFunction> curves;
+    std::vector<TransferFunction> tfs;
     for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
         if (i != TransferFunction::Gamma)
-            curves.push_back({(TransferFunction::Type_)i});
-    curves.push_back({TransferFunction::Gamma, 1.8f});
+            tfs.push_back({(TransferFunction::Type_)i});
+    tfs.push_back({TransferFunction::Gamma, 1.8f});
 
     const Chromaticities gamuts[] = {Chromaticities{}, gamut_chromaticities(ColorGamut_Display_P3_SMPTE432)};
     constexpr int        num      = 64;
 
-    for (const auto &tf : curves)
+    for (const auto &tf : tfs)
     {
         CAPTURE(transfer_function_name(tf));
         const bool hdr  = tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG;

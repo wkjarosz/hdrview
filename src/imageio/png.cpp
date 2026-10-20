@@ -45,7 +45,7 @@ void save_png_image(const Image &, std::ostream &, std::string_view, bool, bool,
 
 PNGSaveOptions *png_parameters_gui(SaveContext &) { return &s_opts; }
 
-bool png_offers_curve(TransferFunction) { return false; }
+bool png_offers_tf(TransferFunction) { return false; }
 
 void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params)
 {
@@ -880,7 +880,7 @@ constexpr bool k_can_write_cicp = PNG_cICP_SUPPORTED_ENABLED;
 
 } // namespace
 
-bool png_offers_curve(TransferFunction tf)
+bool png_offers_tf(TransferFunction tf)
 {
     if (tf.type == TransferFunction::Unspecified || tf.type == TransferFunction::Invalid)
         return false;
@@ -1087,7 +1087,7 @@ PNGSaveOptions *png_parameters_gui(SaveContext &ctx)
                 {
                     for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
-                        if (!png_offers_curve({(TransferFunction::Type_)i, s_opts.tf.gamma}))
+                        if (!png_offers_tf({(TransferFunction::Type_)i, s_opts.tf.gamma}))
                             continue;
                         bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
                         if (ImGui::Selectable(

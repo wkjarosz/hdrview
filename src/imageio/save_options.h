@@ -23,8 +23,8 @@ struct SaveContext
 inline bool is_hdr_encoding(const TransferFunction &tf, bool floating_point = false)
 { return floating_point || tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG; }
 
-/// Returns \p curve, the one transfer function \p format can label, warning when \p asked was another.
-TransferFunction labeled_curve(const TransferFunction &asked, TransferFunction::Type_ curve, const char *format);
+/// Returns \p tf, the one transfer function \p format can label, warning when \p asked was another.
+TransferFunction labeled_tf(const TransferFunction &asked, TransferFunction::Type_ tf, const char *format);
 
 /// Applications known to misread some files HDRView writes, which the save dialogs warn of.
 enum Misreader_ : unsigned

@@ -53,9 +53,8 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, bool sRGB, bool dither, int quality,
-                    bool progressive)
-{ return save_stb_jpg(img, os, filename, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither, quality); }
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, bool dither, int quality, bool)
+{ return save_stb_jpg(img, os, filename, dither, quality); }
 
 JPGSaveOptions *jpg_parameters_gui(SaveContext &) { return &s_opts; }
 
@@ -732,12 +731,11 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     return load_jpg_image(is, filename, opts, true);
 }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filename*/, bool sRGB, bool dither,
-                    int quality, bool progressive)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view /*filename*/, bool dither, int quality,
+                    bool progressive)
 {
     // this writer labels no transfer function, so the pixels are sRGB-encoded, as a reader assumes
-    const auto tf =
-        labeled_curve(sRGB ? TransferFunction::sRGB : TransferFunction::Linear, TransferFunction::sRGB, "JPEG");
+    const TransferFunction tf = TransferFunction::sRGB;
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved<uint8_t>(&w, &h, &n, tf, dither);
     // Validation: ensure we actually have pixel data / valid dimensions
@@ -852,9 +850,9 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     if (params == nullptr)
         throw std::invalid_argument("JPGSaveOptions pointer is null");
 
-    save_jpg_image(img, os, filename, true, params->dither, params->quality, params->progressive);
+    save_jpg_image(img, os, filename, params->dither, params->quality, params->progressive);
 }
 
 #endif
 
-bool jpg_offers_curve(TransferFunction tf) { return tf.type == TransferFunction::sRGB; }
+bool jpg_offers_tf(TransferFunction tf) { return tf.type == TransferFunction::sRGB; }

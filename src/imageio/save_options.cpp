@@ -12,12 +12,12 @@
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
-TransferFunction labeled_curve(const TransferFunction &asked, TransferFunction::Type_ curve, const char *format)
+TransferFunction labeled_tf(const TransferFunction &asked, TransferFunction::Type_ tf, const char *format)
 {
-    if (asked.type != curve)
+    if (asked.type != tf)
         spdlog::warn("{} cannot record the {} transfer function; writing {} instead.", format,
-                     transfer_function_name(asked), transfer_function_name(curve));
-    return curve;
+                     transfer_function_name(asked), transfer_function_name(tf));
+    return tf;
 }
 
 void caveat_entry(const Caveat &caveat)

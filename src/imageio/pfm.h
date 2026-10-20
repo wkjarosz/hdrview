@@ -22,13 +22,12 @@ std::unique_ptr<float[]> load_pfm_image(std::istream &is, std::string_view filen
 // throws on error
 void write_pfm_image(std::ostream &os, std::string_view filename, int width, int height, int num_channels,
                      const float data[]);
-void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename,
-                    TransferFunction tf = {TransferFunction::Linear, 1.f});
+void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename);
 
 struct PFMSaveOptions;
 struct SaveContext;
 PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx);
 /// Whether the PFM save options offer \p tf: only linear, which a reader assumes.
-bool pfm_offers_curve(TransferFunction tf);
+bool pfm_offers_tf(TransferFunction tf);
 // throws on error
 void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename, const PFMSaveOptions *opts);

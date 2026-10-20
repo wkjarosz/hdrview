@@ -207,7 +207,7 @@ bool ICCProfile::can_describe(const TransferFunction &tf) { return tone_curve(tf
 namespace
 {
 
-bool is_hdr_curve(const TransferFunction &tf)
+bool is_hdr_tf(const TransferFunction &tf)
 { return tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG; }
 
 /// The curve a reader that ignores a profile's cicp tag falls back on: \p tf relative to SDR white, clipped at it.
@@ -220,8 +220,7 @@ ToneCurve hdr_fallback_curve(const TransferFunction &tf)
 }
 
 /// The curve to build a profile for \p tf with: its own, or for PQ and HLG the fallback their cicp tag stands over.
-ToneCurve profile_curve(const TransferFunction &tf)
-{ return is_hdr_curve(tf) ? hdr_fallback_curve(tf) : tone_curve(tf); }
+ToneCurve profile_curve(const TransferFunction &tf) { return is_hdr_tf(tf) ? hdr_fallback_curve(tf) : tone_curve(tf); }
 
 /// Tags \p profile, if \p tf is PQ or HLG, with the cicp code points of \p primaries and \p tf (ICC.1:2022).
 /**
@@ -230,7 +229,7 @@ ToneCurve profile_curve(const TransferFunction &tf)
 */
 void add_cicp_tag(cmsHPROFILE profile, int primaries, const TransferFunction &tf)
 {
-    if (!is_hdr_curve(tf))
+    if (!is_hdr_tf(tf))
         return;
     uint8_t tag[12] = {'c', 'i', 'c', 'p'}; // the type signature, then four reserved bytes
     tag[8]          = uint8_t(primaries < 0 ? 2 : primaries);
@@ -243,7 +242,7 @@ void add_cicp_tag(cmsHPROFILE profile, int primaries, const TransferFunction &tf
 
 } // namespace
 
-bool ICCProfile::can_label(const TransferFunction &tf) { return can_describe(tf) || is_hdr_curve(tf); }
+bool ICCProfile::can_label(const TransferFunction &tf) { return can_describe(tf) || is_hdr_tf(tf); }
 
 ICCProfile ICCProfile::RGB(const Chromaticities &chr, const TransferFunction &tf)
 {

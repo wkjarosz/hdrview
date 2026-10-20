@@ -322,7 +322,7 @@ receives a `SaveContext` (`imageio/save_options.h`), through which it reports wh
 above SDR white and whether the file can record its primaries. Scaling the data is an edit (Exposure/gamma...), not
 a save option, so it applies the same way to every format.
 
-A format offers only the transfer functions it can label, through its `X_offers_curve()`, which both its options
+A format offers only the transfer functions it can label, through its `X_offers_tf()`, which both its options
 GUI and `tests/test_export_roundtrip.cpp` use; TIFF, JP2 and WebP label a curve with an ICC profile, which names PQ
 and HLG through a `cicp` tag (`ICCProfile::can_label()`). Its `X_caveat()` names applications known to misread a
 file anyway (`Caveat` and the `Misreader_` flags in `save_options.h`: macOS's ImageIO, Chromium, Firefox), which the

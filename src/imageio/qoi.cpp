@@ -194,7 +194,7 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
                     for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
                     {
                         const auto type = (TransferFunction::Type_)i;
-                        if (!qoi_offers_curve(type))
+                        if (!qoi_offers_tf(type))
                             continue;
                         bool is_selected = s_opts.tf.type == type;
                         if (ImGui::Selectable(transfer_function_name(type).c_str(), is_selected))
@@ -220,5 +220,5 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
     return &s_opts;
 }
 
-bool qoi_offers_curve(TransferFunction tf)
+bool qoi_offers_tf(TransferFunction tf)
 { return tf.type == TransferFunction::sRGB || tf.type == TransferFunction::Linear; }
