@@ -129,7 +129,7 @@ TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profil
             REQUIRE(reloaded);
 
             const bool stated = tf.type == TransferFunction::Linear || tf.type == TransferFunction::Gamma ||
-                                tf.type == TransferFunction::sRGB;
+                                tf.type == TransferFunction::sRGB || tf.type == TransferFunction::ITU;
             if (stated || !ICCProfile::can_describe(tf))
             {
                 CHECK(reloaded->icc_data.empty());
@@ -219,7 +219,7 @@ TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profil
         CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
     }
 
-    SUBCASE("the ITU curve is approximated as gAMA 2.2")
+    SUBCASE("the BT.709 curve, BT.1886's gamma 2.4, is recorded exactly as gAMA")
     {
         std::ostringstream out(std::ios::binary);
         save_png_image(*img, out, "test.png", /*dither*/ false, /*interlaced*/ false,
@@ -230,7 +230,7 @@ TEST_CASE("PNG save records the transfer function in gAMA, sRGB or an ICC profil
         auto &header = reloaded->metadata["header"];
 
         REQUIRE(header.contains("gAMA"));
-        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.2f).epsilon(1e-3));
+        CHECK(header["gAMA"]["value"].get<float>() == doctest::Approx(2.4f).epsilon(1e-3));
         // ITU is not sRGB, so the sRGB chunk must not appear even though the primaries are BT.709
         CHECK(header["sRGB"]["value"].get<int>() < 0);
     }

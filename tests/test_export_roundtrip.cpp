@@ -328,9 +328,8 @@ std::optional<float4> apple_decode(const std::string &bytes, int2 pixel)
 const char *apple_misreads(const Variant &variant, const TransferFunction &tf)
 {
     const std::string ext = variant.ext;
-    if (tf.type == TransferFunction::ITU && (ext == ".png" || ext == ".heif" || ext == ".avif" || ext == ".jxl"))
-        return "macOS displays BT.709 content through BT.1886's gamma 2.4, not the inverse camera curve CICP's code 1 "
-               "names";
+    if (tf.type == TransferFunction::ITU && (ext == ".heif" || ext == ".avif" || ext == ".jxl"))
+        return "macOS reads BT.709 in a HEIF, AVIF or JPEG XL with the sRGB curve, though it reads a PNG's as BT.1886";
     if (ext == ".tif")
         return "macOS ignores TIFF's primaries tags, so takes a wide-gamut TIFF without an ICC profile for sRGB's";
     if (ext == ".heif" || ext == ".avif")

@@ -867,9 +867,9 @@ TransferSignalling transfer_signaling(TransferFunction tf)
     {
     case TransferFunction::Linear: return {1.0, true, false};
     case TransferFunction::Gamma: return {(tf.gamma > 0.f) ? 1.0 / double(tf.gamma) : 0.0, true, false};
-    // sRGB and ITU are piecewise, and 1/2.2 is the long-standing gAMA approximation of either
+    // sRGB is piecewise, and 1/2.2 its long-standing gAMA approximation; BT.709 decodes as BT.1886's plain 2.4
     case TransferFunction::sRGB: return {1.0 / 2.2, false, true};
-    case TransferFunction::ITU: return {1.0 / 2.2, false, false};
+    case TransferFunction::ITU: return {1.0 / 2.4, true, false};
     default: return {}; // PQ, HLG, the log curves and the rest: cICP or nothing
     }
 }

@@ -660,12 +660,14 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             }
 
             // Prefer the encoded profile when it has one of the curves the synthesized ICC profile misstates: an
-            // HDR one, which ICC cannot express, or DCI, whose ICC libjxl tags cicp 17 (ST 428-1) though its curve
-            // is RP 431-2's plain gamma 2.6.
+            // HDR one, which ICC cannot express; DCI, whose ICC libjxl tags cicp 17 (ST 428-1) though its curve
+            // is RP 431-2's plain gamma 2.6; or 709, whose ICC curve inverts the camera's OETF where viewers, and
+            // HDRView, decode it as BT.1886's display gamma (see EOTF_BT1886()).
             prefer_icc = !icc_profile.empty() &&
                          (!has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
                                                    file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG &&
-                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_DCI));
+                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_DCI &&
+                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_709));
             spdlog::info("Will {}prefer ICC profile for linearization.", prefer_icc ? "" : "not ");
         }
         else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER)

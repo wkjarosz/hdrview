@@ -87,6 +87,14 @@ TEST_CASE("The absolute transfer functions map their reference white to 1.0")
     CHECK(to_linear(1.0f, TransferFunction::DCI_P3) == doctest::Approx(52.37f / 48.f));
 }
 
+// Viewers decode a BT.709 label as BT.1886's display gamma rather than inverting the camera curve, and HDRView
+// with them: 0.5 is 0.5^2.4 = 0.189, where the inverse OETF would give 0.260.
+TEST_CASE("The BT.709 curve decodes as BT.1886's gamma 2.4, as other viewers do")
+{
+    CHECK(to_linear(0.5f, TransferFunction::ITU) == doctest::Approx(0.18946457f));
+    CHECK(from_linear(0.18946457f, TransferFunction::ITU) == doctest::Approx(0.5f));
+}
+
 // Narrow (studio) range packs luma into 16..235, a span of 219, unrelated to the HDR reference white above.
 TEST_CASE("narrow-range dequantization maps the studio range to [0,1]")
 {
@@ -197,6 +205,8 @@ TEST_CASE("every transfer function is odd where it mirrors, and its vector form 
         {"sRGB_to_linear", shader::sRGB_to_linear, shader::sRGB_to_linear, true},
         {"OETF_ITU", shader::OETF_ITU, shader::OETF_ITU, false},
         {"inverse_OETF_ITU", shader::inverse_OETF_ITU, shader::inverse_OETF_ITU, false},
+        {"EOTF_BT1886", shader::EOTF_BT1886, shader::EOTF_BT1886, true},
+        {"inverse_EOTF_BT1886", shader::inverse_EOTF_BT1886, shader::inverse_EOTF_BT1886, true},
         {"OETF_IEC61966_2_4", shader::OETF_IEC61966_2_4, shader::OETF_IEC61966_2_4, true},
         {"EOTF_IEC61966_2_4", shader::EOTF_IEC61966_2_4, shader::EOTF_IEC61966_2_4, true},
         {"EOTF_BT2100_PQ", shader::EOTF_BT2100_PQ, shader::EOTF_BT2100_PQ, true},

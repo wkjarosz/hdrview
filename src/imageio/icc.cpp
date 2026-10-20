@@ -172,11 +172,7 @@ ToneCurve tone_curve(const TransferFunction &tf)
         const double p[] = {2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045};
         return ToneCurve{cmsBuildParametricToneCurve(ctx, 4, p)};
     }
-    case TransferFunction::ITU:
-    {
-        const double p[] = {1.0 / 0.45, 1.0 / 1.099, 0.099 / 1.099, 1.0 / 4.5, 0.081};
-        return ToneCurve{cmsBuildParametricToneCurve(ctx, 4, p)};
-    }
+    case TransferFunction::ITU: return ToneCurve{cmsBuildGamma(ctx, 2.4)}; // BT.1886, see EOTF_BT1886()
     case TransferFunction::BT2100_PQ:
     case TransferFunction::BT2100_HLG:
     case TransferFunction::Unspecified:
