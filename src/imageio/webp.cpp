@@ -1,27 +1,25 @@
-#include "webp.h"
-#include "json.h"
 //
 // Copyright (C) Wojciech Jarosz. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can
 // be found in the LICENSE.txt file.
 //
 
-#include "app.h"
+#include "webp.h"
 #include "common.h"
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
-#include "webp.h"
+#include "json.h"
+#include "save_options.h"
 
 using namespace std;
 
 struct WebPSaveOptions
 {
-    float            gain     = 1.f;
     bool             lossless = false;
     float            quality  = 95.f;
-    TransferFunction tf       = TransferFunction::sRGB;
+    TransferFunction tf       = TransferFunction::sRGB; ///< sRGB from the dialog: no ICC profile says otherwise
 };
 
 static WebPSaveOptions s_opts;
@@ -37,13 +35,13 @@ vector<ImagePtr> load_webp_image(istream &is, string_view filename, const ImageL
     throw runtime_error("WebP support not enabled in this build.");
 }
 
-void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, float gain, float quality,
-                     bool lossless, TransferFunction tf)
+void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, float quality, bool lossless,
+                     TransferFunction tf)
 {
     throw runtime_error("WebP support not enabled in this build.");
 }
 
-WebPSaveOptions *webp_parameters_gui() { return &s_opts; }
+WebPSaveOptions *webp_parameters_gui(SaveContext &) { return &s_opts; }
 
 void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *params)
 {
@@ -66,7 +64,6 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
 
 #include "colorspace.h"
 #include "exif.h"
-#include "fonts.h"
 #include "icc.h"
 #include "imgui_ext.h"
 #include "timer.h"
@@ -501,8 +498,7 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
     // Get interleaved RGBA data
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved<uint8_t>(
-        &w, &h, &n, opts->gain,
-        opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, true);
+        &w, &h, &n, opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, true);
 
     // libwebp's API takes only RGB/RGBA, so widen a narrower group to what the viewport shows
     if (n < 3)
@@ -579,62 +575,19 @@ void save_webp_image(const Image &img, std::ostream &os, std::string_view filena
     spdlog::info("Saved WebP image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_webp_image(const Image &img, ostream &os, string_view filename, float gain, float quality, bool lossless,
+void save_webp_image(const Image &img, ostream &os, string_view filename, float quality, bool lossless,
                      TransferFunction tf)
 {
-    WebPSaveOptions opts{gain, lossless, quality, tf};
+    WebPSaveOptions opts{lossless, quality, tf};
     save_webp_image(img, os, filename, &opts);
 }
 
-WebPSaveOptions *webp_parameters_gui()
+WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("WebP Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
-
-        ImGui::PE::Entry(
-            "Transfer function",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
-                {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
-                    {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                return true;
-            },
-            "Encode the pixel values using this transfer function.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
 
         ImGui::PE::Checkbox(
             "Lossless", &s_opts.lossless,
@@ -650,6 +603,7 @@ WebPSaveOptions *webp_parameters_gui()
     if (ImGui::Button("Reset options to defaults"))
         s_opts = WebPSaveOptions{};
 
+    ctx.hdr = false; //< 8-bit, sRGB or linear
     return &s_opts;
 }
 

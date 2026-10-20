@@ -31,12 +31,13 @@ enum class J2KContainer
 };
 
 struct J2KSaveOptions;
-J2KSaveOptions *j2k_parameters_gui();
+struct SaveContext;
+J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx);
 /// The extension for the syntax `params` asks for, since the two share one entry in the save dialog.
 const char *j2k_extension(const J2KSaveOptions *params);
 // throws on error
 void save_j2k_image(const Image &img, std::ostream &os, std::string_view filename, const J2KSaveOptions *params);
 // throws on error
-void save_j2k_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f,
-                    bool lossless = true, int bit_depth = 16, J2KContainer container = J2KContainer::JP2,
+void save_j2k_image(const Image &img, std::ostream &os, std::string_view filename, bool lossless = true,
+                    int bit_depth = 16, J2KContainer container = J2KContainer::JP2,
                     TransferFunction tf = TransferFunction::sRGB, bool dither = true);

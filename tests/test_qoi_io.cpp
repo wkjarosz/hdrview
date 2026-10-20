@@ -26,7 +26,7 @@ namespace
 {
 
 // A single-pixel-per-value RGB QOI file holding `values` verbatim, tagged QOI_SRGB or QOI_LINEAR.
-// qoi_encode() is used directly so the save path's gain/dither/transfer handling doesn't alter the bytes.
+// qoi_encode() is used directly so the save path's dither/transfer handling doesn't alter the bytes.
 std::string encode_qoi_rgb(const std::vector<unsigned char> &values, unsigned char colorspace)
 {
     const int      w = (int)values.size();

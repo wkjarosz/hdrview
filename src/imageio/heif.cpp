@@ -12,7 +12,6 @@
 #include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
-#include "app.h"
 #include "heif.h" // for HEIFCodec, which the stubs below need too
 #include "imgui.h"
 
@@ -30,8 +29,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
     throw runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, float, int, bool, bool, HEIFCodec,
-                     TransferFunction)
+void save_heif_image(const Image &, std::ostream &, std::string_view, int, bool, bool, HEIFCodec, TransferFunction)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
@@ -41,18 +39,18 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, const stru
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec, SaveContext &) { return nullptr; }
 
 #else
 
 #include "colorspace.h"
 #include "common.h"
 #include "exif.h"
-#include "fonts.h"
 #include "gainmap.h"
 #include "hdr_metadata.h"
 #include "heif.h"
 #include "icc.h"
+#include "save_options.h"
 #include "streams.h"
 
 #include "imgui_ext.h"
@@ -61,6 +59,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec) { return nullptr; }
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <hello_imgui/dpi_aware.h>
 #include <map>
 #include <mutex>
 
@@ -86,7 +85,6 @@ using HeifDecodingOptionsPtr = std::unique_ptr<heif_decoding_options, void (*)(h
 
 struct HEIFSaveOptions
 {
-    float            gain      = 1.f;
     int              quality   = 95;
     bool             lossless  = false;
     bool             use_alpha = true;
@@ -1120,7 +1118,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         int                        w = 0, h = 0, n = 0;
         std::unique_ptr<uint8_t[]> pixels8;
         void                      *pixels = nullptr;
-        pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, params->gain, params->tf, true, true, true);
+        pixels8                           = img.as_interleaved<uint8_t>(&w, &h, &n, params->tf, true, true, true);
 
         // not every codec a HEIF can hold has an alpha channel (JPEG does not), so warn before dropping it
         const auto encoder_format =
@@ -1279,8 +1277,8 @@ static void set_heif_lossless(heif_encoder *enc, bool lossless)
     (void)heif_encoder_set_parameter_string(enc, "tune", lossless ? "ssim" : "auto");
 }
 
-void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
-                     bool lossless, bool use_alpha, HEIFCodec codec, TransferFunction tf)
+void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool lossless,
+                     bool use_alpha, HEIFCodec codec, TransferFunction tf)
 {
     // the encoder table is built lazily, and only heif_parameters_gui() does it
     init_heif_supported_formats();
@@ -1288,7 +1286,6 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         throw std::runtime_error("HEIF: no encoder available for the requested codec");
 
     HEIFSaveOptions params;
-    params.gain      = gain;
     params.quality   = quality;
     params.lossless  = lossless;
     params.use_alpha = use_alpha;
@@ -1302,7 +1299,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 // GUI parameter function
-HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
+HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
 {
     init_heif_supported_formats();
 
@@ -1322,24 +1319,6 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-
-        // Gain (custom widget with button)
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
 
         // Transfer function
         ImGui::PE::Entry(
@@ -1564,6 +1543,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec)
     if (ImGui::Button("Reset options to defaults"))
         s_opts = HEIFSaveOptions{};
 
+    ctx.hdr = is_hdr_encoding(s_opts.tf);
     return &s_opts;
 }
 

@@ -17,7 +17,8 @@ bool is_exr_image(std::istream &is, std::string_view filename) noexcept;
 std::vector<ImagePtr> load_exr_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 
 struct EXRSaveOptions;
-EXRSaveOptions *exr_parameters_gui(const ImagePtr &img);
+struct SaveContext;
+EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx);
 
 // throws on error
 void save_exr_image(const Image &img, std::ostream &os, std::string_view filename,

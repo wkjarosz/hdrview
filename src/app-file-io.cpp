@@ -1,5 +1,6 @@
 #include "app.h"
 #include "common.h"
+#include "imageio/save_options.h"
 
 #include "image.h"
 #include "version.h"
@@ -107,9 +108,10 @@ bool validate_session_manifest(const json &j, const string &source_name)
 
 } // namespace
 
-void HDRViewApp::draw_save_as_dialog(bool &open)
+void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 {
-    if (ImGui::BeginModalDialog("Save as...", open, ImGui::DialogPosition::Center))
+    const bool rendition = mode == SaveMode_Rendition;
+    if (ImGui::BeginModalDialog(rendition ? "Export rendition..." : "Save as...", open, ImGui::DialogPosition::Center))
     {
         // Define enum for save formats
         enum Format_
@@ -229,11 +231,26 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         // ImGui::PushItemWidth(-HelloImGui::EmSize(10));
 
-        static int composite = 0;
-        ImGui::Combo("Image to export", &composite, "Current image\0Current/Reference composite image\0");
-        ImGui::Tooltip("Save either the current image, or the composited/blended result between the current "
-                       "image and reference image as shown in the viewport.");
-        // ImGui::NewLine();
+        // What is saved: the image's data, optionally blended with the reference before the view's exposure, or a
+        // rendition of the view; whole, or only the part under the selection.
+        static bool include_comparison = false, selection_only = false;
+        if (!rendition)
+        {
+            ImGui::BeginDisabled(!reference_image());
+            ImGui::Checkbox("Include comparison", &include_comparison);
+            ImGui::EndDisabled();
+            ImGui::Tooltip("Save the current image blended with the reference, in the channels shown, as the "
+                           "viewport compares them, but before its exposure and tonemap.");
+        }
+        ImGui::BeginDisabled(!m_roi.has_volume());
+        ImGui::Checkbox("Save selection only", &selection_only);
+        ImGui::EndDisabled();
+        ImGui::Tooltip("Save only the part of the image under the selection.");
+        const bool comparing = !rendition && include_comparison && reference_image();
+        const bool cropping  = selection_only && m_roi.has_volume();
+
+        // what the format's options say about the encoding they chose; see SaveContext
+        SaveContext ctx;
 
         ImGui::BeginGroup();
 
@@ -275,7 +292,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         {
         case Format_JPEG_LIBJPEG:
         {
-            auto opts = jpg_parameters_gui();
+            auto opts = jpg_parameters_gui(ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_jpg_image(img, os, filename, opts); };
         }
@@ -286,7 +303,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         case Format_HEIF:
         case Format_AVIF:
         {
-            auto opts = heif_parameters_gui(save_format == Format_AVIF ? HEIFCodec::AV1 : HEIFCodec::HEIF);
+            auto opts = heif_parameters_gui(save_format == Format_AVIF ? HEIFCodec::AV1 : HEIFCodec::HEIF, ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_heif_image(img, os, filename, opts); };
         }
@@ -294,7 +311,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_JPEG_UHDR:
         {
-            auto opts = uhdr_parameters_gui();
+            auto opts = uhdr_parameters_gui(ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_uhdr_image(img, os, filename, opts); };
         }
@@ -302,7 +319,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_JPEG_XL:
         {
-            auto opts = jxl_parameters_gui();
+            auto opts = jxl_parameters_gui(ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_jxl_image(img, os, filename, opts); };
         }
@@ -310,7 +327,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_JPEG2000:
         {
-            auto opts = j2k_parameters_gui();
+            auto opts = j2k_parameters_gui(ctx);
             // the container is one of its options, so the extension follows what was chosen there
             save_extension = j2k_extension(opts);
             save_func      = [opts](const Image &img, std::ostream &os, const std::string_view filename)
@@ -320,7 +337,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_WEBP:
         {
-            auto opts = webp_parameters_gui();
+            auto opts = webp_parameters_gui(ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_webp_image(img, os, filename, opts); };
         }
@@ -328,7 +345,15 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_EXR:
         {
-            auto opts = exr_parameters_gui(current_image());
+            // A comparison or a rendition is a single color group, which the options list in place of the image's
+            // own groups; this stands in for that image, which is only built once the file is chosen.
+            static const ImagePtr rgba = []
+            {
+                auto img = make_shared<Image>(int2{1, 1}, 4);
+                img->finalize();
+                return img;
+            }();
+            auto opts = exr_parameters_gui(comparing || rendition ? rgba : current_image(), ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_exr_image(img, os, filename, opts); };
         }
@@ -336,7 +361,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_PFM:
         {
-            auto opts = pfm_parameters_gui();
+            auto opts = pfm_parameters_gui(ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_pfm_image(img, os, filename, opts); };
         }
@@ -344,7 +369,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_PNG_LIBPNG:
         {
-            auto opts = png_parameters_gui();
+            auto opts = png_parameters_gui(ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_png_image(img, os, filename, opts); };
         }
@@ -352,7 +377,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_QOI:
         {
-            auto opts = qoi_parameters_gui();
+            auto opts = qoi_parameters_gui(ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_qoi_image(img, os, filename, opts); };
         }
@@ -360,7 +385,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_JPEG_STB:
         {
-            auto opts = stb_parameters_gui(false, true);
+            auto opts = stb_parameters_gui(false, true, ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_stb_jpg(img, os, filename, opts); };
         }
@@ -368,7 +393,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_BMP_STB:
         {
-            auto opts = stb_parameters_gui(false, false);
+            auto opts = stb_parameters_gui(false, false, ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_stb_bmp(img, os, filename, opts); };
         }
@@ -376,7 +401,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_HDR_STB:
         {
-            auto opts = stb_parameters_gui(true, false);
+            auto opts = stb_parameters_gui(true, false, ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_stb_hdr(img, os, filename, opts); };
         }
@@ -384,7 +409,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_PNG_STB:
         {
-            auto opts = stb_parameters_gui(false, false);
+            auto opts = stb_parameters_gui(false, false, ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_stb_png(img, os, filename, opts); };
         }
@@ -392,7 +417,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_TGA_STB:
         {
-            auto opts = stb_parameters_gui(false, false);
+            auto opts = stb_parameters_gui(false, false, ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_stb_tga(img, os, filename, opts); };
         }
@@ -400,7 +425,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         case Format_TIFF:
         {
-            auto opts = tiff_parameters_gui();
+            auto opts = tiff_parameters_gui(ctx);
             save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
             { save_tiff_image(img, os, filename, opts); };
         }
@@ -409,6 +434,57 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         ImGui::Dummy(HelloImGui::EmToVec2(25.f, 0.f)); // ensure minimum size even for no options
         ImGui::EndGroup();
+
+        // A rendition is written for a target display: SDR white when the format's encoding cannot hold more
+        // (ctx.hdr), else a chosen peak. The view's highlight mode resolves against that display's ceiling rather
+        // than this one's, and nothing is written above it.
+        float target_ceiling = 0.f; //< in stops above SDR white
+        if (rendition)
+        {
+            ImGui::SeparatorText("Rendition");
+            if (ctx.hdr)
+            {
+                static int         target  = 0;
+                static float       nits    = 1000.f;
+                static const char *targets = "1000 cd/m\xc2\xb2 display\0002000 cd/m\xc2\xb2 display\0004000 "
+                                             "cd/m\xc2\xb2 display\0This display\0Custom\0";
+                ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
+                ImGui::Combo("Written for", &target, targets);
+                ImGui::Tooltip("The display the rendition's highlights are fitted to. The peaks are in cd/m\xc2\xb2, "
+                               "with SDR white at the 203 cd/m\xc2\xb2 of BT.2408.");
+                if (target == 4)
+                {
+                    ImGui::SetNextItemWidth(HelloImGui::EmSize(12.f));
+                    ImGui::DragFloat("Peak", &nits, 10.f, HDR_REFERENCE_WHITE_NITS, 10000.f, "%.0f cd/m\xc2\xb2",
+                                     ImGuiSliderFlags_AlwaysClamp);
+                }
+                const float peak_nits = target == 0 ? 1000.f : target == 1 ? 2000.f : target == 2 ? 4000.f : nits;
+                target_ceiling        = target == 3 ? m_rolloff.display_ceiling
+                                                    : std::log2(std::max(1.f, peak_nits / HDR_REFERENCE_WHITE_NITS));
+            }
+            // what the view's highlight mode does at the target; a colormap has no highlights to handle
+            if (m_tonemap == Tonemap_Gamma)
+            {
+                auto level = [](float stops)
+                {
+                    return stops < 0.01f
+                               ? std::string("SDR white")
+                               : fmt::format("{:.0f} cd/m\xc2\xb2", HDR_REFERENCE_WHITE_NITS * std::exp2(stops));
+                };
+                const int   mode    = highlight_mode();
+                const float ceiling = rolloff_for(target_ceiling).ceiling;
+                const auto  outcome = mode == 0   ? fmt::format("values above {} clip.", level(target_ceiling))
+                                      : mode == 1 ? std::string("values above SDR white clip.")
+                                      : ceiling > target_ceiling + 0.01f
+                                          ? fmt::format("highlights are compressed to fit under {}, then clip at {}.",
+                                                        level(ceiling), level(target_ceiling))
+                                          : fmt::format("highlights are compressed to fit under {}.", level(ceiling));
+                ImGui::BeginDisabled();
+                ImGui::TextWrapped("%s: %s", highlight_mode_name(), outcome.c_str());
+                ImGui::EndDisabled();
+                ImGui::Tooltip("The view's highlight mode, applied for the display the rendition is written for.");
+            }
+        }
 
         ImGui::Spacing();
 
@@ -441,29 +517,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             {
                 ostringstream os;
 
-                ImagePtr img = current_image();
-
-                if (composite)
-                {
-                    img = make_shared<Image>(current_image()->size(), 4);
-                    img->finalize();
-                    auto bounds     = current_image()->data_window;
-                    int  block_size = std::max(1, 1024 * 1024 / img->size().x);
-                    parallel_for(blocked_range<int>(0, img->size().y, block_size),
-                                 [this, &img, bounds](int begin_y, int end_y, int, int)
-                                 {
-                                     for (int y = begin_y; y < end_y; ++y)
-                                         for (int x = 0; x < img->size().x; ++x)
-                                         {
-                                             float4 v = pixel_value(int2{x, y} + bounds.min, false, 2);
-
-                                             img->channels[0](x, y) = v[0];
-                                             img->channels[1](x, y) = v[1];
-                                             img->channels[2](x, y) = v[2];
-                                             img->channels[3](x, y) = v[3];
-                                         }
-                                 });
-                }
+                ConstImagePtr img = image_to_save(mode, comparing, cropping, target_ceiling);
+                if (!img)
+                    throw runtime_error("the selection does not cover any of the image");
 
                 if (save_func)
                     save_func(*img, os, filename);
@@ -484,10 +540,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                 );
 #endif
 
-                // The file now holds what the image holds, so its edits count as saved. Not for a
-                // composite, which bakes in exposure, tonemapping and the blend: what was written is a
-                // rendition of the view, and reopening it would not give the image back.
-                if (!composite)
+                // The file now holds what the image holds, so its edits count as saved. Not for part of it,
+                // a comparison or a rendition, which reopening would not give the image back from.
+                if (!rendition && !comparing && !cropping)
                     current_image()->history.mark_saved();
             }
             catch (const exception &e)
@@ -502,6 +557,62 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         ImGui::EndPopup();
     }
+}
+
+ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool include_comparison, bool selection_only,
+                                        float target_ceiling) const
+{
+    auto img = current_image();
+    if (!img)
+        return nullptr;
+    const Box2i region    = selection_only && m_roi.has_volume() ? m_roi : Box2i{};
+    const bool  rendition = mode == SaveMode_Rendition;
+    if (!rendition && !include_comparison)
+        return region.has_volume() ? img->duplicate(region) : img;
+
+    // A new image of the comparison or of the view, over the image's data window or the part of it under the
+    // selection, which keeps its place in the frame as duplicate() keeps it. It has alpha only if what it shows
+    // does: the current image, or the reference blended with it.
+    Box2i bounds = img->data_window;
+    if (region.has_volume())
+        bounds.intersect(region);
+    if (!bounds.has_volume())
+        return nullptr;
+    auto has_alpha = [](const ConstImagePtr &i, Target_ target)
+    { return i && group_has_alpha(i->groups[i->active_group_index(target)].type); };
+    const int num_channels = has_alpha(img, Target_Primary) || has_alpha(reference_image(), Target_Secondary) ? 4 : 3;
+    auto      out          = make_shared<Image>(bounds.size(), num_channels);
+    // pixel_value() is linear BT.709; the result goes back to the current image's primaries, labeled with them, so
+    // a wide gamut survives in a format that can record it
+    out->chromaticities = img->chromaticities.value_or(Chromaticities{});
+    out->finalize();
+    if (bounds != img->data_window)
+        out->data_window = out->display_window = bounds;
+    const float3x3 M_from_sRGB = inverse(out->M_to_sRGB);
+
+    // A rendition's highlights are handled for the target display and clipped at its ceiling (at SDR white in
+    // Clip at SDR white). The clip bounds the straight color, so premultiplied values stay under limit * alpha.
+    const Rolloff rolloff = rolloff_for(target_ceiling);
+    const float   limit   = std::exp2(m_clamp_to_LDR ? 0.f : target_ceiling);
+    const int     width   = bounds.size().x;
+    parallel_for(blocked_range<int>(0, bounds.size().y, std::max(1, 1024 * 1024 / width)),
+                 [&](int begin_y, int end_y, int, int)
+                 {
+                     for (int y = begin_y; y < end_y; ++y)
+                         for (int x = 0; x < width; ++x)
+                         {
+                             float4 v = pixel_value(int2{x, y} + bounds.min, true, 2);
+                             if (rendition)
+                             {
+                                 v             = tonemap_value(v, rolloff);
+                                 const float a = v.w > k_small_alpha ? v.w : 1.f;
+                                 for (int c = 0; c < 3; ++c) v[c] = std::min(v[c], limit * a);
+                             }
+                             v.xyz() = mul(M_from_sRGB, v.xyz());
+                             for (int c = 0; c < num_channels; ++c) out->channels[c](x, y) = v[c];
+                         }
+                 });
+    return out;
 }
 
 void HDRViewApp::load_images(const vector<string> &filenames)

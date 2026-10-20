@@ -380,6 +380,7 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Save as..."));
+        MenuItem(action("Export rendition..."));
 
 #if !defined(__EMSCRIPTEN__)
         ImGui::Separator();

@@ -5,13 +5,13 @@
 //
 
 #include "imageio/jxl.h"
-#include "app.h"
 #include "endian-utils.h"
 #include "exif.h"
 #include "image.h"
 #include "imageio/alpha.h"
 #include "imageio/image_loader.h"
 #include "imageio/streams.h"
+#include "save_options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -25,7 +25,6 @@ using namespace std;
 
 struct JXLSaveOptions
 {
-    float            gain            = 1.f;
     bool             lossless        = false;
     float            quality         = 95.0f;
     int              data_type_index = 0;
@@ -48,7 +47,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
 
-JXLSaveOptions *jxl_parameters_gui() { return &s_opts; }
+JXLSaveOptions *jxl_parameters_gui(SaveContext &) { return &s_opts; }
 
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
 {
@@ -84,7 +83,6 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 #endif
 
 #include "colorspace.h"
-#include "fonts.h"
 #include "icc.h"
 #include "timer.h"
 
@@ -991,8 +989,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
     return images;
 }
 
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool lossless,
-                    float quality, TransferFunction tf, int data_type)
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, bool lossless, float quality,
+                    TransferFunction tf, int data_type)
 {
     ScopedMDC mdc{"IO", "JXL"};
     Timer     timer;
@@ -1029,28 +1027,28 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     case JXL_TYPE_UINT8:
         info.bits_per_sample          = 8;
         info.exponent_bits_per_sample = 0;
-        pixels_u8                     = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, true, true, false);
+        pixels_u8                     = img.as_interleaved<uint8_t>(&w, &h, &n, tf, true, true, false);
         pixels                        = pixels_u8.get();
         pixel_bytes                   = sizeof(uint8_t) * w * h * n;
         break;
     case JXL_TYPE_UINT16:
         info.bits_per_sample          = 16;
         info.exponent_bits_per_sample = 0;
-        pixels_u16                    = img.as_interleaved<uint16_t>(&w, &h, &n, gain, tf, true, true, false);
+        pixels_u16                    = img.as_interleaved<uint16_t>(&w, &h, &n, tf, true, true, false);
         pixels                        = pixels_u16.get();
         pixel_bytes                   = sizeof(uint16_t) * w * h * n;
         break;
     case JXL_TYPE_FLOAT16:
         info.bits_per_sample          = 16;
         info.exponent_bits_per_sample = 5;
-        pixels_f16                    = img.as_interleaved<half>(&w, &h, &n, gain, tf, false, true, false);
+        pixels_f16                    = img.as_interleaved<half>(&w, &h, &n, tf, false, true, false);
         pixels                        = pixels_f16.get();
         pixel_bytes                   = sizeof(half) * w * h * n;
         break;
     case JXL_TYPE_FLOAT:
         info.bits_per_sample          = 32;
         info.exponent_bits_per_sample = 8;
-        pixels_f32                    = img.as_interleaved<float>(&w, &h, &n, gain, tf, false, true, false);
+        pixels_f32                    = img.as_interleaved<float>(&w, &h, &n, tf, false, true, false);
         pixels                        = pixels_f32.get();
         pixel_bytes                   = sizeof(float) * w * h * n;
         break;
@@ -1155,31 +1153,13 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
 static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
 
-JXLSaveOptions *jxl_parameters_gui()
+JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("JPEG-XL Save Options",
                          ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
-
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -1223,6 +1203,7 @@ JXLSaveOptions *jxl_parameters_gui()
     if (ImGui::Button("Reset options to defaults"))
         s_opts = JXLSaveOptions{};
 
+    ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index <= 1); // the first two are the float formats
     return &s_opts;
 }
 
@@ -1232,7 +1213,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     if (params == nullptr)
         throw std::invalid_argument("JXLSaveOptions pointer is null");
 
-    save_jxl_image(img, os, filename, params->gain, params->lossless, params->quality, params->tf,
+    save_jxl_image(img, os, filename, params->lossless, params->quality, params->tf,
                    s_data_types[params->data_type_index]);
 }
 

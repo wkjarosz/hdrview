@@ -24,11 +24,11 @@ bool is_png_image(std::istream &is) noexcept;
 std::vector<ImagePtr> load_png_image(std::istream &is, const std::string_view filename,
                                      const ImageLoadOptions &opts = {});
 // throws on error
-void save_png_image(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
-                    bool dither = true, bool interlaced = false, bool sixteen_bit = false,
-                    TransferFunction tf = TransferFunction::sRGB);
+void save_png_image(const Image &img, std::ostream &os, const std::string_view filename, bool dither = true,
+                    bool interlaced = false, bool sixteen_bit = false, TransferFunction tf = TransferFunction::sRGB);
 
 struct PNGSaveOptions;
-PNGSaveOptions *png_parameters_gui();
+struct SaveContext;
+PNGSaveOptions *png_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params);

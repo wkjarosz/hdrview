@@ -786,7 +786,7 @@ public:
         return transparency == TransparencyType_Straight && group.num_channels > 1 && group_has_alpha(group.type);
     }
 
-    /// Flatten the selected group into an interleaved buffer, applying gain and a transfer function.
+    /// Flatten the selected group into an interleaved buffer, applying a transfer function.
     /**
         `unpremultiply` divides the color channels by alpha before the transfer function, yielding straight
         samples. `premultiply_encoded` then multiplies them back once the transfer has been applied, which
@@ -794,9 +794,8 @@ public:
         `unpremultiply` off, which would multiply in linear light instead. See imageio/alpha.h.
     */
     template <typename T>
-    std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain = 1.f,
-                                        TransferFunction tf = {TransferFunction::Linear, 1.f}, bool dither = true,
-                                        bool unpremultiply = true, bool convert_to_sRGB = true,
+    std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, TransferFunction tf = {TransferFunction::Linear, 1.f},
+                                        bool dither = true, bool unpremultiply = true, bool convert_to_sRGB = true,
                                         bool premultiply_encoded = false) const;
 
     void draw_histogram();
@@ -855,8 +854,8 @@ static_assert(!std::is_copy_constructible_v<Image>, "an Image owns textures and 
 std::unique_ptr<uint8_t[]> widen_to_rgb(const uint8_t *src, int w, int h, int n, bool gray, int *n_out);
 
 template <typename T>
-std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, bool dither,
-                                           bool unpremultiply, bool convert_to_sRGB, bool premultiply_encoded) const
+std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, TransferFunction tf, bool dither, bool unpremultiply,
+                                           bool convert_to_sRGB, bool premultiply_encoded) const
 {
     const ChannelGroup &group = groups[selected_group];
 
@@ -864,8 +863,8 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     *h = size().y;
     *n = group.num_channels;
 
-    // Alpha is not a color: it takes neither the exposure gain nor the transfer function, and the group's
-    // remaining channels are divided back out by it when the caller wants straight alpha.
+    // Alpha is not a color: it takes no transfer function, and the group's remaining channels are divided
+    // back out by it when the caller wants straight alpha.
     const Channel *alpha = group_has_alpha(group.type) ? &channels[group.channels[*n - 1]] : nullptr;
 
     const bool luminance_chroma = group.type == ChannelGroup::YC_Channels || group.type == ChannelGroup::YCA_Channels;
@@ -878,8 +877,8 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     {
         // process RGB channels together
         parallel_for(blocked_range<int>(0, *h, block_size),
-                     [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither, unpremultiply,
-                      convert_to_sRGB, luminance_chroma, premultiply_encoded](int begin_y, int end_y, int, int)
+                     [this, alpha, w = *w, n = *n, data = pixels.get(), tf, dither, unpremultiply, convert_to_sRGB,
+                      luminance_chroma, premultiply_encoded](int begin_y, int end_y, int, int)
                      {
                          int y_stride = w * n;
                          for (int y = begin_y; y < end_y; ++y)
@@ -893,8 +892,6 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
                                  // viewport does, so an exported file matches what it displays.
                                  if (luminance_chroma)
                                      rgb = YC_to_RGB(rgb, luminance_weights);
-
-                                 rgb *= gain;
 
                                  if (convert_to_sRGB)
                                      rgb = mul(M_to_sRGB, rgb);
@@ -929,7 +926,7 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     {
         // A one- or two-channel group: a lone channel, a U,V pair, or gray plus alpha.
         parallel_for(blocked_range<int>(0, *h, block_size),
-                     [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither, unpremultiply,
+                     [this, alpha, w = *w, n = *n, data = pixels.get(), tf, dither, unpremultiply,
                       premultiply_encoded](int begin_y, int end_y, int, int)
                      {
                          int y_stride  = w * n;
@@ -941,7 +938,6 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
                                  for (int c = 0; c < num_color; ++c)
                                  {
                                      float v = channels[groups[selected_group].channels[c]](x, y);
-                                     v *= gain;
 
                                      // unpremultiply alpha
                                      if (alpha && unpremultiply)

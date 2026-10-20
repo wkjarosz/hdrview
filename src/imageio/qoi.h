@@ -18,10 +18,11 @@ bool is_qoi_image(std::istream &is) noexcept;
 std::vector<ImagePtr> load_qoi_image(std::istream &is, const std::string_view filename,
                                      const ImageLoadOptions &opts = {});
 /// throws on error
-void save_qoi_image(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
-                    bool sRGB = true, bool dither = true);
+void save_qoi_image(const Image &img, std::ostream &os, const std::string_view filename, bool sRGB = true,
+                    bool dither = true);
 
 struct QOISaveOptions;
-QOISaveOptions *qoi_parameters_gui();
+struct SaveContext;
+QOISaveOptions *qoi_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_qoi_image(const Image &img, std::ostream &os, std::string_view filename, const QOISaveOptions *opts);

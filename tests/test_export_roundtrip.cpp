@@ -6,7 +6,7 @@
 
 /** \file test_export_roundtrip.cpp
 
-    Every writer against every channel-group layout HDRView can select for export.
+    Every writer against every channel-group layout HDRView can save.
 
     Each cell saves an image, reads it back, and compares against what Image::rgba_pixel() shows for it.
     The comparison is on straight (unpremultiplied) color, so a format that cannot store alpha is judged on
@@ -80,67 +80,67 @@ const Writer k_writers[] = {
      // the default-argument form, which has to fall back to something sized for this image
      [](const Image &i, std::ostream &o, TransferFunction) { save_exr_image(i, o, "a.exr"); }},
     {"pfm", ".pfm", Cap_Float,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_pfm_image(i, o, "a.pfm", 1.f, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_pfm_image(i, o, "a.pfm", t); }},
     {"hdr_stb", ".hdr", Cap_Float,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_hdr(i, o, "a.hdr", 1.f, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_hdr(i, o, "a.hdr", t); }},
     {"png16", ".png", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", 1.f, false, false, true, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, true, t); }},
     {"png8", ".png", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", 1.f, false, false, false, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_png_image(i, o, "a.png", false, false, false, t); }},
     {"png_stb", ".png", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_png(i, o, "a.png", 1.f, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_png(i, o, "a.png", t); }},
     {"tga_stb", ".tga", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_tga(i, o, "a.tga", 1.f, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_tga(i, o, "a.tga", t); }},
     {"bmp_stb", ".bmp", 0u,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_bmp(i, o, "a.bmp", 1.f, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_bmp(i, o, "a.bmp", t); }},
     {"jpg_stb", ".jpg", Cap_Lossy,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_jpg(i, o, "a.jpg", 1.f, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_stb_jpg(i, o, "a.jpg", t); }},
 #if HDRVIEW_ENABLE_LIBTIFF
     {"tiff8", ".tif", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", 1.f, t, 1, 0); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 0); }},
     {"tiff_float", ".tif", Cap_Float | Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", 1.f, t, 1, 2); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_tiff_image(i, o, "a.tif", t, 1, 2); }},
 #endif
     {"qoi", ".qoi", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_qoi_image(i, o, "a.qoi", 1.f, t.type == TransferFunction::sRGB, false); }},
+     { save_qoi_image(i, o, "a.qoi", t.type == TransferFunction::sRGB, false); }},
 #if HDRVIEW_ENABLE_LIBJPEG
     {"jpg", ".jpg", Cap_Lossy,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_jpg_image(i, o, "a.jpg", 1.f, t.type == TransferFunction::sRGB, false, 100, false); }},
+     { save_jpg_image(i, o, "a.jpg", t.type == TransferFunction::sRGB, false, 100, false); }},
 #endif
 #if HDRVIEW_ENABLE_J2K
     // both syntaxes, and both ends of the bit depths the dialog offers
     {"jp2_16", ".jp2", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_j2k_image(i, o, "a.jp2", 1.f, true, 16, J2KContainer::JP2, t, false); }},
+     { save_j2k_image(i, o, "a.jp2", true, 16, J2KContainer::JP2, t, false); }},
     {"jp2_10", ".jp2", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_j2k_image(i, o, "a.jp2", 1.f, true, 10, J2KContainer::JP2, t, false); }},
+     { save_j2k_image(i, o, "a.jp2", true, 10, J2KContainer::JP2, t, false); }},
     {"jp2_8", ".jp2", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_j2k_image(i, o, "a.jp2", 1.f, true, 8, J2KContainer::JP2, t, false); }},
+     { save_j2k_image(i, o, "a.jp2", true, 8, J2KContainer::JP2, t, false); }},
     {"j2k", ".j2k", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_j2k_image(i, o, "a.j2k", 1.f, true, 16, J2KContainer::J2K, t, false); }},
+     { save_j2k_image(i, o, "a.j2k", true, 16, J2KContainer::J2K, t, false); }},
 #endif
 #if HDRVIEW_ENABLE_LIBWEBP
     {"webp", ".webp", Cap_Alpha,
-     [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 1.f, 100.f, true, t); }},
+     [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},
 #endif
 #if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN)
     {"jxl", ".jxl", Cap_Alpha,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_jxl_image(i, o, "a.jxl", 1.f, /*lossless*/ true, 100.f, t, JXL_TYPE_UINT16); }},
+     { save_jxl_image(i, o, "a.jxl", /*lossless*/ true, 100.f, t, JXL_TYPE_UINT16); }},
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
     // both codecs the dialog offers, since they take different paths through libheif
     {"heif", ".heif", Cap_Alpha | Cap_Lossy,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_heif_image(i, o, "a.heif", 1.f, 100, true, true, HEIFCodec::HEVC, t); }},
+     { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t); }},
     {"avif", ".avif", Cap_Alpha | Cap_Lossy,
      [](const Image &i, std::ostream &o, TransferFunction t)
-     { save_heif_image(i, o, "a.avif", 1.f, 100, true, true, HEIFCodec::AV1, t); }},
+     { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t); }},
 #endif
 };
 

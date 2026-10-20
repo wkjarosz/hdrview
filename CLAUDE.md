@@ -311,6 +311,16 @@ and libheif then prefers it (plugin priority 150 vs libaom's 100). Output is bit
 being specified exactly. dav1d builds only under meson, so unlike libaom there is no CPM fallback: the CMake
 block finds a system dav1d or leaves AVIF on libaom, as currently happens on Windows and Emscripten.
 
+Saving has two entries, each opening `draw_save_dialog()` in a fixed `SaveMode`. **Save as...** writes the image's
+data, optionally blended with the reference in the channels shown ("Include comparison", before exposure) and
+optionally cropped to the selection. **Export rendition...** writes what the view shows: exposure, tonemap and
+highlight mode baked in, resolved against the display the dialog targets (SDR white for an SDR encoding, a chosen
+peak for PQ/HLG/float) and clipped at its ceiling. `image_to_save()` builds the image for either; a comparison or
+rendition is converted back into the current image's primaries and carries alpha only when a source has it. A
+format's options GUI receives a `SaveContext` (`imageio/save_options.h`), through which it reports whether its
+encoding keeps values above SDR white. Scaling the data is an edit (Exposure/gamma...), not a save option, so it
+applies the same way to every format.
+
 ### Rendering backend abstraction (GL vs Metal)
 `renderpass.h`, `shader.h`, and `texture.h` declare platform-agnostic interfaces (adapted from NanoGUI),
 each with two mutually-exclusive implementations selected at CMake configure time:

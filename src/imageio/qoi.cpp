@@ -4,11 +4,10 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "app.h"
 #include "imgui.h"
 #include "imgui_ext.h"
+#include "save_options.h"
 
-#include "fonts.h"
 
 #include <qoi.h>
 
@@ -32,7 +31,6 @@ using namespace std;
 
 struct QOISaveOptions
 {
-    float            gain   = 1.f;
     TransferFunction tf     = TransferFunction::sRGB;
     bool             dither = true; // only used for LDR formats
 };
@@ -137,8 +135,8 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved<uint8_t>(
-        &w, &h, &n, opts->gain,
-        opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear, opts->dither);
+        &w, &h, &n, opts->tf.type == TransferFunction::sRGB ? TransferFunction::sRGB : TransferFunction::Linear,
+        opts->dither);
 
     // QOI's header describes only 3 = RGB and 4 = RGBA, so widen a narrower group to what the viewport
     // shows
@@ -175,50 +173,31 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
     spdlog::info("Saved QOI image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_qoi_image(const Image &img, ostream &os, string_view filename, float gain, bool sRGB, bool dither)
+void save_qoi_image(const Image &img, ostream &os, string_view filename, bool sRGB, bool dither)
 {
-    QOISaveOptions opts{gain, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither};
+    QOISaveOptions opts{sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither};
     save_qoi_image(img, os, filename, &opts);
 }
 
 // GUI parameter function
-QOISaveOptions *qoi_parameters_gui()
+QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
 {
     if (ImGui::PE::Begin("QOI Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::PE::Entry(
-            "Gain",
-            [&]
-            {
-                ImGui::BeginGroup();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                        ImGui::GetStyle().ItemInnerSpacing.x);
-                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-                if (ImGui::IconButton(ICON_MY_EXPOSURE))
-                    s_opts.gain = exp2f(hdrview()->exposure());
-                ImGui::Tooltip("Set gain from the current viewport exposure value.");
-                ImGui::EndGroup();
-                return changed;
-            },
-            "Multiply the pixels by this value before saving.");
-
         ImGui::PE::Entry(
             "Transfer function",
             [&]
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
-                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
+                    // the only two the encoder writes
+                    for (auto type : {TransferFunction::Linear, TransferFunction::sRGB})
                     {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                is_selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
+                        bool is_selected = s_opts.tf.type == type;
+                        if (ImGui::Selectable(transfer_function_name(type).c_str(), is_selected))
+                            s_opts.tf = type;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -226,13 +205,7 @@ QOISaveOptions *qoi_parameters_gui()
                 }
                 return true;
             },
-            "Encode the pixel values using this transfer function.\nWARNING: The QOI image format header can only "
-            "indicate sRGB or Linear transfer functions. If you choose a different transfer function, we will store "
-            "Linear in the QOI header, and the file will likely not be displayed correctly by other software.");
-
-        if (s_opts.tf.type == TransferFunction::Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
-                                   "When using a gamma transfer function, this is the gamma value to use.");
+            "Encode the pixel values using this transfer function, which the QOI header records.");
 
         ImGui::PE::Checkbox("Dither", &s_opts.dither);
 
@@ -242,5 +215,6 @@ QOISaveOptions *qoi_parameters_gui()
     if (ImGui::Button("Reset options to defaults"))
         s_opts = QOISaveOptions{};
 
+    ctx.hdr = false; //< 8-bit, sRGB or linear
     return &s_opts;
 }

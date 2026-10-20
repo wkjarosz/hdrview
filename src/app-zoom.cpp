@@ -208,14 +208,16 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
     return raw ? value : tonemap_value(value);
 }
 
-float4 HDRViewApp::tonemap_value(float4 value) const
+float4 HDRViewApp::tonemap_value(float4 value) const { return tonemap_value(value, m_rolloff); }
+
+float4 HDRViewApp::tonemap_value(float4 value, const Rolloff &rolloff) const
 {
     // the image shader's exposure, tonemap and rolloff steps, as main() in image-shader.sglsl applies them
     float4 shown = ::tonemap(shader::expose(value, powf(2.f, m_exposure_live), m_offset_live), m_gamma_live,
                              m_tonemap, m_colormaps[m_colormap_index], m_reverse_colormap);
-    if (m_rolloff.enabled)
-        shown = shader::roll_off(shown, m_tonemap, m_rolloff.preserve_hue, m_rolloff.ceiling, m_rolloff.has_peak,
-                                 m_rolloff.peak);
+    if (rolloff.enabled)
+        shown =
+            shader::roll_off(shown, m_tonemap, rolloff.preserve_hue, rolloff.ceiling, rolloff.has_peak, rolloff.peak);
     return shown;
 }
 

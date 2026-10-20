@@ -23,11 +23,11 @@ bool jxl_supported_tf(TransferFunction tf) noexcept;
 // throws on error
 std::vector<ImagePtr> load_jxl_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 // throws on error
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f,
-                    bool lossless = false, float quality = 95.f, TransferFunction tf = TransferFunction::sRGB,
-                    int data_type = 0);
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, bool lossless = false,
+                    float quality = 95.f, TransferFunction tf = TransferFunction::sRGB, int data_type = 0);
 
 struct JXLSaveOptions;
-JXLSaveOptions *jxl_parameters_gui();
+struct SaveContext;
+JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *opts);

@@ -23,10 +23,11 @@ bool is_webp_image(std::istream &is) noexcept;
 std::vector<ImagePtr> load_webp_image(std::istream &is, const std::string_view filename,
                                       const ImageLoadOptions &opts = {});
 // throws on error
-void save_webp_image(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
-                     float quality = 95.f, bool lossless = false, TransferFunction tf = TransferFunction::sRGB);
+void save_webp_image(const Image &img, std::ostream &os, const std::string_view filename, float quality = 95.f,
+                     bool lossless = false, TransferFunction tf = TransferFunction::sRGB);
 
 struct WebPSaveOptions;
-WebPSaveOptions *webp_parameters_gui();
+struct SaveContext;
+WebPSaveOptions *webp_parameters_gui(SaveContext &ctx);
 // throws on error
 void save_webp_image(const Image &img, std::ostream &os, std::string_view filename, const WebPSaveOptions *params);

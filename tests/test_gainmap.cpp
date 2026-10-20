@@ -385,7 +385,7 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
     img->finalize(); // as_interleaved(), which the writer uses, reads img->groups
 
     std::stringstream ss;
-    REQUIRE_NOTHROW(save_uhdr_image(*img, ss, "test.jpg", 1.f, 95, 95, false, scale));
+    REQUIRE_NOTHROW(save_uhdr_image(*img, ss, "test.jpg", 95, 95, false, scale));
     REQUIRE(ss.tellp() > 0);
 
     ss.clear();
