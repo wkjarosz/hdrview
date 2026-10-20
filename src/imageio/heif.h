@@ -36,9 +36,12 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 
 struct HEIFSaveOptions;
 struct SaveContext;
+struct Caveat;
 /// Draws the options for `codec`, listing only the encoders that implement it.
 HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx);
 /// Whether the HEIF/AVIF save options offer \p tf: whether an nclx box can name it.
 bool heif_offers_curve(TransferFunction tf);
+/// Which applications misread a HEIF or AVIF with the curve \p tf, and how.
+Caveat heif_caveat(TransferFunction tf);
 // throws on error
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, const HEIFSaveOptions *params);

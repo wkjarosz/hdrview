@@ -250,8 +250,10 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         const bool comparing = !rendition && include_comparison && reference_image();
         const bool cropping  = selection_only && m_roi.has_volume();
 
-        // what the format's options say about the encoding they chose; see SaveContext
+        // what the format's options are told about the image, and say about the encoding they chose
         SaveContext ctx;
+        if (auto img = current_image())
+            ctx.wide_gamut = img->chromaticities && named_color_gamut(*img->chromaticities) != ColorGamut_sRGB_BT709;
 
         ImGui::BeginGroup();
 

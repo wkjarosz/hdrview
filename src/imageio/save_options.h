@@ -8,10 +8,11 @@
 
 #include "colorspace.h"
 
-/// What a format's options tell the save dialog about the encoding they chose.
+/// What the save dialog and a format's options tell each other about what is being saved.
 struct SaveContext
 {
-    bool hdr = false; ///< Whether the encoding keeps values above SDR white
+    bool hdr        = false; ///< Set by the options: whether the encoding keeps values above SDR white
+    bool wide_gamut = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
 };
 
 /// Whether an encoding keeps values above SDR white: an HDR transfer function, or floating-point samples.
@@ -20,3 +21,27 @@ inline bool is_hdr_encoding(const TransferFunction &tf, bool floating_point = fa
 
 /// \p curve, the one a format can label, warning when \p asked was another; a reader would misread that one.
 TransferFunction labeled_curve(const TransferFunction &asked, TransferFunction::Type_ curve, const char *format);
+
+/// Applications known to read some file HDRView writes as other values than it means, for the save dialogs' warnings.
+enum Misreader_ : unsigned
+{
+    Misreader_macOS    = 1u << 0, ///< Apple's ImageIO, so Preview, Safari and every other macOS application
+    Misreader_Chromium = 1u << 1, ///< Chrome, Edge and the other Chromium browsers
+    Misreader_Firefox  = 1u << 2, ///< Firefox
+    Misreader_libjxl   = 1u << 3, ///< tools that take a JPEG XL's colors from the ICC profile libjxl synthesizes
+};
+
+/// A warning that some applications misread a file saved so, naming them and what they do instead.
+/**
+    Each format's X_caveat() gives them, from measurements of the readers. On macOS, test_export_roundtrip.cpp holds
+    every one naming macOS to what ImageIO does, both ways; the others record readers checked by hand, whose
+    versions the functions' comments give.
+*/
+struct Caveat
+{
+    unsigned    readers = 0;       ///< the Misreader_ flags of the applications
+    const char *text    = nullptr; ///< the warning, a sentence or two
+};
+
+/// Draws \p caveat's warning below a format's options, if it has one.
+void caveat_entry(const Caveat &caveat);

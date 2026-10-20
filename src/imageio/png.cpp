@@ -1113,29 +1113,7 @@ PNGSaveOptions *png_parameters_gui(SaveContext &ctx)
         ImGui::PE::End();
     }
 
-    // warn here, while the user can still pick a different curve or format; the classification comes from
-    // the writer's own transfer_signaling(), so the two cannot disagree
-    if (const auto signaling = transfer_signaling(s_opts.tf); signaling.file_gamma <= 0.0)
-    {
-        const string name = transfer_function_name(s_opts.tf);
-        const string note =
-            k_can_write_cicp
-                ? fmt::format(ICON_MY_LOG_LEVEL_WARN
-                              "  {} can only be recorded in PNG's cICP chunk, which most other applications "
-                              "still ignore. They will read this file as sRGB.",
-                              name)
-                : fmt::format(ICON_MY_LOG_LEVEL_ERROR
-                              "  {} cannot be recorded at all by this build's libpng ({}), which predates the "
-                              "cICP chunk. Saving will fail; choose another transfer function or format.",
-                              name, PNG_LIBPNG_VER_STRING);
-
-        ImGui::PushStyleColor(ImGuiCol_Text,
-                              k_can_write_cicp ? ImVec4{1.f, 0.75f, 0.25f, 1.f} : ImVec4{1.f, 0.4f, 0.4f, 1.f});
-        ImGui::PushTextWrapPos(0.f);
-        ImGui::TextUnformatted(note.c_str());
-        ImGui::PopTextWrapPos();
-        ImGui::PopStyleColor();
-    }
+    caveat_entry(png_caveat(s_opts.tf));
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = PNGSaveOptions{};
@@ -1154,3 +1132,11 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
 }
 
 #endif
+
+// Firefox 158 measured by hand; macOS's ImageIO by test_export_roundtrip.cpp
+Caveat png_caveat(TransferFunction tf)
+{
+    if (tf.type == TransferFunction::ITU)
+        return {Misreader_Firefox, "Firefox reads a BT.709 PNG with the sRGB curve, rather than BT.1886's gamma 2.4."};
+    return {};
+}

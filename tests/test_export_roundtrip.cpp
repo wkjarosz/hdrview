@@ -32,6 +32,7 @@
 #include "imageio/pfm.h"
 #include "imageio/png.h"
 #include "imageio/qoi.h"
+#include "imageio/save_options.h"
 #include "imageio/stb.h"
 #include "imageio/streams.h"
 #include "imageio/tiff.h"
@@ -323,24 +324,26 @@ std::optional<float4> apple_decode(const std::string &bytes, int2 pixel)
 }
 #endif
 
-#if defined(__APPLE__)
-/// Why macOS is known to read a file written with \p variant and \p tf as other values, or null when it should not.
-const char *apple_misreads(const Variant &variant, const TransferFunction &tf)
+/// The warning \p variant's dialog shows for \p tf, for the sweep's image, whose primaries are BT.2020's.
+Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
 {
     const std::string ext = variant.ext;
-    if (tf.type == TransferFunction::ITU && (ext == ".heif" || ext == ".avif" || ext == ".jxl"))
-        return "macOS reads BT.709 in a HEIF, AVIF or JPEG XL with the sRGB curve, though it reads a PNG's as BT.1886";
-    if (ext == ".tif")
-        return "macOS ignores TIFF's primaries tags, so takes a wide-gamut TIFF without an ICC profile for sRGB's";
+    if (ext == ".png" && std::string{variant.name}.rfind("png", 0) == 0)
+        return png_caveat(tf);
+#if HDRVIEW_ENABLE_LIBHEIF
     if (ext == ".heif" || ext == ".avif")
-    {
-        if (tf.type == TransferFunction::Log100 || tf.type == TransferFunction::Log100_Sqrt10 ||
-            tf.type == TransferFunction::ST240 || tf.type == TransferFunction::IEC61966_2_4)
-            return "macOS does not know this curve's nclx code, and a HEIF carries no ICC profile to fall back on";
-    }
-    return nullptr;
-}
+        return heif_caveat(tf);
 #endif
+#if HDRVIEW_ENABLE_LIBJXL
+    if (ext == ".jxl")
+        return jxl_caveat(tf);
+#endif
+#if HDRVIEW_ENABLE_LIBTIFF
+    if (ext == ".tif")
+        return tiff_caveat(tf, true);
+#endif
+    return {};
+}
 
 /// The layout sweep's relative tolerance, on straight color at the default setting.
 float tolerance(const Variant &v)
@@ -551,11 +554,16 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
                 const auto a_code = from_linear(apple->xyz(), tf), w_code = from_linear(want.xyz(), tf);
                 float      worst = 0.f;
                 for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(a_code[c] - w_code[c]));
-                // Apple's own path quantizes and converts at 8 bits or so, which room for that covers; a known
-                // misread is left unchecked, its reason recorded in apple_misreads()
-                if (!apple_misreads(variant, tf))
-                    CHECK_MESSAGE(worst <= std::max(variant.step, 0.025f),
-                                  "macOS reads this file as other values, off by ", worst);
+                // A setting whose dialog does not warn that macOS misreads it must read within Apple's 8-bit-or-so
+                // precision; one that warns must be off by more than half that, or the warning has gone stale.
+                const float tolerance = std::max(variant.step, 0.025f);
+                if (caveat_of(variant, tf).readers & Misreader_macOS)
+                    CHECK_MESSAGE(worst > tolerance / 2,
+                                  "the dialog warns that macOS misreads this file, which it reads "
+                                  "right: the warning is stale");
+                else
+                    CHECK_MESSAGE(worst <= tolerance, "macOS reads this file as other values, off by ", worst,
+                                  ", and the dialog does not warn of it");
             }
 #endif
             const json header = back->metadata.value("header", json::object());

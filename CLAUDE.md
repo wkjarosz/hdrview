@@ -321,6 +321,13 @@ format's options GUI receives a `SaveContext` (`imageio/save_options.h`), throug
 encoding keeps values above SDR white. Scaling the data is an edit (Exposure/gamma...), not a save option, so it
 applies the same way to every format.
 
+A format offers only the transfer functions it can label, through its `X_offers_curve()`, which both its options
+GUI and `tests/test_export_roundtrip.cpp` use; its `X_caveat()` names applications known to misread a file anyway
+(`Caveat` in `save_options.h`), which the dialog shows as a warning. That test sweeps every setting of every writer
+against every curve its dialog offers, checking the pixels, the labels and the HDR metadata through HDRView's own
+reader and, on macOS, through ImageIO, the decoder every macOS application uses; it holds each caveat naming macOS
+to what ImageIO does, both ways.
+
 ### Rendering backend abstraction (GL vs Metal)
 `renderpass.h`, `shader.h`, and `texture.h` declare platform-agnostic interfaces (adapted from NanoGUI),
 each with two mutually-exclusive implementations selected at CMake configure time:

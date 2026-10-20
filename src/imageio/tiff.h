@@ -25,9 +25,12 @@ std::vector<ImagePtr> load_tiff_image(std::istream &is, const std::string_view f
 
 struct TIFFSaveOptions;
 struct SaveContext;
+struct Caveat;
 TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx);
 /// Whether the TIFF save options offer \p tf at \p data_type_index: sRGB for integer samples, linear for float.
 bool tiff_offers_curve(TransferFunction tf, int data_type_index);
+/// Which applications misread a TIFF with the curve \p tf, over a gamut other than BT.709's when \p wide_gamut.
+Caveat tiff_caveat(TransferFunction tf, bool wide_gamut);
 // throws on error
 void save_tiff_image(const Image &img, std::ostream &os, std::string_view filename, const TIFFSaveOptions *params);
 

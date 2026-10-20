@@ -1663,6 +1663,8 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
         ImGui::PE::End();
     }
 
+    caveat_entry(heif_caveat(s_opts.tf));
+
     if (ImGui::Button("Reset options to defaults"))
         s_opts = HEIFSaveOptions{};
 
@@ -1671,3 +1673,24 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
 }
 
 #endif
+
+// Chromium 155 and Firefox 158 measured by hand; macOS's ImageIO by test_export_roundtrip.cpp
+Caveat heif_caveat(TransferFunction tf)
+{
+    switch (tf.type)
+    {
+    case TransferFunction::ITU:
+        return {Misreader_macOS | Misreader_Chromium | Misreader_Firefox,
+                "Safari and other macOS apps, Chrome and Firefox read BT.709 in a HEIF or AVIF with the sRGB curve, "
+                "rather than BT.1886's gamma 2.4."};
+    case TransferFunction::Log100:
+    case TransferFunction::Log100_Sqrt10:
+    case TransferFunction::ST240:
+        return {Misreader_macOS, "macOS apps do not know this curve's code, and read the file as sRGB."};
+    case TransferFunction::IEC61966_2_4: return {Misreader_macOS, "macOS apps read this curve slightly differently."};
+    case TransferFunction::DCI_P3:
+        return {Misreader_macOS, "macOS apps read this curve as a plain gamma of 2.6, without ST 428-1's 48/52.37 "
+                                 "scaling, so about 8% darker."};
+    default: return {};
+    }
+}

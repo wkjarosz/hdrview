@@ -1214,6 +1214,8 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
         ImGui::PE::End();
     }
 
+    caveat_entry(jxl_caveat(s_opts.tf));
+
     if (ImGui::Button("Reset options to defaults"))
         s_opts = JXLSaveOptions{};
 
@@ -1232,3 +1234,13 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 }
 
 #endif
+
+// macOS's ImageIO measured by test_export_roundtrip.cpp; libjxl 0.11's djxl by hand
+Caveat jxl_caveat(TransferFunction tf)
+{
+    if (tf.type == TransferFunction::ITU)
+        return {Misreader_macOS | Misreader_libjxl,
+                "macOS apps read a BT.709 JPEG XL with the sRGB curve, and tools that take its colors from libjxl's "
+                "profile invert BT.709's camera curve, rather than applying BT.1886's gamma 2.4."};
+    return {};
+}

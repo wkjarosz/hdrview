@@ -1483,6 +1483,8 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
         ImGui::PE::End();
     }
 
+    caveat_entry(tiff_caveat(s_opts.tf, ctx.wide_gamut));
+
     if (ImGui::Button("Reset options to defaults"))
         s_opts = TIFFSaveOptions{};
 
@@ -1495,3 +1497,11 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 
 bool tiff_offers_curve(TransferFunction tf, int data_type_index)
 { return tf.type == (data_type_index == 2 ? TransferFunction::Linear : TransferFunction::sRGB); }
+
+// macOS's ImageIO measured by test_export_roundtrip.cpp
+Caveat tiff_caveat(TransferFunction, bool wide_gamut)
+{
+    if (wide_gamut)
+        return {Misreader_macOS, "macOS apps ignore TIFF's primaries tags, and read a wide-gamut TIFF as sRGB's."};
+    return {};
+}
