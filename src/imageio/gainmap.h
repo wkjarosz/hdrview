@@ -133,6 +133,19 @@ struct IsoGainmapParams
 */
 IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size);
 
+/// The binary form ISO 21496-1 defines for \p params, three channels of them, as parse_iso_gainmap() reads it.
+std::vector<uint8_t> serialize_iso_gainmap(const IsoGainmapParams &params);
+
+/// The ISO 21496-1 gain map that takes the \p base rendition to the \p alternate one, a channel per color channel.
+/**
+    Both are linear, \p channels interleaved samples per pixel (the first three color), \p size pixels, and in the
+    same primaries. \p params brings the two renditions' headrooms and the offsets, and gets the range of gains the
+    map spans, at a gamma of 1: the boost from the darker rendition to the brighter, whichever is the base. Returns
+    the map's normalized values.
+*/
+GainmapImage compute_iso_gainmap(const float *base, const float *alternate, int2 size, int channels,
+                                 IsoGainmapParams &params);
+
 /// Parse Adobe's `hdrgm:` XMP schema, which encodes the same parameters as ISO 21496-1.
 /**
     Returns nullopt when the packet carries no `hdrgm:` properties, and throws when one is present but a

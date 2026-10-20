@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <optional>
 #include <spdlog/fmt/fmt.h>
@@ -445,6 +446,81 @@ IsoGainmapParams parse_iso_gainmap(const uint8_t *data, size_t size)
                   p.base_headroom, p.alternate_headroom, p.use_base_color_space);
 
     return p;
+}
+
+std::vector<uint8_t> serialize_iso_gainmap(const IsoGainmapParams &p)
+{
+    std::vector<uint8_t> out;
+    const auto           put = [&](uint32_t v, int bytes)
+    {
+        for (int i = bytes - 1; i >= 0; --i) out.push_back(uint8_t(v >> (8 * i)));
+    };
+    // every field a rational over 2^20, which holds the offsets' 1/64 exactly and gains to within 1e-6 stops
+    constexpr float k_denominator = float(1 << 20);
+    const auto      rational      = [&](float v, bool is_signed)
+    {
+        const double n = std::round(double(v) * k_denominator);
+        put(is_signed ? uint32_t(int32_t(n)) : uint32_t(std::max(n, 0.0)), 4);
+        put(uint32_t(k_denominator), 4);
+    };
+
+    put(0, 2); // minimum version
+    put(0, 2); // writer version
+    out.push_back(uint8_t(IsoFlag_IsMultiChannel | (p.use_base_color_space ? IsoFlag_UseBaseColorSpace : 0)));
+    rational(p.base_headroom, false);
+    rational(p.alternate_headroom, false);
+    for (int c = 0; c < 3; ++c)
+    {
+        rational(p.min[c], true);
+        rational(p.max[c], true);
+        rational(p.gamma[c], false);
+        rational(p.base_offset[c], true);
+        rational(p.alternate_offset[c], true);
+    }
+    return out;
+}
+
+GainmapImage compute_iso_gainmap(const float *base, const float *alternate, int2 size, int channels,
+                                 IsoGainmapParams &params)
+{
+    const size_t num = size_t(size.x) * size.y;
+
+    // The gain each sample needs, in stops, as the boost from the darker rendition to the brighter one whichever is
+    // the base: a map down to a darker alternate applies it with negative weight (see weight()), as Adobe's
+    // base-HDR samples store it. A negative sample, outside the primaries, counts as black.
+    const float        direction = params.base_headroom > params.alternate_headroom ? -1.f : 1.f;
+    std::vector<float> gain(num * 3);
+    for (size_t i = 0; i < num; ++i)
+        for (int c = 0; c < 3; ++c)
+            gain[3 * i + c] =
+                direction * std::log2((std::max(alternate[channels * i + c], 0.f) + params.alternate_offset[c]) /
+                                      (std::max(base[channels * i + c], 0.f) + params.base_offset[c]));
+
+    for (int c = 0; c < 3; ++c)
+    {
+        params.min[c] = std::numeric_limits<float>::infinity();
+        params.max[c] = -std::numeric_limits<float>::infinity();
+    }
+    for (size_t i = 0; i < num; ++i)
+        for (int c = 0; c < 3; ++c)
+        {
+            params.min[c] = std::min(params.min[c], gain[3 * i + c]);
+            params.max[c] = std::max(params.max[c], gain[3 * i + c]);
+        }
+    params.gamma = float3{1.f};
+
+    GainmapImage map;
+    map.size     = size;
+    map.channels = 3;
+    map.pixels.resize(num * 3);
+    for (size_t i = 0; i < num; ++i)
+        for (int c = 0; c < 3; ++c)
+        {
+            // a channel needing the same gain everywhere maps it from 0
+            const float span      = params.max[c] - params.min[c];
+            map.pixels[3 * i + c] = span > 0.f ? (gain[3 * i + c] - params.min[c]) / span : 0.f;
+        }
+    return map;
 }
 
 // at namespace scope because GCC's -Wunused-but-set-variable reports a function-local one as unused,

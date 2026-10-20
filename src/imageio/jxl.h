@@ -26,12 +26,20 @@ struct Caveat;
 Caveat jxl_caveat(TransferFunction tf, bool lossless);
 // throws on error
 std::vector<ImagePtr> load_jxl_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
-// throws on error
+/// Writes \p img, with a gain map to \p sdr_rendition when one is given; throws on error.
+/**
+    \p img is then the HDR rendition and \p sdr_rendition the SDR one of the same view. With \p hdr_base the file's
+    image is \p img and its gain map darkens it to \p sdr_rendition; otherwise the file's image is \p sdr_rendition
+    and the map brightens it to \p img, up to the peak \p img's mastering display names. \p tf and \p data_type
+    encode the file's image.
+*/
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, bool lossless = false,
-                    float quality = 95.f, TransferFunction tf = TransferFunction::sRGB, int data_type = 0);
+                    float quality = 95.f, TransferFunction tf = TransferFunction::sRGB, int data_type = 0,
+                    const Image *sdr_rendition = nullptr, bool hdr_base = false);
 
 struct JXLSaveOptions;
 struct SaveContext;
 JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx);
-// throws on error
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *opts);
+/// Writes \p img as \p opts say, with a gain map to \p sdr_rendition when they ask for one; throws on error.
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *opts,
+                    const Image *sdr_rendition = nullptr);

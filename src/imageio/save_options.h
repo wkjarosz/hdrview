@@ -17,7 +17,8 @@ struct SaveContext
     std::string table;              ///< Set by the dialog: the ID its own table shares with the options' table
     bool wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
     bool records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
-    bool sdr_base = false; ///< Set by the options: whether the file's base is an SDR rendition, as a gain map's is
+    bool        rendition = false; ///< Set by the dialog: whether it exports a rendition of the view, not the data
+    bool        sdr_base = false; ///< Set by the options: whether the file also needs the SDR rendition, for a gain map
 };
 
 /// Whether an encoding keeps values above SDR white: an HDR transfer function, or floating-point samples.

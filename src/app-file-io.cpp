@@ -241,7 +241,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         // what the format's options are told about the image, and say about the encoding they chose
         SaveContext ctx;
         // every format's options and the rendition's share a table ID, which syncs their columns' widths
-        ctx.table = "##save options";
+        ctx.table     = "##save options";
+        ctx.rendition = mode == SaveMode_Rendition;
         if (auto img = current_image())
             ctx.wide_gamut = img->chromaticities && named_color_gamut(*img->chromaticities) != ColorGamut_sRGB_BT709;
 
@@ -282,7 +283,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::BeginChild("##Options", ImVec2{HelloImGui::EmSize(28.f), column_height}, ImGuiChildFlags_None,
                           ImGuiWindowFlags_NoBackground);
 
-        // the image to save, and for a gain-map format the SDR rendition that is its base
+        // the image to save, and for a gain map the SDR rendition it also needs
         std::function<void(const Image &, std::ostream &, const std::string_view, const Image *)> save_func;
         // what the format writes unless one of its options says otherwise
         std::string save_extension = save_format_extensions[save_format];
@@ -319,8 +320,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_JPEG_XL:
         {
             auto opts = jxl_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
-            { save_jxl_image(img, os, filename, opts); };
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *sdr)
+            { save_jxl_image(img, os, filename, opts, sdr); };
         }
         break;
 
@@ -586,7 +587,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 if (!img)
                     throw runtime_error("the selection does not cover any of the image");
 
-                // a gain map's base: the same view, resolved at SDR white
+                // the SDR rendition a gain map needs: the same view, resolved at SDR white
                 ConstImagePtr sdr_base =
                     ctx.sdr_base
                         ? image_to_save(mode, cropping, 0.f, use_rendition_primaries ? &rendition_primaries : nullptr)

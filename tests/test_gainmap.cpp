@@ -38,6 +38,7 @@ using namespace hdrview_test;
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <sstream>
 
 namespace
@@ -421,21 +422,51 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
     CHECK(left != doctest::Approx(right));
 }
 
-TEST_CASE("An Ultra HDR file reads back as the renditions it was written from, for the peak it was written for")
+#endif
+
+#if HDRVIEW_ENABLE_LIBUHDR || HDRVIEW_ENABLE_LIBJXL
+TEST_CASE("Every gain-map writer's file reads back as the renditions it was written from, at any headroom")
 {
-    // A gain map takes an SDR base to an HDR rendition: decoded with no headroom the file is its base, and decoded in
-    // full it is the HDR rendition, up to the peak the rendition's mastering display names. Each channel ramps across
-    // the frame at its own level, from deep shadow to past SDR white, and the SDR rendition clips there, as an SDR
-    // export does. Both bases (the SDR rendition given, or libultrahdr's own tone map), over BT.709 and a wide gamut.
+    // A gain map takes the file's image to the other rendition: decoded with no headroom the file is the SDR
+    // rendition, decoded in full the HDR one, and halfway the geometric mean of the two, which only the headroom the
+    // map was written for puts there. Each channel ramps across the frame at its own level, from deep shadow to past
+    // SDR white, where the SDR rendition reads back clipped: it is handed over unclipped, as image_to_save() builds
+    // it with highlights passing through, and clips where an SDR file or display does. Over BT.709 and a wide gamut.
+    struct Writer
+    {
+        const char *name;
+        bool        sdr_given; ///< whether the file's SDR rendition is the one handed to the writer
+        std::function<void(const Image &hdr, const Image &sdr, std::ostream &)> save;
+        std::function<ImagePtr(std::istream &, const ImageLoadOptions &)>       load;
+    };
+    const std::vector<Writer> writers = {
+#if HDRVIEW_ENABLE_LIBUHDR
+        {"Ultra HDR, SDR rendition given", true, [](const Image &hdr, const Image &sdr, std::ostream &os)
+         { save_uhdr_image(hdr, os, "a.jpg", 95, 95, true, 1, 1.f, &sdr); },
+         [](std::istream &is, const ImageLoadOptions &opts) { return load_uhdr_image(is, "a.jpg", opts).front(); }},
+        {"Ultra HDR, libultrahdr's tone map", false, [](const Image &hdr, const Image &, std::ostream &os)
+         { save_uhdr_image(hdr, os, "a.jpg", 95, 95, true, 1, 1.f); },
+         [](std::istream &is, const ImageLoadOptions &opts) { return load_uhdr_image(is, "a.jpg", opts).front(); }},
+#endif
+#if HDRVIEW_ENABLE_LIBJXL
+        {"JPEG XL, SDR base", true, [](const Image &hdr, const Image &sdr, std::ostream &os)
+         { save_jxl_image(hdr, os, "a.jxl", false, 95.f, TransferFunction::sRGB, 2 /* uint8 */, &sdr, false); },
+         [](std::istream &is, const ImageLoadOptions &opts) { return load_jxl_image(is, "a.jxl", opts).front(); }},
+        {"JPEG XL, HDR base", true, [](const Image &hdr, const Image &sdr, std::ostream &os)
+         { save_jxl_image(hdr, os, "a.jxl", false, 95.f, TransferFunction::BT2100_PQ, 3 /* uint16 */, &sdr, true); },
+         [](std::istream &is, const ImageLoadOptions &opts) { return load_jxl_image(is, "a.jxl", opts).front(); }},
+#endif
+    };
+
     const int2  size{64, 16};
     const float peak_nits = 1000.f;
     const float headroom  = std::log2(peak_nits / HDR_REFERENCE_WHITE_NITS);
 
-    for (auto gamut : {ColorGamut_sRGB_BT709, ColorGamut_Display_P3_SMPTE432})
-        for (bool given_base : {true, false})
+    for (const auto &writer : writers)
+        for (auto gamut : {ColorGamut_sRGB_BT709, ColorGamut_Display_P3_SMPTE432})
         {
-            CAPTURE(color_gamut_name(gamut));
-            CAPTURE(given_base);
+            CAPTURE(std::string(writer.name));
+            CAPTURE(std::string(color_gamut_name(gamut)));
             const Chromaticities chr = gamut_chromaticities(gamut);
 
             auto hdr = std::make_shared<Image>(size, 3), sdr = std::make_shared<Image>(size, 3);
@@ -444,8 +475,7 @@ TEST_CASE("An Ultra HDR file reads back as the renditions it was written from, f
                     for (int c = 0; c < 3; ++c)
                     {
                         const float stops      = -6.f + (headroom - 0.25f + 6.f) * x / (size.x - 1) - 0.5f * c;
-                        hdr->channels[c](x, y) = std::exp2(stops);
-                        sdr->channels[c](x, y) = std::min(std::exp2(stops), 1.f);
+                        hdr->channels[c](x, y) = sdr->channels[c](x, y) = std::exp2(stops);
                     }
             for (auto &img : {hdr, sdr})
             {
@@ -455,45 +485,46 @@ TEST_CASE("An Ultra HDR file reads back as the renditions it was written from, f
             add_mastering_display(hdr->metadata["header"], chr, k_mastering_display_min_nits, peak_nits, "test");
 
             std::stringstream ss;
-            REQUIRE_NOTHROW(save_uhdr_image(*hdr, ss, "a.jpg", 95, 95, true, 1, 1.f, given_base ? sdr.get() : nullptr));
+            REQUIRE_NOTHROW(writer.save(*hdr, *sdr, ss));
 
             const auto decode = [&](float gainmap_headroom)
             {
                 std::istringstream in(ss.str(), std::ios::binary);
                 ImageLoadOptions   opts;
                 opts.gainmap_headroom = gainmap_headroom;
-                auto images           = load_uhdr_image(in, "a.jpg", opts);
-                REQUIRE(images.size() == 1);
-                return images.front();
+                return writer.load(in, opts);
             };
-            const auto base = decode(0.f), full = decode(k_full_gainmap_headroom);
+            const auto none = decode(0.f), half = decode(headroom / 2), full = decode(k_full_gainmap_headroom);
 
-            // the primaries it was written in, and the capacity the target peak gives
+            // the primaries it was written in
             REQUIRE(full->chromaticities);
             CHECK(la::maxelem(la::abs(full->chromaticities->red - chr.red)) <= 1e-3f);
-            CHECK(full->metadata["header"]["HDR capacity max"]["value"].get<float>() ==
-                  doctest::Approx(peak_nits / HDR_REFERENCE_WHITE_NITS).epsilon(0.01));
 
-            // In full, the HDR rendition: in stops in the highlights, where a wrong peak shows as a fraction of a
-            // stop or more, and in sRGB code values below SDR white, where the 8-bit base sets the precision. With no
-            // headroom, the base, which is the SDR rendition when one was given.
-            float worst_stops = 0.f, worst_code = 0.f, worst_base = 0.f;
+            // Each decode against what it should be: in stops in the highlights, where a wrong headroom shows as a
+            // fraction of a stop or more, and in sRGB code values below SDR white, where 8 bits set the precision.
+            // Halfway is the geometric mean of the two ends, offset as the map's gains are (ISO 21496-1's 1/64).
+            float      worst_stops = 0.f, worst_code = 0.f;
+            const auto compare = [&](float got, float want)
+            {
+                if (want >= 0.25f)
+                    worst_stops = std::max(worst_stops, std::abs(std::log2(std::max(got, 1e-6f) / want)));
+                if (want <= 1.f)
+                    worst_code = std::max(worst_code, std::abs(linear_to_sRGB(got) - linear_to_sRGB(want)));
+            };
             for (int y = 0; y < size.y; ++y)
                 for (int x = 0; x < size.x; ++x)
                     for (int c = 0; c < 3; ++c)
                     {
-                        const float want = hdr->channels[c](x, y), got = full->channels[c](x, y);
-                        if (want >= 0.25f)
-                            worst_stops = std::max(worst_stops, std::abs(std::log2(std::max(got, 1e-6f) / want)));
-                        if (want <= 1.f)
-                            worst_code = std::max(worst_code, std::abs(linear_to_sRGB(got) - linear_to_sRGB(want)));
-                        if (given_base)
-                            worst_base = std::max(worst_base, std::abs(linear_to_sRGB(base->channels[c](x, y)) -
-                                                                       linear_to_sRGB(sdr->channels[c](x, y))));
+                        constexpr float offset = 1.f / 64;
+                        const float     lo = none->channels[c](x, y), hi = full->channels[c](x, y);
+                        compare(hi, hdr->channels[c](x, y));
+                        if (writer.sdr_given)
+                            compare(lo, std::min(sdr->channels[c](x, y), 1.f));
+                        compare(half->channels[c](x, y),
+                                std::sqrt((std::max(lo, 0.f) + offset) * (std::max(hi, 0.f) + offset)) - offset);
                     }
             CHECK(worst_stops <= 0.1f);
             CHECK(worst_code <= 0.03f);
-            CHECK(worst_base <= 0.03f);
         }
 }
 #endif
@@ -570,6 +601,26 @@ TEST_CASE("The ISO 21496-1 binary metadata parses to the values the file declare
     {
         CHECK(p.base_offset[c] == doctest::Approx(1.f / 64.f));
         CHECK(p.alternate_offset[c] == doctest::Approx(1.f / 64.f));
+    }
+
+    // and what HDRView writes reads back as what it wrote, in this direction and the other, where the base is the
+    // HDR rendition
+    IsoGainmapParams down = p;
+    std::swap(down.base_headroom, down.alternate_headroom);
+    down.base_offset[1] = 1.f / 32.f;
+    for (const auto &written : {p, down})
+    {
+        const auto bytes = serialize_iso_gainmap(written);
+        const auto read  = parse_iso_gainmap(bytes.data(), bytes.size());
+        CHECK(read.base_headroom == doctest::Approx(written.base_headroom).epsilon(1e-5));
+        CHECK(read.alternate_headroom == doctest::Approx(written.alternate_headroom).epsilon(1e-5));
+        CHECK(read.use_base_color_space == written.use_base_color_space);
+        for (int c = 0; c < 3; ++c)
+            for (auto [r, w] :
+                 {std::pair{read.min[c], written.min[c]}, std::pair{read.max[c], written.max[c]},
+                  std::pair{read.gamma[c], written.gamma[c]}, std::pair{read.base_offset[c], written.base_offset[c]},
+                  std::pair{read.alternate_offset[c], written.alternate_offset[c]}})
+                CHECK(r == doctest::Approx(w).epsilon(1e-5));
     }
 }
 
