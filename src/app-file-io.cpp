@@ -263,20 +263,6 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::TextUnformatted("File format:");
         ImGui::PopFont();
         // ImGui::SetNextItemWidth(HelloImGui::EmSize(10.f));
-        // Up and Down step through the formats. Keyboard navigation is off app-wide, so the dialog claims the keys
-        // itself; routed to the focused window, they outrank the global shortcuts for them. A route counts only from
-        // the focused window or its parents, so this is claimed here rather than from the list box, a child.
-        const int step    = int(ImGui::Shortcut(ImGuiKey_DownArrow, ImGuiInputFlags_Repeat)) -
-                            int(ImGui::Shortcut(ImGuiKey_UpArrow, ImGuiInputFlags_Repeat));
-        bool      stepped = false;
-        if (step)
-            for (int i = save_format + step; i >= 0 && i <= Format_Last; i += step)
-                if (format_enabled[i])
-                {
-                    save_format = (Format_)i;
-                    stepped     = true;
-                    break;
-                }
         if (ImGui::BeginListBox("##File format", HelloImGui::EmToVec2(8.f, 17.f)))
         {
             for (int i = 0; i <= Format_Last; ++i)
@@ -284,14 +270,11 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 if (!format_enabled[i])
                     continue;
                 bool is_selected = (save_format == i);
-                if (ImGui::Selectable(save_format_names[i], is_selected))
+                // keyboard navigation moves the focus, and the selection follows it
+                if (ImGui::Selectable(save_format_names[i], is_selected) || (ImGui::IsItemFocused() && !is_selected))
                     save_format = (Format_)i;
                 if (is_selected)
-                {
                     ImGui::SetItemDefaultFocus();
-                    if (stepped)
-                        ImGui::SetScrollHereY();
-                }
             }
             ImGui::EndListBox();
         }

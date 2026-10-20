@@ -72,8 +72,10 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         ctx->SetRef("");
         IM_CHECK(ctx->WindowInfo("Save as...").Window != nullptr);
 
-        // the dialog's keys are its own: Down steps through its formats, not through the images behind it, and a
-        // shortcut it does not claim, H for a horizontal flip, stands down while it is open
+        // The dialog's keys are its own: keyboard navigation is on while it is open, Down moves within it rather than
+        // through the images behind it, and a shortcut it has no use for, H for a horizontal flip, stands down.
+        ctx->Yield(2);
+        IM_CHECK(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
         const bool flipped = *hdrview()->action("Flip horizontally").p_selected;
         ctx->KeyPress(ImGuiKey_DownArrow);
         ctx->KeyPress(ImGuiKey_H);
@@ -87,6 +89,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         ctx->SetRef("");
         wait_for_window_closed(ctx, "Save as...");
         IM_CHECK(ctx->WindowInfo("Save as...", ImGuiTestOpFlags_NoError).Window == nullptr);
+        ctx->Yield(2);
+        IM_CHECK((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) ==
+                 0); //< the arrows are the app's again
     };
 
     // Selecting each format in turn is what runs every *_parameters_gui(): in both dialogs, since a rendition

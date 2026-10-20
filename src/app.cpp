@@ -1926,6 +1926,15 @@ void HDRViewApp::process_shortcuts()
 {
     // spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
 
+    // Keyboard navigation (Tab, the arrows, Space) only while a modal dialog is open, which the shortcuts below then
+    // stand down for: elsewhere the arrows are the app's own, which navigation would take over in a focused panel.
+    // Set from the dialogs of the frame before, so it starts the frame after one opens.
+    auto &io = ImGui::GetIO();
+    if (ImGui::AnyModalDialogOpen())
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    else
+        io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+
     for (auto &a : m_actions)
         if (a.second.chord)
             // Held off while something is taking typed characters, so a letter meant for a text field is not
