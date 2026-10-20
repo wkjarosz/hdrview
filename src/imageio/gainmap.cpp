@@ -489,12 +489,12 @@ GainmapImage compute_iso_gainmap(const float *base, const float *alternate, int2
     // the base: a map down to a darker alternate applies it with negative weight (see weight()), as Adobe's
     // base-HDR samples store it. A negative sample, outside the primaries, counts as black.
     const float        direction = params.base_headroom > params.alternate_headroom ? -1.f : 1.f;
+    const auto         sample    = [](float v) { return std::max(v, 0.f); };
     std::vector<float> gain(num * 3);
     for (size_t i = 0; i < num; ++i)
         for (int c = 0; c < 3; ++c)
-            gain[3 * i + c] =
-                direction * std::log2((std::max(alternate[channels * i + c], 0.f) + params.alternate_offset[c]) /
-                                      (std::max(base[channels * i + c], 0.f) + params.base_offset[c]));
+            gain[3 * i + c] = direction * std::log2((sample(alternate[channels * i + c]) + params.alternate_offset[c]) /
+                                                    (sample(base[channels * i + c]) + params.base_offset[c]));
 
     for (int c = 0; c < 3; ++c)
     {

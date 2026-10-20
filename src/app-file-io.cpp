@@ -566,10 +566,15 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         if (ImGui::Button(save_as_name.c_str(), ImVec2{save_w, 0.f}))
         {
             filename = current_image()->path.stem().u8string() + save_extension;
+#if defined(HDRVIEW_ENABLE_GUI_TEST_ENGINE)
+            if (!m_test_save_path.empty())
+                filename = m_test_save_path;
+            else
+#endif
 #if !defined(__EMSCRIPTEN__)
-            filename = pfd::save_file(save_as_name.c_str(), filename,
-                                      {string(save_format_names[save_format]) + " images", save_extension})
-                           .result();
+                filename = pfd::save_file(save_as_name.c_str(), filename,
+                                          {string(save_format_names[save_format]) + " images", save_extension})
+                               .result();
 #endif
         }
 

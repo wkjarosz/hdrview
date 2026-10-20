@@ -38,9 +38,10 @@ enum Misreader_ : unsigned
 
 /// A warning that some applications misread a file saved so, naming them and what they do instead.
 /**
-    Each format's X_caveat() returns the one for its settings, from measurements of the readers. On macOS,
-    test_export_roundtrip.cpp holds every caveat naming macOS to what ImageIO does, both ways; the other readers
-    were checked by hand, at the versions each X_caveat()'s comment gives.
+    Each format's X_caveat() returns the one for its settings, from measurements of the readers, and its text names
+    the version measured, so a reader that has since changed shows as such. On macOS, test_export_roundtrip.cpp and
+    test_gainmap.cpp hold every caveat naming macOS to what ImageIO does, both ways; the other readers were checked
+    by hand.
 */
 struct Caveat
 {

@@ -1135,10 +1135,11 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
 
 #endif
 
-// Firefox 158 measured by hand; macOS's ImageIO by test_export_roundtrip.cpp
+// Firefox 158 measured by hand; macOS 27's ImageIO by test_export_roundtrip.cpp
 Caveat png_caveat(TransferFunction tf)
 {
     if (tf.type == TransferFunction::ITU)
-        return {Misreader_Firefox, "Firefox reads a BT.709 PNG with the sRGB curve, rather than BT.1886's gamma 2.4."};
+        return {Misreader_Firefox,
+                "Firefox 158 reads a BT.709 PNG with the sRGB curve, rather than BT.1886's gamma 2.4."};
     return {};
 }

@@ -34,7 +34,7 @@ struct UHDRSaveOptions
 {
     int   quality           = 95;
     int   gainmap_quality   = 95;
-    bool  use_multi_channel = false;
+    bool  use_multi_channel = true; ///< a gain per color channel, which a rendition clipped per channel needs
     int   gainmap_scale     = 1;
     float gainmap_gamma     = 1.f;
     int   preset            = 1;
@@ -490,10 +490,16 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
         throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &sdr_image, UHDR_SDR_IMG));
     }
 
-    // the gain map reaches the peak the rendition was made for
+    // The gain map reaches the peak the rendition was made for, and spans no more: the HDR rendition is never darker
+    // than the SDR one, so its boosts run from 1 to that peak. Left to itself, libultrahdr spans whatever ratios it
+    // meets, offset by only 1e-7, and a black pixel the SDR base's dither lifts by one code value asks for 14 stops
+    // below 1, spreading the map's 8 bits over more than three times the range they need.
     if (const auto md = mastering_display(img.metadata.value("header", json::object())); md && md->max_nits > 0.f)
-        throw_if_error(uhdr_enc_set_target_display_peak_brightness(
-            encoder.get(), std::clamp(md->max_nits, HDR_REFERENCE_WHITE_NITS, 10000.f)));
+    {
+        const float peak = std::clamp(md->max_nits, HDR_REFERENCE_WHITE_NITS, 10000.f);
+        throw_if_error(uhdr_enc_set_target_display_peak_brightness(encoder.get(), peak));
+        throw_if_error(uhdr_enc_set_min_max_content_boost(encoder.get(), 1.f, peak / HDR_REFERENCE_WHITE_NITS));
+    }
 
     throw_if_error(uhdr_enc_set_quality(encoder.get(), opts->quality, UHDR_BASE_IMG));
     throw_if_error(uhdr_enc_set_quality(encoder.get(), opts->gainmap_quality, UHDR_GAIN_MAP_IMG));

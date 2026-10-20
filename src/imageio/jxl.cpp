@@ -1006,8 +1006,11 @@ namespace
 {
 
 /// Encodes \p img as a JPEG XL, in a container holding \p jhgm as a `jhgm` box when given, else a bare codestream.
+/**
+    \p clip_at_white clips its colors at SDR white, as an SDR rendition shows them, which integer samples do anyway.
+*/
 void encode_jxl(const Image &img, std::ostream &os, std::string_view filename, bool lossless, float quality,
-                TransferFunction tf, int data_type, const std::string *jhgm)
+                TransferFunction tf, int data_type, const std::string *jhgm, bool clip_at_white = false)
 {
     Timer     timer;
 
@@ -1058,6 +1061,10 @@ void encode_jxl(const Image &img, std::ostream &os, std::string_view filename, b
         info.bits_per_sample          = 16;
         info.exponent_bits_per_sample = 5;
         pixels_f16                    = img.as_interleaved<half>(&w, &h, &n, tf, false, true, false);
+        if (clip_at_white)
+            for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i)
+                if (int(i % n) < (n <= 2 ? 1 : 3))
+                    pixels_f16[i] = std::min(float(pixels_f16[i]), from_linear(1.f, tf));
         pixels                        = pixels_f16.get();
         pixel_bytes                   = sizeof(half) * w * h * n;
         break;
@@ -1065,6 +1072,10 @@ void encode_jxl(const Image &img, std::ostream &os, std::string_view filename, b
         info.bits_per_sample          = 32;
         info.exponent_bits_per_sample = 8;
         pixels_f32                    = img.as_interleaved<float>(&w, &h, &n, tf, false, true, false);
+        if (clip_at_white)
+            for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i)
+                if (int(i % n) < (n <= 2 ? 1 : 3))
+                    pixels_f32[i] = std::min(pixels_f32[i], from_linear(1.f, tf));
         pixels                        = pixels_f32.get();
         pixel_bytes                   = sizeof(float) * w * h * n;
         break;
@@ -1246,12 +1257,16 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     encode_jxl(*map, map_os, "gain map", lossless, quality, TransferFunction::Linear, JXL_TYPE_UINT16, nullptr);
 
     const std::string jhgm = jhgm_bundle(serialize_iso_gainmap(params), map_os.str());
-    encode_jxl(hdr_base ? img : *sdr_rendition, os, filename, lossless, quality, tf, data_type, &jhgm);
+    encode_jxl(hdr_base ? img : *sdr_rendition, os, filename, lossless, quality, tf, data_type, &jhgm, !hdr_base);
     spdlog::info("Wrote a gain map to {:.2f} stops of headroom from an {} base in {} seconds.", headroom,
                  hdr_base ? "HDR" : "SDR", timer.elapsed() / 1000.f);
 }
 
 static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
+
+#if defined(HDRVIEW_ENABLE_GUI_TEST_ENGINE)
+int &jxl_gain_map_option() { return s_opts.gain_map; }
+#endif
 
 JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
 {
@@ -1321,6 +1336,8 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
     }
 
     caveat_entry(jxl_caveat(s_opts.tf, s_opts.lossless));
+    if (gain_map)
+        caveat_entry(jxl_gainmap_caveat(gain_map == 2));
 
     ctx.hdr               = gain_map != 0 || is_hdr_encoding(s_opts.tf, float_type);
     ctx.records_primaries = true; //< in its color encoding or ICC profile
@@ -1342,16 +1359,27 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
 #endif
 
-// macOS's ImageIO measured by test_export_roundtrip.cpp. It reads every gamma in JPEG XL's own codes as 1.8, and 709 as
-// sRGB, so those are written through an ICC profile, which a lossless file keeps. A lossy one is encoded in XYB,
-// and libjxl turns the profile back into its codes where they can state it, which leaves macOS misreading the gammas
-// other than its own 1.8 and DCI's 2.6, BT.1886's 2.4 among them.
+// macOS 27's ImageIO measured by test_export_roundtrip.cpp. It reads every gamma in JPEG XL's own codes as 1.8, and 709
+// as sRGB, so those are written through an ICC profile, which a lossless file keeps. A lossy one is encoded in XYB, and
+// libjxl turns the profile back into its codes where they can state it, which leaves macOS misreading the gammas other
+// than its own 1.8 and DCI's 2.6, BT.1886's 2.4 among them.
 Caveat jxl_caveat(TransferFunction tf, bool lossless)
 {
     const bool misread_gamma = tf.type == TransferFunction::ITU ||
                                (tf.type == TransferFunction::Gamma && tf.gamma != 1.8f && tf.gamma != 2.6f);
     if (!lossless && misread_gamma)
-        return {Misreader_macOS, "macOS apps read a lossy JPEG XL with this transfer function as a gamma of 1.8; "
+        return {Misreader_macOS, "macOS 27 apps read a lossy JPEG XL with this transfer function as a gamma of 1.8; "
                                  "they read a lossless one right."};
     return {};
+}
+
+// macOS 27's ImageIO measured by test_gainmap.cpp, and on Adobe's samples: it applies the gain maps of Ultra HDR JPEGs
+// and AVIFs, but not a JPEG XL's jhgm box, whichever rendition is the base.
+Caveat jxl_gainmap_caveat(bool hdr_base)
+{
+    return {Misreader_macOS, hdr_base
+                                 ? "macOS 27 apps ignore a JPEG XL's gain map: on an SDR display they tone-map the "
+                                   "HDR base themselves."
+                                 : "macOS 27 apps ignore a JPEG XL's gain map: on an HDR display they show the SDR "
+                                   "base."};
 }

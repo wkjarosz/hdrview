@@ -1546,11 +1546,11 @@ bool tiff_offers_tf(TransferFunction tf, int data_type_index)
     return tf.type == TransferFunction::sRGB || ICCProfile::can_label(tf);
 }
 
-// macOS's ImageIO measured by test_export_roundtrip.cpp
+// macOS 27's ImageIO measured by test_export_roundtrip.cpp
 Caveat tiff_caveat(TransferFunction tf, bool wide_gamut)
 {
     // an ICC profile names the primaries to macOS, which ignores TIFF's own tags for them
     if (wide_gamut && !ICCProfile::can_label(tf))
-        return {Misreader_macOS, "macOS apps ignore TIFF's primaries tags, and read a wide-gamut TIFF as sRGB's."};
+        return {Misreader_macOS, "macOS 27 apps ignore TIFF's primaries tags, and read a wide-gamut TIFF as sRGB's."};
     return {};
 }

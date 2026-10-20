@@ -1679,11 +1679,11 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
 
 #endif
 
-// Firefox 158 measured by hand, on an AVIF; macOS's ImageIO by test_export_roundtrip.cpp. With the ICC profile an SDR
-// transfer function other than sRGB carries beside its nclx box, macOS and Chromium 155 read every one right.
+// Firefox 158 measured by hand, on an AVIF; macOS 27's ImageIO by test_export_roundtrip.cpp. With the ICC profile an
+// SDR transfer function other than sRGB carries beside its nclx box, macOS and Chromium 155 read every one right.
 Caveat heif_caveat(TransferFunction tf)
 {
     if (tf.type == TransferFunction::ITU)
-        return {Misreader_Firefox, "Firefox reads BT.709 in an AVIF slightly differently."};
+        return {Misreader_Firefox, "Firefox 158 reads BT.709 in an AVIF slightly differently."};
     return {};
 }
