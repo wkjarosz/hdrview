@@ -1015,15 +1015,16 @@ void save_png_image(const Image &img, ostream &os, string_view /*filename*/, boo
     const bool primaries_are_srgb = cicp_primaries < 0 || cicp_primaries == 1 || cicp_primaries == 2;
     const auto signaling          = transfer_signaling(tf);
 
-    if (signaling.srgb_chunk && primaries_are_srgb)
+    const bool srgb_chunk = signaling.srgb_chunk && primaries_are_srgb;
+    if (srgb_chunk)
         png_set_sRGB(png_ptr, info_ptr.get(), PNG_sRGB_INTENT_PERCEPTUAL);
 
-    // A curve neither the sRGB chunk nor an exact gAMA states also gets an ICC profile, which a reader that does
-    // not know the cICP code falls back on. The PNG spec forbids an sRGB chunk in the same file as an iCCP chunk;
-    // that is no conflict here, since only the sRGB curve gets an sRGB chunk.
+    // A curve neither an sRGB chunk nor an exact gAMA states, the sRGB curve over wide primaries among them, also
+    // gets an ICC profile, which a reader that does not know the cICP code falls back on. The PNG spec forbids an
+    // sRGB chunk beside an iCCP chunk, and such a file has none.
     std::vector<uint8_t> icc;
     const bool           exact_gama = signaling.file_gamma > 0.0 && signaling.gamma_is_exact;
-    if (!is_hdr_encoding(tf) && !signaling.srgb_chunk && !exact_gama)
+    if (!is_hdr_encoding(tf) && !srgb_chunk && !exact_gama)
     {
         const auto chr = (cicp_primaries < 0 || !img.chromaticities) ? Chromaticities{} : *img.chromaticities;
         icc            = (n <= 2 ? ICCProfile::Gray(chr.white, tf) : ICCProfile::RGB(chr, tf)).bytes();
