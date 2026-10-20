@@ -468,10 +468,10 @@ TEST_CASE("every writer round-trips every channel-group layout as the viewport s
 TEST_CASE("every setting of every writer round-trips each curve its dialog offers, labeled as it promises")
 {
     // A wide-gamut image, which a setting keeps and records or converts to sRGB's primaries, under every transfer
-    // function. Gamma takes three exponents, since a reader may read them all as one (macOS reads every JPEG XL gamma
-    // as 1.8): 1.8, which no other curve shares, 2.2, which CICP names, and 2.6, JPEG XL's DCI. A setting must label
-    // each curve its dialog offers, or the file reads back as some other curve; one it does not offer is the saver's
-    // to refuse or write as a curve it can label, which the dialog never asks for.
+    // function. Gamma takes four exponents, since a reader may read them all as one (macOS reads every JPEG XL gamma
+    // as 1.8): 1.8, which no other curve shares, 2.2 and 2.8, which CICP names, and 2.6, JPEG XL's DCI. A setting must
+    // label each curve its dialog offers, or the file reads back as some other curve; one it does not offer is the
+    // saver's to refuse or write as a curve it can label, which the dialog never asks for.
     const Chromaticities bt2020 = gamut_chromaticities(ColorGamut_BT2020_2100);
 
     std::vector<TransferFunction> curves;
@@ -481,6 +481,7 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
     curves.push_back({TransferFunction::Gamma, 1.8f});
     curves.push_back({TransferFunction::Gamma, 2.2f});
     curves.push_back({TransferFunction::Gamma, 2.6f});
+    curves.push_back({TransferFunction::Gamma, 2.8f});
 
     for (const auto &variant : k_variants)
     {

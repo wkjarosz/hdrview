@@ -1424,31 +1424,28 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
+                    // nclx names gammas only by code, so each one it has is a choice of its own
+                    std::vector<TransferFunction> curves;
                     for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
+                        if (i == TransferFunction::Gamma)
+                            curves.insert(curves.end(),
+                                          {{TransferFunction::Gamma, 2.2f}, {TransferFunction::Gamma, 2.8f}});
+                        else
+                            curves.push_back({(TransferFunction::Type_)i});
+                    for (const auto &curve : curves)
                     {
-                        if (!heif_offers_curve((TransferFunction::Type_)i))
+                        if (!heif_offers_curve(curve))
                             continue;
-                        bool selected = (s_opts.tf.type == (TransferFunction::Type_)i);
-                        if (ImGui::Selectable(
-                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
-                                selected))
-                            s_opts.tf.type = (TransferFunction::Type_)i;
+                        const bool selected = s_opts.tf.type == curve.type &&
+                                              (curve.type != TransferFunction::Gamma || s_opts.tf.gamma == curve.gamma);
+                        if (ImGui::Selectable(transfer_function_name(curve).c_str(), selected))
+                            s_opts.tf = curve;
                         if (selected)
                             ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
                 }
                 ImGui::Tooltip("Encode the pixel values using this transfer function.");
-                if (s_opts.tf.type == TransferFunction::Gamma)
-                {
-                    ImGui::Indent();
-                    ImGui::AlignTextToFramePadding();
-                    ImGui::TextUnformatted("Gamma");
-                    ImGui::SameLine(HelloImGui::EmSize(9.f));
-                    ImGui::SetNextItemWidth(-FLT_MIN);
-                    ImGui::SliderFloat("##Gamma", &s_opts.tf.gamma, 0.1f, 5.f);
-                    ImGui::Unindent();
-                }
                 return true;
             },
             "Encode the pixel values using this transfer function.");

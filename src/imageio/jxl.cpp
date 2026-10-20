@@ -43,14 +43,17 @@ bool is_jxl_image(istream &is) noexcept { return false; }
 
 bool jxl_offers_curve(TransferFunction) noexcept { return false; }
 
-vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
+vector<ImagePtr> load_jxl_image(istream &, string_view, const ImageLoadOptions &)
 {
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
 
 JXLSaveOptions *jxl_parameters_gui(SaveContext &) { return &s_opts; }
 
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
+void save_jxl_image(const Image &, std::ostream &, std::string_view, bool, float, TransferFunction, int)
+{ throw runtime_error("JPEG-XL support not enabled in this build."); }
+
+void save_jxl_image(const Image &, std::ostream &, std::string_view, JXLSaveOptions *)
 {
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
