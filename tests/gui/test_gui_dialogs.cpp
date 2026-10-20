@@ -17,6 +17,7 @@
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "../test_asan.h"
 #include "test_gui_support.h"
 
 using namespace hdrview_test;
@@ -289,7 +290,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
 #if HDRVIEW_ENABLE_LIBUHDR
     cases.push_back({"JPEG (UltraHDR)", ".jpg", nullptr});
 #endif
-#if HDRVIEW_ENABLE_LIBJXL
+#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
     cases.push_back({"JPEG-XL", ".jxl", "SDR base"});
     cases.push_back({"JPEG-XL", ".jxl", "HDR base"});
 #endif

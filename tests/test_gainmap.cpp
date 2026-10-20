@@ -457,7 +457,7 @@ TEST_CASE("Every gain-map writer's file reads back as the renditions it was writ
          { save_uhdr_image(hdr, os, "a.jpg", 95, 95, true, 1, 1.f); },
          [](std::istream &is, const ImageLoadOptions &opts) { return load_uhdr_image(is, "a.jpg", opts).front(); }},
 #endif
-#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_support.h
+#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
         {"JPEG XL, SDR base", true, jxl_gainmap_caveat(false), [](const Image &hdr, const Image &sdr, std::ostream &os)
          { save_jxl_image(hdr, os, "a.jxl", false, 95.f, TransferFunction::sRGB, 2 /* uint8 */, &sdr, false); },
          [](std::istream &is, const ImageLoadOptions &opts) { return load_jxl_image(is, "a.jxl", opts).front(); }},
