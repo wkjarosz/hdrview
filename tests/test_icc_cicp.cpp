@@ -244,7 +244,8 @@ TEST_CASE("icc_cicp_tag reports the video range flag")
 TEST_CASE("A profile built for a curve reads back as that curve and those primaries")
 {
     // every curve, gamma at an exponent no other curve shares, both an RGB and a gray profile, and a wide gamut
-    // beside BT.709, read back through the same path a loader takes
+    // beside BT.709, read back through the same path a loader takes. PQ and HLG read back through their cicp tag,
+    // and through their curves as the SDR clip a reader that ignores the tag sees.
     std::vector<TransferFunction> curves;
     for (int i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
         if (i != TransferFunction::Gamma)
@@ -257,25 +258,48 @@ TEST_CASE("A profile built for a curve reads back as that curve and those primar
     for (const auto &tf : curves)
     {
         CAPTURE(transfer_function_name(tf));
-        const bool expressible = tf.type != TransferFunction::Unspecified && tf.type != TransferFunction::BT2100_PQ &&
-                                 tf.type != TransferFunction::BT2100_HLG;
-        CHECK(ICCProfile::can_describe(tf) == (expressible && ICCProfile::lcms_version() > 0));
-        if (!ICCProfile::can_describe(tf))
+        const bool hdr  = tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG;
+        const bool lcms = ICCProfile::lcms_version() > 0;
+        CHECK(ICCProfile::can_describe(tf) == (tf.type != TransferFunction::Unspecified && !hdr && lcms));
+        CHECK(ICCProfile::can_label(tf) == (tf.type != TransferFunction::Unspecified && lcms));
+        if (!ICCProfile::can_label(tf))
         {
             CHECK_FALSE(ICCProfile::RGB(Chromaticities{}, tf).valid());
             continue;
         }
 
-        // what the curve decodes a ramp of code values to, clipped to the white an ICC curve ends at
-        std::vector<float> want(num);
-        for (int i = 0; i < num; ++i) want[i] = std::clamp(to_linear(float(i) / (num - 1), tf), 0.f, 1.f);
+        // what the curve decodes a ramp of code values to, and that clipped to the white an ICC curve ends at
+        std::vector<float> want(num), clipped(num);
+        for (int i = 0; i < num; ++i)
+        {
+            want[i]    = to_linear(float(i) / (num - 1), tf);
+            clipped[i] = std::clamp(want[i], 0.f, 1.f);
+        }
+        if (!hdr)
+            want = clipped;
+        const auto ramp = [&](int channels)
+        {
+            std::vector<float> pixels(num * channels);
+            for (int i = 0; i < num * channels; ++i) pixels[i] = float(i / channels) / (num - 1);
+            return pixels;
+        };
+        const auto worst_error = [&](const std::vector<float> &pixels, const std::vector<float> &expected, int channels)
+        {
+            float worst = 0.f;
+            for (int i = 0; i < num * channels; ++i)
+                worst = std::max(worst,
+                                 std::abs(pixels[i] - expected[i / channels]) / std::max(1.f, expected[i / channels]));
+            return worst;
+        };
 
         for (const auto &chr : gamuts)
         {
             const auto bytes = ICCProfile::RGB(chr, tf).bytes();
             REQUIRE_FALSE(bytes.empty());
-            ICCProfile read{bytes};
+            ICCProfile read; // assigned, as a loader holding it for several frames does
+            read = ICCProfile{bytes};
             REQUIRE(read.valid());
+            CHECK(read.cicp().valid() == hdr);
             CHECK(read.description().find(transfer_function_name(tf)) != std::string::npos);
 
             Chromaticities got;
@@ -284,22 +308,21 @@ TEST_CASE("A profile built for a curve reads back as that curve and those primar
                                 std::pair{got.blue, chr.blue}, std::pair{got.white, chr.white}})
                 CHECK(la::maxelem(la::abs(g - w)) <= 1e-3f);
 
-            std::vector<float> pixels(num * 3);
-            for (int i = 0; i < num; ++i) pixels[3 * i] = pixels[3 * i + 1] = pixels[3 * i + 2] = float(i) / (num - 1);
+            auto pixels = ramp(3);
             REQUIRE(read.linearize_pixels(pixels.data(), int3{num, 1, 3}, true));
-            float worst = 0.f;
-            for (int i = 0; i < num * 3; ++i) worst = std::max(worst, std::abs(pixels[i] - want[i / 3]));
-            CHECK(worst <= 2e-3f);
+            CHECK(worst_error(pixels, want, 3) <= 2e-3f);
+
+            pixels = ramp(3);
+            REQUIRE(ICCProfile::transform_pixels(pixels.data(), int3{num, 1, 3}, read, ICCProfile::linear_RGB(chr)));
+            CHECK(worst_error(pixels, clipped, 3) <= 2e-3f);
         }
 
         ICCProfile gray{ICCProfile::Gray(white_point(WhitePoint_D65), tf).bytes()};
         REQUIRE(gray.is_Gray());
-        std::vector<float> pixels(num);
-        for (int i = 0; i < num; ++i) pixels[i] = float(i) / (num - 1);
+        CHECK(gray.cicp().valid() == hdr);
+        auto pixels = ramp(1);
         REQUIRE(gray.linearize_pixels(pixels.data(), int3{num, 1, 1}, true));
-        float worst = 0.f;
-        for (int i = 0; i < num; ++i) worst = std::max(worst, std::abs(pixels[i] - want[i]));
-        CHECK(worst <= 2e-3f);
+        CHECK(worst_error(pixels, want, 1) <= 2e-3f);
     }
 }
 

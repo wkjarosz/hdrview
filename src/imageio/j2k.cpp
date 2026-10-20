@@ -736,7 +736,7 @@ void save_j2k_image(const Image &img, ostream &os, string_view filename, const J
                                       ? params->tf
                                       : labeled_curve(params->tf, TransferFunction::sRGB, "JPEG 2000");
     const bool             wide = img.chromaticities && named_color_gamut(*img.chromaticities) != ColorGamut_sRGB_BT709;
-    const bool             icc  = jp2 && (tf.type != TransferFunction::sRGB || wide) && ICCProfile::can_describe(tf);
+    const bool             icc  = jp2 && (tf.type != TransferFunction::sRGB || wide) && ICCProfile::can_label(tf);
 
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved<uint16_t>(&w, &h, &n, tf, params->dither, true, /*convert_to_sRGB*/ !icc);
@@ -942,12 +942,12 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
         ImGui::PE::End();
     }
 
-    ctx.hdr               = false; //< SDR curves only
-    ctx.records_primaries = s_opts.container == J2KContainer::JP2 && ICCProfile::can_describe(s_opts.tf);
+    ctx.hdr               = is_hdr_encoding(s_opts.tf);
+    ctx.records_primaries = s_opts.container == J2KContainer::JP2 && ICCProfile::can_label(s_opts.tf);
     return &s_opts;
 }
 
 #endif // HDRVIEW_ENABLE_J2K
 
 bool j2k_offers_curve(TransferFunction tf, J2KContainer container)
-{ return tf.type == TransferFunction::sRGB || (container == J2KContainer::JP2 && ICCProfile::can_describe(tf)); }
+{ return tf.type == TransferFunction::sRGB || (container == J2KContainer::JP2 && ICCProfile::can_label(tf)); }

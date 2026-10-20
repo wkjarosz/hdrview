@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <sys/types.h>
+#include <utility>
 #include <vector>
 
 class CICPProfile;
@@ -49,16 +50,11 @@ public:
     ICCProfile &operator=(const ICCProfile &) = delete;
 
     // movable (transfer ownership)
-    // ColorProfile(ColorProfile &&other) noexcept : m_profile(other.m_profile) { other.m_profile = nullptr; }
     ICCProfile &operator=(ICCProfile &&other) noexcept
     {
-        if (this != &other)
-        {
-            // swap pointers so the moved-from object will clean up the old resource in its dtor
-            void *tmp       = m_profile;
-            m_profile       = other.m_profile;
-            other.m_profile = tmp;
-        }
+        // swapped, so the moved-from object releases the old profile in its destructor
+        std::swap(m_profile, other.m_profile);
+        std::swap(m_cicp, other.m_cicp);
         return *this;
     }
 
@@ -67,18 +63,21 @@ public:
     /// Construct a linear Gray ICC profile with the specified white point (or D65 if none is provided).
     static ICCProfile linear_Gray(const float2 &whitepoint = white_point(WhitePoint_D65));
 
-    /// An RGB profile with the primaries and white \p chr and the transfer function \p tf, if ICC can express it.
+    /// An RGB profile with the primaries and white \p chr and the transfer function \p tf.
     /**
         Linear, gamma, sRGB and BT.709 get their exact parametric curves; the others a sampled one, clipped to
-        [0, 1] as every ICC curve is (DCI-P3's code values run past its white). PQ and HLG, whose meaning an ICC
-        curve cannot carry, get an invalid profile, as does any curve when built without LCMS2. The profile's
-        description names its primaries and curve.
+        [0, 1] as every ICC curve is (DCI-P3's code values run past its white). PQ and HLG, whose meaning an ICC curve
+        cannot carry, are named instead by a cicp tag (ICC.1:2022, so an ICC v4.4 profile), over a curve that clips
+        them at SDR white for a reader that ignores the tag. Without LCMS2 the profile is invalid. Its description
+        names its primaries and curve.
     */
     static ICCProfile RGB(const Chromaticities &chr, const TransferFunction &tf);
     /// A Gray profile with the white \p whitepoint and the transfer function \p tf, as RGB() builds them.
     static ICCProfile Gray(const float2 &whitepoint, const TransferFunction &tf);
-    /// Whether RGB() and Gray() can describe the transfer function \p tf in this build.
+    /// Whether RGB() and Gray() can describe the transfer function \p tf exactly, with an ICC curve, in this build.
     static bool can_describe(const TransferFunction &tf);
+    /// Whether RGB() and Gray() can name \p tf in this build: exactly, or for PQ and HLG through a cicp tag.
+    static bool can_label(const TransferFunction &tf);
 
     /// The profile as the bytes of an ICC file, or none for an invalid profile.
     std::vector<uint8_t> bytes() const;

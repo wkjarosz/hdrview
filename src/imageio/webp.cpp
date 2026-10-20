@@ -692,8 +692,8 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
         ImGui::PE::End();
     }
 
-    ctx.hdr               = false;                               //< 8-bit SDR
-    ctx.records_primaries = ICCProfile::can_describe(s_opts.tf); //< in an ICC profile
+    ctx.hdr               = is_hdr_encoding(s_opts.tf);
+    ctx.records_primaries = ICCProfile::can_label(s_opts.tf); //< in an ICC profile
     return &s_opts;
 }
 
@@ -702,5 +702,5 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
 bool webp_offers_curve(TransferFunction tf)
 {
     // any curve an ICC profile names, and sRGB, which needs none
-    return tf.type == TransferFunction::sRGB || ICCProfile::can_describe(tf);
+    return tf.type == TransferFunction::sRGB || ICCProfile::can_label(tf);
 }

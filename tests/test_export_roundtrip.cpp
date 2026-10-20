@@ -253,7 +253,7 @@ const Layout k_layouts[] = {
 // clang-format on
 
 /// Values low enough that unpremultiplying on the way out cannot clamp, and distinct per channel.
-ImagePtr make_image(const Layout &layout, float alpha)
+ImagePtr make_image(const Layout &layout, float alpha, float brightness = 1.f)
 {
     // not square: a transposed stride is invisible in a square image
     const int2 size{8, 6};
@@ -265,7 +265,7 @@ ImagePtr make_image(const Layout &layout, float alpha)
     for (size_t c = 0; c < layout.channels.size(); ++c)
     {
         const bool  is_alpha = std::string(layout.channels[c]) == "A";
-        const float value    = is_alpha ? alpha : v;
+        const float value    = is_alpha ? alpha : v * brightness;
         for (int y = 0; y < size.y; ++y)
             for (int x = 0; x < size.x; ++x) img->channels[c](x, y) = value;
         if (!is_alpha)
@@ -496,14 +496,15 @@ TEST_CASE("every setting of every writer round-trips each curve its dialog offer
                 continue;
             INFO("curve = ", transfer_function_name(tf));
 
-            auto img            = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f);
-            img->chromaticities = bt2020;
+            // for an HDR curve, an image whose channels straddle SDR white, which a curve that clips there misses
+            const bool hdr_curve = tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG;
+            auto       img       = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f, hdr_curve ? 8.f : 1.f);
+            img->chromaticities  = bt2020;
             img->compute_color_transform();
             const float4 want = img->rgba_pixel(int2{1, 0}, Target_Primary);
 
             // what a setting that has room for it records: a white luminance, and for an HDR curve the display
             // the image was mastered on
-            const bool hdr_curve = tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG;
             const MasteringDisplay mastered{bt2020, k_mastering_display_min_nits, 1000.f};
             if (hdr_curve)
                 add_mastering_display(img->metadata["header"], mastered.primaries, mastered.min_nits, mastered.max_nits,

@@ -1529,8 +1529,8 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
 
     caveat_entry(tiff_caveat(s_opts.tf, ctx.wide_gamut));
 
-    ctx.hdr   = s_opts.data_type_index == 2; //< float
-    ctx.records_primaries = ICCProfile::can_describe(s_opts.tf); //< in an ICC profile
+    ctx.hdr               = is_hdr_encoding(s_opts.tf, s_opts.data_type_index == 2);
+    ctx.records_primaries = ICCProfile::can_label(s_opts.tf); //< in an ICC profile
     return &s_opts;
 }
 
@@ -1541,14 +1541,14 @@ bool tiff_offers_curve(TransferFunction tf, int data_type_index)
     // float samples are linear; integer ones are sRGB, or any curve an ICC profile names
     if (data_type_index == 2)
         return tf.type == TransferFunction::Linear;
-    return tf.type == TransferFunction::sRGB || ICCProfile::can_describe(tf);
+    return tf.type == TransferFunction::sRGB || ICCProfile::can_label(tf);
 }
 
 // macOS's ImageIO measured by test_export_roundtrip.cpp
 Caveat tiff_caveat(TransferFunction tf, bool wide_gamut)
 {
     // an ICC profile names the primaries to macOS, which ignores TIFF's own tags for them
-    if (wide_gamut && !ICCProfile::can_describe(tf))
+    if (wide_gamut && !ICCProfile::can_label(tf))
         return {Misreader_macOS, "macOS apps ignore TIFF's primaries tags, and read a wide-gamut TIFF as sRGB's."};
     return {};
 }

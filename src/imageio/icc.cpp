@@ -204,9 +204,50 @@ std::string description_of(const Chromaticities &chr, const TransferFunction &tf
 
 bool ICCProfile::can_describe(const TransferFunction &tf) { return tone_curve(tf) != nullptr; }
 
+namespace
+{
+
+bool is_hdr_curve(const TransferFunction &tf)
+{ return tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG; }
+
+/// The curve a reader that ignores a profile's cicp tag falls back on: \p tf relative to SDR white, clipped at it.
+ToneCurve hdr_fallback_curve(const TransferFunction &tf)
+{
+    constexpr int      num = 4096;
+    std::vector<float> samples(num);
+    for (int i = 0; i < num; ++i) samples[i] = std::clamp(to_linear(float(i) / (num - 1), tf), 0.f, 1.f);
+    return ToneCurve{cmsBuildTabulatedToneCurveFloat(CmsContext::thread_local_instance().get(), num, samples.data())};
+}
+
+/// The curve to build a profile for \p tf with: its own, or for PQ and HLG the fallback their cicp tag stands over.
+ToneCurve profile_curve(const TransferFunction &tf)
+{ return is_hdr_curve(tf) ? hdr_fallback_curve(tf) : tone_curve(tf); }
+
+/// Tags \p profile, if \p tf is PQ or HLG, with the cicp code points of \p primaries and \p tf (ICC.1:2022).
+/**
+    A reader that knows the tag takes it over the profile's curves. It is written raw, since the LCMS libjxl bundles
+    predates it.
+*/
+void add_cicp_tag(cmsHPROFILE profile, int primaries, const TransferFunction &tf)
+{
+    if (!is_hdr_curve(tf))
+        return;
+    uint8_t tag[12] = {'c', 'i', 'c', 'p'}; // the type signature, then four reserved bytes
+    tag[8]          = uint8_t(primaries < 0 ? 2 : primaries);
+    tag[9]          = uint8_t(transfer_function_to_CICP(tf));
+    tag[10]         = 0; // matrix coefficients: RGB
+    tag[11]         = 1; // full range
+    cmsSetProfileVersion(profile, 4.4);
+    cmsWriteRawTag(profile, (cmsTagSignature)0x63696370 /* 'cicp' */, tag, sizeof(tag));
+}
+
+} // namespace
+
+bool ICCProfile::can_label(const TransferFunction &tf) { return can_describe(tf) || is_hdr_curve(tf); }
+
 ICCProfile ICCProfile::RGB(const Chromaticities &chr, const TransferFunction &tf)
 {
-    const ToneCurve curve = tone_curve(tf);
+    const ToneCurve curve = profile_curve(tf);
     if (!curve)
         return ICCProfile{};
     cmsCIExyY       whitepoint = {chr.white.x, chr.white.y, 1.0};
@@ -216,19 +257,25 @@ ICCProfile ICCProfile::RGB(const Chromaticities &chr, const TransferFunction &tf
     cmsHPROFILE   profile =
         cmsCreateRGBProfileTHR(CmsContext::thread_local_instance().get(), &whitepoint, &primaries, curves);
     if (profile)
+    {
         set_description(profile, description_of(chr, tf));
+        add_cicp_tag(profile, chromaticities_to_CICP(chr), tf);
+    }
     return ICCProfile{profile};
 }
 
 ICCProfile ICCProfile::Gray(const float2 &whitepoint, const TransferFunction &tf)
 {
-    const ToneCurve curve = tone_curve(tf);
+    const ToneCurve curve = profile_curve(tf);
     if (!curve)
         return ICCProfile{};
     cmsCIExyY   wp      = {whitepoint.x, whitepoint.y, 1.0};
     cmsHPROFILE profile = cmsCreateGrayProfileTHR(CmsContext::thread_local_instance().get(), &wp, curve.get());
     if (profile)
+    {
         set_description(profile, fmt::format("Gray, {}", transfer_function_name(tf)));
+        add_cicp_tag(profile, 2 /* a gray image has no primaries */, tf);
+    }
     return ICCProfile{profile};
 }
 
@@ -554,6 +601,7 @@ ICCProfile  ICCProfile::linear_Gray(const float2  &/*whitepoint*/) { return ICCP
 ICCProfile           ICCProfile::RGB(const Chromaticities &, const TransferFunction &) { return ICCProfile(nullptr); }
 ICCProfile           ICCProfile::Gray(const float2 &, const TransferFunction &) { return ICCProfile(nullptr); }
 bool                 ICCProfile::can_describe(const TransferFunction &) { return false; }
+bool                 ICCProfile::can_label(const TransferFunction &) { return false; }
 std::vector<uint8_t> ICCProfile::bytes() const { return {}; }
 ICCProfile  ICCProfile::linearized_profile(Chromaticities  */*c*/) const { return ICCProfile(nullptr); }
 int         ICCProfile::lcms_version() { return 0; }
