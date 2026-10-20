@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # macos-15 and macos-26 are arm64 runners; macos-15-intel is the last Intel image
+          # macos-15 and macos-26 are arm64 runners, macos-26-intel an Intel one
           - {
               name: "macOS 15 universal",
               os: macos-15,
@@ -71,13 +71,13 @@ jobs:
               preset: "macos-arm64-local",
             }
           - {
-              name: "macOS 15 Intel CPM",
-              os: macos-15-intel,
+              name: "macOS 26 Intel CPM",
+              os: macos-26-intel,
               preset: "macos-x86_64-cpm",
             }
           - {
-              name: "macOS 15 Intel Local",
-              os: macos-15-intel,
+              name: "macOS 26 Intel Local",
+              os: macos-26-intel,
               preset: "macos-x86_64-local",
             }
 
