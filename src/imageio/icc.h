@@ -9,7 +9,9 @@
 #include "fwd.h"
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <sys/types.h>
 #include <utility>
 #include <vector>
@@ -288,6 +290,17 @@ public:
     const char *mc_short_name() const;
     const char *r_short_name() const { return fr() ? "FR" : "NR"; }
     std::string short_name() const;
+    /// One of the four codes, with ITU-T H.273's name for its field and what it means there.
+    struct Field
+    {
+        const char *name;    ///< e.g. "Transfer characteristics"
+        int         code;    ///< e.g. 18
+        std::string meaning; ///< e.g. "HLG"
+    };
+    /// The four codes, in H.273's order: primaries, transfer characteristics, matrix coefficients, range.
+    std::array<Field, 4> fields() const;
+    /// The codes short_name() wrote into \p name, as "CICP 9-18-0-1", or none when it holds none.
+    static std::optional<CICPProfile> from_name(std::string_view name);
 
     /** Linearize a pixel buffer in-place with this CICP profile.
 

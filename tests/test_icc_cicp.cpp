@@ -119,6 +119,33 @@ TEST_CASE("ICC cicp tag is read from the profile bytes")
 
 // The ICC PCS is normalized to media white, so transforming through the profile would clamp away everything
 // above diffuse white.
+TEST_CASE("A CICP profile's name reads back as its codes, which its description names")
+{
+    // every code H.273 assigns each of the four fields, and some it leaves reserved: the label short_name() writes is
+    // what a loader stores and the Colorspace panel parses back for its tooltip
+    for (int cp = 0; cp <= 23; ++cp)
+        for (int tc = 0; tc <= 19; ++tc)
+            for (int mc = 0; mc <= 17; ++mc)
+                for (int fr = 0; fr <= 1; ++fr)
+                {
+                    const CICPProfile written{std::array<int, 4>{{cp, tc, mc, fr}}};
+                    const auto        read = CICPProfile::from_name(written.short_name());
+                    REQUIRE(read);
+                    if (read->cp() != cp || read->tc() != tc || read->mc() != mc || read->fr() != fr)
+                        FAIL_CHECK(written.short_name(), " reads back as ", read->cp(), "-", read->tc(), "-",
+                                   read->mc(), "-", read->fr());
+                }
+
+    const auto hlg = CICPProfile{std::array<int, 4>{{9, 18, 0, 1}}}.fields();
+    CHECK(hlg[0].code == 9);
+    CHECK(hlg[1].code == 18);
+    CHECK(hlg[1].meaning == "HLG");
+    CHECK(hlg[3].meaning == "Full");
+    // unspecified primaries are named so, not as the BT.709 they stand in for
+    CHECK(CICPProfile{std::array<int, 4>{{2, 13, 0, 1}}}.fields()[0].meaning == "Unspecified");
+    CHECK_FALSE(CICPProfile::from_name("sRGB IEC61966-2.1"));
+}
+
 TEST_CASE("An ICC profile whose cicp tag declares PQ keeps its HDR range")
 {
     auto       bytes = icc_bytes_with_cicp(9, 16, 0, 1);

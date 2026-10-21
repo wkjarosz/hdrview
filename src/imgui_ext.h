@@ -328,6 +328,8 @@ void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args);
 void TextAligned2(float align_x, float size_x, const char *fmt, ...);
 
 void Tooltip(const char *description, bool questionMark = false, float wrap_width = -1.f);
+/// The tooltip of the last item: \p description, followed by whatever \p more draws, such as a table.
+void Tooltip(const char *description, const std::function<void()> &more);
 
 /**
     The right-hand extent of a run of rows, so that something can be hung off all of them at once.
@@ -440,7 +442,8 @@ namespace PropertyEditor
 bool Begin(const char     *label = "PE::Table",
            ImGuiTableFlags flag  = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable);
 void End();
-bool Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip = {});
+bool Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip = {},
+           const std::function<void()> &tooltip_more = {});
 /// An unlabeled row whose content spans both columns.
 /**
     content_fct receives the available width, since a cell's content region only reports its own column.
@@ -481,9 +484,10 @@ void PopLabelFont();
     @param font Optional font to use for rendering the property value. If nullptr, the default font is used.
     @param wrap_em The width (in em units) to wrap the text at. If 0 or less, wraps to the available content region
                    width.
+    @param tooltip_more Optional drawing that follows the tooltip's text inside it, such as a table.
 */
 void WrappedText(const std::string &property_name, const std::string &value, const std::string &tooltip,
-                 ImFont *font = nullptr, float wrap_em = 0.f);
+                 ImFont *font = nullptr, float wrap_em = 0.f, const std::function<void()> &tooltip_more = {});
 void Hyperlink(const char *name, const char *desc, const char *url = nullptr);
 
 // ===== PropertyEditor: explicit named widget forwarders =====

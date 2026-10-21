@@ -9,6 +9,7 @@
 
 #include "app.h"
 #include "image.h"
+#include "imageio/icc.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
@@ -348,15 +349,34 @@ void Image::draw_colorspace()
         ImGui::Indent(ImGui::GetStyle().CellPadding.x);
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
 
-        ImGui::PE::WrappedText(
-            "Profile name",
-            metadata.value<string>("color profile", color_profile_name(ColorGamut_sRGB_BT709, TransferFunction::Linear))
-                .c_str(),
+        const string profile = metadata.value<string>(
+            "color profile", color_profile_name(ColorGamut_sRGB_BT709, TransferFunction::Linear));
+        const string profile_tooltip =
             "The color profile (primaries and transfer function) applied at load time to make the values linear. This "
             "might come from various sources (ICC profiles, CICP tags, structured metadata provided by the image "
             "loading library). If no color profile is found, HDRView assumes BT.709/sRGB primaries with a D65 "
-            "whitepoint, and an sRGB transfer function for SDR images.",
-            bold_font, FLT_MAX);
+            "whitepoint, and an sRGB transfer function for SDR images.";
+        // a profile named by CICP codes carries them in its name, which the tooltip spells out in a table
+        std::function<void()> cicp_table;
+        if (const auto codes = CICPProfile::from_name(profile))
+            cicp_table = [fields = codes->fields()]
+            {
+                ImGui::Spacing();
+                ImGui::TextUnformatted("ITU-T H.273 code points:");
+                if (!ImGui::BeginTable("##cicp", 3, ImGuiTableFlags_SizingFixedFit))
+                    return;
+                for (const auto &field : fields)
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::TextAligned2(1.f, -FLT_MIN, "%d", field.code);
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(field.name);
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(field.meaning.c_str());
+                }
+                ImGui::EndTable();
+            };
+        ImGui::PE::WrappedText("Profile name", profile.c_str(), profile_tooltip, bold_font, FLT_MAX, cicp_table);
 
         ImGui::PE::Entry("Color gamut",
                          [&]
