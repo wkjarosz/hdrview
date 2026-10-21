@@ -217,6 +217,7 @@ QOISaveOptions *qoi_parameters_gui(SaveContext &ctx)
     }
 
     ctx.hdr = false; //< 8-bit, sRGB or linear
+    set_encoding(ctx, s_opts.tf, false);
     return &s_opts;
 }
 

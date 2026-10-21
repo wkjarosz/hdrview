@@ -574,7 +574,8 @@ UHDRSaveOptions *uhdr_parameters_gui(SaveContext &ctx)
         ImGui::PE::End();
     }
 
-    ctx.hdr               = true;
+    ctx.hdr = true;
+    set_encoding(ctx, TransferFunction::sRGB, false); //< the SDR base's; the HDR rendition is the gain map's
     ctx.records_primaries = true; //< BT.709, Display P3 or BT.2100, else converted to BT.709's
     ctx.sdr_base          = s_opts.sdr_base == 0;
     return &s_opts;

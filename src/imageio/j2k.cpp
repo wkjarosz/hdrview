@@ -943,6 +943,7 @@ J2KSaveOptions *j2k_parameters_gui(SaveContext &ctx)
     }
 
     ctx.hdr               = is_hdr_encoding(s_opts.tf);
+    set_encoding(ctx, s_opts.tf, false, true);
     ctx.records_primaries = s_opts.container == J2KContainer::JP2 && ICCProfile::can_label(s_opts.tf);
     return &s_opts;
 }

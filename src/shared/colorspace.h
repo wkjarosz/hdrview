@@ -613,6 +613,34 @@ SHARED_FN vec3 to_linear(vec3 encoded, int tf, float gamma)
     }
 }
 
+// How a file's encoding clips what it is given; src/colorspace.h's EncodingClip_ for C++
+SHARED_CONST int ENCODING_CLIP_NONE      = 0; ///< floating-point samples, which keep what the transfer function does
+SHARED_CONST int ENCODING_CLIP_NEGATIVES = 1; ///< floating-point samples that keep no sign, as Radiance RGBE's
+SHARED_CONST int ENCODING_CLIP_CODES     = 2; ///< integer samples, whose code values clip to [0, 1]
+SHARED_CONST int ENCODING_CLIP_ICC_CURVE = 3; ///< those, labeled by an ICC tone curve, which ends at SDR white
+
+/// \p linear as a file keeps it whose encoding clips by \p clip, in the transfer function \p tf.
+/**
+    Integer samples clip in code values, so this encodes, clamps and decodes: exact for every transfer function,
+    HLG's included, which encodes the three channels together, and for PQ, whose largest code means 10000 cd/m^2.
+*/
+SHARED_FN vec3 encoding_clip(vec3 linear, int clip, int tf, float gamma)
+{
+    if (clip == ENCODING_CLIP_CODES || clip == ENCODING_CLIP_ICC_CURVE)
+    {
+        const vec3 code = from_linear(linear, tf, gamma);
+        const vec3 kept = to_linear(
+            vec3(min(max(code.x, 0.0f), 1.0f), min(max(code.y, 0.0f), 1.0f), min(max(code.z, 0.0f), 1.0f)), tf, gamma);
+        // DCI-P3's top code means more than SDR white, which a reader of the ICC curve cannot go past
+        return clip == ENCODING_CLIP_ICC_CURVE ? vec3(min(kept.x, 1.0f), min(kept.y, 1.0f), min(kept.z, 1.0f)) : kept;
+    }
+    if (clip == ENCODING_CLIP_NEGATIVES)
+        return vec3(max(linear.x, 0.0f), max(linear.y, 0.0f), max(linear.z, 0.0f));
+    // floating-point codes clip nowhere, but a transfer function can still drop what it cannot decode, as HLG does a
+    // negative signal
+    return to_linear(from_linear(linear, tf, gamma), tf, gamma);
+}
+
 SHARED_END
 
 #endif // HDRVIEW_SHARED_COLORSPACE_H

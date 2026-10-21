@@ -1343,6 +1343,13 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
         caveat_entry(jxl_gainmap_caveat(gain_map == 2));
 
     ctx.hdr               = gain_map != 0 || is_hdr_encoding(s_opts.tf, float_type);
+    set_encoding(ctx, s_opts.tf, float_type);
+    // A lossless file names BT.709 and the gammas by an ICC profile, whose curves take no negative value,
+    // floating-point or not; a lossy one is in XYB, and libjxl turns the profile back into its own codes, which have no
+    // such limit.
+    if (float_type && s_opts.lossless &&
+        (s_opts.tf.type == TransferFunction::ITU || s_opts.tf.type == TransferFunction::Gamma))
+        ctx.clip = EncodingClip_Negatives;
     ctx.records_primaries = true; //< in its color encoding or ICC profile
     ctx.sdr_base          = gain_map != 0;
     return &s_opts;

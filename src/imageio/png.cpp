@@ -1120,6 +1120,7 @@ PNGSaveOptions *png_parameters_gui(SaveContext &ctx)
     caveat_entry(png_caveat(s_opts.tf));
 
     ctx.hdr = is_hdr_encoding(s_opts.tf);
+    set_encoding(ctx, s_opts.tf, false);
     ctx.records_primaries = true; //< in cICP, cHRM and any ICC profile
     return &s_opts;
 }

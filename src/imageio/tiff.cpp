@@ -1532,6 +1532,7 @@ TIFFSaveOptions *tiff_parameters_gui(SaveContext &ctx)
     caveat_entry(tiff_caveat(s_opts.tf, ctx.wide_gamut));
 
     ctx.hdr               = is_hdr_encoding(s_opts.tf, s_opts.data_type_index == 2);
+    set_encoding(ctx, s_opts.tf, s_opts.data_type_index == 2, true);
     ctx.records_primaries = ICCProfile::can_label(s_opts.tf); //< in an ICC profile
     return &s_opts;
 }

@@ -220,6 +220,7 @@ PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx)
     // PFM stores linear 32-bit floats, with nothing to choose
     no_options_entry();
     ctx.hdr = true;
+    set_encoding(ctx, TransferFunction::Linear, true);
     return &s_opts;
 }
 

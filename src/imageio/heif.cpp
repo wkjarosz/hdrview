@@ -1673,6 +1673,7 @@ HEIFSaveOptions *heif_parameters_gui(HEIFCodec codec, SaveContext &ctx)
     caveat_entry(heif_caveat(s_opts.tf));
 
     ctx.hdr = is_hdr_encoding(s_opts.tf);
+    set_encoding(ctx, s_opts.tf, false, true); //< an ICC profile beside nclx names the SDR transfer functions
     ctx.records_primaries = true; //< in nclx
     return &s_opts;
 }

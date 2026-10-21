@@ -817,6 +817,7 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
     }
 
     ctx.hdr = true; //< always floating point
+    set_encoding(ctx, TransferFunction::Linear, true);
     ctx.records_primaries = true; //< in the chromaticities attribute
     return &s_opts;
 }

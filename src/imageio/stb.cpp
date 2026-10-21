@@ -412,6 +412,8 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<float>(&w, &h, &n, tf, false);
+    // RGBE keeps no sign, and stb writes a negative value as noise, so it is clamped to black first
+    for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i) pixels[i] = std::max(pixels[i], 0.f);
     if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
         throw std::runtime_error("Failed to write HDR image via stb.");
     spdlog::info("Saved HDR image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
@@ -529,7 +531,9 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
     if (is_hdr)
     {
         no_options_entry();
-        ctx.hdr = true;
+        ctx.hdr  = true;
+        ctx.tf   = TransferFunction::Linear;
+        ctx.clip = EncodingClip_Negatives; //< RGBE keeps no sign
         return &opts;
     }
 
@@ -549,6 +553,7 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality, SaveContext &c
     }
 
     ctx.hdr = false; //< 8-bit sRGB
+    set_encoding(ctx, TransferFunction::sRGB, false);
     return &opts;
 }
 

@@ -1097,6 +1097,15 @@ float  to_linear(float encoded, const TransferFunction tf) { return shader::to_l
 float3 to_linear(const float3 &encoded, const TransferFunction tf)
 { return shader::to_linear(encoded, tf.type, tf.gamma); }
 
+static_assert(shader::ENCODING_CLIP_NONE == EncodingClip_None &&
+                  shader::ENCODING_CLIP_NEGATIVES == EncodingClip_Negatives &&
+                  shader::ENCODING_CLIP_CODES == EncodingClip_Codes &&
+                  shader::ENCODING_CLIP_ICC_CURVE == EncodingClip_ICCCurve,
+              "EncodingClip_ differs from src/shared/colorspace.h's ENCODING_CLIP_ constants, which the shaders use");
+
+float3 encoding_clip(const float3 &linear, EncodingClip_ clip, const TransferFunction &tf)
+{ return shader::encoding_clip(linear, clip, tf.type, tf.gamma); }
+
 Color4 tonemap(Color4 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
     float3 colormap_sRGB{0.f};

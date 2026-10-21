@@ -13,17 +13,36 @@
 /// What the save dialog and a format's options tell each other about what is being saved.
 struct SaveContext
 {
-    bool        hdr = false;               ///< Set by the options: whether the encoding keeps values above SDR white
-    std::string table;                     ///< Set by the dialog: the ID its own table shares with the options' table
-    bool        wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
-    bool        records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
-    bool        rendition = false; ///< Set by the dialog: whether it exports a rendition of the view, not the data
-    bool        sdr_base = false; ///< Set by the options: whether the file also needs the SDR rendition, for a gain map
+    // set by the dialog
+    std::string table;              ///< the ID its own table shares with the options' table
+    bool        wide_gamut = false; ///< whether the image's primaries are other than BT.709's
+    bool        rendition  = false; ///< whether it exports a rendition of the view, not the data
+
+    // set by the options
+    bool             hdr               = false; ///< whether the encoding keeps values above SDR white
+    bool             records_primaries = false; ///< whether the file can say which primaries it is in
+    bool             sdr_base          = false; ///< whether the file also needs the SDR rendition, for a gain map
+    TransferFunction tf                = TransferFunction::Linear; ///< the transfer function the samples are encoded in
+    EncodingClip_    clip              = EncodingClip_None;        ///< how the samples clip what they are given
 };
 
 /// Whether an encoding keeps values above SDR white: an HDR transfer function, or floating-point samples.
 inline bool is_hdr_encoding(const TransferFunction &tf, bool floating_point = false)
 { return floating_point || tf.type == TransferFunction::BT2100_PQ || tf.type == TransferFunction::BT2100_HLG; }
+
+/// Tells \p ctx the encoding: samples in the transfer function \p tf, floating-point ones or integer ones, which clip.
+/**
+    \p icc_labeled says the file names \p tf with an ICC tone curve, as TIFF, JPEG 2000, WebP and HEIF/AVIF do every
+    SDR one; a reader of the curve then goes no further than SDR white. PQ and HLG are named exactly, by a cicp tag or
+    their code points.
+*/
+inline void set_encoding(SaveContext &ctx, const TransferFunction &tf, bool floating_point, bool icc_labeled = false)
+{
+    ctx.tf   = tf;
+    ctx.clip = floating_point                        ? EncodingClip_None
+               : icc_labeled && !is_hdr_encoding(tf) ? EncodingClip_ICCCurve
+                                                     : EncodingClip_Codes;
+}
 
 /// Returns \p tf, the one transfer function \p format can label, warning when \p asked was another.
 TransferFunction labeled_tf(const TransferFunction &asked, TransferFunction::Type_ tf, const char *format);

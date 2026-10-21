@@ -693,6 +693,7 @@ WebPSaveOptions *webp_parameters_gui(SaveContext &ctx)
     }
 
     ctx.hdr               = is_hdr_encoding(s_opts.tf);
+    set_encoding(ctx, s_opts.tf, false, true);
     ctx.records_primaries = ICCProfile::can_label(s_opts.tf); //< in an ICC profile
     return &s_opts;
 }

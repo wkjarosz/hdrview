@@ -270,6 +270,26 @@ float3 straight_rgb(const float4 &premultiplied)
     return float3{premultiplied[0] / a, premultiplied[1] / a, premultiplied[2] / a};
 }
 
+/// How \p variant's samples clip in the transfer function \p tf, as its dialog tells the save dialog's preview.
+EncodingClip_ clip_of(const Variant &variant, const TransferFunction &tf)
+{
+    const std::string name = variant.name;
+    if (name == "hdr_stb")
+        return EncodingClip_Negatives; // RGBE keeps no sign
+    // a lossless JPEG XL names BT.709 and the gammas with an ICC profile, whose curves take no negative value
+    if (name.rfind("jxl f", 0) == 0 && name.find("lossless") != std::string::npos &&
+        (tf.type == TransferFunction::ITU || tf.type == TransferFunction::Gamma))
+        return EncodingClip_Negatives;
+    for (const char *floating : {"exr", "pfm", "tiff float", "jxl f32", "jxl f16"})
+        if (name.rfind(floating, 0) == 0)
+            return EncodingClip_None;
+    // these name every SDR transfer function with an ICC tone curve, and PQ and HLG exactly
+    for (const char *icc_labeled : {"tiff", "jp2", "j2k", "webp", "heif", "avif"})
+        if (name.rfind(icc_labeled, 0) == 0)
+            return is_hdr_encoding(tf) ? EncodingClip_Codes : EncodingClip_ICCCurve;
+    return EncodingClip_Codes;
+}
+
 /// The warning \p variant's dialog shows for \p tf, for the sweep's image, whose primaries are BT.2020's.
 Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
 {
@@ -440,6 +460,67 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
             if (!variant.offers(tf))
                 continue;
             INFO("transfer function = ", transfer_function_name(tf));
+
+            // a lossy float encoding clips nothing, and how closely it keeps 60 times SDR white is its codec's affair
+            if (!((variant.caps & Cap_Lossy) && clip_of(variant, tf) == EncodingClip_None))
+            {
+                // What the file keeps of values it cannot all hold, a negative one, one past SDR white and one past
+                // PQ's 10000 cd/m^2, is what encoding_clip() says, which the save dialogs' preview shows. Uniform, so
+                // a lossy codec has nothing to ring at; compared in the primaries the file holds, where it clips.
+                auto over = make_image(k_layouts[3] /* RGB */, /*alpha*/ 1.f);
+                for (int y = 0; y < over->size().y; ++y)
+                    for (int x = 0; x < over->size().x; ++x)
+                    {
+                        over->channels[0](x, y) = -0.25f;
+                        over->channels[1](x, y) = 2.5f;
+                        over->channels[2](x, y) = 60.f;
+                    }
+                over->chromaticities = bt2020;
+                over->compute_color_transform();
+
+                std::ostringstream    os(std::ios::binary);
+                std::string           failure;
+                std::vector<ImagePtr> back;
+                try
+                {
+                    variant.save(*over, os, tf);
+                    std::istringstream is(os.str(), std::ios::binary);
+                    back = load_image(is, std::string("a") + variant.ext);
+                }
+                catch (const std::exception &e)
+                {
+                    failure = e.what();
+                }
+                if (failure.find("no encoder available") == std::string::npos)
+                {
+                    CHECK_MESSAGE(failure.empty(), "out-of-range round trip threw: ", failure);
+                    if (failure.empty() && back.size() == 1)
+                    {
+                        const bool kept =
+                            back[0]->chromaticities && approx_equal(*back[0]->chromaticities, bt2020, 1e-3f);
+                        const auto          M    = kept ? inverse(over->M_to_sRGB) : float3x3{la::identity};
+                        const float3        got  = mul(M, back[0]->rgba_pixel(int2{1, 0}, Target_Primary).xyz());
+                        const EncodingClip_ clip = clip_of(variant, tf);
+                        const float3        want =
+                            encoding_clip(mul(M, over->rgba_pixel(int2{1, 0}, Target_Primary).xyz()), clip, tf);
+                        // Integer samples in code values, within the setting's step, or within a hair of linear light,
+                        // which a steep transfer function near black stretches into codes; floating-point ones either
+                        // in linear light, relative to the brightest channel, as RGBE's shared exponent is, or in code
+                        // values, relative to the code, as a half float is.
+                        const bool   integer  = clip == EncodingClip_Codes || clip == EncodingClip_ICCCurve;
+                        const float3 got_code = from_linear(got, tf), want_code = from_linear(want, tf);
+                        const float  brightest = std::max(1.f, la::maxelem(la::abs(want)));
+                        for (int c = 0; c < 3; ++c)
+                            CHECK_MESSAGE((integer ? std::abs(got_code[c] - want_code[c]) <= variant.step ||
+                                                         std::abs(got[c] - want[c]) <= 1e-5f
+                                                   : std::abs(got[c] - want[c]) <= variant.step * brightest ||
+                                                         std::abs(got_code[c] - want_code[c]) <=
+                                                             variant.step * std::max(1.f, std::abs(want_code[c]))),
+                                          "channel ", c, " reads back as ", got[c], " where the encoding keeps ",
+                                          want[c]);
+                    }
+                }
+            }
 
             // for an HDR transfer function, an image brightened 8x so its channels straddle SDR white, which one
             // clipping there misses

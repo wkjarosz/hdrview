@@ -408,6 +408,17 @@ float3 from_linear(float3 linear, const TransferFunction tf);
 float  to_linear(float encoded, const TransferFunction tf);
 float3 to_linear(const float3 &encoded, const TransferFunction tf);
 
+/// How a file's encoding clips what it is given, which src/shared/colorspace.h's ENCODING_CLIP_ constants mirror.
+enum EncodingClip_ : int
+{
+    EncodingClip_None = 0,  ///< floating-point samples, which keep what the transfer function does
+    EncodingClip_Negatives, ///< floating-point samples that keep no sign: Radiance RGBE's, or those an ICC curve names
+    EncodingClip_Codes,     ///< integer samples, whose code values clip to [0, 1]
+    EncodingClip_ICCCurve,  ///< those, labeled by an ICC tone curve, which ends at SDR white
+};
+/// \p linear as a file keeps it whose encoding clips by \p clip, in the transfer function \p tf.
+float3 encoding_clip(const float3 &linear, EncodingClip_ clip, const TransferFunction &tf);
+
 void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction tf, int stride = 1);
 inline void to_linear(float *pixels, int3 size, TransferFunction tf)
 {

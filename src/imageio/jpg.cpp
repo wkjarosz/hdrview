@@ -841,6 +841,7 @@ JPGSaveOptions *jpg_parameters_gui(SaveContext &ctx)
     }
 
     ctx.hdr = false;
+    set_encoding(ctx, TransferFunction::sRGB, false);
     return &s_opts;
 }
 
