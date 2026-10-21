@@ -116,6 +116,27 @@ private:
     Box2i                m_data_window, m_display_window;
 };
 
+/// An image's color metadata: what its pixel values mean, apart from the values themselves.
+struct ColorMetadata
+{
+    std::optional<Chromaticities> chromaticities;
+    std::optional<float2>         adopted_neutral;
+    float3x3                      RGB_to_XYZ, XYZ_to_RGB, to_sRGB;
+    float3                        luminance_weights;
+    AdaptationMethod              adaptation_method;
+    ColorGamut_                   color_space;
+    WhitePoint_                   white_point;
+    std::string                   color_profile; ///< metadata["color profile"], the panel's "Profile name"
+
+    /// \p img's color metadata as it stands.
+    static ColorMetadata of(const Image &img);
+    /// Gives \p img this color metadata.
+    void apply_to(Image &img) const;
+
+    bool operator==(const ColorMetadata &other) const;
+    bool operator!=(const ColorMetadata &other) const { return !(*this == other); }
+};
+
 /// The pixels a color conversion rewrote and the color metadata describing them, taken back together.
 class ColorMetadataUndo : public UndoEntry
 {
@@ -131,15 +152,27 @@ public:
 private:
     void swap(Image &img);
 
-    ChannelRectUndo               m_pixels;
-    std::optional<Chromaticities> m_chromaticities;
-    std::optional<float2>         m_adopted_neutral;
-    float3x3                      m_RGB_to_XYZ, m_XYZ_to_RGB, m_to_sRGB;
-    float3                        m_luminance_weights;
-    AdaptationMethod              m_adaptation_method;
-    ColorGamut_                   m_color_space;
-    WhitePoint_                   m_white_point;
-    std::string                   m_color_profile; ///< metadata["color profile"], the panel's "Profile name"
+    ChannelRectUndo m_pixels;
+    ColorMetadata   m_metadata;
+};
+
+/// Records edits of an image's color metadata alone, as the Colorspace panel makes them, as one undo entry each.
+/**
+    Call begin() before the panel draws and end() after. An edit spans the frames from the first that changes the
+    metadata to the one where no widget is active anymore, so a whole drag, or all the typing in one field, undoes
+    at once.
+*/
+class ColorMetadataEdit
+{
+public:
+    void begin(const Image &img);
+    /// \p editing says a widget is still being dragged or typed in, so the edit has not ended.
+    void end(Image &img, bool editing);
+
+private:
+    const Image                 *m_image = nullptr;
+    ColorMetadata                m_frame_start;
+    std::optional<ColorMetadata> m_edit_start;
 };
 
 /// Builds the entry that reverses an edit, from the image as it was before it; see modify_image().

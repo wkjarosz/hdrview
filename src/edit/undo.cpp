@@ -66,37 +66,80 @@ size_t ChannelRectUndo::memory_usage() const
     return total;
 }
 
+ColorMetadata ColorMetadata::of(const Image &img)
+{
+    return {img.chromaticities,    img.adopted_neutral,
+            img.M_RGB_to_XYZ,      img.M_XYZ_to_RGB,
+            img.M_to_sRGB,         img.luminance_weights,
+            img.adaptation_method, img.color_space,
+            img.white_point,       img.metadata.value<std::string>("color profile", "")};
+}
+
+void ColorMetadata::apply_to(Image &img) const
+{
+    img.chromaticities    = chromaticities;
+    img.adopted_neutral   = adopted_neutral;
+    img.M_RGB_to_XYZ      = RGB_to_XYZ;
+    img.M_XYZ_to_RGB      = XYZ_to_RGB;
+    img.M_to_sRGB         = to_sRGB;
+    img.luminance_weights = luminance_weights;
+    img.adaptation_method = adaptation_method;
+    img.color_space       = color_space;
+    img.white_point       = white_point;
+    // an image whose profile was never named has no entry, not an empty one, so the panel falls back
+    if (color_profile.empty())
+        img.metadata.erase("color profile");
+    else
+        img.metadata["color profile"] = color_profile;
+}
+
+bool ColorMetadata::operator==(const ColorMetadata &o) const
+{
+    return chromaticities == o.chromaticities && adopted_neutral == o.adopted_neutral && RGB_to_XYZ == o.RGB_to_XYZ &&
+           XYZ_to_RGB == o.XYZ_to_RGB && to_sRGB == o.to_sRGB && luminance_weights == o.luminance_weights &&
+           adaptation_method == o.adaptation_method && color_space == o.color_space && white_point == o.white_point &&
+           color_profile == o.color_profile;
+}
+
 ColorMetadataUndo::ColorMetadataUndo(const Image &img, std::vector<int> channels, const Box2i &bounds,
                                      std::string name) :
-    m_pixels(img, std::move(channels), bounds, std::move(name)), m_chromaticities(img.chromaticities),
-    m_adopted_neutral(img.adopted_neutral), m_RGB_to_XYZ(img.M_RGB_to_XYZ), m_XYZ_to_RGB(img.M_XYZ_to_RGB),
-    m_to_sRGB(img.M_to_sRGB), m_luminance_weights(img.luminance_weights), m_adaptation_method(img.adaptation_method),
-    m_color_space(img.color_space), m_white_point(img.white_point),
-    m_color_profile(img.metadata.value<std::string>("color profile", ""))
+    m_pixels(img, std::move(channels), bounds, std::move(name)), m_metadata(ColorMetadata::of(img))
 {
 }
 
 void ColorMetadataUndo::swap(Image &img)
 {
     m_pixels.undo(img); // swaps, whichever direction this is
+    ColorMetadata current = ColorMetadata::of(img);
+    m_metadata.apply_to(img);
+    m_metadata = std::move(current);
+}
 
-    std::swap(m_chromaticities, img.chromaticities);
-    std::swap(m_adopted_neutral, img.adopted_neutral);
-    std::swap(m_RGB_to_XYZ, img.M_RGB_to_XYZ);
-    std::swap(m_XYZ_to_RGB, img.M_XYZ_to_RGB);
-    std::swap(m_to_sRGB, img.M_to_sRGB);
-    std::swap(m_luminance_weights, img.luminance_weights);
-    std::swap(m_adaptation_method, img.adaptation_method);
-    std::swap(m_color_space, img.color_space);
-    std::swap(m_white_point, img.white_point);
+void ColorMetadataEdit::begin(const Image &img)
+{
+    // an edit left unfinished on another image is that image's, and ends with it
+    if (m_image != &img)
+        m_edit_start.reset();
+    m_image       = &img;
+    m_frame_start = ColorMetadata::of(img);
+}
 
-    // an image whose profile was never named has no entry, not an empty one, so the panel falls back
-    std::string current = img.metadata.value<std::string>("color profile", "");
-    if (m_color_profile.empty())
-        img.metadata.erase("color profile");
-    else
-        img.metadata["color profile"] = m_color_profile;
-    m_color_profile = std::move(current);
+void ColorMetadataEdit::end(Image &img, bool editing)
+{
+    if (m_image != &img)
+        return;
+    const ColorMetadata now = ColorMetadata::of(img);
+    if (!m_edit_start && now != m_frame_start)
+        m_edit_start = m_frame_start;
+    if (!m_edit_start || editing)
+        return;
+
+    // a drag that ends where it began changes nothing to undo
+    if (now != *m_edit_start)
+        img.history.add(std::make_unique<LambdaUndo>(
+            "Color space", [before = *m_edit_start](Image &i) { before.apply_to(i); },
+            [after = now](Image &i) { after.apply_to(i); }));
+    m_edit_start.reset();
 }
 
 void CommandHistory::add(UndoPtr entry)

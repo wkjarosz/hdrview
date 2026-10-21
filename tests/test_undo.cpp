@@ -13,6 +13,7 @@
 
 using namespace hdrview_test;
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -565,4 +566,56 @@ TEST_CASE("Resampling resizes every channel and both windows together")
     CHECK(img->data_window.size() == int2{10, 6});
     CHECK(img->display_window.size() == int2{10, 6});
     for (const auto &c : img->channels) CHECK(c.size() == int2{10, 6});
+}
+
+TEST_CASE("An edit of the color metadata undoes as one entry, however many frames it spans")
+{
+    // The Colorspace panel's edits reinterpret the pixels without touching them, a frame at a time while a widget is
+    // dragged; the edit is one entry from where it began to where it ends, and taking it back restores every field
+    auto img            = make_test_image();
+    img->chromaticities = gamut_chromaticities(ColorGamut_sRGB_BT709);
+    img->compute_color_transform();
+    img->metadata["color profile"] = "as loaded";
+    const auto original            = ColorMetadata::of(*img);
+    const bool pixels_before       = matches_original(img);
+
+    ColorMetadataEdit edit;
+    // what one frame of the panel does to the image, while a widget is active or once it lets go
+    const auto frame = [&](const std::function<void()> &change, bool editing)
+    {
+        edit.begin(*img);
+        if (change)
+            change();
+        edit.end(*img, editing);
+    };
+    const auto move_white = [&](float2 white)
+    {
+        img->chromaticities->white = white;
+        img->white_point           = WhitePoint_Custom;
+        img->compute_color_transform();
+        img->metadata["color profile"] = "edited";
+    };
+
+    frame({}, false);
+    CHECK(img->history.size() == 0); //< nothing changed
+
+    // a drag across three frames, released on the last
+    frame([&] { move_white(float2{0.32f, 0.33f}); }, true);
+    frame([&] { move_white(float2{0.33f, 0.34f}); }, true);
+    CHECK(img->history.size() == 0); //< still being dragged
+    frame([&] { move_white(float2{0.34f, 0.35f}); }, false);
+    REQUIRE(img->history.size() == 1);
+    const auto edited = ColorMetadata::of(*img);
+    CHECK(edited != original);
+
+    CHECK(img->history.undo(*img));
+    CHECK(ColorMetadata::of(*img) == original);
+    CHECK(img->history.redo(*img));
+    CHECK(ColorMetadata::of(*img) == edited);
+    CHECK(matches_original(img) == pixels_before); //< and no pixel moved
+
+    // a drag that ends where it began is no edit
+    frame([&] { move_white(float2{0.30f, 0.30f}); }, true);
+    frame([&] { edited.apply_to(*img); }, false);
+    CHECK(img->history.size() == 1);
 }
