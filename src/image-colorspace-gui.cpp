@@ -8,6 +8,7 @@
 #include "fwd.h"
 
 #include "app.h"
+#include "edit/undo.h"
 #include "image.h"
 #include "imageio/icc.h"
 #include "imgui.h"
@@ -338,6 +339,10 @@ void Image::draw_colorspace()
 {
     auto bold_font = hdrview()->font("sans bold");
 
+    // what the widgets below change undoes as one entry per edit, though it changes no pixel values
+    static ColorMetadataEdit color_edit;
+    color_edit.begin(*this);
+
     static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize;
     // The enclosing window scrolls this panel (see the ImGuiWindowFlags_AlwaysVerticalScrollbar the
     // Colorspace DockableWindow is created with), so the table itself neither scrolls nor sits in a
@@ -574,4 +579,5 @@ void Image::draw_colorspace()
         ImGui::Unindent(ImGui::GetStyle().CellPadding.x);
         ImGui::PE::End();
     }
+    color_edit.end(*this, ImGui::IsAnyItemActive());
 }
