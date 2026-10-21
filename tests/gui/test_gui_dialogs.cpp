@@ -13,6 +13,7 @@
 #include "imageio/jxl.h"
 #include "imageio/uhdr.h"
 #include "test_gui_registry.h"
+#include <hello_imgui/dpi_aware.h>
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
@@ -63,6 +64,62 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         wait_for_window_closed(ctx, "Image loading options...");
         IM_CHECK(ctx->WindowInfo("Image loading options...", ImGuiTestOpFlags_NoError).Window == nullptr);
     };
+
+    // Both save dialogs are modal, but leave the viewport to be panned and zoomed around them, to look at the image
+    // while choosing how to write it: the wheel zooms over the viewport and not over the dialog, and a drag begun in
+    // the viewport pans it.
+    for (const char *dialog : {"Save as...", "Export rendition..."})
+    {
+        t           = IM_REGISTER_TEST(engine, "dialogs",
+                                       dialog[0] == 'S' ? "save_as_lets_the_viewport_be_navigated"
+                                                        : "export_rendition_lets_the_viewport_be_navigated");
+        t->TestFunc = [dialog](ImGuiTestContext *ctx)
+        {
+            if (hdrview()->num_images() == 0)
+            {
+                hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
+                wait_for_loads(ctx);
+            }
+            auto      *app  = hdrview();
+            const auto zoom = app->zoom();
+
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick((std::string("File/") + dialog).c_str());
+            ctx->SetRef("");
+            ImGuiWindow *window = ctx->WindowInfo(dialog).Window;
+            IM_CHECK(window != nullptr);
+
+            // a corner of the viewport, which the centered dialog leaves clear
+            const float2 corner = app->app_pos_at_vp_pos(float2{HelloImGui::EmSize(2.f)});
+            IM_CHECK(!window->Rect().Contains(ImVec2{corner.x, corner.y}));
+
+            ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
+            ctx->MouseWheelY(1.f);
+            ctx->Yield(2);
+            IM_CHECK(app->zoom() != zoom);
+
+            const float over_viewport = app->zoom();
+            ctx->MouseMoveToPos(window->Rect().GetCenter());
+            ctx->MouseWheelY(1.f);
+            ctx->Yield(2);
+            IM_CHECK_EQ(app->zoom(), over_viewport);
+
+            // a drag from the corner moves the pixel under it along
+            const float2 before = app->pixel_at_app_pos(corner);
+            ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
+            ctx->MouseDown(ImGuiMouseButton_Left);
+            ctx->MouseMoveToPos(ImVec2{corner.x + HelloImGui::EmSize(4.f), corner.y + HelloImGui::EmSize(3.f)});
+            ctx->MouseUp(ImGuiMouseButton_Left);
+            ctx->Yield(2);
+            IM_CHECK(la::length(app->pixel_at_app_pos(corner) - before) > 0.f);
+
+            ctx->SetRef(dialog);
+            ctx->ItemClick("Cancel");
+            ctx->SetRef("");
+            wait_for_window_closed(ctx, dialog);
+            app->set_zoom(zoom);
+        };
+    }
 
     t           = IM_REGISTER_TEST(engine, "dialogs", "save_as_open_close");
     t->TestFunc = [](ImGuiTestContext *ctx)
