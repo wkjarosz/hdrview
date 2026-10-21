@@ -74,6 +74,8 @@ public:
     void enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *));
     /// Valid only after run() returns; {tested, succeeded} counts from the Test Engine queue.
     std::pair<int, int> test_engine_result() const { return {m_test_engine_tested, m_test_engine_succeeded}; }
+    /// The path the save dialogs write to instead of asking the user, which a test cannot answer; empty asks.
+    std::string &test_save_path() { return m_test_save_path; }
     /// The buffer a screenshot must be read back from, or nullptr when the window's own framebuffer will do.
     /**
         Only the colorpass's offscreen target still holds extended sRGB; the window is display-referred.
@@ -1002,7 +1004,8 @@ private:
     HelloImGui::RunnerParams m_params;
 
 #ifdef HDRVIEW_ENABLE_GUI_TEST_ENGINE
-    int m_test_engine_tested = 0, m_test_engine_succeeded = 0; ///< see test_engine_result()
+    int         m_test_engine_tested = 0, m_test_engine_succeeded = 0; ///< see test_engine_result()
+    std::string m_test_save_path;                                      ///< see test_save_path()
 #endif
 
     ImFont *m_sans_regular = nullptr, *m_sans_bold = nullptr, *m_mono_regular = nullptr, *m_mono_bold = nullptr;

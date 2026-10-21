@@ -19,12 +19,15 @@
 
 #include "image.h"
 #include "imageio/gainmap.h"
+#include "imageio/hdr_metadata.h"
 #include "imageio/heif.h"
 #include "imageio/image_loader.h"
 #include "imageio/jpg.h"
 #include "imageio/jxl.h"
+#include "imageio/save_options.h"
 #include "imageio/uhdr.h"
 
+#include "test_apple.h"
 #include "test_support.h"
 
 using namespace hdrview_test;
@@ -37,6 +40,7 @@ using namespace hdrview_test;
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <sstream>
 
 namespace
@@ -419,6 +423,192 @@ TEST_CASE("An UltraHDR gain map is extracted at the base image's resolution")
 
     CHECK(left != doctest::Approx(right));
 }
+
+#endif
+
+#if HDRVIEW_ENABLE_LIBUHDR || HDRVIEW_ENABLE_LIBJXL
+TEST_CASE("Every gain-map writer's file reads back as the renditions it was written from, at any headroom")
+{
+    // A gain map takes the file's image to the other rendition: decoded with no headroom the file is the SDR
+    // rendition, decoded in full the HDR one, and halfway the geometric mean of the two, which only the headroom the
+    // map was written for puts there. Each channel ramps across the frame at its own level, from deep shadow to a
+    // quarter stop below the peak, well past SDR white, where the SDR rendition reads back clipped: it is handed over
+    // unclipped, as image_to_save() builds it with highlights passing through, and clips where an SDR file or display
+    // does. In BT.709 and in Display P3.
+    struct Writer
+    {
+        const char *name;
+        bool        sdr_given; ///< whether the file's SDR rendition is the one handed to the writer
+        Caveat      caveat;    ///< what the writer's options warn of
+        std::function<void(const Image &hdr, const Image &sdr, std::ostream &)> save;
+        std::function<ImagePtr(std::istream &, const ImageLoadOptions &)>       load;
+    };
+    const std::vector<Writer> writers = {
+#if HDRVIEW_ENABLE_LIBUHDR
+        {"Ultra HDR, SDR rendition given",
+         true,
+         {},
+         [](const Image &hdr, const Image &sdr, std::ostream &os)
+         { save_uhdr_image(hdr, os, "a.jpg", 95, 95, true, 1, 1.f, &sdr); },
+         [](std::istream &is, const ImageLoadOptions &opts) { return load_uhdr_image(is, "a.jpg", opts).front(); }},
+        {"Ultra HDR, libultrahdr's tone map",
+         false,
+         {},
+         [](const Image &hdr, const Image &, std::ostream &os)
+         { save_uhdr_image(hdr, os, "a.jpg", 95, 95, true, 1, 1.f); },
+         [](std::istream &is, const ImageLoadOptions &opts) { return load_uhdr_image(is, "a.jpg", opts).front(); }},
+#endif
+#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
+        {"JPEG XL, SDR base", true, jxl_gainmap_caveat(false), [](const Image &hdr, const Image &sdr, std::ostream &os)
+         { save_jxl_image(hdr, os, "a.jxl", false, 95.f, TransferFunction::sRGB, 2 /* uint8 */, &sdr, false); },
+         [](std::istream &is, const ImageLoadOptions &opts) { return load_jxl_image(is, "a.jxl", opts).front(); }},
+        {"JPEG XL, HDR base", true, jxl_gainmap_caveat(true), [](const Image &hdr, const Image &sdr, std::ostream &os)
+         { save_jxl_image(hdr, os, "a.jxl", false, 95.f, TransferFunction::BT2100_PQ, 3 /* uint16 */, &sdr, true); },
+         [](std::istream &is, const ImageLoadOptions &opts) { return load_jxl_image(is, "a.jxl", opts).front(); }},
+#endif
+    };
+
+    const int2  size{64, 16};
+    const float peak_nits = 1000.f;
+    const float headroom  = std::log2(peak_nits / HDR_REFERENCE_WHITE_NITS);
+
+    for (const auto &writer : writers)
+        for (auto gamut : {ColorGamut_sRGB_BT709, ColorGamut_Display_P3_SMPTE432})
+        {
+            CAPTURE(std::string(writer.name));
+            CAPTURE(std::string(color_gamut_name(gamut)));
+            const Chromaticities chr = gamut_chromaticities(gamut);
+
+            // with alpha, which the rendition of an image that has it carries: the top rows are fully transparent, and
+            // the comparisons start two rows below them, past the ringing a lossy codec leaves at their edge
+            const auto rgba = [&]
+            {
+                auto img = std::make_shared<Image>();
+                for (auto name : {"R", "G", "B", "A"}) img->channels.emplace_back(name, size);
+                img->display_window = img->data_window = Box2i{int2{0}, size};
+                return img;
+            };
+            constexpr int transparent_rows = 2;
+            auto          hdr = rgba(), sdr = rgba();
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                {
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        const float stops      = -6.f + (headroom - 0.25f + 6.f) * x / (size.x - 1) - 0.5f * c;
+                        hdr->channels[c](x, y) = sdr->channels[c](x, y) = std::exp2(stops);
+                    }
+                    hdr->channels[3](x, y) = sdr->channels[3](x, y) = y < transparent_rows ? 0.f : 1.f;
+                }
+            for (auto &img : {hdr, sdr})
+            {
+                img->transparency   = TransparencyType_Straight; //< so finalize() premultiplies, as loaders do
+                img->chromaticities = chr;
+                img->compute_color_transform();
+                img->finalize();
+            }
+            add_mastering_display(hdr->metadata["header"], chr, k_mastering_display_min_nits, peak_nits, "test");
+
+            std::stringstream ss;
+            REQUIRE_NOTHROW(writer.save(*hdr, *sdr, ss));
+
+            const auto decode = [&](float gainmap_headroom)
+            {
+                std::istringstream in(ss.str(), std::ios::binary);
+                ImageLoadOptions   opts;
+                opts.gainmap_headroom = gainmap_headroom;
+                return writer.load(in, opts);
+            };
+            const auto none = decode(0.f), half = decode(headroom / 2), full = decode(k_full_gainmap_headroom);
+
+            // the file records the primaries it was written in
+            REQUIRE(full->chromaticities);
+            for (auto [got, want] :
+                 {std::pair{full->chromaticities->red, chr.red}, std::pair{full->chromaticities->green, chr.green},
+                  std::pair{full->chromaticities->blue, chr.blue}, std::pair{full->chromaticities->white, chr.white}})
+                CHECK(la::maxelem(la::abs(got - want)) <= 1e-3f);
+
+            // Each decode against what it should be: within a tenth of a stop from two stops below SDR white up, where
+            // a wrong headroom shows as a fraction of a stop or more, and within 0.03 in sRGB code values up to SDR
+            // white, where 8 bits set the precision. Halfway is the geometric mean of the two ends, offset as the map's
+            // gains are (ISO 21496-1's 1/64). The SDR end has a known answer only when the writer was handed it. The
+            // error is in units of those bounds, so 1 is as far off as a right decode may be.
+            struct Error
+            {
+                float stops = 0.f, code = 0.f;
+                float worst() const { return std::max(stops / 0.1f, code / 0.03f); }
+                void  add(float got, float want)
+                {
+                    if (want >= 0.25f)
+                        stops = std::max(stops, std::abs(std::log2(std::max(got, 1e-6f) / want)));
+                    if (want <= 1.f)
+                        code = std::max(code, std::abs(linear_to_sRGB(got) - linear_to_sRGB(want)));
+                }
+            } error;
+            const auto compare = [&](float got, float want) { error.add(got, want); };
+            for (int y = transparent_rows + 2; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        constexpr float offset = 1.f / 64;
+                        const float     lo = none->channels[c](x, y), hi = full->channels[c](x, y);
+                        compare(hi, hdr->channels[c](x, y));
+                        if (writer.sdr_given)
+                            compare(lo, std::min(sdr->channels[c](x, y), 1.f));
+                        compare(half->channels[c](x, y),
+                                std::sqrt((std::max(lo, 0.f) + offset) * (std::max(hi, 0.f) + offset)) - offset);
+                    }
+            CHECK(error.worst() <= 1.f);
+
+#if defined(__APPLE__)
+            // And as macOS reads it, HDR and SDR, in extended linear sRGB, which adds a conversion at 8 bits or so of
+            // its own: within one and a half times those bounds where the writer's options do not warn that macOS
+            // misreads the file, and outside them where they do, or the warning has gone stale. The misreads warned of
+            // are off by ten times that. The caveats name the macOS versions they were measured on, 26 and 27, so the
+            // check runs from 26 on: macOS 15 decodes these Ultra HDR files' HDR rendition otherwise, though its SDR
+            // one matches.
+            constexpr int k_caveats_measured_on = 26;
+            const int     os                    = apple_os_major();
+            if (os < k_caveats_measured_on)
+                MESSAGE("macOS ", os, " predates the macOS ", k_caveats_measured_on,
+                        " and later the gain-map caveats were measured on; skipping its decode");
+            const auto apple_hdr =
+                           os >= k_caveats_measured_on ? apple_decode(ss.str(), AppleDecode::HDR) : std::nullopt,
+                       apple_sdr =
+                           os >= k_caveats_measured_on ? apple_decode(ss.str(), AppleDecode::SDR) : std::nullopt;
+            if (apple_hdr && apple_sdr)
+            {
+                // the SDR rendition clips in the file's primaries, and both are compared in sRGB's, which ImageIO
+                // decodes into; HDRView's own SDR decode stands in for a rendition the writer made itself
+                Error      apple_hdr_error, apple_sdr_error;
+                const auto rgb = [&](const Image &img, int x, int y)
+                { return float3{img.channels[0](x, y), img.channels[1](x, y), img.channels[2](x, y)}; };
+                for (int y = transparent_rows + 2; y < size.y; ++y)
+                    for (int x = 0; x < size.x; ++x)
+                    {
+                        const float3 want_hdr = mul(hdr->M_to_sRGB, rgb(*hdr, x, y)),
+                                     want_sdr =
+                                         mul(hdr->M_to_sRGB, writer.sdr_given ? la::min(rgb(*sdr, x, y), float3{1.f})
+                                                                              : rgb(*none, x, y));
+                        for (int c = 0; c < 3; ++c)
+                        {
+                            apple_hdr_error.add((*apple_hdr)(x, y)[c], want_hdr[c]);
+                            apple_sdr_error.add((*apple_sdr)(x, y)[c], want_sdr[c]);
+                        }
+                    }
+                const float worst = std::max(apple_hdr_error.worst(), apple_sdr_error.worst());
+                MESSAGE(std::string(writer.name), ", ", std::string(color_gamut_name(gamut)), ": macOS off by ",
+                        apple_hdr_error.worst(), " (HDR) and ", apple_sdr_error.worst(), " (SDR) of the bounds");
+                if (writer.caveat.readers & Misreader_macOS)
+                    CHECK_MESSAGE(worst > 1.5f, "the options warn that macOS misreads this file, which it reads "
+                                                "right: the warning is stale");
+                else
+                    CHECK_MESSAGE(worst <= 1.5f, "macOS reads this file as other values, and its options do not "
+                                                 "warn of it");
+            }
+#endif
+        }
+}
 #endif
 
 // ------------------------------------------------------------------------------------------------
@@ -493,6 +683,26 @@ TEST_CASE("The ISO 21496-1 binary metadata parses to the values the file declare
     {
         CHECK(p.base_offset[c] == doctest::Approx(1.f / 64.f));
         CHECK(p.alternate_offset[c] == doctest::Approx(1.f / 64.f));
+    }
+
+    // and what HDRView writes reads back as what it wrote, in this direction and the other, where the base is the
+    // HDR rendition
+    IsoGainmapParams down = p;
+    std::swap(down.base_headroom, down.alternate_headroom);
+    down.base_offset[1] = 1.f / 32.f;
+    for (const auto &written : {p, down})
+    {
+        const auto bytes = serialize_iso_gainmap(written);
+        const auto read  = parse_iso_gainmap(bytes.data(), bytes.size());
+        CHECK(read.base_headroom == doctest::Approx(written.base_headroom).epsilon(1e-5));
+        CHECK(read.alternate_headroom == doctest::Approx(written.alternate_headroom).epsilon(1e-5));
+        CHECK(read.use_base_color_space == written.use_base_color_space);
+        for (int c = 0; c < 3; ++c)
+            for (auto [r, w] :
+                 {std::pair{read.min[c], written.min[c]}, std::pair{read.max[c], written.max[c]},
+                  std::pair{read.gamma[c], written.gamma[c]}, std::pair{read.base_offset[c], written.base_offset[c]},
+                  std::pair{read.alternate_offset[c], written.alternate_offset[c]}})
+                CHECK(r == doctest::Approx(w).epsilon(1e-5));
     }
 }
 

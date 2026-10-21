@@ -30,6 +30,7 @@ struct JXLSaveOptions
     float            quality         = 95.0f;
     int              data_type_index = 0;
     TransferFunction tf              = TransferFunction::BT2100_PQ;
+    int              gain_map        = 0; ///< 0: none, 1: an SDR base brightened to HDR, 2: an HDR base darkened to SDR
 };
 
 static JXLSaveOptions s_opts;
@@ -44,19 +45,16 @@ bool is_jxl_image(istream &is) noexcept { return false; }
 bool jxl_offers_tf(TransferFunction) noexcept { return false; }
 
 vector<ImagePtr> load_jxl_image(istream &, string_view, const ImageLoadOptions &)
-{
-    throw runtime_error("JPEG-XL support not enabled in this build.");
-}
+{ throw runtime_error("JPEG-XL support not enabled in this build."); }
 
 JXLSaveOptions *jxl_parameters_gui(SaveContext &) { return &s_opts; }
 
-void save_jxl_image(const Image &, std::ostream &, std::string_view, bool, float, TransferFunction, int)
+void save_jxl_image(const Image &, std::ostream &, std::string_view, bool, float, TransferFunction, int, const Image *,
+                    bool)
 { throw runtime_error("JPEG-XL support not enabled in this build."); }
 
-void save_jxl_image(const Image &, std::ostream &, std::string_view, JXLSaveOptions *)
-{
-    throw runtime_error("JPEG-XL support not enabled in this build.");
-}
+void save_jxl_image(const Image &, std::ostream &, std::string_view, JXLSaveOptions *, const Image *)
+{ throw runtime_error("JPEG-XL support not enabled in this build."); }
 
 #else
 
@@ -264,14 +262,21 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     auto           tf       = power ? transfer_function_from_color_encoding(file_enc)
                                     : transfer_function_from_CICP((int)file_enc.transfer_function);
 
+    // JPEG XL names its white point apart from its primaries, and CICP does not: the P3 primaries are code 11 with
+    // DCI's white and 12 with D65's, and sRGB's and BT.2100's codes hold only with D65's
+    int cicp_primaries = -1;
+    if (file_enc.primaries == JXL_PRIMARIES_P3)
+        cicp_primaries = file_enc.white_point == JXL_WHITE_POINT_D65   ? 12
+                         : file_enc.white_point == JXL_WHITE_POINT_DCI ? 11
+                                                                       : -1;
+    else if (file_enc.primaries != JXL_PRIMARIES_CUSTOM && file_enc.white_point == JXL_WHITE_POINT_D65)
+        cicp_primaries = (int)file_enc.primaries;
+
     // a power curve has no CICP code (DCI's 17 means another transfer function there), so it takes the general path
-    if (power || file_enc.primaries == JXL_PRIMARIES_CUSTOM)
+    if (power || cicp_primaries < 0)
         return linearize_pixels(pixels, size, file_chr, tf, keep_primaries, profile_description, c);
-    else // we can map to a CICP profile
-    {
-        return CICPProfile((int)file_enc.primaries, (int)file_enc.transfer_function, 0, 1)
-            .linearize_pixels(pixels, size, keep_primaries, profile_description, c);
-    }
+    return CICPProfile(cicp_primaries, (int)file_enc.transfer_function, 0, 1)
+        .linearize_pixels(pixels, size, keep_primaries, profile_description, c);
 }
 
 //
@@ -1000,11 +1005,17 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
     return images;
 }
 
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, bool lossless, float quality,
-                    TransferFunction tf, int data_type)
+namespace
 {
-    ScopedMDC mdc{"IO", "JXL"};
-    Timer     timer;
+
+/// Encodes \p img as a JPEG XL, in a container holding \p jhgm as a `jhgm` box when given, else a bare codestream.
+/**
+    \p clip_at_white clips its colors at SDR white, as an SDR rendition shows them, which integer samples do anyway.
+*/
+void encode_jxl(const Image &img, std::ostream &os, std::string_view filename, bool lossless, float quality,
+                TransferFunction tf, int data_type, const std::string *jhgm, bool clip_at_white = false)
+{
+    Timer timer;
 
     JxlBasicInfo info;
     JxlEncoderInitBasicInfo(&info);
@@ -1053,15 +1064,23 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
         info.bits_per_sample          = 16;
         info.exponent_bits_per_sample = 5;
         pixels_f16                    = img.as_interleaved<half>(&w, &h, &n, tf, false, true, false);
-        pixels                        = pixels_f16.get();
-        pixel_bytes                   = sizeof(half) * w * h * n;
+        if (clip_at_white)
+            for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i)
+                if (int(i % n) < (n <= 2 ? 1 : 3))
+                    pixels_f16[i] = std::min(float(pixels_f16[i]), from_linear(1.f, tf));
+        pixels      = pixels_f16.get();
+        pixel_bytes = sizeof(half) * w * h * n;
         break;
     case JXL_TYPE_FLOAT:
         info.bits_per_sample          = 32;
         info.exponent_bits_per_sample = 8;
         pixels_f32                    = img.as_interleaved<float>(&w, &h, &n, tf, false, true, false);
-        pixels                        = pixels_f32.get();
-        pixel_bytes                   = sizeof(float) * w * h * n;
+        if (clip_at_white)
+            for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i)
+                if (int(i % n) < (n <= 2 ? 1 : 3))
+                    pixels_f32[i] = std::min(pixels_f32[i], from_linear(1.f, tf));
+        pixels      = pixels_f32.get();
+        pixel_bytes = sizeof(float) * w * h * n;
         break;
     }
     format.num_channels = n;
@@ -1088,6 +1107,10 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     auto          runner = JxlResizableParallelRunnerMake(nullptr);
     if (JXL_ENC_SUCCESS != JxlEncoderSetParallelRunner(enc.get(), JxlResizableParallelRunner, runner.get()))
         throw std::runtime_error("JxlEncoderSetParallelRunner failed");
+
+    if (jhgm && (JXL_ENC_SUCCESS != JxlEncoderUseContainer(enc.get(), JXL_TRUE) ||
+                 JXL_ENC_SUCCESS != JxlEncoderUseBoxes(enc.get())))
+        throw std::runtime_error("JxlEncoderUseBoxes failed");
 
     if (JXL_ENC_SUCCESS != JxlEncoderSetBasicInfo(enc.get(), &info))
         throw std::runtime_error("JxlEncoderSetBasicInfo failed");
@@ -1153,6 +1176,10 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
         throw std::runtime_error(fmt::format("JxlEncoderAddImageFrame failed: {}", (int)JxlEncoderGetError(enc.get())));
     }
 
+    if (jhgm && JXL_ENC_SUCCESS != JxlEncoderAddBox(enc.get(), "jhgm", reinterpret_cast<const uint8_t *>(jhgm->data()),
+                                                    jhgm->size(), JXL_FALSE))
+        throw std::runtime_error("JxlEncoderAddBox failed for the gain map");
+
     JxlEncoderCloseInput(enc.get());
 
     std::vector<uint8_t> outbuf(1024 * 1024); // Start with 1MB
@@ -1176,12 +1203,95 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     spdlog::info("Saved image to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
+/// The contents of a `jhgm` box, laid out as apply_jxl_gainmap() reads them, for no alternate color space.
+std::string jhgm_bundle(const std::vector<uint8_t> &metadata, const std::string &codestream)
+{
+    std::string out;
+    out.push_back(0); // version
+    out.push_back(char(metadata.size() >> 8));
+    out.push_back(char(metadata.size() & 0xff));
+    out.append(metadata.begin(), metadata.end());
+    out.push_back(0);       // no color encoding of the alternate rendition: it is in the base's
+    out.append(4, char(0)); // nor an ICC profile
+    return out + codestream;
+}
+
+} // namespace
+
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, bool lossless, float quality,
+                    TransferFunction tf, int data_type, const Image *sdr_rendition, bool hdr_base)
+{
+    ScopedMDC mdc{"IO", "JXL"};
+    if (!sdr_rendition)
+        return encode_jxl(img, os, filename, lossless, quality, tf, data_type, nullptr);
+
+    Timer timer;
+
+    // the two renditions the map relates: linear, in the same primaries, the SDR one clipped at SDR white
+    int  w = 0, h = 0, n = 0, sw = 0, sh = 0, sn = 0;
+    auto hdr = img.as_interleaved<float>(&w, &h, &n, TransferFunction::Linear, false, true, false);
+    auto sdr = sdr_rendition->as_interleaved<float>(&sw, &sh, &sn, TransferFunction::Linear, false, true, false);
+    if (sw != w || sh != h || sn != n || n < 3)
+        throw std::invalid_argument("JPEG XL: the SDR rendition does not match the HDR one.");
+    for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i) sdr[i] = std::min(sdr[i], 1.f);
+
+    // the HDR rendition's headroom: the peak it was made for, or else its brightest sample
+    float peak = 1.f;
+    if (const auto md = mastering_display(img.metadata.value("header", json::object())); md && md->max_nits > 0.f)
+        peak = md->max_nits / HDR_REFERENCE_WHITE_NITS;
+    else
+        for (size_t i = 0, num = size_t(w) * h * n; i < num; ++i)
+            if (i % n < 3)
+                peak = std::max(peak, hdr[i]);
+    const float headroom = std::log2(std::max(peak, 1.f));
+
+    IsoGainmapParams params;
+    params.base_headroom      = hdr_base ? headroom : 0.f;
+    params.alternate_headroom = hdr_base ? 0.f : headroom;
+    const GainmapImage gm     = hdr_base ? compute_iso_gainmap(hdr.get(), sdr.get(), int2{w, h}, n, params)
+                                         : compute_iso_gainmap(sdr.get(), hdr.get(), int2{w, h}, n, params);
+
+    // the map as a bare codestream of its normalized values, which a reader takes as they are stored
+    auto map = std::make_shared<Image>(gm.size, 3);
+    for (int c = 0; c < 3; ++c)
+        map->channels[c].copy_from_interleaved(gm.pixels.data(), gm.size.x, gm.size.y, 3, c, [](float v) { return v; });
+    map->finalize();
+    std::ostringstream map_os;
+    encode_jxl(*map, map_os, "gain map", lossless, quality, TransferFunction::Linear, JXL_TYPE_UINT16, nullptr);
+
+    const std::string jhgm = jhgm_bundle(serialize_iso_gainmap(params), map_os.str());
+    encode_jxl(hdr_base ? img : *sdr_rendition, os, filename, lossless, quality, tf, data_type, &jhgm, !hdr_base);
+    spdlog::info("Wrote a gain map to {:.2f} stops of headroom from an {} base in {} seconds.", headroom,
+                 hdr_base ? "HDR" : "SDR", timer.elapsed() / 1000.f);
+}
+
 static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
+
+#if defined(HDRVIEW_ENABLE_GUI_TEST_ENGINE)
+int &jxl_gain_map_option() { return s_opts.gain_map; }
+#endif
 
 JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
 {
+    // a gain map is two renditions of the view, so only Export rendition offers one
+    const int  gain_map   = ctx.rendition ? s_opts.gain_map : 0;
+    const bool float_type = s_opts.data_type_index <= 1; // the first two are the float formats
+    // the base's encoding: an SDR one under a map up to HDR, one keeping values above SDR white under a map down
+    const auto fits_base = [&](const TransferFunction &tf)
+    { return gain_map == 0 || is_hdr_encoding(tf, gain_map == 2 && float_type) == (gain_map == 2); };
+    if (!fits_base(s_opts.tf))
+        s_opts.tf = gain_map == 2 ? TransferFunction::BT2100_PQ : TransferFunction::sRGB;
+
     if (begin_options_table(ctx))
     {
+        if (ctx.rendition)
+            ImGui::PE::Combo(
+                "Gain map", &s_opts.gain_map, "None\0SDR base\0HDR base\0", 3,
+                "Write both renditions of the view, the SDR one and the HDR one, as an image and a gain map "
+                "between them.\n\nSDR base: the image is the SDR rendition, which the map brightens on an "
+                "HDR display.\nHDR base: the image is the HDR rendition, which the map darkens on an SDR "
+                "display.");
+
         ImGui::PE::Entry(
             "Transfer function",
             [&]
@@ -1190,7 +1300,8 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
                 {
                     for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
-                        if (!jxl_offers_tf({(TransferFunction::Type_)i, s_opts.tf.gamma}))
+                        if (!jxl_offers_tf({(TransferFunction::Type_)i, s_opts.tf.gamma}) ||
+                            !fits_base({(TransferFunction::Type_)i, s_opts.tf.gamma}))
                             continue;
                         bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
                         if (ImGui::Selectable(
@@ -1228,34 +1339,50 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
     }
 
     caveat_entry(jxl_caveat(s_opts.tf, s_opts.lossless));
+    if (gain_map)
+        caveat_entry(jxl_gainmap_caveat(gain_map == 2));
 
-    ctx.hdr = is_hdr_encoding(s_opts.tf, s_opts.data_type_index <= 1); // the first two are the float formats
+    ctx.hdr               = gain_map != 0 || is_hdr_encoding(s_opts.tf, float_type);
     ctx.records_primaries = true; //< in its color encoding or ICC profile
+    ctx.sdr_base          = gain_map != 0;
     return &s_opts;
 }
 
 // throws on error
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params,
+                    const Image *sdr_rendition)
 {
     if (params == nullptr)
         throw std::invalid_argument("JXLSaveOptions pointer is null");
 
     save_jxl_image(img, os, filename, params->lossless, params->quality, params->tf,
-                   s_data_types[params->data_type_index]);
+                   s_data_types[params->data_type_index], params->gain_map ? sdr_rendition : nullptr,
+                   params->gain_map == 2);
 }
 
 #endif
 
-// macOS's ImageIO measured by test_export_roundtrip.cpp. It reads every gamma in JPEG XL's own codes as 1.8, and 709 as
-// sRGB, so those are written through an ICC profile, which a lossless file keeps. A lossy one is encoded in XYB,
-// and libjxl turns the profile back into its codes where they can state it, which leaves macOS misreading the gammas
-// other than its own 1.8 and DCI's 2.6, BT.1886's 2.4 among them.
+// macOS 27's ImageIO measured by test_export_roundtrip.cpp. It reads every gamma in JPEG XL's own codes as 1.8, and 709
+// as sRGB, so those are written through an ICC profile, which a lossless file keeps. A lossy one is encoded in XYB, and
+// libjxl turns the profile back into its codes where they can state it, which leaves macOS misreading the gammas other
+// than its own 1.8 and DCI's 2.6, BT.1886's 2.4 among them.
 Caveat jxl_caveat(TransferFunction tf, bool lossless)
 {
     const bool misread_gamma = tf.type == TransferFunction::ITU ||
                                (tf.type == TransferFunction::Gamma && tf.gamma != 1.8f && tf.gamma != 2.6f);
     if (!lossless && misread_gamma)
-        return {Misreader_macOS, "macOS apps read a lossy JPEG XL with this transfer function as a gamma of 1.8; "
+        return {Misreader_macOS, "macOS 27 apps read a lossy JPEG XL with this transfer function as a gamma of 1.8; "
                                  "they read a lossless one right."};
     return {};
+}
+
+// macOS 26's and 27's ImageIO measured by test_gainmap.cpp, and on Adobe's samples: it applies the gain maps of Ultra
+// HDR JPEGs and AVIFs, but not a JPEG XL's jhgm box, whichever rendition is the base.
+Caveat jxl_gainmap_caveat(bool hdr_base)
+{
+    return {Misreader_macOS,
+            hdr_base ? "macOS 26 and 27 apps ignore a JPEG XL's gain map: on an SDR display they tone-map the "
+                       "HDR base themselves."
+                     : "macOS 26 and 27 apps ignore a JPEG XL's gain map: on an HDR display they show the SDR "
+                       "base."};
 }

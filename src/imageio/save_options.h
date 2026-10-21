@@ -13,10 +13,12 @@
 /// What the save dialog and a format's options tell each other about what is being saved.
 struct SaveContext
 {
-    bool hdr        = false; ///< Set by the options: whether the encoding keeps values above SDR white
-    std::string table;              ///< Set by the dialog: the ID its own table shares with the options' table
-    bool wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
-    bool records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
+    bool        hdr = false;               ///< Set by the options: whether the encoding keeps values above SDR white
+    std::string table;                     ///< Set by the dialog: the ID its own table shares with the options' table
+    bool        wide_gamut        = false; ///< Set by the dialog: whether the image's primaries are other than BT.709's
+    bool        records_primaries = false; ///< Set by the options: whether the file can say which primaries it is in
+    bool        rendition = false; ///< Set by the dialog: whether it exports a rendition of the view, not the data
+    bool        sdr_base = false; ///< Set by the options: whether the file also needs the SDR rendition, for a gain map
 };
 
 /// Whether an encoding keeps values above SDR white: an HDR transfer function, or floating-point samples.
@@ -36,9 +38,10 @@ enum Misreader_ : unsigned
 
 /// A warning that some applications misread a file saved so, naming them and what they do instead.
 /**
-    Each format's X_caveat() returns the one for its settings, from measurements of the readers. On macOS,
-    test_export_roundtrip.cpp holds every caveat naming macOS to what ImageIO does, both ways; the other readers
-    were checked by hand, at the versions each X_caveat()'s comment gives.
+    Each format's X_caveat() returns the one for its settings, from measurements of the readers, and its text names
+    the version measured, so a reader that has since changed shows as such. On macOS, test_export_roundtrip.cpp and
+    test_gainmap.cpp hold every caveat naming macOS to what ImageIO does, both ways; the other readers were checked
+    by hand.
 */
 struct Caveat
 {

@@ -8,17 +8,26 @@
 #include "app.h"
 #include "colorspace.h"
 #include "image.h"
+#include "imageio/gainmap.h"
+#include "imageio/image_loader.h"
+#include "imageio/jxl.h"
+#include "imageio/uhdr.h"
 #include "test_gui_registry.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
 
+#include "../test_asan.h"
 #include "test_gui_support.h"
 
 using namespace hdrview_test;
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <functional>
 #include <limits>
 
 #ifndef HDRVIEW_GUI_TEST_IMAGE
@@ -123,9 +132,17 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->GatherItems(&items, window.c_str(), -1);
             ImVector<ImGuiID> format_ids;
             const std::string child = std::string(dialog) + "/";
+            bool              lists_gainmap_format = false;
             for (auto &item : items)
                 if (item.Depth == 1 && strstr(item.Window->Name, child.c_str()) != nullptr)
+                {
                     format_ids.push_back(item.ID);
+                    lists_gainmap_format |= strcmp(item.DebugLabel, "JPEG (UltraHDR)") == 0;
+                }
+#if HDRVIEW_ENABLE_LIBUHDR
+            // a gain map is two renditions of the view, so only Export rendition offers one
+            IM_CHECK(lists_gainmap_format == (dialog[0] == 'E'));
+#endif
             // eight entries are present whatever the build enables (BMP, HDR, JPEG and PNG via stb, OpenEXR,
             // PFM, QOI, TGA); the rest are gated on their HDRVIEW_ENABLE_* option
             ctx->LogInfo("format list holds %d entries", format_ids.Size);
@@ -260,4 +277,157 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         app->clamp_to_LDR()  = clamp;
         roll_off             = rolling;
     };
+
+    // What Export rendition writes for a gain-map format, through the dialog the way a user saves: the file reads
+    // back as the view clipped at SDR white with no headroom, and as the view itself in full. The view is two stops
+    // up with highlights passing through, so the two renditions differ wherever the fixture is brighter than a
+    // quarter of white.
+    struct GainmapCase
+    {
+        const char *format, *extension;
+        const char *gain_map; ///< the JPEG XL option to pick, or none for a format that always writes one
+    };
+    std::vector<GainmapCase> cases;
+#if HDRVIEW_ENABLE_LIBUHDR
+    cases.push_back({"JPEG (UltraHDR)", ".jpg", nullptr});
+#endif
+#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
+    cases.push_back({"JPEG-XL", ".jxl", "SDR base"});
+    cases.push_back({"JPEG-XL", ".jxl", "HDR base"});
+#endif
+    for (const auto &gc : cases)
+    {
+        const std::string name = std::string("export_rendition_writes_a_gain_map_") + gc.extension + "_" +
+                                 (gc.gain_map ? (gc.gain_map[0] == 'S' ? "sdr_base" : "hdr_base") : "sdr_base");
+        t                      = IM_REGISTER_TEST(engine, "dialogs", strdup(name.c_str()));
+        t->TestFunc            = [gc](ImGuiTestContext *ctx)
+        {
+            if (hdrview()->num_images() == 0)
+            {
+                hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
+                wait_for_loads(ctx);
+            }
+            auto *app = hdrview();
+            auto  img = app->current_image();
+            IM_CHECK(img != nullptr);
+
+            bool       &roll_off = *app->action("Roll off highlights").p_selected;
+            const float exposure = app->exposure_live(), gamma = app->gamma_live();
+            const auto  tonemap = app->tonemap();
+            const bool  clamp = app->clamp_to_LDR(), rolling = roll_off;
+            // a failed check returns early, so the view and the test hooks are put back however the test ends
+            struct Restore
+            {
+                std::function<void()> undo;
+                ~Restore() { undo(); }
+            } restore{[&, exposure, gamma, tonemap, clamp, rolling]
+                      {
+                          app->test_save_path().clear();
+#if HDRVIEW_ENABLE_LIBJXL
+                          jxl_gain_map_option() = 0;
+#endif
+                          app->exposure_live() = exposure;
+                          app->gamma_live()    = gamma;
+                          app->tonemap()       = tonemap;
+                          app->clamp_to_LDR()  = clamp;
+                          roll_off             = rolling;
+                      }};
+            app->exposure_live() = 2.f;
+            app->gamma_live()    = 1.f;
+            app->tonemap()       = Tonemap_Gamma;
+            app->clamp_to_LDR()  = false;
+            roll_off             = false;
+            ctx->Yield(2); //< for update_rolloff() to see it
+
+            const auto path =
+                std::filesystem::temp_directory_path() / (std::string("hdrview_gui_gainmap") + gc.extension);
+            std::filesystem::remove(path);
+            app->test_save_path() = path.u8string();
+
+            const char *dialog = "Export rendition...";
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick("File/Export rendition...");
+            ctx->SetRef("");
+            IM_CHECK(ctx->WindowInfo(dialog).Window != nullptr);
+
+            // the format, by its entry in the list, whose child window has a runtime-hashed name
+            const auto find = [&](const char *label, const char *window_part) -> ImGuiID
+            {
+                ImGuiTestItemList items;
+                ctx->GatherItems(&items, "//Export rendition...", -1);
+                for (auto &item : items)
+                    if (strcmp(item.DebugLabel, label) == 0 && strstr(item.Window->Name, window_part) != nullptr)
+                        return item.ID;
+                return 0;
+            };
+            const ImGuiID format = find(gc.format, "Export rendition.../");
+            IM_CHECK(format != 0);
+            ctx->ItemClick(format);
+            ctx->Yield(3);
+            if (gc.gain_map)
+            {
+                // set directly: the test engine does not register the widgets of the options' property rows
+                jxl_gain_map_option() = gc.gain_map[0] == 'S' ? 1 : 2;
+                ctx->Yield(3);
+            }
+
+            ctx->SetRef(dialog);
+            ctx->ItemClick((std::string("Save as ") + gc.format + "...").c_str());
+            ctx->SetRef("");
+            wait_for_window_closed(ctx, dialog);
+            app->test_save_path().clear();
+            IM_CHECK(std::filesystem::exists(path));
+
+            const auto decode = [&](float headroom) -> ImagePtr
+            {
+                std::ifstream    is{path, std::ios::binary};
+                ImageLoadOptions opts;
+                opts.gainmap_headroom = headroom;
+                auto images           = gc.extension[2] == 'x' ? load_jxl_image(is, path.u8string(), opts)
+                                                               : load_uhdr_image(is, path.u8string(), opts);
+                return images.empty() ? nullptr : images.front();
+            };
+            const auto none = decode(0.f), full = decode(k_full_gainmap_headroom);
+            IM_CHECK(none && full && full->size() == img->size());
+
+            // The full decode against the view's own rendition, and the no-headroom one against it clipped at SDR
+            // white, in the image's primaries, which the file was written in and an SDR base clips in, at the
+            // fixture's opaque pixels: in stops where the view is bright and in sRGB code values where it is dim. The
+            // 99th percentile, since a lossy codec always leaves some outliers (JPEG's 4:2:0 chroma most, on saturated
+            // colors); a missing or one-sided map is off by the two stops the view was raised across all the
+            // highlights.
+            const auto         view = app->image_to_save(HDRViewApp::SaveMode_Rendition, false, 0.f);
+            std::vector<float> stops, codes;
+            for (int y = 0; y < img->size().y; ++y)
+                for (int x = 0; x < img->size().x; ++x)
+                {
+                    if (view->channels.size() > 3 && view->channels[3](x, y) < 1.f)
+                        continue;
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        const float want = view->channels[c](x, y), hi = full->channels[c](x, y),
+                                    lo = none->channels[c](x, y);
+                        if (want >= 0.25f)
+                            stops.push_back(std::abs(std::log2(std::max(hi, 1e-6f) / want)));
+                        else
+                            codes.push_back(std::abs(linear_to_sRGB(hi) - linear_to_sRGB(want)));
+                        codes.push_back(std::abs(linear_to_sRGB(lo) - linear_to_sRGB(std::min(want, 1.f))));
+                    }
+                }
+            const auto quantile = [](std::vector<float> v, float q)
+            {
+                if (v.empty())
+                    return 0.f;
+                std::nth_element(v.begin(), v.begin() + size_t(q * (v.size() - 1)), v.end());
+                return v[size_t(q * (v.size() - 1))];
+            };
+            ctx->LogInfo("%s %s: stops 99%% %.3f worst %.3f; code values 99%% %.4f worst %.4f", gc.format,
+                         gc.gain_map ? gc.gain_map : "", quantile(stops, 0.99f), quantile(stops, 1.f),
+                         quantile(codes, 0.99f), quantile(codes, 1.f));
+            IM_CHECK_LE(quantile(stops, 0.99f), 0.5f);
+            IM_CHECK_LE(quantile(codes, 0.99f), 0.1f);
+
+            std::filesystem::remove(path);
+        };
+    }
 }

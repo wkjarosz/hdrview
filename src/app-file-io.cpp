@@ -232,10 +232,17 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 
         // ImGui::PushItemWidth(-HelloImGui::EmSize(10));
 
+        // Ultra HDR writes two renditions of the view, so Save as, which writes the data, does not offer it
+        const auto offered = [&](int i)
+        { return format_enabled[i] && (mode == SaveMode_Rendition || i != Format_JPEG_UHDR); };
+        if (!offered(save_format))
+            save_format = Format_EXR;
+
         // what the format's options are told about the image, and say about the encoding they chose
         SaveContext ctx;
         // every format's options and the rendition's share a table ID, which syncs their columns' widths
-        ctx.table = "##save options";
+        ctx.table     = "##save options";
+        ctx.rendition = mode == SaveMode_Rendition;
         if (auto img = current_image())
             ctx.wide_gamut = img->chromaticities && named_color_gamut(*img->chromaticities) != ColorGamut_sRGB_BT709;
 
@@ -252,7 +259,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         {
             for (int i = 0; i <= Format_Last; ++i)
             {
-                if (!format_enabled[i])
+                if (!offered(i))
                     continue;
                 bool is_selected = (save_format == i);
                 // keyboard navigation moves the focus, and the selection follows it
@@ -276,7 +283,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::BeginChild("##Options", ImVec2{HelloImGui::EmSize(28.f), column_height}, ImGuiChildFlags_None,
                           ImGuiWindowFlags_NoBackground);
 
-        std::function<void(const Image &, std::ostream &, const std::string_view)> save_func;
+        // the image to save, and for a gain map the SDR rendition it also needs
+        std::function<void(const Image &, std::ostream &, const std::string_view, const Image *)> save_func;
         // what the format writes unless one of its options says otherwise
         std::string save_extension = save_format_extensions[save_format];
 
@@ -285,7 +293,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_JPEG_LIBJPEG:
         {
             auto opts = jpg_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_jpg_image(img, os, filename, opts); };
         }
         break;
@@ -296,7 +304,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_AVIF:
         {
             auto opts = heif_parameters_gui(save_format == Format_AVIF ? HEIFCodec::AV1 : HEIFCodec::HEIF, ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_heif_image(img, os, filename, opts); };
         }
         break;
@@ -304,16 +312,16 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_JPEG_UHDR:
         {
             auto opts = uhdr_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-            { save_uhdr_image(img, os, filename, opts); };
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename,
+                               const Image *sdr_base) { save_uhdr_image(img, os, filename, opts, sdr_base); };
         }
         break;
 
         case Format_JPEG_XL:
         {
             auto opts = jxl_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-            { save_jxl_image(img, os, filename, opts); };
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *sdr)
+            { save_jxl_image(img, os, filename, opts, sdr); };
         }
         break;
 
@@ -322,7 +330,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
             auto opts = j2k_parameters_gui(ctx);
             // the container is one of its options, so the extension follows what was chosen there
             save_extension = j2k_extension(opts);
-            save_func      = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func      = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_j2k_image(img, os, filename, opts); };
         }
         break;
@@ -330,7 +338,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_WEBP:
         {
             auto opts = webp_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_webp_image(img, os, filename, opts); };
         }
         break;
@@ -346,7 +354,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 return img;
             }();
             auto opts = exr_parameters_gui(rendition ? rgba : current_image(), ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_exr_image(img, os, filename, opts); };
         }
         break;
@@ -354,7 +362,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_PFM:
         {
             auto opts = pfm_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_pfm_image(img, os, filename, opts); };
         }
         break;
@@ -362,7 +370,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_PNG_LIBPNG:
         {
             auto opts = png_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_png_image(img, os, filename, opts); };
         }
         break;
@@ -370,7 +378,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_QOI:
         {
             auto opts = qoi_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_qoi_image(img, os, filename, opts); };
         }
         break;
@@ -378,7 +386,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_JPEG_STB:
         {
             auto opts = stb_parameters_gui(false, true, ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_stb_jpg(img, os, filename, opts); };
         }
         break;
@@ -386,7 +394,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_BMP_STB:
         {
             auto opts = stb_parameters_gui(false, false, ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_stb_bmp(img, os, filename, opts); };
         }
         break;
@@ -394,7 +402,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_HDR_STB:
         {
             auto opts = stb_parameters_gui(true, false, ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_stb_hdr(img, os, filename, opts); };
         }
         break;
@@ -402,7 +410,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_PNG_STB:
         {
             auto opts = stb_parameters_gui(false, false, ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_stb_png(img, os, filename, opts); };
         }
         break;
@@ -410,7 +418,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_TGA_STB:
         {
             auto opts = stb_parameters_gui(false, false, ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_stb_tga(img, os, filename, opts); };
         }
         break;
@@ -418,7 +426,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         case Format_TIFF:
         {
             auto opts = tiff_parameters_gui(ctx);
-            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename, const Image *)
             { save_tiff_image(img, os, filename, opts); };
         }
         break;
@@ -538,7 +546,7 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         // format changes
         float save_w = 0.f;
         for (int i = 0; i <= Format_Last; ++i)
-            if (format_enabled[i])
+            if (offered(i))
                 save_w =
                     std::max(save_w, ImGui::CalcTextSize(fmt::format("Save as {}...", save_format_names[i]).c_str()).x);
         save_w += 2 * style.FramePadding.x;
@@ -558,10 +566,15 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         if (ImGui::Button(save_as_name.c_str(), ImVec2{save_w, 0.f}))
         {
             filename = current_image()->path.stem().u8string() + save_extension;
+#if defined(HDRVIEW_ENABLE_GUI_TEST_ENGINE)
+            if (!m_test_save_path.empty())
+                filename = m_test_save_path;
+            else
+#endif
 #if !defined(__EMSCRIPTEN__)
-            filename = pfd::save_file(save_as_name.c_str(), filename,
-                                      {string(save_format_names[save_format]) + " images", save_extension})
-                           .result();
+                filename = pfd::save_file(save_as_name.c_str(), filename,
+                                          {string(save_format_names[save_format]) + " images", save_extension})
+                               .result();
 #endif
         }
 
@@ -579,8 +592,14 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                 if (!img)
                     throw runtime_error("the selection does not cover any of the image");
 
+                // the SDR rendition a gain map needs: the same view, resolved at SDR white
+                ConstImagePtr sdr_base =
+                    ctx.sdr_base
+                        ? image_to_save(mode, cropping, 0.f, use_rendition_primaries ? &rendition_primaries : nullptr)
+                        : nullptr;
+
                 if (save_func)
-                    save_func(*img, os, filename);
+                    save_func(*img, os, filename, sdr_base.get());
                 else
                     throw runtime_error("No save function defined for this format.");
 

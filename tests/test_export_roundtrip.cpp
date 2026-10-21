@@ -58,22 +58,7 @@
 #if HDRVIEW_ENABLE_LIBHEIF
 #include <libheif/heif.h>
 #endif
-#if defined(__APPLE__)
-#include <CoreGraphics/CoreGraphics.h>
-#include <ImageIO/ImageIO.h>
-#endif
-
-// AddressSanitizer reports a spurious stack-use-after-scope inside libjxl's SizeHeader::Set ->
-// FixedAspectRatios (lib/jxl/headers.cc): the in-bounds read kRatios[ratio - 1] of a function-local
-// constexpr array the optimizer emitted into .rodata. No suppressions file can filter that class, so the
-// JPEG-XL row drops out of the table under ASan alone.
-#if defined(__SANITIZE_ADDRESS__)
-#define HDRVIEW_TEST_ASAN 1
-#elif defined(__has_feature)
-#if __has_feature(address_sanitizer)
-#define HDRVIEW_TEST_ASAN 1
-#endif
-#endif
+#include "test_apple.h"
 
 namespace
 {
@@ -200,7 +185,7 @@ const Variant k_variants[] = {
     {"webp lossless", ".webp", Cap_Alpha, k_8bit, webp_offers_tf,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_webp_image(i, o, "a.webp", 100.f, true, t); }},
 #endif
-#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN)
+#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
     // a gamma decodes through the ICC profile libjxl synthesizes, whose fixed-point curve moves a lossless
     // file's samples by about 1e-4
     {"jxl f32 q95", ".jxl", Cap_Default | Cap_Alpha | Cap_Lossy, 0.03f, [](TransferFunction t) { return jxl_offers_tf(t); },
@@ -284,46 +269,6 @@ float3 straight_rgb(const float4 &premultiplied)
     const float a = std::max(1e-4f, premultiplied[3]);
     return float3{premultiplied[0] / a, premultiplied[1] / a, premultiplied[2] / a};
 }
-
-#if defined(__APPLE__)
-/// What macOS's ImageIO, the decoder Preview uses, reads \p bytes as at \p pixel.
-/**
-    Linear BT.709 light with 1.0 at SDR white, drawn into a float bitmap in extended linear sRGB, so the file's
-    labels are honored, or ignored, as every macOS application would. None when ImageIO cannot decode the file.
-*/
-std::optional<float4> apple_decode(const std::string &bytes, int2 pixel)
-{
-    CFDataRef        data = CFDataCreate(nullptr, reinterpret_cast<const UInt8 *>(bytes.data()), (CFIndex)bytes.size());
-    CGImageSourceRef source = data ? CGImageSourceCreateWithData(data, nullptr) : nullptr;
-    CGImageRef       image  = source ? CGImageSourceCreateImageAtIndex(source, 0, nullptr) : nullptr;
-    std::optional<float4> result;
-    if (image)
-    {
-        const size_t       w = CGImageGetWidth(image), h = CGImageGetHeight(image);
-        std::vector<float> rgba(w * h * 4);
-        CGColorSpaceRef    space = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearSRGB);
-        CGContextRef       ctx   = CGBitmapContextCreate(rgba.data(), w, h, 32, w * 16, space,
-                                                         kCGImageAlphaPremultipliedLast | kCGBitmapFloatComponents |
-                                                             kCGBitmapByteOrder32Little);
-        if (ctx)
-        {
-            CGContextSetBlendMode(ctx, kCGBlendModeCopy);
-            CGContextDrawImage(ctx, CGRectMake(0, 0, (CGFloat)w, (CGFloat)h), image);
-            // the bitmap's first row is the image's bottom one
-            const size_t i = ((h - 1 - (size_t)pixel.y) * w + (size_t)pixel.x) * 4;
-            result         = float4{rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]};
-            CGContextRelease(ctx);
-        }
-        CGColorSpaceRelease(space);
-        CGImageRelease(image);
-    }
-    if (source)
-        CFRelease(source);
-    if (data)
-        CFRelease(data);
-    return result;
-}
-#endif
 
 /// The warning \p variant's dialog shows for \p tf, for the sweep's image, whose primaries are BT.2020's.
 Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
@@ -555,9 +500,10 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
 
 #if defined(__APPLE__)
             // and as macOS reads it, which is how every application there sees the file
-            if (const auto apple = apple_decode(out.str(), int2{1, 0}))
+            if (const auto decoded = hdrview_test::apple_decode(out.str()))
             {
-                const auto a_code = from_linear(apple->xyz(), tf), w_code = from_linear(want.xyz(), tf);
+                const float4 apple  = (*decoded)(1, 0);
+                const auto   a_code = from_linear(apple.xyz(), tf), w_code = from_linear(want.xyz(), tf);
                 float      worst = 0.f;
                 for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(a_code[c] - w_code[c]));
                 // A setting whose dialog does not warn that macOS misreads it must read within Apple's 8-bit-or-so
