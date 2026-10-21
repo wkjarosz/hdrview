@@ -1,6 +1,7 @@
 #include "icc.h"
 #include "colorspace.h"
 #include "smallthreadpool.h"
+#include <cstdio>
 #include <spdlog/spdlog.h>
 #include <vector>
 
@@ -789,6 +790,7 @@ const char *CICPProfile::cp_short_name() const
     {
     case 0: return "Reserved";
     case 1: return "BT709";
+    case 2: return "Unspecified";
     case 4: return "BT470M";
     case 5: return "BT470BG";
     case 6: return "BT601/525";
@@ -858,6 +860,29 @@ const char *CICPProfile::mc_short_name() const
     case 17: return "YCgCo-Ro";
     default: return "Reserved";
     }
+}
+
+std::array<CICPProfile::Field, 4> CICPProfile::fields() const
+{
+    // the primaries by their gamut's name where H.273 gives them one, else by its own short name: code 2, unspecified,
+    // stands in for BT.709's primaries, which would be named in its place
+    std::string primaries = cp() != 2 && chromaticities_from_CICP(cp()).valid() ? cp_long_name() : cp_short_name();
+    return {{{"Color primaries", cp(), std::move(primaries)},
+             {"Transfer characteristics", tc(), tc_long_name()},
+             {"Matrix coefficients", mc(), mc_long_name()},
+             {"Video range", fr(), r_long_name()}}};
+}
+
+std::optional<CICPProfile> CICPProfile::from_name(std::string_view name)
+{
+    const auto at = name.rfind("CICP ");
+    if (at == std::string_view::npos)
+        return std::nullopt;
+    const std::string  codes{name.substr(at + 5)};
+    std::array<int, 4> quad{{-1, -1, -1, -1}};
+    if (std::sscanf(codes.c_str(), "%d-%d-%d-%d", &quad[0], &quad[1], &quad[2], &quad[3]) != 4)
+        return std::nullopt;
+    return CICPProfile{quad};
 }
 
 std::string CICPProfile::short_name() const

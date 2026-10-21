@@ -1253,6 +1253,20 @@ void Tooltip(const char *description, bool questionMark /*= false*/, float wrap 
     }
 }
 
+void Tooltip(const char *description, const std::function<void()> &more)
+{
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNormal))
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(HelloImGui::EmSize(35.f));
+        ImGui::TextUnformatted(description);
+        ImGui::PopTextWrapPos();
+        if (more)
+            more();
+        ImGui::EndTooltip();
+    }
+}
+
 // Beginning the Property Editor
 bool PE::Begin(const char *label, ImGuiTableFlags flag)
 {
@@ -1365,7 +1379,8 @@ static bool PushPELabelFont()
 }
 
 // Generic entry, the lambda function should return true if the widget changed
-bool PE::Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip)
+bool PE::Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip,
+               const std::function<void()> &tooltip_more)
 {
     ImGui::PushID(property_name.c_str());
     ImGui::TableNextRow();
@@ -1376,7 +1391,9 @@ bool PE::Entry(const std::string &property_name, const std::function<bool()> &co
     // ImGui::TextUnformatted(property_name.c_str());
     if (pop_font)
         ImGui::PopFont();
-    if (!tooltip.empty())
+    if (tooltip_more)
+        Tooltip(tooltip.c_str(), tooltip_more);
+    else if (!tooltip.empty())
         Tooltip(tooltip.c_str());
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -1427,7 +1444,7 @@ void PE::Hyperlink(const char *name, const char *desc, const char *url /*= nullp
 }
 
 void PE::WrappedText(const string &property_name, const string &value, const string &tooltip, ImFont *font,
-                     float wrap_em)
+                     float wrap_em, const std::function<void()> &tooltip_more)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.f));
     PE::Entry(
@@ -1459,7 +1476,7 @@ void PE::WrappedText(const string &property_name, const string &value, const str
 
             return false; // no change
         },
-        tooltip);
+        tooltip, tooltip_more);
     ImGui::PopStyleVar();
 }
 
