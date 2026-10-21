@@ -20,16 +20,16 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # macos-14 is an arm64 runner
+          # macos-26 is an arm64 runner, macos-26-intel an Intel one
           - {
               name: "macOS Apple Silicon",
-              os: macos-14,
+              os: macos-26,
               preset: "macos-arm64-cpm",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
           - {
               name: "macOS Intel",
-              os: macos-15-intel,
+              os: macos-26-intel,
               preset: "macos-x86_64-cpm",
               flags: "-DHDRVIEW_ENABLE_HEIC=OFF -DHDRVIEW_ENABLE_AVCI=OFF",
             }
