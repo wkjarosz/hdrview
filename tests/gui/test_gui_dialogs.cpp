@@ -140,10 +140,13 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->Yield(3);
             IM_CHECK_EQ(window->Size.y, full);
 
-            ctx->SetRef(dialog);
-            ctx->ItemClick("Cancel");
-            ctx->SetRef("");
+            // the arrow sits beside the close button, which closes the dialog as Cancel does
+            const std::string bar = std::string("//") + dialog + "/";
+            IM_CHECK(!ctx->ItemInfo((bar + "#FOLD").c_str())
+                          .RectFull.Overlaps(ctx->ItemInfo((bar + "#CLOSE").c_str()).RectFull));
+            ctx->ItemClick((bar + "#CLOSE").c_str());
             wait_for_window_closed(ctx, dialog);
+            IM_CHECK(ctx->WindowInfo(dialog, ImGuiTestOpFlags_NoError).Window == nullptr);
             app->set_zoom(zoom);
         };
     }

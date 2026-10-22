@@ -1125,7 +1125,8 @@ bool FoldButton(ImGuiID id, const ImVec2 &pos, bool folded)
 
 } // namespace
 
-bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags, bool *folded)
+bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags, bool *folded,
+                      bool closable)
 {
     // HelloImGui renders a couple of frames to figure out sizes before the first real frame; guard against
     // opening a dialog that starts out already-open (e.g. the About box on first launch) before then.
@@ -1161,7 +1162,9 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
         ImGui::PushStyleVarY(ImGuiStyleVar_WindowMinSize, ImGui::GetFrameHeight());
     }
 
-    const bool shown = ImGui::BeginPopupModal(title, nullptr, flags);
+    // Dear ImGui draws the close button and closes the popup itself when it is pressed
+    bool       keep_open = true;
+    const bool shown     = ImGui::BeginPopupModal(title, closable ? &keep_open : nullptr, flags);
     if (fold)
         ImGui::PopStyleVar();
     if (shown)
@@ -1169,14 +1172,17 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
         s_modal_dialog_frame = ImGui::GetFrameCount();
         if (folded)
         {
-            // where Dear ImGui puts an ordinary window's collapse arrow, in the title bar, outside the content's clip
+            // where Dear ImGui puts an ordinary window's collapse arrow, in the title bar, outside the content's clip;
+            // on the right, it sits left of the close button
             ImGuiWindow      *window = ImGui::GetCurrentWindow();
             const ImRect      bar    = window->TitleBarRect();
             const ImGuiStyle &style  = ImGui::GetStyle();
-            const ImVec2      pos =
-                style.WindowMenuButtonPosition == ImGuiDir_Left
-                    ? ImVec2(bar.Min.x + style.FramePadding.x, bar.Min.y + style.FramePadding.y)
-                    : ImVec2(bar.Max.x - style.FramePadding.x - ImGui::GetFontSize(), bar.Min.y + style.FramePadding.y);
+            const float       button = ImGui::GetFontSize();
+            const float       right =
+                bar.Max.x - style.FramePadding.x - button - (closable ? button + style.ItemInnerSpacing.x : 0.f);
+            const ImVec2 pos =
+                ImVec2(style.WindowMenuButtonPosition == ImGuiDir_Left ? bar.Min.x + style.FramePadding.x : right,
+                       bar.Min.y + style.FramePadding.y);
             ImGui::PushClipRect(bar.Min, bar.Max, false);
             if (FoldButton(window->GetID("#FOLD"), pos, *folded))
                 *folded = !*folded;

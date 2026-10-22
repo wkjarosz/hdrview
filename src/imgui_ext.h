@@ -148,9 +148,13 @@ enum class DialogPosition
     With \p folded, the dialog's title bar also gets the collapse arrow an ordinary window has, which Dear ImGui leaves
     off a modal, and folding it shows the title bar alone. Its contents still run, out of sight, so what they keep
     doing every frame goes on.
+
+    With \p closable, the title bar also gets a close button, which closes the dialog without running its contents,
+    so it suits a dialog whose Cancel does nothing but close.
 */
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position = DialogPosition::TopCenter,
-                      ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize, bool *folded = nullptr);
+                      ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize, bool *folded = nullptr,
+                      bool closable = false);
 
 /// Whether a BeginModalDialog() dialog showed this frame or the last, for what should stand down behind one.
 bool AnyModalDialogOpen();
