@@ -469,8 +469,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto before = snapshot(img);
         menu_click(ctx, "Edit/Invert");
 
-        // Inverted inside the selection, which excludes its max corner as an edit does, and untouched outside it;
-        // the samples that are not are counted and checked once, since the engine logs every check, passing or not.
+        // Inverted inside the selection and untouched outside it; the samples that are not are counted and checked
+        // once, since the engine logs every check, passing or not.
         const auto &group = img->groups[img->selected_group];
         const int2  o     = img->data_window.min;
         int         wrong = 0;
@@ -481,8 +481,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             for (int y = 0; y < ch.size().y; ++y)
                 for (int x = 0; x < ch.size().x; ++x)
                 {
-                    const int2  p      = int2{x, y} + o;
-                    const bool  inside = all(gequal(p, roi.min)) && all(less(p, roi.max));
+                    const bool  inside = roi.contains(int2{x, y} + o);
                     const float was    = before[base + size_t(y * ch.size().x + x)];
                     wrong += ch(x, y) != (inside ? 1.f - was : was);
                 }
