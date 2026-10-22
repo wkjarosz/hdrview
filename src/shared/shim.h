@@ -28,13 +28,20 @@ namespace shader
 {
 using vec2 = float2;
 using vec3 = float3;
-using vec4 = float4;
-using mat3 = float3x3;
+using vec4  = float4;
+using ivec2 = int2;
+using mat3  = float3x3;
 
 using la::dot;
 using la::mul;
+using la::normalize;
 using std::abs;
+using std::acos;
+using std::asin;
+using std::atan2;
 using std::clamp;
+using std::copysign;
+using std::cos;
 using std::exp;
 using std::exp2;
 using std::floor;
@@ -44,6 +51,7 @@ using std::log2;
 using std::max;
 using std::min;
 using std::pow;
+using std::sin;
 using std::sqrt;
 } // namespace shader
 
@@ -60,8 +68,12 @@ using std::sqrt;
 #define SHARED_CONST const
 #define SHARED_BEGIN
 #define SHARED_END
-#define mul(a, b) ((a) * (b))
-#define log10(x)  (log(x) * 0.43429448190325182f)
+#define mul(a, b)   ((a) * (b))
+#define log10(x)    (log(x) * 0.43429448190325182f)
+#define atan2(y, x) atan(y, x)
+
+// |a| with the sign of b; unlike C's, it reads -0 as positive, which shading languages cannot tell from +0
+float copysign(float a, float b) { return b < 0.0f ? -abs(a) : abs(a); }
 
 #endif
 

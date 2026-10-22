@@ -37,6 +37,7 @@ void main()
 @include ../../src/shared/colorspace.h
 @include ../../src/shared/pipeline.h
 @include ../../src/shared/edits.h
+@include ../../src/shared/envmap.h
 
 layout(binding=1) uniform fs_params {
     int   has_reference;

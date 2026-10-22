@@ -7,6 +7,7 @@
 #include "edit/envmap.h"
 
 #include "common.h"
+#include "shared/envmap.h"
 
 #include <smallthreadpool.h>
 
@@ -17,348 +18,16 @@
 namespace
 {
 
-constexpr float k_pi      = 3.14159265358979323846f;
-constexpr float k_half_pi = k_pi / 2.f;
+constexpr float k_pi = shader::ENVMAP_PI;
 
-// -------------------------------------------------------------------------------------------------
-// The six faces of the cube, in the one orientation convention both cube layouts arrange
-// -------------------------------------------------------------------------------------------------
+// the cube's faces, which the image shader shares with the mappings (src/shared/envmap.h)
+using shader::cube_column_face_vector;
+using shader::cube_face_of;
+using shader::cube_face_st;
+using shader::cube_face_vector;
+using shader::cube_map_face_vector;
 
-/// The six faces of the cube, in the order everything below indexes them.
-enum CubeFace : int
-{
-    Face_PosX = 0,
-    Face_NegX,
-    Face_PosY,
-    Face_NegY,
-    Face_PosZ,
-    Face_NegZ,
-
-    Face_COUNT
-};
-
-/// Direction for \p st on \p face, in that face's own [0,1]^2; not normalized.
-/**
-    Not clamped: an \p st outside [0,1]^2 names a direction past that edge of the cube, which is how a face
-    reaches its neighbors.
-*/
-float3 cube_face_vector(int face, float2 st)
-{
-    const float a = 2.f * st.x - 1.f, b = 2.f * st.y - 1.f;
-    switch (face)
-    {
-    case Face_PosX: return float3{1.f, -b, -a};
-    case Face_NegX: return float3{-1.f, -b, a};
-    case Face_PosY: return float3{a, 1.f, b};
-    case Face_NegY: return float3{a, -1.f, -b};
-    case Face_PosZ: return float3{a, -b, 1.f};
-    default: return float3{a, b, -1.f};
-    }
-}
-
-/// Which face \p d falls on: the axis it points most steeply along, ties going to x and then y.
-int cube_face_of(float3 d)
-{
-    // argmax breaks ties toward the lower index, which is the x-then-y order the faces are declared in
-    const int axis = la::argmax(la::abs(d));
-    return 2 * axis + (d[axis] < 0.f);
-}
-
-/// Where \p d falls on \p face's plane, in that face's own [0,1]^2; the inverse of cube_face_vector().
-/**
-    \p face need not be the one \p d is really on: a direction off to the side lands outside [0,1]^2, so a
-    footprint reaching past an edge is still described in one face's coordinates.
-*/
-float2 cube_face_st(int face, float3 d)
-{
-    float axis;
-    switch (face)
-    {
-    case Face_PosX: axis = d.x; break;
-    case Face_NegX: axis = -d.x; break;
-    case Face_PosY: axis = d.y; break;
-    case Face_NegY: axis = -d.y; break;
-    case Face_PosZ: axis = d.z; break;
-    default: axis = -d.z; break;
-    }
-
-    // a direction at or behind this face's horizon has no place on its plane; the floor on the divisor
-    // puts it far outside the face instead of at infinity
-    const float3 t = d / std::max(axis, 1e-6f);
-
-    float a, b;
-    switch (face)
-    {
-    case Face_PosX:
-        a = -t.z;
-        b = -t.y;
-        break;
-    case Face_NegX:
-        a = t.z;
-        b = -t.y;
-        break;
-    case Face_PosY:
-        a = t.x;
-        b = t.z;
-        break;
-    case Face_NegY:
-        a = t.x;
-        b = -t.z;
-        break;
-    case Face_PosZ:
-        a = t.x;
-        b = -t.y;
-        break;
-    default:
-        a = t.x;
-        b = t.y;
-        break;
-    }
-
-    return float2{0.5f * (a + 1.f), 0.5f * (b + 1.f)};
-}
-
-/// Cell of the cross's 3-by-4 grid holding each face, as (column, row).
-constexpr int2 k_cross_cell[Face_COUNT] = {int2{2, 1}, int2{0, 1}, int2{1, 0}, int2{1, 2}, int2{1, 1}, int2{1, 3}};
-
-/// The face in the cross's (\p col, \p row) cell; the inverse of k_cross_cell.
-int cross_face(int col, int row)
-{
-    switch (col)
-    {
-    case 0: return Face_NegX;
-    case 2: return Face_PosX;
-    default: return row == 0 ? Face_PosY : row == 1 ? Face_PosZ : row == 2 ? Face_NegY : Face_NegZ;
-    }
-}
-
-/// Which of a face's two axes the single-column layout turns to match OpenEXR; the other it keeps.
-constexpr bool k_column_flips_s[Face_COUNT] = {true, true, false, false, true, false};
-
-/// \p st turned as the column layout turns \p face, which being a single flip is its own inverse.
-float2 column_st(int face, float2 st)
-{
-    return k_column_flips_s[face] ? float2{1.f - st.x, st.y} : float2{st.x, 1.f - st.y};
-}
-
-// -------------------------------------------------------------------------------------------------
-// image point -> direction
-// -------------------------------------------------------------------------------------------------
-
-float3 angular_to_xyz(float2 uv)
-{
-    // image plane coordinates going from (-1,1) for x and y
-    // with center of image being (0,0)
-    const float2 xy = 2.f * uv - float2{1.f};
-
-    // phi varies linearly with the radius from center
-    const float phi   = std::clamp(la::length(xy) * k_pi, 0.f, k_pi);
-    const float theta = std::atan2(xy.y, xy.x);
-
-    const float sin_phi = std::sin(phi);
-    return float3{sin_phi * std::cos(theta), -sin_phi * std::sin(theta), std::cos(phi)};
-}
-
-float3 mirror_ball_to_xyz(float2 uv)
-{
-    // image plane coordinates going from (-1,1) for x and y
-    // with center of image being (0,0)
-    const float2 xy = 2.f * uv - float2{1.f};
-
-    // sin(phi) varies linearly with the radius from center
-    const float phi   = 2.f * std::asin(std::clamp(la::length(xy), 0.f, 1.f));
-    const float theta = std::atan2(xy.y, xy.x);
-
-    const float sin_phi = std::sin(phi);
-    return float3{sin_phi * std::cos(theta), -sin_phi * std::sin(theta), std::cos(phi)};
-}
-
-float3 lat_long_to_xyz(float2 uv)
-{
-    // theta varies linearly with U,
-    // and phi varies linearly with V
-    const float theta = lerp(1.5f * k_pi, -k_half_pi, uv.x);
-    const float phi   = uv.y * k_pi;
-
-    const float sin_phi = std::sin(phi);
-    return float3{sin_phi * std::cos(theta), std::cos(phi), sin_phi * std::sin(theta)};
-}
-
-float3 cylindrical_to_xyz(float2 uv)
-{
-    // theta varies linearly with U,
-    // and y=cosPhi varies linearly with V, so every row covers the same solid angle
-    const float theta   = lerp(1.5f * k_pi, -k_half_pi, uv.x);
-    const float cos_phi = lerp(1.f, -1.f, uv.y);
-
-    const float sin_phi = std::sqrt(std::max(0.f, 1.f - cos_phi * cos_phi));
-    return float3{sin_phi * std::cos(theta), cos_phi, sin_phi * std::sin(theta)};
-}
-
-/// The cube face vector for \p uv before normalizing: one component is +-1, the other two face coordinates.
-/**
-    Its length is what the Jacobian needs.
-*/
-float3 cube_map_face_vector(float2 uv)
-{
-    // This is assuming that the Cubemap is a vertical cross: the upright column of four down the middle
-    // third, and the two side faces either side of it
-    const bool middle = uv.x >= 1.f / 3.f && uv.x <= 2.f / 3.f;
-    const int  col    = middle ? 1 : (uv.x < 1.f / 3.f ? 0 : 2);
-    const int  row    = middle ? (uv.y <= 0.25f ? 0 : uv.y <= 0.5f ? 1 : uv.y <= 0.75f ? 2 : 3) : 1;
-
-    // a uv in one of the four corner cells stands for no direction; clamping it into the side face beside
-    // it gives that face's edge
-    const float u = middle ? uv.x : std::clamp(uv.x, float(col) / 3.f, float(col + 1) / 3.f);
-    const float v = middle ? uv.y : std::clamp(uv.y, 0.25f, 0.5f);
-
-    return cube_face_vector(cross_face(col, row), float2{u * 3.f - float(col), v * 4.f - float(row)});
-}
-
-float3 cube_map_to_xyz(float2 uv) { return la::normalize(cube_map_face_vector(uv)); }
-
-/**
-    The cube face vector for \p uv in the single-column layout, before normalizing.
-
-    Six faces stacked top to bottom in the CubeFace order, each turned the way OpenEXR turns it. OpenEXR
-    puts its outermost samples exactly on the face edges, where this puts them half a texel inside as a GPU
-    does; see CubeLevel. Same layout, sample grid offset by half a texel.
-*/
-float3 cube_column_face_vector(float2 uv)
-{
-    const int face = std::clamp(int(uv.y * 6.f), 0, 5);
-    return cube_face_vector(face, column_st(face, float2{uv.x, uv.y * 6.f - float(face)}));
-}
-
-float3 cube_column_to_xyz(float2 uv) { return la::normalize(cube_column_face_vector(uv)); }
-
-/// Where \p xyz falls in the single-column layout; the inverse of cube_column_face_vector().
-float2 xyz_to_cube_column(float3 xyz)
-{
-    const int    face = cube_face_of(xyz);
-    const float2 st   = column_st(face, cube_face_st(face, xyz));
-    return float2{st.x, (float(face) + st.y) / 6.f};
-}
-
-//
-// Equal-area, adapted from PBRTv4, itself from Clarberg, "Fast Equal-Area Mapping of the (Hemi)Sphere
-// using SIMD".
-//
-float3 equal_area_to_xyz(float2 p)
-{
-    const float u = 2.f * p.x - 1.f, v = 2.f * p.y - 1.f;
-    const float up = std::abs(u), vp = std::abs(v);
-
-    // Radius as the signed distance from the diagonal.
-    const float signed_distance = 1.f - (up + vp);
-    const float d               = std::abs(signed_distance);
-    const float r               = 1.f - d;
-
-    const float phi = (r == 0.f ? 1.f : (vp - up) / r + 1.f) * k_pi / 4.f;
-    const float z   = std::copysign(1.f - sqr(r), signed_distance);
-
-    const float cos_phi = std::copysign(std::cos(phi), u);
-    const float sin_phi = std::copysign(std::sin(phi), v);
-    const float scale   = r * std::sqrt(std::max(0.f, 2.f - sqr(r)));
-
-    return float3{cos_phi * scale, z, -sin_phi * scale};
-}
-
-// -------------------------------------------------------------------------------------------------
-// direction -> image point
-// -------------------------------------------------------------------------------------------------
-
-float2 xyz_to_angular(float3 xyz)
-{
-    const float phi   = std::acos(std::clamp(xyz.z, -1.f, 1.f));
-    const float theta = std::atan2(xyz.y, xyz.x);
-
-    const float u = (phi / k_pi) * std::cos(theta);
-    const float v = -(phi / k_pi) * std::sin(theta);
-    return float2{0.5f * (u + 1.f), 0.5f * (v + 1.f)};
-}
-
-float2 xyz_to_mirror_ball(float3 xyz)
-{
-    const float phi   = std::acos(std::clamp(xyz.z, -1.f, 1.f));
-    const float theta = std::atan2(xyz.y, xyz.x);
-
-    const float sin_half_phi = std::sin(phi / 2.f);
-    return float2{0.5f * (sin_half_phi * std::cos(theta) + 1.f), 0.5f * (-sin_half_phi * std::sin(theta) + 1.f)};
-}
-
-float2 xyz_to_lat_long(float3 xyz)
-{
-    const float phi   = std::acos(std::clamp(xyz.y, -1.f, 1.f));
-    const float theta = std::atan2(xyz.z, xyz.x);
-    return float2{mod(lerp_factor(1.5f * k_pi, -k_half_pi, theta), 1.f), phi / k_pi};
-}
-
-float2 xyz_to_cylindrical(float3 xyz)
-{
-    const float theta = std::atan2(xyz.z, xyz.x);
-    return float2{mod(lerp_factor(1.5f * k_pi, -k_half_pi, theta), 1.f), lerp_factor(1.f, -1.f, xyz.y)};
-}
-
-float2 xyz_to_cube_map(float3 xyz)
-{
-    // Again, the CubeMap is a vertical cross: the face tells us which side we're looking at, and its cell
-    // where that side sits in the 3-by-4 grid.
-    const int    face = cube_face_of(xyz);
-    const float2 st   = cube_face_st(face, xyz);
-    const int2   cell = k_cross_cell[face];
-
-    return float2{(float(cell.x) + st.x) / 3.f, (float(cell.y) + st.y) / 4.f};
-}
-
-template <typename Float, typename C>
-constexpr Float evaluate_polynomial(Float, C c)
-{
-    return c;
-}
-
-template <typename Float, typename C, typename... Args>
-constexpr Float evaluate_polynomial(Float t, C c, Args... remaining)
-{
-    return t * evaluate_polynomial(t, remaining...) + c;
-}
-
-float2 xyz_to_equal_area(float3 d)
-{
-    // A 90-degree rotation relative to PBRT's frame, so that this agrees with the mappings above.
-    d.z *= -1.f;
-    std::swap(d.y, d.z);
-
-    const float x = std::abs(d.x), y = std::abs(d.y), z = std::abs(d.z);
-    const float r = std::sqrt(std::max(0.f, 1.f - z));
-
-    const float a = std::max(x, y);
-    float       b = std::min(x, y);
-    b             = a == 0.f ? 0.f : b / a;
-
-    // Minimax polynomial for atan(b)*2/pi over [0,1], to sixth degree.
-    float phi = evaluate_polynomial(b, 0.406758566246788489601959989e-5f, 0.636226545274016134946890922156f,
-                                    0.61572017898280213493197203466e-2f, -0.247333733281268944196501420480f,
-                                    0.881770664775316294736387951347e-1f, 0.419038818029165735901852432784e-1f,
-                                    -0.251390972343483509333252996350e-1f);
-    if (x < y)
-        phi = 1.f - phi;
-
-    float v = phi * r;
-    float u = r - v;
-
-    if (d.z < 0.f)
-    {
-        std::swap(u, v);
-        u = 1.f - u;
-        v = 1.f - v;
-    }
-
-    u = std::copysign(u, d.x);
-    v = std::copysign(v, d.y);
-
-    return float2{0.5f * (u + 1.f), 0.5f * (v + 1.f)};
-}
+constexpr int Face_COUNT = 6;
 
 } // namespace
 
@@ -389,33 +58,15 @@ float envmapping_aspect(int mapping)
     }
 }
 
-float3 envmap_uv_to_xyz(EnvMapping mapping, float2 uv)
-{
-    switch (mapping)
-    {
-    case EnvMapping_Angular: return angular_to_xyz(uv);
-    case EnvMapping_MirrorBall: return mirror_ball_to_xyz(uv);
-    case EnvMapping_LatLong: return lat_long_to_xyz(uv);
-    case EnvMapping_Cylindrical: return cylindrical_to_xyz(uv);
-    case EnvMapping_CubeMap: return cube_map_to_xyz(uv);
-    case EnvMapping_CubeMapColumn: return cube_column_to_xyz(uv);
-    default: return equal_area_to_xyz(uv);
-    }
-}
+// the shader's names for the mappings, which it branches on
+static_assert(EnvMapping_Angular == shader::ENVMAP_ANGULAR && EnvMapping_MirrorBall == shader::ENVMAP_MIRROR_BALL &&
+              EnvMapping_LatLong == shader::ENVMAP_LAT_LONG && EnvMapping_Cylindrical == shader::ENVMAP_CYLINDRICAL &&
+              EnvMapping_CubeMap == shader::ENVMAP_CUBE_MAP && EnvMapping_CubeMapColumn == shader::ENVMAP_CUBE_COLUMN &&
+              EnvMapping_EqualArea == shader::ENVMAP_EQUAL_AREA);
 
-float2 envmap_xyz_to_uv(EnvMapping mapping, float3 xyz)
-{
-    switch (mapping)
-    {
-    case EnvMapping_Angular: return xyz_to_angular(xyz);
-    case EnvMapping_MirrorBall: return xyz_to_mirror_ball(xyz);
-    case EnvMapping_LatLong: return xyz_to_lat_long(xyz);
-    case EnvMapping_Cylindrical: return xyz_to_cylindrical(xyz);
-    case EnvMapping_CubeMap: return xyz_to_cube_map(xyz);
-    case EnvMapping_CubeMapColumn: return xyz_to_cube_column(xyz);
-    default: return xyz_to_equal_area(xyz);
-    }
-}
+float3 envmap_uv_to_xyz(EnvMapping mapping, float2 uv) { return shader::envmap_uv_to_xyz(mapping, uv); }
+
+float2 envmap_xyz_to_uv(EnvMapping mapping, float3 xyz) { return shader::envmap_xyz_to_uv(mapping, xyz); }
 
 namespace
 {
@@ -519,53 +170,9 @@ float envmap_jacobian(EnvMapping mapping, float2 uv)
     }
 }
 
-bool envmap_uv_is_valid(EnvMapping mapping, float2 uv)
-{
-    switch (mapping)
-    {
-    case EnvMapping_Angular:
-    case EnvMapping_MirrorBall:
-        // The sphere fills the inscribed disc; the corners are outside it.
-        return la::length(2.f * uv - float2{1.f}) <= 1.f;
+bool envmap_uv_is_valid(EnvMapping mapping, float2 uv) { return shader::envmap_uv_is_valid(mapping, uv); }
 
-    case EnvMapping_CubeMap:
-        // The upright column of four faces, plus the two side faces beside its second row.
-        return (uv.x >= 1.f / 3.f && uv.x <= 2.f / 3.f) || (uv.y >= 0.25f && uv.y <= 0.5f);
-
-    default: return true;
-    }
-}
-
-float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv)
-{
-    if (envmap_uv_is_valid(mapping, uv))
-        return uv;
-
-    switch (mapping)
-    {
-    case EnvMapping_Angular:
-    case EnvMapping_MirrorBall:
-    {
-        // straight out onto the circle, landing a hair inside it, where the mapping is less singular
-        const float2 d = 2.f * uv - float2{1.f};
-        const float  r = la::length(d);
-        if (r <= 0.f)
-            return uv;
-        return 0.5f * (d * ((1.f - 1e-4f) / r) + float2{1.f});
-    }
-
-    case EnvMapping_CubeMap:
-    {
-        // the cross is two arms: the column of four, and the row of three across its second cell
-        const float2 to_column{std::clamp(uv.x, 1.f / 3.f, 2.f / 3.f), uv.y};
-        const float2 to_row{uv.x, std::clamp(uv.y, 0.25f, 0.5f)};
-
-        return la::length2(to_column - uv) <= la::length2(to_row - uv) ? to_column : to_row;
-    }
-
-    default: return uv;
-    }
-}
+float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv) { return shader::nearest_valid_envmap_uv(mapping, uv); }
 
 namespace
 {
