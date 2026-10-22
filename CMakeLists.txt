@@ -427,6 +427,8 @@ if((APPLE OR ((WIN32 OR (CMAKE_SYSTEM_NAME MATCHES "Linux")) AND HDRVIEW_ENABLE_
             "GLFW_USE_CHDIR OFF"
             "BUILD_SHARED_LIBS OFF"
     EXCLUDE_FROM_ALL YES
+    # an installed GLFW is never the fork, so don't let CPM_USE_LOCAL_PACKAGES substitute one
+    FORCE YES
   )
 
   if(NOT glfw_ADDED)
@@ -456,8 +458,10 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 # Prevent dependencies from installing their files
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 
+# HDRView loads no SVG or color fonts, so it has no use for plutosvg, which hello_imgui would otherwise always
+# download and build, even when the system has it
 set(HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
-                           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
+                           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON" "HELLOIMGUI_USE_FREETYPE_PLUTOSVG OFF"
 )
 if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   # fetches imgui_test_engine and links it into the shared `imgui` target, for hdrview_gui_tests below
@@ -484,7 +488,6 @@ if(hello_imgui_ADDED)
   disable_target_warnings(imgui)
   disable_target_warnings(hello_imgui)
   disable_target_warnings(stb_hello_imgui)
-  disable_target_warnings(plutosvg)
 elseif(hello_imgui_FOUND OR TARGET HELLOIMGUI::hello_imgui)
   message(STATUS "Using system-installed hello_imgui library")
 else()
@@ -1607,15 +1610,20 @@ CPMAddPackage(
   URL https://github.com/richgel999/miniz/releases/download/3.0.2/miniz-3.0.2.zip
   DOWNLOAD_ONLY YES
 )
-if(NOT miniz_ADDED AND NOT miniz_FOUND)
+if(miniz_ADDED)
+  message(STATUS "miniz library added")
+  add_library(miniz "${miniz_SOURCE_DIR}/miniz.c" "${miniz_SOURCE_DIR}/miniz.h")
+  target_include_directories(miniz PUBLIC ${miniz_SOURCE_DIR})
+  disable_target_warnings(miniz)
+  mark_as_system_library(miniz)
+  list(APPEND HDRVIEW_DEPENDENCIES miniz)
+elseif(TARGET miniz::miniz)
+  # as with tinyxml2, CPM's miniz_FOUND never reaches this scope, but the imported target does
+  message(STATUS "Using system-installed miniz library")
+  list(APPEND HDRVIEW_DEPENDENCIES miniz::miniz)
+else()
   message(FATAL_ERROR "Could not find or download miniz library.")
 endif()
-message(STATUS "miniz library added")
-add_library(miniz "${miniz_SOURCE_DIR}/miniz.c" "${miniz_SOURCE_DIR}/miniz.h")
-target_include_directories(miniz PUBLIC ${miniz_SOURCE_DIR})
-disable_target_warnings(miniz)
-mark_as_system_library(miniz)
-list(APPEND HDRVIEW_DEPENDENCIES miniz)
 
 
 
