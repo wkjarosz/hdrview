@@ -2219,6 +2219,10 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_screenshots.cpp
   )
   hdrview_setup_target(hdrview_gui_tests)
+  # it draws through the same compiled shaders as HDRView, so building it alone has to regenerate them too
+  if(HDRVIEW_SOKOL_SHDC_TARGETS)
+    add_dependencies(hdrview_gui_tests ${HDRVIEW_SOKOL_SHDC_TARGETS})
+  endif()
   target_compile_definitions(hdrview_gui_tests PRIVATE HDRVIEW_ENABLE_GUI_TEST_ENGINE)
   # the app's own icons, as small always-present image fixtures for the tests/gui/ suite
   target_compile_definitions(

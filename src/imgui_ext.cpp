@@ -1100,7 +1100,33 @@ void Checkbox(const Action &a)
 // shortcuts ask before this frame's dialogs are drawn
 static int s_modal_dialog_frame = -2;
 
-bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags)
+namespace
+{
+
+/// A collapse arrow at \p pos, drawn as Dear ImGui draws an ordinary window's, pointing as \p folded says.
+bool FoldButton(ImGuiID id, const ImVec2 &pos, bool folded)
+{
+    ImGuiContext &g      = *GImGui;
+    ImGuiWindow  *window = g.CurrentWindow;
+    const ImRect  bb(pos, pos + ImVec2(g.FontSize, g.FontSize));
+    const bool    clipped = !ImGui::ItemAdd(bb, id);
+    bool          hovered, held;
+    const bool    pressed = ImGui::ButtonBehavior(bb, id, &hovered, &held);
+    if (clipped)
+        return pressed;
+    if (hovered || held)
+        window->DrawList->AddRectFilled(
+            bb.Min, bb.Max, ImGui::GetColorU32(held && hovered ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered));
+    ImGui::RenderNavCursor(bb, id, ImGuiNavRenderCursorFlags_Compact);
+    ImGui::RenderArrow(window->DrawList, bb.Min, ImGui::GetColorU32(ImGuiCol_Text),
+                       folded ? ImGuiDir_Right : ImGuiDir_Down, 1.f);
+    return pressed;
+}
+
+} // namespace
+
+bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags, bool *folded,
+                      bool closable)
 {
     // HelloImGui renders a couple of frames to figure out sizes before the first real frame; guard against
     // opening a dialog that starts out already-open (e.g. the About box on first launch) before then.
@@ -1108,6 +1134,8 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     {
         ImGui::OpenPopup(title);
         open = false;
+        if (folded)
+            *folded = false; //< a dialog opens unfolded, however it was left
     }
 
     switch (position)
@@ -1122,9 +1150,45 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     case DialogPosition::None: break;
     }
 
-    const bool shown = ImGui::BeginPopupModal(title, nullptr, flags);
+    // Folded, the dialog keeps its width and shrinks to its title bar, as a collapsed window does, but for the sliver
+    // below it that Dear ImGui keeps for the rounded corners. A collapsed window is exempt from the style's least
+    // height, which the dialog lowers to the title bar.
+    const bool fold = folded && *folded;
+    if (fold)
+    {
+        flags &= ~ImGuiWindowFlags_AlwaysAutoResize;
+        flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar;
+        ImGui::SetNextWindowSize(ImVec2(0.f, ImGui::GetFrameHeight()));
+        ImGui::PushStyleVarY(ImGuiStyleVar_WindowMinSize, ImGui::GetFrameHeight());
+    }
+
+    // Dear ImGui draws the close button and closes the popup itself when it is pressed
+    bool       keep_open = true;
+    const bool shown     = ImGui::BeginPopupModal(title, closable ? &keep_open : nullptr, flags);
+    if (fold)
+        ImGui::PopStyleVar();
     if (shown)
+    {
         s_modal_dialog_frame = ImGui::GetFrameCount();
+        if (folded)
+        {
+            // where Dear ImGui puts an ordinary window's collapse arrow, in the title bar, outside the content's clip;
+            // on the right, it sits left of the close button
+            ImGuiWindow      *window = ImGui::GetCurrentWindow();
+            const ImRect      bar    = window->TitleBarRect();
+            const ImGuiStyle &style  = ImGui::GetStyle();
+            const float       button = ImGui::GetFontSize();
+            const float       right =
+                bar.Max.x - style.FramePadding.x - button - (closable ? button + style.ItemInnerSpacing.x : 0.f);
+            const ImVec2 pos =
+                ImVec2(style.WindowMenuButtonPosition == ImGuiDir_Left ? bar.Min.x + style.FramePadding.x : right,
+                       bar.Min.y + style.FramePadding.y);
+            ImGui::PushClipRect(bar.Min, bar.Max, false);
+            if (FoldButton(window->GetID("#FOLD"), pos, *folded))
+                *folded = !*folded;
+            ImGui::PopClipRect();
+        }
+    }
     return shown;
 }
 
