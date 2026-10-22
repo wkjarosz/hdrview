@@ -803,6 +803,20 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
             CHECK(f(4.f) - f(3.f) > 0.f);
         }
 
+    // at any brightness, the two curves cross the middle at the same input with the same slope, which is the
+    // contrast's
+    for (float B : {-0.6f, -0.2f, 0.f, 0.3f, 0.7f})
+        for (float c : {-0.5f, 0.f, 0.4f})
+        {
+            CAPTURE(B);
+            CAPTURE(c);
+            const float slope = slope_of(c), m = midpoint_of(B), bias = bias_of(B), d = 1e-4f;
+            auto        f = [&](float v) { return brightness_contrast_rational(v, slope, bias); };
+            CHECK(f(m) == doctest::Approx(0.5f).epsilon(1e-4));
+            CHECK((f(m + d) - f(m - d)) / (2.f * d) == doctest::Approx(slope).epsilon(1e-3));
+            CHECK(brightness_contrast_linear(m, slope, m) == doctest::Approx(0.5f));
+        }
+
     // the straight line runs out of [0,1], so an HDR sample keeps its relation to its neighbors
     const float steep = slope_of(0.8f);
     CHECK(brightness_contrast_linear(1.f, steep, 0.5f) > 1.f);

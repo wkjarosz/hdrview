@@ -72,22 +72,24 @@ SHARED_FN float bias_Schlick(float t, float a) { return t / (((1.0f / a) - 2.0f)
 /**
     From "Fast Alternatives to Perlin's Bias and Gain Functions" (Graphics Gems IV, 1994): each half is bias_Schlick()
     of a doubled input. Unlike Perlin's power gain, its slope at the ends is finite and not zero, so it can be carried
-   on past them.
+    on past them.
 */
 SHARED_FN float gain_Schlick(float t, float a)
 { return t < 0.5f ? 0.5f * bias_Schlick(2.0f * t, a) : 1.0f - 0.5f * bias_Schlick(2.0f - 2.0f * t, a); }
 
-/// Schlick's rational bias then gain, of slope \p slope at its midpoint, carried on past black and white.
+/// Schlick's rational bias then gain, of slope \p slope where it crosses 0.5, carried on past black and white.
 /**
-    The gain whose midpoint slope is \p slope has the reciprocal at its ends, so raising the contrast flattens them as
-    it steepens the middle. Past black and white the curve, whose two halves are hyperbolas that level off or reach a
-    pole there, gives way to straight lines along its slopes at the ends, so its slope is continuous everywhere and an
-    HDR sample keeps a share of its difference from its neighbors.
+    The bias sends (1 - B) / 2, the line's midpoint for a brightness B = 2 bias - 1, to 0.5, with a slope there of
+    1 / (4 bias (1 - bias)), so the gain is asked for that much less than \p slope and the two curves meet the
+    midpoint at the same slope. A gain's ends have the reciprocal of its middle's slope, so raising the contrast
+    flattens them as it steepens the middle. Past black and white the curve, whose two halves are hyperbolas that
+    level off or reach a pole there, gives way to straight lines along its slopes at the ends, so its slope is
+    continuous everywhere and an HDR sample keeps a share of its difference from its neighbors.
 */
 SHARED_FN float brightness_contrast_rational(float v, float slope, float bias)
 {
-    float a = clamp(1.0f / (1.0f + slope), 1e-6f, 1.0f - 1e-6f);
     float b = clamp(bias, 1e-6f, 1.0f - 1e-6f);
+    float a = clamp(1.0f / (1.0f + slope * 4.0f * b * (1.0f - b)), 1e-6f, 1.0f - 1e-6f);
     // the slopes at the ends: the gain's, times the bias's there
     float g = a / (1.0f - a);
     if (v < 0.0f)

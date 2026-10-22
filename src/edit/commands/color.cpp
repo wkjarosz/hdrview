@@ -488,7 +488,8 @@ private:
 
     /// The midpoint slope that puts the rational s-curve through (\p x, \p y); negative when nothing can.
     /**
-        Each half of Schlick's gain is his bias of a doubled input, which one division inverts for its parameter.
+        Each half of Schlick's gain is his bias of a doubled input, which one division inverts for its parameter. The
+        gain's midpoint slope is the curve's divided by the bias's there, 1 / (4 bias (1 - bias)), which this undoes.
     */
     static float rational_slope_through(float x, float y, float bias)
     {
@@ -500,7 +501,7 @@ private:
         if (std::fabs(1.f - t) < 1e-4f)
             return -1.f;
         const float a = 1.f / ((t / z - 1.f) / (1.f - t) + 2.f);
-        return a > 0.f && a < 1.f ? (1.f - a) / a : -1.f;
+        return a > 0.f && a < 1.f ? (1.f - a) / a / (4.f * bias * (1.f - bias)) : -1.f;
     }
 
     /// Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
