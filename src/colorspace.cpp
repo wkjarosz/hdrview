@@ -490,6 +490,22 @@ const char *transparency_override_name(TransparencyType_ at) { return s_transpar
 
 const char **transparency_type_names() { return s_transparency_type_names; }
 
+float3x3 hue_saturation_matrix(float turns, float saturation, float3 Yw)
+{
+    const float3   one{1.f};
+    const float3   g    = one / std::sqrt(3.f);
+    const float3x3 gray = la::outerprod(one, Yw), I{la::identity};
+
+    // Rodrigues: a positive turn takes red toward green, as the hue wheel runs
+    const float    theta = 2.f * float(M_PI) * turns, c = std::cos(theta), s = std::sin(theta);
+    const float3x3 cross{{0.f, g.z, -g.y}, {-g.z, 0.f, g.x}, {g.y, -g.x, 0.f}};
+    const float3x3 R = c * I + s * cross + (1.f - c) * la::outerprod(g, g);
+
+    // exactly the identity when asked for nothing, which the rounding of the general form would only approach
+    const float3x3 H = turns == 0.f ? I : gray + mul(I - gray, R - la::outerprod(one, one) / 3.f);
+    return saturation * H + (1.f - saturation) * gray;
+}
+
 float2 white_point(WhitePoint_ wp)
 {
     if (wp >= WhitePoint_Custom)

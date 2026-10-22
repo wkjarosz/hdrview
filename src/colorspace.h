@@ -345,6 +345,16 @@ using shader::RGB_to_HSL;
 using shader::unnormalize_Lab;
 using shader::XYZ_to_Lab;
 
+/// A hue turned by \p turns and a saturation scaled by \p saturation, as one matrix that keeps gray and luminance.
+/**
+    The turn is Haeberli's, from "Matrix Operations for Image Processing" (1993), with the image's own luminance
+    weights \p Yw: a rotation about the gray axis, carried onto the plane of constant luminance, so that
+    H = 1 Yw^T + (I - 1 Yw^T)(R - 1 1^T / 3) fixes 1 and keeps Yw^T. The saturation blends toward or away from the gray
+    of the same luminance, 1 Yw^T + s (I - 1 Yw^T), which acts on that plane alone and so commutes with the turn. Both
+    are linear, so they mean the same above white and below black, and commute with premultiplied alpha.
+*/
+float3x3 hue_saturation_matrix(float turns, float saturation, float3 Yw);
+
 /// XYZ for a chromaticity, scaled so Y is one: the form XYZ_to_Lab() wants a white in.
 inline float3 XYZ_from_xy(float2 xy)
 {

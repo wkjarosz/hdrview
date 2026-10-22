@@ -16,6 +16,7 @@
 
 #ifdef __cplusplus
 #include "colorspace.h"
+#include "constants.h"
 #include "shim.h"
 #endif
 
@@ -33,7 +34,7 @@ SHARED_CONST int EDIT_FILL_BLEND           = 5; ///< p0: the color; p1.x: the al
 
 // color ops
 SHARED_CONST int EDIT_BRIGHTNESS_CONTRAST  = 6; ///< p0: slope, midpoint, bias, linear; p1.x: what it curves
-SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< p0: hue in turns, saturation scale, lightness
+SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< m0: hue and saturation; p0.z: lightness; p1.x: premultiplied
 SHARED_CONST int EDIT_MATRIX               = 8; ///< m0: the matrix applied to the color
 SHARED_CONST int EDIT_FLATTEN              = 9; ///< p0: the straight background composited under the color
 
@@ -308,9 +309,21 @@ SHARED_FN vec4 edit_color(int op, vec4 c, vec4 p0, vec4 p1, mat3 m0, mat3 m1)
         vec3 back = mul(m1, Lab_to_XYZ(unnormalize_Lab(lab), white));
         return vec4(back.x, back.y, back.z, c.w);
     }
+    // A linear hue and saturation, then a mix toward black, or toward white or a highlight's own level, whichever
+    // is brighter, taken on the straight color where the samples are premultiplied.
     if (op == EDIT_HUE_SATURATION)
     {
-        vec3 mapped = adjust_HSL(rgb, p0.x, p0.y, p0.z);
+        vec3  mapped = mul(m0, rgb);
+        float l      = p0.z;
+        if (l < 0.0f)
+            mapped = mapped * (1.0f + l);
+        else if (l > 0.0f)
+        {
+            float a     = p1.x != 0.0f ? c.w : 1.0f;
+            float peak  = max(mapped.x, max(mapped.y, mapped.z));
+            float level = a * max(1.0f, a > k_small_alpha ? peak / a : 0.0f);
+            mapped      = mapped + (vec3(level, level, level) - mapped) * l;
+        }
         return vec4(mapped.x, mapped.y, mapped.z, c.w);
     }
     // premultiplied alpha is no obstacle: scaling every component by alpha commutes with a matrix

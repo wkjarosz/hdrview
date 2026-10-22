@@ -615,6 +615,76 @@ TEST_CASE("the lightness control mixes toward black and white rather than washin
     }
 }
 
+TEST_CASE("the linear hue and saturation keep gray and luminance, at any brightness")
+{
+    // colors in, above and below the unit range, and luminance weights of three different sets of primaries
+    const float3 colors[]  = {{0.5f, 0.25f, 0.125f}, {4.f, 0.5f, 2.f}, {-0.2f, 0.8f, 0.3f}, {12.f, 11.f, 0.f}};
+    const float3 weights[] = {sRGB_Yw(), computeYw(gamut_chromaticities(ColorGamut_BT2020_2100)), float3{1.f / 3.f}};
+    auto         close = [](float3 a, float3 b) { return la::length(a - b) <= 1e-4f * std::max(1.f, la::length(b)); };
+
+    for (const float3 Yw : weights)
+        for (float turns : {0.f, 0.1f, 1.f / 3.f, -0.4f, 1.f})
+            for (float saturation : {0.f, 0.5f, 1.f, 2.f})
+            {
+                CAPTURE(Yw);
+                CAPTURE(turns);
+                CAPTURE(saturation);
+                const float3x3 M = hue_saturation_matrix(turns, saturation, Yw);
+                for (float k : {0.f, 0.3f, 5.f}) CHECK(close(mul(M, float3{k}), float3{k}));
+                for (const float3 c : colors)
+                {
+                    CAPTURE(c);
+                    CHECK(dot(Yw, mul(M, c)) == doctest::Approx(dot(Yw, c)).epsilon(1e-4));
+                    // no saturation leaves the gray of the color's luminance, and a whole turn leaves the color
+                    if (saturation == 0.f)
+                        CHECK(close(mul(M, c), float3{dot(Yw, c)}));
+                    if (saturation == 1.f && (turns == 0.f || turns == 1.f))
+                        CHECK(close(mul(M, c), c));
+                    // and asked for nothing, it is exact, so an edit that does nothing changes no sample
+                    if (saturation == 1.f && turns == 0.f)
+                        CHECK(mul(M, c) == c);
+                }
+                // turns compose, as rotations do
+                if (saturation == 1.f)
+                    CHECK(close(mul(M, mul(hue_saturation_matrix(0.25f, 1.f, Yw), colors[1])),
+                                mul(hue_saturation_matrix(turns + 0.25f, 1.f, Yw), colors[1])));
+            }
+
+    // a small turn takes red toward green, not blue, the way the hue wheel runs, and with equal weights a third of
+    // one takes it all the way
+    for (const float3 Yw : weights)
+    {
+        const float3 turned = mul(hue_saturation_matrix(0.05f, 1.f, Yw), float3{1.f, 0.f, 0.f});
+        CHECK(turned.y > turned.z);
+    }
+    CHECK(close(mul(hue_saturation_matrix(1.f / 3.f, 1.f, float3{1.f / 3.f}), float3{1.f, 0.f, 0.f}),
+                float3{0.f, 1.f, 0.f}));
+}
+
+TEST_CASE("the lightness mixes toward black, or toward white or a highlight's own level")
+{
+    auto lighten = [](float4 c, float l, bool premultiplied)
+    {
+        return shader::edit_color(shader::EDIT_HUE_SATURATION, c, float4{0.f, 0.f, l, 0.f},
+                                  float4{premultiplied ? 1.f : 0.f, 0.f, 0.f, 0.f}, float3x3{la::identity},
+                                  float3x3{la::identity});
+    };
+    auto close = [](float4 a, float4 b) { return la::length(a - b) <= 1e-5f * std::max(1.f, la::length(b)); };
+
+    const float4 sdr{0.5f, 0.25f, 0.125f, 1.f}, hdr{4.f, 2.f, 1.f, 1.f};
+    CHECK(close(lighten(sdr, -1.f, false), float4{0.f, 0.f, 0.f, 1.f}));
+    CHECK(close(lighten(hdr, -0.5f, false), float4{2.f, 1.f, 0.5f, 1.f}));
+    CHECK(close(lighten(sdr, 1.f, false), float4{1.f, 1.f, 1.f, 1.f}));
+    CHECK(close(lighten(sdr, 0.5f, false), float4{0.75f, 0.625f, 0.5625f, 1.f}));
+    // a highlight goes toward its own brightest component, so it loses color without dimming
+    CHECK(close(lighten(hdr, 1.f, false), float4{4.f, 4.f, 4.f, 1.f}));
+    CHECK(close(lighten(hdr, 0.5f, false), float4{4.f, 3.f, 2.5f, 1.f}));
+    // premultiplied, the level is the straight color's, scaled back by alpha
+    const float4 half{0.25f, 0.125f, 0.0625f, 0.5f};
+    CHECK(close(lighten(half, 1.f, true), float4{0.5f, 0.5f, 0.5f, 0.5f}));
+    CHECK(close(lighten(float4{2.f, 1.f, 0.5f, 0.5f}, 1.f, true), float4{2.f, 2.f, 2.f, 0.5f}));
+}
+
 TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen for")
 {
     // shape functions, checked on the identities that make them usable, not on their formulas

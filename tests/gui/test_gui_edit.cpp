@@ -852,6 +852,23 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(snapshot(img) == original);
 
+        // and dragging the lower strip turns the hue, with the other two at rest
+        menu_click(ctx, "Edit/Hue\\/saturation...");
+        ctx->SetRef("Hue\\/saturation...");
+        ctx->ItemInputValue("Saturation", 0.0f);
+        ctx->ItemDragWithDelta("The hue wheel as these settings would leave it; drag it to turn the hue",
+                               ImVec2(HelloImGui::EmSize(3.f), 0.f));
+        ctx->ItemClick("Apply");
+        wait_until(ctx, [&] { return img->history.has_undo(); });
+        {
+            const auto turned = snapshot(img);
+            float      moved  = 0.f;
+            for (size_t i = 0; i < turned.size(); ++i) moved = std::max(moved, std::fabs(turned[i] - original[i]));
+            IM_CHECK_GT(moved, 1e-3f); //< a turn, not rounding
+        }
+        menu_click(ctx, "Edit/Undo");
+        IM_CHECK(snapshot(img) == original);
+
         menu_click(ctx, "Edit/Flatten...");
         ctx->SetRef("Flatten...");
         ctx->ItemClick("Flatten");

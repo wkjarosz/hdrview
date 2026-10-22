@@ -26,6 +26,7 @@
 
 namespace
 {
+
 class ConvertColorSpace final : public EditCommand
 {
 public:
@@ -267,33 +268,35 @@ public:
     {
     }
 
-    void draw(EditContext &) override
+    void draw(EditContext &ctx) override
     {
         // the ranges Photoshop uses: hue in degrees around the wheel, the other two as a percentage
         ImGui::SliderFloat("Hue", &m_hue, -180.f, 180.f, "%+.0f deg");
+        ImGui::Tooltip("Turn every color about gray, keeping its luminance. Dragging the lower strip turns it too.");
         ImGui::SliderFloat("Saturation", &m_saturation, -100.f, 100.f, "%+.0f%%");
+        ImGui::Tooltip("Move every color toward or away from the gray of its own luminance.");
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
+        ImGui::Tooltip("Mix toward black, or toward white, or toward a highlight's own level where it is brighter.");
 
         // The wheel as it is and as the settings would leave it.
         /**
-            Drawn as shaded quads between the points where the sweep bends, which is not an approximation:
-            the hue hexcone is piecewise linear in hue, and the three settings each either move those
-            bends or are affine in every component.
+            Drawn as shaded quads between the points where the sweep bends, which is not an approximation: the
+            hue hexcone is piecewise linear in hue, the hue and saturation are a matrix, and the lightness is
+            affine but for the level it mixes toward, which bends where a component crosses white.
 
-            Two kinds of bend. Six are the hexcone's own corners, slid along by the hue rotation and one of
-            them wrapped. The rest are where clamping to the display's range bends the ramp, which is what
-            raising the saturation of an already-saturated hue looks like: flat, a steeper ramp, then flat.
+            The other bends are where clamping to the display's range bends the ramp, which is what raising the
+            saturation of an already-saturated hue looks like: flat, a steeper ramp, then flat.
         */
-        auto strip = [](const char *id, float h, float s, float l)
+        auto strip = [&](const char *id, const PointEdit &edit)
         {
             const float  w  = ImGui::GetContentRegionAvail().x;
             const ImVec2 p  = ImGui::GetCursorScreenPos();
             auto        *dl = ImGui::GetWindowDrawList();
 
             // before the display's range is imposed, where the bends are still straight lines
-            auto raw = [&](float t)
-            { return adjust_HSL(HSL_to_RGB(float3{t, 1.f, 0.5f}), h / 360.f, (s + 100.f) / 100.f, l / 100.f); };
-
+            auto wheel = [](float t) { return float4{HSL_to_RGB(float3{t, 1.f, 0.5f}), 1.f}; };
+            auto raw   = [&](float t)
+            { return shader::edit_color(edit.op, wheel(t), edit.p0, edit.p1, edit.m0, edit.m1).xyz(); };
             auto shown = [&](float t)
             {
                 const float3 c = raw(t);
@@ -301,33 +304,31 @@ public:
                     ImVec4(std::clamp(c.x, 0.f, 1.f), std::clamp(c.y, 0.f, 1.f), std::clamp(c.z, 0.f, 1.f), 1.f));
             };
 
-            // the hexcone's corners, moved by the hue rotation and wrapped back into the strip
+            // Where a component of f crosses 0 or 1 between each pair of knots, between which it is linear, so each
+            // crossing is one division.
+            auto crossings = [](const std::vector<float> &knots, auto f)
+            {
+                std::vector<float> out = knots;
+                for (size_t i = 0; i + 1 < knots.size(); ++i)
+                {
+                    const float  t0 = knots[i], t1 = knots[i + 1];
+                    const float3 a = f(t0), b = f(t1);
+                    for (int c = 0; c < 3; ++c)
+                        for (float level : {0.f, 1.f})
+                            if ((a[c] < level) != (b[c] < level) && a[c] != b[c])
+                                out.push_back(t0 + (level - a[c]) / (b[c] - a[c]) * (t1 - t0));
+                }
+                std::sort(out.begin(), out.end());
+                return out;
+            };
+
+            // the hexcone's corners, then where the matrix's output crosses white, where the lightness bends, then
+            // where the result crosses the display's range
             std::vector<float> knots{0.f, 1.f};
-            for (int k = 0; k < 6; ++k)
-            {
-                const float t = float(k) / 6.f - h / 360.f;
-                knots.push_back(t - std::floor(t));
-            }
+            for (int k = 1; k < 6; ++k) knots.push_back(float(k) / 6.f);
             std::sort(knots.begin(), knots.end());
-
-            // then wherever a component crosses 0 or 1 between two corners; it is linear in there, so
-            // each crossing is one division
-            std::vector<float> bends = knots;
-            for (size_t i = 0; i + 1 < knots.size(); ++i)
-            {
-                const float  t0 = knots[i], t1 = knots[i + 1];
-                const float3 a = raw(t0), b = raw(t1);
-
-                for (int c = 0; c < 3; ++c)
-                    for (float level : {0.f, 1.f})
-                    {
-                        const float v0 = a[c], v1 = b[c];
-                        if ((v0 < level) == (v1 < level) || v1 == v0)
-                            continue;
-                        bends.push_back(t0 + (level - v0) / (v1 - v0) * (t1 - t0));
-                    }
-            }
-            std::sort(bends.begin(), bends.end());
+            knots                          = crossings(knots, [&](float t) { return mul(edit.m0, wheel(t).xyz()); });
+            const std::vector<float> bends = crossings(knots, raw);
 
             const float height = ImGui::GetFrameHeight();
             for (size_t i = 0; i + 1 < bends.size(); ++i)
@@ -341,17 +342,36 @@ public:
                                             right, left);
             }
 
-            ImGui::Dummy(ImVec2(w, height));
+            ImGui::InvisibleButton(id, ImVec2(w, height));
             ImGui::SetItemTooltip("%s", id);
+            return w;
         };
-        strip("The hue wheel as it is", 0.f, 0.f, 0.f);
-        strip("The hue wheel as these settings would leave it", m_hue, m_saturation, m_lightness);
+        strip("The hue wheel as it is", PointEdit{shader::EDIT_HUE_SATURATION});
+        const float w =
+            strip("The hue wheel as these settings would leave it; drag it to turn the hue", *point_edit(ctx));
+
+        // dragging the strip carries its colors along with the mouse, so the hue under it is the one grabbed
+        if (ImGui::IsItemActive() && ImGui::GetIO().MouseDelta.x != 0.f && w > 0.f)
+        {
+            const float h = m_hue - 360.f * ImGui::GetIO().MouseDelta.x / w;
+            m_hue         = h - 360.f * std::floor((h + 180.f) / 360.f);
+        }
     }
 
-    std::optional<PointEdit> point_edit(const EditContext &) const override
+    std::optional<PointEdit> point_edit(const EditContext &ctx) const override
     {
+        // about the gray of the image's own primaries, and on straight color where the samples are premultiplied,
+        // which finalize() makes them whenever alpha means transparency
+        const float3 Yw            = ctx.image ? ctx.image->luminance_weights : sRGB_Yw();
+        bool         premultiplied = false;
+        if (auto img = ctx.image; img && img->is_valid_group(img->active_group_index(Target_Primary)))
+            premultiplied = img->alpha_is_transparency() &&
+                            group_has_alpha(img->groups[size_t(img->active_group_index(Target_Primary))].type);
+
         PointEdit e{shader::EDIT_HUE_SATURATION};
-        e.p0 = float4{m_hue / 360.f, (m_saturation + 100.f) / 100.f, m_lightness / 100.f, 0.f};
+        e.m0 = hue_saturation_matrix(m_hue / 360.f, (m_saturation + 100.f) / 100.f, Yw);
+        e.p0 = float4{0.f, 0.f, m_lightness / 100.f, 0.f};
+        e.p1 = float4{premultiplied ? 1.f : 0.f, 0.f, 0.f, 0.f};
         return e;
     }
 
