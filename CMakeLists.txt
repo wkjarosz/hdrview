@@ -333,9 +333,8 @@ endfunction()
 include(cmake/SokolShaderCompiler.cmake)
 
 # Headers under src/shared/ that the shaders @include, compiled as C++ too (see src/shared/shim.h)
-set(HDRVIEW_SHARED_SHADER_HEADERS
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/shim.h ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/constants.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/colorspace.h ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/pipeline.h)
+# every header the shaders @include, globbed so that one added later recompiles them too
+file(GLOB HDRVIEW_SHARED_SHADER_HEADERS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/*.h)
 
 # Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime.
 # The output goes into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders, which hello_imgui_add_app(...
