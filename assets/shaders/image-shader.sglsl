@@ -67,6 +67,15 @@ layout(binding=1) uniform fs_params {
     vec2  clip_range;
     int   primary_straight_alpha;
     int   secondary_straight_alpha;
+    // a save dialog's preview; see kept_by_file() in src/shared/pipeline.h
+    int   preview_stage;
+    int   preview_clip;
+    int   preview_tf;
+    float preview_gamma;
+    float preview_ceiling;
+    float preview_highlight_clip;
+    mat4  preview_to_file;
+    mat4  preview_from_file;
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -177,6 +186,9 @@ void main()
         value.xyz = YC_to_RGB(value.xyz, fsp.primary_yw);
 
     value = fsp.primary_M_to_sRGB * value;
+    if (fsp.preview_stage == PREVIEW_DATA)
+        value = kept_by_file(value, mat3(fsp.preview_to_file), mat3(fsp.preview_from_file), fsp.preview_clip,
+                             fsp.preview_tf, fsp.preview_gamma, fsp.preview_ceiling);
     value = choose_channel(value, fsp.channel, fsp.primary_straight_alpha != 0);
 
     if (fsp.has_reference != 0)
@@ -200,6 +212,9 @@ void main()
     if (fsp.rolloff != 0)
         shown = roll_off(shown, fsp.tonemap_mode, fsp.rolloff_preserve_hue, fsp.rolloff_ceiling,
                          fsp.rolloff_has_peak != 0, fsp.rolloff_peak);
+    if (fsp.preview_stage == PREVIEW_RENDITION)
+        shown = kept_by_file(clip_highlights(shown, fsp.preview_highlight_clip), mat3(fsp.preview_to_file), mat3(fsp.preview_from_file), fsp.preview_clip,
+                             fsp.preview_tf, fsp.preview_gamma, fsp.preview_ceiling);
     vec4  tonemapped = shown + background * (1.0 - foreground.a);
     bvec3 clipped    = greaterThan(foreground.rgb, fsp.clip_range.yyy);
     bvec3 crushed    = lessThan(foreground.rgb, fsp.clip_range.xxx);

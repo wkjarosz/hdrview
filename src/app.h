@@ -584,9 +584,49 @@ public:
         float       peak            = 0.f;   ///< In stops above SDR white
         bool        has_auto_peak   = false; ///< Whether the Auto source finds a peak, whichever source is chosen
         float       auto_peak       = 0.f;   ///< The peak Auto would give, which the settings' plot is scaled to
+        bool        has_custom_peak = false; ///< Whether the custom settings' source finds a peak, whichever is chosen
+        float       custom_peak     = 0.f;   ///< The peak the custom settings' source gives, in stops above SDR white
         std::string ceiling_note, peak_note;
         std::string peak_detail; ///< The figures behind peak_note, for its tooltip
     };
+
+    /// The ways a rendition's highlights can be handled for the display it is written for.
+    enum RenditionHighlights : int
+    {
+        RenditionHighlights_PassThrough = 0,
+        RenditionHighlights_ClipAtSDRWhite,
+        RenditionHighlights_ClipAtTarget,
+        RenditionHighlights_RollOffToSDRWhite,
+        RenditionHighlights_RollOffToTarget,
+        RenditionHighlights_Custom, ///< The custom rolloff, as the Highlights panel sets it
+        RenditionHighlights_COUNT
+    };
+    /// How a rendition's highlights are handled: rolled off, then each channel of the straight color clipped.
+    struct Highlights
+    {
+        Rolloff rolloff;
+        float   clip = std::numeric_limits<float>::max(); ///< the largest value kept, in linear light
+    };
+    /// The rendition highlight mode that does what the view's highlight mode does.
+    RenditionHighlights view_rendition_highlights() const;
+    /// How \p mode handles highlights for a display whose ceiling sits \p target_ceiling stops above SDR white.
+    Highlights highlights_for(RenditionHighlights mode, float target_ceiling) const;
+
+    /// What a save dialog's preview has the viewport show, as kept_by_file() in src/shared/pipeline.h applies it.
+    struct SavePreview
+    {
+        int              stage = 0;               ///< a shader::PREVIEW_ stage
+        Highlights       highlights;              ///< for a rendition, as handled for its target display
+        float3x3         to_file{la::identity};   ///< from BT.709's primaries into the file's
+        float3x3         from_file{la::identity}; ///< and back
+        EncodingClip_    clip    = EncodingClip_None;
+        TransferFunction tf      = TransferFunction::Linear;
+        float            ceiling = std::numeric_limits<float>::max(); ///< the largest value kept, in linear light
+    };
+    /// The preview a save dialog asked for this frame or the last, or none.
+    const SavePreview *save_preview() const;
+    /// The value the viewport shows at \p pixel, before encoding for the display, with any save preview in force.
+    float4 preview_value(int2 pixel) const;
 
     /// Which of the highlight modes is chosen: pass through, clip at SDR white, or one of the rolloff presets.
     int highlight_mode() const;
@@ -604,13 +644,13 @@ public:
         In Data mode, the current image itself, or a copy of the part under the selection when \p selection_only. In
         Rendition mode, a new image of the view, blended with the reference when there is one, in \p primaries or else
         the current image's, with alpha only when the current or reference image has it. It bakes in exposure, tonemap
-        and highlights, handled for a display whose ceiling sits \p target_ceiling stops above SDR white, and names
-        that display in its metadata as the one it was mastered for; only Clip at SDR white clips.
+        and highlights, handled as \p highlights says, or else as the view handles them, for a display whose ceiling
+        sits \p target_ceiling stops above SDR white, and names that display in its metadata as the one it was
+        mastered for.
     */
     ConstImagePtr image_to_save(SaveMode mode, bool selection_only, float target_ceiling,
-                                const Chromaticities *primaries = nullptr) const;
-    /// The rolloff in force, applied for a display whose ceiling sits \p display_ceiling stops above SDR white.
-    Rolloff rolloff_for(float display_ceiling) const;
+                                const Chromaticities              *primaries  = nullptr,
+                                std::optional<RenditionHighlights> highlights = std::nullopt) const;
     /// tonemap_value() with the highlights rolled off as \p rolloff says, rather than as the viewport shows.
     float4 tonemap_value(float4 value, const Rolloff &rolloff) const;
     /// Works out this frame's rolloff parameters from its settings, the display and the current image.
@@ -903,7 +943,7 @@ private:
 
     RolloffSettings m_rolloff_settings;
     Rolloff         m_rolloff; ///< What update_rolloff() last worked out, which the shader and tonemap_value() apply
-    /// Whether the highlight settings were on screen last frame, so the peak is worked out for them.
+    /// Whether the highlight settings, or a rendition's, were on screen last frame, so the peaks are worked out.
     bool m_highlight_settings_shown = false;
 
     Tonemap_                   m_tonemap     = Tonemap_Gamma;
@@ -933,10 +973,12 @@ private:
     float2    m_translate          = {0.f, 0.f};     ///< The panning offset of the image
     Channels_ m_channel            = Channels_::Channels_RGBA; ///< Which channel to display
 
-    float2         m_viewport_min, m_viewport_size;
-    int  m_navigable_dialog_frame = -2;    ///< the last frame a save dialog showed, which the viewport is panned around
-    bool m_dragging_around_dialog = false; ///< whether the left button went down in the viewport, around it
-    optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
+    float2      m_viewport_min, m_viewport_size;
+    SavePreview m_save_preview;
+    int         m_save_preview_frame = -2; ///< the last frame a save dialog asked for m_save_preview
+    int  m_navigable_dialog_frame    = -2; ///< the last frame a save dialog showed, which the viewport is panned around
+    bool m_dragging_around_dialog    = false; ///< whether the left button went down in the viewport, around it
+    optional<int2> m_last_hovered_pixel;      ///< see last_hovered_pixel()
 
     /// Index of the annotation being worked on, or -1 when none on the current image is.
     int  active_annotation() const;

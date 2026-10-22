@@ -170,6 +170,33 @@ SHARED_FN vec4 roll_off(vec4 color, Tonemap_ mode, float preserve_hue, float cei
     return vec4((each + (together - each) * preserve_hue) * a, color.w);
 }
 
+/// \p color, premultiplied, with each channel of its straight color clipped at \p level.
+SHARED_FN vec4 clip_highlights(vec4 color, float level)
+{
+    float a = color.w > k_small_alpha ? color.w : 1.0f;
+    return vec4(min(color.x, level * a), min(color.y, level * a), min(color.z, level * a), color.w);
+}
+
+// What a save dialog's preview has the viewport show: nothing different, the data as a file keeps it, or the
+// rendition as one keeps it
+SHARED_CONST int PREVIEW_OFF       = 0;
+SHARED_CONST int PREVIEW_DATA      = 1; ///< Save as: the current image's values, before the view's own steps
+SHARED_CONST int PREVIEW_RENDITION = 2; ///< Export rendition: the view, its highlights handled for the export's target
+
+/// \p color, premultiplied and in BT.709's primaries, as a file keeps it.
+/**
+    Unpremultiplied, taken into the file's primaries by \p to_file, clipped as encoding_clip() says and at \p ceiling,
+    and brought back by \p from_file. A color under zero alpha is left alone: the file keeps no color there.
+*/
+SHARED_FN vec4 kept_by_file(vec4 color, mat3 to_file, mat3 from_file, int clip, int tf, float gamma, float ceiling)
+{
+    if (color.w <= 0.0f)
+        return color;
+    vec3 rgb = encoding_clip(mul(to_file, rgb_of(color) / color.w), clip, tf, gamma);
+    rgb      = mul(from_file, vec3(min(rgb.x, ceiling), min(rgb.y, ceiling), min(rgb.z, ceiling))) * color.w;
+    return vec4(rgb, color.w);
+}
+
 SHARED_END
 
 #endif // HDRVIEW_SHARED_PIPELINE_H

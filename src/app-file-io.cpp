@@ -122,9 +122,13 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::BeginModalDialog(rendition ? "Export rendition..." : "Save as...", open, ImGui::DialogPosition::Center,
                                 ImGuiWindowFlags_AlwaysAutoResize, &folded, true);
     ImGui::PopStyleColor();
+    // a rendition's highlight mode, which starts as the view's each time the dialog opens
+    static RenditionHighlights highlights = RenditionHighlights_PassThrough;
     if (shown)
     {
         m_navigable_dialog_frame = ImGui::GetFrameCount();
+        if (ImGui::IsWindowAppearing())
+            highlights = view_rendition_highlights();
         // Define enum for save formats
         enum Format_
         {
@@ -502,31 +506,52 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
                         "The primaries the rendition is written in. Colors outside them clip, in a format that stores "
                         "no negative values.");
                 }
-                // what the view's highlight mode does at the target; a colormap has no highlights to handle
+                // The rendition's own highlight mode, starting from the view's; a colormap has no highlights to
+                // handle. An SDR target's peak is SDR white, so the modes for a target are offered only for HDR.
                 if (m_tonemap == Tonemap_Gamma)
                 {
-                    auto level = [](float stops)
-                    {
-                        return stops < 0.01f
-                                   ? std::string("SDR white")
-                                   : fmt::format("{:.0f} cd/m\xc2\xb2", HDR_REFERENCE_WHITE_NITS * std::exp2(stops));
-                    };
-                    const int   mode    = highlight_mode();
-                    const float ceiling = rolloff_for(target_ceiling).ceiling;
-                    const auto  outcome = mode == 0
-                                              ? std::string("Written unchanged; a display clips what it cannot show.")
-                                          : mode == 1 ? std::string("Values above SDR white clip.")
-                                                      : fmt::format("Compressed to fit under {}.", level(ceiling));
+                    m_highlight_settings_shown = true;
+                    struct Choice
+                    { const char *name, *tooltip; };
+                    static const Choice choices[] = {
+                        {"Pass through", "Write the values unchanged; a display clips what it cannot show."},
+                        {"Clip at SDR white", "Clip each channel at SDR white."},
+                        {"Clip at target peak", "Clip each channel at the target display's peak."},
+                        {"Roll off to SDR white", "Compress highlights smoothly to fit under SDR white."},
+                        {"Roll off to target peak",
+                         "Compress highlights smoothly to fit under the target display's peak."},
+                        {"Custom rolloff", "Roll off with the custom settings of the Highlights panel."}};
+                    static_assert(IM_ARRAYSIZE(choices) == RenditionHighlights_COUNT);
+                    auto for_target = [](int i)
+                    { return i == RenditionHighlights_ClipAtTarget || i == RenditionHighlights_RollOffToTarget; };
+                    const int shown = !ctx.hdr && for_target(highlights) ? highlights - 1 : highlights;
                     ImGui::PE::Entry(
                         "Highlights",
                         [&]
                         {
-                            ImGui::BeginDisabled();
-                            ImGui::TextWrapped("%s: %s", highlight_mode_name(), outcome.c_str());
-                            ImGui::EndDisabled();
-                            return false;
+                            ImGui::SetNextItemWidth(-FLT_MIN);
+                            bool changed = false;
+                            if (ImGui::BeginCombo("##Highlights", choices[shown].name))
+                            {
+                                for (int i = 0; i < RenditionHighlights_COUNT; ++i)
+                                {
+                                    if (!ctx.hdr && for_target(i))
+                                        continue;
+                                    if (ImGui::Selectable(choices[i].name, shown == i))
+                                    {
+                                        highlights = RenditionHighlights(i);
+                                        changed    = true;
+                                    }
+                                    ImGui::Tooltip(choices[i].tooltip);
+                                    if (shown == i)
+                                        ImGui::SetItemDefaultFocus();
+                                }
+                                ImGui::EndCombo();
+                            }
+                            return changed;
                         },
-                        "The view's highlight mode, applied for the display the rendition is written for.");
+                        "How the rendition's highlights are handled for the display it is written for. Starts as "
+                        "the view's highlight mode.");
                 }
                 ImGui::PE::End();
             }
@@ -549,6 +574,57 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
         ImGui::EndDisabled();
         ImGui::Tooltip("Save only the part of the image under the selection.");
         const bool cropping = selection_only && m_roi.has_volume();
+
+        ImGui::SameLine();
+        static bool preview = false;
+        ImGui::Checkbox("Preview", &preview);
+        ImGui::Tooltip(rendition ? "Show in the viewport what the file will hold: the view for the display it is "
+                                   "written for, clipped where the format's encoding clips."
+                                 : "Show in the viewport what the file will hold: the image's values clipped where the "
+                                   "format's encoding clips, seen as the view shows them.");
+        // a gain map holds two renditions, which the preview shows one at a time
+        static int preview_hdr = 1;
+        if (ctx.sdr_base)
+        {
+            ImGui::BeginDisabled(!preview);
+            ImGui::SameLine();
+            ImGui::RadioButton("SDR", &preview_hdr, 0);
+            ImGui::Tooltip(
+                "Preview the SDR rendition, which a viewer that ignores gain maps, or an SDR display, shows.");
+            ImGui::SameLine();
+            ImGui::RadioButton("HDR", &preview_hdr, 1);
+            ImGui::Tooltip("Preview the HDR rendition, which a gain-map viewer shows on a display that reaches the "
+                           "target.");
+            ImGui::EndDisabled();
+        }
+        if (preview && current_image())
+        {
+            const auto  img      = current_image();
+            const bool  show_sdr = ctx.sdr_base && !preview_hdr;
+            SavePreview p;
+            p.stage      = rendition ? shader::PREVIEW_RENDITION : shader::PREVIEW_DATA;
+            p.highlights = highlights_for(highlights, show_sdr ? 0.f : target_ceiling);
+            // the primaries the file holds: those it records, else BT.709's, which its writer converts to
+            const Chromaticities file_primaries = !ctx.records_primaries ? Chromaticities{}
+                                                  : rendition && use_rendition_primaries
+                                                      ? rendition_primaries
+                                                      : img->chromaticities.value_or(Chromaticities{});
+            color_conversion_matrix(p.from_file, file_primaries, Chromaticities{}, img->adaptation_method);
+            p.to_file = inverse(p.from_file);
+            p.clip    = ctx.clip;
+            p.tf      = ctx.tf;
+            // The file's base image is encoded as the format's options say; the other rendition is the gain map's
+            // to reach: an SDR one clipped to [0, 1], as the map is computed from, or an HDR one with no negatives
+            // and nothing past the target, beyond which the map does not boost.
+            if (ctx.sdr_base && show_sdr == ctx.hdr_base)
+            {
+                p.tf      = TransferFunction::Linear;
+                p.clip    = show_sdr ? EncodingClip_Codes : EncodingClip_Negatives;
+                p.ceiling = show_sdr ? std::numeric_limits<float>::max() : std::exp2(target_ceiling);
+            }
+            m_save_preview       = p;
+            m_save_preview_frame = ImGui::GetFrameCount();
+        }
 
         static string save_as_name;
         save_as_name          = fmt::format("Save as {}...", save_format_names[save_format]).c_str();
@@ -598,16 +674,14 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
             {
                 ostringstream os;
 
-                ConstImagePtr img = image_to_save(mode, cropping, target_ceiling,
-                                                  use_rendition_primaries ? &rendition_primaries : nullptr);
+                const Chromaticities *primaries = use_rendition_primaries ? &rendition_primaries : nullptr;
+                ConstImagePtr         img       = image_to_save(mode, cropping, target_ceiling, primaries, highlights);
                 if (!img)
                     throw runtime_error("the selection does not cover any of the image");
 
                 // the SDR rendition a gain map needs: the same view, resolved at SDR white
                 ConstImagePtr sdr_base =
-                    ctx.sdr_base
-                        ? image_to_save(mode, cropping, 0.f, use_rendition_primaries ? &rendition_primaries : nullptr)
-                        : nullptr;
+                    ctx.sdr_base ? image_to_save(mode, cropping, 0.f, primaries, highlights) : nullptr;
 
                 if (save_func)
                     save_func(*img, os, filename, sdr_base.get());
@@ -648,7 +722,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 }
 
 ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool selection_only, float target_ceiling,
-                                        const Chromaticities *primaries) const
+                                        const Chromaticities              *primaries,
+                                        std::optional<RenditionHighlights> highlights) const
 {
     auto img = current_image();
     if (!img)
@@ -683,23 +758,19 @@ ConstImagePtr HDRViewApp::image_to_save(SaveMode mode, bool selection_only, floa
                           HDR_REFERENCE_WHITE_NITS * std::exp2(target_ceiling), "rendition's target display");
     add_white_luminance(header, HDR_REFERENCE_WHITE_NITS, "rendition's target display");
 
-    // The highlights are handled for the target display. Only Clip at SDR white clips, as it does on screen, bounding
-    // the straight color so premultiplied values stay under alpha; Pass through writes the values unchanged, for the
-    // file's encoding or its reader's display to bound, and a rolloff stops at its own ceiling.
-    const Rolloff rolloff = rolloff_for(target_ceiling);
-    const int     width   = bounds.size().x;
+    // The highlights are handled for the target display. A clip bounds the straight color, so premultiplied values
+    // stay under alpha; Pass through writes the values unchanged, for the file's encoding or its reader's display to
+    // bound, and a rolloff stops at its own ceiling.
+    const Highlights h     = highlights_for(highlights.value_or(view_rendition_highlights()), target_ceiling);
+    const int        width = bounds.size().x;
     parallel_for(blocked_range<int>(0, bounds.size().y, std::max(1, 1024 * 1024 / width)),
                  [&](int begin_y, int end_y, int, int)
                  {
                      for (int y = begin_y; y < end_y; ++y)
                          for (int x = 0; x < width; ++x)
                          {
-                             float4 v = tonemap_value(pixel_value(int2{x, y} + bounds.min, true, 2), rolloff);
-                             if (m_clamp_to_LDR)
-                             {
-                                 const float a = v.w > k_small_alpha ? v.w : 1.f;
-                                 for (int c = 0; c < 3; ++c) v[c] = std::min(v[c], a);
-                             }
+                             float4 v = shader::clip_highlights(
+                                 tonemap_value(pixel_value(int2{x, y} + bounds.min, true, 2), h.rolloff), h.clip);
                              v.xyz() = mul(M_from_sRGB, v.xyz());
                              for (int c = 0; c < num_channels; ++c) out->channels[c](x, y) = v[c];
                          }

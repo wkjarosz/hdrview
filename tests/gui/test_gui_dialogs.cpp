@@ -249,9 +249,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         };
     }
 
-    // What each kind of save writes: the image itself, a copy of the selection, or the view, unchanged when its
-    // highlights pass through and clipped at SDR white when they are clipped there, in the image's own primaries or
-    // those chosen, and with alpha only when the image has it.
+    // What each kind of save writes: the image itself, a copy of the selection, or the view with its highlights
+    // handled as each mode says, in the image's own primaries or those chosen, and with alpha only when the image has
+    // it.
     t           = IM_REGISTER_TEST(engine, "dialogs", "image_to_save_writes_what_each_mode_says");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -307,9 +307,14 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         roll_off             = false;
         ctx->Yield(2); //< for update_rolloff() to see it
 
-        auto check = [&](float target_ceiling, const Chromaticities *primaries = nullptr)
+        // Each highlight mode at a target: a clip holds the straight color to its level, and a rolloff holds it
+        // under its ceiling, touching only what lies above the knee; with no mode, the view's.
+        using RH   = HDRViewApp::RenditionHighlights;
+        auto check = [&](float target_ceiling, const Chromaticities *primaries = nullptr,
+                         std::optional<RH> highlights = std::nullopt)
         {
-            auto view = app->image_to_save(HDRViewApp::SaveMode_Rendition, false, target_ceiling, primaries);
+            auto view =
+                app->image_to_save(HDRViewApp::SaveMode_Rendition, false, target_ceiling, primaries, highlights);
             IM_CHECK(view != nullptr && view->size() == img->size());
             // in the image's own primaries, or those chosen for it, so what they convert back to is what the view
             // computes
@@ -318,8 +323,20 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                      view->chromaticities->green == want.green && view->chromaticities->blue == want.blue &&
                      view->chromaticities->white == want.white);
             // the worst error over the image, checked once: the engine logs every check, passing ones too
-            const float limit = app->clamp_to_LDR() ? 1.f : std::numeric_limits<float>::infinity();
-            float       worst = 0.f;
+            const RH    mode    = highlights.value_or(app->view_rendition_highlights());
+            const bool  rolling = mode >= HDRViewApp::RenditionHighlights_RollOffToSDRWhite;
+            const float limit   = mode == HDRViewApp::RenditionHighlights_ClipAtSDRWhite ? 1.f
+                                  : mode == HDRViewApp::RenditionHighlights_ClipAtTarget
+                                      ? std::exp2(target_ceiling)
+                                      : std::numeric_limits<float>::infinity();
+            // the fixed rolloffs' ceilings as their names state them; the custom one's is its settings'
+            const float ceiling = mode == HDRViewApp::RenditionHighlights_RollOffToSDRWhite ? 1.f
+                                  : mode == HDRViewApp::RenditionHighlights_RollOffToTarget
+                                      ? std::exp2(target_ceiling)
+                                      : std::exp2(app->highlights_for(mode, target_ceiling).rolloff.ceiling);
+            float       worst   = 0.f;
+            float       reach   = 0.f; //< the brightest straight value written
+            bool        above = false, rolled = false;
             for (int y = 0; y < view->size().y; ++y)
                 for (int x = 0; x < view->size().x; ++x)
                 {
@@ -328,9 +345,20 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                     const float3 shown = mul(view->M_to_sRGB, float3{view->channels[0](x, y), view->channels[1](x, y),
                                                                      view->channels[2](x, y)});
                     for (int c = 0; c < 3; ++c)
-                        worst = std::max(worst, std::abs(shown[c] - std::min(raw[c] * 4.f, limit * alpha)));
+                        if (!rolling)
+                            worst = std::max(worst, std::abs(shown[c] - std::min(raw[c] * 4.f, limit * alpha)));
+                        else
+                        {
+                            worst  = std::max(worst, shown[c] - ceiling * alpha);
+                            reach  = std::max(reach, shown[c] / alpha);
+                            above  = above || raw[c] * 4.f > 1.01f * ceiling * alpha;
+                            rolled = rolled || std::abs(shown[c] - raw[c] * 4.f) > 1e-3f;
+                        }
                 }
             IM_CHECK_LE(worst, 1e-4f);
+            IM_CHECK(rolled == above);
+            // and what lies above it is brought under it, the content's peak onto the ceiling
+            IM_CHECK(!above || reach > 0.99f * ceiling);
         };
         check(0.f);
         check(1.f); //< the target sets the metadata, not a clip
@@ -340,6 +368,18 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         ctx->Yield(2);
         check(1.f); //< clipped at SDR white, whatever the target
         app->clamp_to_LDR() = false;
+        ctx->Yield(2);
+        // a rolloff needs the content's peak, worked out while the view rolls off
+        roll_off = true;
+        IM_CHECK(wait_until(
+            ctx, [&]
+            { return app->highlights_for(HDRViewApp::RenditionHighlights_RollOffToTarget, 1.f).rolloff.has_peak; }));
+        for (int mode = 0; mode < HDRViewApp::RenditionHighlights_COUNT; ++mode)
+        {
+            check(0.f, nullptr, RH(mode));
+            check(1.f, nullptr, RH(mode));
+        }
+        roll_off = false;
         ctx->Yield(2);
 
         // a wide-gamut image keeps its gamut

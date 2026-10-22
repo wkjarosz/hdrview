@@ -210,6 +210,41 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
 
 float4 HDRViewApp::tonemap_value(float4 value) const { return tonemap_value(value, m_rolloff); }
 
+const HDRViewApp::SavePreview *HDRViewApp::save_preview() const
+{
+    // the dialogs ask during the frame, after the viewport has drawn, so last frame's request is this frame's
+    return ImGui::GetFrameCount() - m_save_preview_frame <= 1 ? &m_save_preview : nullptr;
+}
+
+float4 HDRViewApp::preview_value(int2 p) const
+{
+    const SavePreview *preview = save_preview();
+    const auto         kept    = [&](float4 color)
+    {
+        return shader::kept_by_file(color, preview->to_file, preview->from_file, preview->clip, preview->tf.type,
+                                    preview->tf.gamma, preview->ceiling);
+    };
+    // the image shader's steps in its order, as main() in image-shader.sglsl applies them
+    auto shown = [&](const ConstImagePtr &img, Target_ target, bool clip)
+    {
+        if (!img)
+            return float4{0.f};
+        float4 value = img->rgba_pixel(p, target);
+        if (clip)
+            value = kept(value);
+        return shader::choose_channel(value, m_channel, img->transparency == TransparencyType_Straight);
+    };
+    const bool data = preview && preview->stage == shader::PREVIEW_DATA;
+    auto       img2 = reference_image();
+    float4     value =
+        img2 ? blend(shown(current_image(), Target_Primary, data), shown(img2, Target_Secondary, false), m_blend_mode)
+             : shown(current_image(), Target_Primary, data);
+    if (preview && preview->stage == shader::PREVIEW_RENDITION)
+        return kept(
+            shader::clip_highlights(tonemap_value(value, preview->highlights.rolloff), preview->highlights.clip));
+    return tonemap_value(value);
+}
+
 float4 HDRViewApp::tonemap_value(float4 value, const Rolloff &rolloff) const
 {
     // the image shader's exposure, tonemap and rolloff steps, as main() in image-shader.sglsl applies them

@@ -403,12 +403,29 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.offset", m_offset_live);
         m_shader->set_uniform("fsp.gamma", m_gamma_live);
         m_shader->set_uniform("fsp.tonemap_mode", (int)m_tonemap);
-        m_shader->set_uniform("fsp.clamp_to_LDR", (int)m_clamp_to_LDR);
-        m_shader->set_uniform("fsp.rolloff", (int)m_rolloff.enabled);
-        m_shader->set_uniform("fsp.rolloff_preserve_hue", m_rolloff.preserve_hue);
-        m_shader->set_uniform("fsp.rolloff_ceiling", m_rolloff.ceiling);
-        m_shader->set_uniform("fsp.rolloff_has_peak", (int)m_rolloff.has_peak);
-        m_shader->set_uniform("fsp.rolloff_peak", m_rolloff.peak);
+        // A save dialog's preview: a rendition's highlights are handled for the display it is written for, in place
+        // of the view's, and the file's clip applies at the stage the preview names.
+        const SavePreview *preview   = save_preview();
+        const bool         rendition = preview && preview->stage == shader::PREVIEW_RENDITION;
+        const Rolloff     &rolloff   = rendition ? preview->highlights.rolloff : m_rolloff;
+        m_shader->set_uniform("fsp.clamp_to_LDR", (int)(m_clamp_to_LDR && !rendition));
+        m_shader->set_uniform("fsp.rolloff", (int)rolloff.enabled);
+        m_shader->set_uniform("fsp.rolloff_preserve_hue", rolloff.preserve_hue);
+        m_shader->set_uniform("fsp.rolloff_ceiling", rolloff.ceiling);
+        m_shader->set_uniform("fsp.rolloff_has_peak", (int)rolloff.has_peak);
+        m_shader->set_uniform("fsp.rolloff_peak", rolloff.peak);
+        const SavePreview  none;
+        const SavePreview &p   = preview ? *preview : none;
+        const auto         pad = [](const float3x3 &M)
+        { return float4x4{{M[0], 0.f}, {M[1], 0.f}, {M[2], 0.f}, {0.f, 0.f, 0.f, 1.f}}; };
+        m_shader->set_uniform("fsp.preview_stage", p.stage);
+        m_shader->set_uniform("fsp.preview_clip", (int)p.clip);
+        m_shader->set_uniform("fsp.preview_tf", (int)p.tf.type);
+        m_shader->set_uniform("fsp.preview_gamma", p.tf.gamma);
+        m_shader->set_uniform("fsp.preview_ceiling", p.ceiling);
+        m_shader->set_uniform("fsp.preview_highlight_clip", p.highlights.clip);
+        m_shader->set_uniform("fsp.preview_to_file", pad(p.to_file));
+        m_shader->set_uniform("fsp.preview_from_file", pad(p.from_file));
         m_shader->set_uniform("fsp.do_dither", (int)m_dither);
         m_shader->set_uniform("fsp.blend_mode", (int)m_blend_mode);
         m_shader->set_uniform("fsp.channel", (int)m_channel);

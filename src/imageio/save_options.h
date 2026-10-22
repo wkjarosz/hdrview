@@ -22,6 +22,7 @@ struct SaveContext
     bool             hdr               = false; ///< whether the encoding keeps values above SDR white
     bool             records_primaries = false; ///< whether the file can say which primaries it is in
     bool             sdr_base          = false; ///< whether the file also needs the SDR rendition, for a gain map
+    bool             hdr_base          = false; ///< with a gain map, whether the file's image is the HDR rendition
     TransferFunction tf                = TransferFunction::Linear; ///< the transfer function the samples are encoded in
     EncodingClip_    clip              = EncodingClip_None;        ///< how the samples clip what they are given
 };

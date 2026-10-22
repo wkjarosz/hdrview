@@ -218,16 +218,52 @@ void HDRViewApp::RolloffSettings::from_json(const json &j)
     custom.preserve_hue   = std::clamp(number(c, "preserve_hue", custom.preserve_hue), 0.f, 1.f);
 }
 
-HDRViewApp::Rolloff HDRViewApp::rolloff_for(float display_ceiling) const
+HDRViewApp::RenditionHighlights HDRViewApp::view_rendition_highlights() const
 {
-    const auto p      = m_rolloff_settings.params();
-    Rolloff    r      = m_rolloff;
-    r.display_ceiling = display_ceiling;
-    r.ceiling         = ceiling_of(p, display_ceiling);
+    if (m_clamp_to_LDR)
+        return RenditionHighlights_ClipAtSDRWhite;
+    if (!m_rolloff_settings.enabled)
+        return RenditionHighlights_PassThrough;
+    switch (m_rolloff_settings.preset)
+    {
+    case RolloffPreset_SDRWhite: return RenditionHighlights_RollOffToSDRWhite;
+    case RolloffPreset_Display: return RenditionHighlights_RollOffToTarget;
+    default: return RenditionHighlights_Custom;
+    }
+}
+
+HDRViewApp::Highlights HDRViewApp::highlights_for(RenditionHighlights mode, float target_ceiling) const
+{
+    Highlights h;
+    h.clip = mode == RenditionHighlights_ClipAtSDRWhite ? 1.f
+             : mode == RenditionHighlights_ClipAtTarget ? std::exp2(target_ceiling)
+                                                        : std::numeric_limits<float>::max();
+
+    // the rolloff modes are the presets, with the target display in place of this one
+    RolloffSettings s = m_rolloff_settings;
+    s.preset          = mode == RenditionHighlights_RollOffToSDRWhite ? RolloffPreset_SDRWhite
+                        : mode == RenditionHighlights_RollOffToTarget ? RolloffPreset_Display
+                                                                      : RolloffPreset_Custom;
+    const auto p      = s.params();
+    Rolloff   &r      = h.rolloff;
+    r                 = m_rolloff;
+    r.enabled         = mode >= RenditionHighlights_RollOffToSDRWhite;
+    r.preserve_hue    = std::clamp(p.preserve_hue, 0.f, 1.f);
+    r.display_ceiling = target_ceiling;
+    r.ceiling         = ceiling_of(p, target_ceiling);
     // as update_rolloff() keeps it: a custom peak is never below the ceiling
     if (p.peak_source == PeakSource_Custom)
-        r.peak = std::max(p.custom_peak, r.ceiling);
-    return r;
+    {
+        r.has_peak = true;
+        r.peak     = std::max(p.custom_peak, r.ceiling);
+    }
+    else
+    {
+        const bool custom = s.preset == RolloffPreset_Custom;
+        r.has_peak        = custom ? r.has_custom_peak : r.has_auto_peak;
+        r.peak            = custom ? r.custom_peak : r.auto_peak;
+    }
+    return h;
 }
 
 int HDRViewApp::highlight_mode() const
@@ -342,20 +378,27 @@ void HDRViewApp::update_rolloff()
             }
         };
 
+        // The fixed presets take Auto's peak and Custom its own source's, both worked out whichever is chosen, for
+        // the settings' plot and an export's highlights.
         const Found automatic = find(PeakSource_Auto);
         r.has_auto_peak       = automatic.has;
         r.auto_peak           = automatic.peak;
 
         // A custom peak below the ceiling would ask for no rolloff, only a clip; the settings keep it at or above
         // the ceiling, and this keeps it there when the display's headroom moves the ceiling up past it.
-        const Found chosen = p.peak_source == PeakSource_Custom
-                                 ? Found{true, std::max(p.custom_peak, r.ceiling), "custom"}
-                             : p.peak_source == PeakSource_Auto ? automatic
-                                                                : find(p.peak_source);
-        r.has_peak         = chosen.has;
-        r.peak             = chosen.peak;
-        r.peak_note        = chosen.note;
-        r.peak_detail      = chosen.detail;
+        const auto &c      = m_rolloff_settings.custom;
+        const Found custom = c.peak_source == PeakSource_Custom
+                                 ? Found{true, std::max(c.custom_peak, ceiling_of(c, r.display_ceiling)), "custom"}
+                             : c.peak_source == PeakSource_Auto ? automatic
+                                                                : find(c.peak_source);
+        r.has_custom_peak  = custom.has;
+        r.custom_peak      = custom.peak;
+
+        const Found &chosen = m_rolloff_settings.preset == RolloffPreset_Custom ? custom : automatic;
+        r.has_peak          = chosen.has;
+        r.peak              = chosen.peak;
+        r.peak_note         = chosen.note;
+        r.peak_detail       = chosen.detail;
     }
 
     m_rolloff = std::move(r);

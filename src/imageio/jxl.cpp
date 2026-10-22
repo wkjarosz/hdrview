@@ -1352,6 +1352,7 @@ JXLSaveOptions *jxl_parameters_gui(SaveContext &ctx)
         ctx.clip = EncodingClip_Negatives;
     ctx.records_primaries = true; //< in its color encoding or ICC profile
     ctx.sdr_base          = gain_map != 0;
+    ctx.hdr_base          = gain_map == 2;
     return &s_opts;
 }
 
