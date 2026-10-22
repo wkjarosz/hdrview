@@ -46,10 +46,10 @@ SHARED_CONST int CURVE_RGB                 = 0;
 SHARED_CONST int CURVE_LIGHTNESS           = 1;
 SHARED_CONST int CURVE_CHROMATICITY        = 2;
 
-// The shape of the brightness/contrast curve, in p0.w.
-SHARED_CONST int SHAPE_S_CURVE             = 0;
+// The shape of the brightness/contrast curve in p0.w, plus SHAPE_CLIP to clip what it gives to [0, 1].
+SHARED_CONST int SHAPE_RATIONAL            = 0;
 SHARED_CONST int SHAPE_LINE                = 1;
-SHARED_CONST int SHAPE_RATIONAL            = 2;
+SHARED_CONST int SHAPE_CLIP                = 2;
 // clang-format on
 
 //
@@ -65,33 +65,14 @@ SHARED_CONST int SHAPE_RATIONAL            = 2;
 SHARED_FN float brightness_contrast_linear(float v, float slope, float midpoint)
 { return (v - midpoint) * slope + 0.5f; }
 
-/// Perlin's gain, an s-curve over [0, 1] of slope \p P at its midpoint, from "Hypertexture" (Perlin & Hoffert 1989).
-/**
-    gain(0, P) = 0, gain(0.5, P) = 0.5, gain(1, P) = 1, gain(t, 1) = t, and gain(gain(t, P), 1/P) = t. The exponent
-    is taken directly, rather than as Perlin's P = -log2(a), to spare the logarithm.
-*/
-SHARED_FN float gain_Perlin(float t, float P)
-{
-    if (t > 0.5f)
-        return 1.0f - 0.5f * pow(2.0f - 2.0f * t, P);
-    return 0.5f * pow(2.0f * t, P);
-}
-
 /// Schlick's rational bias, which sends 0.5 to \p a and keeps 0 and 1, from Graphics Gems IV (1994).
 SHARED_FN float bias_Schlick(float t, float a) { return t / (((1.0f / a) - 2.0f) * (1.0f - t) + 1.0f); }
-
-/// Contrast about a biased midpoint, as an s-curve that approaches black and white without passing them.
-/**
-    Clamped on the way in, since both halves are defined only over [0, 1].
-*/
-SHARED_FN float brightness_contrast_nonlinear(float v, float slope, float bias)
-{ return gain_Perlin(bias_Schlick(clamp(v, 0.0f, 1.0f), bias), slope); }
 
 /// Schlick's rational gain, an s-curve over [0, 1] of slope (1 - a) / a at its midpoint and a / (1 - a) at its ends.
 /**
     From "Fast Alternatives to Perlin's Bias and Gain Functions" (Graphics Gems IV, 1994): each half is bias_Schlick()
-    of a doubled input. Unlike Perlin's, its slope at the ends is finite and not zero, so it can be carried on past
-   them.
+    of a doubled input. Unlike Perlin's power gain, its slope at the ends is finite and not zero, so it can be carried
+   on past them.
 */
 SHARED_FN float gain_Schlick(float t, float a)
 { return t < 0.5f ? 0.5f * bias_Schlick(2.0f * t, a) : 1.0f - 0.5f * bias_Schlick(2.0f - 2.0f * t, a); }
@@ -334,12 +315,11 @@ SHARED_FN vec3 adjust_HSL(vec3 rgb, float hue_turns, float saturation, float lig
 /// The brightness/contrast curve that \p p0 describes, applied to \p v.
 SHARED_FN float brightness_contrast(float v, vec4 p0)
 {
-    int shape = int(p0.w);
-    if (shape == SHAPE_LINE)
-        return brightness_contrast_linear(v, p0.x, p0.y);
-    if (shape == SHAPE_RATIONAL)
-        return brightness_contrast_rational(v, p0.x, p0.z);
-    return brightness_contrast_nonlinear(v, p0.x, p0.z);
+    int   shape = int(p0.w);
+    bool  clip  = shape >= SHAPE_CLIP;
+    float y     = (clip ? shape - SHAPE_CLIP : shape) == SHAPE_LINE ? brightness_contrast_linear(v, p0.x, p0.y)
+                                                                    : brightness_contrast_rational(v, p0.x, p0.z);
+    return clip ? clamp(y, 0.0f, 1.0f) : y;
 }
 
 /// Sample \p v of the subject's channel \p slot, as the per-sample op \p op maps it.

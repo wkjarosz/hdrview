@@ -718,33 +718,9 @@ TEST_CASE("Schlick's rational gain is pinned like Perlin's, with finite slopes a
     }
 }
 
-TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen for")
+TEST_CASE("Schlick's bias has the properties it is chosen for")
 {
-    // shape functions, checked on the identities that make them usable, not on their formulas
-    for (float P : {0.25f, 0.5f, 1.f, 2.f, 4.f})
-    {
-        CAPTURE(P);
-
-        // pinned at both ends and at the middle, whatever the shape
-        CHECK(gain_Perlin(0.f, P) == doctest::Approx(0.f));
-        CHECK(gain_Perlin(0.5f, P) == doctest::Approx(0.5f));
-        CHECK(gain_Perlin(1.f, P) == doctest::Approx(1.f));
-
-        for (int i = 0; i <= 20; ++i)
-        {
-            const float t = float(i) / 20.f;
-            CAPTURE(t);
-
-            // an exponent of one is the identity, and the inverse exponent undoes it
-            CHECK(gain_Perlin(t, 1.f) == doctest::Approx(t));
-            CHECK(gain_Perlin(gain_Perlin(t, P), 1.f / P) == doctest::Approx(t).epsilon(1e-4));
-
-            // it never leaves [0,1]
-            CHECK(gain_Perlin(t, P) >= -1e-6f);
-            CHECK(gain_Perlin(t, P) <= 1.f + 1e-6f);
-        }
-    }
-
+    // a shape function, checked on the identities that make it usable, not on its formula
     for (float a : {0.1f, 0.3f, 0.5f, 0.7f, 0.9f})
     {
         CAPTURE(a);
@@ -785,7 +761,6 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         const float v = float(i) / 20.f;
         CAPTURE(v);
         CHECK(brightness_contrast_linear(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
-        CHECK(brightness_contrast_nonlinear(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
         CHECK(brightness_contrast_rational(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
     }
 
@@ -796,13 +771,10 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         const float slope = slope_of(c);
 
         CHECK(brightness_contrast_linear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
-        CHECK(brightness_contrast_nonlinear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
         CHECK(brightness_contrast_rational(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
 
         CHECK(brightness_contrast_linear(0.75f, slope, 0.5f) > 0.75f);
         CHECK(brightness_contrast_linear(0.25f, slope, 0.5f) < 0.25f);
-        CHECK(brightness_contrast_nonlinear(0.75f, slope, 0.5f) > 0.75f);
-        CHECK(brightness_contrast_nonlinear(0.25f, slope, 0.5f) < 0.25f);
         CHECK(brightness_contrast_rational(0.75f, slope, 0.5f) > 0.75f);
         CHECK(brightness_contrast_rational(0.25f, slope, 0.5f) < 0.25f);
     }
@@ -831,33 +803,27 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
             CHECK(f(4.f) - f(3.f) > 0.f);
         }
 
-    // the straight line runs out of [0,1], so an HDR sample keeps its relation to its neighbors; the s-curve
-    // approaches the ends without reaching them
+    // the straight line runs out of [0,1], so an HDR sample keeps its relation to its neighbors
     const float steep = slope_of(0.8f);
     CHECK(brightness_contrast_linear(1.f, steep, 0.5f) > 1.f);
     CHECK(brightness_contrast_linear(0.f, steep, 0.5f) < 0.f);
-    for (int i = 0; i <= 20; ++i)
-    {
-        const float v = float(i) / 20.f;
-        CAPTURE(v);
-        CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) >= -1e-6f);
-        CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) <= 1.f + 1e-6f);
-    }
 
-    // the edit reaches each shape's own curve
+    // the edit reaches each shape's own curve, and clipped, that curve held to [0, 1]
     for (float v : {-0.5f, 0.3f, 2.f})
     {
         const float slope = slope_of(0.4f), m = midpoint_of(0.2f), b = bias_of(0.2f);
         auto        edit = [&](int shape) { return shader::brightness_contrast(v, float4{slope, m, b, float(shape)}); };
-        CHECK(edit(shader::SHAPE_LINE) == brightness_contrast_linear(v, slope, m));
-        CHECK(edit(shader::SHAPE_S_CURVE) == brightness_contrast_nonlinear(v, slope, b));
-        CHECK(edit(shader::SHAPE_RATIONAL) == brightness_contrast_rational(v, slope, b));
+        const float line     = brightness_contrast_linear(v, slope, m),
+                    rational = brightness_contrast_rational(v, slope, b);
+        CHECK(edit(shader::SHAPE_LINE) == line);
+        CHECK(edit(shader::SHAPE_RATIONAL) == rational);
+        CHECK(edit(shader::SHAPE_LINE + shader::SHAPE_CLIP) == std::clamp(line, 0.f, 1.f));
+        CHECK(edit(shader::SHAPE_RATIONAL + shader::SHAPE_CLIP) == std::clamp(rational, 0.f, 1.f));
     }
 
     // brightness moves which input lands on the middle, in opposite directions for the curves' parameters but to
     // the same effect
     CHECK(brightness_contrast_linear(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
-    CHECK(brightness_contrast_nonlinear(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
     CHECK(brightness_contrast_rational(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
 }
 

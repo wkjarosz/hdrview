@@ -412,26 +412,16 @@ public:
         ImGui::Tooltip("Change the slope at the new 50% midpoint. At -1 everything collapses to one level; "
                        "at +1 the curve is vertical and only black and white are left.");
 
-        // radio-height text, so the label sits on the same line as the buttons beside it
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Curve");
-        struct Shape
-        { const char *name, *tooltip; };
-        static const Shape shapes[] = {
-            {"S-curve", "An s-curve that approaches black and white without arriving, and clips beyond them."},
-            {"Line", "A straight line through the midpoint, which runs past black and white, so an HDR sample "
-                     "keeps its difference from its neighbors."},
-            {"Rational", "Schlick's rational s-curve, whose ends flatten as its middle steepens, and which carries on "
-                         "past black and white along its slopes there, so an HDR sample keeps a share of its "
-                         "difference from its neighbors."}};
-        static_assert(IM_ARRAYSIZE(shapes) == Shape_COUNT);
-        for (int i = 0; i < Shape_COUNT; ++i)
-        {
-            ImGui::SameLine();
-            ImGui::RadioButton(shapes[i].name, &m_shape, i);
-            ImGui::Tooltip(shapes[i].tooltip);
-        }
+        ImGui::Checkbox("Linear", &m_linear);
+        ImGui::Tooltip("A straight line through the midpoint, which runs past black and white, so an HDR sample "
+                       "keeps its difference from its neighbors. Unticked, Schlick's rational s-curve, whose ends "
+                       "flatten as its middle steepens, and which carries on past black and white along its slopes "
+                       "there, so an HDR sample keeps a share of that difference.");
+        ImGui::SameLine();
+        ImGui::Checkbox("Clip to SDR", &m_clip);
+        ImGui::Tooltip("Clip what the curve gives to [0, 1], as an SDR image holds it.");
 
+        // radio-height text, so the label sits on the same line as the buttons beside it
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Adjust");
         const char *names[] = {"RGB", "Lightness", "Chromaticity"};
@@ -448,7 +438,8 @@ public:
     std::optional<PointEdit> point_edit(const EditContext &ctx) const override
     {
         PointEdit e{shader::EDIT_BRIGHTNESS_CONTRAST};
-        e.p0 = float4{slope_of(m_contrast), (1.f - m_brightness) / 2.f, (m_brightness + 1.f) / 2.f, float(m_shape)};
+        const int shape = (m_linear ? shader::SHAPE_LINE : shader::SHAPE_RATIONAL) + (m_clip ? shader::SHAPE_CLIP : 0);
+        e.p0 = float4{slope_of(m_contrast), (1.f - m_brightness) / 2.f, (m_brightness + 1.f) / 2.f, float(shape)};
         e.p1 = float4{float(m_channel), 0.f, 0.f, 0.f};
         // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in XYZ is what
         // the image says they do
@@ -512,37 +503,18 @@ private:
         return a > 0.f && a < 1.f ? (1.f - a) / a : -1.f;
     }
 
-    /// The gain exponent that puts the s-curve through (\p x, \p y); negative when nothing can.
-    /**
-        gain_Perlin is a power on each half of its range, so this is one logarithm; the bias stays put.
-    */
-    static float curve_gain_through(float x, float y, float bias)
-    {
-        const float u = bias_Schlick(std::clamp(x, 0.f, 1.f), bias);
-        if (u <= 1e-4f || u >= 1.f - 1e-4f || y <= 1e-4f || y >= 1.f - 1e-4f)
-            return -1.f;
-
-        // each half is pinned at its own end and at the middle, so a target on the far side of the
-        // middle from the input is unreachable at any exponent
-        if ((u > 0.5f) != (y > 0.5f))
-            return -1.f;
-
-        return u > 0.5f ? std::log(2.f * (1.f - y)) / std::log(2.f - 2.f * u) : std::log(2.f * y) / std::log(2.f * u);
-    }
-
-    /// The curves over [0,1], the one in force drawn solid and the others left faint behind it.
+    /// Both curves over [0,1], the one in force drawn solid and the other left faint behind it.
     void draw_curve()
     {
         const float slope    = slope_of(m_contrast);
         const float midpoint = (1.f - m_brightness) / 2.f;
         const float bias     = (m_brightness + 1.f) / 2.f;
 
-        float linear[ImGui::ToneCurveSamples], curved[ImGui::ToneCurveSamples], rational[ImGui::ToneCurveSamples];
+        float linear[ImGui::ToneCurveSamples], rational[ImGui::ToneCurveSamples];
         for (int i = 0; i < ImGui::ToneCurveSamples; ++i)
         {
             const float x = ImGui::ToneCurveX(i);
             linear[i]     = brightness_contrast_linear(x, slope, midpoint);
-            curved[i]     = brightness_contrast_nonlinear(x, slope, bias);
             rational[i]   = brightness_contrast_rational(x, slope, bias);
         }
 
@@ -552,12 +524,11 @@ private:
         const ImVec4 active{1.f, 1.f, 1.f, 0.85f};
         const ImVec4 faint{1.f, 1.f, 1.f, 0.18f};
 
-        // all are drawn whichever is in force, the others faint
-        ImGui::ToneCurve("s-curve", curved, m_shape == Shape_SCurve ? active : faint);
-        ImGui::ToneCurve("line", linear, m_shape == Shape_Line ? active : faint);
-        ImGui::ToneCurve("rational", rational, m_shape == Shape_Rational ? active : faint);
+        // both are drawn whichever is in force, the other faint
+        ImGui::ToneCurve("rational", rational, m_linear ? faint : active);
+        ImGui::ToneCurve("line", linear, m_linear ? active : faint);
 
-        // the pivot: the one input every curve sends to the middle, whatever the contrast. Drawn as a handle because
+        // the pivot: the one input both curves send to the middle, whatever the contrast. Drawn as a handle because
         // it is also what the drag below grabs.
         ImGui::ToneCurveMarkerX("pivot", midpoint, ImVec4(1.f, 1.f, 1.f, 0.35f));
         ImGui::ToneCurveHandle(float2{midpoint, 0.5f}, ImVec4(1.f, 1.f, 1.f, 0.55f));
@@ -583,9 +554,8 @@ private:
 
                 // left as it is where the cursor asks for something no setting produces, so the curve
                 // stops following instead of jumping to an end of the slider
-                const float wanted = m_shape == Shape_Line       ? line_slope_through(from.x, p.y, midpoint)
-                                     : m_shape == Shape_Rational ? rational_slope_through(from.x, p.y, bias)
-                                                                 : curve_gain_through(from.x, p.y, bias);
+                const float wanted =
+                    m_linear ? line_slope_through(from.x, p.y, midpoint) : rational_slope_through(from.x, p.y, bias);
                 if (wanted >= 0.f)
                     m_contrast = contrast_of(wanted);
             }
@@ -605,23 +575,12 @@ private:
 
         Channel_COUNT
     };
-    /// The curve's shape.
-    enum Shape : int
-    {
-        Shape_SCurve = 0,
-        Shape_Line,
-        Shape_Rational,
-
-        Shape_COUNT
-    };
     // the shader's names for them, which point_edit() hands it
     static_assert(Channel_RGB == shader::CURVE_RGB && Channel_Lightness == shader::CURVE_LIGHTNESS &&
                   Channel_Chromaticity == shader::CURVE_CHROMATICITY);
-    static_assert(Shape_SCurve == shader::SHAPE_S_CURVE && Shape_Line == shader::SHAPE_LINE &&
-                  Shape_Rational == shader::SHAPE_RATIONAL);
 
     float m_brightness = 0.f, m_contrast = 0.f;
-    int   m_shape   = Shape_SCurve;
+    bool  m_linear = false, m_clip = false;
     int   m_channel = Channel_RGB;
     /// Which of the two things the drag in progress is doing; unset between drags.
     std::optional<bool> m_dragging_pivot;

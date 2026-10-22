@@ -938,9 +938,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         };
 
         for (const Mode &mode : modes)
-            for (const char *shape : {"Line", "S-curve", "Rational"})
+            for (bool linear : {true, false})
             {
-                ctx->LogInfo("--- %s, %s ---", mode.button, shape);
+                ctx->LogInfo("--- %s, %s curve ---", mode.button, linear ? "straight" : "rational");
 
                 menu_click(ctx, "Edit/Brightness\\/contrast...");
 
@@ -952,7 +952,10 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 ctx->ItemInputValue("Brightness", 0.4f);
                 ctx->ItemInputValue("Contrast", 0.2f);
                 ctx->ItemClick(mode.button);
-                ctx->ItemClick(shape);
+                if (linear)
+                    ctx->ItemCheck("Linear");
+                else
+                    ctx->ItemUncheck("Linear");
 
                 ctx->ItemClick("Apply");
                 ctx->Yield(2);
@@ -982,6 +985,39 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 ctx->Yield();
                 IM_CHECK_LT(std::fabs(sample_lab().x - before.x), 1e-3f);
             }
+
+        // A bright, steep line runs some of the color channels past white, unless clipped to SDR, which holds every
+        // one to [0, 1]. Counted and checked once, since the engine logs every check.
+        for (bool clip : {false, true})
+        {
+            menu_click(ctx, "Edit/Brightness\\/contrast...");
+            ctx->SetRef("Brightness\\/contrast...");
+            ctx->ItemInputValue("Brightness", 0.6f);
+            ctx->ItemInputValue("Contrast", 0.5f);
+            ctx->ItemClick("RGB");
+            ctx->ItemCheck("Linear");
+            if (clip)
+                ctx->ItemCheck("Clip to SDR");
+            else
+                ctx->ItemUncheck("Clip to SDR");
+            ctx->ItemClick("Apply");
+            ctx->Yield(2);
+
+            int outside = 0;
+            for (int c = 0; c < 3; ++c)
+                for (int i = 0; i < img->channels[ch[c]].num_elements(); ++i)
+                {
+                    const float v = img->channels[ch[c]](i);
+                    outside += v < 0.f || v > 1.f;
+                }
+            if (clip)
+                IM_CHECK_EQ(outside, 0);
+            else
+                IM_CHECK_GT(outside, 0);
+
+            menu_click(ctx, "Edit/Undo");
+            ctx->Yield();
+        }
 
         reset_images(ctx);
     };
