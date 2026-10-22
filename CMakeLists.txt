@@ -462,7 +462,11 @@ set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 # download and build, even when the system has it
 set(HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
                            "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON" "HELLOIMGUI_USE_FREETYPE_PLUTOSVG OFF"
+                           "HELLOIMGUI_USE_IMGUI_CMAKE_PACKAGE OFF"
 )
+# Dear ImGui must be the docking-branch copy hello_imgui vendors, so an installed one (typically the release
+# branch, without docking) can't stand in; hide it, or hello_imgui refuses to build its own once it sees one
+set(CMAKE_DISABLE_FIND_PACKAGE_imgui ON)
 if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
   # fetches imgui_test_engine and links it into the shared `imgui` target, for hdrview_gui_tests below
   list(APPEND HELLOIMGUI_CPM_OPTIONS "HELLOIMGUI_WITH_TEST_ENGINE ON")
