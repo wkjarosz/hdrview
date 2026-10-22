@@ -34,7 +34,7 @@ SHARED_CONST int EDIT_FILL_BLEND           = 5; ///< p0: the color; p1.x: the al
 
 // color ops
 SHARED_CONST int EDIT_BRIGHTNESS_CONTRAST  = 6; ///< p0: slope, midpoint, bias, shape; p1.x: what it curves
-SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< m0: hue and saturation; p0.z: lightness; p1.x: premultiplied
+SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< p0.x: hue in turns; m0: saturation; p0.z: lightness; p1.x: premultiplied
 SHARED_CONST int EDIT_MATRIX               = 8; ///< m0: the matrix applied to the color
 SHARED_CONST int EDIT_FLATTEN              = 9; ///< p0: the straight background composited under the color
 
@@ -222,6 +222,37 @@ SHARED_FN vec3 HSL_to_RGB(vec3 hsl)
     return vec3(hue_to_RGB(x, y, H + 1.0f / 3.0f), hue_to_RGB(x, y, H), hue_to_RGB(x, y, H - 1.0f / 3.0f));
 }
 
+/// \p rgb with its hue turned by \p turns around the hexcone, keeping its smallest and largest components.
+/**
+    Only where the middle component sits between those two changes, so the hue wheel translates by the turn, and a
+    color of any brightness, above white or below black, keeps its range. Scaling a color by a positive factor scales
+    the result by the same factor, so it commutes with premultiplied alpha. Exactly the color itself for no turn.
+*/
+SHARED_FN vec3 rotate_hue(vec3 rgb, float turns)
+{
+    float mn = min(rgb.x, min(rgb.y, rgb.z));
+    float mx = max(rgb.x, max(rgb.y, rgb.z));
+    float C  = mx - mn;
+    // a gray has no hue to turn
+    if (turns == 0.0f || C <= 0.0f)
+        return rgb;
+
+    // the hue as RGB_to_HSL() names it, then turned
+    float H;
+    if (rgb.x == mx)
+        H = (rgb.y - rgb.z) / C;
+    else if (rgb.y == mx)
+        H = (rgb.z - rgb.x) / C + 2.0f;
+    else
+        H = (rgb.x - rgb.y) / C + 4.0f;
+    H = H / 6.0f + turns;
+
+    // the hexcone's pure hue there, between 0 and 1, spread back over the color's own range
+    vec3 hue = vec3(hue_to_RGB(0.0f, 1.0f, H + 1.0f / 3.0f), hue_to_RGB(0.0f, 1.0f, H),
+                    hue_to_RGB(0.0f, 1.0f, H - 1.0f / 3.0f));
+    return vec3(mn, mn, mn) + hue * C;
+}
+
 /// \p rgb with its saturation scaled by \p s, without naming the hue, which the round trip loses on a gray.
 SHARED_FN vec3 adjust_saturation(vec3 rgb, float s)
 {
@@ -329,11 +360,11 @@ SHARED_FN vec4 edit_color(int op, vec4 c, vec4 p0, vec4 p1, mat3 m0, mat3 m1)
         vec3 back = mul(m1, Lab_to_XYZ(unnormalize_Lab(lab), white));
         return vec4(back.x, back.y, back.z, c.w);
     }
-    // A linear hue and saturation, then a mix toward black, or toward white or a highlight's own level, whichever
-    // is brighter, taken on the straight color where the samples are premultiplied.
+    // The hue turned around the hexcone, then a linear saturation, then a mix toward black, or toward white or a
+    // highlight's own level, whichever is brighter, taken on the straight color where the samples are premultiplied.
     if (op == EDIT_HUE_SATURATION)
     {
-        vec3  mapped = mul(m0, rgb);
+        vec3  mapped = mul(m0, rotate_hue(rgb, p0.x));
         float l      = p0.z;
         if (l < 0.0f)
             mapped = mapped * (1.0f + l);

@@ -272,7 +272,7 @@ public:
     {
         // the ranges Photoshop uses: hue in degrees around the wheel, the other two as a percentage
         ImGui::SliderFloat("Hue", &m_hue, -180.f, 180.f, "%+.0f deg");
-        ImGui::Tooltip("Turn every color about gray, keeping its luminance. Dragging the lower strip turns it too.");
+        ImGui::Tooltip("Turn every color around the hue wheel. Dragging the lower strip turns it too.");
         ImGui::SliderFloat("Saturation", &m_saturation, -100.f, 100.f, "%+.0f%%");
         ImGui::Tooltip("Move every color toward or away from the gray of its own luminance.");
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
@@ -281,8 +281,9 @@ public:
         // The wheel as it is and as the settings would leave it.
         /**
             Drawn as shaded quads between the points where the sweep bends, which is not an approximation: the
-            hue hexcone is piecewise linear in hue, the hue and saturation are a matrix, and the lightness is
-            affine but for the level it mixes toward, which bends where a component crosses white.
+            hue hexcone is piecewise linear in hue, with its corners slid along by the turn, the saturation is a
+            matrix, and the lightness is affine but for the level it mixes toward, which bends where a component
+            crosses white.
 
             The other bends are where clamping to the display's range bends the ramp, which is what raising the
             saturation of an already-saturated hue looks like: flat, a steeper ramp, then flat.
@@ -322,12 +323,16 @@ public:
                 return out;
             };
 
-            // the hexcone's corners, then where the matrix's output crosses white, where the lightness bends, then
-            // where the result crosses the display's range
+            // the hexcone's corners, moved by the turn and wrapped back into the strip, then where the saturated
+            // color crosses white, where the lightness bends, then where the result crosses the display's range
             std::vector<float> knots{0.f, 1.f};
-            for (int k = 1; k < 6; ++k) knots.push_back(float(k) / 6.f);
+            for (int k = 0; k < 6; ++k)
+            {
+                const float t = float(k) / 6.f - edit.p0.x;
+                knots.push_back(t - std::floor(t));
+            }
             std::sort(knots.begin(), knots.end());
-            knots                          = crossings(knots, [&](float t) { return mul(edit.m0, wheel(t).xyz()); });
+            knots = crossings(knots, [&](float t) { return mul(edit.m0, rotate_hue(wheel(t).xyz(), edit.p0.x)); });
             const std::vector<float> bends = crossings(knots, raw);
 
             const float height = ImGui::GetFrameHeight();
@@ -360,7 +365,7 @@ public:
 
     std::optional<PointEdit> point_edit(const EditContext &ctx) const override
     {
-        // about the gray of the image's own primaries, and on straight color where the samples are premultiplied,
+        // toward the gray of the image's own primaries, and on straight color where the samples are premultiplied,
         // which finalize() makes them whenever alpha means transparency
         const float3 Yw            = ctx.image ? ctx.image->luminance_weights : sRGB_Yw();
         bool         premultiplied = false;
@@ -369,8 +374,8 @@ public:
                             group_has_alpha(img->groups[size_t(img->active_group_index(Target_Primary))].type);
 
         PointEdit e{shader::EDIT_HUE_SATURATION};
-        e.m0 = hue_saturation_matrix(m_hue / 360.f, (m_saturation + 100.f) / 100.f, Yw);
-        e.p0 = float4{0.f, 0.f, m_lightness / 100.f, 0.f};
+        e.m0 = saturation_matrix((m_saturation + 100.f) / 100.f, Yw);
+        e.p0 = float4{m_hue / 360.f, 0.f, m_lightness / 100.f, 0.f};
         e.p1 = float4{premultiplied ? 1.f : 0.f, 0.f, 0.f, 0.f};
         return e;
     }

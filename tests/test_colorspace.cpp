@@ -615,50 +615,64 @@ TEST_CASE("the lightness control mixes toward black and white rather than washin
     }
 }
 
-TEST_CASE("the linear hue and saturation keep gray and luminance, at any brightness")
+TEST_CASE("turning the hue translates the hue wheel, and keeps a color's range at any brightness")
 {
-    // colors in, above and below the unit range, and luminance weights of three different sets of primaries
+    auto close = [](float3 a, float3 b) { return la::length(a - b) <= 1e-5f * std::max(1.f, la::length(b)); };
+    auto wheel = [](float t) { return HSL_to_RGB(float3{t - std::floor(t), 1.f, 0.5f}); };
+
+    // the wheel slides along by the turn, whichever way and however far
+    for (float turns : {0.05f, 1.f / 6.f, 1.f / 3.f, 0.5f, -0.4f, 1.3f})
+        for (int i = 0; i < 48; ++i)
+        {
+            const float t = float(i) / 48.f;
+            CAPTURE(turns);
+            CAPTURE(t);
+            CHECK(close(rotate_hue(wheel(t), turns), wheel(t + turns)));
+        }
+
+    // colors in, above and below the unit range
+    const float3 colors[] = {{0.5f, 0.25f, 0.125f}, {4.f, 0.5f, 2.f}, {-0.2f, 0.8f, 0.3f}, {12.f, 11.f, 0.f}};
+    for (const float3 c : colors)
+        for (float turns : {0.1f, 1.f / 3.f, -0.4f})
+        {
+            CAPTURE(turns);
+            const float3 r = rotate_hue(c, turns);
+            // only the middle component moves, so the range is kept
+            CHECK(la::minelem(r) == doctest::Approx(la::minelem(c)));
+            CHECK(la::maxelem(r) == doctest::Approx(la::maxelem(c)));
+            // a positive scale passes through, as premultiplied alpha needs
+            for (float k : {0.5f, 3.f}) CHECK(close(rotate_hue(k * c, turns), k * r));
+            // turns compose, and a whole one comes back
+            CHECK(close(rotate_hue(r, 0.25f), rotate_hue(c, turns + 0.25f)));
+            CHECK(close(rotate_hue(c, turns + 1.f), r));
+        }
+
+    // no turn is exact, and a gray has no hue to turn
+    for (const float3 c : colors) CHECK(rotate_hue(c, 0.f) == c);
+    for (float k : {0.f, 0.3f, 5.f}) CHECK(rotate_hue(float3{k}, 0.3f) == float3{k});
+}
+
+TEST_CASE("the saturation blends toward the gray of the same luminance, at any brightness")
+{
     const float3 colors[]  = {{0.5f, 0.25f, 0.125f}, {4.f, 0.5f, 2.f}, {-0.2f, 0.8f, 0.3f}, {12.f, 11.f, 0.f}};
     const float3 weights[] = {sRGB_Yw(), computeYw(gamut_chromaticities(ColorGamut_BT2020_2100)), float3{1.f / 3.f}};
     auto         close = [](float3 a, float3 b) { return la::length(a - b) <= 1e-4f * std::max(1.f, la::length(b)); };
 
     for (const float3 Yw : weights)
-        for (float turns : {0.f, 0.1f, 1.f / 3.f, -0.4f, 1.f})
-            for (float saturation : {0.f, 0.5f, 1.f, 2.f})
+        for (float saturation : {0.f, 0.5f, 1.f, 2.f})
+        {
+            CAPTURE(saturation);
+            const float3x3 M = saturation_matrix(saturation, Yw);
+            for (float k : {0.f, 0.3f, 5.f}) CHECK(close(mul(M, float3{k}), float3{k}));
+            for (const float3 c : colors)
             {
-                CAPTURE(Yw);
-                CAPTURE(turns);
-                CAPTURE(saturation);
-                const float3x3 M = hue_saturation_matrix(turns, saturation, Yw);
-                for (float k : {0.f, 0.3f, 5.f}) CHECK(close(mul(M, float3{k}), float3{k}));
-                for (const float3 c : colors)
-                {
-                    CAPTURE(c);
-                    CHECK(dot(Yw, mul(M, c)) == doctest::Approx(dot(Yw, c)).epsilon(1e-4));
-                    // no saturation leaves the gray of the color's luminance, and a whole turn leaves the color
-                    if (saturation == 0.f)
-                        CHECK(close(mul(M, c), float3{dot(Yw, c)}));
-                    if (saturation == 1.f && (turns == 0.f || turns == 1.f))
-                        CHECK(close(mul(M, c), c));
-                    // and asked for nothing, it is exact, so an edit that does nothing changes no sample
-                    if (saturation == 1.f && turns == 0.f)
-                        CHECK(mul(M, c) == c);
-                }
-                // turns compose, as rotations do
+                CHECK(dot(Yw, mul(M, c)) == doctest::Approx(dot(Yw, c)).epsilon(1e-4));
+                CHECK(close(mul(M, c), float3{dot(Yw, c)} + saturation * (c - float3{dot(Yw, c)})));
+                // asked for nothing, it is exact, so an edit that does nothing changes no sample
                 if (saturation == 1.f)
-                    CHECK(close(mul(M, mul(hue_saturation_matrix(0.25f, 1.f, Yw), colors[1])),
-                                mul(hue_saturation_matrix(turns + 0.25f, 1.f, Yw), colors[1])));
+                    CHECK(mul(M, c) == c);
             }
-
-    // a small turn takes red toward green, not blue, the way the hue wheel runs, and with equal weights a third of
-    // one takes it all the way
-    for (const float3 Yw : weights)
-    {
-        const float3 turned = mul(hue_saturation_matrix(0.05f, 1.f, Yw), float3{1.f, 0.f, 0.f});
-        CHECK(turned.y > turned.z);
-    }
-    CHECK(close(mul(hue_saturation_matrix(1.f / 3.f, 1.f, float3{1.f / 3.f}), float3{1.f, 0.f, 0.f}),
-                float3{0.f, 1.f, 0.f}));
+        }
 }
 
 TEST_CASE("the lightness mixes toward black, or toward white or a highlight's own level")
