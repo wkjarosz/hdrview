@@ -144,8 +144,13 @@ enum class DialogPosition
 // fires ImGui::OpenPopup(title) the frame `open` becomes true (once HelloImGui's startup frames have
 // settled, so a dialog can start out already-open), consumes `open`, applies `position`, then forwards to
 // ImGui::BeginPopupModal. Call ImGui::EndPopup() only when this returns true, as with BeginPopupModal.
+/**
+    With \p folded, the dialog's title bar also gets the collapse arrow an ordinary window has, which Dear ImGui leaves
+    off a modal, and folding it shows the title bar alone. Its contents still run, out of sight, so what they keep
+    doing every frame goes on.
+*/
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position = DialogPosition::TopCenter,
-                      ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize);
+                      ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize, bool *folded = nullptr);
 
 /// Whether a BeginModalDialog() dialog showed this frame or the last, for what should stand down behind one.
 bool AnyModalDialogOpen();

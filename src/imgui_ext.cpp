@@ -1100,7 +1100,32 @@ void Checkbox(const Action &a)
 // shortcuts ask before this frame's dialogs are drawn
 static int s_modal_dialog_frame = -2;
 
-bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags)
+namespace
+{
+
+/// A collapse arrow at \p pos, drawn as Dear ImGui draws an ordinary window's, pointing as \p folded says.
+bool FoldButton(ImGuiID id, const ImVec2 &pos, bool folded)
+{
+    ImGuiContext &g      = *GImGui;
+    ImGuiWindow  *window = g.CurrentWindow;
+    const ImRect  bb(pos, pos + ImVec2(g.FontSize, g.FontSize));
+    const bool    clipped = !ImGui::ItemAdd(bb, id);
+    bool          hovered, held;
+    const bool    pressed = ImGui::ButtonBehavior(bb, id, &hovered, &held);
+    if (clipped)
+        return pressed;
+    if (hovered || held)
+        window->DrawList->AddRectFilled(
+            bb.Min, bb.Max, ImGui::GetColorU32(held && hovered ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered));
+    ImGui::RenderNavCursor(bb, id, ImGuiNavRenderCursorFlags_Compact);
+    ImGui::RenderArrow(window->DrawList, bb.Min, ImGui::GetColorU32(ImGuiCol_Text),
+                       folded ? ImGuiDir_Right : ImGuiDir_Down, 1.f);
+    return pressed;
+}
+
+} // namespace
+
+bool BeginModalDialog(const char *title, bool &open, DialogPosition position, ImGuiWindowFlags flags, bool *folded)
 {
     // HelloImGui renders a couple of frames to figure out sizes before the first real frame; guard against
     // opening a dialog that starts out already-open (e.g. the About box on first launch) before then.
@@ -1108,6 +1133,8 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     {
         ImGui::OpenPopup(title);
         open = false;
+        if (folded)
+            *folded = false; //< a dialog opens unfolded, however it was left
     }
 
     switch (position)
@@ -1122,9 +1149,34 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     case DialogPosition::None: break;
     }
 
+    // folded, the dialog keeps its width and shrinks to its title bar
+    if (folded && *folded)
+    {
+        flags &= ~ImGuiWindowFlags_AlwaysAutoResize;
+        flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar;
+        ImGui::SetNextWindowSize(ImVec2(0.f, ImGui::GetFrameHeight()));
+    }
+
     const bool shown = ImGui::BeginPopupModal(title, nullptr, flags);
     if (shown)
+    {
         s_modal_dialog_frame = ImGui::GetFrameCount();
+        if (folded)
+        {
+            // where Dear ImGui puts an ordinary window's collapse arrow, in the title bar, outside the content's clip
+            ImGuiWindow      *window = ImGui::GetCurrentWindow();
+            const ImRect      bar    = window->TitleBarRect();
+            const ImGuiStyle &style  = ImGui::GetStyle();
+            const ImVec2      pos =
+                style.WindowMenuButtonPosition == ImGuiDir_Left
+                    ? ImVec2(bar.Min.x + style.FramePadding.x, bar.Min.y + style.FramePadding.y)
+                    : ImVec2(bar.Max.x - style.FramePadding.x - ImGui::GetFontSize(), bar.Min.y + style.FramePadding.y);
+            ImGui::PushClipRect(bar.Min, bar.Max, false);
+            if (FoldButton(window->GetID("#FOLD"), pos, *folded))
+                *folded = !*folded;
+            ImGui::PopClipRect();
+        }
+    }
     return shown;
 }
 

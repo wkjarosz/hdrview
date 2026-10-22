@@ -113,6 +113,31 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->Yield(2);
             IM_CHECK(la::length(app->pixel_at_app_pos(corner) - before) > 0.f);
 
+            // and a drag begun on the dialog's own widgets is theirs, even carried out over the viewport: a press on
+            // Cancel, released away from it, which leaves it unclicked
+            const float2 held = app->pixel_at_app_pos(corner);
+            ctx->MouseMoveToPos(ctx->ItemInfo((std::string("//") + dialog + "/Cancel").c_str()).RectFull.GetCenter());
+            ctx->MouseDown(ImGuiMouseButton_Left);
+            ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
+            ctx->MouseMoveToPos(ImVec2{corner.x + HelloImGui::EmSize(4.f), corner.y + HelloImGui::EmSize(3.f)});
+            ctx->MouseUp(ImGuiMouseButton_Left);
+            ctx->Yield(2);
+            IM_CHECK_EQ(la::length(app->pixel_at_app_pos(corner) - held), 0.f);
+
+            // its title bar's arrow folds it to the title bar, out of the way, and back
+            const float full = window->Size.y;
+            ctx->ItemClick((std::string("//") + dialog + "/#FOLD").c_str());
+            ctx->Yield(3);
+            IM_CHECK_LE(window->Size.y, std::max(ImGui::GetFrameHeight(), ImGui::GetStyle().WindowMinSize.y) + 1.f);
+            const float folded_zoom = app->zoom();
+            ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
+            ctx->MouseWheelY(1.f);
+            ctx->Yield(2);
+            IM_CHECK(app->zoom() != folded_zoom); //< still navigable folded
+            ctx->ItemClick((std::string("//") + dialog + "/#FOLD").c_str());
+            ctx->Yield(3);
+            IM_CHECK_EQ(window->Size.y, full);
+
             ctx->SetRef(dialog);
             ctx->ItemClick("Cancel");
             ctx->SetRef("");

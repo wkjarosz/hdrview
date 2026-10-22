@@ -280,7 +280,7 @@ void HDRViewApp::handle_mouse_interaction()
     // A save dialog is modal but lets the viewport be panned and zoomed around it: where the mouse is over the
     // viewport and no window, which a modal leaves only its own and its popups, and for a drag only if it began there.
     // It showed last frame, since this runs before this frame's dialogs.
-    bool navigate_only = false;
+    bool navigate_only = false, may_scroll = true, may_drag = true;
     if (io.WantCaptureMouse)
     {
         const bool around = ImGui::GetFrameCount() - m_navigable_dialog_frame <= 1 &&
@@ -292,6 +292,9 @@ void HDRViewApp::handle_mouse_interaction()
         if (!around && !m_dragging_around_dialog)
             return;
         navigate_only = true;
+        // a drag of one of the dialog's own widgets, carried out over the viewport, is the widget's
+        may_drag   = m_dragging_around_dialog;
+        may_scroll = around && (m_dragging_around_dialog || !ImGui::IsMouseDown(ImGuiMouseButton_Left));
     }
 
     auto vp_mouse_pos   = vp_pos_at_app_pos(io.MousePos);
@@ -299,7 +302,7 @@ void HDRViewApp::handle_mouse_interaction()
 
     auto scroll = scroll_units(float2{io.MouseWheelH, io.MouseWheel});
 
-    if (length2(scroll) > 0.f)
+    if (may_scroll && length2(scroll) > 0.f)
     {
         cancel_autofit = true;
         if (ImGui::IsKeyDown(ImGuiMod_Shift))
@@ -339,7 +342,7 @@ void HDRViewApp::handle_mouse_interaction()
     }
     else
     {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+        if (may_drag && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
         {
             // A second finger means a pinch, while the first still drives a synthesized left-drag, so
             // panning would fight the zoom. The drag is consumed meanwhile: left to accumulate, it would
