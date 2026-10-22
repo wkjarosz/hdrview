@@ -17,6 +17,7 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "shared/edits.h"
 
 #include <algorithm>
 #include <cmath>
@@ -102,34 +103,36 @@ public:
             ImGui::TextWrapped("These describe the same color space, so this would leave the samples as they are.");
     }
 
+    std::optional<PointEdit> point_edit(const EditContext &) const override
+    {
+        PointEdit e{shader::EDIT_MATRIX};
+        color_conversion_matrix(e.m0, from(), to(), AdaptationMethod(m_method));
+        return e;
+    }
+
     void apply(const EditContext &ctx) override
     {
-        float3x3 M;
-        color_conversion_matrix(M, from(), to(), AdaptationMethod(m_method));
-
         const int  g = m_dst_gamut, w = m_dst_white, m = m_method;
         const auto tagged = to();
 
-        modify_colors(
-            ctx, "Convert color space",
-            // premultiplied alpha is no obstacle: scaling every component by alpha commutes with a matrix
-            [M](const float4 &c, int2, int) { return float4{la::mul(M, c.xyz()), c.w}; },
-            [g, w, m, tagged](Image &image)
-            {
-                image.chromaticities    = tagged;
-                image.adopted_neutral   = std::nullopt;
-                image.adaptation_method = AdaptationMethod(m);
-                image.compute_color_transform();
+        apply_point_edit(ctx, "Convert color space", *point_edit(ctx),
+                         [g, w, m, tagged](Image &image)
+                         {
+                             image.chromaticities    = tagged;
+                             image.adopted_neutral   = std::nullopt;
+                             image.adaptation_method = AdaptationMethod(m);
+                             image.compute_color_transform();
 
-                // compute_color_transform() names the space from the chromaticities; these only matter
-                // when the destination is one it cannot recognize
-                image.color_space = ColorGamut_(g);
-                image.white_point = WhitePoint_(w);
+                             // compute_color_transform() names the space from the chromaticities; these only matter
+                             // when the destination is one it cannot recognize
+                             image.color_space = ColorGamut_(g);
+                             image.white_point = WhitePoint_(w);
 
-                // the samples are linear light in the new primaries; the Colorspace panel reads this as
-                // its "Profile name"
-                image.metadata["color profile"] = color_profile_name(ColorGamut_(g), TransferFunction::Linear);
-            });
+                             // the samples are linear light in the new primaries; the Colorspace panel reads this as
+                             // its "Profile name"
+                             image.metadata["color profile"] =
+                                 color_profile_name(ColorGamut_(g), TransferFunction::Linear);
+                         });
     }
 
 private:
@@ -201,7 +204,7 @@ public:
         ImGui::TextDisabled("Total: %.1f%%", w.x + w.y + w.z);
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &) const override
     {
         auto row = [norm = m_normalize](const float3 &r)
         {
@@ -211,23 +214,17 @@ public:
             return norm && std::abs(sum) > 1e-6f ? v / sum : v;
         };
 
-        if (m_output == Out_Monochrome)
-        {
-            const float3 g = row(m_rows[Out_Monochrome]);
-            modify_colors(ctx, "Channel mixer",
-                          [g](const float4 &c, int2, int)
-                          {
-                              const float y = la::dot(g, c.xyz());
-                              return float4{y, y, y, c.w};
-                          });
-        }
-        else
-        {
-            const float3 r = row(m_rows[Out_Red]), g = row(m_rows[Out_Green]), b = row(m_rows[Out_Blue]);
-            modify_colors(ctx, "Channel mixer", [r, g, b](const float4 &c, int2, int)
-                          { return float4{la::dot(r, c.xyz()), la::dot(g, c.xyz()), la::dot(b, c.xyz()), c.w}; });
-        }
+        // the rows of the matrix, as source weights per output channel; Monochrome writes one gray to all three
+        const bool   mono = m_output == Out_Monochrome;
+        const float3 r    = row(m_rows[mono ? Out_Monochrome : Out_Red]),
+                     g    = row(m_rows[mono ? Out_Monochrome : Out_Green]),
+                     b    = row(m_rows[mono ? Out_Monochrome : Out_Blue]);
+        PointEdit    e{shader::EDIT_MATRIX};
+        e.m0 = transpose(float3x3{r, g, b});
+        return e;
     }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Channel mixer", *point_edit(ctx)); }
 
 private:
     /// Which channel the weights are written to.
@@ -343,12 +340,14 @@ public:
         strip("The hue wheel as these settings would leave it", m_hue, m_saturation, m_lightness);
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &) const override
     {
-        const float h = m_hue / 360.f, s = (m_saturation + 100.f) / 100.f, l = m_lightness / 100.f;
-        modify_colors(ctx, "Hue/saturation",
-                      [h, s, l](const float4 &c, int2, int) { return float4{adjust_HSL(c.xyz(), h, s, l), c.w}; });
+        PointEdit e{shader::EDIT_HUE_SATURATION};
+        e.p0 = float4{m_hue / 360.f, (m_saturation + 100.f) / 100.f, m_lightness / 100.f, 0.f};
+        return e;
     }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Hue/saturation", *point_edit(ctx)); }
 
 private:
     float m_hue = 0.f, m_saturation = 0.f, m_lightness = 0.f;
@@ -398,51 +397,29 @@ public:
                        "changes how light the image is and leaves its colors, the other does the reverse.");
     }
 
+    std::optional<PointEdit> point_edit(const EditContext &ctx) const override
+    {
+        PointEdit e{shader::EDIT_BRIGHTNESS_CONTRAST};
+        e.p0 =
+            float4{slope_of(m_contrast), (1.f - m_brightness) / 2.f, (m_brightness + 1.f) / 2.f, m_linear ? 1.f : 0.f};
+        e.p1 = float4{float(m_channel), 0.f, 0.f, 0.f};
+        // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in XYZ is what
+        // the image says they do
+        if (m_channel != Channel_RGB && ctx.image)
+        {
+            const auto  &img   = *ctx.image;
+            const float3 white = img.chromaticities ? XYZ_from_xy(img.chromaticities->white) : Lab_reference_white();
+            e.p1               = float4{float(m_channel), white.x, white.y, white.z};
+            e.m0               = img.M_RGB_to_XYZ;
+            e.m1               = img.M_XYZ_to_RGB;
+        }
+        return e;
+    }
+
     void apply(const EditContext &ctx) override
     {
-        auto img = ctx.image;
-        if (!img)
-            return;
-
-        const float slope    = slope_of(m_contrast);
-        const float midpoint = (1.f - m_brightness) / 2.f;
-        const float bias     = (m_brightness + 1.f) / 2.f;
-        const bool  linear   = m_linear;
-
-        auto curve = [slope, midpoint, bias, linear](float v) {
-            return linear ? brightness_contrast_linear(v, slope, midpoint)
-                          : brightness_contrast_nonlinear(v, slope, bias);
-        };
-
-        if (m_channel == Channel_RGB)
-        {
-            modify_colors(ctx, "Brightness/contrast", [curve](const float4 &c, int2, int)
-                          { return float4{curve(c.x), curve(c.y), curve(c.z), c.w}; });
-            return;
-        }
-
-        // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in
-        // XYZ is what the image says they do
-        const float3x3 to_XYZ   = img->M_RGB_to_XYZ;
-        const float3x3 from_XYZ = img->M_XYZ_to_RGB;
-        const float3   white    = img->chromaticities ? XYZ_from_xy(img->chromaticities->white) : Lab_reference_white();
-        const bool     lightness = m_channel == Channel_Lightness;
-
-        modify_colors(ctx, "Brightness/contrast",
-                      [curve, to_XYZ, from_XYZ, white, lightness](const float4 &c, int2, int)
-                      {
-                          float3 lab = normalize_Lab(XYZ_to_Lab(mul(to_XYZ, c.xyz()), white));
-
-                          if (lightness)
-                              lab.x = curve(lab.x);
-                          else
-                          {
-                              lab.y = curve(lab.y);
-                              lab.z = curve(lab.z);
-                          }
-
-                          return float4{mul(from_XYZ, Lab_to_XYZ(unnormalize_Lab(lab), white)), c.w};
-                      });
+        if (ctx.image)
+            apply_point_edit(ctx, "Brightness/contrast", *point_edit(ctx));
     }
 
 private:
@@ -562,6 +539,9 @@ private:
 
         Channel_COUNT
     };
+    // the shader's names for them, which point_edit() hands it
+    static_assert(Channel_RGB == shader::CURVE_RGB && Channel_Lightness == shader::CURVE_LIGHTNESS &&
+                  Channel_Chromaticity == shader::CURVE_CHROMATICITY);
 
     float m_brightness = 0.f, m_contrast = 0.f;
     bool  m_linear  = false;
@@ -597,17 +577,14 @@ public:
         ImGui::Tooltip("Takes the custom background color from the View menu.");
     }
 
-    void apply(const EditContext &ctx) override
+    std::optional<PointEdit> point_edit(const EditContext &) const override
     {
-        const float4 b = m_bg;
-        modify_colors(ctx, "Flatten",
-                      [b](const float4 &c, int2, int)
-                      {
-                          // samples are held premultiplied, so "over" is an addition and not the
-                          // textbook's lerp; the background is given straight and premultiplied here
-                          return float4{c.xyz() + b.xyz() * b.w * (1.f - c.w), c.w + b.w * (1.f - c.w)};
-                      });
+        PointEdit e{shader::EDIT_FLATTEN};
+        e.p0 = m_bg;
+        return e;
     }
+
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Flatten", *point_edit(ctx)); }
 
 private:
     float4 m_bg{0.f, 0.f, 0.f, 1.f};

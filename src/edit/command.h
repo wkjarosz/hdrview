@@ -15,6 +15,7 @@
 #include <functional>
 #include <imgui.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,18 @@ enum EditExtent : int
 using ChannelFilter = std::function<Array2Df(const Array2Df &, const Box2i &, int, AtomicProgress)>;
 /// Produces a whole channel at the image's new size, from the channel it replaces.
 using ChannelResampler = std::function<Array2Df(const Array2Df &, AtomicProgress)>;
+
+/// A point-wise edit, as src/shared/edits.h applies it: an op and the parameters it reads.
+/**
+    What an edit command that maps each pixel on its own describes itself as, so that applying it and previewing
+    it run the same code. See apply_point_edit() in edit/edit_ops.h.
+*/
+struct PointEdit
+{
+    int      op = 0; ///< One of the EDIT_ constants in src/shared/edits.h; 0, EDIT_NONE, leaves the samples alone
+    float4   p0{0.f}, p1{0.f};
+    float3x3 m0{la::identity}, m1{la::identity};
+};
 
 /// What an edit command sees of the application: the image, the subject, and the ways to change it.
 /**
@@ -99,6 +112,9 @@ public:
 
     /// Perform the edit. Called on confirm, or immediately for a command with no dialog.
     virtual void apply(const EditContext &) = 0;
+
+    /// The point-wise edit this command makes with its current settings, or none for an edit of another kind.
+    virtual std::optional<PointEdit> point_edit(const EditContext &) const { return std::nullopt; }
 
     /// Whether the command can run at all, beyond the image accepting edits.
     virtual bool enabled(const EditContext &) const { return true; }
