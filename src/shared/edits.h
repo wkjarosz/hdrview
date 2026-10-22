@@ -50,6 +50,7 @@ SHARED_CONST int CURVE_CHROMATICITY        = 2;
 SHARED_CONST int SHAPE_S_CURVE             = 0;
 SHARED_CONST int SHAPE_LINE                = 1;
 SHARED_CONST int SHAPE_POWER               = 2;
+SHARED_CONST int SHAPE_SPLINE              = 3;
 // clang-format on
 
 //
@@ -94,6 +95,36 @@ SHARED_FN float brightness_contrast_nonlinear(float v, float slope, float bias)
 */
 SHARED_FN float brightness_contrast_power(float v, float slope, float midpoint)
 { return 0.5f * spow(v / max(midpoint, 1e-4f), slope); }
+
+/// The cubic Hermite segment from (\p x0, \p y0) with slope \p s0 to (\p x1, \p y1) with slope \p s1, at \p x.
+SHARED_FN float hermite(float x, float x0, float y0, float s0, float x1, float y1, float s1)
+{
+    float h = x1 - x0, t = (x - x0) / h, t2 = t * t, t3 = t2 * t;
+    return (2.0f * t3 - 3.0f * t2 + 1.0f) * y0 + (t3 - 2.0f * t2 + t) * h * s0 + (3.0f * t2 - 2.0f * t3) * y1 +
+           (t3 - t2) * h * s1;
+}
+
+/// An s-curve of two cubic halves meeting at (\p midpoint, 0.5) with slope \p slope, extended past black and white.
+/**
+    Each half runs from an end, (0, 0) or (1, 1), to the midpoint, with slope 1/slope at the end, so raising the
+    contrast flattens the ends as it steepens the middle. Beyond the ends it continues along straight lines of those
+    slopes, so an HDR sample keeps a share of its difference from its neighbors, and its slope is continuous
+    everywhere. Every slope is held to at most three times its half's mean, Fritsch and Carlson's bound, within which
+    a cubic Hermite segment is monotone.
+*/
+SHARED_FN float brightness_contrast_spline(float v, float slope, float midpoint)
+{
+    float m    = clamp(midpoint, 1e-4f, 1.0f - 1e-4f);
+    float left = 0.5f / m, right = 0.5f / (1.0f - m); // the halves' mean slopes
+    float k  = min(slope, 3.0f * min(left, right));
+    float e  = 1.0f / max(slope, 1e-6f);
+    float e0 = min(e, 3.0f * left), e1 = min(e, 3.0f * right);
+    if (v < 0.0f)
+        return e0 * v;
+    if (v > 1.0f)
+        return 1.0f + e1 * (v - 1.0f);
+    return v < m ? hermite(v, 0.0f, 0.0f, e0, m, 0.5f, k) : hermite(v, m, 0.5f, k, 1.0f, 1.0f, e1);
+}
 
 //
 // CIE 1976 L*a*b*, where equal steps are meant to look equally different: L* is lightness, 100 at the reference
@@ -318,6 +349,8 @@ SHARED_FN float brightness_contrast(float v, vec4 p0)
         return brightness_contrast_linear(v, p0.x, p0.y);
     if (shape == SHAPE_POWER)
         return brightness_contrast_power(v, p0.x, p0.y);
+    if (shape == SHAPE_SPLINE)
+        return brightness_contrast_spline(v, p0.x, p0.y);
     return brightness_contrast_nonlinear(v, p0.x, p0.z);
 }
 

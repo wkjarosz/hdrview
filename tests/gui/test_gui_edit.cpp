@@ -938,7 +938,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         };
 
         for (const Mode &mode : modes)
-            for (const char *shape : {"Line", "S-curve", "Power"})
+            for (const char *shape : {"Line", "S-curve", "Power", "Spline"})
             {
                 ctx->LogInfo("--- %s, %s ---", mode.button, shape);
 

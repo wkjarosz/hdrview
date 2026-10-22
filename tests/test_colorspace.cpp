@@ -768,6 +768,7 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         CHECK(brightness_contrast_linear(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
         CHECK(brightness_contrast_nonlinear(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
         CHECK(brightness_contrast_power(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
+        CHECK(brightness_contrast_spline(v, 1.f, midpoint_of(0.f)) == doctest::Approx(v));
     }
 
     // raising contrast pushes the ends apart about the midpoint, and every curve still meets at it
@@ -779,6 +780,7 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         CHECK(brightness_contrast_linear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
         CHECK(brightness_contrast_nonlinear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
         CHECK(brightness_contrast_power(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
+        CHECK(brightness_contrast_spline(0.5f, std::pow(3.f, c), 0.5f) == doctest::Approx(0.5f));
 
         CHECK(brightness_contrast_linear(0.75f, slope, 0.5f) > 0.75f);
         CHECK(brightness_contrast_linear(0.25f, slope, 0.5f) < 0.25f);
@@ -786,7 +788,33 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         CHECK(brightness_contrast_nonlinear(0.25f, slope, 0.5f) < 0.25f);
         CHECK(brightness_contrast_power(0.75f, slope, 0.5f) > 0.75f);
         CHECK(brightness_contrast_power(0.25f, slope, 0.5f) < 0.25f);
+        CHECK(brightness_contrast_spline(0.75f, std::pow(3.f, c), 0.5f) > 0.75f);
+        CHECK(brightness_contrast_spline(0.25f, std::pow(3.f, c), 0.5f) < 0.25f);
     }
+
+    // The spline's slope is continuous at the ends and the pivot, it rises everywhere, and past the ends it carries
+    // on along its slopes there, so above white it keeps a share of every difference.
+    for (float c : {-1.f, -0.5f, 0.f, 0.4f, 1.f})
+        for (float m : {0.3f, 0.5f, 0.7f})
+        {
+            CAPTURE(c);
+            CAPTURE(m);
+            const float k = std::pow(3.f, c), d = 1e-3f;
+            auto        f        = [&](float v) { return brightness_contrast_spline(v, k, m); };
+            auto        slope_at = [&](float v, float side) { return side * (f(v + side * d) - f(v)) / d; };
+            for (float at : {0.f, m, 1.f})
+                CHECK(slope_at(at, -1.f) == doctest::Approx(slope_at(at, 1.f)).epsilon(0.02));
+            float previous = f(-1.f);
+            for (int i = 1; i <= 60; ++i)
+            {
+                const float v = -1.f + 3.f * float(i) / 60.f, now = f(v);
+                CHECK(now >= previous);
+                previous = now;
+            }
+            CHECK(f(m) == doctest::Approx(0.5f));
+            CHECK(f(3.f) - f(2.f) == doctest::Approx(f(2.f) - f(1.f)).epsilon(1e-4));
+            CHECK(f(3.f) - f(2.f) > 0.f);
+        }
 
     // the straight line runs out of [0,1], so an HDR sample keeps its relation to its neighbors; the s-curve
     // approaches the ends without reaching them
@@ -825,6 +853,7 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         CHECK(edit(shader::SHAPE_LINE) == brightness_contrast_linear(v, slope, m));
         CHECK(edit(shader::SHAPE_S_CURVE) == brightness_contrast_nonlinear(v, slope, b));
         CHECK(edit(shader::SHAPE_POWER) == brightness_contrast_power(v, slope, m));
+        CHECK(edit(shader::SHAPE_SPLINE) == brightness_contrast_spline(v, slope, m));
     }
 
     // brightness moves which input lands on the middle, in opposite directions for the curves' parameters but to
@@ -832,6 +861,7 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
     CHECK(brightness_contrast_linear(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
     CHECK(brightness_contrast_nonlinear(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
     CHECK(brightness_contrast_power(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
+    CHECK(brightness_contrast_spline(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
 }
 
 TEST_CASE("L*a*b* agrees with the values the standard defines it by")
