@@ -153,41 +153,23 @@ public:
         for (int i = 0; i < Dims; ++i) point[i] = std::min(std::max(point[i], min[i]), max[i]);
         return point;
     }
-    template <bool Inclusive = false>
+    /// Whether \p point lies in the box: in [min, max), as size() counts it, or in [min, max] when \p Closed.
+    template <bool Closed = false>
     bool contains(const Vec &point) const
     {
-        if constexpr (Inclusive)
-        {
-            for (int i = 0; i < Dims; ++i)
-                if (point[i] <= min[i] || point[i] >= max[i])
-                    return false;
-            return true;
-        }
-        else
-        {
-            for (int i = 0; i < Dims; ++i)
-                if (point[i] < min[i] || point[i] > max[i])
-                    return false;
-            return true;
-        }
+        for (int i = 0; i < Dims; ++i)
+            if (point[i] < min[i] || (Closed ? point[i] > max[i] : point[i] >= max[i]))
+                return false;
+        return true;
     }
-    template <bool Inclusive = false>
+    /// Whether the box and \p box share a point, both taken as half-open, or as closed when \p Closed.
+    template <bool Closed = false>
     bool intersects(const BoxT &box) const
     {
-        if constexpr (Inclusive)
-        {
-            for (int i = 0; i < Dims; ++i)
-                if (box.max[i] <= min[i] || box.min[i] >= max[i])
-                    return false;
-            return true;
-        }
-        else
-        {
-            for (int i = 0; i < Dims; ++i)
-                if (box.max[i] < min[i] || box.min[i] > max[i])
-                    return false;
-            return true;
-        }
+        for (int i = 0; i < Dims; ++i)
+            if (Closed ? (box.max[i] < min[i] || box.min[i] > max[i]) : (box.max[i] <= min[i] || box.min[i] >= max[i]))
+                return false;
+        return true;
     }
     Value volume() const
     {
@@ -213,11 +195,6 @@ public:
             if (s[i] > s[major])
                 major = i;
         return major;
-    }
-    void bounding_sphere(Vec *center, Value *radius) const
-    {
-        *center = center();
-        *radius = intersects(*center) ? (*center - max).length() : 0.0f;
     }
     //@}
 

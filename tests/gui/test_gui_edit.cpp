@@ -469,9 +469,11 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto before = snapshot(img);
         menu_click(ctx, "Edit/Invert");
 
-        const auto &group       = img->groups[img->selected_group];
-        const int2  o           = img->data_window.min;
-        bool        any_changed = false;
+        // Inverted inside the selection and untouched outside it; the samples that are not are counted and checked
+        // once, since the engine logs every check, passing or not.
+        const auto &group = img->groups[img->selected_group];
+        const int2  o     = img->data_window.min;
+        int         wrong = 0;
         for (int c = 0; c < group.num_channels; ++c)
         {
             const auto  &ch   = img->channels[group.channels[c]];
@@ -479,14 +481,12 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             for (int y = 0; y < ch.size().y; ++y)
                 for (int x = 0; x < ch.size().x; ++x)
                 {
-                    const float was = before[base + size_t(y * ch.size().x + x)];
-                    if (roi.contains(int2{x, y} + o))
-                        any_changed |= ch(x, y) != was;
-                    else
-                        IM_CHECK_EQ(ch(x, y), was);
+                    const bool  inside = roi.contains(int2{x, y} + o);
+                    const float was    = before[base + size_t(y * ch.size().x + x)];
+                    wrong += ch(x, y) != (inside ? 1.f - was : was);
                 }
         }
-        IM_CHECK(any_changed);
+        IM_CHECK_EQ(wrong, 0);
 
         hdrview()->set_selection(Box2i{});
     };
