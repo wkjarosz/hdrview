@@ -84,6 +84,7 @@ function(sokol_shdc_generate)
   # sokol-shdc names bare-format output "<output>_<program>_<slang>_<stage>.<ext>"; rename to what
   # Shader::from_asset() expects
   set(_rename_commands "")
+  set(_renamed "")
   list(LENGTH ARG_RENAME _rename_len)
   math(EXPR _rename_pairs "${_rename_len} / 2")
   math(EXPR _rename_last_idx "${_rename_pairs} - 1")
@@ -96,6 +97,7 @@ function(sokol_shdc_generate)
       list(APPEND _rename_commands COMMAND ${CMAKE_COMMAND} -E rename "${ARG_OUTPUT_DIR}/${_from}"
            "${ARG_OUTPUT_DIR}/${_to}"
       )
+      list(APPEND _renamed "${ARG_OUTPUT_DIR}/${_to}")
     endforeach()
   endif()
 
@@ -121,9 +123,11 @@ function(sokol_shdc_generate)
     endforeach()
   endif()
 
-  # also re-run at build time, so `cmake --build` alone picks up .sglsl edits
+  # Also re-run at build time, so `cmake --build` alone picks up .sglsl edits. The renamed shaders are named as
+  # byproducts, so whatever copies them, like the macOS bundle's resources, waits for them to be written.
   add_custom_command(
     OUTPUT "${_out_base}.stamp"
+    BYPRODUCTS ${_renamed}
     COMMAND ${_sokol_shdc_command} ${_rename_commands}
     COMMAND ${CMAKE_COMMAND} -E touch "${_out_base}.stamp"
     DEPENDS "${ARG_INPUT}" ${ARG_EXTRA_DEPENDS}
