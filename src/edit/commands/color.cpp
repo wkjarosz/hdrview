@@ -514,9 +514,11 @@ private:
         float linear[ImGui::ToneCurveSamples], rational[ImGui::ToneCurveSamples];
         for (int i = 0; i < ImGui::ToneCurveSamples; ++i)
         {
+            // clipped as the edit clips them, so the plot shows what Clip to SDR does
             const float x = ImGui::ToneCurveX(i);
-            linear[i]     = brightness_contrast_linear(x, slope, midpoint);
-            rational[i]   = brightness_contrast_rational(x, slope, bias);
+            auto        f = [this](float y) { return m_clip ? std::clamp(y, 0.f, 1.f) : y; };
+            linear[i]     = f(brightness_contrast_linear(x, slope, midpoint));
+            rational[i]   = f(brightness_contrast_rational(x, slope, bias));
         }
 
         if (!ImGui::BeginToneCurvePlot("##Curve", true))
