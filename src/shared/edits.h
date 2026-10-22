@@ -46,7 +46,7 @@ SHARED_CONST int CURVE_RGB                 = 0;
 SHARED_CONST int CURVE_LIGHTNESS           = 1;
 SHARED_CONST int CURVE_CHROMATICITY        = 2;
 
-// The shape of the brightness/contrast curve, in p0.w.
+// The shape of the brightness/contrast curve, in p0.w; the spline takes its end slopes in p0.x and p0.y.
 SHARED_CONST int SHAPE_S_CURVE             = 0;
 SHARED_CONST int SHAPE_LINE                = 1;
 SHARED_CONST int SHAPE_POWER               = 2;
@@ -104,26 +104,19 @@ SHARED_FN float hermite(float x, float x0, float y0, float s0, float x1, float y
            (t3 - t2) * h * s1;
 }
 
-/// An s-curve of two cubic halves meeting at (\p midpoint, 0.5) with slope \p slope, extended past black and white.
+/// One cubic from (0, 0) with slope \p s0 to (1, 1) with slope \p s1, carried on past both ends along those slopes.
 /**
-    Each half runs from an end, (0, 0) or (1, 1), to the midpoint, with slope 1/slope at the end, so raising the
-    contrast flattens the ends as it steepens the middle. Beyond the ends it continues along straight lines of those
-    slopes, so an HDR sample keeps a share of its difference from its neighbors, and its slope is continuous
-    everywhere. Every slope is held to at most three times its half's mean, Fritsch and Carlson's bound, within which
-    a cubic Hermite segment is monotone.
+    Slopes below 1 at both ends make an s-curve, and above 1 its inverse; the curve's slope is continuous everywhere,
+    so an HDR sample keeps a share of its difference from its neighbors. Monotone for slopes in [0, 3], to which the
+    dialog keeps them.
 */
-SHARED_FN float brightness_contrast_spline(float v, float slope, float midpoint)
+SHARED_FN float brightness_contrast_spline(float v, float s0, float s1)
 {
-    float m    = clamp(midpoint, 1e-4f, 1.0f - 1e-4f);
-    float left = 0.5f / m, right = 0.5f / (1.0f - m); // the halves' mean slopes
-    float k  = min(slope, 3.0f * min(left, right));
-    float e  = 1.0f / max(slope, 1e-6f);
-    float e0 = min(e, 3.0f * left), e1 = min(e, 3.0f * right);
     if (v < 0.0f)
-        return e0 * v;
+        return s0 * v;
     if (v > 1.0f)
-        return 1.0f + e1 * (v - 1.0f);
-    return v < m ? hermite(v, 0.0f, 0.0f, e0, m, 0.5f, k) : hermite(v, m, 0.5f, k, 1.0f, 1.0f, e1);
+        return 1.0f + s1 * (v - 1.0f);
+    return hermite(v, 0.0f, 0.0f, s0, 1.0f, 1.0f, s1);
 }
 
 //

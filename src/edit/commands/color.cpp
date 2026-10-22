@@ -424,8 +424,9 @@ public:
             {"Power", "A straight line in stops through the midpoint, which never clips, so an HDR sample keeps its "
                       "ratio to its neighbors, raised to the contrast's slope."},
             {"Spline",
-             "An s-curve whose ends flatten as its middle steepens, and which carries on past black and white "
-             "along its slopes there, so an HDR sample keeps a share of its difference from its neighbors."}};
+             "A cubic from black to white, whose slopes there the contrast sets alike and the brightness tilts "
+             "apart, and which carries on past them along those slopes, so an HDR sample keeps a share of "
+             "its difference from its neighbors."}};
         static_assert(IM_ARRAYSIZE(shapes) == Shape_COUNT);
         for (int i = 0; i < Shape_COUNT; ++i)
         {
@@ -450,8 +451,12 @@ public:
     std::optional<PointEdit> point_edit(const EditContext &ctx) const override
     {
         PointEdit e{shader::EDIT_BRIGHTNESS_CONTRAST};
-        e.p0 = float4{m_shape == Shape_Spline ? spline_slope_of(m_contrast) : slope_of(m_contrast),
-                      (1.f - m_brightness) / 2.f, (m_brightness + 1.f) / 2.f, float(m_shape)};
+        e.p0 = float4{slope_of(m_contrast), (1.f - m_brightness) / 2.f, (m_brightness + 1.f) / 2.f, float(m_shape)};
+        if (m_shape == Shape_Spline)
+        {
+            const float2 ends = spline_slopes(m_brightness, m_contrast);
+            e.p0.x = ends.x, e.p0.y = ends.y;
+        }
         e.p1 = float4{float(m_channel), 0.f, 0.f, 0.f};
         // through the image's own primaries: L*a*b* is defined from XYZ, and what the samples mean in XYZ is what
         // the image says they do
@@ -480,24 +485,39 @@ private:
     */
     static float slope_of(float contrast) { return float(std::tan(lerp(0.0, M_PI_2, contrast / 2.0 + 0.5))); }
 
-    /// The slope the contrast slider asks of the spline, from 1/3 to 3, the steepest its cubic halves stay monotone at.
-    static float spline_slope_of(float contrast) { return std::pow(3.f, contrast); }
-
-    /// The contrast that puts the spline through (\p x, \p y), or NaN when none does.
+    /// The spline's end slopes: the contrast's, from 2 at -1 to 0 at +1, tilted apart by the brightness.
     /**
-        Bisected: either half rises at any inner point as the contrast does, its middle steepening as its end flattens.
+        Brightening steepens the start and flattens the end, lifting the shadows; both stay in [0, 3], where the cubic
+        is monotone.
     */
-    static float spline_contrast_through(float x, float y, float midpoint)
+    static float2 spline_slopes(float brightness, float contrast)
     {
-        if (x <= 0.f || x >= 1.f || std::fabs(x - midpoint) < 1e-4f)
-            return NAN;
-        const float sign = x > midpoint ? 1.f : -1.f;
-        auto  f  = [&](float c) { return sign * (brightness_contrast_spline(x, spline_slope_of(c), midpoint) - y); };
-        float lo = -1.f, hi = 1.f;
-        if (f(lo) > 0.f || f(hi) < 0.f)
-            return NAN;
-        for (int i = 0; i < 30; ++i) (f(0.5f * (lo + hi)) < 0.f ? lo : hi) = 0.5f * (lo + hi);
-        return 0.5f * (lo + hi);
+        const float s = 1.f - contrast;
+        return float2{std::clamp(s * (1.f + brightness), 0.f, 3.f), std::clamp(s * (1.f - brightness), 0.f, 3.f)};
+    }
+
+    /// The brightness and contrast whose spline passes through (\p x, \p y), moving the slope of the nearer end.
+    /**
+        The cubic is linear in either end slope, so holding the other one, one division gives it. NaN where no slope in
+        [0, 3] reaches the point.
+    */
+    static float2 spline_settings_through(float x, float y, float brightness, float contrast)
+    {
+        if (x <= 0.f || x >= 1.f)
+            return float2{NAN};
+        float2      ends = spline_slopes(brightness, contrast);
+        const float t = x, t2 = t * t, t3 = t2 * t;
+        const float h10 = t3 - 2.f * t2 + t, h01 = 3.f * t2 - 2.f * t3, h11 = t3 - t2;
+        const float slope = x < 0.5f ? (y - h01 - h11 * ends.y) / h10 : (y - h01 - h10 * ends.x) / h11;
+        if (!(slope >= 0.f && slope <= 3.f))
+            return float2{NAN};
+        (x < 0.5f ? ends.x : ends.y) = slope;
+
+        // back through spline_slopes(): s0 = s (1 + b) and s1 = s (1 - b)
+        const float s = 0.5f * (ends.x + ends.y);
+        if (s <= 1e-6f)
+            return float2{brightness, 1.f};
+        return float2{std::clamp((ends.x - ends.y) / (ends.x + ends.y), -1.f, 1.f), std::clamp(1.f - s, -1.f, 1.f)};
     }
 
     /// The inverse of slope_of(): what the slider must read for the curve to have this slope.
@@ -563,7 +583,8 @@ private:
             linear[i]     = brightness_contrast_linear(x, slope, midpoint);
             curved[i]     = brightness_contrast_nonlinear(x, slope, bias);
             power[i]      = brightness_contrast_power(x, slope, midpoint);
-            spline[i]     = brightness_contrast_spline(x, spline_slope_of(m_contrast), midpoint);
+            const float2 ends = spline_slopes(m_brightness, m_contrast);
+            spline[i]         = brightness_contrast_spline(x, ends.x, ends.y);
         }
 
         if (!ImGui::BeginToneCurvePlot("##Curve", true))
@@ -578,22 +599,26 @@ private:
         ImGui::ToneCurve("power", power, m_shape == Shape_Power ? active : faint);
         ImGui::ToneCurve("spline", spline, m_shape == Shape_Spline ? active : faint);
 
-        // the pivot: the one input both curves send to the middle, whatever the contrast. Drawn as a
-        // handle because it is also what the drag below grabs.
-        ImGui::ToneCurveMarkerX("pivot", midpoint, ImVec4(1.f, 1.f, 1.f, 0.35f));
-        ImGui::ToneCurveHandle(float2{midpoint, 0.5f}, ImVec4(1.f, 1.f, 1.f, 0.55f));
+        // the pivot: the one input the other curves send to the middle, whatever the contrast, which the spline has
+        // none of. Drawn as a handle because it is also what the drag below grabs.
+        if (m_shape != Shape_Spline)
+        {
+            ImGui::ToneCurveMarkerX("pivot", midpoint, ImVec4(1.f, 1.f, 1.f, 0.35f));
+            ImGui::ToneCurveHandle(float2{midpoint, 0.5f}, ImVec4(1.f, 1.f, 1.f, 0.55f));
+        }
 
         /*
             Dragging does one of two things, decided by what was under the cursor when it went down. Near
             the pivot it drags the pivot, which is brightness alone; anywhere else it bends the curve, the
-            grabbed input keeping its place on the horizontal axis, which is contrast alone.
+            grabbed input keeping its place on the horizontal axis, which is contrast alone. The spline has no
+            pivot, and a drag sets the slope at its nearer end, which moves both.
 
             The two cannot be combined: the pivot's output is one half at every contrast, so both requests
             agree only when the cursor is at one half.
         */
         if (float2 p, from; ImGui::ToneCurveDrag(p, &from))
         {
-            if (m_dragging_pivot.value_or(std::fabs(from.x - midpoint) < 0.06f))
+            if (m_shape != Shape_Spline && m_dragging_pivot.value_or(std::fabs(from.x - midpoint) < 0.06f))
             {
                 m_dragging_pivot = true;
                 m_brightness     = std::clamp(lerp(1.f, -1.f, p.x), -1.f, 1.f);
@@ -606,8 +631,9 @@ private:
                 // stops following instead of jumping to an end of the slider
                 if (m_shape == Shape_Spline)
                 {
-                    if (const float c = spline_contrast_through(from.x, p.y, midpoint); !std::isnan(c))
-                        m_contrast = c;
+                    if (const float2 bc = spline_settings_through(from.x, p.y, m_brightness, m_contrast);
+                        !std::isnan(bc.x))
+                        m_brightness = bc.x, m_contrast = bc.y;
                 }
                 else
                 {
