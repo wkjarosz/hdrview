@@ -1599,6 +1599,28 @@ bool BeginToneCurvePlot(const char *id, bool draggable)
     // fixed, so a steep curve is seen leaving the top and bottom instead of the frame following it
     ImPlot::SetupAxesLimits(ToneCurveMin, ToneCurveMax, ToneCurveMin, ToneCurveMax, ImPlotCond_Always);
 
+    // Behind the curves: the [0,1] square black and white bound, shaded and edged, and the dashed diagonal where a
+    // curve would leave every level as it is. Drawn in the text's color, faint, so they read in any theme.
+    ImPlot::SetupFinish();
+    {
+        ImDrawList  *dl = ImPlot::GetPlotDrawList();
+        const ImVec2 lo = ImPlot::PlotToPixels(0.0, 0.0), hi = ImPlot::PlotToPixels(1.0, 1.0);
+        const ImVec2 from = ImPlot::PlotToPixels(ToneCurveMin, ToneCurveMin);
+        const ImVec2 to   = ImPlot::PlotToPixels(ToneCurveMax, ToneCurveMax);
+        ImPlot::PushPlotClipRect();
+        dl->AddRectFilled(ImVec2(lo.x, hi.y), ImVec2(hi.x, lo.y), ImGui::GetColorU32(ImGuiCol_Text, 0.06f));
+        dl->AddRect(ImVec2(lo.x, hi.y), ImVec2(hi.x, lo.y), ImGui::GetColorU32(ImGuiCol_Text, 0.25f));
+        const float dash = HelloImGui::EmSize(0.3f), length = std::hypot(to.x - from.x, to.y - from.y);
+        for (float d = 0.f; d < length; d += 2.f * dash)
+        {
+            const float t0 = d / length, t1 = std::min(d + dash, length) / length;
+            dl->AddLine(ImVec2(from.x + (to.x - from.x) * t0, from.y + (to.y - from.y) * t0),
+                        ImVec2(from.x + (to.x - from.x) * t1, from.y + (to.y - from.y) * t1),
+                        ImGui::GetColorU32(ImGuiCol_Text, 0.3f));
+        }
+        ImPlot::PopPlotClipRect();
+    }
+
     // say the curve can be taken hold of, and keep saying it while it is being held and the cursor has
     // wandered off the plot
     if (draggable && (ImGui::IsWindowHovered() ? in_tone_plot(ImGui::GetIO().MousePos)
