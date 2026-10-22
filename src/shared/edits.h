@@ -46,11 +46,10 @@ SHARED_CONST int CURVE_RGB                 = 0;
 SHARED_CONST int CURVE_LIGHTNESS           = 1;
 SHARED_CONST int CURVE_CHROMATICITY        = 2;
 
-// The shape of the brightness/contrast curve, in p0.w; the spline takes its end slopes in p0.x and p0.y.
+// The shape of the brightness/contrast curve, in p0.w.
 SHARED_CONST int SHAPE_S_CURVE             = 0;
 SHARED_CONST int SHAPE_LINE                = 1;
-SHARED_CONST int SHAPE_POWER               = 2;
-SHARED_CONST int SHAPE_SPLINE              = 3;
+SHARED_CONST int SHAPE_RATIONAL            = 2;
 // clang-format on
 
 //
@@ -88,35 +87,33 @@ SHARED_FN float bias_Schlick(float t, float a) { return t / (((1.0f / a) - 2.0f)
 SHARED_FN float brightness_contrast_nonlinear(float v, float slope, float bias)
 { return gain_Perlin(bias_Schlick(clamp(v, 0.0f, 1.0f), bias), slope); }
 
-/// A straight line in stops through (\p midpoint, 0.5) with slope \p slope, so a power about the midpoint.
+/// Schlick's rational gain, an s-curve over [0, 1] of slope (1 - a) / a at its midpoint and a / (1 - a) at its ends.
 /**
-    The contrast of scene-linear grading: it never clips, keeping an HDR sample's ratio to its neighbors raised to
-    the slope, and it mirrors through the origin below zero. The midpoint is kept off zero, where its ratios end.
+    From "Fast Alternatives to Perlin's Bias and Gain Functions" (Graphics Gems IV, 1994): each half is bias_Schlick()
+    of a doubled input. Unlike Perlin's, its slope at the ends is finite and not zero, so it can be carried on past
+   them.
 */
-SHARED_FN float brightness_contrast_power(float v, float slope, float midpoint)
-{ return 0.5f * spow(v / max(midpoint, 1e-4f), slope); }
+SHARED_FN float gain_Schlick(float t, float a)
+{ return t < 0.5f ? 0.5f * bias_Schlick(2.0f * t, a) : 1.0f - 0.5f * bias_Schlick(2.0f - 2.0f * t, a); }
 
-/// The cubic Hermite segment from (\p x0, \p y0) with slope \p s0 to (\p x1, \p y1) with slope \p s1, at \p x.
-SHARED_FN float hermite(float x, float x0, float y0, float s0, float x1, float y1, float s1)
-{
-    float h = x1 - x0, t = (x - x0) / h, t2 = t * t, t3 = t2 * t;
-    return (2.0f * t3 - 3.0f * t2 + 1.0f) * y0 + (t3 - 2.0f * t2 + t) * h * s0 + (3.0f * t2 - 2.0f * t3) * y1 +
-           (t3 - t2) * h * s1;
-}
-
-/// One cubic from (0, 0) with slope \p s0 to (1, 1) with slope \p s1, carried on past both ends along those slopes.
+/// Schlick's rational bias then gain, of slope \p slope at its midpoint, carried on past black and white.
 /**
-    Slopes below 1 at both ends make an s-curve, and above 1 its inverse; the curve's slope is continuous everywhere,
-    so an HDR sample keeps a share of its difference from its neighbors. Monotone for slopes in [0, 3], to which the
-    dialog keeps them.
+    The gain whose midpoint slope is \p slope has the reciprocal at its ends, so raising the contrast flattens them as
+    it steepens the middle. Past black and white the curve, whose two halves are hyperbolas that level off or reach a
+    pole there, gives way to straight lines along its slopes at the ends, so its slope is continuous everywhere and an
+    HDR sample keeps a share of its difference from its neighbors.
 */
-SHARED_FN float brightness_contrast_spline(float v, float s0, float s1)
+SHARED_FN float brightness_contrast_rational(float v, float slope, float bias)
 {
+    float a = clamp(1.0f / (1.0f + slope), 1e-6f, 1.0f - 1e-6f);
+    float b = clamp(bias, 1e-6f, 1.0f - 1e-6f);
+    // the slopes at the ends: the gain's, times the bias's there
+    float g = a / (1.0f - a);
     if (v < 0.0f)
-        return s0 * v;
+        return g * b / (1.0f - b) * v;
     if (v > 1.0f)
-        return 1.0f + s1 * (v - 1.0f);
-    return hermite(v, 0.0f, 0.0f, s0, 1.0f, 1.0f, s1);
+        return 1.0f + g * (1.0f - b) / b * (v - 1.0f);
+    return gain_Schlick(bias_Schlick(v, b), a);
 }
 
 //
@@ -340,10 +337,8 @@ SHARED_FN float brightness_contrast(float v, vec4 p0)
     int shape = int(p0.w);
     if (shape == SHAPE_LINE)
         return brightness_contrast_linear(v, p0.x, p0.y);
-    if (shape == SHAPE_POWER)
-        return brightness_contrast_power(v, p0.x, p0.y);
-    if (shape == SHAPE_SPLINE)
-        return brightness_contrast_spline(v, p0.x, p0.y);
+    if (shape == SHAPE_RATIONAL)
+        return brightness_contrast_rational(v, p0.x, p0.z);
     return brightness_contrast_nonlinear(v, p0.x, p0.z);
 }
 

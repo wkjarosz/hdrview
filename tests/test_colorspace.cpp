@@ -699,6 +699,25 @@ TEST_CASE("the lightness mixes toward black, or toward white or a highlight's ow
     CHECK(close(lighten(float4{2.f, 1.f, 0.5f, 0.5f}, 1.f, true), float4{2.f, 2.f, 2.f, 0.5f}));
 }
 
+TEST_CASE("Schlick's rational gain is pinned like Perlin's, with finite slopes at its ends")
+{
+    // its midpoint slope is (1 - a) / a and its ends' the reciprocal, which is what lets the rational curve go on
+    // past black and white
+    const float d = 1e-4f; //< small beside the curvature of a steep gain
+    for (float a : {0.1f, 0.3f, 0.5f, 0.7f, 0.9f})
+    {
+        CAPTURE(a);
+        CHECK(gain_Schlick(0.f, a) == doctest::Approx(0.f));
+        CHECK(gain_Schlick(0.5f, a) == doctest::Approx(0.5f));
+        CHECK(gain_Schlick(1.f, a) == doctest::Approx(1.f));
+        CHECK((gain_Schlick(0.5f + d, a) - gain_Schlick(0.5f - d, a)) / (2.f * d) ==
+              doctest::Approx((1.f - a) / a).epsilon(0.01));
+        CHECK(gain_Schlick(d, a) / d == doctest::Approx(a / (1.f - a)).epsilon(0.01));
+        CHECK((1.f - gain_Schlick(1.f - d, a)) / d == doctest::Approx(a / (1.f - a)).epsilon(0.01));
+        for (int i = 0; i <= 20; ++i) CHECK(gain_Schlick(float(i) / 20.f, 0.5f) == doctest::Approx(float(i) / 20.f));
+    }
+}
+
 TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen for")
 {
     // shape functions, checked on the identities that make them usable, not on their formulas
@@ -767,8 +786,7 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         CAPTURE(v);
         CHECK(brightness_contrast_linear(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
         CHECK(brightness_contrast_nonlinear(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
-        CHECK(brightness_contrast_power(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
-        CHECK(brightness_contrast_spline(v, 1.f, 1.f) == doctest::Approx(v));
+        CHECK(brightness_contrast_rational(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
     }
 
     // raising contrast pushes the ends apart about the midpoint, and every curve still meets at it
@@ -779,44 +797,38 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
 
         CHECK(brightness_contrast_linear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
         CHECK(brightness_contrast_nonlinear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
-        CHECK(brightness_contrast_power(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
-        CHECK(brightness_contrast_spline(0.5f, 1.f - c, 1.f - c) == doctest::Approx(0.5f));
+        CHECK(brightness_contrast_rational(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
 
         CHECK(brightness_contrast_linear(0.75f, slope, 0.5f) > 0.75f);
         CHECK(brightness_contrast_linear(0.25f, slope, 0.5f) < 0.25f);
         CHECK(brightness_contrast_nonlinear(0.75f, slope, 0.5f) > 0.75f);
         CHECK(brightness_contrast_nonlinear(0.25f, slope, 0.5f) < 0.25f);
-        CHECK(brightness_contrast_power(0.75f, slope, 0.5f) > 0.75f);
-        CHECK(brightness_contrast_power(0.25f, slope, 0.5f) < 0.25f);
-        CHECK(brightness_contrast_spline(0.75f, 1.f - c, 1.f - c) > 0.75f);
-        CHECK(brightness_contrast_spline(0.25f, 1.f - c, 1.f - c) < 0.25f);
+        CHECK(brightness_contrast_rational(0.75f, slope, 0.5f) > 0.75f);
+        CHECK(brightness_contrast_rational(0.25f, slope, 0.5f) < 0.25f);
     }
 
-    // The spline runs from black to white with the slopes it is given there, continuous through both, it rises
-    // everywhere for slopes in [0, 3], and past the ends it carries on along those slopes, so above white it keeps a
-    // share of every difference.
-    for (float s0 : {0.f, 0.4f, 1.f, 3.f})
-        for (float s1 : {0.f, 0.7f, 1.f, 3.f})
+    // The rational curve's slope is continuous through black and white, it rises everywhere, and past them it
+    // carries on along its slopes there, so above white it keeps a share of every difference. Its own halves would
+    // level off or reach a pole out there, which these sample.
+    for (float c : {-0.8f, -0.3f, 0.f, 0.4f, 0.8f})
+        for (float bias : {0.3f, 0.5f, 0.7f})
         {
-            CAPTURE(s0);
-            CAPTURE(s1);
-            const float d        = 1e-3f;
-            auto        f        = [&](float v) { return brightness_contrast_spline(v, s0, s1); };
+            CAPTURE(c);
+            CAPTURE(bias);
+            const float d        = 1e-4f; //< small beside the curvature of a steep curve
+            auto        f        = [&](float v) { return brightness_contrast_rational(v, slope_of(c), bias); };
             auto        slope_at = [&](float v, float side) { return side * (f(v + side * d) - f(v)) / d; };
-            CHECK(f(0.f) == 0.f);
-            CHECK(f(1.f) == doctest::Approx(1.f));
-            CHECK(slope_at(0.f, -1.f) == doctest::Approx(s0).epsilon(1e-3));
-            CHECK(slope_at(0.f, 1.f) == doctest::Approx(s0).epsilon(0.01));
-            CHECK(slope_at(1.f, 1.f) == doctest::Approx(s1).epsilon(1e-3));
-            CHECK(slope_at(1.f, -1.f) == doctest::Approx(s1).epsilon(0.01));
-            float previous = f(-1.f);
-            for (int i = 1; i <= 60; ++i)
+            for (float at : {0.f, 1.f}) CHECK(slope_at(at, -1.f) == doctest::Approx(slope_at(at, 1.f)).epsilon(0.02));
+            float previous = f(-2.f);
+            for (int i = 1; i <= 80; ++i)
             {
-                const float v = -1.f + 3.f * float(i) / 60.f, now = f(v);
+                const float v = -2.f + 6.f * float(i) / 80.f, now = f(v);
+                CHECK(std::isfinite(now));
                 CHECK(now >= previous);
                 previous = now;
             }
-            CHECK(f(3.f) - f(2.f) == doctest::Approx(s1));
+            CHECK(f(4.f) - f(3.f) == doctest::Approx(f(3.f) - f(2.f)).epsilon(1e-4));
+            CHECK(f(4.f) - f(3.f) > 0.f);
         }
 
     // the straight line runs out of [0,1], so an HDR sample keeps its relation to its neighbors; the s-curve
@@ -832,22 +844,6 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) <= 1.f + 1e-6f);
     }
 
-    // The power is a straight line in stops: it keeps every ratio, raised to the slope, at any brightness, so it never
-    // clips, and it mirrors through the origin.
-    for (float c : {-0.4f, 0.3f, 0.8f})
-        for (float m : {0.18f, 0.5f})
-            for (float v : {0.01f, 0.4f, 1.f, 3.f, 40.f})
-            {
-                CAPTURE(c);
-                CAPTURE(m);
-                CAPTURE(v);
-                const float slope = slope_of(c), f = brightness_contrast_power(v, slope, m);
-                CHECK(brightness_contrast_power(2.f * v, slope, m) / f ==
-                      doctest::Approx(std::exp2(slope)).epsilon(1e-4));
-                CHECK(brightness_contrast_power(-v, slope, m) == doctest::Approx(-f));
-                CHECK(brightness_contrast_power(m, slope, m) == doctest::Approx(0.5f));
-            }
-
     // the edit reaches each shape's own curve
     for (float v : {-0.5f, 0.3f, 2.f})
     {
@@ -855,16 +851,14 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
         auto        edit = [&](int shape) { return shader::brightness_contrast(v, float4{slope, m, b, float(shape)}); };
         CHECK(edit(shader::SHAPE_LINE) == brightness_contrast_linear(v, slope, m));
         CHECK(edit(shader::SHAPE_S_CURVE) == brightness_contrast_nonlinear(v, slope, b));
-        CHECK(edit(shader::SHAPE_POWER) == brightness_contrast_power(v, slope, m));
-        CHECK(edit(shader::SHAPE_SPLINE) == brightness_contrast_spline(v, slope, m));
+        CHECK(edit(shader::SHAPE_RATIONAL) == brightness_contrast_rational(v, slope, b));
     }
 
     // brightness moves which input lands on the middle, in opposite directions for the curves' parameters but to
     // the same effect
     CHECK(brightness_contrast_linear(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
     CHECK(brightness_contrast_nonlinear(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
-    CHECK(brightness_contrast_power(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
-    CHECK(brightness_contrast_spline(0.4f, 1.2f, 0.8f) > 0.4f);
+    CHECK(brightness_contrast_rational(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
 }
 
 TEST_CASE("L*a*b* agrees with the values the standard defines it by")
