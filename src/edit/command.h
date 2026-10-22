@@ -115,6 +115,8 @@ public:
 
     /// The point-wise edit this command makes with its current settings, or none for an edit of another kind.
     virtual std::optional<PointEdit> point_edit(const EditContext &) const { return std::nullopt; }
+    /// The matrix the image shows its samples through once this edit has retagged them, or none if it leaves the tag.
+    virtual std::optional<float3x3> M_to_sRGB_after(const EditContext &) const { return std::nullopt; }
 
     /// Whether the command can run at all, beyond the image accepting edits.
     virtual bool enabled(const EditContext &) const { return true; }

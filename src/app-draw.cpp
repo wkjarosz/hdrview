@@ -61,8 +61,9 @@ void HDRViewApp::draw_pixel_grid() const
 
 void HDRViewApp::draw_pixel_info() const
 {
+    // the stored values, which would contradict a previewed edit's colors under them
     auto img = current_image();
-    if (!img || !m_draw_pixel_info)
+    if (!img || !m_draw_pixel_info || edit_preview())
         return;
 
     // These numbers report the same pixel the status bar does, values and labels alike; see
@@ -364,8 +365,10 @@ void HDRViewApp::draw_image() const
 
             // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
             // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
-            M_to_sRGB = float4x4{
-                {img->M_to_sRGB[0], 0.f}, {img->M_to_sRGB[1], 0.f}, {img->M_to_sRGB[2], 0.f}, {0.f, 0.f, 0.f, 1.f}};
+            // An edit preview that retags the current image shows it through the matrix the new tag gives.
+            const auto     *preview = target == Target_Primary ? edit_preview() : nullptr;
+            const float3x3 &M       = preview && preview->M_to_sRGB ? *preview->M_to_sRGB : img->M_to_sRGB;
+            M_to_sRGB               = float4x4{{M[0], 0.f}, {M[1], 0.f}, {M[2], 0.f}, {0.f, 0.f, 0.f, 1.f}};
             luminance_chroma =
                 (int)(group.type == ChannelGroup::YC_Channels || group.type == ChannelGroup::YCA_Channels);
             straight_alpha = (int)(img->transparency == TransparencyType_Straight);
@@ -416,6 +419,19 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.bg_color", m_bg_color);
         m_shader->set_uniform("fsp.reverse_colormap", (int)m_reverse_colormap);
         m_shader->set_uniform("fsp.has_reference", (int)has_reference);
+        // an edit dialog's preview, applied to the current image's samples as stored; see edit_preview()
+        const EditPreview  none;
+        const EditPreview &edit = edit_preview() ? *edit_preview() : none;
+        const auto         pad  = [](const float3x3 &M)
+        { return float4x4{{M[0], 0.f}, {M[1], 0.f}, {M[2], 0.f}, {0.f, 0.f, 0.f, 1.f}}; };
+        m_shader->set_uniform("fsp.edit_op", edit.edit.op);
+        m_shader->set_uniform("fsp.edit_slots", edit.slots);
+        m_shader->set_uniform("fsp.edit_color", (int)edit.color);
+        m_shader->set_uniform("fsp.edit_rect", edit.rect);
+        m_shader->set_uniform("fsp.edit_p0", edit.edit.p0);
+        m_shader->set_uniform("fsp.edit_p1", edit.edit.p1);
+        m_shader->set_uniform("fsp.edit_m0", pad(edit.edit.m0));
+        m_shader->set_uniform("fsp.edit_m1", pad(edit.edit.m1));
 
         m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
         m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));

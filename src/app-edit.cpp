@@ -10,9 +10,11 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "shared/edits.h"
 
 #include <hello_imgui/hello_imgui.h>
 
+#include <algorithm>
 #include <numeric>
 #include <smallthreadpool.h>
 #include <spdlog/spdlog.h>
@@ -135,6 +137,50 @@ bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
     return cmd.enabled(edit_context());
 }
 
+const HDRViewApp::EditPreview *HDRViewApp::edit_preview() const
+{
+    // the dialogs ask during the frame, after the viewport has drawn, so last frame's request is this frame's
+    return ImGui::GetFrameCount() - m_edit_preview_frame <= 1 ? &m_edit_preview : nullptr;
+}
+
+void HDRViewApp::request_edit_preview(const EditCommand &cmd, const PointEdit &edit, const EditContext &ctx)
+{
+    // what apply_point_edit() would cover of the group the viewport shows: for a per-sample op, the subject's
+    // channels among those bound to the shader's slots, and for a color op, the group if it is one of the subject's
+    const Image &img   = *ctx.image;
+    const int    shown = img.active_group_index(Target_Primary);
+    EditPreview  p;
+    p.edit      = edit;
+    p.M_to_sRGB = cmd.M_to_sRGB_after(ctx);
+    if (edit.op < shader::EDIT_FIRST_COLOR)
+    {
+        const auto subject = subject_channels(img, ctx.subject);
+        const int4 slots   = img.shader_slots(Target_Primary);
+        for (int k = 0; k < 4; ++k)
+            if (slots[k] >= 0)
+                if (auto it = std::find(subject.begin(), subject.end(), img.groups[shown].channels[slots[k]]);
+                    it != subject.end())
+                    p.slots[k] = int(it - subject.begin());
+    }
+    else
+    {
+        const auto groups = subject_color_groups(img, ctx.subject).first;
+        p.color           = std::find(groups.begin(), groups.end(), shown) != groups.end();
+    }
+
+    // the subject's rectangle, as resolve_subject() bounds it, in the uv the channel textures span
+    Box2i bounds = img.data_window;
+    if (ctx.subject.selection_only && ctx.roi.has_volume())
+        bounds.intersect(ctx.roi);
+    const float2 size = float2(img.data_window.size());
+    const float2 lo   = float2(bounds.min - img.data_window.min) / size,
+                 hi   = float2(bounds.max - img.data_window.min) / size;
+    p.rect            = float4{lo.x, lo.y, hi.x, hi.y};
+
+    m_edit_preview       = p;
+    m_edit_preview_frame = ImGui::GetFrameCount();
+}
+
 void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
 {
     const auto &info = cmd.info();
@@ -163,6 +209,17 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
 
         if (info.draws_subject_selector)
             draw_edit_subject_selector();
+
+        // A point-wise edit is previewed in the viewport as the controls move, by the same code that applies it.
+        static bool preview = true;
+        if (const auto edit = cmd.point_edit(ctx); edit && ctx.image)
+        {
+            ImGui::Checkbox("Preview", &preview);
+            ImGui::Tooltip("Show the edit on the current image before it is applied.");
+            ImGui::SameLine();
+            if (preview)
+                request_edit_preview(cmd, *edit, ctx);
+        }
 
         // applied on confirm, not as the controls move: an edit per frame of a drag would fill the
         // history and rewrite every pixel it covers

@@ -235,6 +235,20 @@ public:
     /// The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
     void draw_edit_command_dialog(EditCommand &cmd, bool &open);
 
+    /// What an edit dialog's preview has the viewport show: a point-wise edit of the current image's samples.
+    struct EditPreview
+    {
+        PointEdit edit;
+        int4      slots{-1};     ///< For each shader slot, which of the subject's channels it shows, or -1 for none
+        bool      color = false; ///< Whether the group shown is one a color op reaches
+        float4    rect{0.f};     ///< The subject's rectangle in the shown textures' uv: min, then max
+        std::optional<float3x3> M_to_sRGB; ///< What the image shows its samples through once the edit retags them
+    };
+    /// The preview an edit dialog asked for this frame or the last, or none.
+    const EditPreview *edit_preview() const;
+    /// Ask the viewport to preview \p cmd's point-wise edit, as applying it in \p ctx would change the current image.
+    void request_edit_preview(const EditCommand &cmd, const PointEdit &edit, const EditContext &ctx);
+
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
 
@@ -936,6 +950,8 @@ private:
     float2         m_viewport_min, m_viewport_size;
     int  m_navigable_dialog_frame = -2;    ///< the last frame a save or edit dialog showed, for the viewport around it
     bool m_dragging_around_dialog = false; ///< whether the left button went down in the viewport, around it
+    EditPreview m_edit_preview;                   ///< see edit_preview()
+    int         m_edit_preview_frame = -2;        ///< the last frame an edit dialog asked for m_edit_preview
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
     /// Index of the annotation being worked on, or -1 when none on the current image is.

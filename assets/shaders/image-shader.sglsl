@@ -36,6 +36,7 @@ void main()
 @include ../../src/shared/constants.h
 @include ../../src/shared/colorspace.h
 @include ../../src/shared/pipeline.h
+@include ../../src/shared/edits.h
 
 layout(binding=1) uniform fs_params {
     int   has_reference;
@@ -67,6 +68,15 @@ layout(binding=1) uniform fs_params {
     vec2  clip_range;
     int   primary_straight_alpha;
     int   secondary_straight_alpha;
+    // an edit dialog's preview of the current image; see EditPreview in src/app.h
+    int   edit_op;
+    ivec4 edit_slots;
+    int   edit_color;
+    vec4  edit_rect;
+    vec4  edit_p0;
+    vec4  edit_p1;
+    mat4  edit_m0;
+    mat4  edit_m1;
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -172,6 +182,20 @@ void main()
         sample_channel(primary_1_texture, primary_1_sampler, primary_uv, in_img),
         sample_channel(primary_2_texture, primary_2_sampler, primary_uv, in_img),
         sample_channel(primary_3_texture, primary_3_sampler, primary_uv, in_img));
+
+    // an edit dialog's preview, on the samples as stored, as apply_point_edit() would change them
+    if (fsp.edit_op != EDIT_NONE && all(greaterThanEqual(primary_uv, fsp.edit_rect.xy)) &&
+        all(lessThan(primary_uv, fsp.edit_rect.zw)))
+    {
+        if (fsp.edit_op < EDIT_FIRST_COLOR)
+        {
+            for (int k = 0; k < 4; ++k)
+                if (fsp.edit_slots[k] >= 0)
+                    value[k] = edit_sample(fsp.edit_op, value[k], fsp.edit_slots[k], fsp.edit_p0, fsp.edit_p1);
+        }
+        else if (fsp.edit_color != 0)
+            value = edit_color(fsp.edit_op, value, fsp.edit_p0, fsp.edit_p1, mat3(fsp.edit_m0), mat3(fsp.edit_m1));
+    }
 
     if (fsp.primary_luminance_chroma != 0)
         value.xyz = YC_to_RGB(value.xyz, fsp.primary_yw);

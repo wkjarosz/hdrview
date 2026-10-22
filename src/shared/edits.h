@@ -255,10 +255,10 @@ SHARED_FN vec3 adjust_HSL(vec3 rgb, float hue_turns, float saturation, float lig
         return adjust_saturation(rgb, saturation);
 
     vec3 hsl = RGB_to_HSL(rgb);
-    vec3 out = HSL_to_RGB(vec3(hsl.x + hue_turns, hsl.y * saturation, hsl.z));
+    vec3 mapped = HSL_to_RGB(vec3(hsl.x + hue_turns, hsl.y * saturation, hsl.z));
 
     // mixed toward black or white, since changing L would desaturate on the way
-    return lightness < 0.0f ? out * (1.0f + lightness) : out + (vec3(1.0f, 1.0f, 1.0f) - out) * lightness;
+    return lightness < 0.0f ? mapped * (1.0f + lightness) : mapped + (vec3(1.0f, 1.0f, 1.0f) - mapped) * lightness;
 }
 
 //
@@ -310,14 +310,14 @@ SHARED_FN vec4 edit_color(int op, vec4 c, vec4 p0, vec4 p1, mat3 m0, mat3 m1)
     }
     if (op == EDIT_HUE_SATURATION)
     {
-        vec3 out = adjust_HSL(rgb, p0.x, p0.y, p0.z);
-        return vec4(out.x, out.y, out.z, c.w);
+        vec3 mapped = adjust_HSL(rgb, p0.x, p0.y, p0.z);
+        return vec4(mapped.x, mapped.y, mapped.z, c.w);
     }
     // premultiplied alpha is no obstacle: scaling every component by alpha commutes with a matrix
     if (op == EDIT_MATRIX)
     {
-        vec3 out = mul(m0, rgb);
-        return vec4(out.x, out.y, out.z, c.w);
+        vec3 mapped = mul(m0, rgb);
+        return vec4(mapped.x, mapped.y, mapped.z, c.w);
     }
     // the samples are premultiplied, so "over" is an addition rather than a lerp
     if (op == EDIT_FLATTEN)

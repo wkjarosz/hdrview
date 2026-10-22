@@ -110,6 +110,14 @@ public:
         return e;
     }
 
+    // as compute_color_transform() works it out for the tag apply() leaves, which adopts no neutral of its own
+    std::optional<float3x3> M_to_sRGB_after(const EditContext &) const override
+    {
+        float3x3 M;
+        color_conversion_matrix(M, to(), Chromaticities{}, AdaptationMethod(m_method));
+        return M;
+    }
+
     void apply(const EditContext &ctx) override
     {
         const int  g = m_dst_gamut, w = m_dst_white, m = m_method;
