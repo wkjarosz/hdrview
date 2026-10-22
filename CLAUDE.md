@@ -137,7 +137,11 @@ cmake --preset macos-arm64-cpm -DHDRVIEW_BUILD_GUI_TESTS=ON
 cmake --build --preset macos-arm64-cpm-release --target hdrview_gui_tests
 ./build/macos-arm64-cpm/Release/hdrview_gui_tests   # runs the queued tests, prints a pass/fail summary, exits with the result
 ```
-The binary takes no arguments: it opens a real HDRView window, runs every registered test, and exits. There
+The binary takes no arguments: it opens a real HDRView window, runs every registered test, and exits.
+`HDRVIEW_GUI_TEST_FILTER` narrows the run with the engine's filter syntax: comma-separated, case-insensitive
+substrings of a test's name or category, `^` anchoring one to the start and `-` excluding, e.g.
+`HDRVIEW_GUI_TEST_FILTER=navigated,hue ./hdrview_gui_tests`. A full run takes about a minute, so run only the
+tests a change can affect; CI runs the whole suite on Linux. There
 is no headless mode, since capture and input both go through a live GL context, so CI runs it under
 `xvfb-run`.
 Test source lives under `tests/gui/`, one file per category (mirroring Dear ImGui's own `imgui_test_suite`
