@@ -101,6 +101,21 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const float2 corner = app->app_pos_at_vp_pos(float2{HelloImGui::EmSize(2.f)});
             IM_CHECK(!window->Rect().Contains(ImVec2{corner.x, corner.y}));
 
+            // An edit dialog's footer: "Selection only" only while there is a selection, and on one row with
+            // Preview and the buttons.
+            if (!n.closable)
+            {
+                const std::string at = std::string("//") + dialog + "/";
+                IM_CHECK(!ctx->ItemExists((at + "Selection only").c_str()));
+                app->set_selection(Box2i{int2{0}, int2{4}});
+                ctx->Yield(2);
+                const float row = ctx->ItemInfo((at + "Cancel").c_str()).RectFull.GetCenter().y;
+                for (const char *item : {"Selection only", "Preview"})
+                    IM_CHECK_EQ(ctx->ItemInfo((at + item).c_str()).RectFull.GetCenter().y, row);
+                app->set_selection(Box2i{});
+                ctx->Yield(2);
+            }
+
             ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
             ctx->MouseWheelY(1.f);
             ctx->Yield(2);

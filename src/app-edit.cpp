@@ -210,6 +210,15 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
         if (info.draws_subject_selector)
             draw_edit_subject_selector();
 
+        // The footer: what the edit covers and whether it is previewed, beside the buttons. Selection only is shown
+        // only while there is a selection, without which an edit covers the whole image anyway.
+        if (info.draws_subject_selector && m_roi.has_volume())
+        {
+            ImGui::Checkbox("Selection only", &m_edit_subject.selection_only);
+            ImGui::Tooltip("Edit only the part of the image under the selection.");
+            ImGui::SameLine();
+        }
+
         // A point-wise edit is previewed in the viewport as the controls move, by the same code that applies it.
         static bool preview = true;
         if (const auto edit = cmd.point_edit(ctx); edit && ctx.image)
@@ -365,18 +374,18 @@ void HDRViewApp::draw_edit_subject_selector()
     auto       img     = current_image();
     const bool matters = scope_matters(img);
 
-    ImGui::SeparatorText("Apply to");
-
-    // always settable, since the setting is remembered across images
-    for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
-        if (ImGui::RadioButton(edit_scope_name(i), m_edit_subject.scope == i))
-            m_edit_subject.scope = EditSubject::Scope(i);
-    if (!matters && img)
-        ImGui::Tooltip("This image has a single channel group, so all three choices cover the same channels.");
-
-    ImGui::Checkbox("Selection only", &m_edit_subject.selection_only);
-    if (!m_roi.has_volume())
-        ImGui::Tooltip("There is no selection, so edits cover the whole image.");
+    // always settable, since the setting is remembered across images; the footer has "Selection only"
+    ImGui::Spacing();
+    if (ImGui::BeginCombo("Apply to", edit_scope_name(m_edit_subject.scope)))
+    {
+        for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
+            if (ImGui::Selectable(edit_scope_name(i), m_edit_subject.scope == i))
+                m_edit_subject.scope = EditSubject::Scope(i);
+        ImGui::EndCombo();
+    }
+    ImGui::Tooltip(!matters && img ? "Which channels the edit covers. This image has a single channel group, so all "
+                                     "three choices cover the same channels."
+                                   : "Which channels the edit covers.");
 }
 
 /// A filter running off the main thread, with what is needed to finish or abandon it.
