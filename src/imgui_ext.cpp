@@ -1567,11 +1567,12 @@ bool in_tone_plot(ImVec2 p)
     return p.x >= pos.x && p.x <= pos.x + size.x && p.y >= pos.y && p.y <= pos.y + size.y;
 }
 
-/// \p screen in the plot's own coordinates, clamped to the unit square the axes are locked to.
+/// \p screen in the plot's own coordinates, clamped to the square the axes are locked to.
 float2 tone_plot_pos(ImVec2 screen)
 {
     const ImPlotPoint p = ImPlot::PixelsToPlot(screen);
-    return float2{std::clamp(float(p.x), 0.f, 1.f), std::clamp(float(p.y), 0.f, 1.f)};
+    return float2{std::clamp(float(p.x), ToneCurveMin, ToneCurveMax),
+                  std::clamp(float(p.y), ToneCurveMin, ToneCurveMax)};
 }
 } // namespace
 
@@ -1596,7 +1597,7 @@ bool BeginToneCurvePlot(const char *id, bool draggable)
     ImPlot::SetupAxisTicks(ImAxis_Y1, 0.0, 1.0, 5);
 
     // fixed, so a steep curve is seen leaving the top and bottom instead of the frame following it
-    ImPlot::SetupAxesLimits(0.0, 1.0, 0.0, 1.0, ImPlotCond_Always);
+    ImPlot::SetupAxesLimits(ToneCurveMin, ToneCurveMax, ToneCurveMin, ToneCurveMax, ImPlotCond_Always);
 
     // say the curve can be taken hold of, and keep saying it while it is being held and the cursor has
     // wandered off the plot
@@ -1622,7 +1623,7 @@ void ToneCurve(const char *name, const float *ys, ImVec4 color, float weight)
 void ToneCurveMarkerX(const char *name, float value, ImVec4 color)
 {
     const float xs[2] = {value, value};
-    const float ys[2] = {0.f, 1.f};
+    const float ys[2] = {ToneCurveMin, ToneCurveMax};
 
     ImPlotSpec spec;
     spec.LineWeight = 1.f;

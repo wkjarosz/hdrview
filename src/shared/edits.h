@@ -34,7 +34,7 @@ SHARED_CONST int EDIT_FILL_BLEND           = 5; ///< p0: the color; p1.x: the al
 
 // color ops
 SHARED_CONST int EDIT_BRIGHTNESS_CONTRAST  = 6; ///< p0: slope, midpoint, bias, shape; p1.x: what it curves
-SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< p0.x: hue in turns; m0: saturation; p0.z: lightness; p1.x: premultiplied
+SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< p0.x hue turns, m0 saturation, p0.z lightness, p1.x premultiplied
 SHARED_CONST int EDIT_MATRIX               = 8; ///< m0: the matrix applied to the color
 SHARED_CONST int EDIT_FLATTEN              = 9; ///< p0: the straight background composited under the color
 

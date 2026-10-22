@@ -348,7 +348,8 @@ void Tooltip(const char *description, const std::function<void()> &more);
 */
 /**
     The square plot of a tone curve that the tonal dialogs draw above their sliders: what a level goes in
-    as against what it comes out as, over [0,1]. Used like ImPlot itself:
+    as against what it comes out as, over [0,1] and a margin beyond, to show what a curve does past black and
+    white. Used like ImPlot itself:
 
         if (ImGui::BeginToneCurvePlot("##Curve"))
         {
@@ -359,8 +360,11 @@ void Tooltip(const char *description, const std::function<void()> &more);
 
 /// Samples along the horizontal axis.
 constexpr int ToneCurveSamples = 129;
+/// The range both axes span: [0,1] with a margin either side.
+constexpr float ToneCurveMin = -0.1f, ToneCurveMax = 1.1f;
 /// The input level at sample \p i, where every curve drawn here is evaluated.
-inline float ToneCurveX(int i) { return float(i) / float(ToneCurveSamples - 1); }
+inline float ToneCurveX(int i)
+{ return ToneCurveMin + (ToneCurveMax - ToneCurveMin) * float(i) / float(ToneCurveSamples - 1); }
 
 /// Open the plot. False when ImPlot declined it, in which case nothing else may be called.
 /**

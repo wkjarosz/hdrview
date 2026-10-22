@@ -67,9 +67,9 @@ public:
                        "sample keeps its sign.");
     }
 
-    /// The curve the three sliders make, over [0,1].
+    /// The curve the three sliders make, over [0,1] and a little beyond.
     /**
-        Only the part landing in the unit square is drawn; the operation itself is unbounded.
+        Only the part landing in the plot is drawn, a little past [0,1]; the operation itself is unbounded.
     */
     void draw_curve()
     {
