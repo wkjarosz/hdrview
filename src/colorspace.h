@@ -337,6 +337,7 @@ using shader::adjust_HSL;
 using shader::bias_Schlick;
 using shader::brightness_contrast_linear;
 using shader::brightness_contrast_nonlinear;
+using shader::brightness_contrast_power;
 using shader::gain_Perlin;
 using shader::HSL_to_RGB;
 using shader::Lab_to_XYZ;

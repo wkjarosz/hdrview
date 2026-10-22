@@ -732,7 +732,7 @@ TEST_CASE("Perlin's gain and Schlick's bias have the properties they are chosen 
     }
 }
 
-TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and steepen together")
+TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and steepens with the contrast")
 {
     // What the sliders mean: contrast is an angle, so its ends are a flat line and a vertical one, and
     // brightness slides the point the curve pivots about.
@@ -746,16 +746,17 @@ TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and ste
     CHECK(midpoint_of(0.f) == doctest::Approx(0.5f));
     CHECK(bias_of(0.f) == doctest::Approx(0.5f));
 
-    // neither curve moves anything when both controls are centered
+    // no curve moves anything when both controls are centered
     for (int i = 0; i <= 20; ++i)
     {
         const float v = float(i) / 20.f;
         CAPTURE(v);
         CHECK(brightness_contrast_linear(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
         CHECK(brightness_contrast_nonlinear(v, slope_of(0.f), bias_of(0.f)) == doctest::Approx(v));
+        CHECK(brightness_contrast_power(v, slope_of(0.f), midpoint_of(0.f)) == doctest::Approx(v));
     }
 
-    // raising contrast pushes the ends apart about the midpoint, and both curves still meet at it
+    // raising contrast pushes the ends apart about the midpoint, and every curve still meets at it
     for (float c : {0.3f, 0.6f})
     {
         CAPTURE(c);
@@ -763,11 +764,14 @@ TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and ste
 
         CHECK(brightness_contrast_linear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
         CHECK(brightness_contrast_nonlinear(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
+        CHECK(brightness_contrast_power(0.5f, slope, 0.5f) == doctest::Approx(0.5f));
 
         CHECK(brightness_contrast_linear(0.75f, slope, 0.5f) > 0.75f);
         CHECK(brightness_contrast_linear(0.25f, slope, 0.5f) < 0.25f);
         CHECK(brightness_contrast_nonlinear(0.75f, slope, 0.5f) > 0.75f);
         CHECK(brightness_contrast_nonlinear(0.25f, slope, 0.5f) < 0.25f);
+        CHECK(brightness_contrast_power(0.75f, slope, 0.5f) > 0.75f);
+        CHECK(brightness_contrast_power(0.25f, slope, 0.5f) < 0.25f);
     }
 
     // the straight line runs out of [0,1], so an HDR sample keeps its relation to its neighbors; the s-curve
@@ -783,10 +787,37 @@ TEST_CASE("Both brightness/contrast curves leave a neutral setting alone and ste
         CHECK(brightness_contrast_nonlinear(v, steep, 0.5f) <= 1.f + 1e-6f);
     }
 
-    // brightness moves which input lands on the middle, in opposite directions for the two curves' parameters
-    // but to the same effect
+    // The power is a straight line in stops: it keeps every ratio, raised to the slope, at any brightness, so it never
+    // clips, and it mirrors through the origin.
+    for (float c : {-0.4f, 0.3f, 0.8f})
+        for (float m : {0.18f, 0.5f})
+            for (float v : {0.01f, 0.4f, 1.f, 3.f, 40.f})
+            {
+                CAPTURE(c);
+                CAPTURE(m);
+                CAPTURE(v);
+                const float slope = slope_of(c), f = brightness_contrast_power(v, slope, m);
+                CHECK(brightness_contrast_power(2.f * v, slope, m) / f ==
+                      doctest::Approx(std::exp2(slope)).epsilon(1e-4));
+                CHECK(brightness_contrast_power(-v, slope, m) == doctest::Approx(-f));
+                CHECK(brightness_contrast_power(m, slope, m) == doctest::Approx(0.5f));
+            }
+
+    // the edit reaches each shape's own curve
+    for (float v : {-0.5f, 0.3f, 2.f})
+    {
+        const float slope = slope_of(0.4f), m = midpoint_of(0.2f), b = bias_of(0.2f);
+        auto        edit = [&](int shape) { return shader::brightness_contrast(v, float4{slope, m, b, float(shape)}); };
+        CHECK(edit(shader::SHAPE_LINE) == brightness_contrast_linear(v, slope, m));
+        CHECK(edit(shader::SHAPE_S_CURVE) == brightness_contrast_nonlinear(v, slope, b));
+        CHECK(edit(shader::SHAPE_POWER) == brightness_contrast_power(v, slope, m));
+    }
+
+    // brightness moves which input lands on the middle, in opposite directions for the curves' parameters but to
+    // the same effect
     CHECK(brightness_contrast_linear(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
     CHECK(brightness_contrast_nonlinear(0.4f, 1.f, bias_of(0.2f)) > 0.4f);
+    CHECK(brightness_contrast_power(0.4f, 1.f, midpoint_of(0.2f)) > 0.4f);
 }
 
 TEST_CASE("L*a*b* agrees with the values the standard defines it by")

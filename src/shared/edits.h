@@ -33,7 +33,7 @@ SHARED_CONST int EDIT_FILL_REPLACE         = 4; ///< p0: the color each slot tak
 SHARED_CONST int EDIT_FILL_BLEND           = 5; ///< p0: the color; p1.x: the alpha slot, or -1
 
 // color ops
-SHARED_CONST int EDIT_BRIGHTNESS_CONTRAST  = 6; ///< p0: slope, midpoint, bias, linear; p1.x: what it curves
+SHARED_CONST int EDIT_BRIGHTNESS_CONTRAST  = 6; ///< p0: slope, midpoint, bias, shape; p1.x: what it curves
 SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< m0: hue and saturation; p0.z: lightness; p1.x: premultiplied
 SHARED_CONST int EDIT_MATRIX               = 8; ///< m0: the matrix applied to the color
 SHARED_CONST int EDIT_FLATTEN              = 9; ///< p0: the straight background composited under the color
@@ -45,6 +45,11 @@ SHARED_CONST int EDIT_FIRST_COLOR          = EDIT_BRIGHTNESS_CONTRAST;
 SHARED_CONST int CURVE_RGB                 = 0;
 SHARED_CONST int CURVE_LIGHTNESS           = 1;
 SHARED_CONST int CURVE_CHROMATICITY        = 2;
+
+// The shape of the brightness/contrast curve, in p0.w.
+SHARED_CONST int SHAPE_S_CURVE             = 0;
+SHARED_CONST int SHAPE_LINE                = 1;
+SHARED_CONST int SHAPE_POWER               = 2;
 // clang-format on
 
 //
@@ -81,6 +86,14 @@ SHARED_FN float bias_Schlick(float t, float a) { return t / (((1.0f / a) - 2.0f)
 */
 SHARED_FN float brightness_contrast_nonlinear(float v, float slope, float bias)
 { return gain_Perlin(bias_Schlick(clamp(v, 0.0f, 1.0f), bias), slope); }
+
+/// A straight line in stops through (\p midpoint, 0.5) with slope \p slope, so a power about the midpoint.
+/**
+    The contrast of scene-linear grading: it never clips, keeping an HDR sample's ratio to its neighbors raised to
+    the slope, and it mirrors through the origin below zero. The midpoint is kept off zero, where its ratios end.
+*/
+SHARED_FN float brightness_contrast_power(float v, float slope, float midpoint)
+{ return 0.5f * spow(v / max(midpoint, 1e-4f), slope); }
 
 //
 // CIE 1976 L*a*b*, where equal steps are meant to look equally different: L* is lightness, 100 at the reference
@@ -268,7 +281,14 @@ SHARED_FN vec3 adjust_HSL(vec3 rgb, float hue_turns, float saturation, float lig
 
 /// The brightness/contrast curve that \p p0 describes, applied to \p v.
 SHARED_FN float brightness_contrast(float v, vec4 p0)
-{ return p0.w != 0.0f ? brightness_contrast_linear(v, p0.x, p0.y) : brightness_contrast_nonlinear(v, p0.x, p0.z); }
+{
+    int shape = int(p0.w);
+    if (shape == SHAPE_LINE)
+        return brightness_contrast_linear(v, p0.x, p0.y);
+    if (shape == SHAPE_POWER)
+        return brightness_contrast_power(v, p0.x, p0.y);
+    return brightness_contrast_nonlinear(v, p0.x, p0.z);
+}
 
 /// Sample \p v of the subject's channel \p slot, as the per-sample op \p op maps it.
 SHARED_FN float edit_sample(int op, float v, int slot, vec4 p0, vec4 p1)

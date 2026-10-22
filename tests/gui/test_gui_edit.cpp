@@ -938,9 +938,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         };
 
         for (const Mode &mode : modes)
-            for (bool linear : {true, false})
+            for (const char *shape : {"Line", "S-curve", "Power"})
             {
-                ctx->LogInfo("--- %s, %s curve ---", mode.button, linear ? "straight" : "s");
+                ctx->LogInfo("--- %s, %s ---", mode.button, shape);
 
                 menu_click(ctx, "Edit/Brightness\\/contrast...");
 
@@ -952,11 +952,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 ctx->ItemInputValue("Brightness", 0.4f);
                 ctx->ItemInputValue("Contrast", 0.2f);
                 ctx->ItemClick(mode.button);
-
-                if (linear)
-                    ctx->ItemCheck("Linear");
-                else
-                    ctx->ItemUncheck("Linear");
+                ctx->ItemClick(shape);
 
                 ctx->ItemClick("Apply");
                 ctx->Yield(2);
