@@ -934,7 +934,7 @@ private:
     Channels_ m_channel            = Channels_::Channels_RGBA; ///< Which channel to display
 
     float2         m_viewport_min, m_viewport_size;
-    int  m_navigable_dialog_frame = -2;    ///< the last frame a save dialog showed, which the viewport is panned around
+    int  m_navigable_dialog_frame = -2;    ///< the last frame a save or edit dialog showed, for the viewport around it
     bool m_dragging_around_dialog = false; ///< whether the left button went down in the viewport, around it
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 

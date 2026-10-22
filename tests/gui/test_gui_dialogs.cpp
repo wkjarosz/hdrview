@@ -65,16 +65,24 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         IM_CHECK(ctx->WindowInfo("Image loading options...", ImGuiTestOpFlags_NoError).Window == nullptr);
     };
 
-    // Both save dialogs are modal, but leave the viewport to be panned and zoomed around them, to look at the image
-    // while choosing how to write it: the wheel zooms over the viewport and not over the dialog, and a drag begun in
-    // the viewport pans it.
-    for (const char *dialog : {"Save as...", "Export rendition..."})
+    // The save and edit dialogs are modal, but leave the viewport to be panned and zoomed around them, to look at
+    // the image while choosing: the wheel zooms over the viewport and not over the dialog, and a drag begun in the
+    // viewport pans it. The save dialogs also close from their title bar.
+    struct Navigable
     {
-        t           = IM_REGISTER_TEST(engine, "dialogs",
-                                       dialog[0] == 'S' ? "save_as_lets_the_viewport_be_navigated"
-                                                        : "export_rendition_lets_the_viewport_be_navigated");
-        t->TestFunc = [dialog](ImGuiTestContext *ctx)
+        const char *menu, *dialog, *test;
+        bool        closable;
+    };
+    for (const Navigable n :
+         {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", true},
+          Navigable{"File/Export rendition...", "Export rendition...",
+                    "export_rendition_lets_the_viewport_be_navigated", true},
+          Navigable{"Edit/Channel mixer...", "Channel mixer...", "edit_dialog_lets_the_viewport_be_navigated", false}})
+    {
+        t           = IM_REGISTER_TEST(engine, "dialogs", n.test);
+        t->TestFunc = [n](ImGuiTestContext *ctx)
         {
+            const char *dialog = n.dialog;
             if (hdrview()->num_images() == 0)
             {
                 hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
@@ -84,7 +92,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const auto zoom = app->zoom();
 
             ctx->SetRef("##MainMenuBar");
-            ctx->MenuClick((std::string("File/") + dialog).c_str());
+            ctx->MenuClick(n.menu);
             ctx->SetRef("");
             ImGuiWindow *window = ctx->WindowInfo(dialog).Window;
             IM_CHECK(window != nullptr);
@@ -142,9 +150,14 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
 
             // the arrow sits beside the close button, which closes the dialog as Cancel does
             const std::string bar = std::string("//") + dialog + "/";
-            IM_CHECK(!ctx->ItemInfo((bar + "#FOLD").c_str())
-                          .RectFull.Overlaps(ctx->ItemInfo((bar + "#CLOSE").c_str()).RectFull));
-            ctx->ItemClick((bar + "#CLOSE").c_str());
+            if (n.closable)
+            {
+                IM_CHECK(!ctx->ItemInfo((bar + "#FOLD").c_str())
+                              .RectFull.Overlaps(ctx->ItemInfo((bar + "#CLOSE").c_str()).RectFull));
+                ctx->ItemClick((bar + "#CLOSE").c_str());
+            }
+            else
+                ctx->ItemClick((bar + "Cancel").c_str());
             wait_for_window_closed(ctx, dialog);
             IM_CHECK(ctx->WindowInfo(dialog, ImGuiTestOpFlags_NoError).Window == nullptr);
             app->set_zoom(zoom);

@@ -277,7 +277,7 @@ void HDRViewApp::handle_mouse_interaction()
     if (!current_image())
         return;
 
-    // A save dialog is modal but lets the viewport be panned and zoomed around it: where the mouse is over the
+    // A save or edit dialog is modal but lets the viewport be panned and zoomed around it: where the mouse is over the
     // viewport and no window, which a modal leaves only its own and its popups, and for a drag only if it began there.
     // It showed last frame, since this runs before this frame's dialogs.
     bool navigate_only = false, may_scroll = true, may_drag = true;

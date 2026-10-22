@@ -144,8 +144,17 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
     if (open)
         cmd.on_open(ctx);
 
-    if (ImGui::BeginModalDialog(info.names.front().c_str(), open, ImGui::DialogPosition::Center))
+    // Modal, but leaving the app unfaded and the viewport navigable around it, to look at the image while choosing
+    // the edit. A modal takes the fade's color as it begins. It folds to its title bar, to see more of the image.
+    ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32_BLACK_TRANS);
+    static bool folded = false;
+    const bool  shown  = ImGui::BeginModalDialog(info.names.front().c_str(), open, ImGui::DialogPosition::Center,
+                                                 ImGuiWindowFlags_AlwaysAutoResize, &folded);
+    ImGui::PopStyleColor();
+    if (shown)
     {
+        m_navigable_dialog_frame = ImGui::GetFrameCount();
+
         // a minimum width, set by an item of that width: these dialogs are AlwaysAutoResize, which sizes
         // the window from its contents and ignores a size set from outside
         ImGui::Dummy(ImVec2(info.width_em * HelloImGui::EmSize(), 0.f));
