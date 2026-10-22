@@ -1149,15 +1149,21 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     case DialogPosition::None: break;
     }
 
-    // folded, the dialog keeps its width and shrinks to its title bar
-    if (folded && *folded)
+    // Folded, the dialog keeps its width and shrinks to its title bar, as a collapsed window does, but for the sliver
+    // below it that Dear ImGui keeps for the rounded corners. A collapsed window is exempt from the style's least
+    // height, which the dialog lowers to the title bar.
+    const bool fold = folded && *folded;
+    if (fold)
     {
         flags &= ~ImGuiWindowFlags_AlwaysAutoResize;
         flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar;
         ImGui::SetNextWindowSize(ImVec2(0.f, ImGui::GetFrameHeight()));
+        ImGui::PushStyleVarY(ImGuiStyleVar_WindowMinSize, ImGui::GetFrameHeight());
     }
 
     const bool shown = ImGui::BeginPopupModal(title, nullptr, flags);
+    if (fold)
+        ImGui::PopStyleVar();
     if (shown)
     {
         s_modal_dialog_frame = ImGui::GetFrameCount();

@@ -128,7 +128,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const float full = window->Size.y;
             ctx->ItemClick((std::string("//") + dialog + "/#FOLD").c_str());
             ctx->Yield(3);
-            IM_CHECK_LE(window->Size.y, std::max(ImGui::GetFrameHeight(), ImGui::GetStyle().WindowMinSize.y) + 1.f);
+            // and the sliver Dear ImGui keeps below a title bar for the rounding
+            IM_CHECK_LE(window->Size.y,
+                        window->TitleBarHeight + std::max(0.f, ImGui::GetStyle().WindowRounding - 1.f) + 1.f);
             const float folded_zoom = app->zoom();
             ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
             ctx->MouseWheelY(1.f);
