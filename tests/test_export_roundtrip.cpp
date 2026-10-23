@@ -601,14 +601,9 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
             // samples were quantized in: the image's own when the file kept and recorded them, sRGB's when it
             // converted. A file read back with the wrong transfer function or primaries is off by far more.
             const bool kept = back->chromaticities && approx_equal(*back->chromaticities, bt2020, 1e-3f);
-            // One file records its primaries and is still read back converted: libjxl decodes a lossy file's XYB into
-            // the space its ICC profile names only when it matches that profile to an encoding of its own, which it
-            // does not for a gamma of 1.8, and otherwise hands back linear sRGB.
-            const bool xyb_as_srgb = std::string{variant.ext} == ".jxl" && (variant.caps & Cap_Lossy) &&
-                                     tf.type == TransferFunction::Gamma && tf.gamma == 1.8f;
             if (variant.records(tf))
-                CHECK_MESSAGE(kept != xyb_as_srgb, "the setting reports that it records the image's primaries, and ",
-                              kept ? "libjxl kept them, so its exception here is stale" : "they were not kept");
+                CHECK_MESSAGE(kept,
+                              "the setting reports that it records the image's primaries, and they were not kept");
             const auto M = kept ? inverse(img->M_to_sRGB) : float3x3{la::identity};
 
             float worst = 0.f, worst_alpha = 0.f;
