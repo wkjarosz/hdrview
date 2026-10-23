@@ -98,7 +98,7 @@ private:
 class StructureUndo : public UndoEntry
 {
 public:
-    /// Snapshot the channels and windows of \p img, which must be in its pre-edit state.
+    /// Snapshot the channels, windows and shown groups of \p img, which must be in its pre-edit state.
     StructureUndo(const Image &img, std::string name);
     /// Out of line because Channel is incomplete here and the vector has to destroy them.
     ~StructureUndo() override;
@@ -114,6 +114,7 @@ private:
     std::string          m_name;
     std::vector<Channel> m_channels;
     Box2i                m_data_window, m_display_window;
+    int                  m_selected_group, m_reference_group; ///< Indices into the groups m_channels build
 };
 
 /// An image's color metadata: what its pixel values mean, apart from the values themselves.

@@ -1214,12 +1214,11 @@ TEST_CASE("A group command pointed at a group outside the selection acts on it a
     }
 }
 
-TEST_CASE("A group command keeps the group on screen through its rebuild, and undoing it keeps the selection" *
-          doctest::should_fail())
+TEST_CASE("A group command keeps the group on screen through its rebuild, and undoing it keeps the selection")
 {
-    // Fails as the commands stand. The rebuild renumbers the groups and only a changed group's channel is
-    // followed into its new index, so acting on a group ahead of the one on screen leaves the viewport's index
-    // naming another group; and a structural entry restores the channels without their selected flags.
+    // Pointed at a group other than the one on screen: the rebuild renumbers the groups, so the viewport has to
+    // follow its group to a new index, and a structural entry has to bring the channels back with their selected
+    // flags and the group the viewport showed.
     for (const std::string name : {"Ungroup channels", "Regroup channels", "Delete channel group"})
     {
         CAPTURE(name);
