@@ -83,26 +83,10 @@ static void drag_palette_to(ImGuiTestContext *ctx, float2 target)
 
 void RegisterTests_Tools(ImGuiTestEngine *engine)
 {
-    ImGuiTest *t = IM_REGISTER_TEST(engine, "tools", "mouse_mode_mutually_exclusive");
+    // one mouse mode at a time, whether chosen from the palette or the Tools menu, which are two views of the same
+    // actions
+    ImGuiTest *t = IM_REGISTER_TEST(engine, "tools", "the palette and the menu select one mouse mode at a time");
     t->TestFunc  = [](ImGuiTestContext *ctx)
-    {
-        ctx->SetRef("##MainMenuBar");
-        assert_only("Pan and zoom"); // default at startup
-
-        ctx->MenuClick("Tools/Rectangular select");
-        assert_only("Rectangular select");
-
-        // the action's name contains a literal '/' ("Pixel/color inspector"), which MenuClick would parse
-        // as a submenu separator: escape it, as Dear ImGui's demo does for "Tools/Metrics\\/Debugger"
-        ctx->MenuClick("Tools/Pixel\\/color inspector");
-        assert_only("Pixel/color inspector");
-
-        ctx->MenuClick("Tools/Pan and zoom"); // restore the default the other tests expect
-        assert_only("Pan and zoom");
-    };
-
-    t           = IM_REGISTER_TEST(engine, "tools", "palette_selects_mode");
-    t->TestFunc = [](ImGuiTestContext *ctx)
     {
         show_and_expand_palette(ctx);
 
@@ -113,13 +97,20 @@ void RegisterTests_Tools(ImGuiTestEngine *engine)
             IM_CHECK_EQ(hdrview()->mouse_mode(), i);
         }
 
-        // the palette and the menu are two views of the same actions
-        ctx->SetRef("##MainMenuBar");
-        ctx->MenuClick("Tools/Rectangular select");
-        ctx->SetRef("");
-        IM_CHECK(ctx->ItemExists(palette_tool_ref("Rectangular select").c_str()));
-        assert_only("Rectangular select");
+        for (int i = 0; i < MouseMode_COUNT; ++i)
+        {
+            // a name with a literal '/' ("Pixel/color inspector") would read to MenuClick as a submenu separator:
+            // escaped, as Dear ImGui's demo does for "Tools/Metrics\\/Debugger"
+            string path = string("Tools/") + mouse_mode_action_name(i);
+            for (size_t s = path.find('/', 6); s != string::npos; s = path.find('/', s + 2)) path.insert(s, 1, '\\');
+            ctx->SetRef("##MainMenuBar");
+            ctx->MenuClick(path.c_str());
+            assert_only(mouse_mode_action_name(i));
+            IM_CHECK_EQ(hdrview()->mouse_mode(), i);
+        }
 
+        // and back to the default the other tests expect
+        ctx->SetRef("");
         ctx->ItemClick(palette_tool_ref("Pan and zoom").c_str());
         assert_only("Pan and zoom");
     };

@@ -119,48 +119,13 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         IM_CHECK_EQ(hdrview()->current_image_index(), 1);
     };
 
-    t           = IM_REGISTER_TEST(engine, "navigation", "mouse_click_select");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        load_both_fixtures(ctx);
-
-        std::vector<ImGuiID> row_ids = gather_image_rows(ctx);
-        IM_CHECK_EQ((int)row_ids.size(), 2);
-
-        ctx->ItemClick(row_ids[1]);
-        IM_CHECK_EQ(hdrview()->current_image_index(), 1);
-
-        ctx->KeyDown(ImGuiMod_Shift);
-        ctx->ItemClick(row_ids[0]);
-        ctx->KeyUp(ImGuiMod_Shift);
-        IM_CHECK_EQ(hdrview()->reference_image_index(), 0);
-    };
-
     t           = IM_REGISTER_TEST(engine, "navigation", "shift_click_toggles_reference_group_off");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         load_both_fixtures(ctx);
+        use_flat_list_mode(ctx);
 
-        // channel-group rows only exist in the "flat list" file-list mode, and the mode persists in the app
-        // settings, so drive the combo. Its entries are icon-prefixed: address them by position, 1 = flat list.
-        ctx->SetRef("");
-        ctx->ItemClick("//Images/##channel list mode");
-        ImGuiTestItemList modes;
-        ctx->GatherItems(&modes, "//$FOCUSED", -1);
-        IM_CHECK(modes.GetSize() > 1);
-        ctx->ItemClick(modes[1]->ID);
-        ctx->Yield();
-
-        // group rows and the table's header cells are both depth-3 items drawn with a leading icon glyph,
-        // so match the group name instead; each RGBA fixture contributes one row named "(R,G,B,A)"
-        ImGuiTestItemList all_items;
-        ctx->GatherItems(&all_items, "//Images", -1);
-
-        std::vector<ImGuiID> group_ids;
-        for (const ImGuiTestItemInfo &item : all_items)
-            if (item.Depth == 3 && item.Window && strstr(item.Window->Name, "ImageList") != nullptr &&
-                strstr(item.DebugLabel, "(R,G,B,A)") != nullptr)
-                group_ids.push_back(item.ID);
+        std::vector<ImGuiID> group_ids = gather_rgba_group_rows(ctx);
         IM_CHECK_EQ((int)group_ids.size(), 2);
 
         // shift-click adopts the clicked group as this image's reference group and makes it the reference

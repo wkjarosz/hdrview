@@ -307,10 +307,12 @@ void RegisterTests_Viewport(ImGuiTestEngine *engine)
         const float2 mouse = float2{ImGui::GetIO().MousePos};
 
         // scrolls `events` wheel events of `wheel` units each, from a known starting view. The idle frames
-        // make each call its own gesture: the scrolling device is latched until scrolling stops.
-        auto scroll = [ctx](float wheel, int events)
+        // make each call its own gesture: the scrolling device is latched until scrolling stops, which is
+        // k_scroll_gesture_gap (10) frames without one in app-zoom.cpp.
+        static constexpr int gesture_gap = 10;
+        auto                 scroll      = [ctx](float wheel, int events)
         {
-            ctx->Yield(30);
+            ctx->Yield(gesture_gap + 2);
             hdrview()->set_zoom(1.f);
             hdrview()->center();
             for (int i = 0; i < events; ++i) ctx->MouseWheelY(wheel);
