@@ -421,6 +421,8 @@ std::vector<ImagePtr> load(const Variant &v, const std::string &bytes, const Ima
 Caveat caveat_of(const Variant &variant, const TransferFunction &tf)
 {
     const std::string ext = variant.ext;
+    if (ext == ".exr")
+        return exr_caveat(variant.caps & Cap_Alpha);
     if (ext == ".png" && std::string{variant.name}.rfind("png", 0) == 0)
         return png_caveat(tf);
 #if HDRVIEW_ENABLE_LIBHEIF
@@ -634,11 +636,7 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
                 // A setting whose dialog does not warn that macOS misreads it must read within the setting's own
                 // tolerance plus Apple's 8-bit-or-so precision, which ImageIO's premultiplying divides by alpha; one
                 // that warns must be off by more than half that, or the warning has gone stale.
-                //
-                // ImageIO also reads an EXR's color, which the format premultiplies, as straight, and multiplies it
-                // by alpha again; that is undone here, so the comparison is of the transfer function and primaries.
-                const bool premultiplies_again = std::string{variant.ext} == ".exr";
-                float      apple_worst         = 0.f;
+                float apple_worst = 0.f;
                 for (int y = 0; y < k_size.y; ++y)
                     for (int x = 0; x < k_size.x; ++x)
                     {
@@ -646,8 +644,7 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
                         const auto   w_code = from_linear(straight_rgb(want4), tf);
                         const float  tol    = tolerance(variant, want4[3]) + 0.025f / want4[3];
                         const float4 apple  = (*decoded)(x, y);
-                        const auto   a_code = from_linear(
-                            straight_rgb(apple) / (premultiplies_again ? std::max(1e-4f, apple[3]) : 1.f), tf);
+                        const auto   a_code = from_linear(straight_rgb(apple), tf);
                         for (int c = 0; c < 3; ++c)
                             apple_worst = std::max(apple_worst, std::abs(a_code[c] - w_code[c]) / tol);
                     }
