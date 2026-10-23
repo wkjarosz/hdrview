@@ -477,8 +477,7 @@ TEST_CASE("Every edge of a mapping's image is read as the sphere continues past 
     // lobe a few texels inside an edge, off its midpoint, differs from one side of the edge to the other, so a read of
     // the wrong texel there (clamping, or whatever the layout put beside the edge) makes the texels by the image's
     // edges, or its faces', reconstruct worse than those in the middle, where the lobe peaks. The discs are absent, as
-    // their rim is the one direction -z, which nothing reads across, and so are the cylinder's poles, whose rows span
-    // so much latitude that a bilinear read across the pole reconstructs poorly whichever texel it takes.
+    // their rim is the one direction -z, which nothing reads across.
     struct Edge
     {
         int         mapping;
@@ -491,6 +490,11 @@ TEST_CASE("Every edge of a mapping's image is read as the sphere continues past 
         {EnvMapping_LatLong, "north pole", {43.2f, 0.f}, {0.f, 1.f}},
         {EnvMapping_LatLong, "south pole", {100.8f, 72.f}, {0.f, -1.f}},
         {EnvMapping_Cylindrical, "seam", {144.f, 43.2f}, {-1.f, 0.f}},
+        // With height linear in v, anything smooth on the sphere varies down a column as the square root of the
+        // distance to the pole, which no interpolation between rows follows, so even the right texels reconstruct
+        // several times worse by a pole. A row clamped there instead is a third to a half worse again.
+        {EnvMapping_Cylindrical, "north pole", {43.2f, 0.f}, {0.f, 1.f}, 5.f},
+        {EnvMapping_Cylindrical, "south pole", {100.8f, 72.f}, {0.f, -1.f}, 5.f},
         {EnvMapping_CubeMap, "+y beside an empty cell", {18.f, 10.8f}, {1.f, 0.f}},
         {EnvMapping_CubeMap, "-x below an empty cell", {7.2f, 18.f}, {0.f, 1.f}},
         {EnvMapping_CubeMap, "-z beside an empty cell", {36.f, 61.2f}, {-1.f, 0.f}},
