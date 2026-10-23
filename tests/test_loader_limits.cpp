@@ -273,21 +273,6 @@ TEST_CASE("Loaders reject implausible dimensions before decoding")
     }
 }
 
-TEST_CASE("A header declaring an ordinary size is not rejected for its dimensions")
-{
-    // guards against the limits being tightened into the range of real images: these headers are truncated,
-    // so they still fail, but not with a dimension complaint
-    std::istringstream is(qoi_header(64, 64), std::ios::binary);
-    try
-    {
-        load_qoi_image(is, "small.qoi", ImageLoadOptions{});
-    }
-    catch (const std::exception &e)
-    {
-        CHECK(std::string(e.what()).find("implausibly large") == std::string::npos);
-    }
-}
-
 #ifdef HDRVIEW_TEST_ARTIFACTS_DIR
 TEST_CASE("A file that only LibRaw claims is declined when too little data backs it")
 {

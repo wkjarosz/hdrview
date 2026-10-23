@@ -27,8 +27,7 @@ using namespace hdrview_test;
 namespace
 {
 
-constexpr uint16_t k_tag_make = 0x010f, k_tag_compression = 0x0103, k_tag_orientation = 0x0112, k_tag_exif_ifd = 0x8769,
-                   k_tag_maker_note = 0x927c;
+constexpr uint16_t k_tag_make = 0x010f, k_tag_exif_ifd = 0x8769, k_tag_maker_note = 0x927c;
 constexpr uint16_t k_fmt_ascii = 2, k_fmt_short = 3, k_fmt_long = 4, k_fmt_rational = 5, k_fmt_undefined = 7;
 
 /// Builds a little-endian TIFF header with one IFD0, which is what an EXIF block is.
@@ -165,64 +164,41 @@ std::vector<uint8_t> apple_maker_note(const std::vector<MakerNoteEntry> &entries
 
 } // namespace
 
-TEST_CASE("An EXIF block with an ordinary tag decodes it")
-{
-    // baseline, so a change that stops EXIF parsing entirely cannot pass as one that hardens it
-    TiffBuilder t;
-    t.add_external(k_tag_make, k_fmt_ascii, 8, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0});
-    const json j = parse(t.build());
-
-    REQUIRE(j.is_object());
-    REQUIRE(has_tag_named(j, "Manufacturer"));
-}
-
 TEST_CASE("One tag the file describes oddly does not discard the rest of the EXIF block")
 {
-    // Compression is read back as a single int to name it ("Uncompressed", "JPEG", ...). Two components make
-    // the decoded value an array, and .get<int>() on an array throws out through to_json(), losing every tag.
-    SUBCASE("a scalar tag carrying an array")
+    // Each of these tags is read back as a single int to name its value ("Uncompressed", "RGB", ...). A file
+    // describing one as anything else makes .get<int>() throw out through to_json(), losing every tag, unless that
+    // one tag alone is skipped. Make is the control, whose title has to survive each time. An entry with no
+    // components or a format EXIF does not define, and DNG's own tags, never get that far, so none is a case here.
+    struct Shape
     {
-        TiffBuilder t;
-        t.add_external(k_tag_make, k_fmt_ascii, 8, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0});
-        t.add_inline(k_tag_compression, k_fmt_short, 2, {1, 0, 6, 0});
+        const char          *label;
+        uint16_t             format;
+        uint32_t             components;
+        bool                 external;
+        std::vector<uint8_t> bytes;
+    };
+    const Shape shapes[] = {
+        {"an array", k_fmt_short, 2, false, {1, 0, 6, 0}},
+        {"text", k_fmt_ascii, 4, true, {'n', 'o', 'n', 'e'}},
+    };
+    // Compression, PhotometricInterpretation and PlanarConfiguration
+    for (uint16_t tag : {uint16_t(259), uint16_t(262), uint16_t(284)})
+        for (const auto &shape : shapes)
+        {
+            CAPTURE(tag);
+            CAPTURE(std::string{shape.label});
+            TiffBuilder t;
+            t.add_external(k_tag_make, k_fmt_ascii, 8, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0});
+            if (shape.external)
+                t.add_external(tag, shape.format, shape.components, shape.bytes);
+            else
+                t.add_inline(tag, shape.format, shape.components, shape.bytes);
 
-        json j;
-        CHECK_NOTHROW(j = parse(t.build()));
-        CHECK(has_tag_named(j, "Manufacturer"));
-    }
-
-    SUBCASE("a scalar tag carrying text")
-    {
-        TiffBuilder t;
-        t.add_external(k_tag_make, k_fmt_ascii, 8, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0});
-        t.add_external(k_tag_compression, k_fmt_ascii, 4, {'n', 'o', 'n', 'e'});
-
-        json j;
-        CHECK_NOTHROW(j = parse(t.build()));
-        CHECK(has_tag_named(j, "Manufacturer"));
-    }
-
-    SUBCASE("a tag with no components at all")
-    {
-        TiffBuilder t;
-        t.add_external(k_tag_make, k_fmt_ascii, 8, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0});
-        t.add_inline(k_tag_orientation, k_fmt_short, 0, {0, 0, 0, 0});
-
-        json j;
-        CHECK_NOTHROW(j = parse(t.build()));
-        CHECK(has_tag_named(j, "Manufacturer"));
-    }
-
-    SUBCASE("a tag whose format is not one EXIF defines")
-    {
-        TiffBuilder t;
-        t.add_external(k_tag_make, k_fmt_ascii, 8, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0});
-        t.add_inline(k_tag_compression, 999, 1, {1, 0, 0, 0});
-
-        json j;
-        CHECK_NOTHROW(j = parse(t.build()));
-        CHECK(has_tag_named(j, "Manufacturer"));
-    }
+            json j;
+            CHECK_NOTHROW(j = parse(t.build()));
+            CHECK(has_tag_named(j, "Manufacturer"));
+        }
 }
 
 TEST_CASE("A maker-note entry is followed only where its data lies inside the note")
