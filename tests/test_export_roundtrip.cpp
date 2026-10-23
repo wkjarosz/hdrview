@@ -282,22 +282,20 @@ const Variant k_variants[] = {
      [](const Image &i, std::ostream &o, TransferFunction t) { save_jxl_image(i, o, "a.jxl", true, 100.f, t, JXL_TYPE_UINT8); }},
 #endif
 #if HDRVIEW_ENABLE_LIBHEIF
-    // both codecs the dialog offers, since they take different paths through libheif; "lossless" still converts
-    // to YCbCr, and libheif subsamples its chroma 4:2:0, which at the image's edges moves samples as far as lossy
-    // coding does
+    // both codecs the dialog offers, since they take different paths through libheif
     {"heif", ".heif", "libheif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.055f, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 95, false, true, HEIFCodec::HEVC, t); }},
-    {"heif lossless 8", ".heif", "libheif", Cap_Alpha | Cap_Lossy | k_heif_levels, 0.04f, heif_offers_tf, always,
+    {"heif lossless 8", ".heif", "libheif", Cap_Alpha | k_heif_levels, k_8bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 8); }},
-    {"heif lossless 10", ".heif", "libheif", Cap_Alpha | Cap_Lossy | k_heif_levels, 0.04f, heif_offers_tf, always,
+    {"heif lossless 10", ".heif", "libheif", Cap_Alpha | k_heif_levels, k_10bit, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.heif", 100, true, true, HEIFCodec::HEVC, t, 10); }},
     {"avif", ".avif", "libheif", Cap_Default | Cap_Alpha | Cap_Lossy | k_heif_levels, 0.055f, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 95, false, true, HEIFCodec::AV1, t); }},
-    {"avif lossless 8", ".avif", "libheif", Cap_Alpha | Cap_Lossy | k_heif_levels, 0.04f, heif_offers_tf, always,
+    {"avif lossless 8", ".avif", "libheif", Cap_Alpha | k_heif_levels, k_8bit_dithered, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 8); }},
-    {"avif lossless 10", ".avif", "libheif", Cap_Alpha | Cap_Lossy | k_heif_levels, 0.04f, heif_offers_tf, always,
+    {"avif lossless 10", ".avif", "libheif", Cap_Alpha | k_heif_levels, k_10bit, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 10); }},
-    {"avif lossless 12", ".avif", "libheif", Cap_Alpha | Cap_Lossy | k_heif_levels, 0.04f, heif_offers_tf, always,
+    {"avif lossless 12", ".avif", "libheif", Cap_Alpha | k_heif_levels, 1.f / 4095.f, heif_offers_tf, always,
      [](const Image &i, std::ostream &o, TransferFunction t) { save_heif_image(i, o, "a.avif", 100, true, true, HEIFCodec::AV1, t, 12); }},
 #endif
 };
