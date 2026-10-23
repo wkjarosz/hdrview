@@ -12,6 +12,7 @@
 #include "edit/edit_ops.h"
 #include "edit/envmap.h"
 #include "edit/filters.h"
+#include "edit/preview.h"
 #include "edit/subject.h"
 #include "edit/undo.h"
 #include "imageio/image_loader.h"
@@ -210,7 +211,8 @@ public:
         On a worker behind a cancellable progress bar, since a resampler costs seconds a channel; a resize
         fast enough to run synchronously goes through Image::resample() instead.
     */
-    void resample_image_async(const ImagePtr &img, const std::string &name, int2 size, const ChannelResampler &op);
+    void resample_image_async(const ImagePtr &img, const std::string &name, int2 size, const ChannelResampler &op,
+                              EditExtent extent = Extent_Structure);
 
     /// Filter the subject's channels of \p img, likewise on a worker, as one undoable step.
     /**
@@ -235,36 +237,14 @@ public:
     /// The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
     void draw_edit_command_dialog(EditCommand &cmd, bool &open);
 
-    /// What an edit dialog's preview has the viewport show: a point-wise edit of the current image's samples, or a
-    /// remap.
-    struct EditPreview
-    {
-        PointEdit edit;
-        int4      slots{-1};     ///< For each shader slot, which of the subject's channels it shows, or -1 for none
-        bool      color = false; ///< Whether the group shown is one a color op reaches
-        float4    rect{0.f};     ///< The subject's rectangle in the shown textures' uv: min, then max
-        std::optional<float3x3> M_to_sRGB; ///< What the image shows its samples through once the edit retags them
-        std::optional<EnvmapRemap> remap; ///< The current image remapped to a new size, in place of a point-wise edit
-    };
     /// The preview an edit dialog asked for this frame or the last, or none.
     const EditPreview *edit_preview() const;
-    /// The remap the preview shows, or none.
-    const EnvmapRemap *remap_preview() const
+    /// The display window of the image a reshaping edit's preview shows in place of the current one, or none.
+    const Box2i *preview_window() const
     {
         const EditPreview *p = edit_preview();
-        return p && p->remap ? &*p->remap : nullptr;
+        return p && p->window ? &*p->window : nullptr;
     }
-    /// Ask the viewport to preview \p cmd, as applying it in \p ctx would change the current image; false if it has
-    /// none.
-    bool request_edit_preview(const EditCommand &cmd, const EditContext &ctx);
-    /// Where a remap's output sits in the viewport: the viewport positions of its uv (0, 0) and (1, 1).
-    /**
-        Where the view would show an image of its size, as the result will be once applied: centered, panned and
-        zoomed as the view is, and mirrored as it mirrors the image.
-    */
-    std::pair<float2, float2> remap_preview_corners(const EnvmapRemap &remap) const;
-    /// Hand back the view a remap's preview took over: kept for the result if \p applied, else restored.
-    void end_remap_view(bool applied);
 
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
@@ -357,6 +337,8 @@ public:
     float2 pixel_at_vp_pos(float2 vp_pos) const;
     /// Calculates the position inside the viewport for the given image pixel coordinate.
     float2 vp_pos_at_pixel(float2 pixel) const;
+    /// vp_pos_at_pixel() for an image whose display window is \p display_window, in place of the current image's.
+    float2 vp_pos_at_pixel(float2 pixel, const Box2f &display_window) const;
     /// Calculates the app position at the given image pixel coordinate.
     float2 app_pos_at_pixel(float2 pixel) const { return app_pos_at_vp_pos(vp_pos_at_pixel(pixel)); }
     /// Calculates the image pixel coordinates at the given app position.
@@ -374,6 +356,8 @@ public:
         An involution, and the only place the flip enters the pixel <-> viewport transforms.
     */
     float2 flip_pixel(float2 pixel) const;
+    /// flip_pixel() about \p display_window, in place of the current image's.
+    float2 flip_pixel(float2 pixel, const Box2f &display_window) const;
 
     /// Where the quad the image shader samples \p img over starts, as a fraction of the viewport.
     /**
@@ -680,8 +664,10 @@ private:
 
     void   handle_mouse_interaction();
     void   calculate_viewport();
+    /// The offset that centers the current image's display window in the viewport, at the view's zoom.
     float2 center_offset() const;
-    Box2f  scaled_display_window(ConstImagePtr img) const;
+    /// center_offset() for \p display_window, in place of the current image's.
+    float2 center_offset(const Box2f &display_window) const;
 
     void draw_background();
     void draw_statistics_window();
@@ -969,15 +955,6 @@ private:
     bool m_dragging_around_dialog = false; ///< whether the left button went down in the viewport, around it
     EditPreview m_edit_preview;                   ///< see edit_preview()
     int         m_edit_preview_frame = -2;        ///< the last frame an edit dialog asked for m_edit_preview
-    /// The view a remap's preview took over, to give back if the remap is not applied, and the size it last fit.
-    struct RemapView
-    {
-        bool   active = false;
-        float  zoom   = 1.f;
-        float2 translate{0.f};
-        int2   size{0};
-    } m_remap_view;
-    int m_keep_view_for = -1; ///< An image whose next reshaping keeps the view, its result having been previewed in it
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
     /// Index of the annotation being worked on, or -1 when none on the current image is.

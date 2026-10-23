@@ -69,7 +69,7 @@ layout(binding=1) uniform fs_params {
     vec2  clip_range;
     int   primary_straight_alpha;
     int   secondary_straight_alpha;
-    // an edit dialog's preview of the current image; see EditPreview in src/app.h
+    // an edit dialog's preview of the current image; see EditPreview in src/edit/preview.h
     int   edit_op;
     ivec4 edit_slots;
     int   edit_color;

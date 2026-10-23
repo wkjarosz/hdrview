@@ -57,7 +57,15 @@ public:
                 m_size.x = std::max(1, int(std::lround(double(m_size.y) * double(envmapping_aspect(m_dst_mapping)))));
         }
     }
-    void on_close(EditContext &) override { m_size = int2{0}; }
+    /// Gives back the view a preview took over, unless the remap was applied and its result is framed in it.
+    void on_close(EditContext &ctx) override
+    {
+        if (framing() && !m_applied)
+            ctx.set_view(m_view);
+        m_framed  = Box2i{};
+        m_applied = false;
+        m_size    = int2{0};
+    }
 
     void draw(EditContext &ctx) override
     {
@@ -123,6 +131,25 @@ public:
             ImGui::SliderInt("Samples per axis", &m_supersample, 1, 8);
             ImGui::Tooltip("Averaged within each output pixel, so the cost is its square.");
         }
+
+        // Previewed, the view frames the output as applying it will, fitting it when the preview starts and whenever
+        // the output changes shape, so the result lands where its preview was; unpreviewed, the view is given back.
+        if (ctx.previewing)
+        {
+            const Box2i window = output_window(*img);
+            if (!framing())
+                m_view = ctx.view();
+            if (window != m_framed)
+            {
+                ctx.fit_view(window);
+                m_framed = window;
+            }
+        }
+        else if (framing())
+        {
+            ctx.set_view(m_view);
+            m_framed = Box2i{};
+        }
     }
 
     std::optional<EnvmapRemap> remap_preview(const EditContext &) const override
@@ -142,12 +169,23 @@ public:
         if (out_size.x <= 0 || out_size.y <= 0)
             return;
 
-        ctx.resample_image_async("Remap envmap", out_size,
-                                 [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
-                                 { return remapped_envmap(src, out_size, d, s, mode, ss, p); });
+        ctx.resample_image_async(
+            "Remap envmap", out_size, [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
+            { return remapped_envmap(src, out_size, d, s, mode, ss, p); },
+            framing() ? Extent_StructureInView : Extent_Structure);
+        m_applied = true;
     }
 
 private:
+    /// The display window the remap leaves the image with, which keeps its data window's corner.
+    Box2i output_window(const Image &img) const { return Box2i{img.data_window.min, img.data_window.min + m_size}; }
+    /// Whether a preview has the view framing the output.
+    bool framing() const { return m_framed.has_volume(); }
+
+    ViewState m_view;   ///< What the view was before a preview took it over
+    Box2i     m_framed; ///< The output window the view was last fit to, while a preview frames it
+    bool      m_applied = false;
+
     int  m_src_mapping = EnvMapping_LatLong;
     int  m_dst_mapping = EnvMapping_Angular;
     int2 m_size{0, 0};
@@ -200,8 +238,9 @@ public:
         if (out_size.x <= 0 || out_size.y <= 0)
             return;
 
-        ctx.resample_image_async("Irradiance envmap", out_size, [m, out_size](const Array2Df &src, AtomicProgress p)
-                                 { return irradiance_envmap(src, out_size, m, p); });
+        ctx.resample_image_async(
+            "Irradiance envmap", out_size, [m, out_size](const Array2Df &src, AtomicProgress p)
+            { return irradiance_envmap(src, out_size, m, p); }, Extent_Structure);
     }
 
 private:

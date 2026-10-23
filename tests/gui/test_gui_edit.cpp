@@ -687,20 +687,31 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // Previewed as it will come out: the dialog's mappings at its size, which a lat-long's aspect makes twice
         // as wide as tall, laid out at the view's zoom, with no readout of the pixel under the cursor, which no
         // longer holds what is shown.
-        const auto shown = app->remap_preview() ? std::optional<EnvmapRemap>{*app->remap_preview()} : std::nullopt;
+        // what the view shows of the preview: the remap, and the corners of the result's window
+        auto remap = [&]
+        {
+            const EditPreview *p = app->edit_preview();
+            return p && p->remap ? std::optional<EnvmapRemap>{*p->remap} : std::nullopt;
+        };
+        auto corners = [&]
+        {
+            const Box2f w{*app->preview_window()};
+            return std::pair{app->vp_pos_at_pixel(w.min, w), app->vp_pos_at_pixel(w.max, w)};
+        };
+        const auto shown = remap();
         IM_CHECK(shown.has_value());
         if (!shown)
             return;
         IM_CHECK_EQ(shown->dst, int(EnvMapping_LatLong));
         IM_CHECK_EQ(shown->size.x, 2 * shown->size.y);
-        const auto [lo, hi] = app->remap_preview_corners(*shown);
+        const auto [lo, hi] = corners();
         IM_CHECK(la::length(la::abs(hi - lo) - app->zoom() * float2(shown->size)) < 1e-3f);
         IM_CHECK(!ctx->ItemExists("//StatusBar/##pixel x coordinates"));
 
         // unticked, nothing is previewed
         ctx->ItemUncheck("Preview");
         ctx->Yield(2);
-        IM_CHECK(app->remap_preview() == nullptr);
+        IM_CHECK(app->edit_preview() == nullptr);
         ctx->ItemCheck("Preview");
         ctx->Yield(2);
 
@@ -714,15 +725,15 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->MouseMoveToPos(ImVec2(corner + float2{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)}));
         ctx->MouseUp(ImGuiMouseButton_Left);
         ctx->Yield(2);
-        const auto [plo, phi] = app->remap_preview_corners(*shown);
+        const auto [plo, phi] = corners();
 
         ctx->ItemClick("Remap");
 
         wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(img->size() == shown->size);
-        IM_CHECK(la::length(app->vp_pos_at_pixel(float2{0.f}) - plo) < 1e-3f);
-        IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->size())) - phi) < 1e-3f);
+        IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.min)) - plo) < 1e-3f);
+        IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.max)) - phi) < 1e-3f);
         status_bar = had_bar;
         app->set_zoom(zoom);
         for (const auto &c : img->channels) IM_CHECK(c.size() == img->size());

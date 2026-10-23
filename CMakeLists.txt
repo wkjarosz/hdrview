@@ -1750,6 +1750,7 @@ set(HDRVIEW_SOURCES
     src/edit/commands/tonal.cpp
     src/edit/commands/transform.cpp
     src/edit/envmap.cpp
+    src/edit/preview.cpp
     src/edit/poisson.cpp
     src/edit/filters.cpp
     src/edit/edit_ops.cpp src/edit/subject.cpp

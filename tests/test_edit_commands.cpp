@@ -85,7 +85,7 @@ struct TestEditContext : EditContext
                 { return std::make_unique<ChannelRectUndo>(img, channels, bounds, n); });
         };
 
-        resample_image_async = [this](const std::string &name, int2 size, const ChannelResampler &op)
+        resample_image_async = [this](const std::string &name, int2 size, const ChannelResampler &op, EditExtent extent)
         {
             if (!image || size.x <= 0 || size.y <= 0)
                 return;
@@ -106,7 +106,7 @@ struct TestEditContext : EditContext
                     img.data_window    = Box2i{img.data_window.min, img.data_window.min + size};
                     img.display_window = img.data_window;
                 },
-                structure_undo, Extent_Structure);
+                structure_undo, extent);
         };
     }
 

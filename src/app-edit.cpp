@@ -87,27 +87,34 @@ EditContext HDRViewApp::edit_context(ImagePtr img)
     ctx.add_image             = [this](ImagePtr i, string partname) { add_image_beside_current(i, partname); };
     ctx.set_selection         = [this](const Box2i &box) { set_selection(box); };
     ctx.draw_subject_selector = [this] { draw_edit_subject_selector(); };
-    ctx.edited                = [this, id = ctx.image ? ctx.image->id : -1](EditExtent extent)
+    ctx.edited                = [this](EditExtent extent)
     {
         // recomputes each group's visibility and the layer tree's counts, then rebinds the textures
         update_visibility();
 
-        // the view was framing an image of a different size, unless it was already framing the result in a preview
+        // the view was framing an image of a different size, unless a preview already had it framing the result
         if (extent == Extent_Structure)
-        {
-            if (m_keep_view_for == id)
-                m_keep_view_for = -1;
-            else
-                fit_display_window();
-        }
+            fit_display_window();
     };
 
     const ImagePtr    subject_image = ctx.image;
     const EditSubject subject       = ctx.subject;
     ctx.modify_channels_async       = [this, subject_image, subject](const string &name, const ChannelFilter &filter)
     { modify_channels_async(subject_image, name, subject, filter); };
-    ctx.resample_image_async = [this, subject_image](const string &name, int2 size, const ChannelResampler &op)
-    { resample_image_async(subject_image, name, size, op); };
+    ctx.resample_image_async =
+        [this, subject_image](const string &name, int2 size, const ChannelResampler &op, EditExtent extent)
+    { resample_image_async(subject_image, name, size, op, extent); };
+    ctx.view     = [this] { return ViewState{m_zoom, m_translate}; };
+    ctx.set_view = [this](const ViewState &v)
+    {
+        set_zoom(v.zoom);
+        m_translate = v.translate;
+    };
+    ctx.fit_view = [this](const Box2i &window)
+    {
+        set_zoom(minelem(viewport_size() / float2(window.size())));
+        center();
+    };
 
     return ctx;
 }
@@ -142,71 +149,10 @@ bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
     return cmd.enabled(edit_context());
 }
 
-const HDRViewApp::EditPreview *HDRViewApp::edit_preview() const
+const EditPreview *HDRViewApp::edit_preview() const
 {
     // the dialogs ask during the frame, after the viewport has drawn, so last frame's request is this frame's
     return ImGui::GetFrameCount() - m_edit_preview_frame <= 1 ? &m_edit_preview : nullptr;
-}
-
-bool HDRViewApp::request_edit_preview(const EditCommand &cmd, const EditContext &ctx)
-{
-    if (!ctx.image)
-        return false;
-
-    EditPreview p;
-    p.remap = cmd.remap_preview(ctx);
-    if (const auto edit = cmd.point_edit(ctx))
-        p.edit = *edit;
-    else if (!p.remap)
-        return false;
-    const PointEdit &edit = p.edit;
-
-    // what apply_point_edit() would cover of the group the viewport shows: for a per-sample op, the subject's
-    // channels among those bound to the shader's slots, and for a color op, the group if it is one of the subject's
-    const Image &img   = *ctx.image;
-    const int    shown = img.active_group_index(Target_Primary);
-    p.M_to_sRGB        = cmd.M_to_sRGB_after(ctx);
-    if (edit.op < shader::EDIT_FIRST_COLOR)
-    {
-        const auto subject = subject_channels(img, ctx.subject);
-        const int4 slots   = img.shader_slots(Target_Primary);
-        for (int k = 0; k < 4; ++k)
-            if (slots[k] >= 0)
-                if (auto it = std::find(subject.begin(), subject.end(), img.groups[shown].channels[slots[k]]);
-                    it != subject.end())
-                    p.slots[k] = int(it - subject.begin());
-    }
-    else
-    {
-        const auto groups = subject_color_groups(img, ctx.subject).first;
-        p.color           = std::find(groups.begin(), groups.end(), shown) != groups.end();
-    }
-
-    // the subject's rectangle, as resolve_subject() bounds it, in the uv the channel textures span
-    Box2i bounds = img.data_window;
-    if (ctx.subject.selection_only && ctx.roi.has_volume())
-        bounds.intersect(ctx.roi);
-    const float2 size = float2(img.data_window.size());
-    const float2 lo   = float2(bounds.min - img.data_window.min) / size,
-                 hi   = float2(bounds.max - img.data_window.min) / size;
-    p.rect            = float4{lo.x, lo.y, hi.x, hi.y};
-
-    m_edit_preview       = p;
-    m_edit_preview_frame = ImGui::GetFrameCount();
-    return true;
-}
-
-void HDRViewApp::end_remap_view(bool applied)
-{
-    // applied, the result lands framed as its preview was; otherwise the view goes back to what it was framing
-    if (applied)
-        m_keep_view_for = current_image() ? current_image()->id : -1;
-    else
-    {
-        set_zoom(m_remap_view.zoom);
-        m_translate = m_remap_view.translate;
-    }
-    m_remap_view.active = false;
 }
 
 void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
@@ -233,6 +179,12 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
         // the window from its contents and ignores a size set from outside
         ImGui::Dummy(ImVec2(info.width_em * HelloImGui::EmSize(), 0.f));
 
+        // A point-wise edit or a remap is previewed in the viewport as the controls move, by the same code that
+        // applies it, or for a remap, the same mappings. Its command is told, before it draws, whether it is.
+        static bool preview     = true;
+        const bool  previewable = (cmd.point_edit(ctx) || cmd.remap_preview(ctx)) && ctx.image;
+        ctx.previewing          = preview && previewable;
+
         cmd.draw(ctx);
 
         if (info.draws_subject_selector)
@@ -247,31 +199,18 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
             ImGui::SameLine();
         }
 
-        // A point-wise edit or a remap is previewed in the viewport as the controls move, by the same code that
-        // applies it, or for a remap, the same mappings.
-        static bool preview = true;
-        if ((cmd.point_edit(ctx) || cmd.remap_preview(ctx)) && ctx.image)
+        if (previewable)
         {
             ImGui::Checkbox("Preview", &preview);
             ImGui::Tooltip("Show the edit on the current image before it is applied.");
             ImGui::SameLine();
-            if (preview)
-                request_edit_preview(cmd, ctx);
+            if (ctx.previewing)
+                if (auto p = make_edit_preview(cmd, ctx))
+                {
+                    m_edit_preview       = *p;
+                    m_edit_preview_frame = ImGui::GetFrameCount();
+                }
         }
-
-        // A remap's preview frames its output as applying it would, fitting the view when it starts and whenever the
-        // size changes, so the result lands where its preview was; the view is given back if it does not land.
-        const auto remap = preview && ctx.image ? cmd.remap_preview(ctx) : std::nullopt;
-        if (remap && !m_remap_view.active)
-            m_remap_view = RemapView{true, m_zoom, m_translate, int2{0}};
-        if (remap && remap->size != m_remap_view.size)
-        {
-            set_zoom(minelem(viewport_size() / float2(remap->size)));
-            center();
-            m_remap_view.size = remap->size;
-        }
-        if (!remap && m_remap_view.active)
-            end_remap_view(false);
 
         // applied on confirm, not as the controls move: an edit per frame of a drag would fill the
         // history and rewrite every pixel it covers
@@ -279,16 +218,12 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
         if (result == ImGui::DialogResult::Confirm)
         {
             // the dialog is drawn against the current image, but confirming applies across the selection
-            if (m_remap_view.active)
-                end_remap_view(true);
             apply_edit_command(cmd);
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
         {
-            if (m_remap_view.active)
-                end_remap_view(false);
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
@@ -451,6 +386,7 @@ struct HDRViewApp::RunningFilter
     std::function<Array2Df(const Array2Df &, int, AtomicProgress)> filter;
 
     int2                  new_size{0}; ///< The size of the results; zero keeps the image's shape.
+    EditExtent            extent = Extent_Structure; ///< How a reshaping lands, whether the view refits to it
     std::vector<Array2Df> results;
     AtomicProgress        progress{true};
     std::atomic<bool>     done{false};
@@ -498,14 +434,16 @@ void HDRViewApp::modify_channels_async(const ImagePtr &img, const string &name, 
     start_filter(std::move(running));
 }
 
-void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, int2 size, const ChannelResampler &op)
+void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, int2 size, const ChannelResampler &op,
+                                      EditExtent extent)
 {
     if (!can_edit(img) || size.x <= 0 || size.y <= 0)
         return;
 
     if (m_running_filter)
     {
-        m_filter_queue.push_back([this, img, name, size, op] { resample_image_async(img, name, size, op); });
+        m_filter_queue.push_back([this, img, name, size, op, extent]
+                                 { resample_image_async(img, name, size, op, extent); });
         return;
     }
 
@@ -514,6 +452,7 @@ void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, i
     running->name     = name;
     running->bounds   = img->data_window;
     running->new_size = size;
+    running->extent   = extent;
     running->channels.resize(img->channels.size());
     for (size_t i = 0; i < img->channels.size(); ++i) running->channels[i] = int(i);
     running->filter = [op](const Array2Df &channel, int, AtomicProgress p) { return op(channel, p); };
@@ -611,7 +550,7 @@ void HDRViewApp::drain_running_filter()
                 image.data_window    = Box2i{image.data_window.min, image.data_window.min + size};
                 image.display_window = image.data_window;
             },
-            structure_undo, Extent_Structure);
+            structure_undo, running->extent);
         start_next_filter();
         return;
     }

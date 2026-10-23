@@ -107,7 +107,7 @@ bool modify_image(const EditContext &ctx, const string &name, const function<voi
         img->history.add(std::move(entry));
 
     // the channel list changed wholesale, so the layers and groups built from its names are rebuilt
-    if (extent == Extent_Structure)
+    if (extent != Extent_Pixels)
         img->rebuild_layers();
 
     ++img->content_version; // invalidates the cached statistics and histograms

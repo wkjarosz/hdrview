@@ -159,14 +159,17 @@ void HDRViewApp::draw_image_border() const
     if (!cimg && !rimg)
         return;
 
-    if (const EnvmapRemap *remap = remap_preview())
+    if (const Box2i *window = preview_window())
     {
-        // the remap's output, which is all of the current image's that the view shows
-        const auto [lo, hi] = remap_preview_corners(*remap);
+        // a reshaping edit's preview shows the result's window, which is all of the current image the view shows
+        const Box2f w{*window};
         ImGui::PushRowColors(true, false);
         if (m_draw_data_window)
-            ImGui::DrawLabeledRect(draw_list, Box2f{app_pos_at_vp_pos(lo), app_pos_at_vp_pos(hi)}.make_valid(),
-                                   ImGui::GetColorU32(ImGuiCol_HeaderActive), "Remapped", {0.f, 0.f}, true);
+            ImGui::DrawLabeledRect(
+                draw_list,
+                Box2f{app_pos_at_vp_pos(vp_pos_at_pixel(w.min, w)), app_pos_at_vp_pos(vp_pos_at_pixel(w.max, w))}
+                    .make_valid(),
+                ImGui::GetColorU32(ImGuiCol_HeaderActive), "Data window", {0.f, 0.f}, true);
         ImGui::PopStyleColor(3);
     }
     else if (cimg && cimg->data_window.has_volume())
@@ -206,7 +209,7 @@ void HDRViewApp::draw_image_border() const
         ImGui::PopStyleColor(3);
     }
 
-    if (m_roi_live.has_volume() && !remap_preview())
+    if (m_roi_live.has_volume() && !preview_window())
     {
         Box2f crop_window{app_pos_at_pixel(float2{m_roi_live.min}), app_pos_at_pixel(float2{m_roi_live.max})};
         ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
@@ -443,10 +446,11 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.edit_m0", pad(edit.edit.m0));
         m_shader->set_uniform("fsp.edit_m1", pad(edit.edit.m1));
 
-        // a remap's preview lays its quad over the output it makes, in place of the current image's data window
-        if (const EnvmapRemap *remap = remap_preview())
+        // a reshaping edit's preview lays the quad over the window the result will have, as the view will show it
+        if (const Box2i *window = preview_window())
         {
-            const auto [lo, hi] = remap_preview_corners(*remap);
+            const Box2f  w{*window};
+            const float2 lo = vp_pos_at_pixel(w.min, w), hi = vp_pos_at_pixel(w.max, w);
             m_shader->set_uniform("vsp.primary_pos", lo / viewport_size());
             m_shader->set_uniform("vsp.primary_scale", (hi - lo) / viewport_size());
         }
@@ -455,9 +459,9 @@ void HDRViewApp::draw_image() const
             m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
             m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
         }
-        m_shader->set_uniform("fsp.remap", (int)(remap_preview() != nullptr));
-        m_shader->set_uniform("fsp.remap_src", remap_preview() ? remap_preview()->src : 0);
-        m_shader->set_uniform("fsp.remap_dst", remap_preview() ? remap_preview()->dst : 0);
+        m_shader->set_uniform("fsp.remap", (int)edit.remap.has_value());
+        m_shader->set_uniform("fsp.remap_src", edit.remap ? edit.remap->src : 0);
+        m_shader->set_uniform("fsp.remap_dst", edit.remap ? edit.remap->dst : 0);
         m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
         m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
 
@@ -558,14 +562,14 @@ void HDRViewApp::draw_background()
         draw_image();
         m_render_pass->end();
 
-        // what is drawn in the current image's pixels has nowhere to go over a remap's preview, which shows the
-        // output; the border then outlines that
-        const bool remapping = remap_preview() != nullptr;
+        // what is drawn in the current image's pixels has nowhere to go over a reshaping edit's preview, which shows
+        // the result; the border then outlines that
+        const bool reshaped = preview_window() != nullptr;
         draw_pixel_info();
-        if (!remapping)
+        if (!reshaped)
             draw_pixel_grid();
         draw_image_border();
-        if (!remapping)
+        if (!reshaped)
         {
             draw_vector_overlays();
             draw_tool_decorations();

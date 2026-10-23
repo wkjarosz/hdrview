@@ -22,8 +22,9 @@
 /// How far an edit reached, which says what has to be rebuilt afterwards.
 enum EditExtent : int
 {
-    Extent_Pixels = 0, ///< Pixels within the channels the image already had
-    Extent_Structure   ///< The channel list or the windows: the layer tree is rebuilt and the view refit
+    Extent_Pixels = 0,     ///< Pixels within the channels the image already had
+    Extent_Structure,      ///< The channel list or the windows: the layer tree is rebuilt and the view refit
+    Extent_StructureInView ///< As Extent_Structure, but the view stays, already framing the result as a preview did
 };
 
 /// Produces a rectangle of one channel, in channel-local coordinates.
@@ -53,6 +54,13 @@ struct EnvmapRemap
     int2 size{0};          ///< The size it becomes
 };
 
+/// The view's zoom and pan, which an edit dialog previewing a reshaped image takes over and gives back.
+struct ViewState
+{
+    float  zoom = 1.f;
+    float2 translate{0.f};
+};
+
 /// What an edit command sees of the application: the image, the subject, and the ways to change it.
 /**
     Filled in by HDRViewApp::edit_context(), and by the tests directly. Most ways of changing an image are
@@ -76,10 +84,18 @@ struct EditContext
     /// Called once an edit has landed, so the application can rebind its textures and refit the view.
     std::function<void(EditExtent)> edited;
 
+    /// Whether the dialog drawing the command previews it in the viewport.
+    bool                                   previewing = false;
+    std::function<ViewState()>             view;     ///< The view's zoom and pan.
+    std::function<void(const ViewState &)> set_view; ///< Set the view's zoom and pan.
+    /// Fit and center the view on an image whose display window is the given box, as one reshaped to it is framed.
+    std::function<void(const Box2i &)> fit_view;
+
     /// Filter the subject's channels on a worker, behind a cancellable progress bar; one undoable step.
     std::function<void(const std::string &name, const ChannelFilter &filter)> modify_channels_async;
-    /// The same, resampling every channel into a new size, which replaces the image.
-    std::function<void(const std::string &name, int2 size, const ChannelResampler &op)> resample_image_async;
+    /// The same, resampling every channel into a new size, which replaces the image, reshaping it to the extent given.
+    std::function<void(const std::string &name, int2 size, const ChannelResampler &op, EditExtent extent)>
+        resample_image_async;
 };
 
 /// One undoable edit: what it is called, what it draws, and what it does.
