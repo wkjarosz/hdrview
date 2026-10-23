@@ -6,24 +6,13 @@
 
 #include <doctest/doctest.h>
 
+#include "colorspace.h"
 #include "image.h"
 
 #include <string>
 
 namespace
 {
-
-// A 1x1 RGBA image with color channels of 1 and alpha 0.5, so a premultiply is visible.
-ImagePtr make_rgba_image(TransparencyType_ transparency)
-{
-    // the kind has to be set before finalize(), which is what acts on it
-    auto img = std::make_shared<Image>(int2{1, 1}, 4);
-    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
-    img->channels[3](0, 0) = 0.5f;
-    img->transparency      = transparency;
-    img->finalize();
-    return img;
-}
 
 const ChannelGroup *find_group(const ImagePtr &img, const std::string &name)
 {
@@ -35,75 +24,72 @@ const ChannelGroup *find_group(const ImagePtr &img, const std::string &name)
 
 } // namespace
 
-TEST_CASE("straight alpha is premultiplied into one RGBA group by default")
+TEST_CASE("finalize() groups alpha by what it means, premultiplies only straight alpha, and raw_pixel() undoes it")
 {
-    auto img = make_rgba_image(TransparencyType_Straight);
+    // R, G, B and A all differ, and differ from pixel to pixel, so premultiplying by the wrong channel or by
+    // another pixel's alpha shows
+    const int2 size{3, 2};
+    auto       stored = [](int c, int x, int y)
+    { return c == 3 ? 0.3f + 0.1f * float(x + 3 * y) : 0.8f - 0.2f * float(c) + 0.01f * float(x + 3 * y); };
 
-    REQUIRE(img->groups.size() == 1);
-    auto *rgba = find_group(img, "R,G,B,A");
-    REQUIRE(rgba != nullptr);
-    CHECK(rgba->type == ChannelGroup::RGBA_Channels);
-    CHECK(rgba->num_channels == 4);
-
-    CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
-}
-
-TEST_CASE("TransparencyType_None splits alpha off and skips the premultiply")
-{
-    auto img = make_rgba_image(TransparencyType_None);
-
-    // R,G,B group next in the table, with A left over as its own single-channel group
-    REQUIRE(img->groups.size() == 2);
-    auto *rgb = find_group(img, "R,G,B");
-    REQUIRE(rgb != nullptr);
-    CHECK(rgb->type == ChannelGroup::RGB_Channels);
-    CHECK(rgb->num_channels == 3);
-
-    auto *a = find_group(img, "A");
-    REQUIRE(a != nullptr);
-    CHECK(a->type == ChannelGroup::Single_Channel);
-    CHECK(a->num_channels == 1);
-
-    // no alpha-bearing group means finalize() has nothing to premultiply
-    CHECK(img->channels[0](0, 0) == doctest::Approx(1.f));
-    CHECK(img->channels[3](0, 0) == doctest::Approx(0.5f));
-}
-
-TEST_CASE("raw_pixel reports the file's values for a straight-alpha image")
-{
-    SUBCASE("straight alpha is divided back out")
+    for (TransparencyType_ t = TransparencyType_None; t < TransparencyType_Count; ++t)
     {
-        auto img = make_rgba_image(TransparencyType_Straight);
+        CAPTURE(transparency_type_name(t));
 
-        // stored premultiplied as 0.5; the file held 1.0
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.5f));
-        auto p = img->raw_pixel(int2{0, 0});
-        CHECK(p.x == doctest::Approx(1.f));
-        CHECK(p.w == doctest::Approx(0.5f)); // the alpha channel itself is untouched
+        // the kind has to be set before finalize(), which is what acts on it
+        auto img = std::make_shared<Image>(size, 4);
+        for (int c = 0; c < 4; ++c)
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x) img->channels[size_t(c)](x, y) = stored(c, x, y);
+        img->transparency = t;
+        img->finalize();
+
+        // alpha that means coverage joins the color; alpha that does not stands beside it on its own
+        const bool coverage = t != TransparencyType_None;
+        if (coverage)
+        {
+            REQUIRE(img->groups.size() == 1);
+            const auto *rgba = find_group(img, "R,G,B,A");
+            REQUIRE(rgba != nullptr);
+            CHECK(rgba->type == ChannelGroup::RGBA_Channels);
+            CHECK(rgba->num_channels == 4);
+        }
+        else
+        {
+            REQUIRE(img->groups.size() == 2);
+            const auto *rgb = find_group(img, "R,G,B");
+            const auto *a   = find_group(img, "A");
+            REQUIRE(rgb != nullptr);
+            REQUIRE(a != nullptr);
+            CHECK(rgb->type == ChannelGroup::RGB_Channels);
+            CHECK(rgb->num_channels == 3);
+            CHECK(a->type == ChannelGroup::Single_Channel);
+            CHECK(a->num_channels == 1);
+        }
+
+        // the color group, which comes first either way
+        img->selected_group = 0;
+        REQUIRE(img->groups[0].num_channels >= 3);
+
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                const float a = stored(3, x, y);
+
+                // multiplied by its own alpha only when the file held it straight; a premultiplied file is
+                // already in that form, whichever space it was multiplied in
+                for (int c = 0; c < 3; ++c)
+                    CHECK(img->channels[size_t(c)](x, y) ==
+                          doctest::Approx(t == TransparencyType_Straight ? a * stored(c, x, y) : stored(c, x, y)));
+                CHECK(img->channels[3](x, y) == a); // the alpha channel itself is untouched
+
+                // raw_pixel() reports the file's values: straight alpha divided back out, a premultiplied
+                // file's as stored, since its alpha=0 pixels have no straight form
+                const float4 p = img->raw_pixel(int2{x, y});
+                for (int c = 0; c < 3; ++c) CHECK(p[c] == doctest::Approx(stored(c, x, y)));
+                CHECK(p.w == (coverage ? a : 0.f));
+            }
     }
-
-    SUBCASE("a premultiplied file is reported as stored")
-    {
-        // its alpha=0 pixels have no straight form, so its values are what the author intended
-        auto img = make_rgba_image(TransparencyType_PremultipliedLinear);
-
-        auto p = img->raw_pixel(int2{0, 0});
-        CHECK(p.x == doctest::Approx(1.f));
-        CHECK(p.w == doctest::Approx(0.5f));
-    }
-}
-
-TEST_CASE("An image whose default alpha type is left alone keeps its samples")
-{
-    // the constructor's default for an image with an 'A' channel: already in HDRView's working form
-    auto img = std::make_shared<Image>(int2{1, 1}, 4);
-    for (int c = 0; c < 3; ++c) img->channels[c](0, 0) = 1.f;
-    img->channels[3](0, 0) = 0.5f;
-    REQUIRE(img->transparency == TransparencyType_PremultipliedLinear);
-    img->finalize();
-
-    // coverage, so it groups as RGBA, and already multiplied, so finalize() leaves it alone
-    REQUIRE(img->groups.size() == 1);
-    CHECK(find_group(img, "R,G,B,A") != nullptr);
-    CHECK(img->channels[0](0, 0) == doctest::Approx(1.f));
 }
