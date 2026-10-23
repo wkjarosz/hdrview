@@ -626,13 +626,17 @@ float3x3 envmap_rotation(float yaw, float pitch, float roll)
                     float3{-cy * sr + sy * sp * cr, cp * cr, sy * sr + cy * sp * cr}, float3{sy * cp, -sp, cy * cp}};
 }
 
-float3 envmap_euler(const float3x3 &R)
+float3 envmap_euler(const float3x3 &R, float roll)
 {
     // R[column][row]: the third column's middle row is -sin(pitch), and with it the rest of that column and row
     // give the yaw and the roll, until the pitch reaches a quarter turn and they turn about the same axis
     const float pitch = std::asin(std::clamp(-R[2][1], -1.f, 1.f));
     if (std::abs(R[2][1]) > 1.f - 1e-6f)
-        return float3{std::atan2(-R[0][2], R[0][0]), pitch, 0.f};
+    {
+        // the first column is then the yaw less the roll's turn about the up axis, which is the same turn
+        const float sp = -R[2][1] > 0.f ? 1.f : -1.f;
+        return float3{std::remainder(std::atan2(-R[0][2], R[0][0]) + sp * roll, 2.f * k_pi), pitch, roll};
+    }
     return float3{std::atan2(R[2][0], R[2][2]), pitch, std::atan2(R[0][1], R[1][1])};
 }
 

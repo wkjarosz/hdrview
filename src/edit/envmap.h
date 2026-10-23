@@ -74,9 +74,10 @@ enum EnvMapSampling : int
 float3x3 envmap_rotation(float yaw, float pitch, float roll);
 /// The yaw, pitch and roll of \p rotation, with pitch in [-pi/2, pi/2]; the inverse of envmap_rotation().
 /**
-    At a pitch of a quarter turn the yaw and the roll turn about the same axis, and the roll is taken as zero.
+    At a pitch of a quarter turn the yaw and the roll turn about the same axis, so only their sum or difference is
+    set; the roll is then taken as \p roll and the yaw makes up the rest.
 */
-float3 envmap_euler(const float3x3 &rotation);
+float3 envmap_euler(const float3x3 &rotation, float roll = 0.f);
 /// The shortest rotation, as a unit quaternion (x, y, z, w), taking unit direction \p from to unit direction \p to.
 float4 rotation_between(float3 from, float3 to);
 

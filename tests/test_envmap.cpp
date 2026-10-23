@@ -276,10 +276,22 @@ TEST_CASE("A remap's rotation is the yaw, pitch and roll it is given, and a drag
                 CHECK(la::length(mul(transpose(R), R)[0] - float3{1.f, 0.f, 0.f}) < 1e-5f);
             }
 
-    // and at a quarter-turn pitch, where yaw and roll turn about the same axis, the rotation still comes back
-    const float3x3 locked = envmap_rotation(0.8f, 1.5707963f, 0.f);
-    const float3   e      = envmap_euler(locked);
-    CHECK(la::length(envmap_rotation(e.x, e.y, e.z)[0] - locked[0]) < 1e-3f);
+    // and at a quarter-turn pitch, where yaw and roll turn about the same axis, the rotation still comes back, with
+    // the roll it is asked to keep, since only the yaw and roll together are set there
+    for (float pitch : {-1.5707963f, 1.5707963f})
+        for (float roll : {-2.5f, 0.f, 0.6f})
+            for (float keep : {-1.f, 0.f, 2.f})
+            {
+                CAPTURE(pitch);
+                CAPTURE(roll);
+                CAPTURE(keep);
+                const float3x3 locked = envmap_rotation(0.8f, pitch, roll);
+                const float3   e      = envmap_euler(locked, keep);
+                CHECK(e.z == keep);
+                CHECK(std::abs(e.x) <= 3.1415927f);
+                const float3x3 back = envmap_rotation(e.x, e.y, e.z);
+                for (int c = 0; c < 3; ++c) CHECK(la::length(back[c] - locked[c]) < 1e-3f);
+            }
 
     // the rotation between two directions takes the one onto the other, opposite ones included
     for (const float3 from : sample_directions())

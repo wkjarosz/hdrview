@@ -720,6 +720,20 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // result lands where its preview was.
         IM_CHECK_EQ(app->zoom(), std::min(app->viewport_size().x / float(shown->size.x),
                                           app->viewport_size().y / float(shown->size.y)));
+        // The sliders turn it as they say, roll included where a quarter-turn pitch locks it to the yaw, and Reset
+        // rotation undoes them.
+        ctx->ItemInputValue("Pitch", -90.f);
+        ctx->ItemInputValue("Roll", 30.f);
+        ctx->ItemInputValue("Roll", 60.f);
+        ctx->Yield(2);
+        {
+            const float3x3 want = envmap_rotation(0.f, -float(M_PI) / 2.f, float(M_PI) / 3.f);
+            for (int c = 0; c < 3; ++c) IM_CHECK(la::length(remap()->rotation[c] - want[c]) < 1e-4f);
+        }
+        ctx->ItemClick("Reset rotation");
+        ctx->Yield(2);
+        IM_CHECK(remap()->rotation == float3x3{la::identity});
+
         // A plain drag begun on the preview turns the sphere and leaves the view where it was; with Alt held, it
         // pans the view instead and leaves the sphere alone.
         auto drag = [&](float2 from, ImGuiKeyChord mods)

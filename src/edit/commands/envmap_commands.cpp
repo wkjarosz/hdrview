@@ -32,6 +32,8 @@ void mapping_combo(const char *label, int *value)
     }
 }
 
+constexpr float k_radians_per_degree = float(M_PI) / 180.f;
+
 /// Continue the line, beyond the last item's label, at the dialog's right edge for something \p width wide.
 void same_line_at_right(float width)
 {
@@ -118,24 +120,24 @@ public:
                 m_size.y = std::max(1, int(std::lround(double(m_size.x) / double(aspect))));
         }
 
-        // The rotation, as yaw, pitch and roll, which a drag across the preview turns too. Held as a quaternion, so
-        // that drags compose without drifting, and shown in degrees, plus zero so that an unturned sphere's pitch,
-        // which comes out as -0, shows as 0.
-        float3 angles = envmap_euler(la::qmat(m_rotation)) * (180.f / float(M_PI)) + 0.f, before_angles = angles;
-        ImGui::SliderFloat("Yaw", &angles.x, -180.f, 180.f, "%.1f deg");
+        // The rotation as yaw, pitch and roll, which a drag across the preview turns too. The sliders keep their own
+        // angles, since at a quarter-turn pitch the rotation cannot say how much of a turn is yaw and how much roll,
+        // and the rotation is a quaternion, so that drags compose without drifting.
+        const float3 before_angles = m_angles;
+        ImGui::SliderFloat("Yaw", &m_angles.x, -180.f, 180.f, "%.1f deg");
         ImGui::Tooltip("Turn the sphere about its up axis, which slides a lat-long sideways.");
-        ImGui::SliderFloat("Pitch", &angles.y, -90.f, 90.f, "%.1f deg");
+        ImGui::SliderFloat("Pitch", &m_angles.y, -90.f, 90.f, "%.1f deg");
         ImGui::Tooltip("Tip the sphere forward or back.");
-        ImGui::SliderFloat("Roll", &angles.z, -180.f, 180.f, "%.1f deg");
+        ImGui::SliderFloat("Roll", &m_angles.z, -180.f, 180.f, "%.1f deg");
         ImGui::Tooltip("Turn the sphere about the forward axis.");
         same_line_at_right(ImGui::CalcTextSize("Reset rotation").x + 2.f * style.FramePadding.x);
         if (ImGui::Button("Reset rotation"))
-            m_rotation = float4{0.f, 0.f, 0.f, 1.f};
+            m_angles = float3{0.f};
         ImGui::Tooltip("Drag across the preview to turn the sphere, keeping what is under the cursor under it; "
                        "Alt-drag pans the view instead.");
-        if (angles != before_angles)
+        if (m_angles != before_angles)
         {
-            const float3 r = angles * (float(M_PI) / 180.f);
+            const float3 r = m_angles * k_radians_per_degree;
             m_rotation     = la::rotation_quat(envmap_rotation(r.x, r.y, r.z));
         }
 
@@ -198,6 +200,9 @@ public:
         const auto d  = EnvMapping(m_dst_mapping);
         const auto at = [d](float2 uv) { return envmap_uv_to_xyz(d, nearest_valid_envmap_uv(d, uv)); };
         m_rotation    = la::normalize(la::qmul(m_rotation, rotation_between(at(to), at(from))));
+        // the sliders follow, keeping their roll where pitch has locked it to the yaw, and adding zero so that a
+        // pitch of -0 shows as 0
+        m_angles = envmap_euler(la::qmat(m_rotation), m_angles.z * k_radians_per_degree) / k_radians_per_degree + 0.f;
         return true;
     }
 
@@ -226,6 +231,7 @@ private:
     bool framing() const { return m_framed.has_volume(); }
 
     float4    m_rotation{0.f, 0.f, 0.f, 1.f}; ///< As a unit quaternion (x, y, z, w), turning the result into the source
+    float3    m_angles{0.f}; ///< The rotation's yaw, pitch and roll in degrees, as the sliders hold them
     ViewState m_view;   ///< What the view was before a preview took it over
     Box2i     m_framed; ///< The output window the view was last fit to, while a preview frames it
     bool      m_applied = false;
