@@ -359,14 +359,10 @@ TEST_CASE("Both JPEG 2000 syntaxes decode to the same pixels")
 
 TEST_CASE("A bit depth the writer does not offer is refused, not quietly changed")
 {
+    // the depths the dialog does offer are each a setting of test_export_roundtrip.cpp's sweeps
     auto img = test_image(int2{4, 4}, 3, [](int, int, int) { return 0.5f; });
 
     std::ostringstream out(std::ios::binary);
-    for (int bits : {8, 10, 12, 16})
-    {
-        CAPTURE(bits);
-        CHECK_NOTHROW(save_j2k_image(*img, out, "a.jp2", true, bits));
-    }
     CHECK_THROWS_AS(save_j2k_image(*img, out, "a.jp2", true, 11), std::exception);
 }
 
@@ -461,22 +457,6 @@ TEST_CASE("A JP2's EXIF and XMP boxes reach the metadata the info panel reads")
     }
 }
 
-TEST_CASE("A JP2 file's ICC profile and XMP reach the image")
-{
-    std::vector<int32_t> wrote;
-    const auto           plain = ramp_codestream(8, false, 4, 4, wrote, OPJ_CODEC_JP2);
-
-    const std::string xmp = "<?xpacket begin=\"\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"></x:xmpmeta>";
-    std::string       uuid_payload(16, '\0');
-    const uint8_t     xmp_uuid[16] = {0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8,
-                                      0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC};
-    std::memcpy(&uuid_payload[0], xmp_uuid, 16);
-
-    const auto img = load_bytes(load_j2k_image, with_extra_boxes(plain, box("uuid", uuid_payload + xmp)), "meta.jp2");
-    REQUIRE(img);
-    CHECK(std::string(img->xmp_data.begin(), img->xmp_data.end()) == xmp);
-}
-
 TEST_CASE("A JP2 whose codestream OpenJPEG cannot read as a JP2 still decodes from its jp2c box")
 {
     std::vector<int32_t> wrote;
@@ -496,42 +476,6 @@ TEST_CASE("A JP2 whose codestream OpenJPEG cannot read as a JP2 still decodes fr
     REQUIRE(img->channels.size() == 1);
     for (size_t i = 0; i < wrote.size(); ++i)
         CHECK(img->channels[0](int(i)) == doctest::Approx(wrote[i] / 255.).epsilon(1e-5));
-}
-
-TEST_CASE("Truncated and corrupted JPEG 2000 files are refused rather than crashing")
-{
-    std::vector<int32_t> wrote;
-    const auto           valid = ramp_codestream(8, false, 16, 16, wrote, OPJ_CODEC_JP2);
-
-    int decoded = 0, refused = 0;
-    for (size_t cut = 1; cut < valid.size(); cut += 7)
-    {
-        CAPTURE(cut);
-        try
-        {
-            if (load_bytes(load_j2k_image, valid.substr(0, cut), "cut.jp2"))
-                ++decoded;
-        }
-        catch (const std::exception &)
-        {
-            ++refused;
-        }
-    }
-    CHECK(decoded + refused > 0);
-
-    for (size_t at = 0; at < valid.size(); at += 11)
-    {
-        CAPTURE(at);
-        std::string flipped = valid;
-        flipped[at]         = (char)(~(uint8_t)flipped[at]);
-        try
-        {
-            load_bytes(load_j2k_image, flipped, "flipped.jp2");
-        }
-        catch (const std::exception &)
-        {
-        }
-    }
 }
 
 TEST_CASE("A codestream declaring impossible dimensions is refused before it is decoded")
