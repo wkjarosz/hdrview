@@ -83,6 +83,7 @@ layout(binding=1) uniform fs_params {
     int   remap_src;
     int   remap_dst;
     mat4  remap_rotation;
+    vec2  remap_size;
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -170,15 +171,19 @@ float sample_channel_finest(texture2D tex, sampler smp, vec2 uv, bool within_ima
 
 /// The current image's samples \p value at \p uv, as an edit dialog's preview shows them, or as they are.
 /**
-    Either a remap, whose quad spans the output, so that each point of it reads the source where its direction falls
-    once turned, as remapped_envmap() does, off the sphere from the nearest point that is on it; or a point-wise edit, applied to
-    the samples as stored within the subject's rectangle, as apply_point_edit() would change them.
+    Either a remap, whose quad spans the output, so that each of the output's pixels reads the source where the
+    direction at its center falls once turned, as remapped_envmap() does with a single sample, off the sphere from the
+    nearest point that is on it; or a point-wise edit, applied to the samples as stored within the subject's
+    rectangle, as apply_point_edit() would change them.
 */
 vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
 {
     if (fsp.remap != 0)
     {
-        vec3 dir = mat3(fsp.remap_rotation) * envmap_uv_to_xyz(fsp.remap_dst, nearest_valid_envmap_uv(fsp.remap_dst, uv));
+        // one sample at the center of the output pixel uv falls in, so each output pixel shows as one color
+        vec2 center = (floor(uv * fsp.remap_size) + 0.5) / fsp.remap_size;
+        vec3 dir =
+            mat3(fsp.remap_rotation) * envmap_uv_to_xyz(fsp.remap_dst, nearest_valid_envmap_uv(fsp.remap_dst, center));
         vec2 src = envmap_xyz_to_uv(fsp.remap_src, dir);
         return vec4(sample_channel_finest(primary_0_texture, primary_0_sampler, src, in_img),
                     sample_channel_finest(primary_1_texture, primary_1_sampler, src, in_img),

@@ -470,6 +470,7 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.remap_src", edit.remap ? edit.remap->src : 0);
         m_shader->set_uniform("fsp.remap_dst", edit.remap ? edit.remap->dst : 0);
         m_shader->set_uniform("fsp.remap_rotation", pad(edit.remap ? edit.remap->rotation : float3x3{la::identity}));
+        m_shader->set_uniform("fsp.remap_size", edit.remap ? float2(edit.remap->size) : float2{1.f});
         m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
         m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
 
