@@ -39,7 +39,7 @@ static_assert(Sampler_Nearest == shader::SAMPLER_NEAREST && Sampler_Bilinear == 
                   Sampler_Bicubic == shader::SAMPLER_BICUBIC,
               "Sampler must match src/shared/resample.h");
 
-int wrap_coord(int p, int extent, int mode) { return shader::wrap_coord(p, extent, mode); }
+int wrap_coord(int p, int extent, int mode) { return shader::resample_wrap(p, extent, mode); }
 
 namespace
 {

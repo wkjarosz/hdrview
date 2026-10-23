@@ -31,30 +31,27 @@ SHARED_CONST int SAMPLER_BILINEAR = 1;
 SHARED_CONST int SAMPLER_BICUBIC  = 2;
 // clang-format on
 
-/// \p x modulo \p n, in [0, n) whatever the sign of \p x, which GLSL's % does not promise.
-SHARED_FN int resample_floor_mod(int x, int n) { return x - n * int(floor(float(x) / float(n))); }
-
 /// Where \p p lands once border mode \p mode has been applied to an image \p extent samples across, or -1 for nothing.
-SHARED_FN int wrap_coord(int p, int extent, int mode)
+SHARED_FN int resample_wrap(int p, int extent, int mode)
 {
     if (p >= 0 && p < extent)
         return p;
     if (mode == BORDER_EDGE)
         return clamp(p, 0, extent - 1);
     if (mode == BORDER_REPEAT)
-        return resample_floor_mod(p, extent);
+        return floor_mod(p, extent);
     if (mode == BORDER_MIRROR)
     {
         // the reflection has period twice the extent and folds in the middle of it, so -1 lands on 0 and extent
         // lands on extent-1
-        int q = resample_floor_mod(p, 2 * extent);
+        int q = floor_mod(p, 2 * extent);
         return q < extent ? q : 2 * extent - 1 - q;
     }
     return -1;
 }
 
 /// One tap of the interpolating cubic with a = -0.75, as Photoshop's "bicubic".
-SHARED_FN float cubic_weight(float d)
+SHARED_FN float resample_cubic_weight(float d)
 {
     float A = -0.75f, x = abs(d);
     return x <= 1.0f ? ((A + 2.0f) * x - (A + 3.0f)) * x * x + 1.0f
@@ -64,22 +61,20 @@ SHARED_FN float cubic_weight(float d)
 /// Sample (\p x, \p y) of \p src read through border modes \p mx and \p my; zero where they say there is nothing.
 SHARED_FN ResampleValue resample_bordered(ResampleSource src, int x, int y, int mx, int my)
 {
-    int u = wrap_coord(x, src.size.x, mx), v = wrap_coord(y, src.size.y, my);
+    int u = resample_wrap(x, src.size.x, mx), v = resample_wrap(y, src.size.y, my);
     if (u < 0 || v < 0)
         return ResampleValue(0.0f);
     return resample_fetch(src, ivec2(u, v));
 }
 
-/// Value of \p src at the continuous position \p s, with samples at the centers of their cells.
+/// Value of \p src at \p s, in units of samples with sample (i, j) at (i, j), reconstructed by \p interp.
 SHARED_FN ResampleValue resample_at(ResampleSource src, vec2 s, int interp, int mx, int my)
 {
     if (interp == SAMPLER_NEAREST)
-        return resample_bordered(src, int(floor(s.x)), int(floor(s.y)), mx, my);
+        return resample_bordered(src, int(floor(s.x + 0.5f)), int(floor(s.y + 0.5f)), mx, my);
 
-    // shifted so a sample sits at the center of its cell rather than at its corner
-    float sx = s.x - 0.5f, sy = s.y - 0.5f;
-    float fx = floor(sx), fy = floor(sy);
-    float tx = sx - fx, ty = sy - fy;
+    float fx = floor(s.x), fy = floor(s.y);
+    float tx = s.x - fx, ty = s.y - fy;
     int   x0 = int(fx), y0 = int(fy);
 
     if (interp == SAMPLER_BILINEAR)
@@ -92,10 +87,10 @@ SHARED_FN ResampleValue resample_at(ResampleSource src, vec2 s, int interp, int 
     float         total = 0.0f;
     for (int j = -1; j <= 2; ++j)
     {
-        float wy = cubic_weight(ty - float(j));
+        float wy = resample_cubic_weight(ty - float(j));
         for (int i = -1; i <= 2; ++i)
         {
-            float w = cubic_weight(tx - float(i)) * wy;
+            float w = resample_cubic_weight(tx - float(i)) * wy;
             value += w * resample_bordered(src, x0 + i, y0 + j, mx, my);
             total += w;
         }
@@ -107,15 +102,16 @@ SHARED_FN ResampleValue resample_at(ResampleSource src, vec2 s, int interp, int 
 /// What sample \p p of \p src holds once the image is moved by \p d, read past its edges as \p mx and \p my say.
 /**
     Positive offsets move the image right and down. A whole-sample offset reads the sample exactly, whichever
-    \p interp, so shifting one way and back returns what was there.
+    \p interp, so shifting one way and back returns what was there, and no non-finite neighbor leaks in through a
+    weight of zero.
 */
 SHARED_FN ResampleValue resample_shifted(ResampleSource src, ivec2 p, vec2 d, int interp, int mx, int my)
 {
     // the sample that has to travel to here is the one that far back
-    float sx = float(p.x) - d.x, sy = float(p.y) - d.y;
+    vec2 s = vec2(float(p.x) - d.x, float(p.y) - d.y);
     if (d.x == floor(d.x) && d.y == floor(d.y))
-        return resample_bordered(src, int(floor(sx + 0.5f)), int(floor(sy + 0.5f)), mx, my);
-    return resample_at(src, vec2(sx + 0.5f, sy + 0.5f), interp, mx, my);
+        return resample_bordered(src, int(s.x), int(s.y), mx, my);
+    return resample_at(src, s, interp, mx, my);
 }
 
 SHARED_END

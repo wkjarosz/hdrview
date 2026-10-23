@@ -125,10 +125,7 @@ struct EnvSource
 };
 
 inline float envmap_fetch(EnvSource src, int level, int chart, ivec2, ivec2 p)
-{
-    const int per_level = src.mapping == ENVMAP_CUBE_MAP || src.mapping == ENVMAP_CUBE_COLUMN ? 6 : 1;
-    return (*src.charts[level * per_level + chart])(p.x, p.y);
-}
+{ return (*src.charts[level * (envmap_is_cube(src.mapping) ? 6 : 1) + chart])(p.x, p.y); }
 } // namespace shader
 
 #include "shared/envmap_sample.h"

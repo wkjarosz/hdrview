@@ -81,6 +81,11 @@ float shim_copysign(float a, float b) { return b < 0.0f ? -abs(a) : abs(a); }
 
 #endif
 
+SHARED_BEGIN
+/// \p x modulo \p n, in [0, n) whatever the sign of \p x, which GLSL's % does not promise.
+SHARED_FN int floor_mod(int x, int n) { return x - n * int(floor(float(x) / float(n))); }
+SHARED_END
+
 /// Defines the vec3 overload of the one-argument float function \p f, applying it to each component.
 #define SHARED_PER_COMPONENT(f)                                                                                        \
     SHARED_FN vec3 f(vec3 v) { return vec3(f(v.x), f(v.y), f(v.z)); }

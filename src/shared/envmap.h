@@ -25,6 +25,10 @@ SHARED_CONST int ENVMAP_CUBE_MAP       = 4; ///< Six faces laid out as a vertica
 SHARED_CONST int ENVMAP_CUBE_COLUMN    = 5; ///< Six faces stacked in one column, as OpenEXR stores them
 SHARED_CONST int ENVMAP_EQUAL_AREA     = 6; ///< Clarberg's square-to-sphere map
 
+// How a remap reads its source; see envmap_supersample() and envmap_ewa() in envmap_sample.h.
+SHARED_CONST int ENVMAP_SAMPLE_SUPERSAMPLE = 0;
+SHARED_CONST int ENVMAP_SAMPLE_EWA         = 1;
+
 // The six faces of the cube, in the order everything below indexes them.
 SHARED_CONST int FACE_POS_X = 0;
 SHARED_CONST int FACE_NEG_X = 1;
@@ -33,12 +37,11 @@ SHARED_CONST int FACE_NEG_Y = 3;
 SHARED_CONST int FACE_POS_Z = 4;
 SHARED_CONST int FACE_NEG_Z = 5;
 
-SHARED_CONST float ENVMAP_PI      = 3.14159265358979323846f;
-SHARED_CONST float ENVMAP_HALF_PI = ENVMAP_PI / 2.0f;
+SHARED_CONST float ENVMAP_PI = 3.14159265358979323846f;
 // clang-format on
 
 //
-// The six faces of the cube, in the one orientation convention both cube layouts arrange
+// The cube's six faces, each in the one orientation both cube layouts start from
 //
 
 /// Direction for \p st on \p face, in that face's own [0,1]^2; not normalized.
@@ -149,11 +152,31 @@ SHARED_FN int cross_face(int col, int row)
     return row == 0 ? FACE_POS_Y : row == 1 ? FACE_POS_Z : row == 2 ? FACE_NEG_Y : FACE_NEG_Z;
 }
 
-/// \p st turned as the single-column layout turns \p face to match OpenEXR, which being one flip is its own inverse.
+/// Whether the single-column layout flips \p face across, rather than down, to match OpenEXR.
+SHARED_FN bool column_flips_s(int face) { return face == FACE_POS_X || face == FACE_NEG_X || face == FACE_POS_Z; }
+
+/// \p st turned as the single-column layout turns \p face, which being one flip is its own inverse.
 SHARED_FN vec2 column_st(int face, vec2 st)
+{ return column_flips_s(face) ? vec2(1.0f - st.x, st.y) : vec2(st.x, 1.0f - st.y); }
+
+/// Whether \p mapping lays the sphere out as six flat faces, whichever arrangement it uses for them.
+SHARED_FN bool envmap_is_cube(int mapping) { return mapping == ENVMAP_CUBE_MAP || mapping == ENVMAP_CUBE_COLUMN; }
+
+/// Side of the faces \p mapping carves out of an image of \p size.
+SHARED_FN int envmap_face_size(int mapping, ivec2 size)
 {
-    bool flips_s = face == FACE_POS_X || face == FACE_NEG_X || face == FACE_POS_Z;
-    return flips_s ? vec2(1.0f - st.x, st.y) : vec2(st.x, 1.0f - st.y);
+    if (mapping == ENVMAP_CUBE_COLUMN)
+        return max(1, min(size.x, size.y / 6));
+    return max(1, min(size.x / 3, size.y / 4));
+}
+
+/// Where texel \p p of \p face, \p n texels a side, lies in the image a cube map of \p mapping lays out.
+SHARED_FN ivec2 envmap_face_texel_in_image(int mapping, int face, ivec2 p, int n)
+{
+    if (mapping == ENVMAP_CUBE_COLUMN)
+        return column_flips_s(face) ? ivec2(n - 1 - p.x, face * n + p.y) : ivec2(p.x, face * n + n - 1 - p.y);
+    ivec2 cell = cross_cell(face);
+    return ivec2(cell.x * n + p.x, cell.y * n + p.y);
 }
 
 //
@@ -183,7 +206,7 @@ SHARED_FN vec3 mirror_ball_to_xyz(vec2 uv)
 SHARED_FN vec3 lat_long_to_xyz(vec2 uv)
 {
     // longitude linear in u, latitude linear in v
-    float theta   = 1.5f * ENVMAP_PI + (-ENVMAP_HALF_PI - 1.5f * ENVMAP_PI) * uv.x;
+    float theta   = ENVMAP_PI * (1.5f - 2.0f * uv.x);
     float phi     = uv.y * ENVMAP_PI;
     float sin_phi = sin(phi);
     return vec3(sin_phi * cos(theta), cos(phi), sin_phi * sin(theta));
@@ -192,7 +215,7 @@ SHARED_FN vec3 lat_long_to_xyz(vec2 uv)
 SHARED_FN vec3 cylindrical_to_xyz(vec2 uv)
 {
     // longitude linear in u, and height linear in v, so every row covers the same solid angle
-    float theta   = 1.5f * ENVMAP_PI + (-ENVMAP_HALF_PI - 1.5f * ENVMAP_PI) * uv.x;
+    float theta   = ENVMAP_PI * (1.5f - 2.0f * uv.x);
     float cos_phi = 1.0f - 2.0f * uv.y;
     float sin_phi = sqrt(max(0.0f, 1.0f - cos_phi * cos_phi));
     return vec3(sin_phi * cos(theta), cos_phi, sin_phi * sin(theta));
@@ -272,7 +295,7 @@ SHARED_FN vec2 xyz_to_mirror_ball(vec3 xyz)
 /// How far around a full turn the longitude \p theta is, as lat_long_to_xyz() lays it out across u.
 SHARED_FN float longitude_u(float theta)
 {
-    float t = (theta - 1.5f * ENVMAP_PI) / (-ENVMAP_HALF_PI - 1.5f * ENVMAP_PI);
+    float t = 0.75f - theta / (2.0f * ENVMAP_PI);
     return t - floor(t);
 }
 
@@ -336,7 +359,7 @@ SHARED_FN vec2 xyz_to_equal_area(vec3 xyz)
 // Dispatch over the mappings
 //
 
-/// Direction for a point on the image in \p mapping, both in [0,1]^2 and on the unit sphere respectively.
+/// Direction on the unit sphere for the image point \p uv, in [0,1]^2, of \p mapping.
 SHARED_FN vec3 envmap_uv_to_xyz(int mapping, vec2 uv)
 {
     if (mapping == ENVMAP_ANGULAR)

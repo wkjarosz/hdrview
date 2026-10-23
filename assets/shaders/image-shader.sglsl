@@ -78,13 +78,14 @@ layout(binding=1) uniform fs_params {
     vec4  edit_p1;
     mat4  edit_m0;
     mat4  edit_m1;
-    // a remap dialog's preview, which reads the current image as remap_src and shows it as remap_dst, turned
+    // a remap dialog's preview, which reads the current image as remap_src and shows it as remap_dst, rotated by
+    // remap_rotation
     int   remap;
     int   remap_src;
     int   remap_dst;
     mat4  remap_rotation;
     vec2  remap_size;
-    int   remap_sampling; // an EnvMapSampling: 0 supersamples, 1 is EWA
+    int   remap_sampling; // an ENVMAP_SAMPLE_ constant
     int   remap_quality;  // samples per axis, or EWA's maximum anisotropy
     int   remap_levels;   // the mip levels the current image's textures have
     // a shift dialog's preview, which moves the subject's channels by shift_offset samples; see ShiftEdit
@@ -170,8 +171,33 @@ float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
     return within_image ? value : 0.0;
 }
 
-// What src/shared/envmap_sample.h reads here: the four shown channels at once, from the textures' own mipmaps, whose
-// levels average 2x2 blocks, which blurs by a quarter of a squared texel of the finer level each step down.
+/// Texel \p p of \p tex at \p level; a slot showing no channel is a single texel, read wherever \p p is.
+float fetch_channel(texture2D tex, sampler smp, ivec2 p, int level)
+{
+    ivec2 n = textureSize(sampler2D(tex, smp), 0);
+    return n.x == 1 && n.y == 1 ? texelFetch(sampler2D(tex, smp), ivec2(0), 0).r
+                                : texelFetch(sampler2D(tex, smp), p, level).r;
+}
+
+/// Texel \p p of the four shown channels at \p level.
+vec4 fetch_shown(ivec2 p, int level)
+{
+    return vec4(fetch_channel(primary_0_texture, primary_0_sampler, p, level),
+                fetch_channel(primary_1_texture, primary_1_sampler, p, level),
+                fetch_channel(primary_2_texture, primary_2_sampler, p, level),
+                fetch_channel(primary_3_texture, primary_3_sampler, p, level));
+}
+
+/// The image's size: the largest of the four slots', since a slot showing no channel is one texel.
+ivec2 shown_size()
+{
+    return max(max(textureSize(sampler2D(primary_0_texture, primary_0_sampler), 0),
+                   textureSize(sampler2D(primary_1_texture, primary_1_sampler), 0)),
+               max(textureSize(sampler2D(primary_2_texture, primary_2_sampler), 0),
+                   textureSize(sampler2D(primary_3_texture, primary_3_sampler), 0)));
+}
+
+// What src/shared/envmap_sample.h reads here: the four shown channels at once, from the textures' mipmaps.
 #define EnvValue vec4
 struct EnvSource
 {
@@ -181,27 +207,14 @@ struct EnvSource
     float spread;
     ivec2 size;
 };
-vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p);
-
-@include ../../src/shared/envmap_sample.h
-
-/// Texel \p p of \p tex at \p level, or the one texel of a slot showing no channel, which has no others nor levels.
-float fetch_channel(texture2D tex, sampler smp, ivec2 p, int level)
-{
-    ivec2 n = textureSize(sampler2D(tex, smp), 0);
-    return n.x == 1 && n.y == 1 ? texelFetch(sampler2D(tex, smp), ivec2(0), 0).r
-                                : texelFetch(sampler2D(tex, smp), p, level).r;
-}
-
 vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p)
 {
     // a cube map's faces are cells of the one image
-    ivec2 q = envmap_is_cube(src.mapping) ? envmap_face_texel_in_image(src.mapping, chart, p, size.x) : p;
-    return vec4(fetch_channel(primary_0_texture, primary_0_sampler, q, level),
-                fetch_channel(primary_1_texture, primary_1_sampler, q, level),
-                fetch_channel(primary_2_texture, primary_2_sampler, q, level),
-                fetch_channel(primary_3_texture, primary_3_sampler, q, level));
+    return fetch_shown(envmap_is_cube(src.mapping) ? envmap_face_texel_in_image(src.mapping, chart, p, size.x) : p,
+                       level);
 }
+
+@include ../../src/shared/envmap_sample.h
 
 // What src/shared/resample.h reads here: the four shown channels at once, from the textures' finest level.
 #define ResampleValue vec4
@@ -209,46 +222,29 @@ struct ResampleSource
 {
     ivec2 size;
 };
-vec4 resample_fetch(ResampleSource src, ivec2 p)
-{
-    return vec4(fetch_channel(primary_0_texture, primary_0_sampler, p, 0),
-                fetch_channel(primary_1_texture, primary_1_sampler, p, 0),
-                fetch_channel(primary_2_texture, primary_2_sampler, p, 0),
-                fetch_channel(primary_3_texture, primary_3_sampler, p, 0));
-}
+vec4 resample_fetch(ResampleSource src, ivec2 p) { return fetch_shown(p, 0); }
 
 @include ../../src/shared/resample.h
 
-/// The image's size, which every slot showing a channel has and the one-texel others do not exceed.
-ivec2 shown_size()
-{
-    return max(max(textureSize(sampler2D(primary_0_texture, primary_0_sampler), 0),
-                   textureSize(sampler2D(primary_1_texture, primary_1_sampler), 0)),
-               max(textureSize(sampler2D(primary_2_texture, primary_2_sampler), 0),
-                   textureSize(sampler2D(primary_3_texture, primary_3_sampler), 0)));
-}
-
-/// The current image's samples \p value at \p uv, as an edit dialog's preview shows them, or as they are.
+/// The current image's samples \p value at \p uv, changed as the open edit dialog previews them.
 /**
-    Either a remap, whose quad spans the output, so that each of the output's pixels shows the color remapped_envmap()
-    gives it, through the same envmap_sample.h; or, within the subject's rectangle, a shift, through the same
-    resample.h as shifted(), or a point-wise edit, applied to the samples as stored, as apply_point_edit() would
-    change them.
+    A remap fills the output's quad, each output pixel taking the color remapped_envmap() gives it, through
+    envmap_sample.h. Within the subject's rectangle, a shift reads through resample.h as shifted() does, and a point-wise
+    edit maps the stored samples as apply_point_edit() does.
 */
 vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
 {
+    if (!in_img)
+        return value;
+
     if (fsp.remap != 0)
     {
         // the output pixel uv falls in, so each shows as one color
         ivec2 size  = ivec2(fsp.remap_size);
         ivec2 pixel = clamp(ivec2(floor(uv * fsp.remap_size)), ivec2(0), size - 1);
 
-        EnvSource src;
-        src.mapping = fsp.remap_src;
-        src.ratio   = 2.0;
-        src.spread  = 0.25;
-        src.size    = shown_size();
-        src.levels  = fsp.remap_levels;
+        // the textures' mipmaps average 2x2 blocks, halving each level and blurring by a quarter of a squared texel
+        EnvSource src = EnvSource(fsp.remap_src, fsp.remap_levels, 2.0, 0.25, shown_size());
         // a level of the whole image's mipmaps holds whole texels of each face only while it halves the face size
         // exactly, so as many levels as the face size has trailing zero bits, after the finest
         if (envmap_is_cube(src.mapping))
@@ -257,11 +253,10 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
             src.levels = min(src.levels, int(log2(float(n & -n))) + 1);
         }
 
-        mat3 R     = mat3(fsp.remap_rotation);
-        vec4 value = fsp.remap_sampling == 1
-                         ? envmap_ewa(src, fsp.remap_dst, R, pixel, size, fsp.remap_quality)
-                         : envmap_supersample(src, fsp.remap_dst, R, pixel, size, fsp.remap_quality);
-        return in_img ? value : vec4(0.0);
+        mat3 R = mat3(fsp.remap_rotation);
+        return fsp.remap_sampling == ENVMAP_SAMPLE_EWA
+                   ? envmap_ewa(src, fsp.remap_dst, R, pixel, size, fsp.remap_quality)
+                   : envmap_supersample(src, fsp.remap_dst, R, pixel, size, fsp.remap_quality);
     }
 
     if (!all(greaterThanEqual(uv, fsp.edit_rect.xy)) || !all(lessThan(uv, fsp.edit_rect.zw)))
@@ -269,15 +264,10 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
 
     if (fsp.shift != 0)
     {
-        ResampleSource src;
-        src.size     = shown_size();
-        vec4 shifted = resample_shifted(src, ivec2(floor(uv * vec2(src.size))), fsp.shift_offset, fsp.shift_sampler,
-                                        fsp.shift_borders.x, fsp.shift_borders.y);
-        vec4 result  = value;
-        for (int k = 0; k < 4; ++k)
-            if (fsp.edit_slots[k] >= 0)
-                result[k] = shifted[k];
-        return result;
+        ResampleSource src     = ResampleSource(shown_size());
+        vec4           shifted = resample_shifted(src, ivec2(floor(uv * vec2(src.size))), fsp.shift_offset,
+                                                  fsp.shift_sampler, fsp.shift_borders.x, fsp.shift_borders.y);
+        return mix(value, shifted, greaterThanEqual(fsp.edit_slots, ivec4(0)));
     }
 
     if (fsp.edit_op == EDIT_NONE)

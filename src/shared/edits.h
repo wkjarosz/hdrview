@@ -7,8 +7,8 @@
     channels it is; a color op maps a color group's four samples together. Both see the samples as stored:
     premultiplied where alpha means transparency, and in the image's own primaries.
 
-    Float only, since shading languages have no double; tests/test_colorspace.cpp and
-    tests/test_colour_reference.cpp hold the color math to its inverses and to colour-science's values.
+    tests/test_colorspace.cpp and tests/test_colour_reference.cpp hold the color math to its inverses and to
+    colour-science's values.
 */
 
 #ifndef HDRVIEW_SHARED_EDITS_H
@@ -34,7 +34,7 @@ SHARED_CONST int EDIT_FILL_BLEND           = 5; ///< p0: the color; p1.x: the al
 
 // color ops
 SHARED_CONST int EDIT_BRIGHTNESS_CONTRAST  = 6; ///< p0: slope, midpoint, bias, shape; p1.x: what it curves
-SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< p0.x hue turns, m0 saturation, p0.z lightness, p1.x premultiplied
+SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< p0.x: hue turns; m0: saturation; p0.z: lightness; p1.x: whether premultiplied
 SHARED_CONST int EDIT_MATRIX               = 8; ///< m0: the matrix applied to the color
 SHARED_CONST int EDIT_FLATTEN              = 9; ///< p0: the straight background composited under the color
 
@@ -144,7 +144,7 @@ SHARED_FN vec3 Lab_to_XYZ(vec3 Lab, vec3 white)
     return vec3(Lab_f_inv(fx) * white.x, yr * white.y, Lab_f_inv(fz) * white.z);
 }
 
-/// L*a*b* slid and scaled into [0, 1]^3, where a control expecting its input around [0, 1] reads it rightly.
+/// L*a*b* shifted and scaled into [0, 1]^3, the range brightness_contrast() expects.
 SHARED_FN vec3 normalize_Lab(vec3 Lab) { return (Lab - k_Lab_min) / (k_Lab_max - k_Lab_min); }
 
 /// Inverse of normalize_Lab().
@@ -363,8 +363,8 @@ SHARED_FN vec4 edit_color(int op, vec4 c, vec4 p0, vec4 p1, mat3 m0, mat3 m1)
         vec3 back = mul(m1, Lab_to_XYZ(unnormalize_Lab(lab), white));
         return vec4(back.x, back.y, back.z, c.w);
     }
-    // The hue turned around the hexcone, then a linear saturation, then a mix toward black, or toward white or a
-    // highlight's own level, whichever is brighter, taken on the straight color where the samples are premultiplied.
+    // The hue turned around the hexcone, saturation by m0, then lightness mixes toward black, or toward the brighter
+    // of white and the color's own peak, measured on the straight color when premultiplied.
     if (op == EDIT_HUE_SATURATION)
     {
         vec3  mapped = mul(m0, rotate_hue(rgb, p0.x));

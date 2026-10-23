@@ -2,18 +2,18 @@
     Reading an environment map by direction, as the remap edits do on the CPU and the image shader's preview of them
     does on the GPU, compiled from this one source. See shim.h for the dialect it is written in.
 
-    The two differ only in where the texels come from, so the includer supplies that before including this file:
+    The two differ only in where the texels come from, which the includer supplies before including this file:
     - `EnvValue`, what one texel read gives: one channel's float on the CPU, the four shown channels' vec4 on the GPU;
     - `struct EnvSource`, with at least the fields `int mapping` (an ENVMAP_ constant), `int levels` (how many mip
       levels there are), `float ratio` (how many times larger one level's texels are than the last's), `float spread`
       (the variance each step down blurs by, in squared texels of the level it shrinks) and `ivec2 size` (the image's
       size at level 0);
-    - `EnvValue envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p)`, the texel \p p of \p chart
-      at \p level, which is \p size, where \p p is always inside the chart.
+    - `EnvValue envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p)`, texel \p p of \p chart at
+      \p level, whose charts are \p size, where \p p is always inside the chart.
 
     A chart is a piece of the sphere laid out flat in its own coordinates: the whole image for every mapping but a
-    cube map, and one face of the cube, in cube_face_st()'s coordinates, for a cube map. Everything here reads charts
-    in [0,1]^2 and wraps a read past a chart's edge as the sphere continues there.
+    cube map, and for a cube map, one face in cube_face_st()'s coordinates. Everything here reads charts in [0,1]^2
+    and wraps a read past a chart's edge as the sphere continues there.
 */
 
 #ifndef HDRVIEW_SHARED_ENVMAP_SAMPLE_H
@@ -24,31 +24,6 @@
 #endif
 
 SHARED_BEGIN
-
-/// Whether \p mapping lays the sphere out as six flat faces, whichever arrangement it uses for them.
-SHARED_FN bool envmap_is_cube(int mapping) { return mapping == ENVMAP_CUBE_MAP || mapping == ENVMAP_CUBE_COLUMN; }
-
-/// Side of the faces \p mapping carves out of an image of \p size.
-SHARED_FN int envmap_face_size(int mapping, ivec2 size)
-{
-    if (mapping == ENVMAP_CUBE_COLUMN)
-        return max(1, min(size.x, size.y / 6));
-    return max(1, min(size.x / 3, size.y / 4));
-}
-
-/// Where texel \p p of \p face, \p n texels a side, lies in the image a cube map of \p mapping lays out.
-SHARED_FN ivec2 envmap_face_texel_in_image(int mapping, int face, ivec2 p, int n)
-{
-    if (mapping == ENVMAP_CUBE_COLUMN)
-    {
-        // column_st() turns each face by one flip
-        bool  flips_s = face == FACE_POS_X || face == FACE_NEG_X || face == FACE_POS_Z;
-        ivec2 q       = flips_s ? ivec2(n - 1 - p.x, p.y) : ivec2(p.x, n - 1 - p.y);
-        return ivec2(q.x, face * n + q.y);
-    }
-    ivec2 cell = cross_cell(face);
-    return ivec2(cell.x * n + p.x, cell.y * n + p.y);
-}
 
 /// Size of each chart of \p src at \p level, which shrinks by `ratio` from one level to the next, rounding down.
 SHARED_FN ivec2 envmap_chart_size(EnvSource src, int level)
@@ -63,9 +38,6 @@ SHARED_FN ivec2 envmap_chart_size(EnvSource src, int level)
     float f = pow(src.ratio, float(level));
     return ivec2(max(1, int(floor(float(s.x) / f + 1e-4f))), max(1, int(floor(float(s.y) / f + 1e-4f))));
 }
-
-/// \p x modulo \p n, in [0, n) whatever the sign of \p x, which GLSL's % does not promise.
-SHARED_FN int envmap_floor_mod(int x, int n) { return x - n * int(floor(float(x) / float(n))); }
 
 /// Texel \p p of an image of \p size in \p mapping, wrapped as the sphere continues past the image's edges.
 /**
@@ -99,7 +71,7 @@ SHARED_FN ivec2 envmap_wrap_texel(int mapping, ivec2 p, ivec2 size)
             y = y < 0 ? -1 - y : 2 * h - 1 - y;
             x += w / 2;
         }
-        x = envmap_floor_mod(x, w);
+        x = floor_mod(x, w);
     }
     return ivec2(clamp(x, 0, w - 1), clamp(y, 0, h - 1));
 }
@@ -119,7 +91,7 @@ SHARED_FN ivec3 envmap_wrap_face_texel(int face, ivec2 p, int n)
     return ivec3(g, clamp(int(floor(st.x * float(n))), 0, n - 1), clamp(int(floor(st.y * float(n))), 0, n - 1));
 }
 
-/// Texel \p p of \p chart at \p level, which is \p size, wrapped onto the sphere wherever it lies.
+/// Texel \p p of \p chart at \p level, whose charts are \p size, wrapped onto the sphere wherever it lies.
 SHARED_FN EnvValue envmap_texel(EnvSource src, int level, int chart, ivec2 size, ivec2 p)
 {
     if (envmap_is_cube(src.mapping))
@@ -130,37 +102,16 @@ SHARED_FN EnvValue envmap_texel(EnvSource src, int level, int chart, ivec2 size,
     return envmap_fetch(src, level, chart, size, envmap_wrap_texel(src.mapping, p, size));
 }
 
-/// Bilinear read of \p chart at \p level, which is \p size, at \p st in the chart's [0,1]^2 or a little past it.
-SHARED_FN EnvValue envmap_bilinear(EnvSource src, int level, int chart, ivec2 size, vec2 st)
-{
-    float x = st.x * float(size.x) - 0.5f, y = st.y * float(size.y) - 0.5f;
-    float fx = floor(x), fy = floor(y);
-    float tx = x - fx, ty = y - fy;
-    int   x0 = int(fx), y0 = int(fy);
-
-    return (1.0f - ty) * ((1.0f - tx) * envmap_texel(src, level, chart, size, ivec2(x0, y0)) +
-                          tx * envmap_texel(src, level, chart, size, ivec2(x0 + 1, y0))) +
-           ty * ((1.0f - tx) * envmap_texel(src, level, chart, size, ivec2(x0, y0 + 1)) +
-                 tx * envmap_texel(src, level, chart, size, ivec2(x0 + 1, y0 + 1)));
-}
+/// Where direction \p d falls in \p chart's coordinates, which for a cube face may be past its edges.
+SHARED_FN vec2 envmap_chart_point(int mapping, int chart, vec3 d)
+{ return envmap_is_cube(mapping) ? cube_face_st(chart, d) : envmap_xyz_to_uv(mapping, d); }
 
 /// Where direction \p d falls in \p mapping, as the point on its chart followed by the chart.
 SHARED_FN vec3 envmap_locate(int mapping, vec3 d)
 {
-    if (envmap_is_cube(mapping))
-    {
-        int  face = cube_face_of(d);
-        vec2 st   = cube_face_st(face, d);
-        return vec3(st.x, st.y, float(face));
-    }
-    vec2 uv = envmap_xyz_to_uv(mapping, d);
-    return vec3(uv.x, uv.y, 0.0f);
-}
-
-/// Where direction \p d falls in \p chart's coordinates, which for a cube face may be past its edges.
-SHARED_FN vec2 envmap_chart_point(int mapping, int chart, vec3 d)
-{
-    return envmap_is_cube(mapping) ? cube_face_st(chart, d) : envmap_xyz_to_uv(mapping, d);
+    int  chart = envmap_is_cube(mapping) ? cube_face_of(d) : 0;
+    vec2 st    = envmap_chart_point(mapping, chart, d);
+    return vec3(st.x, st.y, float(chart));
 }
 
 /// Bilinear read at \p level, whose charts are \p size, of the point \p st of \p chart, anywhere on the chart's plane.
@@ -168,14 +119,22 @@ SHARED_FN vec2 envmap_chart_point(int mapping, int chart, vec3 d)
     A cube face's plane goes on past its edges, where the direction it names belongs to another face, so the read is
     taken there. Any other chart wraps texel by texel.
 */
-SHARED_FN EnvValue envmap_probe(EnvSource src, int level, ivec2 size, int chart, vec2 st)
+SHARED_FN EnvValue envmap_bilinear(EnvSource src, int level, int chart, ivec2 size, vec2 st)
 {
+    vec3 at = vec3(st.x, st.y, float(chart));
     if (envmap_is_cube(src.mapping) && (st.x < 0.0f || st.x > 1.0f || st.y < 0.0f || st.y > 1.0f))
-    {
-        vec3 p = envmap_locate(src.mapping, cube_face_vector(chart, st));
-        return envmap_bilinear(src, level, int(p.z), size, vec2(p.x, p.y));
-    }
-    return envmap_bilinear(src, level, chart, size, st);
+        at = envmap_locate(src.mapping, cube_face_vector(chart, st));
+
+    int   c = int(at.z);
+    float x = at.x * float(size.x) - 0.5f, y = at.y * float(size.y) - 0.5f;
+    float fx = floor(x), fy = floor(y);
+    float tx = x - fx, ty = y - fy;
+    int   x0 = int(fx), y0 = int(fy);
+
+    return (1.0f - ty) * ((1.0f - tx) * envmap_texel(src, level, c, size, ivec2(x0, y0)) +
+                          tx * envmap_texel(src, level, c, size, ivec2(x0 + 1, y0))) +
+           ty * ((1.0f - tx) * envmap_texel(src, level, c, size, ivec2(x0, y0 + 1)) +
+                 tx * envmap_texel(src, level, c, size, ivec2(x0 + 1, y0 + 1)));
 }
 
 /// The source's direction for \p uv in mapping \p dst, turned by \p rotation.
@@ -212,30 +171,26 @@ SHARED_FN float envmap_read_variance(EnvSource src, int level)
     return src.spread * (t2 - 1.0f) / (r2 - 1.0f) + t2 / 6.0f;
 }
 
-/// Gaussian of standard deviation \p sigma along \p axis through \p st, as reads at \p level spaced along it.
+/// A Gaussian of standard deviation \p sigma along \p dir through \p st, made of bilinear reads at \p level.
 /**
-    \p axis is a unit direction and \p sigma a length, both in texels of level 0, which \p res converts into the
-    chart's coordinates. A \p sigma no wider than a read's own blur is three reads, one that blur either side of the
-    middle, weighted to have exactly \p sigma's variance: blurred as each read is, they are as smooth as the
-    Gaussian. A wider one is reads spaced no further apart than twice that blur, which their sum then smooths over,
-    nor than \p sigma, which the weights then reproduce; out to three sigma, and no more than \p max_half either side
-    of the middle, past which they spread further apart.
+    \p sigma is in texels of level 0, and \p dir is one such texel along the axis, in the chart's coordinates. A sigma
+    no wider than a read's own blur is three reads, at the middle and one blur to either side, weighted to add exactly
+    sigma^2. A wider one is Gaussian-weighted reads out to three sigma, no further apart than twice the blur or than
+    sigma; past \p max_half reads to a side, they spread further apart instead.
 */
-SHARED_FN EnvValue envmap_probe_line(EnvSource src, int level, int chart, vec2 st, vec2 axis, float sigma, vec2 res,
-                                     int max_half)
+SHARED_FN EnvValue envmap_probe_line(EnvSource src, int level, int chart, vec2 st, vec2 dir, float sigma, int max_half)
 {
     ivec2 size = envmap_chart_size(src, level);
     if (sigma <= 0.0f)
-        return envmap_probe(src, level, size, chart, st);
+        return envmap_bilinear(src, level, chart, size, st);
 
     float own = sqrt(envmap_read_variance(src, level));
-    vec2  dir = vec2(axis.x / res.x, axis.y / res.y);
     if (sigma <= own)
     {
         float a = 0.5f * sigma * sigma / (own * own);
-        return (1.0f - 2.0f * a) * envmap_probe(src, level, size, chart, st) +
-               a * (envmap_probe(src, level, size, chart, st - own * dir) +
-                    envmap_probe(src, level, size, chart, st + own * dir));
+        return (1.0f - 2.0f * a) * envmap_bilinear(src, level, chart, size, st) +
+               a * (envmap_bilinear(src, level, chart, size, st - own * dir) +
+                    envmap_bilinear(src, level, chart, size, st + own * dir));
     }
 
     float spacing = min(2.0f * own, sigma);
@@ -246,23 +201,22 @@ SHARED_FN EnvValue envmap_probe_line(EnvSource src, int level, int chart, vec2 s
         spacing = 3.0f * sigma / float(half_n);
     }
 
-    vec2     step  = dir * spacing;
     EnvValue sum   = EnvValue(0.0f);
     float    total = 0.0f;
     for (int i = -half_n; i <= half_n; ++i)
     {
         float t = float(i) * spacing;
         float w = exp(-0.5f * t * t / (sigma * sigma));
-        sum += w * envmap_probe(src, level, size, chart, st + float(i) * step);
+        sum += w * envmap_bilinear(src, level, chart, size, st + t * dir);
         total += w;
     }
     return sum / total;
 }
 
-/// The half-pixel step \p h from \p uv in the remap's output, doubled, as a step across \p chart from \p st.
+/// The output pixel's step along \p h, half a pixel from \p uv, as a step across \p chart from \p st.
 /**
-    The smaller of the steps toward either side, so that a seam (lat-long wrap, disc rim, equal-area fold) on one side
-    does not blow it up; a step reaching past the pixel could cross a seam on both sides.
+    Measured over half a pixel and doubled, on whichever side is shorter, so that a seam on one side (the lat-long wrap,
+    a disc's rim, the equal-area fold) does not inflate it; half a pixel cannot reach seams on both sides.
 */
 SHARED_FN vec2 envmap_pixel_step(int mapping, int chart, int dst, mat3 rotation, vec2 uv, vec2 h, vec2 st)
 {
@@ -273,14 +227,13 @@ SHARED_FN vec2 envmap_pixel_step(int mapping, int chart, int dst, mat3 rotation,
 
 /// Output pixel \p pixel of a remap to \p dst at \p size, filtered over the part of the source it covers.
 /**
-    The filter is a Gaussian of half a pixel, carried into the source by the remap's local stretch: an ellipse there,
-    whose covariance is a quarter of the outer products of the pixel's two steps. Its short axis is widened to at
-    least a \p max_aniso th of the long one, which bounds the reads.
+    The filter is a Gaussian of half a pixel carried into the source by the remap's local stretch: an ellipse whose
+    covariance is a quarter of the sum of the outer products of the pixel's two steps. Its short axis is widened to at
+    least 1/max_aniso of the long one, which bounds the number of reads.
 
-    A read at a mip level blurs by that level's variance in every direction (envmap_read_variance()), so the levels
-    either side of the short axis's variance are blended by the weight that gives exactly it, and along the long axis
-    a line of reads makes up the rest at each, the coarser level's chosen so that the blend has exactly the long
-    axis's variance too.
+    A read at a mip level is already blurred by that level's variance (envmap_read_variance()). The two levels either
+    side of the short axis's variance are blended by the weight that matches it exactly, and at each one a line of
+    reads along the long axis adds the rest, so the blend matches the long axis's variance too.
 */
 SHARED_FN EnvValue envmap_ewa(EnvSource src, int dst, mat3 rotation, ivec2 pixel, ivec2 size, int max_aniso)
 {
@@ -306,28 +259,28 @@ SHARED_FN EnvValue envmap_ewa(EnvSource src, int dst, mat3 rotation, ivec2 pixel
     vec2 axis = abs(sxy) > 1e-12f * major ? normalize(vec2(major - syy, sxy))
                 : sxx >= syy             ? vec2(1.0f, 0.0f)
                                          : vec2(0.0f, 1.0f);
-    float aniso = float(max(1, max_aniso));
-    minor       = max(minor, major / (aniso * aniso));
+    int  aniso = max(1, max_aniso);
+    minor      = max(minor, major / float(aniso * aniso));
 
-    // the finest level whose reads blur by no more than the short axis wants, and the next, blended to make it up;
-    // envmap_read_variance() is (k + 1/6) t2 - k, with t2 = ratio^2l, solved for the level
+    // the coarsest level whose reads blur no more than the short axis wants, blended with the next to make up the
+    // rest; envmap_read_variance() is (k + 1/6) t2 - k with t2 = ratio^2l, solved here for l
     float r2 = src.ratio * src.ratio, k = src.spread / (r2 - 1.0f);
     int   lo   = clamp(int(floor(log((minor + k) / (k + 1.0f / 6.0f)) / log(r2) + 1e-4f)), 0, src.levels - 1);
     int   hi   = min(lo + 1, src.levels - 1);
     float b_lo = envmap_read_variance(src, lo), b_hi = envmap_read_variance(src, hi);
     float w    = hi > lo ? clamp((minor - b_lo) / (b_hi - b_lo), 0.0f, 1.0f) : 0.0f;
 
-    // along the long axis, what each level's reads leave to make up, the finer level's covering what the coarser
-    // one overshoots
+    // what a line of reads along the long axis adds at each level, the finer level's making up for any overshoot at
+    // the coarser one
     float g_hi = max(0.0f, major - b_hi);
     float g_lo = w < 1.0f ? max(0.0f, (major - w * (b_hi + g_hi)) / (1.0f - w) - b_lo) : 0.0f;
 
-    int      max_half = 3 * max(1, max_aniso);
-    EnvValue result   = EnvValue(0.0f);
+    vec2     dir    = axis / res;
+    EnvValue result = EnvValue(0.0f);
     if (w < 1.0f)
-        result += (1.0f - w) * envmap_probe_line(src, lo, chart, st, axis, sqrt(g_lo), res, max_half);
+        result += (1.0f - w) * envmap_probe_line(src, lo, chart, st, dir, sqrt(g_lo), 3 * aniso);
     if (w > 0.0f)
-        result += w * envmap_probe_line(src, hi, chart, st, axis, sqrt(g_hi), res, max_half);
+        result += w * envmap_probe_line(src, hi, chart, st, dir, sqrt(g_hi), 3 * aniso);
     return result;
 }
 

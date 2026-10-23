@@ -65,6 +65,9 @@ enum EnvMapSampling : int
     EnvMapSampling_Point = 0, ///< Supersample and average
     EnvMapSampling_EWA        ///< Elliptical Gaussian over mip levels
 };
+static_assert(EnvMapSampling_Point == shader::ENVMAP_SAMPLE_SUPERSAMPLE &&
+                  EnvMapSampling_EWA == shader::ENVMAP_SAMPLE_EWA,
+              "EnvMapSampling must match src/shared/envmap.h");
 
 /// The rotation that turns by \p yaw about +y, then \p pitch about +x, then \p roll about +z, all in radians.
 /**
