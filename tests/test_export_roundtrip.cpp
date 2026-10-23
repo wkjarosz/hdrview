@@ -51,7 +51,6 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -634,8 +633,7 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
             {
                 // A setting whose dialog does not warn that macOS misreads it must read within the setting's own
                 // tolerance plus Apple's 8-bit-or-so precision, which ImageIO's premultiplying divides by alpha; one
-                // that warns must be off by more than half that, or the warning has gone stale. The caveats are about
-                // values, so each row is compared either way up.
+                // that warns must be off by more than half that, or the warning has gone stale.
                 //
                 // ImageIO also reads an EXR's color, which the format premultiplies, as straight, and multiplies it
                 // by alpha again; that is undone here, so the comparison is of the transfer function and primaries.
@@ -647,17 +645,11 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
                         const float4 want4  = img->rgba_pixel(int2{x, y}, Target_Primary);
                         const auto   w_code = from_linear(straight_rgb(want4), tf);
                         const float  tol    = tolerance(variant, want4[3]) + 0.025f / want4[3];
-                        float        pixel  = std::numeric_limits<float>::infinity();
-                        for (int row : {y, k_size.y - 1 - y})
-                        {
-                            const float4 apple  = (*decoded)(x, row);
-                            const auto   a_code = from_linear(
-                                straight_rgb(apple) / (premultiplies_again ? std::max(1e-4f, apple[3]) : 1.f), tf);
-                            float e = 0.f;
-                            for (int c = 0; c < 3; ++c) e = std::max(e, std::abs(a_code[c] - w_code[c]) / tol);
-                            pixel = std::min(pixel, e);
-                        }
-                        apple_worst = std::max(apple_worst, pixel);
+                        const float4 apple  = (*decoded)(x, y);
+                        const auto   a_code = from_linear(
+                            straight_rgb(apple) / (premultiplies_again ? std::max(1e-4f, apple[3]) : 1.f), tf);
+                        for (int c = 0; c < 3; ++c)
+                            apple_worst = std::max(apple_worst, std::abs(a_code[c] - w_code[c]) / tol);
                     }
                 if (caveat_of(variant, tf).readers & Misreader_macOS)
                     CHECK_MESSAGE(apple_worst > 0.5f, "the dialog warns that macOS misreads this file, which it reads "

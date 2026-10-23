@@ -64,16 +64,12 @@ std::optional<AppleImage> apple_decode(const std::string &bytes, AppleDecode req
                 CGContextSetEDRTargetHeadroom(ctx, 64.f);
             CGContextSetBlendMode(ctx, kCGBlendModeCopy);
             CGContextDrawImage(ctx, CGRectMake(0, 0, (CGFloat)w, (CGFloat)h), image);
+            // a bitmap context's memory holds the image's top row first, though its coordinates start at the bottom
             AppleImage out;
             out.size = int2{(int)w, (int)h};
             out.pixels.resize(w * h);
-            // the bitmap's first row is the image's bottom one
-            for (size_t y = 0; y < h; ++y)
-                for (size_t x = 0; x < w; ++x)
-                {
-                    const size_t i        = ((h - 1 - y) * w + x) * 4;
-                    out.pixels[y * w + x] = float4{rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]};
-                }
+            for (size_t i = 0; i < w * h; ++i)
+                out.pixels[i] = float4{rgba[4 * i], rgba[4 * i + 1], rgba[4 * i + 2], rgba[4 * i + 3]};
             result = std::move(out);
             CGContextRelease(ctx);
         }
