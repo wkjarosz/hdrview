@@ -87,11 +87,10 @@ float4 rotation_between(float3 from, float3 to);
     Resample \p src, a \p src_mapping of the sphere, into \p dst_mapping at \p size, turned by \p rotation.
 
     The output's direction d reads the source in direction rotation d. Point sampling averages \p supersample^2
-    bilinear reads per output pixel. EWA filters each pixel with a Gaussian of half a pixel, stretched into the source
-    as the remap stretches the pixel, reading mip levels chosen by its short axis along its long one; there
-    \p supersample is the maximum anisotropy. Both are envmap_supersample() and envmap_ewa() in
-    src/shared/envmap_sample.h, which the image shader's preview shares. A rotation changes no solid angle, so it
-    only moves the footprint.
+    bilinear reads per output pixel. EWA filters each pixel with a Gaussian of half a pixel, carried into the source
+    by the remap's local stretch: it reads the mip levels its short axis calls for, at points along its long axis;
+    there \p supersample is the maximum anisotropy. Both are envmap_supersample() and envmap_ewa() in
+    src/shared/envmap_sample.h, which the image shader's preview shares.
 */
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
                          EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2,

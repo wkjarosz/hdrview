@@ -64,7 +64,7 @@ public:
         {
             m_size = img->size();
             if (m_auto_aspect)
-                m_size.x = std::max(1, int(std::lround(double(m_size.y) * double(envmapping_aspect(m_dst_mapping)))));
+                m_size.x = aspect_width();
         }
     }
     /// Gives back the view a preview took over, unless the remap was applied and its result is framed in it.
@@ -113,16 +113,15 @@ public:
         // editing one field drives the other
         if (m_auto_aspect)
         {
-            const float aspect = envmapping_aspect(m_dst_mapping);
             if (m_dst_mapping != before_dst || m_size.y != before.y)
-                m_size.x = std::max(1, int(std::lround(double(m_size.y) * double(aspect))));
+                m_size.x = aspect_width();
             else if (m_size.x != before.x)
-                m_size.y = std::max(1, int(std::lround(double(m_size.x) / double(aspect))));
+                m_size.y = std::max(1, int(std::lround(double(m_size.x) / double(envmapping_aspect(m_dst_mapping)))));
         }
 
-        // The rotation as yaw, pitch and roll, which a drag across the preview turns too. The sliders keep their own
-        // angles, since at a quarter-turn pitch the rotation cannot say how much of a turn is yaw and how much roll,
-        // and the rotation is a quaternion, so that drags compose without drifting.
+        // The sliders keep their own angles, since at a quarter-turn pitch the rotation cannot tell yaw from roll. The
+        // rotation itself is a quaternion, so the many small turns of a drag compose exactly, and the sliders follow
+        // it.
         const float3 before_angles = m_angles;
         ImGui::SliderFloat("Yaw", &m_angles.x, -180.f, 180.f, "%.1f deg");
         ImGui::Tooltip("Rotate the environment around the vertical axis. In a lat-long this shifts the image "
@@ -164,8 +163,8 @@ public:
                            "square of this value.");
         }
 
-        // Previewed, the view frames the output as applying it will, fitting it when the preview starts and whenever
-        // the output changes shape, so the result lands where its preview was; unpreviewed, the view is given back.
+        // While previewing, fit the view to the output when the preview starts and whenever the output's size changes,
+        // so the applied result lands where the preview was. When previewing stops, restore the view.
         if (ctx.previewing)
         {
             const Box2i window = output_window(*img);
@@ -194,8 +193,8 @@ public:
     /// Turns the sphere so that what was seen at \p from is seen at \p to.
     bool drag_preview(float2 from, float2 to, float2) override
     {
-        // the rotation that takes the result's direction at to onto the one at from, applied before the turn so
-        // far, so that the source seen at from comes to be seen at to
+        // R' = R Q, with Q turning the output direction at to onto the one at from, so the output at to now shows what
+        // it showed at from
         const auto d  = EnvMapping(m_dst_mapping);
         const auto at = [d](float2 uv) { return envmap_uv_to_xyz(d, nearest_valid_envmap_uv(d, uv)); };
         m_rotation    = la::normalize(la::qmul(m_rotation, rotation_between(at(to), at(from))));
@@ -207,23 +206,24 @@ public:
 
     void apply(const EditContext &ctx) override
     {
-        const auto s = EnvMapping(m_src_mapping), d = EnvMapping(m_dst_mapping);
-        const auto rotation = la::qmat(m_rotation);
-        const int2 out_size = m_size;
-        const int  ss       = quality();
-        const auto mode     = EnvMapSampling(m_sampling);
-
-        if (out_size.x <= 0 || out_size.y <= 0)
+        const auto r = remap_preview(ctx);
+        if (!r)
             return;
-
         ctx.resample_image_async(
-            "Remap envmap", out_size, [s, d, out_size, ss, mode, rotation](const Array2Df &src, AtomicProgress p)
-            { return remapped_envmap(src, out_size, d, s, mode, ss, rotation, p); },
+            "Remap envmap", r->size,
+            [r = *r](const Array2Df &src, AtomicProgress p)
+            {
+                return remapped_envmap(src, r.size, EnvMapping(r.dst), EnvMapping(r.src), EnvMapSampling(r.sampling),
+                                       r.quality, r.rotation, p);
+            },
             framing() ? Extent_StructureInView : Extent_Structure);
         m_applied = true;
     }
 
 private:
+    /// The width the target mapping's aspect gives the current height.
+    int aspect_width() const
+    { return std::max(1, int(std::lround(double(m_size.y) * double(envmapping_aspect(m_dst_mapping))))); }
     /// The display window the remap leaves the image with, which keeps its data window's corner.
     Box2i output_window(const Image &img) const { return Box2i{img.data_window.min, img.data_window.min + m_size}; }
     /// What remapped_envmap() takes as its supersample count: samples per axis, or EWA's maximum anisotropy.

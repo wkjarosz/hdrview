@@ -274,7 +274,8 @@ TEST_CASE("A remap's rotation is the yaw, pitch and roll it is given, and a drag
                 const float3x3 R = envmap_rotation(yaw, pitch, roll);
                 CHECK(la::length(envmap_euler(R) - float3{yaw, pitch, roll}) < 1e-4f);
                 CHECK(la::determinant(R) == doctest::Approx(1.f));
-                CHECK(la::length(mul(transpose(R), R)[0] - float3{1.f, 0.f, 0.f}) < 1e-5f);
+                for (int c = 0; c < 3; ++c)
+                    CHECK(la::length(mul(transpose(R), R)[c] - float3x3{la::identity}[c]) < 1e-5f);
             }
 
     // and at a quarter-turn pitch, where yaw and roll turn about the same axis, the rotation still comes back, with
@@ -394,9 +395,9 @@ TEST_CASE("A cube map's faces join up, so a read at a face edge continues onto t
                 CHECK(out(x, y) == doctest::Approx(f(envmap_uv_to_xyz(EnvMapping_LatLong, uv))).epsilon(0.03));
             }
 
-        // Each face is stored with a one-texel ring of what lies past its edges, taken from whichever face
-        // that is: a join reconstructed with the ring spreads the step over about a texel, with samples in
-        // between on neither face, where clamping at the edge leaves every sample holding one face's value.
+        // A read past a face's edge takes the texel the sphere continues into on the next face, so a join is
+        // reconstructed over about a texel, with samples in between on neither face, where clamping at the edge
+        // leaves every sample holding one face's value.
         // Four destination samples per source texel around the equator, so a step spread over one texel is
         // several samples wide, and one sample per pixel, since averaging several within it would soften
         // the step by itself.
@@ -506,9 +507,10 @@ TEST_CASE("Remapping a mapping to itself returns the image it was given")
         }
     }
 
-    // the equal-area square has no border: each edge continues into itself, folded about its midpoint, so identity
-    // holds over all of it. A lobe just inside an edge, its steepest slope on the fold, differs on either side of it,
-    // so a filter reading past the edge needs the texel the sphere continues into there, not the one beside it
+    // The equal-area square has no border: past each edge the sphere continues into the same edge, mirrored about its
+    // midpoint, so remapping onto itself is the identity everywhere. A lobe just inside an edge, off its midpoint, has
+    // different values on the two sides of that fold, which catches a filter that reads the texel beside the edge
+    // instead of the one the sphere continues into.
     const int2     size{72, 72};
     const float3   c    = envmap_uv_to_xyz(EnvMapping_EqualArea, float2{6.f / 72.f, 0.2f});
     const Array2Df lobe = make_envmap(size, EnvMapping_EqualArea,
@@ -594,8 +596,8 @@ TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, an
     //
     // Reductions differ in kind, not only degree: an isotropic one exercises the mip levels, a lopsided one the reads
     // along the long axis, and a slightly lopsided one the few reads that make up a little more along it than across,
-    // and a filter can be right about one and wrong about another; scales between powers of two land between levels,
-    // and those at them on a level's own texels.
+    // and a filter can be right about one and wrong about another; scales of 2 and 4 put the output's pixels on the
+    // texels of the half- and quarter-size levels, where 1.5, 3 and 6 do not.
     const int W = 480, H = 240;
 
     struct Shape
@@ -619,12 +621,13 @@ TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, an
         for (int axis : {0, 1})
         {
             const float k = axis == 0 ? shape.kx : shape.ky;
-            // at the source's own scale a read lands on the source's texels and nothing is reduced; and the capped
-            // shape is widened across its short axis, on purpose, which only its long axis is held to
+            // skip an axis the shape does not reduce: at the source's own scale reads land on its texels, and the
+            // capped shape's short axis is widened on purpose
             if (k <= 1.f)
                 continue;
-            // and what is past the output's Nyquist is a frequency the source holds only from twice the scale
-            const bool past_nyquist = k >= 2.f;
+            // the aliasing probe, 3/4 cycle per output pixel, is 3/(4k) per source pixel, which the source holds
+            // below its own Nyquist only for k > 1.5
+            const bool past_nyquist = k > 1.5f;
 
             CAPTURE(std::string(shape.what));
             CAPTURE(shape.kx);
@@ -666,8 +669,8 @@ TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, an
                     std::sqrt(-std::log(response(quarter, quarter, offset)) / (2.0 * M_PI * M_PI / 16.0));
                 CHECK(sigma > 0.45);
                 CHECK(sigma < 0.55);
-                // a Gaussian of half a pixel lets 0.06 through, and one read per level, or a whole octave between
-                // levels, two or three times that
+                // a Gaussian of half a pixel passes 0.06 here; one read per level, or levels an octave apart, two or
+                // three times that
                 if (past_nyquist)
                     CHECK(response(n - quarter, quarter, offset) < 0.15);
             }
@@ -902,11 +905,10 @@ TEST_CASE("A mapping's aspect matches the area its image actually covers")
 
 TEST_CASE("The mip level is blended continuously across the finest one")
 {
-    // A remap at the source's own size sits on the boundary between magnifying and minifying, where the lod
-    // crosses zero. Clamping the level while taking the fraction from the unclamped lod puts a whole level's
-    // worth of blur on one side of that boundary, which in a remap is a curve across the image.
+    // A remap at the source's own size sits where magnifying turns into minifying, along a curve across the image.
+    // The blend between levels must be continuous there, or that curve shows as a seam.
     //
-    // Alternating columns, which the finest level holds and the next one averages flat, so how much of the
+    // Alternating columns, which the finest level holds and an octave down averages flat, so how much of the
     // output's variation survives says which level was read.
     Array2Df src{int2{256, 256}};
     for (int y = 0; y < 256; ++y)
@@ -927,22 +929,22 @@ TEST_CASE("The mip level is blended continuously across the finest one")
         return std::sqrt(var / double(out.num_elements()));
     };
 
-    // a hundredth of a level either side of the boundary, and a whole level past it
+    // a hundredth of a level either side of the boundary, and an octave (two levels) past it
     const double just_over = variation(255), at = variation(256), just_under = variation(257);
-    const double one_level = variation(128);
+    const double one_octave = variation(128);
 
     CAPTURE(just_over);
     CAPTURE(at);
     CAPTURE(just_under);
-    CAPTURE(one_level);
+    CAPTURE(one_octave);
 
-    // the level is reached at all: the finest holds the columns and the next has averaged them away, or
+    // the level is reached at all: the finest holds the columns and an octave down they are averaged away, or
     // the comparison below says nothing
     REQUIRE(at > 0.05);
-    REQUIRE(one_level < 0.25 * at);
+    REQUIRE(one_octave < 0.25 * at);
 
-    // and the two sides of the boundary agree far more closely than a level's worth of difference. Only
+    // and the two sides of the boundary agree far more closely than an octave's worth of difference. Only
     // these two are compared: at the source's own size the samples land on the columns instead of drifting
     // across them, which changes the spread by itself.
-    CHECK(std::abs(just_under - just_over) < 0.2 * (just_over - one_level));
+    CHECK(std::abs(just_under - just_over) < 0.2 * (just_over - one_octave));
 }

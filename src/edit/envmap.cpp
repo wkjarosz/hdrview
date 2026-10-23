@@ -133,16 +133,16 @@ namespace
 
 /// How many times larger each mip level's texels are than the last's: half an octave.
 /**
-    EWA blends the two levels either side of the blur it needs (envmap_ewa()), which has the right variance but not a
-    Gaussian's shape, and so passes more of what lies past Nyquist the further apart the two levels' blurs are: four
-    times the variance a whole octave apart, which aliases about three times as much as half an octave.
+    Blending two levels (envmap_ewa()) gets the blur's variance right but not its Gaussian shape, and lets more past
+    Nyquist through the further apart the levels are: a whole octave apart aliases about three times as much as half
+    an octave.
 */
-constexpr float k_level_ratio = 1.41421356f;
+constexpr float k_level_ratio = 1.41421356f; // sqrt(2)
 
 /// The Gaussian blur before each step down, in texels of the level it shrinks.
 /**
-    Enough that the smaller level keeps little of what it cannot hold, which averaging neighbors would fold down to low
-    frequencies, where nothing downstream can tell it from the content's own.
+    Enough to remove most of what the smaller level cannot hold, which would otherwise alias to low frequencies that no
+    later filter can tell from real content.
 */
 constexpr float k_level_sigma = 0.85f;
 
@@ -218,7 +218,7 @@ private:
         float w[8];
     };
 
-    /// The taps for each of \p n texels along one axis, \p scale old texels apart, reading \p from old ones.
+    /// The taps for each of \p n new texels along one axis, spaced \p scale old texels apart.
     static std::vector<Taps> taps_along(int n, float scale)
     {
         const float       r = 3.f * k_level_sigma;
@@ -319,12 +319,13 @@ float3x3 envmap_rotation(float yaw, float pitch, float roll)
 
 float3 envmap_euler(const float3x3 &R, float roll)
 {
-    // R[column][row]: the third column's middle row is -sin(pitch), and with it the rest of that column and row
-    // give the yaw and the roll, until the pitch reaches a quarter turn and they turn about the same axis
+    // R[column][row]. R[2][1] = -sin(pitch); the rest of the third column gives the yaw and the rest of the middle row
+    // the roll, both scaled by cos(pitch), which vanishes at a quarter turn
     const float pitch = std::asin(std::clamp(-R[2][1], -1.f, 1.f));
     if (std::abs(R[2][1]) > 1.f - 1e-6f)
     {
-        // the first column is then the yaw less the roll's turn about the up axis, which is the same turn
+        // there yaw and roll turn about the same axis, and the first column is a turn by yaw - sin(pitch) * roll about
+        // +y
         const float sp = -R[2][1] > 0.f ? 1.f : -1.f;
         return float3{std::remainder(std::atan2(-R[0][2], R[0][0]) + sp * roll, 2.f * k_pi), pitch, roll};
     }
