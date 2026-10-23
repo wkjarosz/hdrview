@@ -32,6 +32,14 @@ void mapping_combo(const char *label, int *value)
     }
 }
 
+/// Continue the line, beyond the last item's label, at the dialog's right edge for something \p width wide.
+void same_line_at_right(float width)
+{
+    ImGui::SameLine();
+    if (const float slack = ImGui::GetContentRegionAvail().x - width; slack > 0.f)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + slack);
+}
+
 class Remap final : public EditCommand
 {
 public:
@@ -90,10 +98,12 @@ public:
             std::swap(m_src_mapping, m_dst_mapping);
 
         const int2 before = m_size;
-        ImGui::DragInt2("Width, height", &m_size.x, 1.f, 1, 65536, "%d px");
+        ImGui::DragInt2("Size", &m_size.x, 1.f, 1, 65536, "%d px");
         m_size = la::max(m_size, int2{1});
 
-        ImGui::Checkbox("Auto aspect ratio", &m_auto_aspect);
+        const auto &style = ImGui::GetStyle();
+        same_line_at_right(ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize("Auto aspect").x);
+        ImGui::Checkbox("Auto aspect", &m_auto_aspect);
         ImGui::Tooltip("Keep the width and height in the proportion the target parameterization wants: 2:1 "
                        "for a lat-long, square for a disc, 3:4 for a cube cross.");
 
@@ -109,23 +119,25 @@ public:
         }
 
         // The rotation, as yaw, pitch and roll, which a drag across the preview turns too. Held as a quaternion, so
-        // that drags compose without drifting, and shown in degrees.
-        float3 angles = envmap_euler(la::qmat(m_rotation)) * (180.f / float(M_PI)), before_angles = angles;
+        // that drags compose without drifting, and shown in degrees, plus zero so that an unturned sphere's pitch,
+        // which comes out as -0, shows as 0.
+        float3 angles = envmap_euler(la::qmat(m_rotation)) * (180.f / float(M_PI)) + 0.f, before_angles = angles;
         ImGui::SliderFloat("Yaw", &angles.x, -180.f, 180.f, "%.1f deg");
         ImGui::Tooltip("Turn the sphere about its up axis, which slides a lat-long sideways.");
         ImGui::SliderFloat("Pitch", &angles.y, -90.f, 90.f, "%.1f deg");
         ImGui::Tooltip("Tip the sphere forward or back.");
         ImGui::SliderFloat("Roll", &angles.z, -180.f, 180.f, "%.1f deg");
         ImGui::Tooltip("Turn the sphere about the forward axis.");
+        same_line_at_right(ImGui::CalcTextSize("Reset rotation").x + 2.f * style.FramePadding.x);
+        if (ImGui::Button("Reset rotation"))
+            m_rotation = float4{0.f, 0.f, 0.f, 1.f};
+        ImGui::Tooltip("Drag across the preview to turn the sphere, keeping what is under the cursor under it; "
+                       "Alt-drag pans the view instead.");
         if (angles != before_angles)
         {
             const float3 r = angles * (float(M_PI) / 180.f);
             m_rotation     = la::rotation_quat(envmap_rotation(r.x, r.y, r.z));
         }
-        if (ImGui::Button("Reset rotation"))
-            m_rotation = float4{0.f, 0.f, 0.f, 1.f};
-        ImGui::Tooltip("Drag across the preview to turn the sphere, keeping what is under the cursor under it; "
-                       "Alt-drag pans the view instead.");
 
         ImGui::RadioButton("EWA", &m_sampling, EnvMapSampling_EWA);
         ImGui::Tooltip("Reads a mip pyramid through an ellipse shaped by the area each output pixel covers "
@@ -256,7 +268,7 @@ public:
 
         mapping_combo("Mapping", &m_mapping);
 
-        ImGui::DragInt2("Width, height", &m_size.x, 1.f, 1, 8192, "%d px");
+        ImGui::DragInt2("Size", &m_size.x, 1.f, 1, 8192, "%d px");
         m_size = la::max(m_size, int2{1});
         ImGui::Tooltip("The result is smooth enough that a small output loses nothing: it is described by "
                        "nine numbers however large it is written out.");

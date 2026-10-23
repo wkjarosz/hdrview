@@ -817,8 +817,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Irradiance envmap...");
         ctx->SetRef("Irradiance envmap...");
         // tiny: the convolution costs the two resolutions multiplied together, and the result is smooth
-        ctx->ItemInputValue("Width, height/$$0", 8);
-        ctx->ItemInputValue("Width, height/$$1", 6);
+        ctx->ItemInputValue("Size/$$0", 8);
+        ctx->ItemInputValue("Size/$$1", 6);
         ctx->ItemClick("Convolve");
 
         wait_until(ctx, [&] { return img->history.has_undo(); });
