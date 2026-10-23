@@ -999,6 +999,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Channel mixer...");
         ctx->ItemClick("Monochrome");
         ctx->ItemClick("Mix");
+        // applied in the frame it was confirmed, so its preview is gone, or the next frame would apply it twice
+        IM_CHECK(hdrview()->edit_preview() == nullptr);
         wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(snapshot(img) != original);

@@ -249,9 +249,13 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
         src.spread  = 0.25;
         src.size    = shown_size();
         src.levels  = fsp.remap_levels;
-        // a cube map's faces run out of texels before the image does
+        // a level of the whole image's mipmaps holds whole texels of each face only while it halves the face size
+        // exactly, so as many levels as the face size has trailing zero bits, after the finest
         if (envmap_is_cube(src.mapping))
-            src.levels = min(src.levels, int(floor(log2(float(envmap_face_size(src.mapping, src.size))))) + 1);
+        {
+            int n      = envmap_face_size(src.mapping, src.size);
+            src.levels = min(src.levels, int(log2(float(n & -n))) + 1);
+        }
 
         mat3 R     = mat3(fsp.remap_rotation);
         vec4 value = fsp.remap_sampling == 1

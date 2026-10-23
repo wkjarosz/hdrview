@@ -365,13 +365,11 @@ public:
 
     std::optional<PointEdit> point_edit(const EditContext &ctx) const override
     {
-        // toward the gray of the image's own primaries, and on straight color where the samples are premultiplied,
-        // which finalize() makes them whenever alpha means transparency
-        const float3 Yw            = ctx.image ? ctx.image->luminance_weights : sRGB_Yw();
-        bool         premultiplied = false;
-        if (auto img = ctx.image; img && img->is_valid_group(img->active_group_index(Target_Primary)))
-            premultiplied = img->alpha_is_transparency() &&
-                            group_has_alpha(img->groups[size_t(img->active_group_index(Target_Primary))].type);
+        // Toward the gray of the image's own primaries, on straight color wherever alpha means transparency, since
+        // finalize() then stores the samples premultiplied. A group without alpha reads as opaque either way.
+        const auto  &img           = ctx.image;
+        const bool   premultiplied = img && img->alpha_is_transparency();
+        const float3 Yw            = img ? img->luminance_weights : sRGB_Yw();
 
         PointEdit e{shader::EDIT_HUE_SATURATION};
         e.m0 = saturation_matrix((m_saturation + 100.f) / 100.f, Yw);

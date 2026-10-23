@@ -534,6 +534,28 @@ TEST_CASE("A color edit is handed a group's channels together")
     CHECK(samples(img) == swapped);
 }
 
+TEST_CASE("Hue/saturation works on straight color in every group it covers where alpha means transparency")
+{
+    // the group on screen has no alpha while another covered group does, so a decision made from the group on
+    // screen alone reads that other group's premultiplied samples as straight
+    auto img            = make_layered_image();
+    img->selected_group = group_of_channel(img, "normal.R");
+
+    TestEditContext ctx{img};
+    ctx.subject.scope = EditSubject::Scope_AllChannels;
+
+    auto cmd = find_command("Hue/saturation...");
+    REQUIRE(cmd);
+    for (TransparencyType_ t : {TransparencyType_None, TransparencyType_PremultipliedLinear})
+    {
+        CAPTURE(t);
+        img->set_transparency(t, std::nullopt);
+        const auto edit = cmd->point_edit(ctx);
+        REQUIRE(edit);
+        CHECK((edit->p1.x != 0.f) == img->alpha_is_transparency());
+    }
+}
+
 TEST_CASE("Converting the color space moves the samples and the tag in one step")
 {
     auto img            = make_image();

@@ -953,7 +953,7 @@ private:
     bool m_dragging_around_dialog = false; ///< whether the left button went down in the viewport, around it
     bool        m_steering_preview = false; ///< whether it went down on a preview that takes drags, which it steers
     EditPreview m_edit_preview;                   ///< see edit_preview()
-    int         m_edit_preview_frame = -2;        ///< the last frame an edit dialog asked for m_edit_preview
+    int         m_edit_preview_frame = -2;        ///< the last frame an edit dialog asked for it, or k_preview_held
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
     /// Index of the annotation being worked on, or -1 when none on the current image is.

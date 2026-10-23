@@ -15,6 +15,7 @@
 #include <hello_imgui/hello_imgui.h>
 
 #include <algorithm>
+#include <limits>
 #include <numeric>
 #include <smallthreadpool.h>
 #include <spdlog/spdlog.h>
@@ -22,6 +23,12 @@
 
 using std::function;
 using std::string;
+
+namespace
+{
+/// The preview frame of an edit confirmed and handed to a worker, whose preview stays up until its result lands.
+constexpr int k_preview_held = std::numeric_limits<int>::max();
+} // namespace
 
 ImagePtr HDRViewApp::target_image() { return m_target_image_override ? m_target_image_override : current_image(); }
 
@@ -151,6 +158,8 @@ bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
 
 const EditPreview *HDRViewApp::edit_preview() const
 {
+    if (m_edit_preview_frame == k_preview_held)
+        return m_running_filter ? &m_edit_preview : nullptr;
     // the dialogs ask during the frame, after the viewport has drawn, so last frame's request is this frame's
     return ImGui::GetFrameCount() - m_edit_preview_frame <= 1 ? &m_edit_preview : nullptr;
 }
@@ -217,13 +226,18 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
         const auto result = ImGui::DialogButtons(info.confirm.c_str());
         if (result == ImGui::DialogResult::Confirm)
         {
-            // the dialog is drawn against the current image, but confirming applies across the selection
+            // The dialog is drawn against the current image, but confirming applies across the selection. An edit
+            // made in the frame has landed already, where drawing its preview would apply it twice; one handed to a
+            // worker keeps its preview up until the result lands on the current image.
+            const bool shown = edit_preview() != nullptr;
             apply_edit_command(cmd);
+            m_edit_preview_frame = shown && m_running_filter ? k_preview_held : -2;
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
         {
+            m_edit_preview_frame = -2;
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
@@ -516,6 +530,10 @@ void HDRViewApp::drain_running_filter()
 
     auto running     = std::move(m_running_filter);
     m_running_filter = nullptr;
+
+    // a preview held for this result ends as it lands, or with the run
+    if (m_edit_preview_frame == k_preview_held && (running->image == current_image() || running->progress.canceled()))
+        m_edit_preview_frame = -2;
 
     // a partial result is a wrong one, so an abandoned run changes nothing
     if (running->progress.canceled())
