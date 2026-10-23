@@ -159,7 +159,17 @@ void HDRViewApp::draw_image_border() const
     if (!cimg && !rimg)
         return;
 
-    if (cimg && cimg->data_window.has_volume())
+    if (const EnvmapRemap *remap = remap_preview())
+    {
+        // the remap's output, which is all of the current image's that the view shows
+        const auto [lo, hi] = remap_preview_corners(*remap);
+        ImGui::PushRowColors(true, false);
+        if (m_draw_data_window)
+            ImGui::DrawLabeledRect(draw_list, Box2f{app_pos_at_vp_pos(lo), app_pos_at_vp_pos(hi)}.make_valid(),
+                                   ImGui::GetColorU32(ImGuiCol_HeaderActive), "Remapped", {0.f, 0.f}, true);
+        ImGui::PopStyleColor(3);
+    }
+    else if (cimg && cimg->data_window.has_volume())
     {
         auto data_window =
             Box2f{app_pos_at_pixel(float2{cimg->data_window.min}), app_pos_at_pixel(float2{cimg->data_window.max})}
@@ -196,7 +206,7 @@ void HDRViewApp::draw_image_border() const
         ImGui::PopStyleColor(3);
     }
 
-    if (m_roi_live.has_volume())
+    if (m_roi_live.has_volume() && !remap_preview())
     {
         Box2f crop_window{app_pos_at_pixel(float2{m_roi_live.min}), app_pos_at_pixel(float2{m_roi_live.max})};
         ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
@@ -433,8 +443,21 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.edit_m0", pad(edit.edit.m0));
         m_shader->set_uniform("fsp.edit_m1", pad(edit.edit.m1));
 
-        m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
-        m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
+        // a remap's preview lays its quad over the output it makes, in place of the current image's data window
+        if (const EnvmapRemap *remap = remap_preview())
+        {
+            const auto [lo, hi] = remap_preview_corners(*remap);
+            m_shader->set_uniform("vsp.primary_pos", lo / viewport_size());
+            m_shader->set_uniform("vsp.primary_scale", (hi - lo) / viewport_size());
+        }
+        else
+        {
+            m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
+            m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
+        }
+        m_shader->set_uniform("fsp.remap", (int)(remap_preview() != nullptr));
+        m_shader->set_uniform("fsp.remap_src", remap_preview() ? remap_preview()->src : 0);
+        m_shader->set_uniform("fsp.remap_dst", remap_preview() ? remap_preview()->dst : 0);
         m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
         m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
 
@@ -535,11 +558,18 @@ void HDRViewApp::draw_background()
         draw_image();
         m_render_pass->end();
 
+        // what is drawn in the current image's pixels has nowhere to go over a remap's preview, which shows the
+        // output; the border then outlines that
+        const bool remapping = remap_preview() != nullptr;
         draw_pixel_info();
-        draw_pixel_grid();
+        if (!remapping)
+            draw_pixel_grid();
         draw_image_border();
-        draw_vector_overlays();
-        draw_tool_decorations();
+        if (!remapping)
+        {
+            draw_vector_overlays();
+            draw_tool_decorations();
+        }
     }
     catch (const exception &e)
     {

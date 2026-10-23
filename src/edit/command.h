@@ -46,6 +46,13 @@ struct PointEdit
     float3x3 m0{la::identity}, m1{la::identity};
 };
 
+/// An environment map remap, as the image shader previews it: the image read as one mapping and shown as another.
+struct EnvmapRemap
+{
+    int  src = 0, dst = 0; ///< EnvMapping values: what the image is, and what it becomes
+    int2 size{0};          ///< The size it becomes
+};
+
 /// What an edit command sees of the application: the image, the subject, and the ways to change it.
 /**
     Filled in by HDRViewApp::edit_context(), and by the tests directly. Most ways of changing an image are
@@ -115,6 +122,8 @@ public:
 
     /// The point-wise edit this command makes with its current settings, or none for an edit of another kind.
     virtual std::optional<PointEdit> point_edit(const EditContext &) const { return std::nullopt; }
+    /// The envmap remap this command makes with its current settings, for the viewport to preview, or none.
+    virtual std::optional<EnvmapRemap> remap_preview(const EditContext &) const { return std::nullopt; }
     /// The matrix the image shows its samples through once this edit has retagged them, or none if it leaves the tag.
     virtual std::optional<float3x3> M_to_sRGB_after(const EditContext &) const { return std::nullopt; }
 

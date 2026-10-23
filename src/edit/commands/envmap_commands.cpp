@@ -125,6 +125,13 @@ public:
         }
     }
 
+    std::optional<EnvmapRemap> remap_preview(const EditContext &) const override
+    {
+        if (m_size.x <= 0 || m_size.y <= 0)
+            return std::nullopt;
+        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size};
+    }
+
     void apply(const EditContext &ctx) override
     {
         const auto s = EnvMapping(m_src_mapping), d = EnvMapping(m_dst_mapping);

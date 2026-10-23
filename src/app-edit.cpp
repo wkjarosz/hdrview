@@ -143,15 +143,24 @@ const HDRViewApp::EditPreview *HDRViewApp::edit_preview() const
     return ImGui::GetFrameCount() - m_edit_preview_frame <= 1 ? &m_edit_preview : nullptr;
 }
 
-void HDRViewApp::request_edit_preview(const EditCommand &cmd, const PointEdit &edit, const EditContext &ctx)
+bool HDRViewApp::request_edit_preview(const EditCommand &cmd, const EditContext &ctx)
 {
+    if (!ctx.image)
+        return false;
+
+    EditPreview p;
+    p.remap = cmd.remap_preview(ctx);
+    if (const auto edit = cmd.point_edit(ctx))
+        p.edit = *edit;
+    else if (!p.remap)
+        return false;
+    const PointEdit &edit = p.edit;
+
     // what apply_point_edit() would cover of the group the viewport shows: for a per-sample op, the subject's
     // channels among those bound to the shader's slots, and for a color op, the group if it is one of the subject's
     const Image &img   = *ctx.image;
     const int    shown = img.active_group_index(Target_Primary);
-    EditPreview  p;
-    p.edit      = edit;
-    p.M_to_sRGB = cmd.M_to_sRGB_after(ctx);
+    p.M_to_sRGB        = cmd.M_to_sRGB_after(ctx);
     if (edit.op < shader::EDIT_FIRST_COLOR)
     {
         const auto subject = subject_channels(img, ctx.subject);
@@ -179,6 +188,7 @@ void HDRViewApp::request_edit_preview(const EditCommand &cmd, const PointEdit &e
 
     m_edit_preview       = p;
     m_edit_preview_frame = ImGui::GetFrameCount();
+    return true;
 }
 
 void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
@@ -219,15 +229,16 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
             ImGui::SameLine();
         }
 
-        // A point-wise edit is previewed in the viewport as the controls move, by the same code that applies it.
+        // A point-wise edit or a remap is previewed in the viewport as the controls move, by the same code that
+        // applies it, or for a remap, the same mappings.
         static bool preview = true;
-        if (const auto edit = cmd.point_edit(ctx); edit && ctx.image)
+        if ((cmd.point_edit(ctx) || cmd.remap_preview(ctx)) && ctx.image)
         {
             ImGui::Checkbox("Preview", &preview);
             ImGui::Tooltip("Show the edit on the current image before it is applied.");
             ImGui::SameLine();
             if (preview)
-                request_edit_preview(cmd, *edit, ctx);
+                request_edit_preview(cmd, ctx);
         }
 
         // applied on confirm, not as the controls move: an edit per frame of a drag would fill the

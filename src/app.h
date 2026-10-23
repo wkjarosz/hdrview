@@ -235,7 +235,8 @@ public:
     /// The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
     void draw_edit_command_dialog(EditCommand &cmd, bool &open);
 
-    /// What an edit dialog's preview has the viewport show: a point-wise edit of the current image's samples.
+    /// What an edit dialog's preview has the viewport show: a point-wise edit of the current image's samples, or a
+    /// remap.
     struct EditPreview
     {
         PointEdit edit;
@@ -243,11 +244,25 @@ public:
         bool      color = false; ///< Whether the group shown is one a color op reaches
         float4    rect{0.f};     ///< The subject's rectangle in the shown textures' uv: min, then max
         std::optional<float3x3> M_to_sRGB; ///< What the image shows its samples through once the edit retags them
+        std::optional<EnvmapRemap> remap; ///< The current image remapped to a new size, in place of a point-wise edit
     };
     /// The preview an edit dialog asked for this frame or the last, or none.
     const EditPreview *edit_preview() const;
-    /// Ask the viewport to preview \p cmd's point-wise edit, as applying it in \p ctx would change the current image.
-    void request_edit_preview(const EditCommand &cmd, const PointEdit &edit, const EditContext &ctx);
+    /// The remap the preview shows, or none.
+    const EnvmapRemap *remap_preview() const
+    {
+        const EditPreview *p = edit_preview();
+        return p && p->remap ? &*p->remap : nullptr;
+    }
+    /// Ask the viewport to preview \p cmd, as applying it in \p ctx would change the current image; false if it has
+    /// none.
+    bool request_edit_preview(const EditCommand &cmd, const EditContext &ctx);
+    /// Where a remap's output sits in the viewport: the viewport positions of its uv (0, 0) and (1, 1).
+    /**
+        Centered where the current image's display window is, at the same zoom, as an image of its size would open,
+        and mirrored as the view mirrors the image.
+    */
+    std::pair<float2, float2> remap_preview_corners(const EnvmapRemap &remap) const;
 
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();

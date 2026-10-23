@@ -690,7 +690,8 @@ void HDRViewApp::draw_statistics_window()
 
         ImGui::PE::PushLabelFont(bold_font);
 
-        if (auto hp = last_hovered_pixel())
+        // not while an edit is previewed, when the pixel under the cursor no longer holds what is shown
+        if (auto hp = last_hovered_pixel(); hp && !edit_preview())
         {
             auto        hovered_pixel = *hp;
             static int3 hover_color_mode{0, 0, 0};

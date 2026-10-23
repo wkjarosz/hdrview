@@ -241,9 +241,9 @@ SHARED_FN vec3 equal_area_to_xyz(vec2 p)
     float r               = 1.0f - abs(signed_distance);
 
     float phi     = (r == 0.0f ? 1.0f : (vp - up) / r + 1.0f) * ENVMAP_PI / 4.0f;
-    float z       = copysign(1.0f - r * r, signed_distance);
-    float cos_phi = copysign(cos(phi), u);
-    float sin_phi = copysign(sin(phi), v);
+    float z       = copy_sign(1.0f - r * r, signed_distance);
+    float cos_phi = copy_sign(cos(phi), u);
+    float sin_phi = copy_sign(sin(phi), v);
     float scale   = r * sqrt(max(0.0f, 2.0f - r * r));
     return vec3(cos_phi * scale, z, -sin_phi * scale);
 }
@@ -329,7 +329,7 @@ SHARED_FN vec2 xyz_to_equal_area(vec3 xyz)
         u             = 1.0f - v;
         v             = 1.0f - swapped;
     }
-    return vec2(0.5f * (copysign(u, d.x) + 1.0f), 0.5f * (copysign(v, d.y) + 1.0f));
+    return vec2(0.5f * (copy_sign(u, d.x) + 1.0f), 0.5f * (copy_sign(v, d.y) + 1.0f));
 }
 
 //

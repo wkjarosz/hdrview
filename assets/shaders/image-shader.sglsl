@@ -78,6 +78,10 @@ layout(binding=1) uniform fs_params {
     vec4  edit_p1;
     mat4  edit_m0;
     mat4  edit_m1;
+    // a remap dialog's preview, which reads the current image as remap_src and shows it as remap_dst
+    int   remap;
+    int   remap_src;
+    int   remap_dst;
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -156,6 +160,13 @@ float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
     return within_image ? value : 0.0;
 }
 
+/// sample_channel() from the finest level alone, for a uv whose jumps, at an envmap's seams, would pick the coarsest
+float sample_channel_finest(texture2D tex, sampler smp, vec2 uv, bool within_image)
+{
+    float value = textureLod(sampler2D(tex, smp), uv, 0.0).r;
+    return within_image ? value : 0.0;
+}
+
 void main()
 {
     vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
@@ -178,11 +189,23 @@ void main()
     bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
     bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;
 
-    vec4 value = vec4(
-        sample_channel(primary_0_texture, primary_0_sampler, primary_uv, in_img),
-        sample_channel(primary_1_texture, primary_1_sampler, primary_uv, in_img),
-        sample_channel(primary_2_texture, primary_2_sampler, primary_uv, in_img),
-        sample_channel(primary_3_texture, primary_3_sampler, primary_uv, in_img));
+    vec4 value;
+    if (fsp.remap != 0)
+    {
+        // A remap's preview: the quad spans the output, and each point of it reads the source where its direction
+        // falls, as remapped_envmap() does; off the sphere, from the nearest point that is on it.
+        vec3 dir = envmap_uv_to_xyz(fsp.remap_dst, nearest_valid_envmap_uv(fsp.remap_dst, primary_uv));
+        vec2 uv  = envmap_xyz_to_uv(fsp.remap_src, dir);
+        value    = vec4(sample_channel_finest(primary_0_texture, primary_0_sampler, uv, in_img),
+                        sample_channel_finest(primary_1_texture, primary_1_sampler, uv, in_img),
+                        sample_channel_finest(primary_2_texture, primary_2_sampler, uv, in_img),
+                        sample_channel_finest(primary_3_texture, primary_3_sampler, uv, in_img));
+    }
+    else
+        value = vec4(sample_channel(primary_0_texture, primary_0_sampler, primary_uv, in_img),
+                     sample_channel(primary_1_texture, primary_1_sampler, primary_uv, in_img),
+                     sample_channel(primary_2_texture, primary_2_sampler, primary_uv, in_img),
+                     sample_channel(primary_3_texture, primary_3_sampler, primary_uv, in_img));
 
     // an edit dialog's preview, on the samples as stored, as apply_point_edit() would change them
     if (fsp.edit_op != EDIT_NONE && all(greaterThanEqual(primary_uv, fsp.edit_rect.xy)) &&
