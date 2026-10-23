@@ -38,7 +38,7 @@ void border_fields(int *border_x, int *border_y, bool *linked, const char *toolt
     };
 
     combo("Border", border_x);
-    ImGui::Tooltip("%s", tooltip);
+    ImGui::Tooltip(tooltip);
 
     ImGui::Checkbox("Same in both directions", linked);
     if (!*linked)

@@ -337,6 +337,8 @@ void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args);
 void TextAligned2(float align_x, float size_x, const char *fmt, ...);
 
 void Tooltip(const char *description, bool questionMark = false, float wrap_width = -1.f);
+/// Not printf-style: a second string would otherwise convert to \p questionMark, showing the format and a "?".
+void Tooltip(const char *description, const char *, float wrap_width = -1.f) = delete;
 /// The tooltip of the last item: \p description, followed by whatever \p more draws, such as a table.
 void Tooltip(const char *description, const std::function<void()> &more);
 
