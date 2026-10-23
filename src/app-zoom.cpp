@@ -7,6 +7,13 @@
 using namespace std;
 using namespace HelloImGui;
 
+namespace
+{
+/// The display window of the image \p preview shows: a reshaping edit's result, or else \p img, as drawn.
+Box2f previewed_window(const EditPreview &preview, const ConstImagePtr &img)
+{ return preview.window ? Box2f{*preview.window} : Box2f{img->display_window}; }
+} // namespace
+
 /**
     Mirrors a pixel coordinate about a display window, along whichever axes are flipped.
 
@@ -280,12 +287,11 @@ static float2 scroll_units(float2 wheel)
 
 std::optional<float2> HDRViewApp::preview_uv(float2 vp_pos) const
 {
-    // the image previewed is a reshaping edit's result, or else the current image, as drawn
     const EditPreview *preview = edit_preview();
     auto               img     = current_image();
     if (!preview || !preview->command || (!preview->window && !img))
         return std::nullopt;
-    const Box2f w = preview->window ? Box2f{*preview->window} : Box2f{img->display_window};
+    const Box2f w = previewed_window(*preview, img);
     return (pixel_at_vp_pos(vp_pos, w) - w.min) / w.size();
 }
 
@@ -373,7 +379,8 @@ void HDRViewApp::handle_mouse_interaction()
             bool         steered = false;
             if (m_steering_preview && !ImGui::IsKeyDown(ImGuiMod_Alt) && m_active_touches < 2)
                 if (const auto from = preview_uv(vp_mouse_pos - delta), to = preview_uv(vp_mouse_pos); from && to)
-                    steered = edit_preview()->command->drag_preview(*from, *to);
+                    steered = edit_preview()->command->drag_preview(
+                        *from, *to, previewed_window(*edit_preview(), current_image()).size());
 
             // A second finger means a pinch, while the first still drives a synthesized left-drag, so
             // panning would fight the zoom. The drag is consumed meanwhile: left to accumulate, it would

@@ -155,9 +155,10 @@ public:
     virtual std::optional<ShiftEdit> shift_preview(const EditContext &) const { return std::nullopt; }
     /// Steer the preview by a drag over it from \p from to \p to, in the previewed image's uv; whether it did.
     /**
-        Only while the command's dialog previews it. A drag it does not take pans the viewport as usual.
+        \p size is the previewed image's size in pixels. Only while the command's dialog previews it. A drag it does
+        not take pans the viewport as usual.
     */
-    virtual bool drag_preview(float2 /*from*/, float2 /*to*/) { return false; }
+    virtual bool drag_preview(float2 /*from*/, float2 /*to*/, float2 /*size*/) { return false; }
     /// The matrix the image shows its samples through once this edit has retagged them, or none if it leaves the tag.
     virtual std::optional<float3x3> M_to_sRGB_after(const EditContext &) const { return std::nullopt; }
 

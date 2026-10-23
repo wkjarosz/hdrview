@@ -204,7 +204,8 @@ public:
     {
         ImGui::DragFloat2("X, Y offset", &m_offset.x, 0.25f, 0.f, 0.f, "%.2f px");
         ImGui::Tooltip("Shift the image by this many pixels. Positive values move it right and down, and "
-                       "fractional offsets are interpolated using the sampler below.");
+                       "fractional offsets are interpolated using the sampler below.\n\nYou can also drag the "
+                       "preview to move the image with the mouse. Alt-drag to pan the view instead.");
 
         border_fields(&m_border_x, &m_border_y, &m_link_borders,
                       "Set what fills in where the shift moves the image away from an edge. Repeat wraps the "
@@ -222,6 +223,13 @@ public:
         ImGui::EndDisabled();
         ImGui::Tooltip("Set how to interpolate between pixels for a fractional offset (unused for whole-pixel "
                        "offsets).");
+    }
+
+    /// Moves the offset by the drag, so the image follows the cursor as if grabbed, as panning does.
+    bool drag_preview(float2 from, float2 to, float2 size) override
+    {
+        m_offset += (to - from) * size;
+        return true;
     }
 
     std::optional<ShiftEdit> shift_preview(const EditContext &) const override

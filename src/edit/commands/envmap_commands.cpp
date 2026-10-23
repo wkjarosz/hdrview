@@ -192,7 +192,7 @@ public:
     }
 
     /// Turns the sphere so that what was seen at \p from is seen at \p to.
-    bool drag_preview(float2 from, float2 to) override
+    bool drag_preview(float2 from, float2 to, float2) override
     {
         // the rotation that takes the result's direction at to onto the one at from, applied before the turn so
         // far, so that the source seen at from comes to be seen at to

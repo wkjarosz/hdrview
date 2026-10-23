@@ -930,6 +930,44 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const EditPreview *preview = hdrview()->edit_preview();
         IM_CHECK(preview && preview->shift && preview->shift->offset == float2(3.f, 0.f));
         IM_CHECK(preview && preview->slots != int4{-1});
+        // A drag begun on the image, clear of the dialog, carries the image with it by as far as the cursor went, which
+        // at a zoom of 2.5 is not a whole number of pixels.
+        {
+            auto       *app  = hdrview();
+            const float zoom = app->zoom();
+            app->set_zoom(2.5f);
+            ctx->Yield(2);
+            ImGuiWindow *dialog = ctx->WindowInfo("//Shift...").Window;
+            float2       on{0.f};
+            for (const float2 t : {float2{0.1f, 0.5f}, float2{0.9f, 0.5f}, float2{0.5f, 0.1f}, float2{0.5f, 0.9f}})
+            {
+                const float2 vp = t * app->viewport_size(), app_pos = app->app_pos_at_vp_pos(vp);
+                const auto   uv = app->preview_uv(vp);
+                if (uv && la::all(la::gequal(*uv, float2{0.f})) && la::all(la::lequal(*uv, float2{1.f})) && dialog &&
+                    !dialog->Rect().Contains(ImVec2(app_pos)))
+                {
+                    on = app_pos;
+                    break;
+                }
+            }
+            IM_CHECK(on != float2{0.f});
+            const float2 by{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)};
+            const float2 moved = app->pixel_at_vp_pos(app->vp_pos_at_app_pos(on + by)) -
+                                 app->pixel_at_vp_pos(app->vp_pos_at_app_pos(on));
+            ctx->MouseMoveToPos(ImVec2(on));
+            ctx->MouseDown(ImGuiMouseButton_Left);
+            ctx->MouseMoveToPos(ImVec2(on + by));
+            ctx->MouseUp(ImGuiMouseButton_Left);
+            ctx->Yield(2);
+            preview = app->edit_preview();
+            IM_CHECK(la::length(moved) > 1.f);
+            IM_CHECK(la::round(moved) != moved);
+            IM_CHECK(preview && preview->shift);
+            if (preview && preview->shift)
+                IM_CHECK(la::length(preview->shift->offset - (float2{3.f, 0.f} + moved)) < 1e-3f);
+            app->set_zoom(zoom);
+        }
+        ctx->SetRef("Shift...");
         ctx->ItemClick("Shift");
         wait_until(ctx, [&] { return img->history.has_undo(); });
 
