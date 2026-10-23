@@ -23,8 +23,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <numeric>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -119,6 +122,9 @@ struct TestEditContext : EditContext
 
 constexpr int2 k_size{7, 5};
 
+/// A selection well inside a k_size image, so there is untouched ground on every side of it.
+const Box2i k_roi{int2{2, 1}, int2{5, 4}};
+
 /// An image whose every sample is distinct, so any misplacement shows as a mismatch.
 ImagePtr make_image(int num_channels = 4)
 {
@@ -175,6 +181,106 @@ int channel_index(const ImagePtr &img, const std::string &name)
     return -1;
 }
 
+/// Every sample of \p a, as one comparable value.
+std::vector<float> values(const Array2Df &a) { return std::vector<float>(a.data(), a.data() + a.num_elements()); }
+
+/// The names of group \p g's channels, or none when \p g is not a group of \p img.
+std::vector<std::string> names_of(const ImagePtr &img, int g)
+{
+    std::vector<std::string> out;
+    if (img->is_valid_group(g))
+        for (int i = 0; i < img->groups[size_t(g)].num_channels; ++i)
+            out.push_back(img->channels[size_t(img->groups[size_t(g)].channels[i])].name);
+    return out;
+}
+
+/// Every selected group, each by the names of its channels; the indices are renumbered by a rebuild.
+std::vector<std::vector<std::string>> selected_names(const ImagePtr &img)
+{
+    std::vector<std::vector<std::string>> out;
+    for (int g : img->selected_groups()) out.push_back(names_of(img, g));
+    return out;
+}
+
+/// Everything an edit can change about an image, with the samples compared bit for bit, so a NaN equals itself.
+struct Snapshot
+{
+    std::vector<uint32_t>    bits;
+    Box2i                    data_window, display_window;
+    std::vector<std::string> structure; ///< the channels and their flags, and the groups, by name
+    std::vector<std::string> selection; ///< the selected channels, and the group shown, by name
+    ColorMetadata            color;
+
+    /// This, but for which groups are selected and shown.
+    Snapshot content() const
+    {
+        Snapshot s  = *this;
+        s.selection = {};
+        return s;
+    }
+
+    bool operator==(const Snapshot &o) const
+    {
+        return bits == o.bits && data_window == o.data_window && display_window == o.display_window &&
+               structure == o.structure && selection == o.selection && color == o.color;
+    }
+    bool operator!=(const Snapshot &o) const { return !(*this == o); }
+};
+
+Snapshot snapshot(const ImagePtr &img)
+{
+    Snapshot s;
+    for (const auto &ch : img->channels)
+    {
+        for (int i = 0; i < ch.num_elements(); ++i)
+        {
+            uint32_t b;
+            std::memcpy(&b, &ch(i), sizeof b);
+            s.bits.push_back(b);
+        }
+        s.structure.push_back("channel " + ch.name + (ch.ungrouped ? " ungrouped" : ""));
+        if (ch.selected)
+            s.selection.push_back("selected " + ch.name);
+    }
+    for (size_t g = 0; g < img->groups.size(); ++g)
+    {
+        std::string group = "group";
+        for (const auto &n : names_of(img, int(g))) group += " " + n;
+        s.structure.push_back(group);
+    }
+    std::string shown = "shown";
+    for (const auto &n : names_of(img, img->selected_group)) shown += " " + n;
+    s.selection.push_back(shown);
+
+    s.data_window    = img->data_window;
+    s.display_window = img->display_window;
+    s.color          = ColorMetadata::of(*img);
+    return s;
+}
+
+} // namespace
+
+namespace doctest
+{
+
+/// A snapshot as a failed check prints it: its structure and selection, which say what differs.
+template <>
+struct StringMaker<Snapshot>
+{
+    static String convert(const Snapshot &s)
+    {
+        std::string out = fmt::format("{} samples; ", s.bits.size());
+        for (const auto &line : s.structure) out += line + "; ";
+        for (const auto &line : s.selection) out += line + "; ";
+        return out.c_str();
+    }
+};
+
+} // namespace doctest
+
+namespace
+{
+
 std::string first_name(const EditCommandPtr &cmd) { return cmd->info().names.front(); }
 
 /// The registered command whose first name is \p name.
@@ -214,56 +320,123 @@ TEST_CASE("Every edit command is addressable and describes itself")
     CHECK(std::adjacent_find(names.begin(), names.end()) == names.end());
 }
 
-TEST_CASE("Every edit that applies leaves exactly one undo entry, and undoing restores the image")
+TEST_CASE("Every edit that applies changes the image as one undo entry, and one it refuses changes nothing")
 {
-    // a command recording two entries, or none, or one restoring only part of what it changed fails here
-    for (auto &cmd : all_edit_commands())
+    // The commands that are the identity at the settings their dialog opens with, which still record an entry,
+    // so all a sweep at those settings can check is that it undoes and redoes exactly.
+    const std::set<std::string> identity = {
+        "Exposure/gamma...",      // no exposure, no offset, and a gamma of one
+        "Brightness/contrast...", // no brightness and no contrast
+        "Channel mixer...",       // each output row starts as its own channel
+        "Hue/saturation...",      // no turn, and no change of saturation or lightness
+        "Shift...",               // no offset
+        "Image size...",          // opens on the image's own size
+        "Canvas size...",         // likewise
+    };
+    // The commands writing somewhere other than the image they are handed, which record nothing on it.
+    const std::set<std::string> elsewhere = {
+        "Copy",                // the clipboard
+        "Generate mipmaps...", // new images beside it
+    };
+
+    // A clipboard unlike the image, so pasting it changes what it lands on, seamlessly or not.
+    auto clipboard = make_image();
+    for (int c = 0; c < 4; ++c)
+        for (int y = 0; y < k_size.y; ++y)
+            for (int x = 0; x < k_size.x; ++x)
+                clipboard->channels[size_t(c)](x, y) = 0.5f + 0.3f * std::sin(1.3f * float(x) + 0.7f * float(y + c));
+
+    // Across the whole image; within a selection, where cropping is offered; and on an image a renderer owns,
+    // which refuses every edit, since its next tile would overwrite it and undoing would restore samples
+    // already replaced.
+    enum Pass
     {
-        const std::string name = first_name(cmd);
-        CAPTURE(name);
-
-        auto            img = make_image();
-        TestEditContext ctx{img};
-
-        // something on the clipboard, so the paste commands are exercised and not skipped
-        ctx.clipboard_image = make_image();
-
-        if (!cmd->enabled(ctx))
-            continue;
-
-        const std::vector<float> before       = samples(img);
-        const int2               size_before  = img->size();
-        const int                steps_before = img->history.size();
-
-        cmd->apply(ctx);
-
-        const int added = img->history.size() - steps_before;
-        CHECK(added <= 1); // never more than one step per invocation
-
-        if (added == 0)
+        Pass_Whole,
+        Pass_Selection,
+        Pass_Live
+    };
+    for (int pass : {Pass_Whole, Pass_Selection, Pass_Live})
+        for (auto &cmd : all_edit_commands())
         {
-            // a command that declined to do anything must not have changed the image either
-            CHECK(samples(img) == before);
-            CHECK(img->size() == size_before);
-            continue;
+            const std::string name = first_name(cmd);
+            CAPTURE(name);
+            CAPTURE(pass);
+
+            // Inside the selection, a NaN and an infinity for zapping to replace, and samples either side of
+            // [0,1] for clamping to bring in. The gremlins are in the alpha channel, which a seamless paste
+            // leaves alone, since one in a channel it solves for keeps the solve from converging.
+            auto img               = make_image();
+            img->channels[3](3, 2) = std::numeric_limits<float>::quiet_NaN();
+            img->channels[3](2, 1) = std::numeric_limits<float>::infinity();
+            img->channels[2](4, 3) = 1.75f;
+            img->channels[0](3, 1) = -0.25f;
+            img->is_live           = pass == Pass_Live;
+
+            TestEditContext ctx{img};
+            ctx.clipboard_image = clipboard;
+            if (pass == Pass_Selection)
+                ctx.roi = k_roi;
+
+            const Snapshot before = snapshot(img);
+            const int      steps  = img->history.size();
+
+            // as the dialog does; several commands read their starting settings off the image here
+            cmd->on_open(ctx);
+            const bool enabled = cmd->enabled(ctx);
+            // applied whether or not it is enabled, since the command palette and the chord reach it either way
+            cmd->apply(ctx);
+            cmd->on_close(ctx);
+
+            const int      added = img->history.size() - steps;
+            const Snapshot after = snapshot(img);
+
+            if (pass == Pass_Live || !enabled || elsewhere.count(name))
+            {
+                CHECK(added == 0);
+                CHECK(after == before);
+
+                // and it did write where it writes
+                if (enabled && pass != Pass_Live && name == "Copy")
+                    CHECK(ctx.clipboard_image != clipboard);
+                if (enabled && pass != Pass_Live && name == "Generate mipmaps...")
+                    CHECK_FALSE(ctx.added.empty());
+                continue;
+            }
+
+            // one entry: two would take two undos to reverse, and none could not be reversed at all
+            REQUIRE(added == 1);
+
+            // named for the history panel; the name need not be the command's own, since one command can record
+            // different edits (a blur names the kind of blur it did)
+            CHECK_FALSE(img->history.undo_name().empty());
+
+            // it changed something, unless it is one of the identities, which are held to changing nothing so the
+            // list stays true
+            if (!identity.count(name))
+                CHECK(after != before);
+            else
+                CHECK(after == before);
+
+            // the entry restores everything, structure and color metadata included, in both directions
+            REQUIRE(img->history.undo(*img));
+            CHECK(snapshot(img) == before);
+            REQUIRE(img->history.redo(*img));
+            CHECK(snapshot(img) == after);
         }
 
-        // named for the history panel; the name need not be the command's own, since one command can record
-        // different edits (a blur names the kind of blur it did)
-        CHECK_FALSE(img->history.undo_name().empty());
+    // not only the commands: the edit functions themselves decline, which is what every command goes through
+    auto img     = make_image();
+    img->is_live = true;
+    TestEditContext ctx{img};
+    ctx.subject.selection_only = false;
 
-        const std::vector<float> after      = samples(img);
-        const int2               size_after = img->size();
-
-        REQUIRE(img->history.undo(*img));
-        CHECK(img->size() == size_before);
-        CHECK(samples(img) == before);
-
-        // and redo returns to what the edit produced, so the entry is good in both directions
-        REQUIRE(img->history.redo(*img));
-        CHECK(img->size() == size_after);
-        CHECK(samples(img) == after);
-    }
+    const Snapshot                     before = snapshot(img);
+    const std::function<void(Image &)> flip   = [](Image &i) { i.flip_horizontal(); };
+    CHECK_FALSE(modify_image(ctx, "Flip image horizontally", flip, reversible(flip, flip)));
+    CHECK_FALSE(modify_pixels(ctx, "Raise", [](float v, int2, int) { return v + 1.f; }));
+    CHECK_FALSE(modify_colors(ctx, "Raise", [](const float4 &c, int2, int) { return c + 1.f; }));
+    CHECK(snapshot(img) == before);
+    CHECK_FALSE(img->history.has_undo());
 }
 
 TEST_CASE("An edit covers the subject it was given and nothing else")
@@ -290,9 +463,7 @@ TEST_CASE("An edit covers the subject it was given and nothing else")
             TestEditContext ctx{img};
             ctx.clipboard_image = make_image();
 
-            // a selection well inside the image, so there is untouched ground on every side of it
-            const Box2i roi{int2{2, 1}, int2{5, 4}};
-            ctx.roi                    = roi;
+            ctx.roi                    = k_roi;
             ctx.subject.selection_only = true;
             ctx.subject.scope          = EditSubject::Scope(scope);
 
@@ -339,7 +510,7 @@ TEST_CASE("An edit covers the subject it was given and nothing else")
                 for (int y = 0; y < k_size.y; ++y)
                     for (int x = 0; x < k_size.x; ++x)
                     {
-                        if (named && roi.contains(int2{x, y}))
+                        if (named && in_box(k_roi, int2{x, y}))
                             continue;
 
                         CAPTURE(c);
@@ -352,78 +523,106 @@ TEST_CASE("An edit covers the subject it was given and nothing else")
         }
 }
 
-TEST_CASE("An edit reaches every channel its scope names")
+TEST_CASE("An edit reaches every channel its scope names, each as the slot it holds there")
 {
     // The other half of the sweep above, which catches only an edit writing where it should not: a scope
     // resolving to too few channels leaves part of the subject untouched and passes there. The ops are
-    // driven directly, since each has to change every sample it is handed for "changed" to mean "covered".
-    for (int scope = 0; scope < EditSubject::Scope_COUNT; ++scope)
-    {
-        CAPTURE(scope);
+    // driven directly. The pixel op adds one more than the slot it is handed, so each channel rises by an
+    // amount that says which slot it was, and a selection skipping the depth channel puts the slots and the
+    // channel indices out of step. The color op turns R, G and B around, which only an op handed a group's
+    // channels together can do. An image of lone channels has no color group, so the color op covers nothing
+    // and has to say so.
+    for (bool lone : {false, true})
+        for (int scope = 0; scope < EditSubject::Scope_COUNT; ++scope)
+        {
+            CAPTURE(lone);
+            CAPTURE(scope);
 
-        auto img = make_layered_image(); // R,G,B,A | Z | normal.R,G,B
-
-        // the color group on screen, and that plus the second color group selected
-        img->selected_group = group_of_channel(img, "R");
-        img->select_group(img->selected_group);
-        img->select_group(group_of_channel(img, "normal.R"));
-
-        TestEditContext ctx{img};
-        ctx.subject.scope          = EditSubject::Scope(scope);
-        ctx.subject.selection_only = false;
-
-        // the groups the scope names, read off the image rather than asked of the resolver
-        std::vector<int> groups;
-        if (scope == EditSubject::Scope_AllChannels)
-            for (size_t g = 0; g < img->groups.size(); ++g) groups.push_back(int(g));
-        else if (scope == EditSubject::Scope_SelectedGroups)
-            groups = img->selected_groups();
-        else
-            groups.push_back(img->selected_group);
-
-        std::vector<int> covered, colors;
-        for (int g : groups)
-            for (int i = 0; i < img->groups[size_t(g)].num_channels; ++i)
+            auto img = make_layered_image(); // R,G,B,A | Z | normal.R,G,B
+            if (lone)
             {
-                covered.push_back(img->groups[size_t(g)].channels[i]);
-                const auto type = img->groups[size_t(g)].type;
-                if (type == ChannelGroup::RGB_Channels || type == ChannelGroup::RGBA_Channels)
-                    colors.push_back(img->groups[size_t(g)].channels[i]);
+                for (auto &c : img->channels) c.ungrouped = true;
+                img->rebuild_layers();
             }
 
-        // "every channel" names them all, whether or not they belong to a group
-        if (scope == EditSubject::Scope_AllChannels)
-        {
-            covered.resize(img->channels.size());
-            std::iota(covered.begin(), covered.end(), 0);
-        }
+            // the group holding R on screen, and that plus the one holding normal.R selected
+            img->selected_group = group_of_channel(img, "R");
+            img->select_group(img->selected_group);
+            img->select_group(group_of_channel(img, "normal.R"));
 
-        // both add one to every sample they are handed, so afterwards a channel has changed exactly when
-        // the subject named it
-        auto changed_by = [&img](const std::function<void()> &edit)
-        {
-            const std::vector<float> before = samples(img);
-            edit();
+            TestEditContext ctx{img};
+            ctx.subject.scope          = EditSubject::Scope(scope);
+            ctx.subject.selection_only = false;
 
-            std::vector<int> changed;
-            const size_t     per_channel = size_t(k_size.x * k_size.y);
+            // the groups the scope names, read off the image rather than asked of the resolver
+            std::vector<int> groups;
+            if (scope == EditSubject::Scope_AllChannels)
+                for (size_t g = 0; g < img->groups.size(); ++g) groups.push_back(int(g));
+            else if (scope == EditSubject::Scope_SelectedGroups)
+                groups = img->selected_groups();
+            else
+                groups.push_back(img->selected_group);
+
+            // the channels in slot order, which is channel order; "every channel" names them all, whether or
+            // not they belong to a group
+            std::vector<int>              covered;
+            std::vector<std::vector<int>> colors;
+            for (int g : groups)
+            {
+                const auto      &group = img->groups[size_t(g)];
+                std::vector<int> channels;
+                for (int i = 0; i < group.num_channels; ++i) channels.push_back(group.channels[i]);
+                covered.insert(covered.end(), channels.begin(), channels.end());
+                if (group.type == ChannelGroup::RGB_Channels || group.type == ChannelGroup::RGBA_Channels)
+                    colors.push_back(channels);
+            }
+            if (scope == EditSubject::Scope_AllChannels)
+            {
+                covered.resize(img->channels.size());
+                std::iota(covered.begin(), covered.end(), 0);
+            }
+            std::sort(covered.begin(), covered.end());
+
+            const size_t             per_channel = size_t(k_size.x * k_size.y);
+            const std::vector<float> before      = samples(img);
+            auto                     was         = [&](int c, size_t i) { return before[size_t(c) * per_channel + i]; };
+
+            REQUIRE(modify_pixels(ctx, "Raise", [](float v, int2, int slot) { return v + 1.f + float(slot); }));
             for (size_t c = 0; c < img->channels.size(); ++c)
+            {
+                CAPTURE(c);
+                const auto slot = std::find(covered.begin(), covered.end(), int(c));
                 for (size_t i = 0; i < per_channel; ++i)
-                    if (img->channels[c](int(i)) != before[c * per_channel + i])
-                    {
-                        changed.push_back(int(c));
-                        break;
-                    }
-
+                    CHECK(img->channels[c](int(i)) == (slot == covered.end()
+                                                           ? was(int(c), i)
+                                                           : was(int(c), i) + 1.f + float(slot - covered.begin())));
+            }
             REQUIRE(img->history.undo(*img));
             CHECK(samples(img) == before);
-            return changed;
-        };
 
-        CHECK(changed_by([&] { modify_pixels(ctx, "Raise", [](float v, int2, int) { return v + 1.f; }); }) == covered);
-        CHECK(changed_by([&] { modify_colors(ctx, "Raise", [](const float4 &c, int2, int) { return c + 1.f; }); }) ==
-              colors);
-    }
+            // R takes G's samples, G takes B's and B takes R's; alpha and every other channel keep their own
+            const bool edited =
+                modify_colors(ctx, "Turn", [](const float4 &c, int2, int) { return float4{c.y, c.z, c.x, c.w}; });
+            CHECK(edited == !colors.empty());
+            CHECK(img->history.has_undo() == edited); // the pixel op was undone, so only this can be undone now
+
+            std::vector<int> from(img->channels.size());
+            std::iota(from.begin(), from.end(), 0);
+            for (const auto &group : colors)
+                for (int k = 0; k < 3; ++k) from[size_t(group[size_t(k)])] = group[size_t((k + 1) % 3)];
+
+            for (size_t c = 0; c < img->channels.size(); ++c)
+            {
+                CAPTURE(c);
+                for (size_t i = 0; i < per_channel; ++i) CHECK(img->channels[c](int(i)) == was(from[c], i));
+            }
+
+            if (edited)
+            {
+                REQUIRE(img->history.undo(*img));
+                CHECK(samples(img) == before);
+            }
+        }
 }
 
 TEST_CASE("A bump map becomes the normal map its slopes ask for")
@@ -453,8 +652,9 @@ TEST_CASE("A bump map becomes the normal map its slopes ask for")
     REQUIRE(cmd);
     cmd->apply(ctx);
 
+    // The command writes the normal as (dh/dx, dh/dy, 1), its slopes taken per unit of the whole image and
+    // scaled by the default of one, normalized and stored in [0,1] where flat is (0.5, 0.5, 1).
     const float2 size{float(k_size.x), float(k_size.y)};
-    // z = h(x,y) has normal (-dh/dx, -dh/dy, 1), stored in [0,1] where flat is (0.5, 0.5, 1)
     const float3 diffuse  = la::normalize(float3{dh_dx * size.x, 0.f, 1.f}) * 0.5f + 0.5f;
     const float3 specular = la::normalize(float3{0.f, dh_dy * size.y, 1.f}) * 0.5f + 0.5f;
 
@@ -479,61 +679,6 @@ TEST_CASE("A bump map becomes the normal map its slopes ask for")
     CHECK(diffuse.y != doctest::Approx(specular.y));
 }
 
-TEST_CASE("Filling writes a different value in each of a group's channels")
-{
-    // fill is the one edit whose value depends on which channel it writes, so a group's channels must not
-    // all come out the same; the slot index is what carries that
-    auto img = make_image();
-
-    TestEditContext ctx{img};
-    ctx.subject.selection_only = false;
-
-    const float4 color{0.25f, 0.5f, 0.75f, 1.f};
-    REQUIRE(modify_pixels(ctx, "Fill", [color](float, int2, int slot) { return color[slot % 4]; }));
-
-    const auto &group = img->groups[size_t(img->selected_group)];
-    for (int c = 0; c < group.num_channels; ++c)
-    {
-        CAPTURE(c);
-        const auto &ch = img->channels[size_t(group.channels[c])];
-        for (int i = 0; i < ch.num_elements(); ++i) CHECK(ch(i) == color[c % 4]);
-    }
-}
-
-TEST_CASE("A color edit is handed a group's channels together")
-{
-    // reading the sample beside it is what modify_pixels() cannot do: it is handed one sample and told
-    // which slot it is, never the others
-    auto img = make_image();
-    REQUIRE(img->groups.size() == 1);
-    REQUIRE(img->groups[0].num_channels == 4);
-
-    TestEditContext ctx{img};
-    ctx.subject.selection_only = false;
-
-    const auto before = samples(img);
-    REQUIRE(
-        modify_colors(ctx, "Swap red and blue", [](const float4 &c, int2, int) { return float4{c.z, c.y, c.x, c.w}; }));
-
-    const auto  &r           = img->channels[size_t(img->groups[0].channels[0])];
-    const auto  &b           = img->channels[size_t(img->groups[0].channels[2])];
-    const size_t per_channel = size_t(k_size.x * k_size.y);
-    for (int i = 0; i < r.num_elements(); ++i)
-    {
-        CAPTURE(i);
-        // each channel now holds what the other did, which one-sample-at-a-time editing cannot produce
-        CHECK(r(i) == before[2 * per_channel + size_t(i)]);
-        CHECK(b(i) == before[0 * per_channel + size_t(i)]);
-        CHECK(r(i) != b(i)); // a fixture whose channels were equal would prove nothing
-    }
-
-    const auto swapped = samples(img);
-    REQUIRE(img->history.undo(*img));
-    CHECK(samples(img) == before);
-    REQUIRE(img->history.redo(*img));
-    CHECK(samples(img) == swapped);
-}
-
 TEST_CASE("Hue/saturation works on straight color in every group it covers where alpha means transparency")
 {
     // the group on screen has no alpha while another covered group does, so a decision made from the group on
@@ -552,7 +697,7 @@ TEST_CASE("Hue/saturation works on straight color in every group it covers where
         img->set_transparency(t, std::nullopt);
         const auto edit = cmd->point_edit(ctx);
         REQUIRE(edit);
-        CHECK((edit->p1.x != 0.f) == img->alpha_is_transparency());
+        CHECK((edit->p1.x != 0.f) == (t != TransparencyType_None));
     }
 }
 
@@ -638,83 +783,6 @@ TEST_CASE("Flattening makes the image opaque and leaves the composite where it i
     CHECK(samples(img) == before);
 }
 
-TEST_CASE("Each scope names the channels it says it does")
-{
-    auto img = make_layered_image();
-
-    const int color = group_of_channel(img, "R");
-    const int depth = group_of_channel(img, "Z");
-    const int other = group_of_channel(img, "normal.R");
-    REQUIRE(img->groups.size() == 3);
-    REQUIRE(color >= 0);
-    REQUIRE(depth >= 0);
-    REQUIRE(other >= 0);
-
-    // the group on screen is the color one and the selection is that plus the second color group, not the
-    // depth channel, so the three scopes cover 4, 7 and 8 of the 8 channels
-    img->selected_group = color;
-    img->select_group(color);
-    img->select_group(other);
-
-    EditSubject subject;
-    subject.selection_only = false;
-
-    auto channels_under = [&](EditSubject::Scope s)
-    {
-        subject.scope = s;
-        return subject_channels(*img, subject);
-    };
-    auto color_groups_under = [&](EditSubject::Scope s)
-    {
-        subject.scope = s;
-        return subject_color_groups(*img, subject);
-    };
-
-    const auto current  = channels_under(EditSubject::Scope_CurrentGroup);
-    const auto selected = channels_under(EditSubject::Scope_SelectedGroups);
-    const auto all      = channels_under(EditSubject::Scope_AllChannels);
-
-    CHECK(current.size() == 4);  // R,G,B,A
-    CHECK(selected.size() == 7); // and normal.R,G,B, but not Z
-    CHECK(all.size() == img->channels.size());
-
-    // narrower to wider: each scope names everything the one before it did
-    for (int c : current) CHECK(std::find(selected.begin(), selected.end(), c) != selected.end());
-    for (int c : selected) CHECK(std::find(all.begin(), all.end(), c) != all.end());
-
-    // the one channel the selection leaves out is the one whose group was not selected
-    CHECK(std::find(selected.begin(), selected.end(), channel_index(img, "Z")) == selected.end());
-
-    // selecting every group makes "selected" and "all channels" the same set, since every channel of this
-    // image belongs to a group
-    img->select_group(depth);
-    CHECK(channels_under(EditSubject::Scope_SelectedGroups).size() == img->channels.size());
-    img->select_group(depth, false);
-
-    // the color resolver keeps only the RGB/RGBA groups, whatever the scope, and its channel list is the
-    // union of the groups it kept
-    for (int s = 0; s < EditSubject::Scope_COUNT; ++s)
-    {
-        CAPTURE(s);
-        auto [groups, channels] = color_groups_under(EditSubject::Scope(s));
-
-        size_t expected = 0;
-        for (int g : groups)
-        {
-            const auto t = img->groups[size_t(g)].type;
-            CHECK((t == ChannelGroup::RGB_Channels || t == ChannelGroup::RGBA_Channels));
-            expected += size_t(img->groups[size_t(g)].num_channels);
-        }
-        CHECK(channels.size() == expected);
-        CHECK(std::find(channels.begin(), channels.end(), channel_index(img, "Z")) == channels.end());
-    }
-
-    // 1, 2 and 2 groups: the depth channel is all "all channels" adds over the selection, and it is not a color
-    CHECK(color_groups_under(EditSubject::Scope_CurrentGroup).first.size() == 1);
-    CHECK(color_groups_under(EditSubject::Scope_SelectedGroups).first.size() == 2);
-    CHECK(color_groups_under(EditSubject::Scope_AllChannels).first.size() == 2);
-}
-
 TEST_CASE("A command with no image to work on does nothing rather than crashing")
 {
     // the menu can be reached with no image loaded, and the palette hands a command whatever the context has
@@ -727,37 +795,6 @@ TEST_CASE("A command with no image to work on does nothing rather than crashing"
         CHECK_NOTHROW(cmd->apply(ctx));
         CHECK_NOTHROW(cmd->on_open(ctx));
         CHECK_NOTHROW(cmd->on_close(ctx));
-    }
-}
-
-TEST_CASE("An edit covers the whole image when there is no selection")
-{
-    // with the box cleared, every sample the scope names has to move, not just the ones a stale rectangle
-    // covered
-    for (auto &cmd : all_edit_commands())
-    {
-        const std::string name = first_name(cmd);
-        CAPTURE(name);
-
-        auto            img = make_image();
-        TestEditContext ctx{img};
-        ctx.clipboard_image = make_image();
-        ctx.subject.scope   = EditSubject::Scope_AllChannels;
-
-        if (!cmd->enabled(ctx))
-            continue;
-
-        const std::vector<float> before = samples(img);
-        const int                steps  = img->history.size();
-
-        cmd->apply(ctx);
-
-        if (img->history.size() == steps || !cmd->info().draws_subject_selector || img->size() != k_size)
-            continue;
-
-        // it was allowed to write anywhere, so the undo entry has to cover the whole image
-        REQUIRE(img->history.undo(*img));
-        CHECK(samples(img) == before);
     }
 }
 
@@ -805,137 +842,6 @@ TEST_CASE("Zapping gremlins replaces the non-finite samples and leaves the rest"
 
     // ...and the samples that were already fine untouched
     CHECK(ch(2, 2) == kept);
-}
-
-TEST_CASE("Exploding a group takes its channels out of it, and regrouping puts them back")
-{
-    auto            img = make_image();
-    TestEditContext ctx{img};
-
-    // what the names alone give: one group over all four channels, or over three with alpha beside them
-    const size_t grouped = img->groups.size();
-    REQUIRE(grouped < img->channels.size());
-
-    auto explode = find_command("Ungroup channels");
-    REQUIRE(explode);
-    REQUIRE(explode->enabled(ctx));
-
-    explode->apply(ctx);
-
-    // every channel of the group it was showing now stands on its own
-    CHECK(img->groups.size() > grouped);
-    for (const auto &group : img->groups) CHECK(group.num_channels == 1);
-
-    // and nothing else about the image moved: this says how to look at it, not what it is
-    CHECK(img->channels.size() == 4);
-    CHECK(img->size() == k_size);
-
-    // Only one group can be selected at a time, so regrouping works from whichever single exploded channel is
-    // showing, which is why it is scoped to the layer. The explosion leaves the selection on one it made.
-    REQUIRE(img->is_valid_group(img->selected_group));
-    REQUIRE(img->groups[size_t(img->selected_group)].num_channels == 1);
-
-    auto regroup = find_command("Regroup channels");
-    REQUIRE(regroup);
-
-    // the rebuild renumbered the groups, so the next invocation reads which to act on afresh
-    ctx.retarget();
-    REQUIRE(regroup->enabled(ctx));
-
-    regroup->apply(ctx);
-    CHECK(img->groups.size() == grouped);
-
-    // undoing the regroup explodes it again and undoing that puts it back; the flags ride the history
-    // without storing a sample
-    REQUIRE(img->history.undo(*img));
-    CHECK(img->groups.size() > grouped);
-    REQUIRE(img->history.undo(*img));
-    CHECK(img->groups.size() == grouped);
-}
-
-TEST_CASE("Marking one channel leaves the others grouped")
-{
-    // the flag is per channel, so taking the alpha out of an RGBA image leaves a color behind and not four
-    // separate channels
-    auto img = make_image();
-
-    const size_t grouped = img->groups.size();
-
-    img->channels[3].ungrouped = true;
-    img->rebuild_layers();
-
-    // alpha on its own, and R, G, B still one group between them
-    CHECK(img->groups.size() == grouped + 1);
-
-    int multi = 0, single = 0;
-    for (const auto &group : img->groups) (group.num_channels > 1 ? multi : single) += 1;
-    CHECK(multi == 1);
-    CHECK(single >= 1);
-
-    for (const auto &group : img->groups)
-        if (group.num_channels > 1)
-            CHECK(group.num_channels == 3); // R, G and B, without the alpha
-
-    img->channels[3].ungrouped = false;
-    img->rebuild_layers();
-    CHECK(img->groups.size() == grouped);
-}
-
-TEST_CASE("Deleting a channel group removes its channels, and undo brings them back")
-{
-    auto            img = make_image();
-    TestEditContext ctx{img};
-
-    // explode first, so there is more than one group and deleting one leaves an image behind
-    find_command("Ungroup channels")->apply(ctx);
-    ctx.retarget();
-
-    const size_t channels_before = img->channels.size();
-    const size_t groups_before   = img->groups.size();
-    REQUIRE(groups_before > 1);
-
-    auto del = find_command("Delete channel group");
-    REQUIRE(del);
-    REQUIRE(del->enabled(ctx));
-
-    const std::string gone = img->channels[size_t(img->groups[size_t(img->selected_group)].channels[0])].name;
-
-    del->apply(ctx);
-
-    // gone, unlike exploding: this is what would be written on save
-    CHECK(img->channels.size() == channels_before - 1);
-    CHECK(img->groups.size() == groups_before - 1);
-    for (const auto &c : img->channels) CHECK(c.name != gone);
-
-    REQUIRE(img->history.undo(*img));
-    CHECK(img->channels.size() == channels_before);
-    CHECK(img->groups.size() == groups_before);
-
-    bool found = false;
-    for (const auto &c : img->channels) found = found || c.name == gone;
-    CHECK(found);
-}
-
-TEST_CASE("Deleting is refused when it would leave nothing behind")
-{
-    // an image with no channels is not an image, so the last group has to stay
-    auto            img = make_image();
-    TestEditContext ctx{img};
-
-    auto del = find_command("Delete channel group");
-    REQUIRE(del);
-
-    // one group over every channel, so deleting it would empty the image
-    if (img->groups.size() == 1)
-        CHECK_FALSE(del->enabled(ctx));
-
-    // and applying it anyway changes nothing, since a command may be reached from the palette
-    const size_t before = img->channels.size();
-    if (!del->enabled(ctx))
-    {
-        del->apply(ctx);
-        CHECK(img->channels.size() == before);
-    }
 }
 
 TEST_CASE("Generating mipmaps halves the image down to the number of levels asked for")
@@ -1073,50 +979,6 @@ TEST_CASE("Regrouping reaches the whole layer from any one of its exploded chann
     CHECK(img->groups.size() == 2);
 }
 
-TEST_CASE("Regrouping touches only the channels an explosion marked, not every lone channel")
-{
-    // A layer can hold channels standing alone because their names never grouped, a depth channel beside a
-    // color say. Marking those on the way back would be a change nobody asked for.
-    auto img = std::make_shared<Image>(k_size, 4);
-
-    static const char *names[] = {"beauty.R", "beauty.G", "beauty.B", "beauty.Z"};
-    for (int c = 0; c < 4; ++c) img->channels[size_t(c)].name = names[c];
-    img->rebuild_layers();
-
-    // the color as one group, the depth on its own without anyone having said so
-    REQUIRE(img->groups.size() == 2);
-    for (const auto &c : img->channels) REQUIRE_FALSE(c.ungrouped);
-
-    TestEditContext ctx{img};
-
-    // select the color and explode it
-    for (size_t g = 0; g < img->groups.size(); ++g)
-        if (img->groups[g].num_channels > 1)
-        {
-            img->selected_group = int(g);
-            break;
-        }
-    ctx.retarget();
-    find_command("Ungroup channels")->apply(ctx);
-
-    // three marked, and the depth channel still unmarked though it too stands alone
-    CHECK(img->channels[0].ungrouped);
-    CHECK(img->channels[1].ungrouped);
-    CHECK(img->channels[2].ungrouped);
-    CHECK_FALSE(img->channels[3].ungrouped);
-
-    ctx.retarget();
-    find_command("Regroup channels")->apply(ctx);
-    CHECK(img->groups.size() == 2);
-    for (const auto &c : img->channels) CHECK_FALSE(c.ungrouped);
-
-    // undoing the regroup marks back what it cleared; one that had swept up every lone channel would mark
-    // the depth channel, which was never exploded
-    REQUIRE(img->history.undo(*img));
-    CHECK(img->channels[0].ungrouped);
-    CHECK_FALSE(img->channels[3].ungrouped);
-}
-
 TEST_CASE("Regrouping from a selection puts back exactly the channels it names")
 {
     // Explode an RGBA group, leave the alpha out of the selection, and ask for the rest back. Grouping is
@@ -1166,11 +1028,11 @@ TEST_CASE("Regrouping from a selection puts back exactly the channels it names")
     CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
 }
 
-TEST_CASE("A group command covers every group it is given, and nothing else")
+TEST_CASE("A group command covers every group it is given, as one entry, and nothing else")
 {
     // All three are addressed by target_groups(). What they do differs, but "every target group changes and
-    // nothing outside them does" is a property all three owe.
-    for (const char *name : {"Ungroup channels", "Regroup channels", "Delete channel group"})
+    // nothing outside them does" is a property all three owe, and so is an entry restoring all of it.
+    for (const std::string name : {"Ungroup channels", "Regroup channels", "Delete channel group"})
     {
         CAPTURE(name);
 
@@ -1187,141 +1049,389 @@ TEST_CASE("A group command covers every group it is given, and nothing else")
 
         // regrouping has nothing to put back until something has been taken apart; the selection rides on
         // the channels, so it survives the rebuild that renumbers the groups
-        if (std::string(name) == "Regroup channels")
+        if (name == "Regroup channels")
         {
             find_command("Ungroup channels")->apply(ctx);
             REQUIRE(img->history.size() == 1);
             ctx.retarget();
             REQUIRE(ctx.target_groups.size() == 7);
         }
+        else if (name == "Delete channel group")
+            CHECK(delete_channels_label(img, ctx.target_groups) == "Delete channel groups");
 
         auto cmd = find_command(name);
         REQUIRE(cmd);
         REQUIRE(cmd->enabled(ctx));
 
-        const int before = img->history.size();
+        const Snapshot           before = snapshot(img);
+        const std::vector<float> depth  = values(img->channels[size_t(channel_index(img, "Z"))]);
+        const auto               shown  = names_of(img, img->selected_group);
+        const int                steps  = img->history.size();
+
         cmd->apply(ctx);
-        CHECK(img->history.size() == before + 1); // one entry over the lot, not one per group
+        CHECK(img->history.size() == steps + 1); // one entry over the lot, not one per group
 
         // whatever it did, it left the group nobody selected alone
-        REQUIRE(channel_index(img, "Z") >= 0);
-        CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
+        const int z = channel_index(img, "Z");
+        REQUIRE(z >= 0);
+        CHECK_FALSE(img->channels[size_t(z)].ungrouped);
+        CHECK(values(img->channels[size_t(z)]) == depth);
 
         // and it reached both of the ones that were
-        if (std::string(name) == "Ungroup channels")
-            for (const char *n : {"R", "G", "B", "A", "normal.R", "normal.G", "normal.B"})
-                CHECK(img->channels[size_t(channel_index(img, n))].ungrouped);
-        else if (std::string(name) == "Regroup channels")
-            for (const char *n : {"R", "G", "B", "A", "normal.R", "normal.G", "normal.B"})
-                CHECK_FALSE(img->channels[size_t(channel_index(img, n))].ungrouped);
+        if (name == "Delete channel group")
+            CHECK(img->channels.size() == 1);
         else
         {
-            REQUIRE(img->channels.size() == 1);
-            CHECK(img->channels[0].name == "Z");
+            const bool apart = name == "Ungroup channels";
+            for (const char *n : {"R", "G", "B", "A", "normal.R", "normal.G", "normal.B"})
+            {
+                CAPTURE(n);
+                CHECK(img->channels[size_t(channel_index(img, n))].ungrouped == apart);
+            }
+
+            // the viewport follows what it was showing into whichever group now holds it
+            const auto now = names_of(img, img->selected_group);
+            CHECK(std::find(now.begin(), now.end(), shown.front()) != now.end());
         }
 
-        // undoing puts back what was taken, and still nothing more
+        // undoing puts back the channels, their flags and the groups built from them, and redoing returns; see
+        // the test below for the selection
+        const Snapshot after = snapshot(img);
         REQUIRE(img->history.undo(*img));
-        CHECK_FALSE(img->channels[size_t(channel_index(img, "Z"))].ungrouped);
+        CHECK(snapshot(img).content() == before.content());
+        REQUIRE(img->history.redo(*img));
+        CHECK(snapshot(img).content() == after.content());
     }
 }
 
-TEST_CASE("The delete command says whether it is about to take one channel or a group")
+namespace
 {
-    // the label follows the group on screen while the action's name stays put, since the name is what the
-    // registry, the palette and these tests address it by
-    auto img = make_image();
-    REQUIRE(delete_channels_label(img, {img->selected_group}) == "Delete channel group");
 
-    TestEditContext ctx{img};
-    find_command("Ungroup channels")->apply(ctx);
-    ctx.retarget();
+/// Shows and selects the layered image's second color group, and points \p ctx at a group outside it.
+/**
+    Ungrouping is pointed at the first color group, R,G,B,A. The others are pointed at its G once it has been
+    taken apart, which regrouping reaches back from to the whole layer, and deleting takes alone. That layer
+    also holds the depth channel, standing alone without ever having been taken apart.
+*/
+int point_outside_selection(TestEditContext &ctx, const std::string &command)
+{
+    const auto &img     = ctx.image;
+    img->selected_group = group_of_channel(img, "normal.R");
+    img->select_group(img->selected_group);
 
-    // now every group is a lone channel, and deleting one is not deleting a group
-    REQUIRE(img->groups[size_t(img->selected_group)].num_channels == 1);
-    CHECK(delete_channels_label(img, {img->selected_group}) == "Delete channel");
-
-    // the command is still registered under the one name throughout
-    CHECK(find_command("Delete channel group") != nullptr);
-    CHECK(find_command("Delete channel") == nullptr);
+    int pointed = group_of_channel(img, "R");
+    if (command != "Ungroup channels")
+    {
+        ctx.retarget(pointed);
+        find_command("Ungroup channels")->apply(ctx);
+        pointed = group_of_channel(img, "G");
+    }
+    ctx.retarget(pointed);
+    return pointed;
 }
 
-TEST_CASE("A group can be acted on without becoming the one on screen")
+} // namespace
+
+TEST_CASE("A group command pointed at a group outside the selection acts on it alone")
 {
-    // pointing at a group is not selecting it: right-clicking a lone depth channel to delete it leaves the
-    // color that was being shown both selected and intact
-    auto img = std::make_shared<Image>(k_size, 4);
+    // Pointing at a group is not selecting it: right-clicking one in the Images panel acts on that group and
+    // leaves the selection where it was. A lone channel the command does not reach, taken apart or never
+    // grouped, has to keep its flag through the command and its undo both.
+    for (const std::string name : {"Ungroup channels", "Regroup channels", "Delete channel group"})
+    {
+        CAPTURE(name);
 
-    static const char *names[] = {"R", "G", "B", "Z"};
-    for (int c = 0; c < 4; ++c) img->channels[size_t(c)].name = names[c];
-    img->rebuild_layers();
+        auto            img = make_layered_image(); // R,G,B,A | Z | normal.R,G,B
+        TestEditContext ctx{img};
+        const int       pointed = point_outside_selection(ctx, name);
+        REQUIRE_FALSE(img->is_group_selected(pointed));
+        REQUIRE(img->groups[size_t(pointed)].num_channels == (name == "Ungroup channels" ? 4 : 1));
 
-    REQUIRE(img->groups.size() == 2); // the color, and the depth on its own
+        const std::vector<std::string> reached = name == "Delete channel group"
+                                                     ? std::vector<std::string>{"G"}
+                                                     : std::vector<std::string>{"R", "G", "B", "A"};
 
-    // show the color
-    int color = -1, depth = -1;
-    for (size_t g = 0; g < img->groups.size(); ++g) (img->groups[g].num_channels > 1 ? color : depth) = int(g);
-    REQUIRE(color >= 0);
-    REQUIRE(depth >= 0);
+        // pointing inside the selection covers the selection, as a click inside one keeps it; outside, only the
+        // group pointed at
+        ctx.retarget(img->selected_groups().front());
+        CHECK(ctx.target_groups == img->selected_groups());
+        ctx.retarget(pointed);
+        CHECK(ctx.target_groups == std::vector<int>{pointed});
 
-    // shown and selected, so what follows says the pointed-at group wins over the selection and not merely
-    // over what the viewport shows
-    img->selected_group = color;
-    img->select_group(color);
+        // and the label says what it is about to take
+        CHECK(delete_channels_label(img, ctx.target_groups) ==
+              (img->groups[size_t(pointed)].num_channels == 1 ? "Delete channel" : "Delete channel group"));
 
-    TestEditContext ctx{img};
+        auto cmd = find_command(name);
+        REQUIRE(cmd);
+        REQUIRE(cmd->enabled(ctx));
 
-    // what the label says it is about to do differs between the two
-    CHECK(delete_channels_label(img, {color}) == "Delete channel group");
-    CHECK(delete_channels_label(img, {depth}) == "Delete channel");
+        struct Was
+        {
+            std::string        name;
+            bool               ungrouped;
+            std::vector<float> samples;
+        };
+        std::vector<Was> was;
+        for (const auto &c : img->channels) was.push_back({c.name, c.ungrouped, values(c)});
 
-    // point at the depth channel without selecting it
-    ctx.retarget(depth);
-    CHECK(ctx.target_groups == std::vector<int>{depth});
-    CHECK(delete_channels_label(img, ctx.target_groups) == "Delete channel");
+        const Snapshot before   = snapshot(img);
+        const auto     selected = selected_names(img);
 
-    auto del = find_command("Delete channel group");
-    REQUIRE(del);
-    REQUIRE(del->enabled(ctx));
-    del->apply(ctx);
+        cmd->apply(ctx);
 
-    // the depth channel is gone and the color is untouched, still shown and still selected
-    CHECK(img->channels.size() == 3);
-    for (const auto &c : img->channels) CHECK(c.name != "Z");
+        // every channel the command does not reach is as it was: present, flagged and filled the same
+        for (const auto &c : was)
+        {
+            if (std::find(reached.begin(), reached.end(), c.name) != reached.end())
+                continue;
+            CAPTURE(c.name);
+            const int now = channel_index(img, c.name);
+            REQUIRE(now >= 0);
+            CHECK(img->channels[size_t(now)].ungrouped == c.ungrouped);
+            CHECK(values(img->channels[size_t(now)]) == c.samples);
+        }
 
-    REQUIRE(img->is_valid_group(img->selected_group));
-    CHECK(img->groups[size_t(img->selected_group)].num_channels == 3);
-    CHECK(img->is_group_selected(img->selected_group));
+        // what was pointed at changed as the command says
+        for (const auto &n : reached)
+        {
+            CAPTURE(n);
+            const int now = channel_index(img, n);
+            if (name == "Delete channel group")
+                CHECK(now < 0);
+            else
+            {
+                REQUIRE(now >= 0);
+                CHECK(img->channels[size_t(now)].ungrouped == (name == "Ungroup channels"));
+            }
+        }
 
-    // pointing at a group that is selected covers the selection, as a click inside one keeps it
-    ctx.retarget(img->selected_group);
-    CHECK(ctx.target_groups == img->selected_groups());
+        // the selection stays where it was, though the rebuild renumbered the groups
+        CHECK(selected_names(img) == selected);
+
+        REQUIRE(img->history.undo(*img));
+        CHECK(snapshot(img).content() == before.content());
+    }
 }
 
-TEST_CASE("Ungrouping a group that is not on screen leaves the viewport where it was")
+TEST_CASE("A group command keeps the group on screen through its rebuild, and undoing it keeps the selection" *
+          doctest::should_fail())
 {
-    auto img = std::make_shared<Image>(k_size, 6);
+    // Fails as the commands stand. The rebuild renumbers the groups and only a changed group's channel is
+    // followed into its new index, so acting on a group ahead of the one on screen leaves the viewport's index
+    // naming another group; and a structural entry restores the channels without their selected flags.
+    for (const std::string name : {"Ungroup channels", "Regroup channels", "Delete channel group"})
+    {
+        CAPTURE(name);
 
-    static const char *names[] = {"diffuse.R", "diffuse.G", "diffuse.B", "specular.R", "specular.G", "specular.B"};
-    for (int c = 0; c < 6; ++c) img->channels[size_t(c)].name = names[c];
-    img->rebuild_layers();
-    REQUIRE(img->groups.size() == 2);
+        auto            img = make_layered_image();
+        TestEditContext ctx{img};
+        point_outside_selection(ctx, name);
 
-    int shown = -1, other = -1;
-    for (size_t g = 0; g < img->groups.size(); ++g)
-        (Channel::head(img->channels[size_t(img->groups[g].channels[0])].name) == "diffuse." ? shown : other) = int(g);
+        const Snapshot before = snapshot(img);
+        const auto     shown  = names_of(img, img->selected_group);
 
-    img->selected_group         = shown;
-    const std::string on_screen = img->channels[size_t(img->groups[size_t(shown)].channels[0])].name;
+        auto cmd = find_command(name);
+        REQUIRE(cmd);
+        cmd->apply(ctx);
+        CHECK(names_of(img, img->selected_group) == shown);
 
+        REQUIRE(img->history.undo(*img));
+        CHECK(snapshot(img) == before);
+    }
+}
+
+TEST_CASE("A seamless paste lands at the selection's top-left, or the image's without one, and nowhere else")
+{
+    // The clipboard is constant and the background a checkerboard, so whatever stopped being the checkerboard
+    // is what the paste touched, which says where it went without trusting the command's own account of it.
+    // The border ring keeps the background, so what moves is the interior, one sample in from the patch on
+    // every side; alpha is the mask and is left alone. The solve itself is test_poisson.cpp's business.
+    const int2 size{24, 20}, patch{8, 8};
+    auto       checker = [](int2 p) { return ((p.x / 4 + p.y / 4) % 2) ? 1.f : 0.f; };
+
+    auto clip = std::make_shared<Image>(patch, 4);
+    for (int c = 0; c < 4; ++c)
+        for (int i = 0; i < clip->channels[size_t(c)].num_elements(); ++i)
+            clip->channels[size_t(c)](i) = c < 3 ? 0.5f : 1.f;
+    clip->rebuild_layers();
+
+    const int2 at{12, 8};
+    const struct
+    {
+        const char *what;
+        Box2i       selection;
+        int2        lands; ///< where the patch's top-left should end up
+    } cases[] = {
+        {"a selection the size of the clipboard", Box2i{at, at + patch}, at},
+        // larger: the clipboard is placed at the selection's top-left, not centered or scaled
+        {"a selection larger than the clipboard", Box2i{at, size}, at},
+        // none at all: the whole image is the target, so the patch lands at its top-left
+        {"no selection", Box2i{}, int2{0}},
+    };
+
+    for (const auto &c : cases)
+    {
+        CAPTURE(c.what);
+
+        auto img = std::make_shared<Image>(size, 4);
+        for (int ch = 0; ch < 4; ++ch)
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x) img->channels[size_t(ch)](x, y) = ch < 3 ? checker(int2{x, y}) : 1.f;
+        img->rebuild_layers();
+
+        TestEditContext ctx{img};
+        ctx.clipboard_image = clip;
+        ctx.roi             = c.selection;
+
+        auto cmd = find_command("Seamless paste...");
+        REQUIRE(cmd);
+        REQUIRE(cmd->enabled(ctx));
+        cmd->apply(ctx);
+        CHECK(img->history.undo_name() == "Seamless paste");
+
+        const Box2i interior{c.lands + 1, c.lands + patch - 1};
+        for (int ch = 0; ch < 4; ++ch)
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                {
+                    CAPTURE(ch);
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    const float was   = ch < 3 ? checker(int2{x, y}) : 1.f;
+                    const bool  moved = std::fabs(img->channels[size_t(ch)](x, y) - was) > 1e-4f;
+                    CHECK(moved == (ch < 3 && in_box(interior, int2{x, y})));
+                }
+    }
+}
+
+TEST_CASE("Copy, cut and paste carry samples from where they were taken to where they are put")
+{
+    auto            img = make_image(); // RGBA, every sample distinct, partly transparent throughout
     TestEditContext ctx{img};
-    ctx.retarget(other);
 
-    find_command("Ungroup channels")->apply(ctx);
+    auto copy = find_command("Copy"), cut = find_command("Cut"), paste = find_command("Paste");
+    REQUIRE(copy);
+    REQUIRE(cut);
+    REQUIRE(paste);
 
-    // specular came apart, diffuse did not, and diffuse is still what is being shown
-    CHECK(img->groups.size() == 4);
-    REQUIRE(img->is_valid_group(img->selected_group));
-    CHECK(img->groups[size_t(img->selected_group)].num_channels == 3);
-    CHECK(img->channels[size_t(img->groups[size_t(img->selected_group)].channels[0])].name == on_screen);
+    const std::vector<float> original    = samples(img);
+    const size_t             per_channel = size_t(k_size.x * k_size.y);
+    auto was = [&](int c, int2 p) { return original[size_t(c) * per_channel + size_t(p.y * k_size.x + p.x)]; };
+
+    // the clipboard holds what the selection covered, at its size, and copying edits nothing
+    const Box2i from{{1, 1}, {4, 3}};
+    ctx.roi = from;
+    copy->apply(ctx);
+    REQUIRE(ctx.clipboard_image);
+    const auto clip = ctx.clipboard_image;
+    REQUIRE(clip->size() == from.size());
+    for (int c = 0; c < 4; ++c)
+        for (int y = 0; y < from.size().y; ++y)
+            for (int x = 0; x < from.size().x; ++x)
+                CHECK(clip->channels[size_t(c)](x, y) == was(c, from.min + int2{x, y}));
+    CHECK(img->history.size() == 0);
+
+    // Pasted into a selection larger than it: at the selection's top-left, source-over what is there on the
+    // premultiplied samples, the same expression for color and alpha, and nothing past the clipboard's extent.
+    const Box2i to{{3, 2}, {7, 5}};
+    ctx.roi = to;
+    paste->apply(ctx);
+    CHECK(img->history.undo_name() == "Paste");
+    for (int c = 0; c < 4; ++c)
+        for (int y = 0; y < k_size.y; ++y)
+            for (int x = 0; x < k_size.x; ++x)
+            {
+                CAPTURE(c);
+                CAPTURE(x);
+                CAPTURE(y);
+                const int2 q = int2{x, y} - to.min;
+                if (in_box(to, int2{x, y}) && in_box(Box2i{int2{0}, clip->size()}, q))
+                    CHECK(img->channels[size_t(c)](x, y) ==
+                          doctest::Approx(clip->channels[size_t(c)](q.x, q.y) +
+                                          was(c, int2{x, y}) * (1.f - clip->channels[3](q.x, q.y))));
+                else
+                    CHECK(img->channels[size_t(c)](x, y) == was(c, int2{x, y}));
+            }
+    REQUIRE(img->history.undo(*img));
+    REQUIRE(samples(img) == original);
+
+    // Cutting takes the samples into the clipboard and leaves zero behind: these are held premultiplied, where
+    // a color with no alpha is additive and not invisible.
+    const Box2i taken{{4, 1}, {7, 4}};
+    ctx.roi = taken;
+    cut->apply(ctx);
+    REQUIRE(ctx.clipboard_image);
+    REQUIRE(ctx.clipboard_image->size() == taken.size());
+    for (int c = 0; c < 4; ++c)
+        for (int y = 0; y < k_size.y; ++y)
+            for (int x = 0; x < k_size.x; ++x)
+            {
+                CAPTURE(c);
+                CAPTURE(x);
+                CAPTURE(y);
+                const bool inside = in_box(taken, int2{x, y});
+                CHECK(img->channels[size_t(c)](x, y) == (inside ? 0.f : was(c, int2{x, y})));
+                if (inside)
+                    CHECK(ctx.clipboard_image->channels[size_t(c)](x - taken.min.x, y - taken.min.y) ==
+                          was(c, int2{x, y}));
+            }
+}
+
+TEST_CASE("Cropping is offered only for a selection that would change the image, and crops to what lands")
+{
+    const struct
+    {
+        const char *what;
+        Box2i       selection;
+        bool        offered;
+    } cases[] = {
+        {"no selection", Box2i{}, false},
+        {"the whole image, which would crop to itself", Box2i{int2{0}, k_size}, false},
+        {"around all of it", Box2i{{-3, -2}, {20, 20}}, false},
+        {"missing it entirely", Box2i{{10, 10}, {12, 12}}, false},
+        {"hanging off a corner", Box2i{{5, 3}, {9, 9}}, true},
+        {"inside", Box2i{{1, 1}, {5, 4}}, true},
+    };
+
+    for (const auto &c : cases)
+    {
+        CAPTURE(c.what);
+
+        auto            img = make_image();
+        TestEditContext ctx{img};
+        ctx.roi = c.selection;
+
+        auto crop = find_command("Crop to selection");
+        REQUIRE(crop);
+        CHECK(crop->enabled(ctx) == c.offered);
+
+        const Snapshot           before   = snapshot(img);
+        const std::vector<float> original = samples(img);
+        crop->apply(ctx);
+
+        if (!c.offered)
+        {
+            // reached anyway, from the palette, it does nothing
+            CHECK(snapshot(img) == before);
+            CHECK(img->history.size() == 0);
+            continue;
+        }
+
+        // the part of the selection that lands on the image, which is the whole image now
+        const int2 lo = la::max(c.selection.min, int2{0}), hi = la::min(c.selection.max, k_size);
+        REQUIRE(img->size() == hi - lo);
+        CHECK(img->display_window.size() == hi - lo);
+        for (int ch = 0; ch < 4; ++ch)
+        {
+            REQUIRE(img->channels[size_t(ch)].size() == hi - lo);
+            for (int y = 0; y < hi.y - lo.y; ++y)
+                for (int x = 0; x < hi.x - lo.x; ++x)
+                    CHECK(img->channels[size_t(ch)](x, y) ==
+                          original[size_t(ch * k_size.x * k_size.y + (lo.y + y) * k_size.x + lo.x + x)]);
+        }
+
+        // and what was selected is all there is, so the selection has nothing left to say
+        CHECK_FALSE(ctx.roi.has_volume());
+    }
 }
