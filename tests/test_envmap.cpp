@@ -583,59 +583,91 @@ TEST_CASE("Irradiance is smoother than what it was computed from")
     CHECK(peak > 0.f);
 }
 
-TEST_CASE("EWA lands on the mean whatever shape the reduction is")
+TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, and keeps out what is past Nyquist")
 {
-    // Reductions differ in kind, not only degree: an isotropic one exercises the mip level and a lopsided one
-    // the probes along the long axis, and a filter can be right about one and wrong about the other.
+    // A lat-long remapped onto itself at another size is a pure scaling, the same at every pixel, so a sinusoid in the
+    // source comes out a sinusoid, attenuated by the filter's response at its frequency. A Gaussian of sigma output
+    // pixels passes exp(-2 pi^2 sigma^2 nu^2) of a frequency of nu cycles per pixel, which gives the blur's sigma from
+    // what comes through at a quarter cycle per pixel, and a frequency past Nyquist folds back onto one below it,
+    // three quarters onto one quarter, which says how much aliases.
     //
-    // Period sixteen, so an output pixel covering sixteen source columns covers one period. Not eight: a level
-    // one step too sharp averages over eight texels, still a whole period, and is right for the wrong reason.
-    Array2Df src{int2{512, 512}};
-    for (int y = 0; y < 512; ++y)
-        for (int x = 0; x < 512; ++x) src(x, y) = (x % 16 < 4) ? 1.f : 0.f;
-    const double true_mean = 0.25;
+    // Reductions differ in kind, not only degree: an isotropic one exercises the mip levels, a lopsided one the reads
+    // along the long axis, and a filter can be right about one and wrong about the other; scales between powers of
+    // two land between levels, and those at them on a level's own texels.
+    const int W = 480, H = 240;
 
     struct Shape
     {
         const char *what;
-        int2        size;
+        float       kx, ky; ///< Source pixels per output pixel across and down
         int         max_aniso;
     };
-    // only shapes that reduce along x, the axis the pattern varies on: a destination keeping x at full
-    // resolution covers one source column per pixel and shows the stripes, not their mean. The last is
-    // capped below the eccentricity it needs, so the ellipse is widened until round and the level rises with
-    // it: exceeding the cap gives a soft result and not a broken one, where keeping the level and gathering
-    // part of the footprint would alias.
-    const Shape shapes[] = {{"isotropic", int2{32, 32}, 16},
-                            {"reduced in x only", int2{32, 512}, 16},
-                            {"reduced further in x than in y", int2{16, 128}, 16},
-                            {"too eccentric for its anisotropy cap", int2{32, 512}, 1}};
+    const Shape shapes[] = {{"isotropic", 1.5f, 1.5f, 8},
+                            {"isotropic", 2.f, 2.f, 8},
+                            {"isotropic", 3.f, 3.f, 8},
+                            {"isotropic", 4.f, 4.f, 8},
+                            {"isotropic", 6.f, 6.f, 8},
+                            {"reduced in x only", 4.f, 1.f, 8},
+                            {"reduced further in x than in y", 6.f, 2.f, 8},
+                            {"too eccentric for its anisotropy cap", 8.f, 1.f, 1}};
 
     for (const Shape &shape : shapes)
-    {
-        CAPTURE(std::string(shape.what));
+        for (int axis : {0, 1})
+        {
+            const float k = axis == 0 ? shape.kx : shape.ky;
+            // at the source's own scale a read lands on the source's texels and nothing is reduced; and the capped
+            // shape is widened across its short axis, on purpose, which only its long axis is held to
+            if (k <= 1.f)
+                continue;
+            // and what is past the output's Nyquist is a frequency the source holds only from twice the scale
+            const bool past_nyquist = k >= 2.f;
 
-        const Array2Df ewa = remapped_envmap(src, shape.size, EnvMapping_LatLong, EnvMapping_LatLong,
-                                             EnvMapSampling_EWA, shape.max_aniso);
+            CAPTURE(std::string(shape.what));
+            CAPTURE(shape.kx);
+            CAPTURE(shape.ky);
+            CAPTURE(axis);
 
-        double err = 0.0;
-        for (int i = 0; i < ewa.num_elements(); ++i) err += std::abs(double(ewa(i)) - true_mean);
-        err /= double(ewa.num_elements());
+            const int2 size{int(std::lround(W / shape.kx)), int(std::lround(H / shape.ky))};
+            const int  n = axis == 0 ? size.x : size.y, src_n = axis == 0 ? W : H;
 
-        // The bound separates a filtered result from an unfiltered one instead of asserting the box mean: a
-        // Gaussian weights the middle of its footprint more heavily, so over one period its answer depends on
-        // the phase. Stripes surviving intact would score about 0.375.
-        CHECK(err < 0.15);
+            // how much of a sinusoid of `cycles` across the source comes out at `seen` cycles across the output
+            auto response = [&](int cycles, int seen, double offset)
+            {
+                Array2Df src{int2{W, H}};
+                for (int y = 0; y < H; ++y)
+                    for (int x = 0; x < W; ++x)
+                        src(x, y) =
+                            0.5f +
+                            0.5f * float(std::cos(2.0 * M_PI * cycles * ((axis == 0 ? x : y) + 0.5) / src_n + offset));
+                const Array2Df out = remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_LatLong,
+                                                     EnvMapSampling_EWA, shape.max_aniso);
+                double         c = 0.0, s = 0.0;
+                for (int y = 0; y < size.y; ++y)
+                    for (int x = 0; x < size.x; ++x)
+                    {
+                        const double phase = 2.0 * M_PI * seen * ((axis == 0 ? x : y) + 0.5) / n;
+                        c += out(x, y) * std::cos(phase);
+                        s += out(x, y) * std::sin(phase);
+                    }
+                return std::sqrt(c * c + s * s) * 2.0 / double(size.x * size.y) / 0.5;
+            };
 
-        // and better than the cheap setting it exists to improve on, wherever that setting is stressed
-        const Array2Df point =
-            remapped_envmap(src, shape.size, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling_Point, 1);
-        double point_err = 0.0;
-        for (int i = 0; i < point.num_elements(); ++i) point_err += std::abs(double(point(i)) - true_mean);
-        point_err /= double(point.num_elements());
-
-        CHECK(err <= point_err);
-    }
+            // at several phases, since where the output's pixels fall on the source's texels changes what a read
+            // blurs by, and can put an aliased frequency's samples on its zeros
+            const int quarter = n / 4;
+            for (double offset : {0.0, 0.25 * M_PI, 0.5 * M_PI, 0.75 * M_PI})
+            {
+                CAPTURE(offset);
+                const double sigma =
+                    std::sqrt(-std::log(response(quarter, quarter, offset)) / (2.0 * M_PI * M_PI / 16.0));
+                CHECK(sigma > 0.45);
+                CHECK(sigma < 0.55);
+                // a Gaussian of half a pixel lets 0.06 through, and one read per level, or a whole octave between
+                // levels, two or three times that
+                if (past_nyquist)
+                    CHECK(response(n - quarter, quarter, offset) < 0.15);
+            }
+        }
 }
 
 TEST_CASE("Snapping to the sphere lands on it, and leaves alone what is already on it")

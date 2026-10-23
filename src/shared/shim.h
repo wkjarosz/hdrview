@@ -30,6 +30,7 @@ using vec2 = float2;
 using vec3 = float3;
 using vec4  = float4;
 using ivec2 = int2;
+using ivec3 = int3;
 using mat3  = float3x3;
 
 using la::dot;
@@ -39,6 +40,7 @@ using std::abs;
 using std::acos;
 using std::asin;
 using std::atan2;
+using std::ceil;
 using std::clamp;
 using std::copysign;
 using std::cos;

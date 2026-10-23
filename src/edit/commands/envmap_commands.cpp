@@ -157,7 +157,7 @@ public:
             ImGui::Tooltip("How much longer than it is wide the footprint may be before it is widened to "
                            "fit. The mip level covers the short axis and the filter walks the long one, so "
                            "this is what keeps a stretched footprint sharp, and what it costs, since each "
-                           "step along that axis is another texel read.");
+                           "step along that axis is another read.");
         }
         else
         {
