@@ -592,8 +592,9 @@ TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, an
     // three quarters onto one quarter, which says how much aliases.
     //
     // Reductions differ in kind, not only degree: an isotropic one exercises the mip levels, a lopsided one the reads
-    // along the long axis, and a filter can be right about one and wrong about the other; scales between powers of
-    // two land between levels, and those at them on a level's own texels.
+    // along the long axis, and a slightly lopsided one the few reads that make up a little more along it than across,
+    // and a filter can be right about one and wrong about another; scales between powers of two land between levels,
+    // and those at them on a level's own texels.
     const int W = 480, H = 240;
 
     struct Shape
@@ -607,6 +608,8 @@ TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, an
                             {"isotropic", 3.f, 3.f, 8},
                             {"isotropic", 4.f, 4.f, 8},
                             {"isotropic", 6.f, 6.f, 8},
+                            {"slightly lopsided", 4.f, 3.f, 8},
+                            {"slightly lopsided", 3.f, 2.5f, 8},
                             {"reduced in x only", 4.f, 1.f, 8},
                             {"reduced further in x than in y", 6.f, 2.f, 8},
                             {"too eccentric for its anisotropy cap", 8.f, 1.f, 1}};

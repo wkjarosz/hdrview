@@ -124,7 +124,7 @@ struct EnvSource
     const Array2Df *const *charts;
 };
 
-inline float envmap_fetch(EnvSource src, int level, int chart, ivec2 p)
+inline float envmap_fetch(EnvSource src, int level, int chart, ivec2, ivec2 p)
 {
     const int per_level = src.mapping == ENVMAP_CUBE_MAP || src.mapping == ENVMAP_CUBE_COLUMN ? 6 : 1;
     return (*src.charts[level * per_level + chart])(p.x, p.y);
@@ -216,7 +216,38 @@ public:
     }
 
 private:
+    /// Which texels of the last level one row or column of the next reads, and the normalized Gaussian weights.
+    struct Taps
+    {
+        int   first = 0, count = 0;
+        float w[8];
+    };
+
+    /// The taps for each of \p n texels along one axis, \p scale old texels apart, reading \p from old ones.
+    static std::vector<Taps> taps_along(int n, float scale)
+    {
+        const float       r = 3.f * k_level_sigma;
+        std::vector<Taps> taps(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i)
+        {
+            // the new texel's center, in the old level's texels
+            const float at = (float(i) + 0.5f) * scale - 0.5f;
+            Taps       &t  = taps[size_t(i)];
+            t.first        = int(std::ceil(at - r));
+            t.count        = std::min(8, int(std::floor(at + r)) - t.first + 1);
+            float total    = 0.f;
+            for (int k = 0; k < t.count; ++k)
+                total += t.w[k] = std::exp(-0.5f * sqr((float(t.first + k) - at) / k_level_sigma));
+            for (int k = 0; k < t.count; ++k) t.w[k] /= total;
+        }
+        return taps;
+    }
+
     /// The next level: each chart of the last one, Gaussian-blurred and shrunk, read past its edges as the sphere is.
+    /**
+        The Gaussian is separable, so a texel whose taps all lie inside the chart is two passes of a few taps each;
+        only those near an edge, whose taps wrap, read every tap of the square through envmap_texel().
+    */
     void add_level()
     {
         const shader::EnvSource src    = source();
@@ -224,12 +255,31 @@ private:
         const int               charts = shader::envmap_is_cube(src.mapping) ? 6 : 1;
         const int2              from   = shader::envmap_chart_size(src, l);
         const int2              to     = shader::envmap_chart_size(src, l + 1);
-        const float2            scale  = float2(from) / float2(to);
-        const float             r      = 3.f * k_level_sigma;
+        const auto              tx     = taps_along(to.x, float(from.x) / float(to.x)),
+                                ty     = taps_along(to.y, float(from.y) / float(to.y));
+        auto                    inside = [](const Taps &t, int n) { return t.first >= 0 && t.first + t.count <= n; };
 
         std::vector<const Array2Df *> added;
         for (int c = 0; c < charts; ++c)
         {
+            const Array2Df &a = *src.charts[size_t(l * charts + c)];
+
+            // across every row, for the columns whose taps stay inside it
+            Array2Df rows{int2{to.x, from.y}};
+            stp::parallel_for(stp::blocked_range<int>(0, from.y, 1),
+                              [&](int y0, int y1, int, int)
+                              {
+                                  for (int y = y0; y < y1; ++y)
+                                      for (int x = 0; x < to.x; ++x)
+                                          if (const Taps &t = tx[size_t(x)]; inside(t, from.x))
+                                          {
+                                              float sum = 0.f;
+                                              for (int k = 0; k < t.count; ++k) sum += t.w[k] * a(t.first + k, y);
+                                              rows(x, y) = sum;
+                                          }
+                              });
+
+            // then down them, or wherever a tap wraps, over the whole square
             Array2Df &next = m_store.emplace_back(to);
             stp::parallel_for(stp::blocked_range<int>(0, to.y, 1),
                               [&](int y0, int y1, int, int)
@@ -237,19 +287,17 @@ private:
                                   for (int y = y0; y < y1; ++y)
                                       for (int x = 0; x < to.x; ++x)
                                       {
-                                          // the new texel's center, in the old level's texels
-                                          const float2 at  = (float2{float(x), float(y)} + 0.5f) * scale - 0.5f;
-                                          float        sum = 0.f, total = 0.f;
-                                          for (int j = int(std::ceil(at.y - r)); j <= int(std::floor(at.y + r)); ++j)
-                                              for (int i = int(std::ceil(at.x - r)); i <= int(std::floor(at.x + r));
-                                                   ++i)
-                                              {
-                                                  const float2 o = float2{float(i), float(j)} - at;
-                                                  const float w = std::exp(-0.5f * la::length2(o) / sqr(k_level_sigma));
-                                                  sum += w * shader::envmap_texel(src, l, c, from, int2{i, j});
-                                                  total += w;
-                                              }
-                                          next(x, y) = sum / total;
+                                          const Taps &u = tx[size_t(x)], &v = ty[size_t(y)];
+                                          float       sum = 0.f;
+                                          if (inside(u, from.x) && inside(v, from.y))
+                                              for (int j = 0; j < v.count; ++j) sum += v.w[j] * rows(x, v.first + j);
+                                          else
+                                              for (int j = 0; j < v.count; ++j)
+                                                  for (int i = 0; i < u.count; ++i)
+                                                      sum += v.w[j] * u.w[i] *
+                                                             shader::envmap_texel(src, l, c, from,
+                                                                                  int2{u.first + i, v.first + j});
+                                          next(x, y) = sum;
                                       }
                               });
             added.push_back(&next);

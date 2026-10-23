@@ -176,7 +176,7 @@ struct EnvSource
     float spread;
     ivec2 size;
 };
-vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 p);
+vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p);
 
 @include ../../src/shared/envmap_sample.h
 
@@ -188,12 +188,10 @@ float fetch_channel(texture2D tex, sampler smp, ivec2 p, int level)
                                 : texelFetch(sampler2D(tex, smp), p, level).r;
 }
 
-vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 p)
+vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p)
 {
     // a cube map's faces are cells of the one image
-    ivec2 q = envmap_is_cube(src.mapping)
-                  ? envmap_face_texel_in_image(src.mapping, chart, p, envmap_chart_size(src, level).x)
-                  : p;
+    ivec2 q = envmap_is_cube(src.mapping) ? envmap_face_texel_in_image(src.mapping, chart, p, size.x) : p;
     return vec4(fetch_channel(primary_0_texture, primary_0_sampler, q, level),
                 fetch_channel(primary_1_texture, primary_1_sampler, q, level),
                 fetch_channel(primary_2_texture, primary_2_sampler, q, level),
