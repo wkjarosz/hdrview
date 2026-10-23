@@ -65,11 +65,30 @@ bool wraps_in_u(EnvMapping mapping) { return mapping == EnvMapping_LatLong || ma
 
 /// Texel of \p a with out-of-range coordinates wrapped as the sphere does.
 /**
-    Lat-long and cylindrical wrap in u; past a pole the row reflects and u shifts by half a turn. Every
+    Lat-long and cylindrical wrap in u; past a pole the row reflects and u shifts by half a turn. The equal-area
+    square joins each edge to itself folded about its midpoint, so past an edge it mirrors back across that edge and
+    flips along it, as in PBRT's WrapEqualAreaSquare() but with texel -1 the mirror of texel 0 on both sides. Every
     other mapping clamps.
 */
 float texel(const Array2Df &a, int x, int y, EnvMapping mapping)
 {
+    if (mapping == EnvMapping_EqualArea)
+    {
+        const int w = a.width(), h = a.height();
+        if (x < 0 || x >= w)
+        {
+            x = x < 0 ? -1 - x : 2 * w - 1 - x;
+            y = h - 1 - y;
+        }
+        if (y < 0 || y >= h)
+        {
+            y = y < 0 ? -1 - y : 2 * h - 1 - y;
+            x = w - 1 - x;
+        }
+        // a footprint wider than the image can still land outside it
+        return a(std::clamp(x, 0, w - 1), std::clamp(y, 0, h - 1));
+    }
+
     if (wraps_in_u(mapping))
     {
         if (y < 0)

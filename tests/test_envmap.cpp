@@ -492,6 +492,27 @@ TEST_CASE("Remapping a mapping to itself returns the image it was given")
                 }
         }
     }
+
+    // the equal-area square has no border: each edge continues into itself, folded about its midpoint, so identity
+    // holds over all of it. A lobe just inside an edge, its steepest slope on the fold, differs on either side of it,
+    // so a filter reading past the edge needs the texel the sphere continues into there, not the one beside it
+    const int2     size{72, 72};
+    const float3   c    = envmap_uv_to_xyz(EnvMapping_EqualArea, float2{6.f / 72.f, 0.2f});
+    const Array2Df lobe = make_envmap(size, EnvMapping_EqualArea,
+                                      [&c](float3 d) { return 0.2f + std::exp(-20.f * (1.f - la::dot(d, c))); });
+    for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+    {
+        CAPTURE(sampler);
+        const Array2Df out =
+            remapped_envmap(lobe, size, EnvMapping_EqualArea, EnvMapping_EqualArea, EnvMapSampling(sampler), 4);
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x)
+            {
+                CAPTURE(x);
+                CAPTURE(y);
+                CHECK(out(x, y) == doctest::Approx(lobe(x, y)).epsilon(0.03).scale(0.f));
+            }
+    }
 }
 
 TEST_CASE("A uniform environment reflects back exactly what it emits")
