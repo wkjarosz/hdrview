@@ -165,11 +165,11 @@ float2 HDRViewApp::image_scale(ConstImagePtr img) const
 
 std::pair<float2, float2> HDRViewApp::remap_preview_corners(const EnvmapRemap &remap) const
 {
-    auto         img    = current_image();
-    const Box2f  window = img ? Box2f{img->display_window} : Box2f{float2{0.f}, float2{0.f}};
-    const float2 center = vp_pos_at_pixel(0.5f * (window.min + window.max));
-    const float2 half   = 0.5f * m_zoom * float2(remap.size) * select(m_flip, float2{-1.f}, float2{1.f});
-    return {center - half, center + half};
+    // vp_pos_at_pixel() for an image whose display and data windows are both [0, size), as the result's are
+    const float2 size   = float2(remap.size);
+    const float2 offset = m_translate + 0.5f * (viewport_size() - m_zoom * size);
+    auto         at     = [&](float2 pixel) { return m_zoom * select(m_flip, size - pixel, pixel) + offset; };
+    return {at(float2{0.f}), at(size)};
 }
 
 int HDRViewApp::next_visible_image_index(int index, Direction_ direction) const

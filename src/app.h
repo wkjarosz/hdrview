@@ -259,10 +259,12 @@ public:
     bool request_edit_preview(const EditCommand &cmd, const EditContext &ctx);
     /// Where a remap's output sits in the viewport: the viewport positions of its uv (0, 0) and (1, 1).
     /**
-        Centered where the current image's display window is, at the same zoom, as an image of its size would open,
-        and mirrored as the view mirrors the image.
+        Where the view would show an image of its size, as the result will be once applied: centered, panned and
+        zoomed as the view is, and mirrored as it mirrors the image.
     */
     std::pair<float2, float2> remap_preview_corners(const EnvmapRemap &remap) const;
+    /// Hand back the view a remap's preview took over: kept for the result if \p applied, else restored.
+    void end_remap_view(bool applied);
 
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();
@@ -967,6 +969,15 @@ private:
     bool m_dragging_around_dialog = false; ///< whether the left button went down in the viewport, around it
     EditPreview m_edit_preview;                   ///< see edit_preview()
     int         m_edit_preview_frame = -2;        ///< the last frame an edit dialog asked for m_edit_preview
+    /// The view a remap's preview took over, to give back if the remap is not applied, and the size it last fit.
+    struct RemapView
+    {
+        bool   active = false;
+        float  zoom   = 1.f;
+        float2 translate{0.f};
+        int2   size{0};
+    } m_remap_view;
+    int m_keep_view_for = -1; ///< An image whose next reshaping keeps the view, its result having been previewed in it
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
 
     /// Index of the annotation being worked on, or -1 when none on the current image is.

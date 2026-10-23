@@ -702,12 +702,27 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->Yield(2);
         IM_CHECK(app->remap_preview() == nullptr);
         ctx->ItemCheck("Preview");
+        ctx->Yield(2);
+
+        // It frames the output as applying it will, fitting the view to it, and panned while it is previewed, the
+        // result lands where its preview was.
+        IM_CHECK_EQ(app->zoom(), std::min(app->viewport_size().x / float(shown->size.x),
+                                          app->viewport_size().y / float(shown->size.y)));
+        const float2 corner = app->app_pos_at_vp_pos(float2{HelloImGui::EmSize(2.f)});
+        ctx->MouseMoveToPos(ImVec2(corner));
+        ctx->MouseDown(ImGuiMouseButton_Left);
+        ctx->MouseMoveToPos(ImVec2(corner + float2{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)}));
+        ctx->MouseUp(ImGuiMouseButton_Left);
+        ctx->Yield(2);
+        const auto [plo, phi] = app->remap_preview_corners(*shown);
 
         ctx->ItemClick("Remap");
 
         wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(img->size() == shown->size);
+        IM_CHECK(la::length(app->vp_pos_at_pixel(float2{0.f}) - plo) < 1e-3f);
+        IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->size())) - phi) < 1e-3f);
         status_bar = had_bar;
         app->set_zoom(zoom);
         for (const auto &c : img->channels) IM_CHECK(c.size() == img->size());
@@ -717,6 +732,18 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(img->size() == original);
         IM_CHECK(snapshot(img) == samples);
+
+        // and canceled, the view its preview took over is given back
+        const float  before_zoom = app->zoom();
+        const float2 before_at   = app->vp_pos_at_pixel(float2{0.f});
+        menu_click(ctx, "Edit/Remap envmap...");
+        ctx->SetRef("Remap envmap...");
+        ctx->ComboClick("Target/Longitude-latitude");
+        ctx->Yield(2);
+        ctx->ItemClick("Cancel");
+        ctx->Yield(2);
+        IM_CHECK_EQ(app->zoom(), before_zoom);
+        IM_CHECK(la::length(app->vp_pos_at_pixel(float2{0.f}) - before_at) < 1e-3f);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an irradiance map comes out at the size asked for");

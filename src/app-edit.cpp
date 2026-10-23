@@ -87,14 +87,19 @@ EditContext HDRViewApp::edit_context(ImagePtr img)
     ctx.add_image             = [this](ImagePtr i, string partname) { add_image_beside_current(i, partname); };
     ctx.set_selection         = [this](const Box2i &box) { set_selection(box); };
     ctx.draw_subject_selector = [this] { draw_edit_subject_selector(); };
-    ctx.edited                = [this](EditExtent extent)
+    ctx.edited                = [this, id = ctx.image ? ctx.image->id : -1](EditExtent extent)
     {
         // recomputes each group's visibility and the layer tree's counts, then rebinds the textures
         update_visibility();
 
-        // the view was framing an image of a different size
+        // the view was framing an image of a different size, unless it was already framing the result in a preview
         if (extent == Extent_Structure)
-            fit_display_window();
+        {
+            if (m_keep_view_for == id)
+                m_keep_view_for = -1;
+            else
+                fit_display_window();
+        }
     };
 
     const ImagePtr    subject_image = ctx.image;
@@ -191,6 +196,19 @@ bool HDRViewApp::request_edit_preview(const EditCommand &cmd, const EditContext 
     return true;
 }
 
+void HDRViewApp::end_remap_view(bool applied)
+{
+    // applied, the result lands framed as its preview was; otherwise the view goes back to what it was framing
+    if (applied)
+        m_keep_view_for = current_image() ? current_image()->id : -1;
+    else
+    {
+        set_zoom(m_remap_view.zoom);
+        m_translate = m_remap_view.translate;
+    }
+    m_remap_view.active = false;
+}
+
 void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
 {
     const auto &info = cmd.info();
@@ -241,18 +259,36 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
                 request_edit_preview(cmd, ctx);
         }
 
+        // A remap's preview frames its output as applying it would, fitting the view when it starts and whenever the
+        // size changes, so the result lands where its preview was; the view is given back if it does not land.
+        const auto remap = preview && ctx.image ? cmd.remap_preview(ctx) : std::nullopt;
+        if (remap && !m_remap_view.active)
+            m_remap_view = RemapView{true, m_zoom, m_translate, int2{0}};
+        if (remap && remap->size != m_remap_view.size)
+        {
+            set_zoom(minelem(viewport_size() / float2(remap->size)));
+            center();
+            m_remap_view.size = remap->size;
+        }
+        if (!remap && m_remap_view.active)
+            end_remap_view(false);
+
         // applied on confirm, not as the controls move: an edit per frame of a drag would fill the
         // history and rewrite every pixel it covers
         const auto result = ImGui::DialogButtons(info.confirm.c_str());
         if (result == ImGui::DialogResult::Confirm)
         {
             // the dialog is drawn against the current image, but confirming applies across the selection
+            if (m_remap_view.active)
+                end_remap_view(true);
             apply_edit_command(cmd);
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
         {
+            if (m_remap_view.active)
+                end_remap_view(false);
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
