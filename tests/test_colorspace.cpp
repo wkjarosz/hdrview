@@ -468,14 +468,12 @@ TEST_CASE("blend() keeps fractional results in the difference modes")
 namespace
 {
 
-/// Colors spanning what an HSL adjustment has to handle, including values outside [0,1].
+/// Colors spanning what the HSL conversions and the hue edits have to handle, including values outside [0,1].
 const float3 k_hsl_colors[] = {
     {0.5f, 0.25f, 0.125f}, {1.f, 0.f, 0.f},    {0.f, 1.f, 0.f},       {0.f, 0.f, 1.f}, {0.2f, 0.7f, 0.9f},
     {0.f, 0.f, 0.f},       {1.f, 1.f, 1.f},    {0.35f, 0.35f, 0.35f}, // achromatic, where hue is undefined
     {4.f, 1.5f, 0.25f},    {-0.2f, 0.4f, 1.f},                        // beyond white and below black
 };
-
-float hsl_spread(float3 c) { return std::max({c.x, c.y, c.z}) - std::min({c.x, c.y, c.z}); }
 
 } // namespace
 
@@ -517,101 +515,6 @@ TEST_CASE("HSL's lightness is the midpoint of the extremes, and gray has no hue"
             CHECK(hsl.y == doctest::Approx(0.f));
         else
             CHECK(hsl.y > 0.f);
-    }
-}
-
-TEST_CASE("an HSL adjustment that asks for nothing changes nothing")
-{
-    // exact, not approximate: this is what an opened dialog applies before any slider is touched
-    for (const float3 &rgb : k_hsl_colors)
-    {
-        CAPTURE(rgb.x);
-        CAPTURE(rgb.y);
-        CAPTURE(rgb.z);
-
-        for (float turns : {0.f, 1.f, -1.f})
-        {
-            CAPTURE(turns);
-            const float3 out = adjust_HSL(rgb, turns, 1.f, 0.f);
-            CHECK(out.x == doctest::Approx(rgb.x).epsilon(1e-3));
-            CHECK(out.y == doctest::Approx(rgb.y).epsilon(1e-3));
-            CHECK(out.z == doctest::Approx(rgb.z).epsilon(1e-3));
-        }
-    }
-}
-
-TEST_CASE("rotating the hue moves it around the wheel and leaves the lightness alone")
-{
-    for (const float3 &rgb : k_hsl_colors)
-    {
-        const float3 hsl = RGB_to_HSL(rgb);
-        if (hsl.y <= 1e-6f)
-            continue; // gray has no hue to rotate
-
-        CAPTURE(rgb.x);
-        CAPTURE(rgb.y);
-        CAPTURE(rgb.z);
-
-        for (float turn : {1.f / 3.f, -0.25f, 0.5f})
-        {
-            CAPTURE(turn);
-            const float3 out = RGB_to_HSL(adjust_HSL(rgb, turn, 1.f, 0.f));
-
-            float moved = out.x - hsl.x - turn;
-            moved -= std::floor(moved + 0.5f); // the shortest way round, so the wrap does not count
-            CHECK(std::abs(moved) < 0.01f);
-
-            // a rotation is a move around the wheel and nothing else
-            CHECK(out.z == doctest::Approx(hsl.z).epsilon(1e-3));
-        }
-    }
-}
-
-TEST_CASE("saturation spreads the components apart, and zero of it leaves gray")
-{
-    for (const float3 &rgb : k_hsl_colors)
-    {
-        CAPTURE(rgb.x);
-        CAPTURE(rgb.y);
-        CAPTURE(rgb.z);
-
-        const float3 gray = adjust_HSL(rgb, 0.f, 0.f, 0.f);
-        CHECK(gray.y == doctest::Approx(gray.x).epsilon(1e-3));
-        CHECK(gray.z == doctest::Approx(gray.x).epsilon(1e-3));
-
-        // at the lightness it had, so desaturating did not also darken it
-        CHECK(gray.x == doctest::Approx(RGB_to_HSL(rgb).z).epsilon(1e-3));
-
-        // a turn of something with no hue is a no-op, whichever path the adjustment takes
-        const float3 turned = adjust_HSL(gray, 0.25f, 1.f, 0.f);
-        CHECK(turned.x == doctest::Approx(gray.x).epsilon(1e-3));
-        CHECK(turned.y == doctest::Approx(gray.y).epsilon(1e-3));
-        CHECK(turned.z == doctest::Approx(gray.z).epsilon(1e-3));
-
-        // monotonic either side of where it started, as a slider needs
-        if (RGB_to_HSL(rgb).y > 1e-6f)
-        {
-            CHECK(hsl_spread(adjust_HSL(rgb, 0.f, 0.5f, 0.f)) < hsl_spread(rgb));
-            CHECK(hsl_spread(adjust_HSL(rgb, 0.f, 1.5f, 0.f)) > hsl_spread(rgb));
-        }
-    }
-}
-
-TEST_CASE("the lightness control mixes toward black and white rather than washing the color out")
-{
-    // Photoshop's slider of that name; changing L directly desaturates on the way
-    const float3 rgb{0.5f, 0.25f, 0.125f};
-
-    const float3 black = adjust_HSL(rgb, 0.f, 1.f, -1.f);
-    const float3 white = adjust_HSL(rgb, 0.f, 1.f, 1.f);
-    const float3 half  = adjust_HSL(rgb, 0.f, 1.f, 0.5f);
-
-    for (int i = 0; i < 3; ++i)
-    {
-        CAPTURE(i);
-        CHECK(black[i] == doctest::Approx(0.f).epsilon(1e-4));
-        CHECK(white[i] == doctest::Approx(1.f).epsilon(1e-4));
-        CHECK(half[i] == doctest::Approx(0.5f * (rgb[i] + 1.f)).epsilon(1e-3));
     }
 }
 

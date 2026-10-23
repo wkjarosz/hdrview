@@ -209,10 +209,11 @@ public:
     /// Resample every channel of \p img into a new \p size, replacing the image as one undoable step.
     /**
         On a worker behind a cancellable progress bar, since a resampler costs seconds a channel; a resize
-        fast enough to run synchronously goes through Image::resample() instead.
+        fast enough to run synchronously goes through Image::resample() instead. \p extent says whether the view
+        refits to the result.
     */
     void resample_image_async(const ImagePtr &img, const std::string &name, int2 size, const ChannelResampler &op,
-                              EditExtent extent = Extent_Structure);
+                              EditExtent extent);
 
     /// Filter the subject's channels of \p img, likewise on a worker, as one undoable step.
     /**

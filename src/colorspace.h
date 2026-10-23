@@ -333,7 +333,6 @@ float3 RGB_to_YC(float3 input, float3 Yw);
 
 // The point-wise edits' color math, which the shaders share (src/shared/edits.h): hue, saturation and lightness,
 // L*a*b*, and the brightness/contrast curves.
-using shader::adjust_HSL;
 using shader::bias_Schlick;
 using shader::brightness_contrast_linear;
 using shader::brightness_contrast_rational;

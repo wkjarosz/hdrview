@@ -154,6 +154,14 @@ SHARED_FN vec3 unnormalize_Lab(vec3 Lab) { return Lab * (k_Lab_max - k_Lab_min) 
 // Hue, saturation and lightness, with hue a turn in [0, 1)
 //
 
+/// The hue of \p rgb, whose largest component is \p mx and range \p C > 0, in turns around the hexcone, unwrapped.
+SHARED_FN float hexcone_hue(vec3 rgb, float mx, float C)
+{
+    // the sextant the largest component names, plus how far around it the other two have moved
+    float h = rgb.x == mx ? (rgb.y - rgb.z) / C : rgb.y == mx ? (rgb.z - rgb.x) / C + 2.0f : (rgb.x - rgb.y) / C + 4.0f;
+    return h / 6.0f;
+}
+
 /// The double hexcone's hue, saturation and lightness of \p rgb, extended to values outside [0, 1].
 /**
     From the sample code in Foley et al., Computer Graphics: Principles and Practice, second edition in C, 592-596,
@@ -181,15 +189,7 @@ SHARED_FN vec3 RGB_to_HSL(vec3 rgb)
     else
         S = mx > 1.0f ? mx : diff / (2.0f - sum);
 
-    // the sextant the largest component names, plus how far around it the other two have moved
-    float H;
-    if (rgb.x == mx)
-        H = (rgb.y - rgb.z) / diff;
-    else if (rgb.y == mx)
-        H = (rgb.z - rgb.x) / diff + 2.0f;
-    else
-        H = (rgb.x - rgb.y) / diff + 4.0f;
-    H *= 1.0f / 6.0f;
+    float H = hexcone_hue(rgb, mx, diff);
     if (H < 0.0f || H > 1.0f)
         H -= floor(H);
 
@@ -241,73 +241,12 @@ SHARED_FN vec3 rotate_hue(vec3 rgb, float turns)
     if (turns == 0.0f || C <= 0.0f)
         return rgb;
 
-    // the hue as RGB_to_HSL() names it, then turned
-    float H;
-    if (rgb.x == mx)
-        H = (rgb.y - rgb.z) / C;
-    else if (rgb.y == mx)
-        H = (rgb.z - rgb.x) / C + 2.0f;
-    else
-        H = (rgb.x - rgb.y) / C + 4.0f;
-    H = H / 6.0f + turns;
+    float H = hexcone_hue(rgb, mx, C) + turns;
 
     // the hexcone's pure hue there, between 0 and 1, spread back over the color's own range
     vec3 hue = vec3(hue_to_RGB(0.0f, 1.0f, H + 1.0f / 3.0f), hue_to_RGB(0.0f, 1.0f, H),
                     hue_to_RGB(0.0f, 1.0f, H - 1.0f / 3.0f));
     return vec3(mn, mn, mn) + hue * C;
-}
-
-/// \p rgb with its saturation scaled by \p s, without naming the hue, which the round trip loses on a gray.
-SHARED_FN vec3 adjust_saturation(vec3 rgb, float s)
-{
-    float mn = min(rgb.x, min(rgb.y, rgb.z));
-    float mx = max(rgb.x, max(rgb.y, rgb.z));
-
-    // nothing to scale: gray stays gray at any saturation
-    if (mn == mx)
-        return rgb;
-
-    // the same two branches as RGB_to_HSL(), carried far enough to give the new extremes
-    float L = 0.5f * (mn + mx);
-    float S, y2;
-    if (L <= 0.5f)
-    {
-        S  = (mn < 0.0f ? 1.0f - mn : (mx - mn) / (mx + mn)) * s;
-        y2 = S > 1.0f ? 2.0f * L + S - 1.0f : L + L * S;
-    }
-    else
-    {
-        S  = (mx > 1.0f ? mx : (mx - mn) / (2.0f - (mx + mn))) * s;
-        y2 = S > 1.0f ? S : L + S - L * S;
-    }
-    float x2 = 2.0f * L - y2;
-
-    // the map taking the old extremes to the new ones is affine, so applying it to all three components at once
-    // leaves each in its place between them, and the hue untouched
-    float t    = 1.0f / (mx - mn);
-    float fac1 = (y2 - x2) * t;
-    float fac2 = (mx * x2 - mn * y2) * t;
-    return rgb * fac1 + vec3(fac2, fac2, fac2);
-}
-
-/// \p rgb with its hue turned by \p hue_turns, its saturation scaled by \p saturation, and mixed toward black or white.
-/**
-    \p lightness runs over [-1, 1], mixing toward black below zero and toward white above it, as Photoshop's slider
-    of that name does. That agrees with moving L at a fixed saturation while the color is already on the side it is
-    pushed toward; a color lightened from below the middle, or darkened from above it, comes out less saturated
-    than moving L would leave it. A change of saturation alone skips the round trip through hue, which is where a
-    gray loses its hue.
-*/
-SHARED_FN vec3 adjust_HSL(vec3 rgb, float hue_turns, float saturation, float lightness)
-{
-    if (hue_turns == 0.0f && lightness == 0.0f)
-        return adjust_saturation(rgb, saturation);
-
-    vec3 hsl = RGB_to_HSL(rgb);
-    vec3 mapped = HSL_to_RGB(vec3(hsl.x + hue_turns, hsl.y * saturation, hsl.z));
-
-    // mixed toward black or white, since changing L would desaturate on the way
-    return lightness < 0.0f ? mapped * (1.0f + lightness) : mapped + (vec3(1.0f, 1.0f, 1.0f) - mapped) * lightness;
 }
 
 //

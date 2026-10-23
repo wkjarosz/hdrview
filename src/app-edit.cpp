@@ -10,7 +10,6 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
-#include "shared/edits.h"
 
 #include <hello_imgui/hello_imgui.h>
 

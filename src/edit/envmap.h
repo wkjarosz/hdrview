@@ -7,7 +7,6 @@
 #pragma once
 
 #include "array2d.h"
-#include "box.h"
 #include "edit/progress.h"
 #include "fwd.h"
 #include "shared/envmap.h"

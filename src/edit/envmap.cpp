@@ -21,8 +21,6 @@ constexpr float k_pi = shader::ENVMAP_PI;
 
 // the cube's faces, which the image shader shares with the mappings (src/shared/envmap.h)
 using shader::cube_column_face_vector;
-using shader::cube_face_of;
-using shader::cube_face_st;
 using shader::cube_face_vector;
 using shader::cube_map_face_vector;
 
