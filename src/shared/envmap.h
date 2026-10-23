@@ -241,9 +241,9 @@ SHARED_FN vec3 equal_area_to_xyz(vec2 p)
     float r               = 1.0f - abs(signed_distance);
 
     float phi     = (r == 0.0f ? 1.0f : (vp - up) / r + 1.0f) * ENVMAP_PI / 4.0f;
-    float z       = copy_sign(1.0f - r * r, signed_distance);
-    float cos_phi = copy_sign(cos(phi), u);
-    float sin_phi = copy_sign(sin(phi), v);
+    float z       = copysign(1.0f - r * r, signed_distance);
+    float cos_phi = copysign(cos(phi), u);
+    float sin_phi = copysign(sin(phi), v);
     float scale   = r * sqrt(max(0.0f, 2.0f - r * r));
     return vec3(cos_phi * scale, z, -sin_phi * scale);
 }
@@ -329,7 +329,7 @@ SHARED_FN vec2 xyz_to_equal_area(vec3 xyz)
         u             = 1.0f - v;
         v             = 1.0f - swapped;
     }
-    return vec2(0.5f * (copy_sign(u, d.x) + 1.0f), 0.5f * (copy_sign(v, d.y) + 1.0f));
+    return vec2(0.5f * (copysign(u, d.x) + 1.0f), 0.5f * (copysign(v, d.y) + 1.0f));
 }
 
 //
@@ -375,7 +375,7 @@ SHARED_FN vec2 envmap_xyz_to_uv(int mapping, vec3 xyz)
 /// Whether \p uv is part of the sphere at all in \p mapping.
 /**
     The discs fill only their inscribed circle, and the cross only its column of four and the row across its second
-    cell; every other mapping covers its whole image.
+    cell; every other mapping covers its whole image. Anything summing over the image has to skip the rest.
 */
 SHARED_FN bool envmap_uv_is_valid(int mapping, vec2 uv)
 {
@@ -391,8 +391,9 @@ SHARED_FN bool envmap_uv_is_valid(int mapping, vec2 uv)
 
 /// Nearest point of the sphere to \p uv in \p mapping (\p uv itself if it is already on the sphere).
 /**
-    A disc's corner goes straight out onto its circle, landing a hair inside it, where the mapping is less singular;
-    a cross's corner cell goes to the nearer of its two arms.
+    What fills the parts of an image that are not sphere, so a bilinear read at the rim does not pull in zeros. A
+    disc's corner goes straight out onto its circle, landing a hair inside it, where the mapping is less singular; a
+    cross's corner cell goes to the nearer of its two arms.
 */
 SHARED_FN vec2 nearest_valid_envmap_uv(int mapping, vec2 uv)
 {

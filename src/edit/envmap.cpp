@@ -7,7 +7,6 @@
 #include "edit/envmap.h"
 
 #include "common.h"
-#include "shared/envmap.h"
 
 #include <smallthreadpool.h>
 
@@ -57,16 +56,6 @@ float envmapping_aspect(int mapping)
     default: return 1.f;                             // the discs and the equal-area square
     }
 }
-
-// the shader's names for the mappings, which it branches on
-static_assert(EnvMapping_Angular == shader::ENVMAP_ANGULAR && EnvMapping_MirrorBall == shader::ENVMAP_MIRROR_BALL &&
-              EnvMapping_LatLong == shader::ENVMAP_LAT_LONG && EnvMapping_Cylindrical == shader::ENVMAP_CYLINDRICAL &&
-              EnvMapping_CubeMap == shader::ENVMAP_CUBE_MAP && EnvMapping_CubeMapColumn == shader::ENVMAP_CUBE_COLUMN &&
-              EnvMapping_EqualArea == shader::ENVMAP_EQUAL_AREA);
-
-float3 envmap_uv_to_xyz(EnvMapping mapping, float2 uv) { return shader::envmap_uv_to_xyz(mapping, uv); }
-
-float2 envmap_xyz_to_uv(EnvMapping mapping, float3 xyz) { return shader::envmap_xyz_to_uv(mapping, xyz); }
 
 namespace
 {
@@ -169,10 +158,6 @@ float envmap_jacobian(EnvMapping mapping, float2 uv)
     }
     }
 }
-
-bool envmap_uv_is_valid(EnvMapping mapping, float2 uv) { return shader::envmap_uv_is_valid(mapping, uv); }
-
-float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv) { return shader::nearest_valid_envmap_uv(mapping, uv); }
 
 namespace
 {

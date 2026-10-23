@@ -10,6 +10,7 @@
 #include "box.h"
 #include "edit/progress.h"
 #include "fwd.h"
+#include "shared/envmap.h"
 
 /// The ways an environment map can be flattened onto a rectangle.
 /**
@@ -27,35 +28,29 @@ enum EnvMapping : int
 
     EnvMapping_COUNT
 };
+// the shader's names for them, which the shared mappings branch on
+static_assert(EnvMapping_Angular == shader::ENVMAP_ANGULAR && EnvMapping_MirrorBall == shader::ENVMAP_MIRROR_BALL &&
+              EnvMapping_LatLong == shader::ENVMAP_LAT_LONG && EnvMapping_Cylindrical == shader::ENVMAP_CYLINDRICAL &&
+              EnvMapping_CubeMap == shader::ENVMAP_CUBE_MAP && EnvMapping_CubeMapColumn == shader::ENVMAP_CUBE_COLUMN &&
+              EnvMapping_EqualArea == shader::ENVMAP_EQUAL_AREA);
 
 const char *envmapping_name(int mapping);
 
 /// Width divided by height for an image in \p mapping that wastes no resolution.
 float envmapping_aspect(int mapping);
 
-/// Direction for a point on the image, both in [0,1]^2 and on the unit sphere respectively.
-float3 envmap_uv_to_xyz(EnvMapping mapping, float2 uv);
-/// Point on the image for a direction; the inverse of envmap_uv_to_xyz().
-float2 envmap_xyz_to_uv(EnvMapping mapping, float3 xyz);
+// The mappings themselves, which the image shader shares (src/shared/envmap.h): envmap_uv_to_xyz() and its inverse
+// envmap_xyz_to_uv(), envmap_uv_is_valid() and nearest_valid_envmap_uv(), each taking an EnvMapping.
+using shader::envmap_uv_is_valid;
+using shader::envmap_uv_to_xyz;
+using shader::envmap_xyz_to_uv;
+using shader::nearest_valid_envmap_uv;
 
 /// Where \p uv in the \p src mapping falls in the \p dst mapping.
 inline float2 convert_envmap_uv(EnvMapping dst, EnvMapping src, float2 uv)
 {
     return envmap_xyz_to_uv(dst, envmap_uv_to_xyz(src, uv));
 }
-
-/// Whether \p uv is part of the sphere at all in \p mapping.
-/**
-    The discs leave their corners empty and the cube cross leaves four; anything summing over the image has
-    to skip those.
-*/
-bool envmap_uv_is_valid(EnvMapping mapping, float2 uv);
-
-/// Nearest point of the sphere to \p uv (\p uv itself if it is already on the sphere).
-/**
-    Fills the empty corners of a disc or cube cross so bilinear reads at the rim don't pull in zeros.
-*/
-float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv);
 
 /// Solid angle per unit image area at \p uv, in steradians; 0 off the sphere.
 /**

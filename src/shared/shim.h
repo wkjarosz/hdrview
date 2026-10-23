@@ -40,6 +40,7 @@ using std::acos;
 using std::asin;
 using std::atan2;
 using std::clamp;
+using std::copysign;
 using std::cos;
 using std::exp;
 using std::exp2;
@@ -52,9 +53,6 @@ using std::min;
 using std::pow;
 using std::sin;
 using std::sqrt;
-
-/// |a| with the sign of b.
-inline float copy_sign(float a, float b) { return std::copysign(a, b); }
 } // namespace shader
 
 // clang-format off
@@ -74,9 +72,10 @@ inline float copy_sign(float a, float b) { return std::copysign(a, b); }
 #define log10(x)    (log(x) * 0.43429448190325182f)
 #define atan2(y, x) atan(y, x)
 
-// |a| with the sign of b; unlike C's copysign(), it reads -0 as positive, which shading languages cannot tell from +0.
-// Named apart from copysign(), which Metal has built in.
-float copy_sign(float a, float b) { return b < 0.0f ? -abs(a) : abs(a); }
+// |a| with the sign of b; unlike C's, it reads -0 as positive, which shading languages cannot tell from +0. Defined
+// under another name, since Metal has a copysign() of its own, which SPIRV-Cross's output would collide with.
+float shim_copysign(float a, float b) { return b < 0.0f ? -abs(a) : abs(a); }
+#define copysign(a, b) shim_copysign(a, b)
 
 #endif
 
