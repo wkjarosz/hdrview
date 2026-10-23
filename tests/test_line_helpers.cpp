@@ -19,44 +19,41 @@ using std::string;
 using std::string_view;
 using std::vector;
 
-TEST_CASE("line helpers respect the length of a non-terminated string_view")
+TEST_CASE("line helpers see the lines of a string_view, and nothing past its end")
 {
-    const string      backing = "first\nsecond\nthird";
-    const string_view view(backing.data(), 5); // exactly "first"
-    REQUIRE(view == "first");
-
-    SUBCASE("process_lines visits only the lines inside the view")
+    // Every length of view into one buffer: none of them is null-terminated where it ends, so a helper
+    // reading through data() instead of the view's length would see the rest of the buffer.
+    const string backing = "first\nsecond\nthird";
+    for (size_t length = 0; length <= backing.size(); ++length)
     {
+        const string_view view(backing.data(), length);
+        CAPTURE(view);
+
         vector<string> lines;
         process_lines(view, [&lines](string_view l) { lines.emplace_back(l); });
-        REQUIRE(lines.size() == 1);
-        CHECK(lines[0] == "first");
+
+        // the lines visited are the view's own, in order
+        string joined, indented;
+        for (size_t i = 0; i < lines.size(); ++i)
+        {
+            joined += (i ? "\n" : "") + lines[i];
+            indented += (i ? "\n  " : "  ") + lines[i];
+        }
+        const bool ends_in_newline = !view.empty() && view.back() == '\n';
+        CHECK(joined + (ends_in_newline ? "\n" : "") == view);
+
+        // indent adds its prefix to each of those lines and to nothing else
+        CHECK(indent(view, true, 2) == indented + (ends_in_newline ? "\n" : ""));
+
+        // add_line_numbers numbers each of them, once
+        const string   numbered = add_line_numbers(view);
+        vector<string> numbered_lines;
+        process_lines(numbered, [&numbered_lines](string_view l) { numbered_lines.emplace_back(l); });
+        REQUIRE(numbered_lines.size() == lines.size());
+        for (size_t i = 0; i < lines.size(); ++i)
+        {
+            CAPTURE(i);
+            CHECK(numbered_lines[i] == std::to_string(i + 1) + ": " + lines[i]);
+        }
     }
-
-    SUBCASE("add_line_numbers numbers only the lines inside the view")
-    {
-        const auto numbered = add_line_numbers(view);
-        CHECK(numbered.find("second") == string::npos);
-        CHECK(numbered.find("third") == string::npos);
-        CHECK(numbered.find("first") != string::npos);
-    }
-
-    SUBCASE("indent indents only the lines inside the view")
-    {
-        const auto indented = indent(view, true, 2);
-        CHECK(indented == "  first");
-    }
-}
-
-TEST_CASE("line helpers still handle multi-line input")
-{
-    const string input = "alpha\nbeta";
-
-    vector<string> lines;
-    process_lines(input, [&lines](string_view l) { lines.emplace_back(l); });
-    REQUIRE(lines.size() == 2);
-    CHECK(lines[0] == "alpha");
-    CHECK(lines[1] == "beta");
-
-    CHECK(indent(input, true, 2) == "  alpha\n  beta");
 }
