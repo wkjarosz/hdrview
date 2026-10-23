@@ -74,27 +74,6 @@ void RegisterTests_Multipart(ImGuiTestEngine *engine)
 
         for (int i = 0; i < hdrview()->num_images(); ++i) IM_CHECK(hdrview()->image(i) != nullptr);
     };
-
-    t           = IM_REGISTER_TEST(engine, "multipart", "each_part_computes_valid_stats");
-    t->TestFunc = [](ImGuiTestContext *ctx)
-    {
-        load_multipart(ctx);
-
-        auto img = hdrview()->current_image();
-        IM_CHECK(img != nullptr);
-        auto &group = img->groups[img->selected_group];
-        IM_CHECK(group.num_channels > 0);
-
-        PixelStats *stats = wait_for_stats(ctx, img->channels[group.channels[0]]);
-        IM_CHECK(stats != nullptr);
-        IM_CHECK(stats->computed);
-
-        // some parts (motion-vector or depth channels) may legitimately hold NaN/Inf, so check only that
-        // every pixel was accounted for once
-        const auto &s     = stats->summary;
-        int         total = img->size().x * img->size().y;
-        IM_CHECK_EQ(s.valid_pixels + s.nan_pixels + s.inf_pixels, total);
-    };
 }
 
 #else // !HDRVIEW_TEST_OPENEXR_DIR

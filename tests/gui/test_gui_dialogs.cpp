@@ -31,8 +31,8 @@ using namespace hdrview_test;
 #include <functional>
 #include <limits>
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE
-#error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
+#ifndef HDRVIEW_GUI_TEST_IMAGE_2
+#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
 #endif
 
 // ImGui::CloseCurrentPopup() takes a couple of frames to take effect (~2 at ImGuiTestRunSpeed_Fast), so
@@ -40,6 +40,15 @@ using namespace hdrview_test;
 static void wait_for_window_closed(ImGuiTestContext *ctx, const char *window_name)
 {
     wait_until(ctx, [&] { return ctx->WindowInfo(window_name, ImGuiTestOpFlags_NoError).Window == nullptr; });
+}
+
+/// Starts from the small fixture alone, loaded \p copies times, whatever an earlier test left loaded.
+static bool load_fixture(ImGuiTestContext *ctx, int copies = 1)
+{
+    reset_images(ctx);
+    const std::vector<std::string> paths(copies, HDRVIEW_GUI_TEST_IMAGE_2);
+    IM_CHECK_SILENT_RETV(load_and_wait(ctx, paths) == copies, false);
+    return true;
 }
 
 void RegisterTests_Dialogs(ImGuiTestEngine *engine)
@@ -83,11 +92,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         t->TestFunc = [n](ImGuiTestContext *ctx)
         {
             const char *dialog = n.dialog;
-            if (hdrview()->num_images() == 0)
-            {
-                hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-                wait_for_loads(ctx);
-            }
+            if (!load_fixture(ctx))
+                return;
             auto             *app = hdrview();
             const std::string at  = std::string("//") + dialog + "/";
             OnExit            restore{[app, zoom = app->zoom()]
@@ -183,12 +189,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
         // two images, so a Down that reached the shortcuts behind the dialog would change the current one
-        if (hdrview()->num_images() < 2)
-        {
-            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE, HDRVIEW_GUI_TEST_IMAGE_2});
-            wait_for_loads(ctx);
-        }
-        IM_CHECK(hdrview()->num_images() >= 2);
+        if (!load_fixture(ctx, 2))
+            return;
         const int current = hdrview()->current_image_index();
 
         ctx->SetRef("##MainMenuBar");
@@ -228,12 +230,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                                                         : "export_rendition_every_format_options_panel");
         t->TestFunc = [dialog](ImGuiTestContext *ctx)
         {
-            if (hdrview()->num_images() == 0)
-            {
-                hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-                wait_for_loads(ctx);
-            }
-            IM_CHECK(hdrview()->num_images() > 0);
+            if (!load_fixture(ctx))
+                return;
 
             const std::string menu = std::string("File/") + dialog, window = std::string("//") + dialog;
             ctx->SetRef("##MainMenuBar");
@@ -283,11 +281,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     t           = IM_REGISTER_TEST(engine, "dialogs", "image_to_save_writes_what_each_mode_says");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
-        if (hdrview()->num_images() == 0)
-        {
-            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-            wait_for_loads(ctx);
-        }
+        if (!load_fixture(ctx))
+            return;
         auto img = hdrview()->current_image();
         IM_CHECK(img != nullptr);
         auto *app = hdrview();
@@ -396,7 +391,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     // What Export rendition writes for a gain-map format, through the dialog the way a user saves: the file reads
     // back as the view clipped at SDR white with no headroom, and as the view itself in full. The view is two stops
     // up with highlights passing through, so the two renditions differ wherever the fixture is brighter than a
-    // quarter of white.
+    // quarter of white. One format suffices for the dialog building the SDR base beside the HDR rendition;
+    // test_gainmap.cpp reads back every gain-map writer, either way round.
     struct GainmapCase
     {
         const char *format, *extension;
@@ -405,23 +401,17 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     std::vector<GainmapCase> cases;
 #if HDRVIEW_ENABLE_LIBUHDR
     cases.push_back({"JPEG (UltraHDR)", ".jpg", nullptr});
-#endif
-#if HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
+#elif HDRVIEW_ENABLE_LIBJXL && !defined(HDRVIEW_TEST_ASAN) // see test_asan.h
     cases.push_back({"JPEG-XL", ".jxl", "SDR base"});
-    cases.push_back({"JPEG-XL", ".jxl", "HDR base"});
 #endif
     for (const auto &gc : cases)
     {
-        const std::string name = std::string("export_rendition_writes_a_gain_map_") + gc.extension + "_" +
-                                 (gc.gain_map ? (gc.gain_map[0] == 'S' ? "sdr_base" : "hdr_base") : "sdr_base");
+        const std::string name = std::string("export_rendition_writes_a_gain_map_") + gc.extension + "_sdr_base";
         t                      = IM_REGISTER_TEST(engine, "dialogs", strdup(name.c_str()));
         t->TestFunc            = [gc](ImGuiTestContext *ctx)
         {
-            if (hdrview()->num_images() == 0)
-            {
-                hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-                wait_for_loads(ctx);
-            }
+            if (!load_fixture(ctx))
+                return;
             auto *app = hdrview();
             auto  img = app->current_image();
             IM_CHECK(img != nullptr);
