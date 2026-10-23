@@ -275,11 +275,11 @@ public:
             m_size = img->size();
 
         mapping_combo("Mapping", &m_mapping);
+        ImGui::Tooltip("Choose how the environment map is laid out. The result uses the same mapping.");
 
         ImGui::DragInt2("Size", &m_size.x, 1.f, 1, 8192, "%d px");
         m_size = la::max(m_size, int2{1});
-        ImGui::Tooltip("The result is smooth enough that a small output loses nothing: it is described by "
-                       "nine numbers however large it is written out.");
+        ImGui::Tooltip("Set the size of the result. Irradiance is very smooth, so a small size loses no detail.");
     }
 
     void apply(const EditContext &ctx) override
