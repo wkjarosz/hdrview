@@ -153,7 +153,7 @@ public:
 
         if (m_sampling == EnvMapSampling_EWA)
         {
-            ImGui::SliderInt("Max anisotropy", &m_supersample, 1, 32);
+            ImGui::SliderInt("Max anisotropy", &m_max_aniso, 1, 32);
             ImGui::Tooltip("How much longer than it is wide the footprint may be before it is widened to "
                            "fit. The mip level covers the short axis and the filter walks the long one, so "
                            "this is what keeps a stretched footprint sharp, and what it costs, since each "
@@ -161,7 +161,7 @@ public:
         }
         else
         {
-            ImGui::SliderInt("Samples per axis", &m_supersample, 1, 8);
+            ImGui::SliderInt("Samples per axis", &m_samples, 1, 8);
             ImGui::Tooltip("Averaged within each output pixel, so the cost is its square.");
         }
 
@@ -189,7 +189,7 @@ public:
     {
         if (m_size.x <= 0 || m_size.y <= 0)
             return std::nullopt;
-        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size, la::qmat(m_rotation), m_sampling, m_supersample};
+        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size, la::qmat(m_rotation), m_sampling, quality()};
     }
 
     /// Turns the sphere so that what was seen at \p from is seen at \p to.
@@ -211,7 +211,7 @@ public:
         const auto s = EnvMapping(m_src_mapping), d = EnvMapping(m_dst_mapping);
         const auto rotation = la::qmat(m_rotation);
         const int2 out_size = m_size;
-        const int  ss       = m_supersample;
+        const int  ss       = quality();
         const auto mode     = EnvMapSampling(m_sampling);
 
         if (out_size.x <= 0 || out_size.y <= 0)
@@ -227,6 +227,8 @@ public:
 private:
     /// The display window the remap leaves the image with, which keeps its data window's corner.
     Box2i output_window(const Image &img) const { return Box2i{img.data_window.min, img.data_window.min + m_size}; }
+    /// What remapped_envmap() takes as its supersample count: samples per axis, or EWA's maximum anisotropy.
+    int quality() const { return m_sampling == EnvMapSampling_EWA ? m_max_aniso : m_samples; }
     /// Whether a preview has the view framing the output.
     bool framing() const { return m_framed.has_volume(); }
 
@@ -239,7 +241,8 @@ private:
     int  m_src_mapping = EnvMapping_LatLong;
     int  m_dst_mapping = EnvMapping_Angular;
     int2 m_size{0, 0};
-    int  m_supersample = 8;
+    int  m_samples     = 8; ///< Per axis, when supersampling
+    int  m_max_aniso   = 8; ///< For EWA
     int  m_sampling    = EnvMapSampling_EWA;
     bool m_auto_aspect = true;
 };
