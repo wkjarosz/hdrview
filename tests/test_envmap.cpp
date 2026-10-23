@@ -235,14 +235,6 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
                 {
                     CAPTURE(sampler);
 
-                    // EWA fits its ellipse to the footprint's derivatives on one side, which the equal-area square's
-                    // fold, a crease where two of its sides meet, does not continue; a rotation can carry a large
-                    // footprint onto it, where it reads the wrong part of the sphere, so there point sampling alone
-                    // is held to the rotation
-                    if (sampler == EnvMapSampling_EWA && src_m == EnvMapping_EqualArea &&
-                        R[0] != float3{1.f, 0.f, 0.f})
-                        continue;
-
                     const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m),
                                                          EnvMapSampling(sampler), 4, R);
 

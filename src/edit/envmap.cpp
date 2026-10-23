@@ -488,15 +488,16 @@ public:
         if (!m_faces.empty())
             return ewa_on_face(dst, uv, d, delta_u, delta_v, max_aniso);
 
-        // footprint = source-space step to the neighboring destination pixel, which composes both
-        // mappings at once. Use the smaller of the forward and backward differences so a seam (lat-long
-        // wrap, disc rim) on one side doesn't blow it up.
+        // footprint = source-space step across the destination pixel, which composes both mappings at once:
+        // twice the step from its center to an edge, the smaller of the two toward either side, so a seam (lat-long
+        // wrap, disc rim, equal-area fold) on one side doesn't blow it up. Steps to the neighboring pixels would
+        // reach past the pixel and could cross a seam on both sides.
         const float2 c    = envmap_xyz_to_uv(m_mapping, d);
         auto         step = [&](float2 delta)
         {
-            const float2 fwd = envmap_xyz_to_uv(m_mapping, direction(dst, uv + delta)) - c;
-            const float2 bwd = c - envmap_xyz_to_uv(m_mapping, direction(dst, uv - delta));
-            return la::length2(fwd) <= la::length2(bwd) ? fwd : bwd;
+            const float2 fwd = envmap_xyz_to_uv(m_mapping, direction(dst, uv + 0.5f * delta)) - c;
+            const float2 bwd = c - envmap_xyz_to_uv(m_mapping, direction(dst, uv - 0.5f * delta));
+            return 2.f * (la::length2(fwd) <= la::length2(bwd) ? fwd : bwd);
         };
 
         const float2       base{float(level(0).width()), float(level(0).height())};
@@ -569,12 +570,12 @@ private:
         const float2 st   = cube_face_st(face, d);
 
         // the footprint in this face's own coordinates, since a step across a face join is a jump to
-        // somewhere else in the image. Smaller of the two differences, as above.
+        // somewhere else in the image. Half steps, the smaller of the two, as above.
         auto step = [&](float2 delta)
         {
-            const float2 fwd = cube_face_st(face, direction(dst, uv + delta)) - st;
-            const float2 bwd = st - cube_face_st(face, direction(dst, uv - delta));
-            return la::length2(fwd) <= la::length2(bwd) ? fwd : bwd;
+            const float2 fwd = cube_face_st(face, direction(dst, uv + 0.5f * delta)) - st;
+            const float2 bwd = st - cube_face_st(face, direction(dst, uv - 0.5f * delta));
+            return 2.f * (la::length2(fwd) <= la::length2(bwd) ? fwd : bwd);
         };
 
         const float2       base{float(face_size(m_faces[0]))};
