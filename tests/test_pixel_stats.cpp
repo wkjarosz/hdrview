@@ -122,7 +122,7 @@ TEST_CASE("PixelStats::Settings::match ignores settings that only affect drawing
 TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else")
 {
     // a tile carries only its own rows, and everything outside it has to survive untouched
-    const int w = 8, h = 6;
+    constexpr int w = 8, h = 6;
 
     SUBCASE("tightly packed rows")
     {
@@ -484,7 +484,7 @@ TEST_CASE("PixelStats::calculate applies each blend mode against a reference ima
     // Both channels vary, and cross: the image is below the reference on the left and above it on the right,
     // so a mode that swapped its operands, or a reference read at the wrong pixel, changes the result. The
     // reference stays positive, so dividing by it is finite.
-    const int w = 8, h = 6;
+    constexpr int w = 8, h = 6;
     Channel   img("img", int2{w, h});
     Channel   ref("ref", int2{w, h});
     img.apply([](float, int x, int y) { return float(x) - 3.f + 0.25f * float(y); });
