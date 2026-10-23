@@ -91,7 +91,7 @@ TEST_CASE("EXIF orientation turns the samples as the spec says, and carries the 
 
                 CHECK(ch(q.x, q.y) == value(p));
                 // a sample inside the display window before is inside it after, and one outside stays outside
-                CHECK(in_box(img->display_window, img->data_window.min + q) == in_box(display, p));
+                CHECK(img->display_window.contains(img->data_window.min + q) == display.contains(p));
             }
     }
 }

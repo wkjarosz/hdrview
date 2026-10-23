@@ -510,7 +510,7 @@ TEST_CASE("An edit covers the subject it was given and nothing else")
                 for (int y = 0; y < k_size.y; ++y)
                     for (int x = 0; x < k_size.x; ++x)
                     {
-                        if (named && in_box(k_roi, int2{x, y}))
+                        if (named && k_roi.contains(int2{x, y}))
                             continue;
 
                         CAPTURE(c);
@@ -1300,7 +1300,7 @@ TEST_CASE("A seamless paste lands at the selection's top-left, or the image's wi
                     CAPTURE(y);
                     const float was   = ch < 3 ? checker(int2{x, y}) : 1.f;
                     const bool  moved = std::fabs(img->channels[size_t(ch)](x, y) - was) > 1e-4f;
-                    CHECK(moved == (ch < 3 && in_box(interior, int2{x, y})));
+                    CHECK(moved == (ch < 3 && interior.contains(int2{x, y})));
                 }
     }
 }
@@ -1346,7 +1346,7 @@ TEST_CASE("Copy, cut and paste carry samples from where they were taken to where
                 CAPTURE(x);
                 CAPTURE(y);
                 const int2 q = int2{x, y} - to.min;
-                if (in_box(to, int2{x, y}) && in_box(Box2i{int2{0}, clip->size()}, q))
+                if (to.contains(int2{x, y}) && Box2i{int2{0}, clip->size()}.contains(q))
                     CHECK(img->channels[size_t(c)](x, y) ==
                           doctest::Approx(clip->channels[size_t(c)](q.x, q.y) +
                                           was(c, int2{x, y}) * (1.f - clip->channels[3](q.x, q.y))));
@@ -1370,7 +1370,7 @@ TEST_CASE("Copy, cut and paste carry samples from where they were taken to where
                 CAPTURE(c);
                 CAPTURE(x);
                 CAPTURE(y);
-                const bool inside = in_box(taken, int2{x, y});
+                const bool inside = taken.contains(int2{x, y});
                 CHECK(img->channels[size_t(c)](x, y) == (inside ? 0.f : was(c, int2{x, y})));
                 if (inside)
                     CHECK(ctx.clipboard_image->channels[size_t(c)](x - taken.min.x, y - taken.min.y) ==

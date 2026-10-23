@@ -165,7 +165,7 @@ TEST_CASE("A rectangle entry swaps exactly the samples it covers, clipped to the
                         CAPTURE(x);
                         CAPTURE(y);
                         const bool covered =
-                            in_box(c.bounds, int2{x, y}) && std::find(saved.begin(), saved.end(), ch) != saved.end();
+                            c.bounds.contains(int2{x, y}) && std::find(saved.begin(), saved.end(), ch) != saved.end();
                         CHECK(img->channels[size_t(ch)](x, y) == (restored && covered ? expected(ch, x, y) : -1.f));
                     }
         };
@@ -389,7 +389,7 @@ TEST_CASE("Resizing the canvas puts the old samples where the anchor says, cutti
                         CAPTURE(y);
                         const int2 from = int2{x, y} - offset;
                         CHECK(img->channels[size_t(c)](x, y) ==
-                              (in_box(Box2i{int2{0}, k_size}, from) ? expected(c, from.x, from.y) : 0.f));
+                              (Box2i{int2{0}, k_size}.contains(from) ? expected(c, from.x, from.y) : 0.f));
                     }
             }
         }

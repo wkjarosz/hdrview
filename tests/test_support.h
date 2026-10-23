@@ -53,10 +53,6 @@ ImagePtr test_image(int2 size, int num_channels, F &&fill)
     return img;
 }
 
-/// Whether \p p lies in the half-open box \p b, whatever convention Box::contains() defaults to.
-inline bool in_box(const Box2i &b, int2 p)
-{ return p.x >= b.min.x && p.x < b.max.x && p.y >= b.min.y && p.y < b.max.y; }
-
 /// Every sample of every channel, as one comparable value.
 inline std::vector<float> samples(const ImagePtr &img)
 {
