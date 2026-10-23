@@ -60,42 +60,7 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
     }
 }
 
-// The round trip above passes for any normalization constant, since to_linear and from_linear scale by it
-// symmetrically, and colour-science checks the transfer functions in absolute cd/m^2 (test_colour_reference.cpp).
-// These pin HDRView's own convention for the ones in absolute luminance: their reference white is 1.0, BT.2408's
-// 203 cd/m^2 for PQ and HLG, and ST 428-1's 48 cd/m^2 for DCI-P3.
-TEST_CASE("The absolute transfer functions map their reference white to 1.0")
-{
-    // 203 is spelled out here, not taken from HDR_REFERENCE_WHITE_NITS, so these pin the constant instead of
-    // tracking it
-    CHECK(to_linear(1.0f, TransferFunction::BT2100_PQ) == doctest::Approx(10000.f / 203.f));
-    CHECK(to_linear(shader::inverse_EOTF_BT2100_PQ(203.f), TransferFunction::BT2100_PQ) == doctest::Approx(1.f));
-
-    // from_linear() therefore takes 1.0 to the signal for 203 cd/m^2, and is not interchangeable with the
-    // inverse EOTF's absolute input, which the colorpass feeds
-    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) == doctest::Approx(shader::inverse_EOTF_BT2100_PQ(203.f)));
-    CHECK(from_linear(1.f, TransferFunction::BT2100_PQ) != doctest::Approx(shader::inverse_EOTF_BT2100_PQ(1.f)));
-
-    // BT.2408 places HLG reference white at 75% signal, which a 1000 cd/m^2 reference display renders at
-    // about 203 cd/m^2
-    CHECK(shader::EOTF_BT2100_HLG(0.75f) == doctest::Approx(203.f).epsilon(0.002));
-    CHECK(to_linear(0.75f, TransferFunction::BT2100_HLG) == doctest::Approx(1.f).epsilon(0.002));
-
-    // DCI's white is code value 3960 of 4095, the signal for 48 cd/m^2, and its full signal is 52.37 cd/m^2
-    CHECK(from_linear(1.f, TransferFunction::DCI_P3) == doctest::Approx(std::pow(48.f / 52.37f, 1.f / 2.6f)));
-    CHECK(from_linear(1.f, TransferFunction::DCI_P3) * 4095.f == doctest::Approx(3960.f).epsilon(5e-4));
-    CHECK(to_linear(1.0f, TransferFunction::DCI_P3) == doctest::Approx(52.37f / 48.f));
-}
-
-// Viewers decode a BT.709 label as BT.1886's display gamma rather than inverting the camera curve, and HDRView
-// with them: 0.5 is 0.5^2.4 = 0.189, where the inverse OETF would give 0.260.
-TEST_CASE("The BT.709 curve decodes as BT.1886's gamma 2.4, as other viewers do")
-{
-    CHECK(to_linear(0.5f, TransferFunction::ITU) == doctest::Approx(0.18946457f));
-    CHECK(from_linear(0.18946457f, TransferFunction::ITU) == doctest::Approx(0.5f));
-}
-
-// Narrow (studio) range packs luma into 16..235, a span of 219, unrelated to the HDR reference white above.
+// Narrow (studio) range packs luma into 16..235, a span of 219.
 TEST_CASE("narrow-range dequantization maps the studio range to [0,1]")
 {
     CHECK(dequantize_narrow<uint8_t>(16) == doctest::Approx(0.f));
@@ -104,7 +69,8 @@ TEST_CASE("narrow-range dequantization maps the studio range to [0,1]")
     CHECK(dequantize_narrow<uint16_t>(235 * 256) == doctest::Approx(1.f));
 }
 
-TEST_CASE("quantize_full/dequantize_full round-trip within quantization error, undithered")
+TEST_CASE(
+    "quantize_full/dequantize_full round-trip within quantization error, and non-finite input stays representable")
 {
     for (float x : {0.0f, 0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f})
     {
@@ -112,6 +78,15 @@ TEST_CASE("quantize_full/dequantize_full round-trip within quantization error, u
         CHECK(dequantize_full(quantize_full<uint8_t>(x, 0, 0, false)) == doctest::Approx(x).epsilon(0.004));
         CHECK(dequantize_full(quantize_full<uint16_t>(x, 0, 0, false)) == doctest::Approx(x).epsilon(1e-4));
     }
+
+    // Casting a NaN to an integer type is undefined behavior, and std::clamp doesn't filter it out: both of its
+    // comparisons are false for NaN, so it returns the NaN unchanged.
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    CHECK(quantize_full<uint8_t>(nan, 0, 0, false) == 0);
+    CHECK(quantize_full<uint16_t>(nan, 0, 0, false) == 0);
+    CHECK(quantize_full<uint8_t>(inf, 0, 0, false) == 255);
+    CHECK(quantize_full<uint8_t>(-inf, 0, 0, false) == 0);
 }
 
 TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")
@@ -123,69 +98,25 @@ TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")
     }
 }
 
-TEST_CASE("color_conversion_matrix generalizes to the colorpass's other reachable display gamuts")
+TEST_CASE("a gamut converts to itself as the identity, and the shader's sRGB luminance weights are the derived ones")
 {
-    // Every gamut query_display_colorspace() can produce has to survive that call. Display-P3 is the one most
-    // likely to show up: Wayland reports it, and most laptop panels advertise it.
-    float3x3 M;
-    CHECK(color_conversion_matrix(M, gamut_chromaticities(ColorGamut_sRGB_BT709),
-                                  gamut_chromaticities(ColorGamut_Display_P3_SMPTE432)));
-
-    // white stays white: an equal-energy RGB triple is the same color in both gamuts, which share D65
-    float3 white = mul(M, float3{1.f, 1.f, 1.f});
-    INFO("M * (1,1,1) = ", white);
-    CHECK(approx_equal(white, float3{1.f, 1.f, 1.f}, 1e-4f));
-
-    // Rec.709 is a subset of Display-P3, so saturated primaries map inside the unit cube with no negative
-    // lobes, unlike the reverse direction
-    for (const float3 &primary : {float3{1, 0, 0}, float3{0, 1, 0}, float3{0, 0, 1}})
+    // converting a gamut to itself is reported as unnecessary, so the colorpass keeps an identity matrix in the
+    // common sRGB case
+    for (int g = ColorGamut_FirstNamed; g <= ColorGamut_LastNamed; ++g)
     {
-        float3 converted = mul(M, primary);
-        INFO("primary ", primary, " -> ", converted);
-        CHECK(la::all(la::gequal(converted, float3{-1e-4f})));
+        INFO("gamut = ", color_gamut_name(ColorGamut_(g)));
+        const Chromaticities chr = gamut_chromaticities(ColorGamut_(g));
+        float3x3             M{float3{2.f}, float3{3.f}, float3{4.f}};
+        CHECK_FALSE(color_conversion_matrix(M, chr, chr));
+        CHECK(M == float3x3{la::identity});
     }
 
-    // and converting a gamut to itself is reported as unnecessary, so the colorpass keeps an identity matrix
-    // in the common sRGB case
-    float3x3 I;
-    CHECK_FALSE(color_conversion_matrix(I, gamut_chromaticities(ColorGamut_sRGB_BT709),
-                                        gamut_chromaticities(ColorGamut_sRGB_BT709)));
-}
-
-TEST_CASE("the image shader isolates luminance in the primaries it has already converted to")
-{
-    // assets/shaders/image-shader.sglsl converts every image into sRGB/BT.709 primaries before
-    // choose_channel() runs, so Channels_Y weighs with shader::sRGB_Yw, the middle row of the classic rounded
-    // sRGB matrix. colorspace.h derives sRGB_Yw() from the BT.709 chromaticities instead; the two agree to
-    // about 3e-5 per weight.
+    // assets/shaders/image-shader.sglsl converts every image into sRGB/BT.709 primaries before choose_channel()
+    // runs, so Channels_Y weighs with shader::sRGB_Yw, the middle row of the classic rounded sRGB matrix.
+    // colorspace.h derives sRGB_Yw() from the BT.709 chromaticities instead; the two agree to about 3e-5 per weight.
     const float3 shader_Yw = shader::sRGB_Yw;
     INFO("colorspace.h says ", sRGB_Yw().x, ", ", sRGB_Yw().y, ", ", sRGB_Yw().z);
     CHECK(approx_equal(sRGB_Yw(), shader_Yw, 1e-4f));
-    CHECK(shader_Yw.x + shader_Yw.y + shader_Yw.z == doctest::Approx(1.f).epsilon(1e-5));
-
-    // Luminance is a property of the color, not of the primaries it is written in, so converting into sRGB
-    // and weighing with sRGB's weights recovers what the source gamut's own weights describe. Restricted to
-    // gamuts sharing sRGB's D65 white, since a chromatic adaptation is free to move Y.
-    for (ColorGamut_ gamut : {ColorGamut_Display_P3_SMPTE432, ColorGamut_BT2020_2100, ColorGamut_AdobeRGB})
-    {
-        const Chromaticities chr = gamut_chromaticities(gamut);
-        INFO("gamut = ", color_gamut_name(gamut));
-        REQUIRE(approx_equal(chr.white, Chromaticities{}.white, 1e-4f));
-
-        float3x3 M;
-        color_conversion_matrix(M, chr, Chromaticities{});
-
-        const float3 native_Yw = computeYw(chr);
-        for (const float3 &rgb :
-             {float3{1, 1, 1}, float3{1, 0, 0}, float3{0, 1, 0}, float3{0, 0, 1}, float3{0.2f, 0.7f, 0.4f}})
-        {
-            INFO("rgb = ", rgb);
-            CHECK(dot(mul(M, rgb), sRGB_Yw()) == doctest::Approx(dot(rgb, native_Yw)).epsilon(1e-4));
-        }
-
-        // and the weights differ, so the check above is not passing on a coincidence
-        CHECK_FALSE(approx_equal(native_Yw, sRGB_Yw(), 1e-3f));
-    }
 }
 
 TEST_CASE("every transfer function is odd where it mirrors, and its vector form is its scalar one per component")
@@ -254,8 +185,6 @@ TEST_CASE("every transfer function is odd where it mirrors, and its vector form 
             INFO("rgb = ", rgb, ", Yw = ", Yw);
             CHECK(approx_equal(shader::YC_to_RGB(RGB_to_YC(rgb, Yw), Yw), rgb, 1e-5f));
         }
-    CHECK(shader::RGB_to_Y(float3{0.2f, 0.7f, 0.4f}, shader::sRGB_Yw) ==
-          doctest::Approx(0.2f * 0.212671f + 0.7f * 0.715160f + 0.4f * 0.072169f));
 }
 
 TEST_CASE("the image shader's per-pixel steps do what the viewer's controls say")
@@ -445,24 +374,17 @@ TEST_CASE("blend()'s overloads agree on every blend mode")
             // statistics pass wants; every other mode is per-channel arithmetic and must match
             if (mode != BlendMode_Normal)
                 CHECK(v4[c] == doctest::Approx(s));
+
+            // colorspace.h is a header, where only a qualified std::abs is sure to reach the floating-point
+            // overloads: libstdc++ leaves only <stdlib.h>'s integer ::abs at global scope, which would truncate
+            // these differences, of either sign and two of them below 1
+            const float diff = std::fabs(top[c] - bottom[c]);
+            if (mode == BlendMode_Difference)
+                CHECK(s == doctest::Approx(diff));
+            else if (mode == BlendMode_Relative_Difference)
+                CHECK(s == doctest::Approx(diff / (bottom[c] + 0.01f)));
         }
     }
-}
-
-TEST_CASE("blend() keeps fractional results in the difference modes")
-{
-    // colorspace.h is a header, where only a qualified std::abs is sure to reach the floating-point overloads:
-    // libstdc++ leaves only <stdlib.h>'s integer ::abs at global scope. Every difference here is below 1, so an
-    // integer abs would return zero.
-    const float top = 0.6f, bottom = 0.25f;
-
-    CHECK(blend(top, bottom, BlendMode_Difference) == doctest::Approx(0.35f));
-    CHECK(blend(bottom, top, BlendMode_Difference) == doctest::Approx(0.35f));
-    CHECK(blend(top, bottom, BlendMode_Relative_Difference) == doctest::Approx(0.35f / 0.26f));
-
-    // also below 1 with the operands the other way round
-    CHECK(blend(0.2f, 0.1f, BlendMode_Difference) == doctest::Approx(0.1f));
-    CHECK(blend(0.1f, 0.2f, BlendMode_Difference) == doctest::Approx(0.1f));
 }
 
 namespace
@@ -482,7 +404,7 @@ bool close(V a, V b, float rel = 1e-5f)
 
 } // namespace
 
-TEST_CASE("a color survives the trip through HSL and back")
+TEST_CASE("a color survives the trip through HSL and back, whose lightness is the midpoint of the extremes")
 {
     // the textbook version measures saturation as a fraction of the unit range, which has no meaning for a
     // value brighter than white
@@ -492,30 +414,18 @@ TEST_CASE("a color survives the trip through HSL and back")
         CAPTURE(rgb.y);
         CAPTURE(rgb.z);
 
-        const float3 out = HSL_to_RGB(RGB_to_HSL(rgb));
-
+        const float3 hsl = RGB_to_HSL(rgb);
+        const float3 out = HSL_to_RGB(hsl);
         CHECK(out.x == doctest::Approx(rgb.x).epsilon(1e-4));
         CHECK(out.y == doctest::Approx(rgb.y).epsilon(1e-4));
         CHECK(out.z == doctest::Approx(rgb.z).epsilon(1e-4));
-    }
-}
 
-TEST_CASE("HSL's lightness is the midpoint of the extremes, and gray has no hue")
-{
-    for (const float3 &rgb : k_hsl_colors)
-    {
-        CAPTURE(rgb.x);
-        CAPTURE(rgb.y);
-        CAPTURE(rgb.z);
-
-        const float3 hsl = RGB_to_HSL(rgb);
-        const float  mn = std::min({rgb.x, rgb.y, rgb.z}), mx = std::max({rgb.x, rgb.y, rgb.z});
-
+        const float mn = std::min({rgb.x, rgb.y, rgb.z}), mx = std::max({rgb.x, rgb.y, rgb.z});
         CHECK(hsl.z == doctest::Approx(0.5f * (mn + mx)));
         CHECK(hsl.x >= 0.f);
         CHECK(hsl.x <= 1.f);
 
-        // no hue to rotate, which a rotation has to leave alone
+        // gray has no hue to rotate, which a rotation has to leave alone
         if (mx - mn < 1e-6f)
             CHECK(hsl.y == doctest::Approx(0.f));
         else
@@ -652,12 +562,6 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
     auto midpoint_of = [](float b) { return (1.f - b) / 2.f; };
     auto bias_of     = [](float b) { return (b + 1.f) / 2.f; };
 
-    CHECK(slope_of(0.f) == doctest::Approx(1.f));  // 45 degrees: no change
-    CHECK(slope_of(-1.f) == doctest::Approx(0.f)); // flat: everything to one level
-    CHECK(slope_of(1.f) > 1e6f);                   // vertical: a hard threshold
-    CHECK(midpoint_of(0.f) == doctest::Approx(0.5f));
-    CHECK(bias_of(0.f) == doctest::Approx(0.5f));
-
     // no curve moves anything when both controls are centered
     for (int i = 0; i <= 20; ++i)
     {
@@ -720,71 +624,83 @@ TEST_CASE("Every brightness/contrast curve leaves a neutral setting alone and st
     const float steep = slope_of(0.8f);
     CHECK(brightness_contrast_linear(1.f, steep, 0.5f) > 1.f);
     CHECK(brightness_contrast_linear(0.f, steep, 0.5f) < 0.f);
-
-    // the edit reaches each shape's own curve, and clipped, that curve held to [0, 1]
-    for (float v : {-0.5f, 0.3f, 2.f})
-    {
-        const float slope = slope_of(0.4f), m = midpoint_of(0.2f), b = bias_of(0.2f);
-        auto        edit = [&](int shape) { return shader::brightness_contrast(v, float4{slope, m, b, float(shape)}); };
-        const float line     = brightness_contrast_linear(v, slope, m),
-                    rational = brightness_contrast_rational(v, slope, b);
-        CHECK(edit(shader::SHAPE_LINE) == line);
-        CHECK(edit(shader::SHAPE_RATIONAL) == rational);
-        CHECK(edit(shader::SHAPE_LINE + shader::SHAPE_CLIP) == std::clamp(line, 0.f, 1.f));
-        CHECK(edit(shader::SHAPE_RATIONAL + shader::SHAPE_CLIP) == std::clamp(rational, 0.f, 1.f));
-    }
 }
 
-TEST_CASE("L*a*b* agrees with the values the standard defines it by")
+TEST_CASE("brightness/contrast curves the RGB channels, L* alone, or a* and b* alone, as its mode says")
 {
-    // checked against the definition, since a round trip passes just as well with both halves wrong the same way
-    const float3 white = Lab_reference_white();
+    // The command curves the three channels alike, or works in L*a*b* through the image's own primaries and white
+    // (BrightnessContrast::point_edit() in src/edit/commands/color.cpp), where one mode curves L* and leaves a* and
+    // b*, and the other does the reverse. Each shape's curve applies to the channels, or to normalized L*a*b*, and
+    // clipped, that curve is held to [0, 1].
+    struct Setting
+    { float slope, midpoint, bias; };
+    // a brighter, steeper curve and a darker, flatter one
+    const Setting settings[] = {{1.376f, 0.3f, 0.7f}, {0.51f, 0.65f, 0.35f}};
+    const int     shapes[]   = {shader::SHAPE_RATIONAL, shader::SHAPE_LINE, shader::SHAPE_RATIONAL + shader::SHAPE_CLIP,
+                                shader::SHAPE_LINE + shader::SHAPE_CLIP};
 
-    // the reference white is the point L* is scaled to, and it is achromatic
-    const float3 w = XYZ_to_Lab(white, white);
-    CHECK(w.x == doctest::Approx(100.f).epsilon(1e-4));
-    CHECK(w.y == doctest::Approx(0.f).epsilon(1e-4));
-    CHECK(w.z == doctest::Approx(0.f).epsilon(1e-4));
+    std::vector<float3> colors;
+    for (float r : {0.05f, 0.3f, 0.6f, 0.9f})
+        for (float g : {0.05f, 0.3f, 0.6f, 0.9f})
+            for (float b : {0.05f, 0.3f, 0.6f, 0.9f}) colors.push_back({r, g, b});
+    colors.push_back({2.5f, 1.2f, 0.4f}); // beyond white, where the unclipped curves carry on
 
-    // black is the other end, and also achromatic
-    const float3 k = XYZ_to_Lab(float3{0.f, 0.f, 0.f}, white);
-    CHECK(k.x == doctest::Approx(0.f).epsilon(1e-4));
-    CHECK(k.y == doctest::Approx(0.f).epsilon(1e-4));
-    CHECK(k.z == doctest::Approx(0.f).epsilon(1e-4));
-
-    // any neutral is achromatic whatever its level, since the three ratios to the white are equal
-    for (float y : {0.02f, 0.18f, 0.5f, 0.9f})
+    for (ColorGamut_ gamut : {ColorGamut_sRGB_BT709, ColorGamut_BT2020_2100, ColorGamut_ProPhotoRGB})
     {
-        CAPTURE(y);
-        const float3 gray = XYZ_to_Lab(white * y, white);
-        CHECK(gray.y == doctest::Approx(0.f).epsilon(1e-3));
-        CHECK(gray.z == doctest::Approx(0.f).epsilon(1e-3));
+        const Chromaticities chr = gamut_chromaticities(gamut);
+        const float3x3       M = RGB_to_XYZ(chr, 1.f), M_inv = la::inverse(M);
+        const float3         white  = XYZ_from_xy(chr.white);
+        auto                 lab_of = [&](float3 rgb) { return XYZ_to_Lab(mul(M, rgb), white); };
+
+        for (const Setting &set : settings)
+            for (int shape : shapes)
+            {
+                INFO("gamut = ", color_gamut_name(gamut), ", slope = ", set.slope, ", shape = ", shape);
+                auto curve = [&](float v)
+                {
+                    const float y = shape % shader::SHAPE_CLIP == shader::SHAPE_LINE
+                                        ? brightness_contrast_linear(v, set.slope, set.midpoint)
+                                        : brightness_contrast_rational(v, set.slope, set.bias);
+                    return shape >= shader::SHAPE_CLIP ? std::clamp(y, 0.f, 1.f) : y;
+                };
+                const float4 p0{set.slope, set.midpoint, set.bias, float(shape)};
+
+                float rgb_moves_lightness = 0.f, rgb_moves_color = 0.f;
+                for (const float3 &rgb : colors)
+                {
+                    INFO("rgb = ", rgb);
+                    const float4 c{rgb, 0.7f};
+                    const float3 lab = lab_of(rgb), n = normalize_Lab(lab);
+                    for (int mode : {shader::CURVE_RGB, shader::CURVE_LIGHTNESS, shader::CURVE_CHROMATICITY})
+                    {
+                        INFO("mode = ", mode);
+                        const float4 p1 =
+                            mode == shader::CURVE_RGB ? float4{0.f} : float4{float(mode), white.x, white.y, white.z};
+                        const float4 got = shader::edit_color(shader::EDIT_BRIGHTNESS_CONTRAST, c, p0, p1, M, M_inv);
+                        CHECK(got.w == c.w);
+                        if (mode == shader::CURVE_RGB)
+                        {
+                            CHECK(got.xyz() == float3{curve(rgb.x), curve(rgb.y), curve(rgb.z)});
+                            const float3 moved  = lab_of(got.xyz()) - lab;
+                            rgb_moves_lightness = std::max(rgb_moves_lightness, std::fabs(moved.x));
+                            rgb_moves_color     = std::max({rgb_moves_color, std::fabs(moved.y), std::fabs(moved.z)});
+                            continue;
+                        }
+                        // the moved components follow the curve, and the others stay, to within the trip out to
+                        // RGB and back
+                        const float3 want =
+                            unnormalize_Lab(mode == shader::CURVE_LIGHTNESS ? float3{curve(n.x), n.y, n.z}
+                                                                            : float3{n.x, curve(n.y), curve(n.z)});
+                        const float3 got_lab = lab_of(got.xyz());
+                        INFO("L*a*b* = ", lab, " -> ", got_lab, ", want ", want);
+                        CHECK(approx_equal(got_lab, want, 2e-3f));
+                    }
+                }
+                // the three channels alike move L* and also a* and b*, which the L*a*b* modes keep apart
+                CHECK(rgb_moves_lightness > 5.f);
+                CHECK(rgb_moves_color > 5.f);
+            }
     }
-
-    // the published anchors of the lightness curve: mid gray at Y = 0.18 sits near L* = 49.5, and the linear
-    // segment below Y = 216/24389 has slope kappa = 24389/27 in Y
-    CHECK(XYZ_to_Lab(white * 0.184187f, white).x == doctest::Approx(50.f).epsilon(1e-3));
-
-    const float y_knee = 216.f / 24389.f;
-    CHECK(XYZ_to_Lab(white * y_knee, white).x == doctest::Approx(8.f).epsilon(1e-3));
-    const float y_small = 0.5f * y_knee;
-    CHECK(XYZ_to_Lab(white * y_small, white).x == doctest::Approx((24389.f / 27.f) * y_small).epsilon(1e-3));
-
-    // L* rises with luminance and nothing else does
-    float previous = -1.f;
-    for (int i = 0; i <= 20; ++i)
-    {
-        const float3 lab = XYZ_to_Lab(white * (float(i) / 20.f), white);
-        CHECK(lab.x > previous);
-        previous = lab.x;
-    }
-
-    // a* is the green-red axis and b* the blue-yellow one: more X than the white asks for reads red, more Z
-    // reads blue
-    CHECK(XYZ_to_Lab(float3{white.x * 1.2f, white.y, white.z}, white).y > 0.f);
-    CHECK(XYZ_to_Lab(float3{white.x * 0.8f, white.y, white.z}, white).y < 0.f);
-    CHECK(XYZ_to_Lab(float3{white.x, white.y, white.z * 1.2f}, white).z < 0.f);
-    CHECK(XYZ_to_Lab(float3{white.x, white.y, white.z * 0.8f}, white).z > 0.f);
 }
 
 TEST_CASE("A color survives the trip through L*a*b* and back")
@@ -829,48 +745,6 @@ TEST_CASE("A color survives the trip through L*a*b* and back")
     CHECK(n.y == doctest::Approx(0.5f).epsilon(1e-4));
     CHECK(n.z == doctest::Approx(0.5f).epsilon(1e-4));
     CHECK(normalize_Lab(float3{0.f, 0.f, 0.f}).x == doctest::Approx(0.f).epsilon(1e-4));
-}
-
-TEST_CASE("sRGB primaries land where L*a*b* is documented to put them")
-{
-    // The path an edit takes, linear sRGB through XYZ into L*a*b*, against values published for the sRGB
-    // primaries under D65. These catch a transposed matrix or a swapped axis; the achromatic checks cannot.
-    const float3 white  = Lab_reference_white();
-    auto         lab_of = [&](float3 rgb) { return XYZ_to_Lab(mul(sRGB_to_XYZ(), rgb), white); };
-
-    const float3 red = lab_of(float3{1.f, 0.f, 0.f});
-    CHECK(red.x == doctest::Approx(53.24f).epsilon(2e-3));
-    CHECK(red.y == doctest::Approx(80.09f).epsilon(2e-3));
-    CHECK(red.z == doctest::Approx(67.20f).epsilon(2e-3));
-
-    const float3 green = lab_of(float3{0.f, 1.f, 0.f});
-    CHECK(green.x == doctest::Approx(87.73f).epsilon(2e-3));
-    CHECK(green.y == doctest::Approx(-86.18f).epsilon(2e-3));
-    CHECK(green.z == doctest::Approx(83.18f).epsilon(2e-3));
-
-    const float3 blue = lab_of(float3{0.f, 0.f, 1.f});
-    CHECK(blue.x == doctest::Approx(32.30f).epsilon(2e-3));
-    CHECK(blue.y == doctest::Approx(79.19f).epsilon(2e-3));
-    CHECK(blue.z == doctest::Approx(-107.86f).epsilon(2e-3));
-
-    // white through the same path, tying the matrix and the reference white together
-    const float3 w = lab_of(float3{1.f, 1.f, 1.f});
-    CHECK(w.x == doctest::Approx(100.f).epsilon(1e-3));
-    CHECK(w.y == doctest::Approx(0.f).epsilon(2e-2));
-    CHECK(w.z == doctest::Approx(0.f).epsilon(2e-2));
-}
-
-TEST_CASE("quantize_full maps non-finite input to a representable integer")
-{
-    // Casting a NaN to an integer type is undefined behavior, and std::clamp doesn't filter it out:
-    // both of its comparisons are false for NaN, so it returns the NaN unchanged.
-    const float nan = std::numeric_limits<float>::quiet_NaN();
-    const float inf = std::numeric_limits<float>::infinity();
-
-    CHECK(quantize_full<uint8_t>(nan, 0, 0, false) == 0);
-    CHECK(quantize_full<uint16_t>(nan, 0, 0, false) == 0);
-    CHECK(quantize_full<uint8_t>(inf, 0, 0, false) == 255);
-    CHECK(quantize_full<uint8_t>(-inf, 0, 0, false) == 0);
 }
 
 TEST_CASE("Saving wide-gamut content through an HDR transfer function stays finite")

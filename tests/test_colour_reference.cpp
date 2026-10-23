@@ -20,6 +20,7 @@
 #include <cmath>
 #include <iterator>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -89,6 +90,109 @@ TEST_CASE("every transfer function agrees with colour-science")
     }
 }
 
+TEST_CASE("to_linear and from_linear reach each TransferFunction's own function, with reference white at 1.0")
+{
+    // Each type against colour-science's values for the function it names, so a type routed to the wrong function,
+    // or scaled by the wrong constant, is caught where a round trip through the pair passes. The ones in absolute
+    // luminance put reference white at 1.0: BT.2408's 203 cd/m^2 for PQ and HLG, and ST 428-1's 48 cd/m^2 for
+    // DCI-P3, spelled out here rather than taken from the constants, so these pin them. The three with no table
+    // have closed forms: BT.709 decodes as BT.1886's gamma 2.4, as other viewers decode it, rather than through the
+    // inverse of the camera's OETF.
+    using namespace colour_reference;
+    struct Case
+    {
+        std::vector<Sample> decode, encode; ///< in the table's own units, which `white` relates to HDRView's
+        float               white = 1.f;
+        float               rel = 1e-5f, abs = 1e-9f;
+    };
+    auto table       = [](const auto &t) { return std::vector<Sample>(std::begin(t), std::end(t)); };
+    auto closed_form = [](auto f)
+    {
+        std::vector<Sample> out;
+        for (const Sample &s : sRGB_decode) out.push_back({s.in, f(s.in)});
+        return out;
+    };
+    auto inverted = [](std::vector<Sample> v)
+    {
+        for (Sample &s : v) std::swap(s.in, s.out);
+        return v;
+    };
+    auto case_for = [&](TransferFunction tf) -> Case
+    {
+        switch (tf.type)
+        {
+        case TransferFunction::Unspecified:
+        case TransferFunction::sRGB: return {table(sYCC_decode), table(sYCC_encode)};
+        case TransferFunction::Linear:
+        {
+            const auto identity = closed_form([](float x) { return x; });
+            return {identity, identity};
+        }
+        case TransferFunction::Gamma:
+        {
+            const auto decode = closed_form([g = tf.gamma](float x) { return std::pow(x, g); });
+            return {decode, inverted(decode)};
+        }
+        case TransferFunction::ITU:
+        {
+            const auto decode = closed_form([](float x) { return std::pow(x, 2.4f); });
+            return {decode, inverted(decode)};
+        }
+        case TransferFunction::BT2100_PQ: return {table(PQ_decode), table(PQ_encode), 203.f, 1e-4f};
+        case TransferFunction::BT2100_HLG:
+        {
+            // the EOTF of a nominal 1000 cd/m^2 display, on grays, where the scalar form applies
+            Case c{{}, {}, 203.f};
+            for (const auto &s : HLG_EOTF)
+                if (s.L_B == 0.f && s.L_W == 1000.f && s.in.x == s.in.y && s.in.y == s.in.z)
+                    c.decode.push_back({s.in.x, s.out.x});
+            c.encode = inverted(c.decode);
+            return c;
+        }
+        case TransferFunction::ST240: return {table(ST240_decode), table(ST240_encode)};
+        case TransferFunction::Log100: return {table(log100_decode), table(log100_encode), 1.f, 1e-5f, 1e-6f};
+        case TransferFunction::Log100_Sqrt10:
+            return {table(log100_sqrt10_decode), table(log100_sqrt10_encode), 1.f, 1e-5f, 1e-6f};
+        // xvYCC: BT.709's OETF, extended to negative values by odd symmetry
+        case TransferFunction::IEC61966_2_4: return {table(ITU_decode), table(ITU_encode)};
+        case TransferFunction::DCI_P3: return {table(DCI_P3_decode), table(DCI_P3_encode), 48.f};
+        default: FAIL("no reference for transfer function ", tf.type); return {};
+        }
+    };
+
+    std::vector<TransferFunction> tfs;
+    for (int t = TransferFunction::Unspecified; t < TransferFunction::Count; ++t)
+        tfs.emplace_back(static_cast<TransferFunction::Type_>(t));
+    for (float gamma : {1.8f, 2.6f}) tfs.emplace_back(TransferFunction::Gamma, gamma);
+
+    for (const TransferFunction &tf : tfs)
+    {
+        INFO("transfer function = ", transfer_function_name(tf), " (gamma ", tf.gamma, ")");
+        const Case c = case_for(tf);
+        REQUIRE(!c.decode.empty());
+        REQUIRE(!c.encode.empty());
+        for (const Sample &s : c.decode)
+        {
+            INFO("decoding ", s.in, ": want ", s.out, ", got ", to_linear(s.in, tf) * c.white);
+            CHECK(close(to_linear(s.in, tf) * c.white, s.out, c.rel, c.abs));
+        }
+        for (const Sample &s : c.encode)
+        {
+            INFO("encoding ", s.in, ": want ", s.out, ", got ", from_linear(s.in / c.white, tf));
+            CHECK(close(from_linear(s.in / c.white, tf), s.out, c.rel, c.abs));
+        }
+    }
+
+    // and on colors, which HLG decodes as a whole, its OOTF depending on the luminance
+    for (const auto &s : HLG_EOTF)
+        if (s.L_B == 0.f && s.L_W == 1000.f)
+        {
+            INFO("HLG color ", s.in);
+            CHECK(close(to_linear(s.in, TransferFunction::BT2100_HLG) * 203.f, s.out, 1e-5f, 1e-6f));
+            CHECK(close(from_linear(s.out / 203.f, TransferFunction::BT2100_HLG), s.in, 1e-5f, 1e-6f));
+        }
+}
+
 TEST_CASE("the HLG EOTF agrees with colour-science on colors, and on grays in its scalar form")
 {
     for (const auto &s : colour_reference::HLG_EOTF)
@@ -103,6 +207,10 @@ TEST_CASE("the HLG EOTF agrees with colour-science on colors, and on grays in it
 
 TEST_CASE("L*a*b* and HSL agree with colour-science")
 {
+    // the white the editing controls' L*a*b* is relative to when an image names none is D65's
+    for (const auto &s : colour_reference::white_points)
+        if (s.white_point == WhitePoint_D65)
+            CHECK(close(Lab_reference_white(), XYZ_from_xy(s.xy), 2e-4f));
     for (const auto &s : colour_reference::Lab)
     {
         INFO("white = ", s.white_xy, ", XYZ = ", s.XYZ);
@@ -137,7 +245,14 @@ TEST_CASE("the named gamuts and white points, and the matrices they define, agre
             {
                 INFO("element (", r, ", ", c, ")");
                 CHECK(close(element(M, r, c), s.RGB_to_XYZ[3 * r + c], 1e-5f, 1e-6f));
+                // sRGB's is also the one sRGB_to_XYZ() holds, from HDRView's own chromaticities
+                if (s.gamut == ColorGamut_sRGB_BT709)
+                    CHECK(close(element(sRGB_to_XYZ(), r, c), s.RGB_to_XYZ[3 * r + c], 2e-4f, 1e-6f));
             }
+
+        // and default-constructed chromaticities are sRGB's
+        if (s.gamut == ColorGamut_sRGB_BT709)
+            CHECK(approx_equal(Chromaticities{}, Chromaticities{s.red, s.green, s.blue, s.white}, 2e-4f));
     }
 
     for (const auto &s : colour_reference::white_points)

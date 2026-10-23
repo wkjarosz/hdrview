@@ -481,14 +481,6 @@ inline float dequantize_narrow<float>(float v)
     return v;
 }
 
-/// see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW
-template <typename T>
-T quantize_narrow(float v, int x = 0, int y = 0, bool dither = true)
-{
-    constexpr float maximum = 1u << (std::numeric_limits<T>::digits - 8);
-    return (T)std::clamp((219.f * v + 16.f) * maximum + 0.5f + (dither ? tent_dither(x, y) : 0.f), 0.0f, maximum);
-}
-
 #define HDRVIEW_COL32_R_SHIFT 24
 #define HDRVIEW_COL32_G_SHIFT 16
 #define HDRVIEW_COL32_B_SHIFT 8
