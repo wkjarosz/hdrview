@@ -462,17 +462,17 @@ TEST_CASE("A dragged handle follows the cursor, and the side it pivots about sta
 
                     // Glyphs cannot be stretched, so a string's box keeps its aspect, its height following the
                     // cursor and the corner opposite the handle staying put; the box then lies on whichever
-                    // side of that corner the cursor is. Each step here is a fresh drag, since the index is
-                    // not renumbered when the box crosses that corner.
+                    // side of that corner the cursor is, and the corner held is the one that names.
                     if (shape == Annotation::Shape::Text)
                     {
-                        a = before;
                         float2 lo0, extent0;
-                        REQUIRE(text_extent(a, x, lo0, extent0));
+                        REQUIRE(text_extent(before, x, lo0, extent0));
                         const float2 fixed{i == 0 || i == 3 ? lo0.x + extent0.x : lo0.x,
                                            i == 0 || i == 1 ? lo0.y + extent0.y : lo0.y};
 
-                        CHECK(move_annotation_handle(a, i, to, &x) == i);
+                        index = move_annotation_handle(a, index, to, &x);
+                        REQUIRE(index >= 0);
+                        REQUIRE(index < 4);
 
                         float2 lo, extent;
                         REQUIRE(text_extent(a, x, lo, extent));
@@ -482,6 +482,10 @@ TEST_CASE("A dragged handle follows the cursor, and the side it pivots about sta
                         CHECK(a.font_size == doctest::Approx(before.font_size * ratio));
                         CHECK(lo.x == doctest::Approx(to.x >= fixed.x ? fixed.x : fixed.x - extent.x));
                         CHECK(lo.y == doctest::Approx(to.y >= fixed.y ? fixed.y : fixed.y - extent.y));
+
+                        const int2 side = held_side(index);
+                        CHECK((side.x < 0 ? lo.x + extent.x : lo.x) == doctest::Approx(fixed.x));
+                        CHECK((side.y < 0 ? lo.y + extent.y : lo.y) == doctest::Approx(fixed.y));
                         continue;
                     }
 
