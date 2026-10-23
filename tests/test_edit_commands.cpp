@@ -652,10 +652,11 @@ TEST_CASE("A bump map becomes the normal map its slopes ask for")
     REQUIRE(cmd);
     cmd->apply(ctx);
 
-    // The command writes the normal as (dh/dx, dh/dy, 1), its slopes taken per unit of the whole image and
-    // scaled by the default of one, normalized and stored in [0,1] where flat is (0.5, 0.5, 1).
+    // A surface rising to the right faces left, and one rising down the image faces up it, which green points
+    // along by default: the normal is (-dh/dx, dh/dy, 1) in the image's coordinates, its slopes taken per unit of
+    // the whole image and scaled by the default of one, normalized and stored in [0,1] where flat is (0.5, 0.5, 1).
     const float2 size{float(k_size.x), float(k_size.y)};
-    const float3 diffuse  = la::normalize(float3{dh_dx * size.x, 0.f, 1.f}) * 0.5f + 0.5f;
+    const float3 diffuse  = la::normalize(float3{-dh_dx * size.x, 0.f, 1.f}) * 0.5f + 0.5f;
     const float3 specular = la::normalize(float3{0.f, dh_dy * size.y, 1.f}) * 0.5f + 0.5f;
 
     const int diffuse_group  = group_of_channel(img, "diffuse.R");

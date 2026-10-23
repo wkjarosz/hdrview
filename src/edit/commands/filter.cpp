@@ -391,8 +391,9 @@ public:
                           const float dx  = height(p + int2{1, 0}) - h00;
                           const float dy  = height(p + int2{0, 1}) - h00;
 
-                          // the surface z = h(x,y) has normal (-dh/dx, -dh/dy, 1), the sign folded into the scale
-                          float3 n = la::normalize(float3{s * dx * size.x, y_sign * s * dy * size.y, 1.f});
+                          // the surface z = h(x, y) has normal (-dh/dx, -dh/dy, 1) with y up, and the image's y runs
+                          // down, so green pointing up takes the slope down the image as it is
+                          float3 n = la::normalize(float3{-s * dx * size.x, y_sign * s * dy * size.y, 1.f});
 
                           // into the [0,1] range a normal map is stored in, where flat is (0.5, 0.5, 1)
                           n = n * 0.5f + 0.5f;
