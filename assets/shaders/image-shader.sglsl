@@ -167,6 +167,38 @@ float sample_channel_finest(texture2D tex, sampler smp, vec2 uv, bool within_ima
     return within_image ? value : 0.0;
 }
 
+/// The current image's samples \p value at \p uv, as an edit dialog's preview shows them, or as they are.
+/**
+    Either a remap, whose quad spans the output, so that each point of it reads the source where its direction falls,
+    as remapped_envmap() does, off the sphere from the nearest point that is on it; or a point-wise edit, applied to
+    the samples as stored within the subject's rectangle, as apply_point_edit() would change them.
+*/
+vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
+{
+    if (fsp.remap != 0)
+    {
+        vec3 dir = envmap_uv_to_xyz(fsp.remap_dst, nearest_valid_envmap_uv(fsp.remap_dst, uv));
+        vec2 src = envmap_xyz_to_uv(fsp.remap_src, dir);
+        return vec4(sample_channel_finest(primary_0_texture, primary_0_sampler, src, in_img),
+                    sample_channel_finest(primary_1_texture, primary_1_sampler, src, in_img),
+                    sample_channel_finest(primary_2_texture, primary_2_sampler, src, in_img),
+                    sample_channel_finest(primary_3_texture, primary_3_sampler, src, in_img));
+    }
+
+    if (fsp.edit_op == EDIT_NONE || !all(greaterThanEqual(uv, fsp.edit_rect.xy)) ||
+        !all(lessThan(uv, fsp.edit_rect.zw)))
+        return value;
+    if (fsp.edit_op >= EDIT_FIRST_COLOR)
+        return fsp.edit_color != 0
+                   ? edit_color(fsp.edit_op, value, fsp.edit_p0, fsp.edit_p1, mat3(fsp.edit_m0), mat3(fsp.edit_m1))
+                   : value;
+    vec4 edited = value;
+    for (int k = 0; k < 4; ++k)
+        if (fsp.edit_slots[k] >= 0)
+            edited[k] = edit_sample(fsp.edit_op, value[k], fsp.edit_slots[k], fsp.edit_p0, fsp.edit_p1);
+    return edited;
+}
+
 void main()
 {
     vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
@@ -189,37 +221,12 @@ void main()
     bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
     bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;
 
-    vec4 value;
-    if (fsp.remap != 0)
-    {
-        // A remap's preview: the quad spans the output, and each point of it reads the source where its direction
-        // falls, as remapped_envmap() does; off the sphere, from the nearest point that is on it.
-        vec3 dir = envmap_uv_to_xyz(fsp.remap_dst, nearest_valid_envmap_uv(fsp.remap_dst, primary_uv));
-        vec2 uv  = envmap_xyz_to_uv(fsp.remap_src, dir);
-        value    = vec4(sample_channel_finest(primary_0_texture, primary_0_sampler, uv, in_img),
-                        sample_channel_finest(primary_1_texture, primary_1_sampler, uv, in_img),
-                        sample_channel_finest(primary_2_texture, primary_2_sampler, uv, in_img),
-                        sample_channel_finest(primary_3_texture, primary_3_sampler, uv, in_img));
-    }
-    else
-        value = vec4(sample_channel(primary_0_texture, primary_0_sampler, primary_uv, in_img),
-                     sample_channel(primary_1_texture, primary_1_sampler, primary_uv, in_img),
-                     sample_channel(primary_2_texture, primary_2_sampler, primary_uv, in_img),
-                     sample_channel(primary_3_texture, primary_3_sampler, primary_uv, in_img));
-
-    // an edit dialog's preview, on the samples as stored, as apply_point_edit() would change them
-    if (fsp.edit_op != EDIT_NONE && all(greaterThanEqual(primary_uv, fsp.edit_rect.xy)) &&
-        all(lessThan(primary_uv, fsp.edit_rect.zw)))
-    {
-        if (fsp.edit_op < EDIT_FIRST_COLOR)
-        {
-            for (int k = 0; k < 4; ++k)
-                if (fsp.edit_slots[k] >= 0)
-                    value[k] = edit_sample(fsp.edit_op, value[k], fsp.edit_slots[k], fsp.edit_p0, fsp.edit_p1);
-        }
-        else if (fsp.edit_color != 0)
-            value = edit_color(fsp.edit_op, value, fsp.edit_p0, fsp.edit_p1, mat3(fsp.edit_m0), mat3(fsp.edit_m1));
-    }
+    vec4 value = vec4(
+        sample_channel(primary_0_texture, primary_0_sampler, primary_uv, in_img),
+        sample_channel(primary_1_texture, primary_1_sampler, primary_uv, in_img),
+        sample_channel(primary_2_texture, primary_2_sampler, primary_uv, in_img),
+        sample_channel(primary_3_texture, primary_3_sampler, primary_uv, in_img));
+    value = edit_preview(value, primary_uv, in_img);
 
     if (fsp.primary_luminance_chroma != 0)
         value.xyz = YC_to_RGB(value.xyz, fsp.primary_yw);
