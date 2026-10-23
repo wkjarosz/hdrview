@@ -84,6 +84,9 @@ layout(binding=1) uniform fs_params {
     int   remap_dst;
     mat4  remap_rotation;
     vec2  remap_size;
+    int   remap_sampling; // an EnvMapSampling: 0 supersamples, 1 is EWA
+    int   remap_quality;  // samples per axis, or EWA's maximum anisotropy
+    int   remap_levels;   // the mip levels the current image's textures have
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -162,33 +165,74 @@ float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
     return within_image ? value : 0.0;
 }
 
-/// sample_channel() from the finest level alone, for a uv whose jumps, at an envmap's seams, would pick the coarsest
-float sample_channel_finest(texture2D tex, sampler smp, vec2 uv, bool within_image)
+// What src/shared/envmap_sample.h reads here: the four shown channels at once, from the textures' own mipmaps, whose
+// levels average 2x2 blocks, which blurs by a quarter of a squared texel of the finer level each step down.
+#define EnvValue vec4
+struct EnvSource
 {
-    float value = textureLod(sampler2D(tex, smp), uv, 0.0).r;
-    return within_image ? value : 0.0;
+    int   mapping;
+    int   levels;
+    float ratio;
+    float spread;
+    ivec2 size;
+};
+vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 p);
+
+@include ../../src/shared/envmap_sample.h
+
+/// Texel \p p of \p tex at \p level, or the one texel of a slot showing no channel, which has no others nor levels.
+float fetch_channel(texture2D tex, sampler smp, ivec2 p, int level)
+{
+    ivec2 n = textureSize(sampler2D(tex, smp), 0);
+    return n.x == 1 && n.y == 1 ? texelFetch(sampler2D(tex, smp), ivec2(0), 0).r
+                                : texelFetch(sampler2D(tex, smp), p, level).r;
+}
+
+vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 p)
+{
+    // a cube map's faces are cells of the one image
+    ivec2 q = envmap_is_cube(src.mapping)
+                  ? envmap_face_texel_in_image(src.mapping, chart, p, envmap_chart_size(src, level).x)
+                  : p;
+    return vec4(fetch_channel(primary_0_texture, primary_0_sampler, q, level),
+                fetch_channel(primary_1_texture, primary_1_sampler, q, level),
+                fetch_channel(primary_2_texture, primary_2_sampler, q, level),
+                fetch_channel(primary_3_texture, primary_3_sampler, q, level));
 }
 
 /// The current image's samples \p value at \p uv, as an edit dialog's preview shows them, or as they are.
 /**
-    Either a remap, whose quad spans the output, so that each of the output's pixels reads the source where the
-    direction at its center falls once turned, as remapped_envmap() does with a single sample, off the sphere from the
-    nearest point that is on it; or a point-wise edit, applied to the samples as stored within the subject's
-    rectangle, as apply_point_edit() would change them.
+    Either a remap, whose quad spans the output, so that each of the output's pixels shows the color remapped_envmap()
+    gives it, through the same envmap_sample.h; or a point-wise edit, applied to the samples as stored within the
+    subject's rectangle, as apply_point_edit() would change them.
 */
 vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
 {
     if (fsp.remap != 0)
     {
-        // one sample at the center of the output pixel uv falls in, so each output pixel shows as one color
-        vec2 center = (floor(uv * fsp.remap_size) + 0.5) / fsp.remap_size;
-        vec3 dir =
-            mat3(fsp.remap_rotation) * envmap_uv_to_xyz(fsp.remap_dst, nearest_valid_envmap_uv(fsp.remap_dst, center));
-        vec2 src = envmap_xyz_to_uv(fsp.remap_src, dir);
-        return vec4(sample_channel_finest(primary_0_texture, primary_0_sampler, src, in_img),
-                    sample_channel_finest(primary_1_texture, primary_1_sampler, src, in_img),
-                    sample_channel_finest(primary_2_texture, primary_2_sampler, src, in_img),
-                    sample_channel_finest(primary_3_texture, primary_3_sampler, src, in_img));
+        // the output pixel uv falls in, so each shows as one color
+        ivec2 size  = ivec2(fsp.remap_size);
+        ivec2 pixel = clamp(ivec2(floor(uv * fsp.remap_size)), ivec2(0), size - 1);
+
+        EnvSource src;
+        src.mapping = fsp.remap_src;
+        src.ratio   = 2.0;
+        src.spread  = 0.25;
+        // the image's size, which every slot showing a channel has and the one-texel others do not exceed
+        src.size = max(max(textureSize(sampler2D(primary_0_texture, primary_0_sampler), 0),
+                           textureSize(sampler2D(primary_1_texture, primary_1_sampler), 0)),
+                       max(textureSize(sampler2D(primary_2_texture, primary_2_sampler), 0),
+                           textureSize(sampler2D(primary_3_texture, primary_3_sampler), 0)));
+        src.levels  = fsp.remap_levels;
+        // a cube map's faces run out of texels before the image does
+        if (envmap_is_cube(src.mapping))
+            src.levels = min(src.levels, int(floor(log2(float(envmap_face_size(src.mapping, src.size))))) + 1);
+
+        mat3 R     = mat3(fsp.remap_rotation);
+        vec4 value = fsp.remap_sampling == 1
+                         ? envmap_ewa(src, fsp.remap_dst, R, pixel, size, fsp.remap_quality)
+                         : envmap_supersample(src, fsp.remap_dst, R, pixel, size, fsp.remap_quality);
+        return in_img ? value : vec4(0.0);
     }
 
     if (fsp.edit_op == EDIT_NONE || !all(greaterThanEqual(uv, fsp.edit_rect.xy)) ||

@@ -189,7 +189,7 @@ public:
     {
         if (m_size.x <= 0 || m_size.y <= 0)
             return std::nullopt;
-        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size, la::qmat(m_rotation)};
+        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size, la::qmat(m_rotation), m_sampling, m_supersample};
     }
 
     /// Turns the sphere so that what was seen at \p from is seen at \p to.

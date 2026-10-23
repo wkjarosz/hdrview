@@ -21,6 +21,15 @@ namespace
 /// The display window of the image a reshaping edit's preview shows in place of the current one, or none.
 const Box2i *reshaped_window(const EditPreview *preview)
 { return preview && preview->window ? &*preview->window : nullptr; }
+
+/// How many mip levels \p img's textures have: the whole chain where they minify through one, else only the finest.
+int texture_levels(const ConstImagePtr &img)
+{
+    const Texture *t = img && !img->channels.empty() ? img->channels.front().texture.get() : nullptr;
+    if (!t || t->min_interpolation_mode() != Texture::InterpolationMode::Trilinear)
+        return 1;
+    return int(std::floor(std::log2(float(la::maxelem(t->size()))))) + 1;
+}
 } // namespace
 
 void HDRViewApp::draw_pixel_grid() const
@@ -471,6 +480,9 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.remap_dst", edit.remap ? edit.remap->dst : 0);
         m_shader->set_uniform("fsp.remap_rotation", pad(edit.remap ? edit.remap->rotation : float3x3{la::identity}));
         m_shader->set_uniform("fsp.remap_size", edit.remap ? float2(edit.remap->size) : float2{1.f});
+        m_shader->set_uniform("fsp.remap_sampling", edit.remap ? edit.remap->sampling : 0);
+        m_shader->set_uniform("fsp.remap_quality", edit.remap ? edit.remap->quality : 1);
+        m_shader->set_uniform("fsp.remap_levels", texture_levels(current_image()));
         m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
         m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
 

@@ -53,6 +53,8 @@ struct EnvmapRemap
     int      src = 0, dst = 0;       ///< EnvMapping values: what the image is, and what it becomes
     int2     size{0};                ///< The size it becomes
     float3x3 rotation{la::identity}; ///< Turns a direction of the result into the source's
+    int      sampling = 0;           ///< An EnvMapSampling: how the source is read
+    int      quality  = 1;           ///< Samples per axis, or EWA's maximum anisotropy
 };
 
 /// The view's zoom and pan, which an edit dialog previewing a reshaped image takes over and gives back.
