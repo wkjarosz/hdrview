@@ -683,6 +683,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Remap envmap...");
         ctx->SetRef("Remap envmap...");
         ctx->ComboClick("Target/Longitude-latitude");
+        // small, since nothing here reads the result's pixels and a remap costs what it writes, which a sanitized
+        // build multiplies many times over
+        ctx->ItemInputValue("Size/$$1", 48);
         ctx->Yield(2);
 
         // Previewed as it will come out: the dialog's mappings at its size, which a lat-long's aspect makes twice
