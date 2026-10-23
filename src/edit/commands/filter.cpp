@@ -203,12 +203,12 @@ public:
     void draw(EditContext &) override
     {
         ImGui::DragFloat2("X, Y offset", &m_offset.x, 0.25f, 0.f, 0.f, "%.2f px");
-        ImGui::Tooltip("Positive moves the image right and down. Fractional offsets are allowed, and are "
-                       "what the sampler below is for.");
+        ImGui::Tooltip("Shift the image by this many pixels. Positive values move it right and down, and "
+                       "fractional offsets are interpolated using the sampler below.");
 
         border_fields(&m_border_x, &m_border_y, &m_link_borders,
-                      "What is read where the shift reaches past the edge. Repeat is the wrapping shift: "
-                      "what leaves one side comes back in on the other, so a tiling texture stays tiling.");
+                      "Set what fills in where the shift moves the image away from an edge. Repeat wraps the "
+                      "image around, which keeps a tiling texture seamless.");
 
         // only asked for when it is consulted: a whole-sample offset reads samples exactly
         ImGui::BeginDisabled(m_offset.x == std::floor(m_offset.x) && m_offset.y == std::floor(m_offset.y));
@@ -220,8 +220,8 @@ public:
             ImGui::EndCombo();
         }
         ImGui::EndDisabled();
-        ImGui::Tooltip("How the samples between samples are reconstructed, which a whole-number offset never "
-                       "has to ask.");
+        ImGui::Tooltip("Set how to interpolate between pixels for a fractional offset (unused for whole-pixel "
+                       "offsets).");
     }
 
     void apply(const EditContext &ctx) override

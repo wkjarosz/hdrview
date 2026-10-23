@@ -96,7 +96,7 @@ public:
         mappings.take();
 
         // between the two it exchanges, bracketed like the chain that ties a width to a height
-        if (ImGui::RowBracketButton(ICON_MY_SWAP, mappings, true, "Exchange source and target."))
+        if (ImGui::RowBracketButton(ICON_MY_SWAP, mappings, true, "Swap the source and target mappings."))
             std::swap(m_src_mapping, m_dst_mapping);
 
         const int2 before = m_size;
@@ -106,8 +106,8 @@ public:
         const auto &style = ImGui::GetStyle();
         same_line_at_right(ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize("Auto aspect").x);
         ImGui::Checkbox("Auto aspect", &m_auto_aspect);
-        ImGui::Tooltip("Keep the width and height in the proportion the target parameterization wants: 2:1 "
-                       "for a lat-long, square for a disc, 3:4 for a cube cross.");
+        ImGui::Tooltip("Keep the width and height at the target mapping's aspect ratio (e.g. 2:1 for a lat-long, "
+                       "3:4 for a cube cross).");
 
         // follow whichever was just changed: a new target re-derives the width from its aspect, and
         // editing one field drives the other
@@ -125,16 +125,17 @@ public:
         // and the rotation is a quaternion, so that drags compose without drifting.
         const float3 before_angles = m_angles;
         ImGui::SliderFloat("Yaw", &m_angles.x, -180.f, 180.f, "%.1f deg");
-        ImGui::Tooltip("Turn the sphere about its up axis, which slides a lat-long sideways.");
+        ImGui::Tooltip("Rotate the environment around the vertical axis. In a lat-long this shifts the image "
+                       "horizontally.");
         ImGui::SliderFloat("Pitch", &m_angles.y, -90.f, 90.f, "%.1f deg");
-        ImGui::Tooltip("Tip the sphere forward or back.");
+        ImGui::Tooltip("Tilt the environment up or down.");
         ImGui::SliderFloat("Roll", &m_angles.z, -180.f, 180.f, "%.1f deg");
-        ImGui::Tooltip("Turn the sphere about the forward axis.");
+        ImGui::Tooltip("Rotate the environment around the forward axis.");
         same_line_at_right(ImGui::CalcTextSize("Reset rotation").x + 2.f * style.FramePadding.x);
         if (ImGui::Button("Reset rotation"))
             m_angles = float3{0.f};
-        ImGui::Tooltip("Drag across the preview to turn the sphere, keeping what is under the cursor under it; "
-                       "Alt-drag pans the view instead.");
+        ImGui::Tooltip("Set yaw, pitch and roll back to zero.\n\nYou can also rotate the environment by dragging "
+                       "the preview. Alt-drag to pan the view instead.");
         if (m_angles != before_angles)
         {
             const float3 r = m_angles * k_radians_per_degree;
@@ -142,27 +143,25 @@ public:
         }
 
         ImGui::RadioButton("EWA", &m_sampling, EnvMapSampling_EWA);
-        ImGui::Tooltip("Reads a mip pyramid through an ellipse shaped by the area each output pixel covers "
-                       "in the source. That area is far wider than it is tall near a lat-long's poles, "
-                       "which is the case a mip level on its own cannot represent. Costs the same whatever "
-                       "the scale.");
+        ImGui::Tooltip("Filter each output pixel over the elliptical region it covers in the source, using "
+                       "mipmaps. Avoids aliasing without overblurring, even where the mapping stretches the image "
+                       "a lot (e.g. near the poles of a lat-long).");
         ImGui::SameLine();
         ImGui::RadioButton("Point", &m_sampling, EnvMapSampling_Point);
-        ImGui::Tooltip("Averages a grid of samples inside each output pixel. Exact when enlarging, but a "
-                       "reduction of more than the sample count still aliases.");
+        ImGui::Tooltip("Average a grid of samples within each output pixel. Can alias when shrinking the image "
+                       "by more than the number of samples per axis.");
 
         if (m_sampling == EnvMapSampling_EWA)
         {
             ImGui::SliderInt("Max anisotropy", &m_max_aniso, 1, 32);
-            ImGui::Tooltip("How much longer than it is wide the footprint may be before it is widened to "
-                           "fit. The mip level covers the short axis and the filter walks the long one, so "
-                           "this is what keeps a stretched footprint sharp, and what it costs, since each "
-                           "step along that axis is another read.");
+            ImGui::Tooltip("Set how elongated a pixel's footprint in the source can get before it is blurred to "
+                           "fit. Higher values keep stretched regions sharper, but are slower.");
         }
         else
         {
             ImGui::SliderInt("Samples per axis", &m_samples, 1, 8);
-            ImGui::Tooltip("Averaged within each output pixel, so the cost is its square.");
+            ImGui::Tooltip("Set the number of samples along each axis of an output pixel. The cost grows with the "
+                           "square of this value.");
         }
 
         // Previewed, the view frames the output as applying it will, fitting it when the preview starts and whenever
