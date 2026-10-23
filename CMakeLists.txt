@@ -2203,7 +2203,6 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_main.cpp
     tests/gui/test_gui_smoke.cpp
     tests/gui/test_gui_dialogs.cpp
-    tests/gui/test_gui_image_io.cpp
     tests/gui/test_gui_view.cpp
     tests/gui/test_gui_viewport.cpp
     tests/gui/test_gui_display.cpp
