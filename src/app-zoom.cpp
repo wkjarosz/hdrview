@@ -9,9 +9,12 @@ using namespace HelloImGui;
 
 namespace
 {
-/// The display window of the image \p preview shows: a reshaping edit's result, or else \p img, as drawn.
+/// The display window the view shows \p img in, empty without one.
+Box2f display_window_of(const ConstImagePtr &img) { return img ? Box2f{img->display_window} : Box2f{float2{0.f}}; }
+
+/// The display window of the image \p preview shows: a reshaping edit's result, or else \p img.
 Box2f previewed_window(const EditPreview &preview, const ConstImagePtr &img)
-{ return preview.window ? Box2f{*preview.window} : Box2f{img->display_window}; }
+{ return preview.window ? Box2f{*preview.window} : display_window_of(img); }
 } // namespace
 
 /**
@@ -24,22 +27,11 @@ Box2f previewed_window(const EditPreview &preview, const ConstImagePtr &img)
 float2 HDRViewApp::flip_pixel(float2 pixel, const Box2f &display_window) const
 { return select(m_flip, display_window.max - pixel, pixel); }
 
-float2 HDRViewApp::flip_pixel(float2 pixel) const
-{
-    if (auto img = current_image())
-        return flip_pixel(pixel, Box2f{img->display_window});
-    return pixel;
-}
-
 float2 HDRViewApp::pixel_at_vp_pos(float2 vp_pos) const
-{
-    return flip_pixel((vp_pos - (m_translate + center_offset())) / m_zoom);
-}
+{ return pixel_at_vp_pos(vp_pos, display_window_of(current_image())); }
 
 float2 HDRViewApp::vp_pos_at_pixel(float2 pixel) const
-{
-    return m_zoom * flip_pixel(pixel) + (m_translate + center_offset());
-}
+{ return vp_pos_at_pixel(pixel, display_window_of(current_image())); }
 
 float2 HDRViewApp::pixel_at_vp_pos(float2 vp_pos, const Box2f &display_window) const
 { return flip_pixel((vp_pos - (m_translate + center_offset(display_window))) / m_zoom, display_window); }
@@ -142,7 +134,8 @@ void HDRViewApp::zoom_out()
 void HDRViewApp::reposition_pixel_to_vp_pos(float2 position, float2 pixel)
 {
     // Calculate where the new offset must be in order to satisfy the image position equation.
-    m_translate = position - (flip_pixel(pixel) * m_zoom) - center_offset();
+    const Box2f w = display_window_of(current_image());
+    m_translate   = position - (flip_pixel(pixel, w) * m_zoom) - center_offset(w);
 }
 
 float HDRViewApp::pixel_ratio() const { return ImGui::GetIO().DisplayFramebufferScale.x; }
@@ -154,12 +147,6 @@ float2 HDRViewApp::center_offset(const Box2f &display_window) const
     // window's min corner has to be pulled back to the viewport's margin; flipped, it is
     // zoom*(display_window.max - pixel) + offset, which already puts that corner at zero.
     return (viewport_size() - dw.size()) / 2.f - select(m_flip, float2{0.f}, dw.min);
-}
-
-float2 HDRViewApp::center_offset() const
-{
-    auto img = current_image();
-    return center_offset(img ? Box2f{img->display_window} : Box2f{float2{0.f}, float2{0.f}});
 }
 
 // The quad the image shader samples an image over spans its data window, uv 0 at the min corner and uv 1 at
@@ -288,10 +275,9 @@ static float2 scroll_units(float2 wheel)
 std::optional<float2> HDRViewApp::preview_uv(float2 vp_pos) const
 {
     const EditPreview *preview = edit_preview();
-    auto               img     = current_image();
-    if (!preview || !preview->command || (!preview->window && !img))
+    if (!preview)
         return std::nullopt;
-    const Box2f w = previewed_window(*preview, img);
+    const Box2f w = previewed_window(*preview, current_image());
     return (pixel_at_vp_pos(vp_pos, w) - w.min) / w.size();
 }
 
@@ -379,8 +365,10 @@ void HDRViewApp::handle_mouse_interaction()
             bool         steered = false;
             if (m_steering_preview && !ImGui::IsKeyDown(ImGuiMod_Alt) && m_active_touches < 2)
                 if (const auto from = preview_uv(vp_mouse_pos - delta), to = preview_uv(vp_mouse_pos); from && to)
-                    steered = edit_preview()->command->drag_preview(
-                        *from, *to, previewed_window(*edit_preview(), current_image()).size());
+                {
+                    const EditPreview *p = edit_preview();
+                    steered = p->command->drag_preview(*from, *to, previewed_window(*p, current_image()).size());
+                }
 
             // A second finger means a pinch, while the first still drives a synthesized left-drag, so
             // panning would fight the zoom. The drag is consumed meanwhile: left to accumulate, it would
@@ -388,8 +376,7 @@ void HDRViewApp::handle_mouse_interaction()
             if (!steered && m_active_touches < 2)
             {
                 cancel_autofit = true;
-                reposition_pixel_to_vp_pos(vp_mouse_pos + float2{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)},
-                                           pixel_at_vp_pos(vp_mouse_pos));
+                reposition_pixel_to_vp_pos(vp_mouse_pos + delta, pixel_at_vp_pos(vp_mouse_pos));
             }
             ImGui::ResetMouseDragDelta();
         }

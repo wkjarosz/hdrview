@@ -24,7 +24,8 @@ enum EditExtent : int
 {
     Extent_Pixels = 0,     ///< Pixels within the channels the image already had
     Extent_Structure,      ///< The channel list or the windows: the layer tree is rebuilt and the view refit
-    Extent_StructureInView ///< As Extent_Structure, but the view stays, already framing the result as a preview did
+    Extent_StructureInView ///< As Extent_Structure, but the view stays put, since a preview has already framed the
+                           ///< result
 };
 
 /// Produces a rectangle of one channel, in channel-local coordinates.
@@ -99,12 +100,12 @@ struct EditContext
     bool                                   previewing = false;
     std::function<ViewState()>             view;     ///< The view's zoom and pan.
     std::function<void(const ViewState &)> set_view; ///< Set the view's zoom and pan.
-    /// Fit and center the view on an image whose display window is the given box, as one reshaped to it is framed.
+    /// Fit and center the view on the given display window, as it would frame an image reshaped to it.
     std::function<void(const Box2i &)> fit_view;
 
     /// Filter the subject's channels on a worker, behind a cancellable progress bar; one undoable step.
     std::function<void(const std::string &name, const ChannelFilter &filter)> modify_channels_async;
-    /// The same, resampling every channel into a new size, which replaces the image, reshaping it to the extent given.
+    /// The same, resampling every channel into a new size that replaces the image, refitting the view as extent says.
     std::function<void(const std::string &name, int2 size, const ChannelResampler &op, EditExtent extent)>
         resample_image_async;
 };
@@ -112,8 +113,8 @@ struct EditContext
 /// One undoable edit: what it is called, what it draws, and what it does.
 /**
     Add one by writing a subclass and naming it in the table in commands.cpp. Parameters live as members, so
-    they persist between openings; HDRViewApp::draw_edit_command_dialog() draws the dialog shell, the
-    "Apply to" selector and the Cancel/Confirm footer around draw().
+    they persist between openings; HDRViewApp::draw_edit_command_dialog() draws the dialog shell around draw(): the
+    "Apply to" controls, then a footer of Selection only, Preview and Cancel/Confirm.
 */
 class EditCommand
 {

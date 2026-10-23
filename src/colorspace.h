@@ -345,10 +345,10 @@ using shader::rotate_hue;
 using shader::unnormalize_Lab;
 using shader::XYZ_to_Lab;
 
-/// A saturation scaled by \p saturation, as the matrix blending toward or away from the gray of the same luminance.
+/// The matrix that scales saturation by \p saturation, moving each color toward or away from the gray of its luminance.
 /**
-    1 Yw^T + s (I - 1 Yw^T), with the image's own luminance weights \p Yw: it keeps gray and luminance, and being
-    linear means the same above white and below black, and commutes with premultiplied alpha.
+    s I + (1 - s) 1 Yw^T, with the image's luminance weights \p Yw. It keeps grays and luminance, and being linear it
+    treats values above white and below black alike and commutes with premultiplied alpha.
 */
 float3x3 saturation_matrix(float saturation, float3 Yw);
 

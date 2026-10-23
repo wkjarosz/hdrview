@@ -492,7 +492,7 @@ const char **transparency_type_names() { return s_transparency_type_names; }
 
 float3x3 saturation_matrix(float saturation, float3 Yw)
 {
-    // exactly the identity at 1, which the rounding of the general form would only approach
+    // in this form s = 1 gives exactly the identity
     const float3x3 gray = la::outerprod(float3{1.f}, Yw);
     return saturation * float3x3{la::identity} + (1.f - saturation) * gray;
 }
@@ -853,7 +853,6 @@ Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
     result.white = wpXYZ.xy() / sum(wpXYZ);
     return result;
 }
-
 
 float3 RGB_to_YC(float3 input, float3 Yw)
 {

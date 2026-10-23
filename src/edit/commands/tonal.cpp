@@ -67,10 +67,7 @@ public:
                        "sample keeps its sign.");
     }
 
-    /// The curve the three sliders make, over [0,1] and a little beyond.
-    /**
-        Only the part landing in the plot is drawn, a little past [0,1]; the operation itself is unbounded.
-    */
+    /// The curve the three sliders make, plotted a little past [0,1]; the operation itself is unbounded.
     void draw_curve()
     {
         const float scale = std::pow(2.f, m_exposure);

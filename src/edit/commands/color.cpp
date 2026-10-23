@@ -276,7 +276,8 @@ public:
         ImGui::SliderFloat("Saturation", &m_saturation, -100.f, 100.f, "%+.0f%%");
         ImGui::Tooltip("Move every color toward or away from the gray of its own luminance.");
         ImGui::SliderFloat("Lightness", &m_lightness, -100.f, 100.f, "%+.0f%%");
-        ImGui::Tooltip("Mix toward black, or toward white, or toward a highlight's own level where it is brighter.");
+        ImGui::Tooltip("Darken toward black, or lighten toward white (toward the color's own peak, for colors brighter "
+                       "than white).");
 
         // The wheel as it is and as the settings would leave it.
         /**
@@ -411,10 +412,8 @@ public:
                        "at +1 the curve is vertical and only black and white are left.");
 
         ImGui::Checkbox("Linear", &m_linear);
-        ImGui::Tooltip("A straight line through the midpoint, which runs past black and white, so an HDR sample "
-                       "keeps its difference from its neighbors. Unticked, Schlick's rational s-curve, whose ends "
-                       "flatten as its middle steepens, and which carries on past black and white along its slopes "
-                       "there, so an HDR sample keeps a share of that difference.");
+        ImGui::Tooltip("Use a straight line through the midpoint instead of an s-curve. Both continue past black and "
+                       "white, so HDR values keep contrast there: the line all of it, the s-curve a share.");
         ImGui::SameLine();
         ImGui::Checkbox("Clip to SDR", &m_clip);
         ImGui::Tooltip("Clip what the curve gives to [0, 1], as an SDR image holds it.");
@@ -452,11 +451,7 @@ public:
         return e;
     }
 
-    void apply(const EditContext &ctx) override
-    {
-        if (ctx.image)
-            apply_point_edit(ctx, "Brightness/contrast", *point_edit(ctx));
-    }
+    void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Brightness/contrast", *point_edit(ctx)); }
 
 private:
     /// The slope the contrast slider asks for, as the tangent of an angle.
@@ -486,8 +481,9 @@ private:
 
     /// The midpoint slope that puts the rational s-curve through (\p x, \p y); negative when nothing can.
     /**
-        Each half of Schlick's gain is his bias of a doubled input, which one division inverts for its parameter. The
-        gain's midpoint slope is the curve's divided by the bias's there, 1 / (4 bias (1 - bias)), which this undoes.
+        The curve is Schlick's gain after his bias, and each half of the gain is a bias of a doubled input, so solving
+        for its parameter takes one division. The curve's midpoint slope is the gain's times the bias's,
+        1 / (4 bias (1 - bias)).
     */
     static float rational_slope_through(float x, float y, float bias)
     {

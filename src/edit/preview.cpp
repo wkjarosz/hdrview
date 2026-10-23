@@ -6,6 +6,7 @@
 
 #include "edit/preview.h"
 
+#include "edit/edit_ops.h"
 #include "edit/subject.h"
 #include "image.h"
 #include "shared/edits.h"
@@ -30,14 +31,15 @@ std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext
         return std::nullopt;
     p.M_to_sRGB = cmd.M_to_sRGB_after(ctx);
 
-    // what apply_point_edit() would cover of the group the viewport shows: for a per-sample op, the subject's
-    // channels among those bound to the shader's slots, and for a color op, the group if it is one of the subject's
-    const Image &img   = *ctx.image;
-    const int    shown = img.active_group_index(Target_Primary);
+    // What applying would cover of the group the viewport shows: for a per-sample op or a shift (whose op is
+    // EDIT_NONE), the subject's channels among those bound to the shader's slots; for a color op, the group, if the
+    // subject includes it. Within the subject's rectangle, either way.
+    const Image &img             = *ctx.image;
+    const int    shown           = img.active_group_index(Target_Primary);
+    const auto [subject, bounds] = resolve_subject(ctx.image, ctx.subject, ctx.roi);
     if (p.edit.op < shader::EDIT_FIRST_COLOR)
     {
-        const auto subject = subject_channels(img, ctx.subject);
-        const int4 slots   = img.shader_slots(Target_Primary);
+        const int4 slots = img.shader_slots(Target_Primary);
         for (int k = 0; k < 4; ++k)
             if (slots[k] >= 0)
                 if (auto it = std::find(subject.begin(), subject.end(), img.groups[shown].channels[slots[k]]);
@@ -50,10 +52,7 @@ std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext
         p.color           = std::find(groups.begin(), groups.end(), shown) != groups.end();
     }
 
-    // the subject's rectangle, as resolve_subject() bounds it, in the uv the channel textures span
-    Box2i bounds = img.data_window;
-    if (ctx.subject.selection_only && ctx.roi.has_volume())
-        bounds.intersect(ctx.roi);
+    // the rectangle in the uv the channel textures span
     const float2 size = float2(img.data_window.size());
     const float2 lo   = float2(bounds.min - img.data_window.min) / size,
                  hi   = float2(bounds.max - img.data_window.min) / size;

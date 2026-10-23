@@ -235,7 +235,7 @@ public:
     std::vector<ImagePtr> edit_command_images(const EditCommand &cmd);
     /// Whether \p cmd could run now: the image accepts edits, and the command itself is satisfied.
     bool edit_command_enabled(const EditCommand &cmd);
-    /// The shell, the "Apply to" selector and the Cancel/Confirm footer that every command's dialog wears.
+    /// Every command's dialog shell: "Apply to", then Selection only, Preview and Cancel/Confirm.
     void draw_edit_command_dialog(EditCommand &cmd, bool &open);
 
     /// The preview an edit dialog asked for this frame or the last, or none.
@@ -332,7 +332,7 @@ public:
     float2 pixel_at_vp_pos(float2 vp_pos) const;
     /// Calculates the position inside the viewport for the given image pixel coordinate.
     float2 vp_pos_at_pixel(float2 pixel) const;
-    /// Where \p vp_pos falls in the uv of the image a preview steered by drags shows, or none without one.
+    /// Where \p vp_pos falls in the uv of the image an edit's preview shows, or none without a preview.
     std::optional<float2> preview_uv(float2 vp_pos) const;
     /// pixel_at_vp_pos() for an image whose display window is \p display_window, in place of the current image's.
     float2 pixel_at_vp_pos(float2 vp_pos, const Box2f &display_window) const;
@@ -350,12 +350,10 @@ public:
     /// Reposition the image so that the specified image pixel coordinate lies under the provided viewport position
     void reposition_pixel_to_vp_pos(float2 vp_pos, float2 pixel);
 
-    /// Mirrors a pixel coordinate about the current image's display window along the flipped axes.
+    /// Mirrors a pixel coordinate about \p display_window along the flipped axes.
     /**
         An involution, and the only place the flip enters the pixel <-> viewport transforms.
     */
-    float2 flip_pixel(float2 pixel) const;
-    /// flip_pixel() about \p display_window, in place of the current image's.
     float2 flip_pixel(float2 pixel, const Box2f &display_window) const;
 
     /// Where the quad the image shader samples \p img over starts, as a fraction of the viewport.
@@ -387,13 +385,14 @@ public:
     /// The most recently hovered image pixel while the mouse was over the viewport.
     /**
         Held once the mouse moves elsewhere so hover-driven widgets stay interactable while it travels to
-        them. nullopt only if the viewport has never been hovered this session.
+        them. nullopt if the viewport has never been hovered this session, and while an edit is previewed, when the
+        stored values under the cursor are not what is shown.
     */
     optional<int2> last_hovered_pixel()
     {
         if (mouse_over_viewport())
             m_last_hovered_pixel = int2{pixel_at_app_pos(ImGui::GetIO().MousePos)};
-        return m_last_hovered_pixel;
+        return edit_preview() ? std::nullopt : m_last_hovered_pixel;
     }
     //-----------------------------------------------------------------------------
 
@@ -663,9 +662,7 @@ private:
 
     void   handle_mouse_interaction();
     void   calculate_viewport();
-    /// The offset that centers the current image's display window in the viewport, at the view's zoom.
-    float2 center_offset() const;
-    /// center_offset() for \p display_window, in place of the current image's.
+    /// The offset that centers \p display_window in the viewport, at the view's zoom.
     float2 center_offset(const Box2f &display_window) const;
 
     void draw_background();
@@ -949,13 +946,13 @@ private:
     float2    m_translate          = {0.f, 0.f};     ///< The panning offset of the image
     Channels_ m_channel            = Channels_::Channels_RGBA; ///< Which channel to display
 
-    float2         m_viewport_min, m_viewport_size;
-    int  m_navigable_dialog_frame = -2;    ///< the last frame a save or edit dialog showed, for the viewport around it
-    bool m_dragging_around_dialog = false; ///< whether the left button went down in the viewport, around it
-    bool        m_steering_preview = false; ///< whether it went down on a preview that takes drags, which it steers
-    EditPreview m_edit_preview;                   ///< see edit_preview()
-    int         m_edit_preview_frame = -2;        ///< the last frame an edit dialog asked for it, or k_preview_held
-    optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()
+    float2 m_viewport_min, m_viewport_size;
+    int    m_navigable_dialog_frame = -2; ///< the last frame a save or edit dialog showed, for the viewport around it
+    bool   m_dragging_around_dialog = false;  ///< whether the left button went down in the viewport, around it
+    bool   m_steering_preview       = false;  ///< whether it went down on a preview that takes drags, which it steers
+    EditPreview    m_edit_preview;            ///< see edit_preview()
+    int            m_edit_preview_frame = -2; ///< the last frame an edit dialog asked for it, or k_preview_held
+    optional<int2> m_last_hovered_pixel;      ///< see last_hovered_pixel()
 
     /// Index of the annotation being worked on, or -1 when none on the current image is.
     int  active_annotation() const;

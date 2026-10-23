@@ -241,8 +241,7 @@ void HDRViewApp::draw_status_bar()
         // while the cursor travels to it
         if (hover_x + hover_w + item_spacing <= zoom_visual_x)
         {
-            // not while an edit is previewed, when the pixel under the cursor no longer holds what is shown
-            if (auto hp = last_hovered_pixel(); hp && !edit_preview())
+            if (auto hp = last_hovered_pixel())
             {
                 auto hovered_pixel = *hp;
 

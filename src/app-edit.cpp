@@ -187,10 +187,10 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
         // the window from its contents and ignores a size set from outside
         ImGui::Dummy(ImVec2(info.width_em * HelloImGui::EmSize(), 0.f));
 
-        // A point-wise edit, a shift or a remap is previewed in the viewport as the controls move, by the same code
-        // that applies it. Its command is told, before it draws, whether it is.
-        static bool preview    = true;
-        const bool previewable = (cmd.point_edit(ctx) || cmd.remap_preview(ctx) || cmd.shift_preview(ctx)) && ctx.image;
+        // Point-wise edits, shifts and remaps preview in the viewport as the controls move, through the code that
+        // applies them; ctx.previewing tells the command, before it draws, whether this one does.
+        static bool preview     = true;
+        const bool  previewable = make_edit_preview(cmd, ctx).has_value();
         ctx.previewing         = preview && previewable;
 
         cmd.draw(ctx);
@@ -398,7 +398,7 @@ struct HDRViewApp::RunningFilter
     /// Filters one of `channels`, given its index among them and a share of the progress bar.
     std::function<Array2Df(const Array2Df &, int, AtomicProgress)> filter;
 
-    int2                  new_size{0}; ///< The size of the results; zero keeps the image's shape.
+    int2                  new_size{0};               ///< The size of the results; zero keeps the image's shape.
     EditExtent            extent = Extent_Structure; ///< How a reshaping lands, whether the view refits to it
     std::vector<Array2Df> results;
     AtomicProgress        progress{true};

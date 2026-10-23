@@ -332,8 +332,8 @@ endfunction()
 # =====================================================================================
 include(cmake/SokolShaderCompiler.cmake)
 
-# Headers under src/shared/ that the shaders @include, compiled as C++ too (see src/shared/shim.h)
-# every header the shaders @include, globbed so that one added later recompiles them too
+# The headers under src/shared/ that the shaders @include and C++ compiles too (see src/shared/shim.h), globbed so a
+# new one is picked up
 file(GLOB HDRVIEW_SHARED_SHADER_HEADERS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/*.h)
 
 # Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime.

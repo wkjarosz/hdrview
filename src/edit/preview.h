@@ -32,8 +32,8 @@ struct EditPreview
 
 /// The preview of \p cmd as applying it in \p ctx would change its image, or none for a command that has none.
 /**
-    For a point-wise edit or a shift, the subject's channels among those the shader shows of the image's active group,
-    or the group itself if a color op reaches it, within the subject's rectangle, as apply_point_edit() and
-    modify_channels_async() cover them.
+    A point-wise edit or a shift covers what apply_point_edit() or modify_channels_async() would: within the subject's
+    rectangle, the subject's channels among those the shader shows, or for a color op the shown group, if the subject
+    includes it.
 */
 std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext &ctx);
