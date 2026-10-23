@@ -239,12 +239,6 @@ public:
 
     /// The preview an edit dialog asked for this frame or the last, or none.
     const EditPreview *edit_preview() const;
-    /// The display window of the image a reshaping edit's preview shows in place of the current one, or none.
-    const Box2i *preview_window() const
-    {
-        const EditPreview *p = edit_preview();
-        return p && p->window ? &*p->window : nullptr;
-    }
 
     /// Draws the "apply to" controls inline, for a dialog that carries them beside its own parameters.
     void draw_edit_subject_selector();

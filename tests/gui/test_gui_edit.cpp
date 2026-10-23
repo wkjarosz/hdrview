@@ -695,7 +695,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         };
         auto corners = [&]
         {
-            const Box2f w{*app->preview_window()};
+            const Box2f w{*app->edit_preview()->window};
             return std::pair{app->vp_pos_at_pixel(w.min, w), app->vp_pos_at_pixel(w.max, w)};
         };
         const auto shown = remap();

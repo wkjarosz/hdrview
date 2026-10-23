@@ -16,6 +16,13 @@
 
 using namespace std;
 
+namespace
+{
+/// The display window of the image a reshaping edit's preview shows in place of the current one, or none.
+const Box2i *reshaped_window(const EditPreview *preview)
+{ return preview && preview->window ? &*preview->window : nullptr; }
+} // namespace
+
 void HDRViewApp::draw_pixel_grid() const
 {
     if (!current_image())
@@ -159,7 +166,7 @@ void HDRViewApp::draw_image_border() const
     if (!cimg && !rimg)
         return;
 
-    if (const Box2i *window = preview_window())
+    if (const Box2i *window = reshaped_window(edit_preview()))
     {
         // a reshaping edit's preview shows the result's window, which is all of the current image the view shows
         const Box2f w{*window};
@@ -209,7 +216,7 @@ void HDRViewApp::draw_image_border() const
         ImGui::PopStyleColor(3);
     }
 
-    if (m_roi_live.has_volume() && !preview_window())
+    if (m_roi_live.has_volume() && !reshaped_window(edit_preview()))
     {
         Box2f crop_window{app_pos_at_pixel(float2{m_roi_live.min}), app_pos_at_pixel(float2{m_roi_live.max})};
         ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
@@ -447,7 +454,7 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.edit_m1", pad(edit.edit.m1));
 
         // a reshaping edit's preview lays the quad over the window the result will have, as the view will show it
-        if (const Box2i *window = preview_window())
+        if (const Box2i *window = reshaped_window(edit_preview()))
         {
             const Box2f  w{*window};
             const float2 lo = vp_pos_at_pixel(w.min, w), hi = vp_pos_at_pixel(w.max, w);
@@ -564,7 +571,7 @@ void HDRViewApp::draw_background()
 
         // what is drawn in the current image's pixels has nowhere to go over a reshaping edit's preview, which shows
         // the result; the border then outlines that
-        const bool reshaped = preview_window() != nullptr;
+        const bool reshaped = reshaped_window(edit_preview()) != nullptr;
         draw_pixel_info();
         if (!reshaped)
             draw_pixel_grid();
