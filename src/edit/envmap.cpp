@@ -454,8 +454,9 @@ EWAFootprint choose_ewa_levels(float2 du, float2 dv, float2 base, int num_levels
 class EnvSource
 {
 public:
-    /// \p with_mips builds the levels EWA needs; point sampling reads only the finest.
-    EnvSource(const Array2Df &src, EnvMapping mapping, bool with_mips) : m_src(src), m_mapping(mapping)
+    /// \p with_mips builds the levels EWA needs; point sampling reads only the finest. EWA reads through \p rotation.
+    EnvSource(const Array2Df &src, EnvMapping mapping, bool with_mips, const float3x3 &rotation) :
+        m_src(src), m_mapping(mapping), m_rotation(rotation)
     {
         if (is_cube(mapping))
         {
@@ -482,7 +483,7 @@ public:
     */
     float ewa(EnvMapping dst, float2 uv, float2 delta_u, float2 delta_v, int max_aniso) const
     {
-        const float3 d = envmap_uv_to_xyz(dst, uv);
+        const float3 d = direction(dst, uv);
 
         if (!m_faces.empty())
             return ewa_on_face(dst, uv, d, delta_u, delta_v, max_aniso);
@@ -493,8 +494,8 @@ public:
         const float2 c    = envmap_xyz_to_uv(m_mapping, d);
         auto         step = [&](float2 delta)
         {
-            const float2 fwd = convert_envmap_uv(m_mapping, dst, uv + delta) - c;
-            const float2 bwd = c - convert_envmap_uv(m_mapping, dst, uv - delta);
+            const float2 fwd = envmap_xyz_to_uv(m_mapping, direction(dst, uv + delta)) - c;
+            const float2 bwd = c - envmap_xyz_to_uv(m_mapping, direction(dst, uv - delta));
             return la::length2(fwd) <= la::length2(bwd) ? fwd : bwd;
         };
 
@@ -511,6 +512,9 @@ public:
     }
 
 private:
+    /// The source's direction for \p uv in the \p dst mapping, turned as the remap turns it.
+    float3 direction(EnvMapping dst, float2 uv) const { return mul(m_rotation, envmap_uv_to_xyz(dst, uv)); }
+
     int num_levels() const { return std::max(1, int(m_levels.size())); }
 
     /// Level \p i of the whole-image pyramid; the source itself when there is none, it being level 0.
@@ -568,8 +572,8 @@ private:
         // somewhere else in the image. Smaller of the two differences, as above.
         auto step = [&](float2 delta)
         {
-            const float2 fwd = cube_face_st(face, envmap_uv_to_xyz(dst, uv + delta)) - st;
-            const float2 bwd = st - cube_face_st(face, envmap_uv_to_xyz(dst, uv - delta));
+            const float2 fwd = cube_face_st(face, direction(dst, uv + delta)) - st;
+            const float2 bwd = st - cube_face_st(face, direction(dst, uv - delta));
             return la::length2(fwd) <= la::length2(bwd) ? fwd : bwd;
         };
 
@@ -587,13 +591,48 @@ private:
 
     const Array2Df        &m_src;
     EnvMapping             m_mapping;
+    float3x3               m_rotation;
     std::vector<Array2Df>  m_levels; ///< The whole image, for every mapping but a cube map
     std::vector<CubeLevel> m_faces;  ///< Six ringed faces per level, for a cube map
 };
 } // namespace
 
+float3x3 envmap_rotation(float yaw, float pitch, float roll)
+{
+    const float cy = std::cos(yaw), sy = std::sin(yaw), cp = std::cos(pitch), sp = std::sin(pitch);
+    const float cr = std::cos(roll), sr = std::sin(roll);
+    // columns, as linalg stores them, of Ry(yaw) Rx(pitch) Rz(roll)
+    return float3x3{float3{cy * cr + sy * sp * sr, cp * sr, -sy * cr + cy * sp * sr},
+                    float3{-cy * sr + sy * sp * cr, cp * cr, sy * sr + cy * sp * cr}, float3{sy * cp, -sp, cy * cp}};
+}
+
+float3 envmap_euler(const float3x3 &R)
+{
+    // R[column][row]: the third column's middle row is -sin(pitch), and with it the rest of that column and row
+    // give the yaw and the roll, until the pitch reaches a quarter turn and they turn about the same axis
+    const float pitch = std::asin(std::clamp(-R[2][1], -1.f, 1.f));
+    if (std::abs(R[2][1]) > 1.f - 1e-6f)
+        return float3{std::atan2(-R[0][2], R[0][0]), pitch, 0.f};
+    return float3{std::atan2(R[2][0], R[2][2]), pitch, std::atan2(R[0][1], R[1][1])};
+}
+
+float4 rotation_between(float3 from, float3 to)
+{
+    // a quaternion of half the angle, from the cross product's axis and the dot product's cosine; opposite
+    // directions, where both vanish, turn a half turn about any axis perpendicular to them
+    const float c = la::dot(from, to);
+    if (c < -1.f + 1e-6f)
+    {
+        float3 axis = la::cross(from, float3{1.f, 0.f, 0.f});
+        if (la::length2(axis) < 1e-6f)
+            axis = la::cross(from, float3{0.f, 1.f, 0.f});
+        return float4{la::normalize(axis), 0.f};
+    }
+    return la::normalize(float4{la::cross(from, to), 1.f + c});
+}
+
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         EnvMapSampling sampling, int supersample, AtomicProgress progress)
+                         EnvMapSampling sampling, int supersample, const float3x3 &rotation, AtomicProgress progress)
 {
     Array2Df out{size};
 
@@ -603,7 +642,7 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 
     // prepared once for the whole remap: the levels EWA reads, and, for a cube map, the six faces both
     // samplers read instead of the cross
-    const EnvSource source{src, src_mapping, sampling == EnvMapSampling_EWA};
+    const EnvSource source{src, src_mapping, sampling == EnvMapSampling_EWA, rotation};
 
     progress.set_num_steps(size.y);
 
@@ -640,7 +679,7 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                                 dst_mapping, float2{(float(x) + (float(sx) + 0.5f) / float(ss)) / float(size.x),
                                                     (float(y) + (float(sy) + 0.5f) / float(ss)) / float(size.y)});
 
-                            sum += source.point(envmap_uv_to_xyz(dst_mapping, s_uv));
+                            sum += source.point(mul(rotation, envmap_uv_to_xyz(dst_mapping, s_uv)));
                         }
                     out(x, y) = sum * inv;
                 }

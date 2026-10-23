@@ -12,13 +12,14 @@
 
 #include <algorithm>
 
-std::optional<EditPreview> make_edit_preview(const EditCommand &cmd, const EditContext &ctx)
+std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext &ctx)
 {
     if (!ctx.image)
         return std::nullopt;
 
     EditPreview p;
-    p.remap = cmd.remap_preview(ctx);
+    p.command = &cmd;
+    p.remap   = cmd.remap_preview(ctx);
     // a remap's result keeps the data window's corner, as resample_image_async() leaves it
     if (p.remap)
         p.window = Box2i{ctx.image->data_window.min, ctx.image->data_window.min + p.remap->size};

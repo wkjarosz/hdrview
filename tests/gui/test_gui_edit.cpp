@@ -9,6 +9,7 @@
 #include "app.h"
 #include "colorspace.h"
 #include "edit/commands.h"
+#include "edit/envmap.h"
 #include "edit/filters.h"
 #include "fonts.h"
 #include "image.h"
@@ -719,12 +720,59 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // result lands where its preview was.
         IM_CHECK_EQ(app->zoom(), std::min(app->viewport_size().x / float(shown->size.x),
                                           app->viewport_size().y / float(shown->size.y)));
-        const float2 corner = app->app_pos_at_vp_pos(float2{HelloImGui::EmSize(2.f)});
-        ctx->MouseMoveToPos(ImVec2(corner));
-        ctx->MouseDown(ImGuiMouseButton_Left);
-        ctx->MouseMoveToPos(ImVec2(corner + float2{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)}));
-        ctx->MouseUp(ImGuiMouseButton_Left);
-        ctx->Yield(2);
+        // A plain drag begun on the preview turns the sphere and leaves the view where it was; with Alt held, it
+        // pans the view instead and leaves the sphere alone.
+        auto drag = [&](float2 from, ImGuiKeyChord mods)
+        {
+            if (mods)
+                ctx->KeyDown(mods);
+            ctx->MouseMoveToPos(ImVec2(from));
+            ctx->MouseDown(ImGuiMouseButton_Left);
+            ctx->MouseMoveToPos(ImVec2(from + float2{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)}));
+            ctx->MouseUp(ImGuiMouseButton_Left);
+            if (mods)
+                ctx->KeyUp(mods);
+            ctx->Yield(2);
+        };
+        {
+            const auto [lo0, hi0] = corners();
+            // on the output, in the viewport, and clear of the dialog, which is centered over it
+            ImGuiWindow *dialog = ctx->WindowInfo("//Remap envmap...").Window;
+            float2       on{0.f};
+            for (const float2 t : {float2{0.1f, 0.5f}, float2{0.9f, 0.5f}, float2{0.5f, 0.1f}, float2{0.5f, 0.9f}})
+            {
+                const float2 vp      = la::lerp(lo0, hi0, t);
+                const float2 app_pos = app->app_pos_at_vp_pos(vp);
+                if (app->vp_pos_in_viewport(vp) && dialog && !dialog->Rect().Contains(ImVec2(app_pos)))
+                {
+                    on = app_pos;
+                    break;
+                }
+            }
+            IM_CHECK(on != float2{0.f});
+            // what the source shows at a point of the preview, under the remap's rotation
+            auto seen = [&](float2 app_pos, const float3x3 &R)
+            {
+                const auto uv = app->preview_uv(app->vp_pos_at_app_pos(app_pos));
+                return mul(R, envmap_uv_to_xyz(EnvMapping_LatLong, uv ? *uv : float2{0.f}));
+            };
+            const float3x3 before_turn = remap()->rotation;
+            const float2   end         = on + float2{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)};
+            const float3   grabbed     = seen(on, before_turn);
+            drag(on, 0);
+            const float3 unturned{1.f, 0.f, 0.f};
+            IM_CHECK(remap().has_value() && remap()->rotation[0] != unturned);
+            // and what was under the cursor where the drag began is under it where the drag ended
+            IM_CHECK(la::length(seen(end, remap()->rotation) - grabbed) < 2e-2f);
+            const auto [lo1, hi1] = corners();
+            IM_CHECK(la::length(lo1 - lo0) < 1e-3f);
+
+            const float3x3 turned = remap()->rotation;
+            drag(on, ImGuiMod_Alt);
+            IM_CHECK(remap()->rotation[0] == turned[0] && remap()->rotation[1] == turned[1]);
+            const auto [lo2, hi2] = corners();
+            IM_CHECK(la::length(lo2 - lo1) > 1.f);
+        }
         const auto [plo, phi] = corners();
 
         ctx->ItemClick("Remap");

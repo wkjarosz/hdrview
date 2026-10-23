@@ -331,6 +331,10 @@ public:
     float2 pixel_at_vp_pos(float2 vp_pos) const;
     /// Calculates the position inside the viewport for the given image pixel coordinate.
     float2 vp_pos_at_pixel(float2 pixel) const;
+    /// Where \p vp_pos falls in the uv of the image a preview steered by drags shows, or none without one.
+    std::optional<float2> preview_uv(float2 vp_pos) const;
+    /// pixel_at_vp_pos() for an image whose display window is \p display_window, in place of the current image's.
+    float2 pixel_at_vp_pos(float2 vp_pos, const Box2f &display_window) const;
     /// vp_pos_at_pixel() for an image whose display window is \p display_window, in place of the current image's.
     float2 vp_pos_at_pixel(float2 pixel, const Box2f &display_window) const;
     /// Calculates the app position at the given image pixel coordinate.
@@ -947,6 +951,7 @@ private:
     float2         m_viewport_min, m_viewport_size;
     int  m_navigable_dialog_frame = -2;    ///< the last frame a save or edit dialog showed, for the viewport around it
     bool m_dragging_around_dialog = false; ///< whether the left button went down in the viewport, around it
+    bool        m_steering_preview = false; ///< whether it went down on a preview that takes drags, which it steers
     EditPreview m_edit_preview;                   ///< see edit_preview()
     int         m_edit_preview_frame = -2;        ///< the last frame an edit dialog asked for m_edit_preview
     optional<int2> m_last_hovered_pixel; ///< see last_hovered_pixel()

@@ -108,6 +108,25 @@ public:
                 m_size.y = std::max(1, int(std::lround(double(m_size.x) / double(aspect))));
         }
 
+        // The rotation, as yaw, pitch and roll, which a drag across the preview turns too. Held as a quaternion, so
+        // that drags compose without drifting, and shown in degrees.
+        float3 angles = envmap_euler(la::qmat(m_rotation)) * (180.f / float(M_PI)), before_angles = angles;
+        ImGui::SliderFloat("Yaw", &angles.x, -180.f, 180.f, "%.1f deg");
+        ImGui::Tooltip("Turn the sphere about its up axis, which slides a lat-long sideways.");
+        ImGui::SliderFloat("Pitch", &angles.y, -90.f, 90.f, "%.1f deg");
+        ImGui::Tooltip("Tip the sphere forward or back.");
+        ImGui::SliderFloat("Roll", &angles.z, -180.f, 180.f, "%.1f deg");
+        ImGui::Tooltip("Turn the sphere about the forward axis.");
+        if (angles != before_angles)
+        {
+            const float3 r = angles * (float(M_PI) / 180.f);
+            m_rotation     = la::rotation_quat(envmap_rotation(r.x, r.y, r.z));
+        }
+        if (ImGui::Button("Reset rotation"))
+            m_rotation = float4{0.f, 0.f, 0.f, 1.f};
+        ImGui::Tooltip("Drag across the preview to turn the sphere, keeping what is under the cursor under it; "
+                       "Alt-drag pans the view instead.");
+
         ImGui::RadioButton("EWA", &m_sampling, EnvMapSampling_EWA);
         ImGui::Tooltip("Reads a mip pyramid through an ellipse shaped by the area each output pixel covers "
                        "in the source. That area is far wider than it is tall near a lat-long's poles, "
@@ -156,12 +175,24 @@ public:
     {
         if (m_size.x <= 0 || m_size.y <= 0)
             return std::nullopt;
-        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size};
+        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size, la::qmat(m_rotation)};
+    }
+
+    /// Turns the sphere so that what was seen at \p from is seen at \p to.
+    bool drag_preview(float2 from, float2 to) override
+    {
+        // the rotation that takes the result's direction at to onto the one at from, applied before the turn so
+        // far, so that the source seen at from comes to be seen at to
+        const auto d  = EnvMapping(m_dst_mapping);
+        const auto at = [d](float2 uv) { return envmap_uv_to_xyz(d, nearest_valid_envmap_uv(d, uv)); };
+        m_rotation    = la::normalize(la::qmul(m_rotation, rotation_between(at(to), at(from))));
+        return true;
     }
 
     void apply(const EditContext &ctx) override
     {
         const auto s = EnvMapping(m_src_mapping), d = EnvMapping(m_dst_mapping);
+        const auto rotation = la::qmat(m_rotation);
         const int2 out_size = m_size;
         const int  ss       = m_supersample;
         const auto mode     = EnvMapSampling(m_sampling);
@@ -170,8 +201,8 @@ public:
             return;
 
         ctx.resample_image_async(
-            "Remap envmap", out_size, [s, d, out_size, ss, mode](const Array2Df &src, AtomicProgress p)
-            { return remapped_envmap(src, out_size, d, s, mode, ss, p); },
+            "Remap envmap", out_size, [s, d, out_size, ss, mode, rotation](const Array2Df &src, AtomicProgress p)
+            { return remapped_envmap(src, out_size, d, s, mode, ss, rotation, p); },
             framing() ? Extent_StructureInView : Extent_Structure);
         m_applied = true;
     }
@@ -182,6 +213,7 @@ private:
     /// Whether a preview has the view framing the output.
     bool framing() const { return m_framed.has_volume(); }
 
+    float4    m_rotation{0.f, 0.f, 0.f, 1.f}; ///< As a unit quaternion (x, y, z, w), turning the result into the source
     ViewState m_view;   ///< What the view was before a preview took it over
     Box2i     m_framed; ///< The output window the view was last fit to, while a preview frames it
     bool      m_applied = false;

@@ -34,6 +34,9 @@ float2 HDRViewApp::vp_pos_at_pixel(float2 pixel) const
     return m_zoom * flip_pixel(pixel) + (m_translate + center_offset());
 }
 
+float2 HDRViewApp::pixel_at_vp_pos(float2 vp_pos, const Box2f &display_window) const
+{ return flip_pixel((vp_pos - (m_translate + center_offset(display_window))) / m_zoom, display_window); }
+
 float2 HDRViewApp::vp_pos_at_pixel(float2 pixel, const Box2f &display_window) const
 { return m_zoom * flip_pixel(pixel, display_window) + (m_translate + center_offset(display_window)); }
 
@@ -275,6 +278,17 @@ static float2 scroll_units(float2 wheel)
     return discrete ? wheel * k_units_per_notch : wheel;
 }
 
+std::optional<float2> HDRViewApp::preview_uv(float2 vp_pos) const
+{
+    // the image previewed is a reshaping edit's result, or else the current image, as drawn
+    const EditPreview *preview = edit_preview();
+    auto               img     = current_image();
+    if (!preview || !preview->command || (!preview->window && !img))
+        return std::nullopt;
+    const Box2f w = preview->window ? Box2f{*preview->window} : Box2f{img->display_window};
+    return (pixel_at_vp_pos(vp_pos, w) - w.min) / w.size();
+}
+
 void HDRViewApp::handle_mouse_interaction()
 {
     auto &io = ImGui::GetIO();
@@ -290,9 +304,14 @@ void HDRViewApp::handle_mouse_interaction()
         const bool around = ImGui::GetFrameCount() - m_navigable_dialog_frame <= 1 &&
                             app_pos_in_viewport(io.MousePos) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
             m_dragging_around_dialog = around;
+            // a drag begun on a preview that takes drags steers it to the end, and one begun beside it pans
+            const auto at      = preview_uv(vp_pos_at_app_pos(io.MousePos));
+            m_steering_preview = around && at && all(gequal(*at, float2{0.f})) && all(lequal(*at, float2{1.f}));
+        }
         else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
-            m_dragging_around_dialog = false;
+            m_dragging_around_dialog = m_steering_preview = false;
         if (!around && !m_dragging_around_dialog)
             return;
         navigate_only = true;
@@ -348,10 +367,18 @@ void HDRViewApp::handle_mouse_interaction()
     {
         if (may_drag && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
         {
+            // A drag begun on a preview that takes drags steers it, from where the drag last was to where it is, in
+            // the uv of the image previewed; Alt pans the view over it instead.
+            const float2 delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
+            bool         steered = false;
+            if (m_steering_preview && !ImGui::IsKeyDown(ImGuiMod_Alt) && m_active_touches < 2)
+                if (const auto from = preview_uv(vp_mouse_pos - delta), to = preview_uv(vp_mouse_pos); from && to)
+                    steered = edit_preview()->command->drag_preview(*from, *to);
+
             // A second finger means a pinch, while the first still drives a synthesized left-drag, so
             // panning would fight the zoom. The drag is consumed meanwhile: left to accumulate, it would
             // pan by the whole pinch's travel the moment a finger lifts.
-            if (m_active_touches < 2)
+            if (!steered && m_active_touches < 2)
             {
                 cancel_autofit = true;
                 reposition_pixel_to_vp_pos(vp_mouse_pos + float2{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)},

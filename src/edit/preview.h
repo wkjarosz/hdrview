@@ -26,6 +26,7 @@ struct EditPreview
     std::optional<float3x3>    M_to_sRGB; ///< What the image shows its samples through once the edit retags them
     std::optional<EnvmapRemap> remap;     ///< A remap of the whole image, in place of a point-wise edit
     std::optional<Box2i>       window;    ///< The display window of the image shown in place of this one, if reshaped
+    EditCommand               *command = nullptr; ///< The command previewed, which a drag over the preview may steer
 };
 
 /// The preview of \p cmd as applying it in \p ctx would change its image, or none for a command that has none.
@@ -33,4 +34,4 @@ struct EditPreview
     For a point-wise edit, the subject's channels among those the shader shows of the image's active group, or the
     group itself if a color op reaches it, within the subject's rectangle, as apply_point_edit() covers them.
 */
-std::optional<EditPreview> make_edit_preview(const EditCommand &cmd, const EditContext &ctx);
+std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext &ctx);

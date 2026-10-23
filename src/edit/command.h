@@ -50,8 +50,9 @@ struct PointEdit
 /// An environment map remap, as the image shader previews it: the image read as one mapping and shown as another.
 struct EnvmapRemap
 {
-    int  src = 0, dst = 0; ///< EnvMapping values: what the image is, and what it becomes
-    int2 size{0};          ///< The size it becomes
+    int      src = 0, dst = 0;       ///< EnvMapping values: what the image is, and what it becomes
+    int2     size{0};                ///< The size it becomes
+    float3x3 rotation{la::identity}; ///< Turns a direction of the result into the source's
 };
 
 /// The view's zoom and pan, which an edit dialog previewing a reshaped image takes over and gives back.
@@ -140,6 +141,11 @@ public:
     virtual std::optional<PointEdit> point_edit(const EditContext &) const { return std::nullopt; }
     /// The envmap remap this command makes with its current settings, for the viewport to preview, or none.
     virtual std::optional<EnvmapRemap> remap_preview(const EditContext &) const { return std::nullopt; }
+    /// Steer the preview by a drag over it from \p from to \p to, in the previewed image's uv; whether it did.
+    /**
+        Only while the command's dialog previews it. A drag it does not take pans the viewport as usual.
+    */
+    virtual bool drag_preview(float2 /*from*/, float2 /*to*/) { return false; }
     /// The matrix the image shows its samples through once this edit has retagged them, or none if it leaves the tag.
     virtual std::optional<float3x3> M_to_sRGB_after(const EditContext &) const { return std::nullopt; }
 

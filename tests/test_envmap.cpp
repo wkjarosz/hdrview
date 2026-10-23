@@ -215,40 +215,86 @@ TEST_CASE("The Jacobian agrees with how far the direction actually moves")
 
 TEST_CASE("Remapping carries a value with the direction it belongs to")
 {
-    // if the source holds a smooth function of direction, every destination sample holds that same function
-    // of its own direction, whatever the two parameterizations were
-    for (int src_m = 0; src_m < EnvMapping_COUNT; ++src_m)
-        for (int dst_m = 0; dst_m < EnvMapping_COUNT; ++dst_m)
-        {
-            CAPTURE(std::string(name_of(src_m)));
-            CAPTURE(std::string(name_of(dst_m)));
-
-            // smooth and low-frequency, so resampling blur cannot account for a mismatch
-            auto f = [](float3 d) { return 0.5f + 0.25f * d.y + 0.15f * d.x; };
-
-            const Array2Df src = make_envmap(size_for(src_m), EnvMapping(src_m), f);
-
-            for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+    // if the source holds a smooth function of direction, every destination sample holds that same function of its
+    // own direction turned by the remap's rotation, whatever the two parameterizations were
+    const float3x3 rotations[] = {float3x3{la::identity}, envmap_rotation(0.7f, -0.4f, 1.1f)};
+    for (const float3x3 &R : rotations)
+        for (int src_m = 0; src_m < EnvMapping_COUNT; ++src_m)
+            for (int dst_m = 0; dst_m < EnvMapping_COUNT; ++dst_m)
             {
-                CAPTURE(sampler);
+                CAPTURE(std::string(name_of(src_m)));
+                CAPTURE(std::string(name_of(dst_m)));
+                CAPTURE(R[0][0]);
 
-                const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m),
-                                                     EnvMapSampling(sampler), 4);
+                // smooth and low-frequency, so resampling blur cannot account for a mismatch
+                auto f = [](float3 d) { return 0.5f + 0.25f * d.y + 0.15f * d.x; };
 
-                // away from the edges, where the disc mappings run out of sphere and the cube cross is empty
-                for (int y = 12; y < 36; ++y)
-                    for (int x = 12; x < 36; ++x)
-                    {
-                        const float2 uv{(x + 0.5f) / 48.f, (y + 0.5f) / 48.f};
-                        // only where the destination has a direction at all
-                        if (!envmap_uv_is_valid(EnvMapping(dst_m), uv))
-                            continue;
+                const Array2Df src = make_envmap(size_for(src_m), EnvMapping(src_m), f);
 
-                        CAPTURE(x);
-                        CAPTURE(y);
-                        CHECK(out(x, y) == doctest::Approx(f(envmap_uv_to_xyz(EnvMapping(dst_m), uv))).epsilon(0.05));
-                    }
+                for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+                {
+                    CAPTURE(sampler);
+
+                    // EWA fits its ellipse to the footprint's derivatives on one side, which the equal-area square's
+                    // fold, a crease where two of its sides meet, does not continue; a rotation can carry a large
+                    // footprint onto it, where it reads the wrong part of the sphere, so there point sampling alone
+                    // is held to the rotation
+                    if (sampler == EnvMapSampling_EWA && src_m == EnvMapping_EqualArea &&
+                        R[0] != float3{1.f, 0.f, 0.f})
+                        continue;
+
+                    const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m),
+                                                         EnvMapSampling(sampler), 4, R);
+
+                    // away from the edges, where the disc mappings run out of sphere and the cube cross is empty
+                    for (int y = 12; y < 36; ++y)
+                        for (int x = 12; x < 36; ++x)
+                        {
+                            const float2 uv{(x + 0.5f) / 48.f, (y + 0.5f) / 48.f};
+                            // only where the destination has a direction at all
+                            if (!envmap_uv_is_valid(EnvMapping(dst_m), uv))
+                                continue;
+
+                            CAPTURE(x);
+                            CAPTURE(y);
+                            CHECK(out(x, y) ==
+                                  doctest::Approx(f(mul(R, envmap_uv_to_xyz(EnvMapping(dst_m), uv)))).epsilon(0.05));
+                        }
+                }
             }
+}
+
+TEST_CASE("A remap's rotation is the yaw, pitch and roll it is given, and a drag's turns one direction onto another")
+{
+    // yaw turns about the up axis, carrying +x toward -z, as it carries a lat-long's horizon sideways
+    const float3 turned = mul(envmap_rotation(0.3f, 0.f, 0.f), float3{1.f, 0.f, 0.f});
+    CHECK(la::length(turned - float3{std::cos(0.3f), 0.f, -std::sin(0.3f)}) < 1e-6f);
+
+    // the angles come back from the rotation they make, which is a rotation
+    for (float yaw : {-2.5f, -0.3f, 0.f, 1.2f, 3.f})
+        for (float pitch : {-1.4f, -0.5f, 0.f, 0.9f})
+            for (float roll : {-3.f, 0.f, 0.4f, 2.2f})
+            {
+                CAPTURE(yaw);
+                CAPTURE(pitch);
+                CAPTURE(roll);
+                const float3x3 R = envmap_rotation(yaw, pitch, roll);
+                CHECK(la::length(envmap_euler(R) - float3{yaw, pitch, roll}) < 1e-4f);
+                CHECK(la::determinant(R) == doctest::Approx(1.f));
+                CHECK(la::length(mul(transpose(R), R)[0] - float3{1.f, 0.f, 0.f}) < 1e-5f);
+            }
+
+    // and at a quarter-turn pitch, where yaw and roll turn about the same axis, the rotation still comes back
+    const float3x3 locked = envmap_rotation(0.8f, 1.5707963f, 0.f);
+    const float3   e      = envmap_euler(locked);
+    CHECK(la::length(envmap_rotation(e.x, e.y, e.z)[0] - locked[0]) < 1e-3f);
+
+    // the rotation between two directions takes the one onto the other, opposite ones included
+    for (const float3 from : sample_directions())
+        for (const float3 to : {float3{0.f, 1.f, 0.f}, la::normalize(float3{1.f, -2.f, 0.5f}), -from})
+        {
+            const float4 q = rotation_between(from, to);
+            CHECK(la::length(la::qrot(q, from) - to) < 1e-4f);
         }
 }
 

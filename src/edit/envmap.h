@@ -66,16 +66,31 @@ enum EnvMapSampling : int
     EnvMapSampling_EWA        ///< Elliptical filter over a mip pyramid
 };
 
+/// The rotation that turns by \p yaw about +y, then \p pitch about +x, then \p roll about +z, all in radians.
 /**
-    Resample \p src, a \p src_mapping of the sphere, into \p dst_mapping at \p size.
+    R = Ry(yaw) Rx(pitch) Rz(roll): yaw turns the horizon around the up axis, pitch tips it, and roll turns about
+    the view's forward axis.
+*/
+float3x3 envmap_rotation(float yaw, float pitch, float roll);
+/// The yaw, pitch and roll of \p rotation, with pitch in [-pi/2, pi/2]; the inverse of envmap_rotation().
+/**
+    At a pitch of a quarter turn the yaw and the roll turn about the same axis, and the roll is taken as zero.
+*/
+float3 envmap_euler(const float3x3 &rotation);
+/// The shortest rotation, as a unit quaternion (x, y, z, w), taking unit direction \p from to unit direction \p to.
+float4 rotation_between(float3 from, float3 to);
 
-    Point sampling averages \p supersample^2 samples per output pixel. EWA reads a mip pyramid through an
-    ellipse fitted to the pixel's footprint in the source (PBRT's MIPMap::EWA); there \p supersample is the
-    maximum anisotropy.
+/**
+    Resample \p src, a \p src_mapping of the sphere, into \p dst_mapping at \p size, turned by \p rotation.
+
+    The output's direction d reads the source in direction rotation d. Point sampling averages \p supersample^2
+    samples per output pixel. EWA reads a mip pyramid through an ellipse fitted to the pixel's footprint in the
+    source (PBRT's MIPMap::EWA); there \p supersample is the maximum anisotropy. A rotation changes no solid angle,
+    so it only moves the footprint.
 */
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
                          EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2,
-                         AtomicProgress progress = {});
+                         const float3x3 &rotation = float3x3{la::identity}, AtomicProgress progress = {});
 
 /// Convolve \p src, a \p mapping of incident radiance, with a clamped cosine, giving irradiance per direction.
 /**
