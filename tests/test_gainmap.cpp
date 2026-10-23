@@ -46,22 +46,6 @@ using namespace hdrview_test;
 namespace
 {
 
-/// A flat RGB image, so that any variation after applying a gain map came from the map.
-ImagePtr make_flat_image(int2 size, float value)
-{
-    return test_image(size, 3, [=](int, int, int) { return value; });
-}
-
-/// A monochrome gain map holding one constant sRGB-encoded value.
-GainmapImage make_flat_gainmap(int2 size, float encoded)
-{
-    GainmapImage gm;
-    gm.size     = size;
-    gm.channels = 1;
-    gm.pixels.assign(size_t(size.x) * size.y, encoded);
-    return gm;
-}
-
 int channel_index(const Image &img, const std::string &name)
 {
     for (int i = 0; i < (int)img.channels.size(); ++i)
@@ -70,221 +54,282 @@ int channel_index(const Image &img, const std::string &name)
     return -1;
 }
 
+/// An RGBA image whose four channels each ramp their own way, so a step that mixes them up or skips one shows.
+ImagePtr make_ramp_image(int2 size)
+{
+    auto img = std::make_shared<Image>(size, 4);
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            img->channels[0](x, y) = 0.1f + 0.02f * x;
+            img->channels[1](x, y) = 0.2f + 0.03f * y;
+            img->channels[2](x, y) = 0.05f + 0.01f * (x + y);
+            img->channels[3](x, y) = float(x + y) / float(size.x + size.y);
+        }
+    return img;
+}
+
+/// The value the gain maps below hold at sample (i, j), linear in both.
+float map_ramp(float2 p) { return 0.2f + 0.15f * p.x + 0.2f * p.y; }
+
+/// A monochrome map of \p size whose sample at (i, j) is \p encode of map_ramp(i, j).
+GainmapImage make_ramp_gainmap(int2 size, const std::function<float(float)> &encode)
+{
+    GainmapImage gm;
+    gm.size     = size;
+    gm.channels = 1;
+    for (int j = 0; j < size.y; ++j)
+        for (int i = 0; i < size.x; ++i) gm.pixels.push_back(encode(map_ramp(float2{float(i), float(j)})));
+    return gm;
+}
+
+/// Whether \p a holds exactly \p b's samples.
+bool same_data(const Array2Df &a, const Array2Df &b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (int i = 0; i < a.num_elements(); ++i)
+        if (a(i) != b(i))
+            return false;
+    return true;
+}
+
+/// Whether \p a has exactly \p b's channels, by name and sample.
+bool same_channels(const Image &a, const Image &b)
+{
+    if (a.channels.size() != b.channels.size())
+        return false;
+    for (size_t c = 0; c < a.channels.size(); ++c)
+        if (a.channels[c].name != b.channels[c].name || !same_data(a.channels[c], b.channels[c]))
+            return false;
+    return true;
+}
+
+/// The ISO maps below: log2 gains from -0.5 to 2.5, under a gamma, with offsets on both sides.
+IsoGainmapParams iso_params(float base_headroom, float alternate_headroom)
+{
+    IsoGainmapParams p;
+    p.min                = float3{-0.5f};
+    p.max                = float3{2.5f};
+    p.gamma              = float3{0.5f};
+    p.base_offset        = float3{0.125f};
+    p.alternate_offset   = float3{0.0625f};
+    p.base_headroom      = base_headroom;
+    p.alternate_headroom = alternate_headroom;
+    return p;
+}
+
 } // namespace
 
 TEST_CASE("Apple gain-map strength follows the published piecewise fit")
 {
-    // the branch is chosen by whether the headroom field reaches 1.0, and within it by whether the gain
-    // field is past the 0.01 knee
-    SUBCASE("low headroom, gain below the knee")
+    // The branch is chosen by whether the headroom field reaches 1.0, and within it by whether the gain field is past
+    // the 0.01 knee. Pinned at the intercepts, the fit's two lines meet at the knee, and on each side of headroom 1
+    // more gain asks for less reconstruction, as the fit's slopes say.
+    CHECK(AppleGainmapParams{0.5f, 0.f}.stops() == doctest::Approx(1.8f));
+    CHECK(AppleGainmapParams{1.5f, 0.f}.stops() == doctest::Approx(3.f));
+
+    for (float headroom : {0.f, 0.5f, 0.999f, 1.f, 1.5f, 4.f})
     {
-        AppleGainmapParams p{0.5f, 0.f};
-        CHECK(p.stops() == doctest::Approx(1.8f));
-    }
-    SUBCASE("low headroom, gain past the knee")
-    {
-        AppleGainmapParams p{0.5f, 1.f};
-        CHECK(p.stops() == doctest::Approx(1.5f));
-    }
-    SUBCASE("high headroom, gain below the knee")
-    {
-        AppleGainmapParams p{1.5f, 0.f};
-        CHECK(p.stops() == doctest::Approx(3.f));
-    }
-    SUBCASE("high headroom, gain past the knee")
-    {
-        AppleGainmapParams p{1.5f, 1.f};
-        CHECK(p.stops() == doctest::Approx(2.f));
+        CAPTURE(headroom);
+        auto stops = [&](float gain) { return AppleGainmapParams{headroom, gain}.stops(); };
+
+        const float knee = 0.01f, h = 1e-5f;
+        CHECK(stops(knee - h) == doctest::Approx(stops(knee + h)).epsilon(1e-3));
+
+        float previous = stops(0.f);
+        for (float gain = 0.f; gain <= 8.f; gain += gain < 0.05f ? 1e-3f : 0.05f)
+        {
+            CAPTURE(gain);
+            CHECK(stops(gain) <= previous + 1e-6f);
+            previous = stops(gain);
+        }
     }
 
-    SUBCASE("the defaults are the weakest reconstruction Apple's software falls back to")
-    {
-        AppleGainmapParams p;
-        CHECK(p.stops() == doctest::Approx(0.793f));
-    }
-
-    SUBCASE("what an iPhone 12 Pro actually writes")
-    {
-        // maker note 0x21 = 0.8432090282, 0x30 = 0, which several captures in the test corpus share
-        AppleGainmapParams p{0.8432090282f, 0.f};
-        CHECK(p.stops() == doctest::Approx(1.8f));
-    }
+    // and without a maker note, the weakest reconstruction Apple's software falls back to
+    CHECK(AppleGainmapParams{}.stops() == doctest::Approx(0.793f));
 }
 
-TEST_CASE("Applying an Apple gain map scales the base image by the reconstructed headroom")
+TEST_CASE("Every gain map keeps what the file stores beside what it builds, and leaves alone what it cannot use")
 {
-    const int2 size{8, 4};
-
-    SUBCASE("a fully-on map brightens by the full headroom")
+    // An Apple map, and ISO maps brightening the base and darkening it, each stored at a quarter of the base's
+    // resolution as a ramp linear in both directions, which center-aligned bilinear resampling reproduces wherever it
+    // has samples either side. Apple's map is sRGB-encoded and an ISO map gamma-encoded log2 gain, both undone before
+    // the resize, so the appended group holds the linear gain (Apple) or log2 gain (ISO) of the ramp.
+    struct Format
     {
-        auto img = make_flat_image(size, 0.25f);
-        // 1.0 encodes to 1.0 under any transfer function, so the gain here is 1
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom,
-                            true);
+        const char                 *name;
+        float                       base_headroom, alternate_headroom; ///< the targets that show each rendition
+        GainmapImage                map;
+        std::function<float(float)> gain_at; ///< of map_ramp()'s value
+        std::function<void(Image &, const GainmapImage &, float target, bool keep)> apply;
+    };
+    const IsoGainmapParams up = iso_params(0.f, 2.f), down = iso_params(2.5f, 0.f);
+    auto                   iso_gain   = [&](float r) { return up.min.x + (up.max.x - up.min.x) * r; };
+    auto                   iso_encode = [&](float r) { return std::pow(r, up.gamma.x); };
+    const int2             map_size{4, 2};
+    const Format           formats[] = {
+        {"Apple", 0.f, k_full_gainmap_headroom,
+         make_ramp_gainmap(map_size, [](float r) { return float(linear_to_sRGB(r)); }), [](float r) { return r; },
+         [](Image &img, const GainmapImage &gm, float target, bool keep)
+         { apply_apple_gainmap(img, gm, AppleGainmapParams{0.5f, 0.f}, target, keep); }},
+        {"ISO, base SDR", up.base_headroom, up.alternate_headroom, make_ramp_gainmap(map_size, iso_encode), iso_gain,
+         [&](Image &img, const GainmapImage &gm, float target, bool keep)
+         { apply_iso_gainmap(img, gm, up, target, keep); }},
+        {"ISO, base HDR", down.base_headroom, down.alternate_headroom, make_ramp_gainmap(map_size, iso_encode),
+         iso_gain, [&](Image &img, const GainmapImage &gm, float target, bool keep)
+         { apply_iso_gainmap(img, gm, down, target, keep); }},
+    };
 
-        // stops = 1.8, so headroom = 2^1.8, and gain 1 scales the base by the whole of it
-        const float expected = 0.25f * std::exp2(1.8f);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(expected));
-        CHECK(img->channels[2](7, 3) == doctest::Approx(expected));
-    }
-
-    SUBCASE("a fully-off map leaves the base image alone")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 0.f), AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom,
-                            true);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f));
-    }
-
-    SUBCASE("a target of zero stops leaves the base image alone, but still yields the map")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, 0.f, true);
-
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f));
-        REQUIRE(channel_index(*img, "gainmap.Y") >= 0);
-    }
-
-    SUBCASE("the target caps a map that asks for more")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, 1.f, true);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * 2.f)); // capped at 1 stop
-    }
-
-    SUBCASE("the target does not raise a map that asks for less")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, 10.f, true);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * std::exp2(1.8f)));
-    }
-
-    SUBCASE("alpha is not a color and is not scaled")
-    {
-        auto img = std::make_shared<Image>(size, 4);
-        for (int c = 0; c < 4; ++c)
-            for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) img->channels[c](x, y) = 0.5f;
-
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom,
-                            true);
-
-        REQUIRE(img->channels[3].name == "A");
-        CHECK(img->channels[3](0, 0) == doctest::Approx(0.5f));
-        CHECK(img->channels[0](0, 0) > 0.5f);
-    }
-}
-
-TEST_CASE("What the file stores is kept alongside what is built from it")
-{
-    const int2 size{8, 4};
-
-    SUBCASE("the base group holds the rendition as stored, not the reconstruction")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom,
-                            true);
-
-        const int r = channel_index(*img, "base.R"), g = channel_index(*img, "base.G"),
-                  b = channel_index(*img, "base.B");
-        REQUIRE(r >= 0);
-        REQUIRE(g >= 0);
-        REQUIRE(b >= 0);
-
-        // the color channels were brightened; base.* still reads what the file held
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * std::exp2(1.8f)));
-        CHECK(img->channels[r](0, 0) == doctest::Approx(0.25f));
-        CHECK(img->channels[g](3, 2) == doctest::Approx(0.25f));
-        CHECK(img->channels[b](7, 3) == doctest::Approx(0.25f));
-        CHECK(channel_index(*img, "gainmap.Y") >= 0);
-    }
-
-    SUBCASE("turning it off leaves only the reconstruction")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom,
-                            false);
-
-        CHECK(img->channels.size() == 3);
-        CHECK(channel_index(*img, "base.R") < 0);
-        CHECK(channel_index(*img, "gainmap.Y") < 0);
-        // and the reconstruction is unaffected by the choice
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * std::exp2(1.8f)));
-    }
-
-    SUBCASE("alpha is not duplicated into the base group")
-    {
-        auto img = std::make_shared<Image>(size, 4);
-        for (int c = 0; c < 4; ++c)
-            for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) img->channels[c](x, y) = 0.5f;
-
-        apply_apple_gainmap(*img, make_flat_gainmap(size, 1.f), AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom,
-                            true);
-
-        CHECK(channel_index(*img, "base.A") < 0);
-        CHECK(channel_index(*img, "base.B") >= 0);
-    }
-
-    SUBCASE("an ISO map keeps its base rendition too")
-    {
-        IsoGainmapParams p;
-        p.min         = float3{0.f};
-        p.max         = float3{2.f};
-        p.gamma       = float3{1.f};
-        p.base_offset = p.alternate_offset = float3{0.f};
-        p.base_headroom                    = 0.f;
-        p.alternate_headroom               = 2.f;
-
-        auto img = make_flat_image(size, 0.25f);
-        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, k_full_gainmap_headroom, true);
-
-        const int r = channel_index(*img, "base.R");
-        REQUIRE(r >= 0);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * 4.f));
-        CHECK(img->channels[r](0, 0) == doctest::Approx(0.25f));
-    }
-}
-
-TEST_CASE("A gain map is appended as its own channel group, resized to the base image")
-{
     const int2 size{16, 8};
-    auto       img = make_flat_image(size, 0.5f);
+    const auto original = make_ramp_image(size);
+    for (const Format &f : formats)
+    {
+        CAPTURE(std::string(f.name));
 
-    // quarter resolution in each axis, as gain maps are usually stored
-    apply_apple_gainmap(*img, make_flat_gainmap(int2{4, 2}, 1.f), AppleGainmapParams{0.5f, 0.f}, 0.f, true);
+        // a malformed map, empty or claiming more samples than it holds, leaves the image as it was
+        GainmapImage short_map;
+        short_map.size     = int2{64, 64};
+        short_map.channels = 1;
+        short_map.pixels.assign(4, 1.f);
+        for (const GainmapImage &bad : {GainmapImage{}, short_map})
+        {
+            auto img = make_ramp_image(size);
+            f.apply(*img, bad, k_full_gainmap_headroom, true);
+            CHECK(same_channels(*img, *original));
+        }
 
-    const int gm = channel_index(*img, "gainmap.Y");
-    REQUIRE(gm >= 0);
-    CHECK(img->channels[gm].size() == size);
+        // at the base's own headroom nothing changes, and the map is there to look at, at the image's size
+        auto  at_base_ptr = make_ramp_image(size);
+        auto &at_base     = *at_base_ptr;
+        f.apply(at_base, f.map, f.base_headroom, true);
+        for (int c = 0; c < 4; ++c) CHECK(same_data(at_base.channels[c], original->channels[c]));
+        const int gm = channel_index(at_base, "gainmap.Y");
+        REQUIRE(gm >= 0);
+        CHECK(at_base.channels[gm].size() == size);
+        float worst = 0.f;
+        for (int y = 0; y < size.y; ++y)
+            for (int x = 0; x < size.x; ++x)
+            {
+                const float2 p{(x + 0.5f) * map_size.x / size.x - 0.5f, (y + 0.5f) * map_size.y / size.y - 0.5f};
+                if (p.x >= 0.f && p.y >= 0.f && p.x <= map_size.x - 1.f && p.y <= map_size.y - 1.f)
+                    worst = std::max(worst, std::abs(at_base.channels[gm](x, y) - f.gain_at(map_ramp(p))));
+            }
+        CHECK(worst < 1e-5f);
 
-    // the map was uniform, so every resampled value is still the linearized 1.0
-    for (int y = 0; y < size.y; ++y)
-        for (int x = 0; x < size.x; ++x) CHECK(img->channels[gm](x, y) == doctest::Approx(1.f));
+        // at the other rendition's, the base group holds the rendition as stored, color only, and with keep off only
+        // the reconstruction remains, the same either way; alpha is never touched
+        auto  kept_ptr = make_ramp_image(size), alone_ptr = make_ramp_image(size);
+        auto &kept = *kept_ptr, &alone = *alone_ptr;
+        f.apply(kept, f.map, f.alternate_headroom, true);
+        f.apply(alone, f.map, f.alternate_headroom, false);
+        CHECK(channel_index(kept, "base.A") < 0);
+        REQUIRE(alone.channels.size() == original->channels.size());
+        for (int c = 0; c < 4; ++c)
+        {
+            CAPTURE(c);
+            const std::string name = original->channels[c].name;
+            CHECK(alone.channels[c].name == name);
+            CHECK(same_data(alone.channels[c], kept.channels[c]));
+            if (name == "A")
+                CHECK(same_data(kept.channels[c], original->channels[c]));
+            else
+            {
+                const int b = channel_index(kept, "base." + name);
+                REQUIRE(b >= 0);
+                CHECK(same_data(kept.channels[b], original->channels[c]));
+                CHECK_FALSE(same_data(kept.channels[c], original->channels[c]));
+            }
+        }
+    }
 }
 
-TEST_CASE("A malformed gain map is ignored rather than corrupting the base image")
+TEST_CASE("An Apple gain map scales the base by the headroom it asks for, capped at the target")
 {
-    const int2 size{4, 4};
+    // the gain is 1 + (2^stops - 1) g for the map's linear value g, with stops held to the target's
+    const int2 size{16, 8};
+    const auto               original = make_ramp_image(size);
+    const auto               map      = make_ramp_gainmap(int2{4, 2}, [](float r) { return float(linear_to_sRGB(r)); });
+    const AppleGainmapParams params{0.5f, 0.f};
+    REQUIRE(params.stops() == doctest::Approx(1.8f));
 
-    SUBCASE("empty map")
+    for (float target : {0.f, 0.5f, 1.f, 1.8f, 3.f, k_full_gainmap_headroom})
     {
-        auto img = make_flat_image(size, 0.25f);
-        apply_apple_gainmap(*img, GainmapImage{}, AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom, true);
-        CHECK(img->channels.size() == 3);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f));
+        CAPTURE(target);
+        auto  img_ptr = make_ramp_image(size);
+        auto &img     = *img_ptr;
+        apply_apple_gainmap(img, map, params, target, true);
+        const int g = channel_index(img, "gainmap.Y");
+        REQUIRE(g >= 0);
+        const float headroom = std::exp2(std::min(1.8f, target));
+        float       worst    = 0.f;
+        for (int c = 0; c < 4; ++c)
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                {
+                    const float gain = c == 3 ? 1.f : 1.f + (headroom - 1.f) * img.channels[g](x, y);
+                    worst =
+                        std::max(worst, std::abs(img.channels[c](x, y) / (original->channels[c](x, y) * gain) - 1.f));
+                }
+        CHECK(worst < 1e-5f);
     }
+}
 
-    SUBCASE("map claiming more pixels than it holds")
+TEST_CASE("An ISO gain map applies its log2 gain in proportion to how far the target is toward the alternate")
+{
+    // (base + base offset) 2^(gain w) - alternate offset, where w runs linearly from 0 at the base's headroom to 1 at
+    // the alternate's, held there past it, and is negative when the alternate is the darker one. A weight of 0 shows
+    // the base as stored, without the offsets, and a map whose two renditions want the same headroom does nothing.
+    struct Case
     {
-        auto         img = make_flat_image(size, 0.25f);
-        GainmapImage gm;
-        gm.size     = int2{64, 64};
-        gm.channels = 1;
-        gm.pixels.assign(4, 1.f);
-        apply_apple_gainmap(*img, gm, AppleGainmapParams{0.5f, 0.f}, k_full_gainmap_headroom, true);
-        CHECK(img->channels.size() == 3);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f));
+        IsoGainmapParams params;
+        float            target, weight;
+    };
+    const IsoGainmapParams up = iso_params(0.f, 2.f), down = iso_params(2.5f, 0.f), same = iso_params(1.f, 1.f);
+    const Case             cases[] = {
+        {up, 0.f, 0.f},
+        {up, 0.5f, 0.25f},
+        {up, 1.f, 0.5f},
+        {up, 2.f, 1.f},
+        {up, 3.f, 1.f},
+        {up, k_full_gainmap_headroom, 1.f},
+        {down, k_full_gainmap_headroom, 0.f},
+        {down, 2.5f, 0.f},
+        {down, 1.25f, -0.5f},
+        {down, 0.5f, -0.8f},
+        {down, 0.f, -1.f},
+        {same, k_full_gainmap_headroom, 0.f},
+        {same, 0.f, 0.f},
+    };
+
+    const int2 size{16, 8};
+    const auto original = make_ramp_image(size);
+    const auto map      = make_ramp_gainmap(int2{4, 2}, [](float r) { return std::pow(r, 0.5f); });
+    for (const Case &k : cases)
+    {
+        CAPTURE(k.params.base_headroom);
+        CAPTURE(k.params.alternate_headroom);
+        CAPTURE(k.target);
+        CHECK(k.params.weight(k.target) == doctest::Approx(k.weight));
+
+        auto  img_ptr = make_ramp_image(size);
+        auto &img     = *img_ptr;
+        apply_iso_gainmap(img, map, k.params, k.target, true);
+        const int g = channel_index(img, "gainmap.Y");
+        REQUIRE(g >= 0);
+        float worst = 0.f;
+        for (int c = 0; c < 4; ++c)
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                {
+                    const float base = original->channels[c](x, y);
+                    const float want = c == 3 || k.weight == 0.f ? base
+                                                                 : (base + k.params.base_offset[c]) *
+                                                                           std::exp2(img.channels[g](x, y) * k.weight) -
+                                                                       k.params.alternate_offset[c];
+                    worst = std::max(worst, std::abs(img.channels[c](x, y) - want) / std::max(1.f, std::abs(want)));
+                }
+        CHECK(worst < 1e-5f);
     }
 }
 
@@ -844,108 +889,6 @@ TEST_CASE("A packet with no hdrgm properties is reported as absent, not as defau
     CHECK_FALSE(parse_hdrgm_xmp(plain, sizeof(plain) - 1).has_value());
     CHECK_FALSE(parse_hdrgm_xmp(nullptr, 0).has_value());
     CHECK_FALSE(parse_hdrgm_xmp("not xml at all", 14).has_value());
-}
-
-TEST_CASE("Gain-map weight follows the target headroom, in both directions")
-{
-    SUBCASE("base is the SDR rendition, as in a JPEG")
-    {
-        IsoGainmapParams p;
-        p.base_headroom      = 0.f;
-        p.alternate_headroom = 2.5f;
-
-        CHECK(p.weight(k_full_gainmap_headroom) == doctest::Approx(1.f)); // all the way to HDR
-        CHECK(p.weight(2.5f) == doctest::Approx(1.f));
-        CHECK(p.weight(1.25f) == doctest::Approx(0.5f));
-        CHECK(p.weight(0.f) == doctest::Approx(0.f)); // the base image as stored
-    }
-
-    SUBCASE("base is the HDR rendition, as in a base-HDR JPEG XL")
-    {
-        // the map then derives a darker rendition, so an unbounded target leaves the base alone
-        IsoGainmapParams p;
-        p.base_headroom      = 2.5f;
-        p.alternate_headroom = 0.f;
-
-        CHECK(p.weight(k_full_gainmap_headroom) == doctest::Approx(0.f));
-        CHECK(p.weight(2.5f) == doctest::Approx(0.f));
-        CHECK(p.weight(1.25f) == doctest::Approx(-0.5f));
-        CHECK(p.weight(0.f) == doctest::Approx(-1.f)); // all the way down to SDR
-    }
-
-    SUBCASE("a map whose two renditions want the same headroom does nothing")
-    {
-        IsoGainmapParams p;
-        p.base_headroom = p.alternate_headroom = 1.f;
-        CHECK(p.weight(k_full_gainmap_headroom) == doctest::Approx(0.f));
-    }
-}
-
-TEST_CASE("Applying an ISO gain map moves the base image towards the alternate rendition")
-{
-    const int2 size{8, 8};
-
-    // a map that is 1.0 everywhere, with min 0 and max 2, encodes a uniform 2-stop brightening
-    IsoGainmapParams p;
-    p.min                = float3{0.f};
-    p.max                = float3{2.f};
-    p.gamma              = float3{1.f};
-    p.base_offset        = float3{0.f};
-    p.alternate_offset   = float3{0.f};
-    p.base_headroom      = 0.f;
-    p.alternate_headroom = 2.f;
-
-    SUBCASE("fully applied")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, k_full_gainmap_headroom, true);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * 4.f)); // 2 stops
-    }
-
-    SUBCASE("half applied")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, 1.f, true);
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f * 2.f)); // 1 stop
-    }
-
-    SUBCASE("not applied, but the map is still there to look at")
-    {
-        auto img = make_flat_image(size, 0.25f);
-        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, 0.f, true);
-
-        CHECK(img->channels[0](0, 0) == doctest::Approx(0.25f));
-
-        // the appended group holds log2 gains, so a map decoding to "2 stops" reads as 2
-        const int gm = channel_index(*img, "gainmap.Y");
-        REQUIRE(gm >= 0);
-        CHECK(img->channels[gm](0, 0) == doctest::Approx(2.f));
-    }
-
-    SUBCASE("the offsets are applied around the gain, not after it")
-    {
-        IsoGainmapParams q = p;
-        q.base_offset      = float3{0.125f};
-        q.alternate_offset = float3{0.0625f};
-
-        auto img = make_flat_image(size, 0.25f);
-        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), q, k_full_gainmap_headroom, true);
-        CHECK(img->channels[0](0, 0) == doctest::Approx((0.25f + 0.125f) * 4.f - 0.0625f));
-    }
-
-    SUBCASE("alpha is left alone")
-    {
-        auto img = std::make_shared<Image>(size, 4);
-        for (int c = 0; c < 4; ++c)
-            for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) img->channels[c](x, y) = 0.5f;
-
-        apply_iso_gainmap(*img, make_flat_gainmap(size, 1.f), p, k_full_gainmap_headroom, true);
-
-        REQUIRE(img->channels[3].name == "A");
-        CHECK(img->channels[3](0, 0) == doctest::Approx(0.5f));
-        CHECK(img->channels[0](0, 0) > 0.5f);
-    }
 }
 
 #if HDRVIEW_ENABLE_LIBJXL
