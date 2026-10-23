@@ -17,7 +17,9 @@
 #include "test_gui_support.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
+
 #include "imgui_test_engine/imgui_te_engine.h"
+#include <array>
 
 #include <chrono>
 #include <cmath>
@@ -656,73 +658,88 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(img->history.has_undo(), false);
     };
 
-    t           = IM_REGISTER_TEST(engine, "edit", "remapping resizes the image and undo puts it back");
-    t->TestFunc = [](ImGuiTestContext *ctx)
+    // what the view shows of a remap's preview: the remap, and the corners of the result's window, in the viewport
+    auto shown_remap = []
+    {
+        const EditPreview *p = hdrview()->edit_preview();
+        return p && p->remap ? std::optional<EnvmapRemap>{*p->remap} : std::nullopt;
+    };
+    auto shown_corners = []
+    {
+        const EditPreview *p = hdrview()->edit_preview();
+        if (!p || !p->window)
+            return std::pair{float2{NAN}, float2{NAN}};
+        const Box2f w{*p->window};
+        return std::pair{hdrview()->vp_pos_at_pixel(w.min, w), hdrview()->vp_pos_at_pixel(w.max, w)};
+    };
+    // Opens the remap dialog onto a small lat-long, point sampled once a pixel. Nothing here reads the result's
+    // pixels, and the preview evaluates the filter at every pixel of the viewport each frame, which on CI's software
+    // OpenGL makes a frame of EWA take long enough to trip the engine's watchdog.
+    auto open_remap = [](ImGuiTestContext *ctx)
+    {
+        menu_click(ctx, "Edit/Remap envmap...");
+        ctx->SetRef("Remap envmap...");
+        ctx->ComboClick("Target/Longitude-latitude");
+        ctx->ItemInputValue("Size/$$1", 48);
+        ctx->ItemClick("Point");
+        ctx->ItemInputValue("Samples per axis", 1);
+        ctx->Yield(2);
+    };
+
+    t = IM_REGISTER_TEST(engine, "edit", "the remap preview frames the output, turns with its sliders and drags");
+    t->TestFunc = [shown_remap, shown_corners, open_remap](ImGuiTestContext *ctx)
     {
         if (!load_fixture(ctx))
             return;
 
-        auto       img      = hdrview()->current_image();
-        const int2 original = img->size();
-        const auto samples  = snapshot(img);
-
-        // the status bar shows what is under the cursor, here the viewport's middle, until a preview hides it; at
-        // a zoom other than 1, so the preview's layout is seen to follow it
+        // The status bar shows what is under the cursor, here the viewport's middle, until a preview hides it; and
+        // zoomed to 2 first, so the preview's fit to the view shows as a change.
         auto      *app        = hdrview();
         bool      &status_bar = *app->action("Show status bar").p_selected;
         const bool had_bar    = status_bar;
-        const auto zoom       = app->zoom();
-        status_bar            = true;
+        OnExit     restore{[&, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
+                           {
+                           status_bar = had_bar;
+                           app->set_zoom(zoom);
+                           app->reposition_pixel_to_vp_pos(at, float2{0.f});
+                           }};
+        status_bar = true;
         app->set_zoom(2.f);
         ctx->MouseMoveToPos(ImVec2(app->app_pos_at_vp_pos(0.5f * app->viewport_size())));
         ctx->Yield(2);
         IM_CHECK(ctx->ItemExists("//StatusBar/##pixel x coordinates"));
+        const float  before_zoom = app->zoom();
+        const float2 before_at   = app->vp_pos_at_pixel(float2{0.f});
 
-        // structural and computed off the main thread at once: the result is a different size than what it
-        // was computed from, so there is no rectangle to write back
-        menu_click(ctx, "Edit/Remap envmap...");
-        ctx->SetRef("Remap envmap...");
-        ctx->ComboClick("Target/Longitude-latitude");
-        // small, since nothing here reads the result's pixels and a remap costs what it writes, which a sanitized
-        // build multiplies many times over
-        ctx->ItemInputValue("Size/$$1", 48);
-        ctx->Yield(2);
-
-        // Previewed as it will come out: the dialog's mappings at its size, which a lat-long's aspect makes twice
-        // as wide as tall, laid out at the view's zoom, with no readout of the pixel under the cursor, which no
-        // longer holds what is shown.
-        // what the view shows of the preview: the remap, and the corners of the result's window
-        auto remap = [&]
-        {
-            const EditPreview *p = app->edit_preview();
-            return p && p->remap ? std::optional<EnvmapRemap>{*p->remap} : std::nullopt;
-        };
-        auto corners = [&]
-        {
-            const Box2f w{*app->edit_preview()->window};
-            return std::pair{app->vp_pos_at_pixel(w.min, w), app->vp_pos_at_pixel(w.max, w)};
-        };
-        const auto shown = remap();
+        // Previewed as it will come out: a lat-long twice as wide as tall, drawn at the view's zoom, with the pixel
+        // readout hidden, since the pixel under the cursor no longer holds what is shown.
+        open_remap(ctx);
+        const auto shown = shown_remap();
         IM_CHECK(shown.has_value());
-        if (!shown)
-            return;
         IM_CHECK_EQ(shown->dst, int(EnvMapping_LatLong));
         IM_CHECK_EQ(shown->size.x, 2 * shown->size.y);
-        const auto [lo, hi] = corners();
+        const auto [lo, hi] = shown_corners();
         IM_CHECK(la::length(la::abs(hi - lo) - app->zoom() * float2(shown->size)) < 1e-3f);
         IM_CHECK(!ctx->ItemExists("//StatusBar/##pixel x coordinates"));
+        // fitting the view to it
+        IM_CHECK_EQ(app->zoom(), std::min(app->viewport_size().x / float(shown->size.x),
+                                          app->viewport_size().y / float(shown->size.y)));
 
-        // unticked, nothing is previewed
+        // unticked, nothing is previewed, and the readout comes back
         ctx->ItemUncheck("Preview");
         ctx->Yield(2);
         IM_CHECK(app->edit_preview() == nullptr);
+        IM_CHECK(ctx->ItemExists("//StatusBar/##pixel x coordinates"));
         ctx->ItemCheck("Preview");
         ctx->Yield(2);
 
-        // It frames the output as applying it will, fitting the view to it, and panned while it is previewed, the
-        // result lands where its preview was.
-        IM_CHECK_EQ(app->zoom(), std::min(app->viewport_size().x / float(shown->size.x),
-                                          app->viewport_size().y / float(shown->size.y)));
+        // NaN without a preview, so a comparison with it fails rather than reading nothing
+        auto rotation = [&]
+        {
+            const auto r = shown_remap();
+            return r ? r->rotation : float3x3{float3{NAN}, float3{NAN}, float3{NAN}};
+        };
+
         // The sliders turn it as they say, roll included where a quarter-turn pitch locks it to the yaw, and Reset
         // rotation undoes them.
         ctx->ItemInputValue("Pitch", -90.f);
@@ -731,76 +748,76 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->Yield(2);
         {
             const float3x3 want = envmap_rotation(0.f, -shader::ENVMAP_PI / 2.f, shader::ENVMAP_PI / 3.f);
-            for (int c = 0; c < 3; ++c) IM_CHECK(la::length(remap()->rotation[c] - want[c]) < 1e-4f);
+            for (int c = 0; c < 3; ++c) IM_CHECK(la::length(rotation()[c] - want[c]) < 1e-4f);
         }
         ctx->ItemClick("Reset rotation");
         ctx->Yield(2);
-        IM_CHECK(remap()->rotation == float3x3{la::identity});
+        IM_CHECK(rotation() == float3x3{la::identity});
 
-        // A plain drag begun on the preview turns the sphere and leaves the view where it was; with Alt held, it
-        // pans the view instead and leaves the sphere alone.
-        auto drag = [&](float2 from, ImGuiKeyChord mods)
+        // A plain drag begun on the preview turns the sphere, so what was under the cursor where the drag began is
+        // under it where the drag ended, and leaves the view where it was; with Alt held, it pans the view by the drag
+        // instead and leaves the sphere alone.
+        const auto on = preview_point(ctx, "//Remap envmap...");
+        IM_CHECK(on.has_value());
+        const float2 by{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)};
+        // what the source shows at a point of the preview, under the remap's rotation
+        auto seen = [&](float2 app_pos, const float3x3 &R)
         {
-            if (mods)
-                ctx->KeyDown(mods);
-            ctx->MouseMoveToPos(ImVec2(from));
-            ctx->MouseDown(ImGuiMouseButton_Left);
-            ctx->MouseMoveToPos(ImVec2(from + float2{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)}));
-            ctx->MouseUp(ImGuiMouseButton_Left);
-            if (mods)
-                ctx->KeyUp(mods);
-            ctx->Yield(2);
+            const auto uv = app->preview_uv(app->vp_pos_at_app_pos(app_pos));
+            return mul(R, envmap_uv_to_xyz(EnvMapping_LatLong, uv ? *uv : float2{0.f}));
         };
-        {
-            const auto [lo0, hi0] = corners();
-            // on the output, in the viewport, and clear of the dialog, which is centered over it
-            ImGuiWindow *dialog = ctx->WindowInfo("//Remap envmap...").Window;
-            float2       on{0.f};
-            for (const float2 t : {float2{0.1f, 0.5f}, float2{0.9f, 0.5f}, float2{0.5f, 0.1f}, float2{0.5f, 0.9f}})
-            {
-                const float2 vp      = la::lerp(lo0, hi0, t);
-                const float2 app_pos = app->app_pos_at_vp_pos(vp);
-                if (app->vp_pos_in_viewport(vp) && dialog && !dialog->Rect().Contains(ImVec2(app_pos)))
-                {
-                    on = app_pos;
-                    break;
-                }
-            }
-            IM_CHECK(on != float2{0.f});
-            // what the source shows at a point of the preview, under the remap's rotation
-            auto seen = [&](float2 app_pos, const float3x3 &R)
-            {
-                const auto uv = app->preview_uv(app->vp_pos_at_app_pos(app_pos));
-                return mul(R, envmap_uv_to_xyz(EnvMapping_LatLong, uv ? *uv : float2{0.f}));
-            };
-            const float3x3 before_turn = remap()->rotation;
-            const float2   end         = on + float2{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)};
-            const float3   grabbed     = seen(on, before_turn);
-            drag(on, 0);
-            const float3 unturned{1.f, 0.f, 0.f};
-            IM_CHECK(remap().has_value() && remap()->rotation[0] != unturned);
-            // and what was under the cursor where the drag began is under it where the drag ended
-            IM_CHECK(la::length(seen(end, remap()->rotation) - grabbed) < 2e-2f);
-            const auto [lo1, hi1] = corners();
-            IM_CHECK(la::length(lo1 - lo0) < 1e-3f);
+        const auto [lo0, hi0] = shown_corners();
+        const float3 grabbed  = seen(*on, rotation());
+        drag(ctx, *on, by);
+        IM_CHECK(la::length(seen(*on + by, rotation()) - grabbed) < 2e-2f);
+        const auto [lo1, hi1] = shown_corners();
+        IM_CHECK(la::length(lo1 - lo0) < 1e-3f);
 
-            const float3x3 turned = remap()->rotation;
-            drag(on, ImGuiMod_Alt);
-            IM_CHECK(remap()->rotation[0] == turned[0] && remap()->rotation[1] == turned[1]);
-            const auto [lo2, hi2] = corners();
-            IM_CHECK(la::length(lo2 - lo1) > 1.f);
-        }
-        const auto [plo, phi] = corners();
+        const float3x3 turned = rotation();
+        drag(ctx, *on, by, ImGuiMod_Alt);
+        IM_CHECK(rotation() == turned);
+        const auto [lo2, hi2] = shown_corners();
+        IM_CHECK(la::length(lo2 - lo1 - by) < 1e-2f);
 
+        // and canceled, the view the preview took over is given back
+        IM_CHECK_NE(app->zoom(), before_zoom);
+        ctx->ItemClick("Cancel");
+        ctx->Yield(2);
+        IM_CHECK(app->edit_preview() == nullptr);
+        IM_CHECK_EQ(app->zoom(), before_zoom);
+        IM_CHECK(la::length(app->vp_pos_at_pixel(float2{0.f}) - before_at) < 1e-3f);
+    };
+
+    t = IM_REGISTER_TEST(engine, "edit", "remapping resizes the image where its preview was, and undo puts it back");
+    t->TestFunc = [shown_remap, shown_corners, open_remap](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto       img      = hdrview()->current_image();
+        auto      *app      = hdrview();
+        const int2 original = img->size();
+        const auto samples  = snapshot(img);
+        OnExit     restore{[&, zoom = app->zoom()] { app->set_zoom(zoom); }};
+
+        // panned while it is previewed, so the result is seen to land where its preview was, not where a fit would
+        // put it
+        open_remap(ctx);
+        const auto shown = shown_remap();
+        IM_CHECK(shown.has_value());
+        const auto on = preview_point(ctx, "//Remap envmap...");
+        IM_CHECK(on.has_value());
+        drag(ctx, *on, float2{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)}, ImGuiMod_Alt);
+        const auto [lo, hi] = shown_corners();
+
+        // structural and computed off the main thread at once: the result is a different size than what it was
+        // computed from, so there is no rectangle to write back
         ctx->ItemClick("Remap");
-
         wait_until(ctx, [&] { return img->history.has_undo(); });
 
         IM_CHECK(img->size() == shown->size);
-        IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.min)) - plo) < 1e-3f);
-        IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.max)) - phi) < 1e-3f);
-        status_bar = had_bar;
-        app->set_zoom(zoom);
+        IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.min)) - lo) < 1e-3f);
+        IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.max)) - hi) < 1e-3f);
         for (const auto &c : img->channels) IM_CHECK(c.size() == img->size());
         IM_CHECK(img->data_window.size() == img->size());
         IM_CHECK(img->display_window.size() == img->size());
@@ -808,18 +825,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(img->size() == original);
         IM_CHECK(snapshot(img) == samples);
-
-        // and canceled, the view its preview took over is given back
-        const float  before_zoom = app->zoom();
-        const float2 before_at   = app->vp_pos_at_pixel(float2{0.f});
-        menu_click(ctx, "Edit/Remap envmap...");
-        ctx->SetRef("Remap envmap...");
-        ctx->ComboClick("Target/Longitude-latitude");
-        ctx->Yield(2);
-        ctx->ItemClick("Cancel");
-        ctx->Yield(2);
-        IM_CHECK_EQ(app->zoom(), before_zoom);
-        IM_CHECK(la::length(app->vp_pos_at_pixel(float2{0.f}) - before_at) < 1e-3f);
     };
 
     t           = IM_REGISTER_TEST(engine, "edit", "an irradiance map comes out at the size asked for");
@@ -913,6 +918,45 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_LT(std::fabs(alpha(0, 0) - color.w), 1e-4f);
     };
 
+    t = IM_REGISTER_TEST(engine, "edit", "the shift preview follows its offset, and a drag carries the image");
+    t->TestFunc = [](ImGuiTestContext *ctx)
+    {
+        if (!load_fixture(ctx))
+            return;
+
+        auto  *app = hdrview();
+        auto   img = app->current_image();
+        OnExit restore{[&, zoom = app->zoom()] { app->set_zoom(zoom); }};
+
+        // previewed as the shift asked for, over the channels the view shows: the shown group's, all of them the
+        // subject's
+        menu_click(ctx, "Edit/Shift...");
+        ctx->SetRef("Shift...");
+        ctx->ItemInputValue("X, Y offset/$$0", 3.0f);
+        ctx->Yield(2);
+        const EditPreview *preview = app->edit_preview();
+        IM_CHECK(preview && preview->shift);
+        IM_CHECK(preview->shift->offset == float2(3.f, 0.f));
+        int4 slots{-1};
+        for (int k = 0; k < std::min(4, img->groups[img->selected_group].num_channels); ++k) slots[k] = k;
+        IM_CHECK(preview->slots == slots);
+
+        // A drag begun on the image, clear of the dialog, carries the image with it by as far as the cursor went,
+        // fractions of a pixel included: whole units of the cursor, which the engine moves in, at a zoom of 2.5.
+        app->set_zoom(2.5f);
+        ctx->Yield(2);
+        const auto on = preview_point(ctx, "//Shift...");
+        IM_CHECK(on.has_value());
+        drag(ctx, *on, float2{19.f, 8.f});
+        preview = app->edit_preview();
+        IM_CHECK(preview && preview->shift);
+        IM_CHECK(la::length(preview->shift->offset - float2{3.f + 19.f / 2.5f, 8.f / 2.5f}) < 1e-3f);
+
+        ctx->ItemClick("Cancel");
+        ctx->Yield(2);
+        IM_CHECK(!img->history.has_undo());
+    };
+
     t           = IM_REGISTER_TEST(engine, "edit", "every new edit dialog is wired to its edit");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -928,49 +972,6 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Shift...");
         ctx->SetRef("Shift...");
         ctx->ItemInputValue("X, Y offset/$$0", 3.0f);
-        // and previewed while the dialog is open: the shift asked for, over the channels the view shows
-        ctx->Yield(2);
-        const EditPreview *preview = hdrview()->edit_preview();
-        IM_CHECK(preview && preview->shift && preview->shift->offset == float2(3.f, 0.f));
-        IM_CHECK(preview && preview->slots != int4{-1});
-        // A drag begun on the image, clear of the dialog, carries the image with it by as far as the cursor went, which
-        // at a zoom of 2.5 is not a whole number of pixels.
-        {
-            auto       *app  = hdrview();
-            const float zoom = app->zoom();
-            app->set_zoom(2.5f);
-            ctx->Yield(2);
-            ImGuiWindow *dialog = ctx->WindowInfo("//Shift...").Window;
-            float2       on{0.f};
-            for (const float2 t : {float2{0.1f, 0.5f}, float2{0.9f, 0.5f}, float2{0.5f, 0.1f}, float2{0.5f, 0.9f}})
-            {
-                const float2 vp = t * app->viewport_size(), app_pos = app->app_pos_at_vp_pos(vp);
-                const auto   uv = app->preview_uv(vp);
-                if (uv && la::all(la::gequal(*uv, float2{0.f})) && la::all(la::lequal(*uv, float2{1.f})) && dialog &&
-                    !dialog->Rect().Contains(ImVec2(app_pos)))
-                {
-                    on = app_pos;
-                    break;
-                }
-            }
-            IM_CHECK(on != float2{0.f});
-            const float2 by{HelloImGui::EmSize(3.f), HelloImGui::EmSize(2.f)};
-            const float2 moved = app->pixel_at_vp_pos(app->vp_pos_at_app_pos(on + by)) -
-                                 app->pixel_at_vp_pos(app->vp_pos_at_app_pos(on));
-            ctx->MouseMoveToPos(ImVec2(on));
-            ctx->MouseDown(ImGuiMouseButton_Left);
-            ctx->MouseMoveToPos(ImVec2(on + by));
-            ctx->MouseUp(ImGuiMouseButton_Left);
-            ctx->Yield(2);
-            preview = app->edit_preview();
-            IM_CHECK(la::length(moved) > 1.f);
-            IM_CHECK(la::round(moved) != moved);
-            IM_CHECK(preview && preview->shift);
-            if (preview && preview->shift)
-                IM_CHECK(la::length(preview->shift->offset - (float2{3.f, 0.f} + moved)) < 1e-3f);
-            app->set_zoom(zoom);
-        }
-        ctx->SetRef("Shift...");
         ctx->ItemClick("Shift");
         wait_until(ctx, [&] { return img->history.has_undo(); });
 
@@ -1037,18 +1038,31 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(snapshot(img) == original);
 
-        // and dragging the lower strip turns the hue, with the other two at rest
+        // And dragging the lower strip turns the hue, with saturation and lightness at zero; Saturation is set back,
+        // since the dialog keeps the -100 from above. A turn keeps each pixel's smallest and largest component and
+        // moves the one between.
         menu_click(ctx, "Edit/Hue\\/saturation...");
         ctx->SetRef("Hue\\/saturation...");
         ctx->ItemInputValue("Saturation", 0.0f);
         ctx->ItemDragWithDelta("The hue wheel as these settings would leave it; drag it to turn the hue",
                                ImVec2(HelloImGui::EmSize(3.f), 0.f));
-        ctx->ItemClick("Apply");
-        wait_until(ctx, [&] { return img->history.has_undo(); });
         {
-            const auto turned = snapshot(img);
-            float      moved  = 0.f;
-            for (size_t i = 0; i < turned.size(); ++i) moved = std::max(moved, std::fabs(turned[i] - original[i]));
+            const int4                    ch = img->groups[img->selected_group].channels;
+            const std::array<Array2Df, 3> before{img->channels[ch[0]], img->channels[ch[1]], img->channels[ch[2]]};
+            ctx->ItemClick("Apply");
+            wait_until(ctx, [&] { return img->history.has_undo(); });
+
+            int   ranges_changed = 0;
+            float moved          = 0.f;
+            for (int i = 0; i < before[0].num_elements(); ++i)
+            {
+                const float3 a{before[0](i), before[1](i), before[2](i)};
+                const float3 b{img->channels[ch[0]](i), img->channels[ch[1]](i), img->channels[ch[2]](i)};
+                ranges_changed += std::fabs(la::minelem(a) - la::minelem(b)) > 1e-4f ||
+                                  std::fabs(la::maxelem(a) - la::maxelem(b)) > 1e-4f;
+                moved = std::max(moved, la::maxelem(la::abs(a - b)));
+            }
+            IM_CHECK_EQ(ranges_changed, 0);
             IM_CHECK_GT(moved, 1e-3f); //< a turn, not rounding
         }
         menu_click(ctx, "Edit/Undo");
@@ -1171,8 +1185,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 IM_CHECK_LT(std::fabs(sample_lab().x - before.x), 1e-3f);
             }
 
-        // A bright, steep line runs some of the color channels past white, unless clipped to SDR, which holds every
-        // one to [0, 1]. Counted and checked once, since the engine logs every check.
+        // A bright, steep line runs the fill's red past white; clipped to SDR, each channel is what it was unclipped,
+        // held to [0, 1].
+        float3 unclipped{0.f};
         for (bool clip : {false, true})
         {
             menu_click(ctx, "Edit/Brightness\\/contrast...");
@@ -1188,17 +1203,16 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             ctx->ItemClick("Apply");
             ctx->Yield(2);
 
-            int outside = 0;
-            for (int c = 0; c < 3; ++c)
-                for (int i = 0; i < img->channels[ch[c]].num_elements(); ++i)
-                {
-                    const float v = img->channels[ch[c]](i);
-                    outside += v < 0.f || v > 1.f;
-                }
+            IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Brightness/contrast");
+            const float3 rgb{img->channels[ch[0]](int2{4, 4}), img->channels[ch[1]](int2{4, 4}),
+                             img->channels[ch[2]](int2{4, 4})};
             if (clip)
-                IM_CHECK_EQ(outside, 0);
+                IM_CHECK(la::length(rgb - la::clamp(unclipped, 0.f, 1.f)) < 1e-6f);
             else
-                IM_CHECK_GT(outside, 0);
+            {
+                unclipped = rgb;
+                IM_CHECK_GT(rgb.x, 1.f);
+            }
 
             menu_click(ctx, "Edit/Undo");
             ctx->Yield();

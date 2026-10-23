@@ -71,13 +71,13 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     struct Navigable
     {
         const char *menu, *dialog, *test;
-        bool        closable;
+        bool        edit; ///< An edit dialog, with an edit's footer, where a save dialog has a close button
     };
     for (const Navigable n :
-         {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", true},
+         {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", false},
           Navigable{"File/Export rendition...", "Export rendition...",
-                    "export_rendition_lets_the_viewport_be_navigated", true},
-          Navigable{"Edit/Channel mixer...", "Channel mixer...", "edit_dialog_lets_the_viewport_be_navigated", false}})
+                    "export_rendition_lets_the_viewport_be_navigated", false},
+          Navigable{"Edit/Channel mixer...", "Channel mixer...", "edit_dialog_lets_the_viewport_be_navigated", true}})
     {
         t           = IM_REGISTER_TEST(engine, "dialogs", n.test);
         t->TestFunc = [n](ImGuiTestContext *ctx)
@@ -88,8 +88,14 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                 hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
                 wait_for_loads(ctx);
             }
-            auto      *app  = hdrview();
-            const auto zoom = app->zoom();
+            auto             *app = hdrview();
+            const std::string at  = std::string("//") + dialog + "/";
+            OnExit            restore{[app, zoom = app->zoom()]
+                                      {
+                               app->set_zoom(zoom);
+                               app->set_selection(Box2i{});
+                                      }};
+            app->set_selection(Box2i{});
 
             ctx->SetRef("##MainMenuBar");
             ctx->MenuClick(n.menu);
@@ -103,9 +109,8 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
 
             // An edit dialog's footer: "Selection only" only while there is a selection, and on one row with
             // Preview and the buttons.
-            if (!n.closable)
+            if (n.edit)
             {
-                const std::string at = std::string("//") + dialog + "/";
                 IM_CHECK(!ctx->ItemExists((at + "Selection only").c_str()));
                 app->set_selection(Box2i{int2{0}, int2{4}});
                 ctx->Yield(2);
@@ -116,6 +121,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                 ctx->Yield(2);
             }
 
+            const float zoom = app->zoom();
             ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
             ctx->MouseWheelY(1.f);
             ctx->Yield(2);
@@ -129,17 +135,13 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
 
             // a drag from the corner moves the pixel under it along
             const float2 before = app->pixel_at_app_pos(corner);
-            ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
-            ctx->MouseDown(ImGuiMouseButton_Left);
-            ctx->MouseMoveToPos(ImVec2{corner.x + HelloImGui::EmSize(4.f), corner.y + HelloImGui::EmSize(3.f)});
-            ctx->MouseUp(ImGuiMouseButton_Left);
-            ctx->Yield(2);
+            drag(ctx, corner, float2{HelloImGui::EmSize(4.f), HelloImGui::EmSize(3.f)});
             IM_CHECK(la::length(app->pixel_at_app_pos(corner) - before) > 0.f);
 
             // and a drag begun on the dialog's own widgets is theirs, even carried out over the viewport: a press on
             // Cancel, released away from it, which leaves it unclicked
             const float2 held = app->pixel_at_app_pos(corner);
-            ctx->MouseMoveToPos(ctx->ItemInfo((std::string("//") + dialog + "/Cancel").c_str()).RectFull.GetCenter());
+            ctx->MouseMoveToPos(ctx->ItemInfo((at + "Cancel").c_str()).RectFull.GetCenter());
             ctx->MouseDown(ImGuiMouseButton_Left);
             ctx->MouseMoveToPos(ImVec2{corner.x, corner.y});
             ctx->MouseMoveToPos(ImVec2{corner.x + HelloImGui::EmSize(4.f), corner.y + HelloImGui::EmSize(3.f)});
@@ -149,7 +151,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
 
             // its title bar's arrow folds it to the title bar, out of the way, and back
             const float full = window->Size.y;
-            ctx->ItemClick((std::string("//") + dialog + "/#FOLD").c_str());
+            ctx->ItemClick((at + "#FOLD").c_str());
             ctx->Yield(3);
             // and the sliver Dear ImGui keeps below a title bar for the rounding
             IM_CHECK_LE(window->Size.y,
@@ -159,23 +161,21 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->MouseWheelY(1.f);
             ctx->Yield(2);
             IM_CHECK(app->zoom() != folded_zoom); //< still navigable folded
-            ctx->ItemClick((std::string("//") + dialog + "/#FOLD").c_str());
+            ctx->ItemClick((at + "#FOLD").c_str());
             ctx->Yield(3);
             IM_CHECK_EQ(window->Size.y, full);
 
-            // the arrow sits beside the close button, which closes the dialog as Cancel does
-            const std::string bar = std::string("//") + dialog + "/";
-            if (n.closable)
-            {
-                IM_CHECK(!ctx->ItemInfo((bar + "#FOLD").c_str())
-                              .RectFull.Overlaps(ctx->ItemInfo((bar + "#CLOSE").c_str()).RectFull));
-                ctx->ItemClick((bar + "#CLOSE").c_str());
-            }
+            if (n.edit)
+                ctx->ItemClick((at + "Cancel").c_str());
             else
-                ctx->ItemClick((bar + "Cancel").c_str());
+            {
+                // the arrow sits beside the close button, which closes the dialog as Cancel does
+                IM_CHECK(!ctx->ItemInfo((at + "#FOLD").c_str())
+                              .RectFull.Overlaps(ctx->ItemInfo((at + "#CLOSE").c_str()).RectFull));
+                ctx->ItemClick((at + "#CLOSE").c_str());
+            }
             wait_for_window_closed(ctx, dialog);
             IM_CHECK(ctx->WindowInfo(dialog, ImGuiTestOpFlags_NoError).Window == nullptr);
-            app->set_zoom(zoom);
         };
     }
 
