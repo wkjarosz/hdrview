@@ -57,6 +57,14 @@ struct EnvmapRemap
     int      quality  = 1;           ///< Samples per axis, or EWA's maximum anisotropy
 };
 
+/// A shift of the subject's channels, as the image shader previews it: see shifted() in edit/filters.h.
+struct ShiftEdit
+{
+    float2 offset{0.f}; ///< In samples; positive moves the image right and down
+    int    sampler = 0; ///< A Sampler, for a fractional offset
+    int2   borders{0};  ///< The BorderMode across and down
+};
+
 /// The view's zoom and pan, which an edit dialog previewing a reshaped image takes over and gives back.
 struct ViewState
 {
@@ -143,6 +151,8 @@ public:
     virtual std::optional<PointEdit> point_edit(const EditContext &) const { return std::nullopt; }
     /// The envmap remap this command makes with its current settings, for the viewport to preview, or none.
     virtual std::optional<EnvmapRemap> remap_preview(const EditContext &) const { return std::nullopt; }
+    /// The shift this command makes with its current settings, for the viewport to preview, or none.
+    virtual std::optional<ShiftEdit> shift_preview(const EditContext &) const { return std::nullopt; }
     /// Steer the preview by a drag over it from \p from to \p to, in the previewed image's uv; whether it did.
     /**
         Only while the command's dialog previews it. A drag it does not take pans the viewport as usual.

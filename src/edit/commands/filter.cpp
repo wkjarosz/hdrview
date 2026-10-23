@@ -224,6 +224,9 @@ public:
                        "offsets).");
     }
 
+    std::optional<ShiftEdit> shift_preview(const EditContext &) const override
+    { return ShiftEdit{m_offset, m_sampler, int2{m_border_x, m_link_borders ? m_border_x : m_border_y}}; }
+
     void apply(const EditContext &ctx) override
     {
         const float2 d  = m_offset;

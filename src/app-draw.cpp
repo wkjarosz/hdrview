@@ -483,6 +483,10 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.remap_sampling", edit.remap ? edit.remap->sampling : 0);
         m_shader->set_uniform("fsp.remap_quality", edit.remap ? edit.remap->quality : 1);
         m_shader->set_uniform("fsp.remap_levels", texture_levels(current_image()));
+        m_shader->set_uniform("fsp.shift", (int)edit.shift.has_value());
+        m_shader->set_uniform("fsp.shift_offset", edit.shift ? edit.shift->offset : float2{0.f});
+        m_shader->set_uniform("fsp.shift_sampler", edit.shift ? edit.shift->sampler : 0);
+        m_shader->set_uniform("fsp.shift_borders", edit.shift ? edit.shift->borders : int2{0});
         m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
         m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
 

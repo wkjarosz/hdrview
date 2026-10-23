@@ -23,9 +23,10 @@ std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext
     // a remap's result keeps the data window's corner, as resample_image_async() leaves it
     if (p.remap)
         p.window = Box2i{ctx.image->data_window.min, ctx.image->data_window.min + p.remap->size};
+    p.shift = cmd.shift_preview(ctx);
     if (const auto edit = cmd.point_edit(ctx))
         p.edit = *edit;
-    else if (!p.remap)
+    else if (!p.remap && !p.shift)
         return std::nullopt;
     p.M_to_sRGB = cmd.M_to_sRGB_after(ctx);
 

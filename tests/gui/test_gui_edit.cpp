@@ -925,6 +925,11 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Shift...");
         ctx->SetRef("Shift...");
         ctx->ItemInputValue("X, Y offset/$$0", 3.0f);
+        // and previewed while the dialog is open: the shift asked for, over the channels the view shows
+        ctx->Yield(2);
+        const EditPreview *preview = hdrview()->edit_preview();
+        IM_CHECK(preview && preview->shift && preview->shift->offset == float2(3.f, 0.f));
+        IM_CHECK(preview && preview->slots != int4{-1});
         ctx->ItemClick("Shift");
         wait_until(ctx, [&] { return img->history.has_undo(); });
 

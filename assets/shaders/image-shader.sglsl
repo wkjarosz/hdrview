@@ -87,6 +87,11 @@ layout(binding=1) uniform fs_params {
     int   remap_sampling; // an EnvMapSampling: 0 supersamples, 1 is EWA
     int   remap_quality;  // samples per axis, or EWA's maximum anisotropy
     int   remap_levels;   // the mip levels the current image's textures have
+    // a shift dialog's preview, which moves the subject's channels by shift_offset samples; see ShiftEdit
+    int   shift;
+    vec2  shift_offset;
+    int   shift_sampler;
+    ivec2 shift_borders;
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -198,11 +203,37 @@ vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p)
                 fetch_channel(primary_3_texture, primary_3_sampler, q, level));
 }
 
+// What src/shared/resample.h reads here: the four shown channels at once, from the textures' finest level.
+#define ResampleValue vec4
+struct ResampleSource
+{
+    ivec2 size;
+};
+vec4 resample_fetch(ResampleSource src, ivec2 p)
+{
+    return vec4(fetch_channel(primary_0_texture, primary_0_sampler, p, 0),
+                fetch_channel(primary_1_texture, primary_1_sampler, p, 0),
+                fetch_channel(primary_2_texture, primary_2_sampler, p, 0),
+                fetch_channel(primary_3_texture, primary_3_sampler, p, 0));
+}
+
+@include ../../src/shared/resample.h
+
+/// The image's size, which every slot showing a channel has and the one-texel others do not exceed.
+ivec2 shown_size()
+{
+    return max(max(textureSize(sampler2D(primary_0_texture, primary_0_sampler), 0),
+                   textureSize(sampler2D(primary_1_texture, primary_1_sampler), 0)),
+               max(textureSize(sampler2D(primary_2_texture, primary_2_sampler), 0),
+                   textureSize(sampler2D(primary_3_texture, primary_3_sampler), 0)));
+}
+
 /// The current image's samples \p value at \p uv, as an edit dialog's preview shows them, or as they are.
 /**
     Either a remap, whose quad spans the output, so that each of the output's pixels shows the color remapped_envmap()
-    gives it, through the same envmap_sample.h; or a point-wise edit, applied to the samples as stored within the
-    subject's rectangle, as apply_point_edit() would change them.
+    gives it, through the same envmap_sample.h; or, within the subject's rectangle, a shift, through the same
+    resample.h as shifted(), or a point-wise edit, applied to the samples as stored, as apply_point_edit() would
+    change them.
 */
 vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
 {
@@ -216,11 +247,7 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
         src.mapping = fsp.remap_src;
         src.ratio   = 2.0;
         src.spread  = 0.25;
-        // the image's size, which every slot showing a channel has and the one-texel others do not exceed
-        src.size = max(max(textureSize(sampler2D(primary_0_texture, primary_0_sampler), 0),
-                           textureSize(sampler2D(primary_1_texture, primary_1_sampler), 0)),
-                       max(textureSize(sampler2D(primary_2_texture, primary_2_sampler), 0),
-                           textureSize(sampler2D(primary_3_texture, primary_3_sampler), 0)));
+        src.size    = shown_size();
         src.levels  = fsp.remap_levels;
         // a cube map's faces run out of texels before the image does
         if (envmap_is_cube(src.mapping))
@@ -233,8 +260,23 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
         return in_img ? value : vec4(0.0);
     }
 
-    if (fsp.edit_op == EDIT_NONE || !all(greaterThanEqual(uv, fsp.edit_rect.xy)) ||
-        !all(lessThan(uv, fsp.edit_rect.zw)))
+    if (!all(greaterThanEqual(uv, fsp.edit_rect.xy)) || !all(lessThan(uv, fsp.edit_rect.zw)))
+        return value;
+
+    if (fsp.shift != 0)
+    {
+        ResampleSource src;
+        src.size     = shown_size();
+        vec4 shifted = resample_shifted(src, ivec2(floor(uv * vec2(src.size))), fsp.shift_offset, fsp.shift_sampler,
+                                        fsp.shift_borders.x, fsp.shift_borders.y);
+        vec4 result  = value;
+        for (int k = 0; k < 4; ++k)
+            if (fsp.edit_slots[k] >= 0)
+                result[k] = shifted[k];
+        return result;
+    }
+
+    if (fsp.edit_op == EDIT_NONE)
         return value;
     if (fsp.edit_op >= EDIT_FIRST_COLOR)
         return fsp.edit_color != 0
