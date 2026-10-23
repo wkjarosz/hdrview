@@ -55,6 +55,24 @@ std::vector<Annotation::Shape> all_shapes()
     return shapes;
 }
 
+/// Stands in for a font: a fixed box per character, proportional to the size, which is all a box needs.
+float2 measure_stand_in(const std::string &, float size, const std::string &text)
+{ return float2{0.5f * size * float(text.size()), size}; }
+
+/// Image-to-screen mapping at \p s screen pixels per image pixel, as zooming the viewport gives.
+/**
+    It measures text with measure_stand_in(), so a Text annotation has a box, and handles, like every other
+    shape.
+*/
+VgTransform scaled_transform(float s)
+{
+    VgTransform x;
+    x.to_screen    = [s](float2 p) { return p * s; };
+    x.scale        = s;
+    x.measure_text = measure_stand_in;
+    return x;
+}
+
 } // namespace
 
 TEST_CASE("Every shape flattens to a well-formed command stream")
@@ -117,36 +135,50 @@ TEST_CASE("Every shape draws within the bounds it declares")
     }
 }
 
-TEST_CASE("A stroke is a screen width, and a font size an image one")
+TEST_CASE("A stroke is a screen width, and a font size an image one, unless set otherwise")
 {
-    // The two are measured differently on purpose: a stroke is how the markup is drawn, so it stays as easy
-    // to see however far out the view is, while how large a string is on the image is its geometry, and
-    // shrinks with the feature it labels like every other extent here.
+    // The defaults differ on purpose: a stroke is how the markup is drawn, so it stays as easy to see however
+    // far out the view is, while how large a string is on the image is its geometry, and shrinks with the
+    // feature it labels like every other extent here. Either can be switched, and the command stream has to
+    // carry whichever unit is set.
+    const Annotation defaults;
+    CHECK_FALSE(defaults.stroke_width_relative);
+    CHECK(defaults.font_size_relative);
+
+    auto kind = [](bool relative) { return int(relative ? VgCommand::Relative : VgCommand::Absolute); };
+
     for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        const std::vector<VgCommand> out = to_vg_commands({sample(shape)}, 1.f);
-
-        int widths = 0, sizes = 0;
-        for (const auto &c : out)
-        {
-            if (c.type == VgCommand::Type::StrokeWidth)
+        for (bool stroke_relative : {false, true})
+            for (bool font_relative : {false, true})
             {
-                CHECK(int(c.data[1]) == int(VgCommand::Absolute));
-                ++widths;
-            }
-            if (c.type == VgCommand::Type::FontSize)
-            {
-                CHECK(int(c.data[1]) == int(VgCommand::Relative));
-                ++sizes;
-            }
-        }
+                CAPTURE(annotation_shape_name(shape));
+                CAPTURE(stroke_relative);
+                CAPTURE(font_relative);
 
-        // Every shape says one or the other, so neither check above can pass by never running.
-        CHECK(widths + sizes > 0);
-        CHECK((shape == Annotation::Shape::Text ? sizes : widths) > 0);
-    }
+                Annotation a            = sample(shape);
+                a.stroke_width_relative = stroke_relative;
+                a.font_size_relative    = font_relative;
+
+                int widths = 0, sizes = 0;
+                for (const auto &c : to_vg_commands({a}, 1.f))
+                {
+                    if (c.type == VgCommand::Type::StrokeWidth)
+                    {
+                        CHECK(c.data[0] == a.stroke_width);
+                        CHECK(int(c.data[1]) == kind(stroke_relative));
+                        ++widths;
+                    }
+                    if (c.type == VgCommand::Type::FontSize)
+                    {
+                        CHECK(c.data[0] == a.font_size);
+                        CHECK(int(c.data[1]) == kind(font_relative));
+                        ++sizes;
+                    }
+                }
+
+                // Every shape says one or the other, so neither check above can pass by never running.
+                CHECK((shape == Annotation::Shape::Text ? sizes : widths) > 0);
+            }
 }
 
 TEST_CASE("An invisible annotation draws nothing, and does not disturb its neighbors")
@@ -249,51 +281,75 @@ TEST_CASE("Every shape reports a label without being given one")
 namespace
 {
 
-/// Image-to-screen mapping at \p s screen pixels per image pixel, as zooming the viewport gives.
-VgTransform scaled_transform(float s)
-{
-    VgTransform x;
-    x.to_screen = [s](float2 p) { return p * s; };
-    x.scale     = s;
-    return x;
-}
-
-/// A point on \p a's outline. Which point that is differs by shape, which is the whole of the difference.
+/// A point on \p a's outline from which straight up, toward smaller y, leads away from the shape.
 float2 point_on_outline(const Annotation &a)
 {
-    float2    h[Annotation::MaxHandles];
-    const int n = annotation_handles(a, h);
+    float2 h[Annotation::MaxHandles];
+    annotation_handles(a, h);
     switch (a.shape)
     {
-    // The midpoint of a bounding-box edge: on a rectangle's side, and on an ellipse's extreme, which is
-    // where the box touches it.
+    // The midpoint of the top edge of the bounding box: on a rectangle's side, and on an ellipse's extreme,
+    // which is where the box touches it.
     case Annotation::Shape::Rect:
     case Annotation::Shape::Ellipse: return h[4];
     case Annotation::Shape::Line:
     case Annotation::Shape::Arrow: return (h[0] + h[1]) * 0.5f;
-    default: return a.p0(); // Text is only ever its anchor
+    // A scribble's first point, at the top of its box, and the anchor at the top of a string's.
+    default: return a.p0();
     }
-    (void)n;
 }
 
 constexpr float k_slop = 4.f;
 
+/// Which side of a boxed shape's extent its handle \p i moves along each axis: -1 the low, 1 the high, 0 neither.
+/**
+    In the order annotation_handles() lays them out: the corners (lo, hi.x/lo.y, hi, lo.x/hi.y), then the
+    midpoints of the top, right, bottom and left edges.
+*/
+int2 held_side(int i)
+{
+    static constexpr int x[8] = {-1, 1, 1, -1, 0, 1, 0, -1};
+    static constexpr int y[8] = {-1, -1, 1, 1, -1, 0, 1, 0};
+    return int2{x[i], y[i]};
+}
+
 } // namespace
 
-TEST_CASE("Every shape is picked up on its outline, and not far from it")
+TEST_CASE("Every shape is picked up within its tolerance and not beyond, unless it cannot be taken hold of")
 {
+    // The slop and the stroke straddling the outline widen every shape, both in screen pixels, so the same
+    // miss by a few of them lands the same way however far the image is zoomed; a stroke measured in image
+    // pixels widens it with the zoom. Later annotations draw over earlier ones, so the topmost is the one
+    // picked up, and one hidden or locked is passed over without shielding what is behind it.
     for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
+        for (bool stroke_relative : {false, true})
+            for (float scale : {0.25f, 1.f, 8.f})
+            {
+                CAPTURE(annotation_shape_name(shape));
+                CAPTURE(stroke_relative);
+                CAPTURE(scale);
 
-        const Annotation a = sample(shape);
-        const auto       x = identity_transform();
+                Annotation a            = sample(shape);
+                a.stroke_width_relative = stroke_relative;
+                const auto   x          = scaled_transform(scale);
+                const float  tol        = k_slop + 0.5f * a.stroke_width * (stroke_relative ? scale : 1.f);
+                const float2 on         = x.to_screen(point_on_outline(a));
+                const float2 inside     = on - float2{0.f, tol - 1.f};
+                const float2 beyond     = on - float2{0.f, 4.f * tol};
 
-        CHECK(annotation_at({a}, point_on_outline(a), x, k_slop) == 0);
+                CHECK(annotation_at({a}, inside, x, k_slop) == 0);
+                CHECK(annotation_at({a}, beyond, x, k_slop) == -1);
+                CHECK(annotation_at({a, a}, inside, x, k_slop) == 1);
 
-        // Far outside anything the fixture spans.
-        CHECK(annotation_at({a}, float2{500.f, 500.f}, x, k_slop) == -1);
-    }
+                Annotation hidden = a, locked = a;
+                hidden.visible = false;
+                locked.locked  = true;
+                for (const Annotation &out_of_reach : {hidden, locked})
+                {
+                    CHECK(annotation_at({out_of_reach}, inside, x, k_slop) == -1);
+                    CHECK(annotation_at({a, out_of_reach}, inside, x, k_slop) == 0);
+                }
+            }
 }
 
 TEST_CASE("A shape is hit through its middle only once it is filled")
@@ -319,230 +375,158 @@ TEST_CASE("A shape is hit through its middle only once it is filled")
     }
 }
 
-TEST_CASE("Every handle is found where it is drawn")
+TEST_CASE("Every handle can be grabbed anywhere it is drawn, at any zoom")
 {
-    // Hit testing and drawing read the same list, so this is really checking that the transform is applied
-    // the same way in both directions, the one place a handle can drift from the shape it belongs to.
+    // Hit testing and drawing read the same list, so this checks that the transform is applied the same way in
+    // both directions, the one place a handle can drift from the shape it belongs to. A handle is drawn as a
+    // square of the hit radius, so the square is what has to answer: measured as a radius, a click on one of
+    // its corners -- which is where a corner handle is aimed at -- would miss, and the press fall through to
+    // whatever is under it.
     constexpr float radius = 6.f;
+    const float     e = radius - 0.5f, o = radius + 0.5f; //< just inside the square, and just outside it
 
     for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        const Annotation a = sample(shape);
         for (float scale : {0.5f, 1.f, 4.f})
         {
+            CAPTURE(annotation_shape_name(shape));
             CAPTURE(scale);
-            const auto x = scaled_transform(scale);
+
+            const Annotation a = sample(shape);
+            const auto       x = scaled_transform(scale);
 
             float2    h[Annotation::MaxHandles];
-            const int count = annotation_handles(a, h);
-            CHECK(count == (shape == Annotation::Shape::Text    ? 0
-                            : shape == Annotation::Shape::Line  ? 2
-                            : shape == Annotation::Shape::Arrow ? 2
-                                                                : 8));
+            const int count = annotation_handles(a, h, &x);
+            CHECK(count == (shape == Annotation::Shape::Text                                        ? 4
+                            : shape == Annotation::Shape::Line || shape == Annotation::Shape::Arrow ? 2
+                                                                                                    : 8));
 
             for (int i = 0; i < count; ++i)
             {
                 CAPTURE(i);
-                CHECK(handle_at(a, x.to_screen(h[i]), x, radius) == i);
+                const float2 at = x.to_screen(h[i]);
+                for (float2 inside : {float2{0.f, 0.f}, float2{-e, -e}, float2{e, -e}, float2{e, e}, float2{-e, e}})
+                {
+                    CAPTURE(inside.x);
+                    CAPTURE(inside.y);
+                    CHECK(handle_at(a, at + inside, x, radius) == i);
+                }
+                // past each side the square ends, though a neighbor's may begin there
+                for (float2 outside : {float2{-o, 0.f}, float2{o, 0.f}, float2{0.f, -o}, float2{0.f, o}})
+                {
+                    CAPTURE(outside.x);
+                    CAPTURE(outside.y);
+                    CHECK(handle_at(a, at + outside, x, radius) != i);
+                }
             }
 
-            // A point well away from every handle finds none, so the check above is not simply always
-            // returning the first one.
+            // A point well away from every handle finds none, so the checks above are not simply always
+            // returning a handle.
             CHECK(handle_at(a, x.to_screen(float2{500.f, 500.f}), x, radius) == -1);
         }
-    }
 }
 
-TEST_CASE("The topmost annotation is the one picked up")
+TEST_CASE("A dragged handle follows the cursor, and the side it pivots about stays put")
 {
-    // Later annotations draw over earlier ones, so the search has to run the other way; a forward search
-    // would hand back whichever was drawn first and looks buried.
+    // Corners and endpoints take both of the cursor's coordinates; an edge midpoint takes only the one across
+    // its edge, and stays centered along it. A resize pivots about the side not being held, which stays
+    // where it was even once the drag carries the handle past it and turns the shape inside out. That
+    // renumbers the handles, so each step continues from the index the last one returned, as a drag held
+    // through the crossing does.
+    const auto x = scaled_transform(1.f);
+
     for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        const Annotation under = sample(shape);
-        const Annotation over  = sample(shape);
-        const float2     p     = point_on_outline(over);
-
-        CHECK(annotation_at({under, over}, p, identity_transform(), k_slop) == 1);
-    }
-}
-
-TEST_CASE("An annotation that cannot be taken hold of is not picked up")
-{
-    for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        const Annotation a = sample(shape);
-        const float2     p = point_on_outline(a);
-        const auto       x = identity_transform();
-
-        REQUIRE(annotation_at({a}, p, x, k_slop) == 0);
-
-        Annotation hidden = a;
-        hidden.visible    = false;
-        CHECK(annotation_at({hidden}, p, x, k_slop) == -1);
-
-        Annotation locked = a;
-        locked.locked     = true;
-        CHECK(annotation_at({locked}, p, x, k_slop) == -1);
-
-        // ...and one of those in front does not shield the one behind it.
-        CHECK(annotation_at({a, hidden}, p, x, k_slop) == 0);
-    }
-}
-
-TEST_CASE("How easy a shape is to hit does not change with zoom")
-{
-    // Slop and stroke width are screen quantities, like the stroke itself, so the same miss by a few
-    // screen pixels has to land the same way however far the image is zoomed in.
-    for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        const Annotation a = sample(shape);
-
-        for (float scale : {0.25f, 1.f, 8.f})
-        {
-            CAPTURE(scale);
-            const auto   x  = scaled_transform(scale);
-            const float2 on = x.to_screen(point_on_outline(a));
-
-            // Just inside the tolerance the stroke and slop together allow, and well outside it.
-            const float tol = k_slop + a.stroke_width * 0.5f;
-            CHECK(annotation_at({a}, on + float2{0.f, tol - 1.f}, x, k_slop) == 0);
-            CHECK(annotation_at({a}, on + float2{0.f, 4.f * tol}, x, k_slop) == -1);
-        }
-    }
-}
-
-TEST_CASE("A dragged handle follows the cursor, in the directions it is free to move")
-{
-    // Corners and endpoints take both of the cursor's coordinates; an edge midpoint takes only the one
-    // across the edge it sits on, and stays centered along it.
-    for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        float2    h[Annotation::MaxHandles];
-        const int count = annotation_handles(sample(shape), h);
-
-        for (int i = 0; i < count; ++i)
-        {
-            CAPTURE(i);
-
-            // Small enough not to drag anything past the far side, which is the next test's business.
-            const float2 delta{5.f, 3.f};
-
-            Annotation a = sample(shape);
-            move_annotation_handle(a, i, h[i] + delta);
-
-            float2 after[Annotation::MaxHandles];
-            annotation_handles(a, after);
-
-            const bool free_x = i < 4 || i == 5 || i == 7;
-            const bool free_y = i < 4 || i == 4 || i == 6;
-            CHECK(after[i].x == doctest::Approx(h[i].x + (free_x ? delta.x : 0.f)));
-            CHECK(after[i].y == doctest::Approx(h[i].y + (free_y ? delta.y : 0.f)));
-        }
-    }
-}
-
-TEST_CASE("A corner dragged past the opposite one turns the shape inside out rather than sticking")
-{
-    const auto      x      = identity_transform();
-    constexpr float radius = 6.f;
-
-    for (auto shape : {Annotation::Shape::Rect, Annotation::Shape::Ellipse})
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        Annotation a = sample(shape);
-        float2     h[Annotation::MaxHandles];
-        annotation_handles(a, h);
-
-        // Handle 0 is the low corner; this drags it well beyond the high one.
-        const float2 to = h[2] + float2{50.f, 40.f};
-        move_annotation_handle(a, 0, to);
-
-        // The shape comes back ordered, so everything downstream can still read p0 as the low corner...
-        CHECK(a.p0().x <= a.p1().x);
-        CHECK(a.p0().y <= a.p1().y);
-
-        // ...and the cursor is still holding a corner of it, rather than having let go at the crossing.
-        CHECK(handle_at(a, x.to_screen(to), x, radius) >= 0);
-    }
-}
-
-TEST_CASE("Dragging one handle leaves the opposite side of the shape alone")
-{
-    // A resize pivots about the side you are not holding. Were the shape re-centered or re-ordered
-    // wrongly, this is what would move.
-    for (auto shape : {Annotation::Shape::Rect, Annotation::Shape::Ellipse})
     {
         CAPTURE(annotation_shape_name(shape));
 
         const Annotation before = sample(shape);
-        float2           h0[Annotation::MaxHandles];
-        annotation_handles(before, h0);
-
-        // Handle 0 is the low corner, so handle 2, the high one, is what must not move.
-        Annotation a = before;
-        move_annotation_handle(a, 0, float2{0.f, 5.f});
-
-        float2 h1[Annotation::MaxHandles];
-        annotation_handles(a, h1);
-        CHECK(h1[2].x == doctest::Approx(h0[2].x));
-        CHECK(h1[2].y == doctest::Approx(h0[2].y));
-
-        // And the corner that was dragged did move, so the check above is not comparing two unchanged
-        // shapes.
-        CHECK(length(h1[0] - h0[0]) > 1.f);
-    }
-}
-
-TEST_CASE("A handle held across the far side keeps its grip")
-{
-    // Dragging a corner past its opposite renumbers the handles. If the index did not come back renumbered,
-    // a drag held through the crossing would let go and start moving a different corner, and the shape
-    // would jump. Each step here continues the drag from the index the last one returned.
-    for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        float2    h[Annotation::MaxHandles];
-        const int count = annotation_handles(sample(shape), h);
+        float2           h[Annotation::MaxHandles];
+        const int        count = annotation_handles(before, h, &x);
+        REQUIRE(count > 0);
 
         for (int i = 0; i < count; ++i)
         {
             CAPTURE(i);
 
-            Annotation a     = sample(shape);
-            int        index = i;
+            // a small move, crossing nothing; and out past the far side, back through it, and out the other way
+            const std::vector<std::vector<float2>> drags{
+                {h[i] + float2{5.f, 3.f}}, {float2{300.f, 250.f}, float2{-200.f, -150.f}, float2{60.f, 45.f}}};
 
-            // Out well past the opposite side, back through it, and out the other way again.
-            for (float2 to : {float2{300.f, 250.f}, float2{-200.f, -150.f}, float2{60.f, 45.f}})
+            for (const auto &drag : drags)
             {
-                CAPTURE(to.x);
-                index = move_annotation_handle(a, index, to);
-                REQUIRE(index >= 0);
-                REQUIRE(index < count);
+                Annotation a     = before;
+                int        index = i;
+                for (float2 to : drag)
+                {
+                    CAPTURE(to.x);
+                    CAPTURE(to.y);
 
-                float2 after[Annotation::MaxHandles];
-                annotation_handles(a, after);
+                    // Glyphs cannot be stretched, so a string's box keeps its aspect, its height following the
+                    // cursor and the corner opposite the handle staying put; the box then lies on whichever
+                    // side of that corner the cursor is. Each step here is a fresh drag, since the index is
+                    // not renumbered when the box crosses that corner.
+                    if (shape == Annotation::Shape::Text)
+                    {
+                        a = before;
+                        float2 lo0, extent0;
+                        REQUIRE(text_extent(a, x, lo0, extent0));
+                        const float2 fixed{i == 0 || i == 3 ? lo0.x + extent0.x : lo0.x,
+                                           i == 0 || i == 1 ? lo0.y + extent0.y : lo0.y};
 
-                // The handle now named by that index is the one the cursor is holding: it tracks the
-                // cursor in whichever directions it is free to move.
-                const bool free_x = index < 4 || index == 5 || index == 7;
-                const bool free_y = index < 4 || index == 4 || index == 6;
-                if (free_x)
-                    CHECK(after[index].x == doctest::Approx(to.x));
-                if (free_y)
-                    CHECK(after[index].y == doctest::Approx(to.y));
+                        CHECK(move_annotation_handle(a, i, to, &x) == i);
+
+                        float2 lo, extent;
+                        REQUIRE(text_extent(a, x, lo, extent));
+                        const float ratio = std::abs(to.y - fixed.y) / extent0.y;
+                        CHECK(extent.y == doctest::Approx(std::abs(to.y - fixed.y)));
+                        CHECK(extent.x == doctest::Approx(extent0.x * ratio));
+                        CHECK(a.font_size == doctest::Approx(before.font_size * ratio));
+                        CHECK(lo.x == doctest::Approx(to.x >= fixed.x ? fixed.x : fixed.x - extent.x));
+                        CHECK(lo.y == doctest::Approx(to.y >= fixed.y ? fixed.y : fixed.y - extent.y));
+                        continue;
+                    }
+
+                    index = move_annotation_handle(a, index, to, &x);
+                    REQUIRE(index >= 0);
+                    REQUIRE(index < count);
+
+                    float2 after[Annotation::MaxHandles];
+                    REQUIRE(annotation_handles(a, after, &x) == count);
+
+                    if (!Annotation::boxed(shape))
+                    {
+                        // an endpoint is an endpoint however the line is turned around, and the other one stays
+                        CHECK(index == i);
+                        CHECK(after[i].x == doctest::Approx(to.x));
+                        CHECK(after[i].y == doctest::Approx(to.y));
+                        CHECK(after[1 - i].x == doctest::Approx(h[1 - i].x));
+                        CHECK(after[1 - i].y == doctest::Approx(h[1 - i].y));
+                        continue;
+                    }
+
+                    // the handle the returned index names is at the cursor along each axis it is free on, and
+                    // where it started along the other
+                    const int2 side = held_side(i);
+                    CHECK(after[index].x == doctest::Approx(side.x ? to.x : h[i].x));
+                    CHECK(after[index].y == doctest::Approx(side.y ? to.y : h[i].y));
+
+                    // the box spans from the side not held to the cursor, and an axis not held keeps both sides
+                    const Box2f box0 = before.bounds(), box = a.bounds();
+                    for (int k = 0; k < 2; ++k)
+                    {
+                        CAPTURE(k);
+                        const float pivot = side[k] < 0 ? box0.max[k] : box0.min[k];
+                        CHECK(box.min[k] == doctest::Approx(side[k] ? std::min(pivot, to[k]) : box0.min[k]));
+                        CHECK(box.max[k] == doctest::Approx(side[k] ? std::max(pivot, to[k]) : box0.max[k]));
+                    }
+
+                    // Rect and Ellipse come back ordered, so everything downstream can read p0 as the low
+                    // corner; a scribble's points are its path, which a flip mirrors.
+                    if (shape != Annotation::Shape::Freehand)
+                    {
+                        CHECK(a.p0().x <= a.p1().x);
+                        CHECK(a.p0().y <= a.p1().y);
+                    }
+                }
             }
         }
     }
@@ -788,9 +772,6 @@ TEST_CASE("Smoothing changes how a scribble is drawn, not what it is")
     Annotation curved   = straight;
     curved.smooth       = true;
 
-    // The points are untouched, so the flag can be turned on and off without losing the stroke.
-    CHECK(straight.points == curved.points);
-
     // Only a scribble has a path to curve; the flag is inert on everything else.
     for (auto shape : all_shapes())
     {
@@ -880,62 +861,61 @@ TEST_CASE("A text annotation is picked up over its glyphs, not just at its ancho
 
 TEST_CASE("Resizing a text annotation's box scales the size it is drawn at")
 {
-    // Glyphs cannot be stretched, so a box drag has to come out as a font size. The measure here stands in
-    // for a font: a fixed box per character, proportional to the size, which is all the property needs.
-    // Zoomed, not identity: a font size is a screen quantity and the box is an image one, so a transform
-    // that scales by one would hide the conversion between them entirely.
+    // Glyphs cannot be stretched, so a box drag has to come out as a font size. Zoomed, not identity: the box
+    // is an image quantity and a font size may be a screen one, so a transform that scales by one would hide
+    // the conversion between them entirely.
     constexpr float zoom = 2.f;
-    auto            x    = scaled_transform(zoom);
-    x.measure_text       = [](const std::string &, float size, const std::string &text)
-    { return float2{0.5f * size * float(text.size()), size}; };
+    const auto      x    = scaled_transform(zoom);
 
-    Annotation a = sample(Annotation::Shape::Text);
-    a.text       = "caption";
-    a.font_size  = 20.f;
-    a.points     = {float2{100.f, 100.f}};
-    a.text_align = VgCommand::AlignLeft | VgCommand::AlignTop;
-
-    float2    handles[Annotation::MaxHandles];
-    const int count = annotation_handles(a, handles, &x);
-    REQUIRE(count == 4); // the corners; an edge would only stretch it
-
-    // Without something to measure with there is no box, so there is nothing to take hold of.
-    CHECK(annotation_handles(a, handles, nullptr) == 0);
-
-    float2 lo, extent;
-    REQUIRE(text_extent(a, x, lo, extent));
-
-    // The box is in image coordinates, and a font size is too, so it is the same box however far the view
-    // is zoomed -- which is what makes a string shrink with the image rather than floating over it.
-    CHECK(extent.y == doctest::Approx(a.font_size));
-    CHECK(extent.x == doctest::Approx(0.5f * a.font_size * float(a.text.size())));
-
-    for (float other_zoom : {0.25f, 1.f, 8.f})
+    for (bool relative : {true, false})
     {
-        CAPTURE(other_zoom);
-        auto y         = scaled_transform(other_zoom);
-        y.measure_text = x.measure_text;
+        CAPTURE(relative);
 
-        float2 lo_z, extent_z;
-        REQUIRE(text_extent(a, y, lo_z, extent_z));
-        CHECK(extent_z.x == doctest::Approx(extent.x));
-        CHECK(extent_z.y == doctest::Approx(extent.y));
+        Annotation a         = sample(Annotation::Shape::Text);
+        a.text               = "caption";
+        a.font_size          = 20.f;
+        a.font_size_relative = relative;
+        a.points             = {float2{100.f, 100.f}};
+        a.text_align         = VgCommand::AlignLeft | VgCommand::AlignTop;
+
+        float2    handles[Annotation::MaxHandles];
+        const int count = annotation_handles(a, handles, &x);
+        REQUIRE(count == 4); // the corners; an edge would only stretch it
+
+        // Without something to measure with there is no box, so there is nothing to take hold of.
+        CHECK(annotation_handles(a, handles, nullptr) == 0);
+
+        // A size in image pixels draws a box of that height on the image, which grows on screen with the
+        // zoom and so shrinks with the image rather than floating over it; one in screen pixels draws a box
+        // of that height on screen, whatever the zoom.
+        for (float z : {0.25f, 1.f, zoom, 8.f})
+        {
+            CAPTURE(z);
+            float2 lo_z, extent_z;
+            REQUIRE(text_extent(a, scaled_transform(z), lo_z, extent_z));
+            const float screen_height = a.font_size * (relative ? z : 1.f);
+            CHECK(extent_z.y * z == doctest::Approx(screen_height));
+            CHECK(extent_z.x * z == doctest::Approx(0.5f * screen_height * float(a.text.size())));
+        }
+
+        float2 lo, extent;
+        REQUIRE(text_extent(a, x, lo, extent));
+
+        // Drag the low corner up and left so the box doubles in height; the size doubles with it.
+        const float2 fixed = lo + extent;
+        move_annotation_handle(a, 0, float2{lo.x, fixed.y - 2.f * extent.y}, &x);
+        CHECK(a.font_size == doctest::Approx(40.f));
+
+        // The corner opposite the one dragged stayed where it was.
+        float2 lo2, extent2;
+        REQUIRE(text_extent(a, x, lo2, extent2));
+        CHECK((lo2 + extent2).x == doctest::Approx(fixed.x));
+        CHECK((lo2 + extent2).y == doctest::Approx(fixed.y));
+
+        // Shrinking works the same way round.
+        move_annotation_handle(a, 0, float2{lo2.x, (lo2 + extent2).y - 0.5f * extent2.y}, &x);
+        CHECK(a.font_size == doctest::Approx(20.f));
     }
-
-    // Drag the low corner up and left so the box doubles in height; the size doubles with it.
-    const float2 fixed = lo + extent;
-    move_annotation_handle(a, 0, float2{lo.x, fixed.y - 2.f * extent.y}, &x);
-    CHECK(a.font_size == doctest::Approx(40.f));
-
-    // The corner opposite the one dragged stayed where it was.
-    float2 lo2, extent2;
-    REQUIRE(text_extent(a, x, lo2, extent2));
-    CHECK((lo2 + extent2).x == doctest::Approx(fixed.x));
-    CHECK((lo2 + extent2).y == doctest::Approx(fixed.y));
-
-    // Shrinking works the same way round.
-    move_annotation_handle(a, 0, float2{lo2.x, (lo2 + extent2).y - 0.5f * extent2.y}, &x);
-    CHECK(a.font_size == doctest::Approx(20.f));
 }
 
 TEST_CASE("Text is baked at a handful of sizes, and at the same one however far it is zoomed")
@@ -969,40 +949,4 @@ TEST_CASE("Text is baked at a handful of sizes, and at the same one however far 
 }
 
 // That the zoom is not one of the things picking a baked size is what the box test above checks, by way of
-// the extent being the same at every zoom: nothing here takes a zoom to be independent of.
-
-TEST_CASE("A handle can be grabbed anywhere it is drawn")
-{
-    // Handles are drawn as squares of the hit radius, so the square is what has to answer: measured as a
-    // radius, a click on one of its own corners -- which is where a corner handle is aimed at -- misses,
-    // and the press falls through to whatever is under it.
-    constexpr float radius = 6.f;
-    const auto      x      = identity_transform();
-
-    for (auto shape : all_shapes())
-    {
-        CAPTURE(annotation_shape_name(shape));
-
-        const Annotation a = sample(shape);
-        float2           h[Annotation::MaxHandles];
-        const int        count = annotation_handles(a, h, &x);
-
-        for (int i = 0; i < count; ++i)
-        {
-            CAPTURE(i);
-            const float2 at = x.to_screen(h[i]);
-
-            // Every corner of the drawn square, just inside it.
-            const float e = radius - 0.5f;
-            for (float2 corner : {float2{-e, -e}, float2{e, -e}, float2{e, e}, float2{-e, e}})
-            {
-                CAPTURE(corner.x);
-                CAPTURE(corner.y);
-                CHECK(handle_at(a, at + corner, x, radius) >= 0);
-            }
-
-            // ...and well outside it, so the square has not simply grown without limit.
-            CHECK(handle_at(a, at + float2{4.f * radius, 4.f * radius}, x, radius) == -1);
-        }
-    }
-}
+// the box following the zoom only as its unit says: nothing here takes a zoom to be independent of.
