@@ -727,7 +727,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->ItemInputValue("Roll", 60.f);
         ctx->Yield(2);
         {
-            const float3x3 want = envmap_rotation(0.f, -float(M_PI) / 2.f, float(M_PI) / 3.f);
+            const float3x3 want = envmap_rotation(0.f, -shader::ENVMAP_PI / 2.f, shader::ENVMAP_PI / 3.f);
             for (int c = 0; c < 3; ++c) IM_CHECK(la::length(remap()->rotation[c] - want[c]) < 1e-4f);
         }
         ctx->ItemClick("Reset rotation");

@@ -35,6 +35,9 @@ std::vector<float3> sample_directions()
 
 const char *name_of(int m) { return envmapping_name(m); }
 
+// spelled out, since MSVC defines k_pi only under _USE_MATH_DEFINES, ahead of the first <cmath>
+constexpr double k_pi = 3.14159265358979323846;
+
 } // namespace
 
 TEST_CASE("Every mapping turns an image point into a unit direction")
@@ -641,14 +644,14 @@ TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, an
                     for (int x = 0; x < W; ++x)
                         src(x, y) =
                             0.5f +
-                            0.5f * float(std::cos(2.0 * M_PI * cycles * ((axis == 0 ? x : y) + 0.5) / src_n + offset));
+                            0.5f * float(std::cos(2.0 * k_pi * cycles * ((axis == 0 ? x : y) + 0.5) / src_n + offset));
                 const Array2Df out = remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_LatLong,
                                                      EnvMapSampling_EWA, shape.max_aniso);
                 double         c = 0.0, s = 0.0;
                 for (int y = 0; y < size.y; ++y)
                     for (int x = 0; x < size.x; ++x)
                     {
-                        const double phase = 2.0 * M_PI * seen * ((axis == 0 ? x : y) + 0.5) / n;
+                        const double phase = 2.0 * k_pi * seen * ((axis == 0 ? x : y) + 0.5) / n;
                         c += out(x, y) * std::cos(phase);
                         s += out(x, y) * std::sin(phase);
                     }
@@ -658,11 +661,11 @@ TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, an
             // at several phases, since where the output's pixels fall on the source's texels changes what a read
             // blurs by, and can put an aliased frequency's samples on its zeros
             const int quarter = n / 4;
-            for (double offset : {0.0, 0.25 * M_PI, 0.5 * M_PI, 0.75 * M_PI})
+            for (double offset : {0.0, 0.25 * k_pi, 0.5 * k_pi, 0.75 * k_pi})
             {
                 CAPTURE(offset);
                 const double sigma =
-                    std::sqrt(-std::log(response(quarter, quarter, offset)) / (2.0 * M_PI * M_PI / 16.0));
+                    std::sqrt(-std::log(response(quarter, quarter, offset)) / (2.0 * k_pi * k_pi / 16.0));
                 CHECK(sigma > 0.45);
                 CHECK(sigma < 0.55);
                 // a Gaussian of half a pixel lets 0.06 through, and one read per level, or a whole octave between
