@@ -92,13 +92,8 @@ TEST_CASE("A blur's impulse response is centered, symmetric, conserves its mass,
     // An impulse well away from the border, so every tap lands inside the image, blurred along one axis at a
     // time: the other axis then has to stay a single row or column, with no variance at all. Each kernel's
     // variance is known in closed form: a box of half-width r is the discrete uniform on [-r, r], of variance
-    // r(r+1)/3, and n passes of it add up to n times that.
-    const int2 size{81, 81};
-    const int2 center{40, 40};
-
-    Array2Df impulse{size};
-    impulse(center.x, center.y) = 1.f;
-
+    // r(r+1)/3, and n passes of it add up to n times that. Long along the blurred axis, and a few samples
+    // across the other, which is all it takes to see one spread there.
     struct Case
     {
         std::string                                     what;
@@ -130,6 +125,12 @@ TEST_CASE("A blur's impulse response is centered, symmetric, conserves its mass,
         {
             CAPTURE(c.what);
             CAPTURE(across);
+
+            const int2 size = across ? int2{81, 9} : int2{9, 81};
+            const int2 center{size.x / 2, size.y / 2};
+            Array2Df   impulse{size};
+            impulse(center.x, center.y) = 1.f;
+
             const Array2Df out = c.blur(impulse, across);
             REQUIRE(out.size() == size);
 
@@ -367,9 +368,9 @@ int expected_wrap(int p, int extent, int mode)
 TEST_CASE("A whole-sample shift moves samples without touching their values")
 {
     // A whole-sample shift is a permutation of the samples, not a filter over them, so no sampler may leave a
-    // fingerprint. Swept over all three, since the sampler is not consulted when the offset is whole, and
-    // over every pair of border modes, since the axes take theirs independently: a lat-long environment map
-    // wraps in longitude and not in latitude.
+    // fingerprint. Swept over all three, since the sampler is not consulted when the offset is whole, under
+    // each border mode; and under every pair of them for one sampler, since the axes take theirs
+    // independently: a lat-long environment map wraps in longitude and not in latitude.
     const Array2Df src = noise(int2{17, 13});
 
     for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
@@ -381,6 +382,9 @@ TEST_CASE("A whole-sample shift moves samples without touching their values")
                 for (int2 d :
                      {int2{0, 0}, int2{3, 0}, int2{0, -2}, int2{5, 7}, int2{-9, -11}, int2{40, -31}, int2{17, -26}})
                 {
+                    if (border_x != border_y && sampler != Sampler_Bilinear)
+                        continue;
+
                     CAPTURE(sampler);
                     CAPTURE(border_x);
                     CAPTURE(border_y);
