@@ -1917,8 +1917,23 @@ void HDRViewApp::setup_actions(ImGuiKey modKey, const vector<DockableWindowExtra
                    [if_img, this]() { return if_img() && m_roi.has_volume(); },
                    false,
                    &m_auto_fit_selection});
-        add(Action{{"Flip horizontally"}, ICON_MY_FLIP_HORIZ, ImGuiKey_H, 0, []() {}, if_img, false, &m_flip.x});
-        add(Action{{"Flip vertically"}, ICON_MY_FLIP_VERT, ImGuiKey_V, 0, []() {}, if_img, false, &m_flip.y});
+        // the view's, which leaves the image as it is; the Edit menu's Flip image commands mirror the pixels
+        add(Action{{"Mirror view horizontally", "Flip view horizontally"},
+                   ICON_MY_MIRROR_VIEW_HORIZ,
+                   ImGuiKey_H,
+                   0,
+                   []() {},
+                   if_img,
+                   false,
+                   &m_flip.x});
+        add(Action{{"Mirror view vertically", "Flip view vertically"},
+                   ICON_MY_MIRROR_VIEW_VERT,
+                   ImGuiKey_V,
+                   0,
+                   []() {},
+                   if_img,
+                   false,
+                   &m_flip.y});
     }
 }
 

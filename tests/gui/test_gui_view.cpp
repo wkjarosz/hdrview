@@ -91,8 +91,8 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         auto *app = hdrview();
 
         std::vector<std::string> toggles{"Auto fit display window", "Auto fit data window",
-                                         "Auto fit selection",      "Flip horizontally",
-                                         "Flip vertically",         "Draw pixel grid",
+                                         "Auto fit selection",      "Mirror view horizontally",
+                                         "Mirror view vertically",  "Draw pixel grid",
                                          "Draw pixel values",       "Draw data window",
                                          "Draw display window",     "Dither"};
         // offered, and enabled, only on a display that supports HDR

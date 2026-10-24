@@ -230,6 +230,32 @@ void HDRViewApp::draw_status_bar()
         string zoom_str      = fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom);
         float  zoom_visual_x = right_zone_x + EmSize(10.f) - ImGui::CalcTextSize(zoom_str.c_str()).x;
 
+        // Just left of the zoom, a button for each axis the view mirrors, which the image itself does not, so a
+        // mirrored view is not taken for flipped pixels; clicking one stops mirroring that axis.
+        struct Mirror
+        {
+            bool       &on;
+            const char *icon, *tooltip;
+        };
+        const Mirror mirrors[] = {
+            {m_flip.x, ICON_MY_MIRROR_VIEW_HORIZ,
+             "The view is mirrored horizontally; the image itself is not. Click to stop mirroring."},
+            {m_flip.y, ICON_MY_MIRROR_VIEW_VERT,
+             "The view is mirrored vertically; the image itself is not. Click to stop mirroring."}};
+        for (int i = 1; i >= 0; --i)
+            if (mirrors[i].on)
+            {
+                const float2 size =
+                    float2{ImGui::CalcTextSize(mirrors[i].icon)} + 2.f * float2{ImGui::GetStyle().FramePadding};
+                zoom_visual_x -= size.x + item_spacing;
+                ImGui::SameLine(zoom_visual_x);
+                ImGui::PushID(i);
+                if (ImGui::FlatButton(mirrors[i].icon, true, size))
+                    mirrors[i].on = false;
+                ImGui::PopID();
+                ImGui::Tooltip(mirrors[i].tooltip);
+            }
+
         const float drag_size = EmSize(5.f);
         const float inner_sp  = ImGui::GetStyle().ItemInnerSpacing.x;
         // width the color row is given below; also part of the fit test, so the zone is only drawn when
@@ -515,8 +541,8 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Auto fit data window"));
         MenuItem(action("Fit selection"));
         MenuItem(action("Auto fit selection"));
-        MenuItem(action("Flip horizontally"));
-        MenuItem(action("Flip vertically"));
+        MenuItem(action("Mirror view horizontally"));
+        MenuItem(action("Mirror view vertically"));
 
         ImGui::Separator();
 

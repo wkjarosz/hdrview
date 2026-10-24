@@ -200,12 +200,12 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         // through the images behind it, and a shortcut it has no use for, H for a horizontal flip, stands down.
         ctx->Yield(2);
         IM_CHECK(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
-        const bool flipped = *hdrview()->action("Flip horizontally").p_selected;
+        const bool flipped = *hdrview()->action("Mirror view horizontally").p_selected;
         ctx->KeyPress(ImGuiKey_DownArrow);
         ctx->KeyPress(ImGuiKey_H);
         ctx->Yield(2);
         IM_CHECK_EQ(hdrview()->current_image_index(), current);
-        IM_CHECK_EQ(*hdrview()->action("Flip horizontally").p_selected, flipped);
+        IM_CHECK_EQ(*hdrview()->action("Mirror view horizontally").p_selected, flipped);
 
         ctx->SetRef("Save as...");
         ctx->ItemClick("Cancel");

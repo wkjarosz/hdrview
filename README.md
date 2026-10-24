@@ -17,7 +17,7 @@ Most image viewers are built to display and browse images. You can of course do 
 - False-color and positive/negative modes over 17 built-in colormaps (Viridis, Turbo, Inferno, Spectral, IceFire, …).
 - Blue-noise dithering when values are quantized for an SDR display or an 8-bit file format, which keeps smooth gradients from banding.
 - Shadow and highlight clip warnings via zebra striping, with adjustable thresholds.
-- Continuous zoom from 1:100 to 512:1, fit-to-display-window / data-window / selection, and horizontal and vertical flips.
+- Continuous zoom from 1:100 to 512:1, fit-to-display-window / data-window / selection, and mirroring the view horizontally and vertically.
 
 **True HDR output** — HDRView asks the display what it can actually show and converts to it, rather than assuming sRGB:
 

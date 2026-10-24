@@ -50,8 +50,8 @@ struct ScopedDisplayWindow
 /// Every combination of the two flip axes, so no test below checks only the unflipped case.
 struct FlipState
 {
-    bool &h       = *hdrview()->action("Flip horizontally").p_selected;
-    bool &v       = *hdrview()->action("Flip vertically").p_selected;
+    bool &h       = *hdrview()->action("Mirror view horizontally").p_selected;
+    bool &v       = *hdrview()->action("Mirror view vertically").p_selected;
     bool  saved_h = h, saved_v = v;
 
     void set(int f)
