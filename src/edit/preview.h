@@ -26,6 +26,7 @@ struct EditPreview
     std::optional<float3x3>    M_to_sRGB; ///< What the image shows its samples through once the edit retags them
     std::optional<EnvmapRemap> remap;     ///< A remap of the whole image, in place of a point-wise edit
     std::optional<ShiftEdit>   shift;     ///< A shift of the subject's channels, in place of a point-wise edit
+    std::optional<BumpEdit>    bump;      ///< A bump map's normals in place of the shown group, if the subject has it
     std::optional<Box2i>       window;    ///< The display window of the image shown in place of this one, if reshaped
     EditCommand               *command = nullptr; ///< The command previewed, which a drag over the preview may steer
 };

@@ -25,19 +25,20 @@ std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext
     if (p.remap)
         p.window = Box2i{ctx.image->data_window.min, ctx.image->data_window.min + p.remap->size};
     p.shift = cmd.shift_preview(ctx);
+    p.bump  = cmd.bump_preview(ctx);
     if (const auto edit = cmd.point_edit(ctx))
         p.edit = *edit;
-    else if (!p.remap && !p.shift)
+    else if (!p.remap && !p.shift && !p.bump)
         return std::nullopt;
     p.M_to_sRGB = cmd.M_to_sRGB_after(ctx);
 
     // What applying would cover of the group the viewport shows: for a per-sample op or a shift (whose op is
-    // EDIT_NONE), the subject's channels among those bound to the shader's slots; for a color op, the group, if the
-    // subject includes it. Within the subject's rectangle, either way.
+    // EDIT_NONE), the subject's channels among those bound to the shader's slots; for a color op or a bump map, which
+    // writes whole color groups, the group, if the subject includes it. Within the subject's rectangle, either way.
     const Image &img             = *ctx.image;
     const int    shown           = img.active_group_index(Target_Primary);
     const auto [subject, bounds] = resolve_subject(ctx.image, ctx.subject, ctx.roi);
-    if (p.edit.op < shader::EDIT_FIRST_COLOR)
+    if (p.edit.op < shader::EDIT_FIRST_COLOR && !p.bump)
     {
         const int4 slots = img.shader_slots(Target_Primary);
         for (int k = 0; k < 4; ++k)
@@ -76,6 +77,12 @@ ShaderEdit shader_edit(const EditPreview &preview)
         s.op = shader::EDIT_SHIFT;
         s.p0 = float4{shift->offset, 0.f, 0.f};
         s.i0 = int4{shift->sampler, shift->borders.x, shift->borders.y, 0};
+    }
+    else if (const auto &bump = preview.bump)
+    {
+        s.op = shader::EDIT_BUMP_NORMAL;
+        s.p0 = float4{bump->scale, 0.f, 0.f};
+        s.i0 = int4{bump->borders, 0, 0};
     }
     else
     {

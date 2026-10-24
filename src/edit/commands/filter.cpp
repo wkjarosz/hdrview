@@ -18,6 +18,7 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "shared/edits.h"
 
 #include <cmath>
 
@@ -341,6 +342,18 @@ public:
                        "is a convention it chooses, and the two are commonly called OpenGL and DirectX.");
     }
 
+    /// The bump map's scale and borders, as the image shader previews it and apply() makes it.
+    std::optional<BumpEdit> bump_preview(const EditContext &ctx) const override
+    {
+        if (!ctx.image)
+            return std::nullopt;
+        // slopes in the image's own coordinates, so height is per unit of the whole image and the same bump map gives
+        // the same normals whatever resolution it is stored at
+        const float2 size{float(ctx.image->size().x), float(ctx.image->size().y)};
+        return BumpEdit{float2{m_scale * size.x, (m_flip_y ? -1.f : 1.f) * m_scale * size.y},
+                        int2{m_border_x, m_link_borders ? m_border_x : m_border_y}};
+    }
+
     void apply(const EditContext &ctx) override
     {
         auto img = ctx.image;
@@ -354,15 +367,11 @@ public:
         if (!src)
             return;
 
-        // slopes in the image's own coordinates, so height is per unit of the whole image and the same
-        // bump map gives the same normals whatever resolution it is stored at
-        const float2 size{float(img->size().x), float(img->size().y)};
-        const float  s      = m_scale;
-        const float  y_sign = m_flip_y ? -1.f : 1.f;
-        const int    bx = m_border_x, by = m_link_borders ? m_border_x : m_border_y;
+        const BumpEdit bump = *bump_preview(ctx);
+        const int      bx = bump.borders.x, by = bump.borders.y;
 
         modify_colors(ctx, "Bump to normal map",
-                      [src, groups, s, size, y_sign, bx, by](const float4 &, int2 p, int g)
+                      [src, groups, scale = bump.scale, bx, by](const float4 &, int2 p, int g)
                       {
                           // reads anywhere in the channel, not merely the selection; only past the image itself
                           // does the border mode decide what is there
@@ -384,17 +393,9 @@ public:
                           };
 
                           // forward differences: the finest slope the pixels can express
-                          const float h00 = height(p);
-                          const float dx  = height(p + int2{1, 0}) - h00;
-                          const float dy  = height(p + int2{0, 1}) - h00;
-
-                          // the surface z = h(x, y) has normal (-dh/dx, -dh/dy, 1) with y up, and the image's y runs
-                          // down, so green pointing up takes the slope down the image as it is
-                          float3 n = la::normalize(float3{-s * dx * size.x, y_sign * s * dy * size.y, 1.f});
-
-                          // into the [0,1] range a normal map is stored in, where flat is (0.5, 0.5, 1)
-                          n = n * 0.5f + 0.5f;
-                          return float4{n, 1.f};
+                          return float4{
+                              shader::bump_normal(height(p), height(p + int2{1, 0}), height(p + int2{0, 1}), scale),
+                              1.f};
                       });
     }
 

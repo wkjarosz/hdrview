@@ -265,6 +265,21 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
         return mix(value, shifted, greaterThanEqual(fsp.edit_slots, ivec4(0)));
     }
 
+    if (fsp.edit_op == EDIT_BUMP_NORMAL)
+    {
+        if (fsp.edit_color == 0)
+            return value;
+        // a color group's first three channels make the height; its alpha says nothing about it
+        vec2           scale   = fsp.edit_p0.xy;
+        ivec2          borders = fsp.edit_i0.xy;
+        ResampleSource src     = ResampleSource(shown_size());
+        ivec2          p       = ivec2(floor(uv * vec2(src.size)));
+        float          h       = dot(resample_bordered(src, p.x, p.y, borders.x, borders.y).xyz, vec3(1.0 / 3.0));
+        float          across  = dot(resample_bordered(src, p.x + 1, p.y, borders.x, borders.y).xyz, vec3(1.0 / 3.0));
+        float          down    = dot(resample_bordered(src, p.x, p.y + 1, borders.x, borders.y).xyz, vec3(1.0 / 3.0));
+        return vec4(bump_normal(h, across, down, scale), 1.0);
+    }
+
     if (fsp.edit_op == EDIT_NONE)
         return value;
     if (fsp.edit_op >= EDIT_FIRST_COLOR)

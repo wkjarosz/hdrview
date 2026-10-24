@@ -7,9 +7,9 @@
     channels it is; a color op maps a color group's four samples together. Both see the samples as stored:
     premultiplied where alpha means transparency, and in the image's own primaries.
 
-    The resampling ops read the image around a pixel, so only the image shader's preview dispatches on them, with
-    four integers besides; the edits themselves are shifted() and remapped_envmap(), whose parameters
-    shader_edit() packs into these slots.
+    The ops after the color ops read more than a pixel's own samples, so only the image shader's preview dispatches
+    on them, with four integers besides; the edits themselves are shifted(), remapped_envmap(), the bump map's
+    filter and irradiance_envmap(), whose parameters shader_edit() packs into these slots.
 
     tests/test_colorspace.cpp and tests/test_colour_reference.cpp hold the color math to its inverses and to
     colour-science's values.
@@ -45,9 +45,11 @@ SHARED_CONST int EDIT_FLATTEN              = 9; ///< p0: the straight background
 /// The first color op: the ops below it map samples one at a time.
 SHARED_CONST int EDIT_FIRST_COLOR          = EDIT_BRIGHTNESS_CONTRAST;
 
-// resampling ops, previewed only
+// ops that read more than a pixel, previewed only
 SHARED_CONST int EDIT_SHIFT                = 10; ///< p0.xy: offset in samples; i0.x: sampler; i0.yz: border modes
 SHARED_CONST int EDIT_REMAP                = 11; ///< p0: output size, sigma; m0: rotation; i0: src, dst, sampling, quality
+SHARED_CONST int EDIT_BUMP_NORMAL          = 12; ///< p0.xy: bump_normal()'s scale; i0.xy: border modes
+SHARED_CONST int EDIT_IRRADIANCE           = 13; ///< m0, m1, p0: the coefficients; p1.xy: output size; i0.x: mapping
 
 // What brightness/contrast curves, in p1.x; the L*a*b* ones take m0 to XYZ, m1 back, and the white in p1.yzw.
 SHARED_CONST int CURVE_RGB                 = 0;
@@ -341,6 +343,19 @@ SHARED_FN vec4 edit_color(int op, vec4 c, vec4 p0, vec4 p1, mat3 m0, mat3 m1)
     }
     return c;
 }
+
+//
+// Bump to normal map
+//
+
+/// The normal of a height field at a sample, from its height \p h there and at the next sample across and down.
+/**
+    The surface z = h(x, y) has normal (-dh/dx, -dh/dy, 1) with y up, and the image's y runs down, so with green
+    pointing up the slope down the image keeps its sign. \p scale scales the slopes across and down, its second
+    negated for green pointing down. Stored in [0, 1], where flat is (0.5, 0.5, 1).
+*/
+SHARED_FN vec3 bump_normal(float h, float h_across, float h_down, vec2 scale)
+{ return normalize(vec3(-scale.x * (h_across - h), scale.y * (h_down - h), 1.0f)) * 0.5f + 0.5f; }
 
 SHARED_END
 
