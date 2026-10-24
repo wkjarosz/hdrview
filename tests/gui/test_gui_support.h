@@ -7,6 +7,7 @@
 #pragma once
 
 #include "app.h"
+#include "edit/commands.h"
 #include "image.h"
 #include "imageio/image_loader.h"
 
@@ -61,6 +62,27 @@ inline int load_and_wait(ImGuiTestContext *ctx, const std::vector<std::string> &
     hdrview()->load_images(paths);
     wait_for_loads(ctx);
     return hdrview()->num_images();
+}
+
+/// \p name with each slash escaped, which a menu path or a window ref would otherwise read as a separator.
+inline std::string escaped(const std::string &name)
+{
+    std::string out;
+    for (char c : name)
+    {
+        if (c == '/')
+            out += '\\';
+        out += c;
+    }
+    return out;
+}
+
+/// The Edit menu's path to the command named \p name, through the submenu that lists it, under \p label if it has one.
+inline std::string edit_menu_item(const std::string &name, const std::string &label = {})
+{
+    const char *submenu = edit_submenu_of(name);
+    return std::string("Edit/") + (submenu ? std::string(submenu) + "/" : std::string()) +
+           escaped(label.empty() ? name : label);
 }
 
 /// Closes everything without prompting and waits for the list to empty, so a test starts from a known state.

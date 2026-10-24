@@ -21,3 +21,30 @@ std::vector<EditCommandPtr> all_edit_commands()
 
     return commands;
 }
+
+const std::vector<EditSubmenu> &edit_submenus()
+{
+    static const std::vector<EditSubmenu> submenus{
+        {"Size and orientation",
+         {"Flip image horizontally", "Flip image vertically", "Rotate 90 degrees clockwise",
+          "Rotate 90 degrees counter-clockwise", "Shift...", "Crop to selection", "Image size...", "Canvas size...",
+          "Generate mipmaps..."}},
+        {"Tone",
+         {"Invert", "Clamp to [0,1]", "Zap gremlins...", "Exposure/gamma...", "Brightness/contrast...", "Fill..."}},
+        {"Color",
+         {"Convert color space...", "Channel mixer...", "Hue/saturation...", "Flatten...", "Bump to normal map..."}},
+        {"Channels", {"Ungroup channels", "Regroup channels", "Delete channel group"}},
+        {"Neighborhood filters", {"Blur...", "Unsharp mask...", "Median filter..."}},
+        {"Environment maps", {"Remap envmap...", "Irradiance envmap..."}},
+    };
+    return submenus;
+}
+
+const char *edit_submenu_of(std::string_view name)
+{
+    for (const auto &submenu : edit_submenus())
+        for (const char *command : submenu.commands)
+            if (name == command)
+                return submenu.title;
+    return nullptr;
+}

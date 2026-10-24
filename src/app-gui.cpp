@@ -456,52 +456,19 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Select all"));
         MenuItem(action("Deselect"));
 
-        ImGui::SeparatorText("Size and orientation");
+        // the rest in submenus, which keep the menu short enough to take in
+        ImGui::SeparatorText("Filters");
 
-        MenuItem(action("Flip image horizontally"));
-        MenuItem(action("Flip image vertically"));
-        MenuItem(action("Rotate 90 degrees clockwise"));
-        MenuItem(action("Rotate 90 degrees counter-clockwise"));
-        MenuItem(action("Shift..."));
-        MenuItem(action("Crop to selection"));
-        MenuItem(action("Image size..."));
-        MenuItem(action("Canvas size..."));
-        MenuItem(action("Generate mipmaps..."));
-
-        ImGui::SeparatorText("Tone");
-
-        MenuItem(action("Invert"));
-        MenuItem(action("Clamp to [0,1]"));
-        MenuItem(action("Zap gremlins..."));
-        MenuItem(action("Exposure/gamma..."));
-        MenuItem(action("Brightness/contrast..."));
-        MenuItem(action("Fill..."));
-
-        ImGui::SeparatorText("Color");
-
-        MenuItem(action("Convert color space..."));
-        MenuItem(action("Channel mixer..."));
-        MenuItem(action("Hue/saturation..."));
-        MenuItem(action("Flatten..."));
-        MenuItem(action("Bump to normal map..."));
-
-        ImGui::SeparatorText("Channels");
-
-        MenuItem(action("Ungroup channels"));
-        MenuItem(action("Regroup channels"));
-        MenuItem(action("Delete channel group"),
-                 delete_channels_label(current_image(), target_groups(current_image())));
-
-        ImGui::SeparatorText("Neighborhood filters");
-
-        MenuItem(action("Blur..."));
-        MenuItem(action("Unsharp mask..."));
-        MenuItem(action("Median filter..."));
-
-        ImGui::SeparatorText("Environment maps");
-
-        MenuItem(action("Remap envmap..."));
-        MenuItem(action("Irradiance envmap..."));
+        for (const auto &submenu : edit_submenus())
+            if (ImGui::BeginMenu(submenu.title))
+            {
+                for (const char *name : submenu.commands)
+                    if (std::string_view{name} == "Delete channel group")
+                        MenuItem(action(name), delete_channels_label(img, target_groups(img)));
+                    else
+                        MenuItem(action(name));
+                ImGui::EndMenu();
+            }
 
         ImGui::Separator();
 

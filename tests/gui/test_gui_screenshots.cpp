@@ -552,7 +552,7 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         const auto blur = [](ImGuiTestContext *c, float sigma)
         {
             c->SetRef("##MainMenuBar");
-            c->MenuClick("Edit/Blur...");
+            c->MenuClick(edit_menu_item("Blur...").c_str());
             // The dialog exists from the frame after the click, and its items are addressed by an absolute
             // path: SetRef does not resolve this popup by name.
             c->Yield(2);
@@ -571,11 +571,11 @@ void RegisterTests_Screenshots(ImGuiTestEngine *engine)
         // two more steps, then taken back: everything past the cursor is drawn faded, so the panel shows
         // both what has been applied and what redo would reapply. Neither changes the image's extent, which
         // a test thread cannot undo safely -- textures rebuild on the main thread.
-        for (const char *item : {"Edit/Invert", "Edit/Clamp to [0,1]"})
+        for (const char *name : {"Invert", "Clamp to [0,1]"})
         {
             const size_t n = hdrview()->current_image()->history.size();
             ctx->SetRef("##MainMenuBar");
-            ctx->MenuClick(item);
+            ctx->MenuClick(edit_menu_item(name).c_str());
             ctx->SetRef("");
             wait_until(ctx, [n] { return hdrview()->current_image()->history.size() > n; });
         }

@@ -8,10 +8,24 @@
 
 #include "edit/command.h"
 
+#include <string_view>
 #include <vector>
 
-/// Every edit command. Menu order is set in app-gui.cpp, not here.
+/// Every edit command, in the order the action registry and the command palette list them.
 std::vector<EditCommandPtr> all_edit_commands();
+
+/// A submenu of the Edit menu's Filters section: its title, and the names of the commands it lists, in order.
+struct EditSubmenu
+{
+    const char               *title;
+    std::vector<const char *> commands;
+};
+
+/// The Edit menu's Filters submenus, which list every command but the clipboard's, which sit in the menu itself.
+const std::vector<EditSubmenu> &edit_submenus();
+
+/// The title of the Edit menu submenu that lists the command named \p name, or null for one in the menu itself.
+const char *edit_submenu_of(std::string_view name);
 
 //
 // One appender per file under edit/commands/, called by all_edit_commands().

@@ -318,6 +318,27 @@ TEST_CASE("Every edit command is addressable and describes itself")
     // addressed by name, so two commands sharing one would make the second unreachable
     std::sort(names.begin(), names.end());
     CHECK(std::adjacent_find(names.begin(), names.end()) == names.end());
+
+    // And each on the Edit menu exactly once: the clipboard's in the menu itself, every other in one of its submenus,
+    // which name nothing but commands.
+    std::vector<EditCommandPtr> clipboard;
+    add_clipboard_commands(clipboard);
+    std::vector<std::string> listed;
+    for (const auto &submenu : edit_submenus())
+        listed.insert(listed.end(), submenu.commands.begin(), submenu.commands.end());
+    for (const auto &name : names)
+    {
+        CAPTURE(name);
+        const bool in_menu = std::any_of(clipboard.begin(), clipboard.end(),
+                                         [&](const EditCommandPtr &c) { return first_name(c) == name; });
+        CHECK(std::count(listed.begin(), listed.end(), name) == (in_menu ? 0 : 1));
+        CHECK((edit_submenu_of(name) == nullptr) == in_menu);
+    }
+    for (const auto &name : listed)
+    {
+        CAPTURE(name);
+        CHECK(std::binary_search(names.begin(), names.end(), name));
+    }
 }
 
 TEST_CASE("Every edit that applies changes the image as one undo entry, and one it refuses changes nothing")

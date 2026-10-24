@@ -79,14 +79,16 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     // viewport pans it. All of them also close from their title bar.
     struct Navigable
     {
-        const char *menu, *dialog, *test;
+        std::string menu;
+        const char *dialog, *test;
         bool        edit; ///< An edit dialog, with an edit's footer
     };
-    for (const Navigable n :
+    for (const Navigable &n :
          {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", false},
           Navigable{"File/Export rendition...", "Export rendition...",
                     "export_rendition_lets_the_viewport_be_navigated", false},
-          Navigable{"Edit/Channel mixer...", "Channel mixer...", "edit_dialog_lets_the_viewport_be_navigated", true}})
+          Navigable{edit_menu_item("Channel mixer..."), "Channel mixer...",
+                    "edit_dialog_lets_the_viewport_be_navigated", true}})
     {
         t           = IM_REGISTER_TEST(engine, "dialogs", n.test);
         t->TestFunc = [n](ImGuiTestContext *ctx)
@@ -106,7 +108,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             app->set_selection(Box2i{});
 
             ctx->SetRef("##MainMenuBar");
-            ctx->MenuClick(n.menu);
+            ctx->MenuClick(n.menu.c_str());
             ctx->SetRef("");
             ImGuiWindow *window = ctx->WindowInfo(dialog).Window;
             IM_CHECK(window != nullptr);

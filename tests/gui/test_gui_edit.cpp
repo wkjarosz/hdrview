@@ -98,19 +98,6 @@ int changed_outside(const ConstImagePtr &img, const vector<float> &before, const
     return changed;
 }
 
-/// \p name with each slash escaped, which a menu path or a window ref would otherwise read as a separator.
-string escaped(const string &name)
-{
-    string out;
-    for (char c : name)
-    {
-        if (c == '/')
-            out += '\\';
-        out += c;
-    }
-    return out;
-}
-
 void menu_click(ImGuiTestContext *ctx, const string &path)
 {
     ctx->SetRef("##MainMenuBar");
@@ -189,7 +176,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             {
                 // The fixture has one group, which neither may act on. Ungrouping leaves each of its channels
                 // selected, and deleting every channel is not offered, so one is left selected.
-                menu_click(ctx, "Edit/Ungroup channels");
+                menu_click(ctx, edit_menu_item("Ungroup channels"));
                 for (int g = 0; g < (int)img->groups.size(); ++g)
                     if (g != img->selected_group && img->is_group_selected(g))
                         hdrview()->toggle_group_selected(hdrview()->current_image_index(), g);
@@ -216,7 +203,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             // the menu labels this one by what it would delete
             const string label =
                 name == "Delete channel group" ? delete_channels_label(img, hdrview()->target_groups(img)) : name;
-            menu_click(ctx, "Edit/" + escaped(label));
+            menu_click(ctx, edit_menu_item(name, label));
             ++exercised;
 
             // A command that does not need an editable image cannot be editing one, and Copy is the only such
@@ -449,7 +436,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
                 auto open = [&]
                 {
-                    menu_click(ctx, "Edit/" + escaped(name));
+                    menu_click(ctx, edit_menu_item(name));
                     ctx->SetRef(escaped(name).c_str());
                     if (c.settings)
                         c.settings(ctx);
@@ -508,7 +495,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 if (reshaped)
                 {
                     const auto reshaped_samples = snapshot(img);
-                    menu_click(ctx, "Edit/Invert");
+                    menu_click(ctx, edit_menu_item("Invert"));
                     IM_CHECK_EQ(img->history.size(), 2);
                     IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Invert");
                     IM_CHECK(!same(snapshot(img), reshaped_samples));
@@ -536,7 +523,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto  entries = [app](int i) { return (int)app->image(i)->history.size(); };
 
         // an edit that takes a subject reaches both, each as an entry in its own history
-        menu_click(ctx, "Edit/Invert");
+        menu_click(ctx, edit_menu_item("Invert"));
         for (int i = 0; i < 2; ++i)
         {
             IM_CHECK_EQ(entries(i), 1);
@@ -550,14 +537,14 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         for (int i = 0; i < 2; ++i) IM_CHECK_EQ(app->image(i)->history.has_undo(), true);
 
         // an edit that reshapes an image reaches both too
-        menu_click(ctx, "Edit/Rotate 90 degrees clockwise");
+        menu_click(ctx, edit_menu_item("Rotate 90 degrees clockwise"));
         for (int i = 0; i < 2; ++i) IM_CHECK_EQ(entries(i), 2);
 
         // and crops both to the same rectangle: cropping consumes the selection, so each invocation has to start
         // from the same one
         app->set_selection(Box2i{int2{1, 1}, int2{5, 4}});
         ctx->Yield();
-        menu_click(ctx, "Edit/Crop to selection");
+        menu_click(ctx, edit_menu_item("Crop to selection"));
         for (int i = 0; i < 2; ++i)
         {
             IM_CHECK((app->image(i)->size() == int2{4, 3}));
@@ -568,7 +555,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // only one filter runs at a time, there being one progress bar and one Cancel, so the second image's blur
         // waits for the first and starts as it lands
-        menu_click(ctx, "Edit/Blur...");
+        menu_click(ctx, edit_menu_item("Blur..."));
         ctx->SetRef("Blur...");
         ctx->KeyPress(ImGuiKey_Enter);
         IM_CHECK(wait_until(ctx, [&] { return entries(0) == 4 && entries(1) == 4; }));
@@ -601,7 +588,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(app->action("Paste").enabled(), false);
 
         // something to undo, which a live image must not offer either
-        menu_click(ctx, "Edit/Invert");
+        menu_click(ctx, edit_menu_item("Invert"));
         IM_CHECK_EQ(app->action("Undo").enabled(), true);
 
         // What arriving over IPC marks an image as: its pixels belong to the other process, so an edit would be
@@ -695,7 +682,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK_EQ(copy->groups.size(), original->groups.size());
 
         // ...and its own copy of it, with its own history: a shallow copy would pass everything above and fail here
-        menu_click(ctx, "Edit/Invert");
+        menu_click(ctx, edit_menu_item("Invert"));
         IM_CHECK(!same(snapshot(copy), before));
         IM_CHECK(same(snapshot(original), before));
         IM_CHECK_EQ(copy->history.has_undo(), true);
@@ -730,9 +717,9 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto       img      = hdrview()->current_image();
         const auto original = snapshot(img);
 
-        menu_click(ctx, "Edit/Flip image horizontally");
+        menu_click(ctx, edit_menu_item("Flip image horizontally"));
         const auto flipped = snapshot(img);
-        menu_click(ctx, "Edit/Rotate 90 degrees clockwise");
+        menu_click(ctx, edit_menu_item("Rotate 90 degrees clockwise"));
         const auto rotated = snapshot(img);
 
         // starts hidden, like the log, so the window has to be asked for before it can be read
@@ -779,7 +766,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // the modes are told apart by what they ask for, which also catches a radio button wired to the
         // wrong one
-        menu_click(ctx, "Edit/Blur...");
+        menu_click(ctx, edit_menu_item("Blur..."));
         ctx->SetRef("Blur...");
 
         ctx->ItemClick("Gaussian");
@@ -815,7 +802,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
             return p ? p->edit : PointEdit{};
         };
 
-        menu_click(ctx, "Edit/Brightness\\/contrast...");
+        menu_click(ctx, edit_menu_item("Brightness/contrast..."));
         // escaped, as the menu path is: the slash in the name is a path separator to the engine, so an unescaped
         // ref looks for "contrast..." inside a window called "Brightness"
         ctx->SetRef("Brightness\\/contrast...");
@@ -867,7 +854,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // previewed as the shift asked for, over the channels the view shows: the shown group's, all of them the
         // subject's
-        menu_click(ctx, "Edit/Shift...");
+        menu_click(ctx, edit_menu_item("Shift..."));
         ctx->SetRef("Shift...");
         ctx->ItemInputValue("Offset x, y/$$0", 3.0f);
         ctx->ItemInputValue("Offset x, y/$$1", 0.0f);
@@ -932,7 +919,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
     };
     auto open_remap = [](ImGuiTestContext *ctx)
     {
-        menu_click(ctx, "Edit/Remap envmap...");
+        menu_click(ctx, edit_menu_item("Remap envmap..."));
         ctx->SetRef("Remap envmap...");
         small_remap_settings(ctx);
         ctx->Yield(2);
@@ -1102,7 +1089,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
 
         // percent first, while the dialog is still in the absolute, in-pixels state it was constructed in,
         // so nothing has to be read back to find out which way it is set
-        menu_click(ctx, "Edit/Canvas size...");
+        menu_click(ctx, edit_menu_item("Canvas size..."));
         ctx->SetRef("Canvas size...");
         ctx->ComboClick("Units/Pixels");
         ctx->Yield();
@@ -1124,7 +1111,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         menu_click(ctx, "Edit/Undo");
         IM_CHECK(img->size() == original);
 
-        menu_click(ctx, "Edit/Canvas size...");
+        menu_click(ctx, edit_menu_item("Canvas size..."));
         ctx->SetRef("Canvas size...");
         ctx->ComboClick("Units/Pixels");
         ctx->Yield();
