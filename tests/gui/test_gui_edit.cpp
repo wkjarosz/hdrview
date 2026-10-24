@@ -783,20 +783,20 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Blur...");
 
         ctx->ItemClick("Gaussian");
-        IM_CHECK(ctx->ItemExists("##Horizontal sigma"));
-        IM_CHECK(!ctx->ItemExists("##Horizontal half width"));
+        IM_CHECK(ctx->ItemExists("##Sigma (x)"));
+        IM_CHECK(!ctx->ItemExists("##Half-size (x)"));
         // quality belongs to the approximation alone; the exact kernel has nothing to trade
         IM_CHECK(!ctx->ItemExists("Quality"));
 
         ctx->ItemClick("Fast Gaussian");
-        IM_CHECK(ctx->ItemExists("##Horizontal sigma"));
+        IM_CHECK(ctx->ItemExists("##Sigma (x)"));
         IM_CHECK(ctx->ItemExists("Quality"));
-        IM_CHECK(!ctx->ItemExists("##Horizontal half width"));
+        IM_CHECK(!ctx->ItemExists("##Half-size (x)"));
 
         ctx->ItemClick("Box");
-        IM_CHECK(ctx->ItemExists("##Horizontal half width"));
+        IM_CHECK(ctx->ItemExists("##Half-size (x)"));
         IM_CHECK(ctx->ItemExists("Passes"));
-        IM_CHECK(!ctx->ItemExists("##Horizontal sigma"));
+        IM_CHECK(!ctx->ItemExists("##Sigma (x)"));
 
         ctx->ItemClick("Cancel");
     };
@@ -890,18 +890,23 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(preview && preview->shift);
         IM_CHECK(la::length(preview->shift->offset - float2{3.f + 19.f / 2.5f, 8.f / 2.5f}) < 1e-3f);
 
-        // The borders, linked to start with: unlinked, each is set on its own; linked again, the vertical one takes
-        // the horizontal one's; and while linked, setting either sets both.
-        auto borders = [app] { return app->edit_preview()->shift->borders; };
+        // The borders, linked to start with, where y follows x and cannot be set itself; unlinked, each is set on
+        // its own; and linked again, y takes x's.
+        auto borders  = [app] { return app->edit_preview()->shift->borders; };
+        auto disabled = [ctx](const char *ref)
+        { return (ctx->ItemInfo(ref).ItemFlags & ImGuiItemFlags_Disabled) != 0; };
         IM_CHECK(borders() == int2{BorderMode_Repeat});
+        IM_CHECK(disabled("##Border (y)"));
+        ctx->ComboClick("##Border (x)/Mirror");
+        ctx->Yield(2);
+        IM_CHECK(borders() == int2{BorderMode_Mirror});
         ctx->ItemClick(ICON_MY_LINK);
-        ctx->ComboClick("##Vertical border/Black");
         ctx->Yield(2);
-        IM_CHECK((borders() == int2{BorderMode_Repeat, BorderMode_Black}));
+        IM_CHECK(!disabled("##Border (y)"));
+        ctx->ComboClick("##Border (y)/Black");
+        ctx->Yield(2);
+        IM_CHECK((borders() == int2{BorderMode_Mirror, BorderMode_Black}));
         ctx->ItemClick(ICON_MY_UNLINK);
-        ctx->Yield(2);
-        IM_CHECK(borders() == int2{BorderMode_Repeat});
-        ctx->ComboClick("##Vertical border/Mirror");
         ctx->Yield(2);
         IM_CHECK(borders() == int2{BorderMode_Mirror});
 

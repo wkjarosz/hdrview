@@ -28,20 +28,17 @@ namespace
 /// A setting per axis, as two rows drawn by \p field, joined by a link that keeps them the same.
 /**
     As Image size joins its width and height: the link at the open end of a bracket around the two rows, labeled
-    "Horizontal" and "Vertical" \p noun. While it is closed, setting either row sets both, and \p y follows \p x.
-    \p field draws one row's widget under the ID it is given and says whether it changed the value.
+    \p name followed by (x) and (y). While it is closed, \p y follows \p x and its row is disabled. \p field draws one
+    row's widget under the ID it is given.
 */
 template <typename T, typename Field>
-void axis_pair(const char *noun, T *x, T *y, bool *linked, const char *tooltip, Field &&field)
+void axis_pair(const char *name, T *x, T *y, bool *linked, const char *tooltip, Field &&field)
 {
-    if (*linked)
-        *y = *x;
-
     ImGui::RowSpan rows;
     auto           row = [&](const char *axis, T *value)
     {
-        const std::string label   = fmt::format("{} {}", axis, noun);
-        const bool        changed = field(("##" + label).c_str(), value);
+        const std::string label = fmt::format("{} ({})", name, axis);
+        field(("##" + label).c_str(), value);
         if (tooltip)
             ImGui::Tooltip(tooltip);
         rows.take();
@@ -49,36 +46,34 @@ void axis_pair(const char *noun, T *x, T *y, bool *linked, const char *tooltip, 
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::TextUnformatted(label.c_str());
         rows.take();
-        return changed;
     };
 
-    if (row("Horizontal", x) && *linked)
+    row("x", x);
+    if (*linked)
         *y = *x;
-    if (row("Vertical", y) && *linked)
-        *x = *y;
+    ImGui::BeginDisabled(*linked);
+    row("y", y);
+    ImGui::EndDisabled();
 
-    const std::string link = fmt::format(*linked ? "Both directions use the same {}. Click to unlink."
-                                                 : "Each direction has its own {}. Click to link.",
-                                         noun);
-    if (ImGui::RowBracketButton(*linked ? ICON_MY_LINK : ICON_MY_UNLINK, rows, *linked, link.c_str()))
+    if (ImGui::RowBracketButton(*linked ? ICON_MY_LINK : ICON_MY_UNLINK, rows, *linked,
+                                *linked ? "The x and y values are linked. Click to unlink."
+                                        : "The x and y values are set independently. Click to link."))
         *linked = !*linked;
 }
 
 /// The border-mode pair the resampling commands offer.
 void border_fields(int *border_x, int *border_y, bool *linked, const char *tooltip)
 {
-    axis_pair("border", border_x, border_y, linked, tooltip,
+    axis_pair("Border", border_x, border_y, linked, tooltip,
               [](const char *id, int *value)
               {
-                  bool changed = false;
                   if (ImGui::BeginCombo(id, border_mode_name(*value)))
                   {
                       for (int i = 0; i < BorderMode_COUNT; ++i)
                           if (ImGui::Selectable(border_mode_name(i), *value == i))
-                              *value = i, changed = true;
+                              *value = i;
                       ImGui::EndCombo();
                   }
-                  return changed;
               });
 }
 
@@ -98,7 +93,7 @@ public:
 
         if (m_kind == Kind_Box)
         {
-            axis_pair("half width", &m_half_width, &m_half_width_y, &m_link_axes, nullptr,
+            axis_pair("Half-size", &m_half_width, &m_half_width_y, &m_link_axes, nullptr,
                       [](const char *id, int *value) { return ImGui::SliderInt(id, value, 0, 64); });
 
             // here repeating widens the result, this being the box blur as an effect in its own right
@@ -107,7 +102,7 @@ public:
         }
         else
         {
-            axis_pair("sigma", &m_sigma, &m_sigma_y, &m_link_axes, nullptr, [](const char *id, float *value)
+            axis_pair("Sigma", &m_sigma, &m_sigma_y, &m_link_axes, nullptr, [](const char *id, float *value)
                       { return ImGui::SliderFloat(id, value, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic); });
 
             if (m_kind == Kind_FastGaussian)
