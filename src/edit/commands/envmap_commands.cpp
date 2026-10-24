@@ -34,6 +34,58 @@ void mapping_combo(const char *label, int *value)
 
 constexpr float k_radians_per_degree = float(M_PI) / 180.f;
 
+/// The view a reshaping preview takes over to frame the result's window, and gives back as the preview ends.
+/**
+    While previewing, the view is fit to the result's window as the preview starts and whenever that window changes,
+    so the applied result lands where the preview was. When previewing stops, or the dialog closes without applying,
+    the view is given back.
+*/
+class PreviewFraming
+{
+public:
+    /// Frame \p window while \p ctx previews, or give the view back once it does not.
+    void update(EditContext &ctx, const Box2i &window)
+    {
+        if (ctx.previewing)
+        {
+            if (!framing())
+                m_view = ctx.view();
+            if (window != m_framed)
+            {
+                ctx.fit_view(window);
+                m_framed = window;
+            }
+        }
+        else if (framing())
+        {
+            ctx.set_view(m_view);
+            m_framed = Box2i{};
+        }
+    }
+
+    /// How an applied result lands: in the view framing it, while a preview frames one.
+    EditExtent extent() const { return framing() ? Extent_StructureInView : Extent_Structure; }
+
+    /// Mark the edit applied, so that closing leaves the view framing its result.
+    void applied() { m_applied = true; }
+
+    /// Give back the view a preview took over, unless the edit was applied and its result is framed in it.
+    void close(EditContext &ctx)
+    {
+        if (framing() && !m_applied)
+            ctx.set_view(m_view);
+        m_framed  = Box2i{};
+        m_applied = false;
+    }
+
+private:
+    bool framing() const { return m_framed.has_volume(); }
+
+    ViewState m_view;   ///< What the view was before a preview took it over
+    Box2i     m_framed; ///< The result's window the view was last fit to, while a preview frames it
+    bool      m_applied = false;
+};
+
 class Remap final : public EditCommand
 {
 public:
@@ -58,14 +110,10 @@ public:
                 m_size.x = aspect_width();
         }
     }
-    /// Gives back the view a preview took over, unless the remap was applied and its result is framed in it.
     void on_close(EditContext &ctx) override
     {
-        if (framing() && !m_applied)
-            ctx.set_view(m_view);
-        m_framed  = Box2i{};
-        m_applied = false;
-        m_size    = int2{0};
+        m_framing.close(ctx);
+        m_size = int2{0};
     }
 
     void draw(EditContext &ctx) override
@@ -169,24 +217,7 @@ public:
             m_sigma = std::max(m_sigma, 0.f);
         }
 
-        // While previewing, fit the view to the output when the preview starts and whenever the output's size changes,
-        // so the applied result lands where the preview was. When previewing stops, restore the view.
-        if (ctx.previewing)
-        {
-            const Box2i window = output_window(*img);
-            if (!framing())
-                m_view = ctx.view();
-            if (window != m_framed)
-            {
-                ctx.fit_view(window);
-                m_framed = window;
-            }
-        }
-        else if (framing())
-        {
-            ctx.set_view(m_view);
-            m_framed = Box2i{};
-        }
+        m_framing.update(ctx, output_window(*img));
     }
 
     std::optional<EnvmapRemap> remap_preview(const EditContext &) const override
@@ -222,8 +253,8 @@ public:
                 return remapped_envmap(src, r.size, EnvMapping(r.dst), EnvMapping(r.src), EnvMapSampling(r.sampling),
                                        r.quality, r.sigma, r.rotation, p);
             },
-            framing() ? Extent_StructureInView : Extent_Structure);
-        m_applied = true;
+            m_framing.extent());
+        m_framing.applied();
     }
 
 private:
@@ -234,14 +265,9 @@ private:
     Box2i output_window(const Image &img) const { return Box2i{img.data_window.min, img.data_window.min + m_size}; }
     /// What remapped_envmap() takes as its supersample count: samples per axis, or EWA's maximum anisotropy.
     int quality() const { return m_sampling == EnvMapSampling_EWA ? m_max_aniso : m_samples; }
-    /// Whether a preview has the view framing the output.
-    bool framing() const { return m_framed.has_volume(); }
-
     float4    m_rotation{0.f, 0.f, 0.f, 1.f}; ///< As a unit quaternion (x, y, z, w), turning the result into the source
     float3    m_angles{0.f}; ///< The rotation's yaw, pitch and roll in degrees, as the sliders hold them
-    ViewState m_view;   ///< What the view was before a preview took it over
-    Box2i     m_framed; ///< The output window the view was last fit to, while a preview frames it
-    bool      m_applied = false;
+    PreviewFraming m_framing;
 
     int   m_src_mapping = EnvMapping_LatLong;
     int   m_dst_mapping = EnvMapping_Angular;
@@ -272,7 +298,11 @@ public:
         if (auto img = ctx.image)
             m_size = img->size();
     }
-    void on_close(EditContext &) override { m_size = int2{0}; }
+    void on_close(EditContext &ctx) override
+    {
+        m_framing.close(ctx);
+        m_size = int2{0};
+    }
 
     void draw(EditContext &ctx) override
     {
@@ -286,6 +316,10 @@ public:
         ImGui::DragInt2("Size", &m_size.x, 1.f, 1, 8192, "%d px");
         m_size = la::max(m_size, int2{1});
         ImGui::Tooltip("Set the size of the result. Irradiance is very smooth, so a small size loses no detail.");
+
+        // the result keeps the data window's corner, as resample_image_async() leaves it
+        if (img)
+            m_framing.update(ctx, Box2i{img->data_window.min, img->data_window.min + m_size});
     }
 
     /// The irradiance of the channels the viewport shows, projected again only when they or the mapping change.
@@ -328,7 +362,8 @@ public:
 
         ctx.resample_image_async(
             "Irradiance envmap", out_size, [m, out_size](const Array2Df &src, AtomicProgress p)
-            { return irradiance_envmap(src, out_size, m, p); }, Extent_Structure);
+            { return irradiance_envmap(src, out_size, m, p); }, m_framing.extent());
+        m_framing.applied();
     }
 
 private:
@@ -342,6 +377,7 @@ private:
         int                        shown = 0;
     };
 
+    PreviewFraming    m_framing;
     int               m_mapping = EnvMapping_LatLong;
     int2              m_size{0, 0};
     mutable Projected m_projected; ///< Projecting a large image takes long enough to do only when something changes

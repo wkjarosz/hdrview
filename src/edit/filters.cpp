@@ -46,13 +46,15 @@ int wrap_coord(int p, int extent, int mode) { return shader::resample_wrap(p, ex
 namespace
 {
 
-/// Normalized 1D Gaussian taps, truncated at three standard deviations.
+/// The radius at which Gaussian taps of \p sigma stop, three standard deviations out.
 /**
     Past three sigma the taps carry well under a thousandth of the weight.
 */
-std::vector<float> gaussian_taps(float sigma)
+int gaussian_radius(float sigma) { return std::max(1, int(std::ceil(3.f * sigma))); }
+
+/// Normalized 1D Gaussian taps of \p sigma, \p radius to a side.
+std::vector<float> gaussian_taps(float sigma, int radius)
 {
-    const int          radius = std::max(1, int(std::ceil(3.f * sigma)));
     std::vector<float> taps(size_t(2 * radius + 1));
 
     float sum = 0.f;
@@ -79,15 +81,6 @@ std::vector<float> variance_matched_gaussian_taps(float sigma)
     if (sigma <= 0.f)
         return {};
 
-    auto taps_of = [](float s, int radius)
-    {
-        std::vector<float> taps(size_t(2 * radius + 1));
-        float              sum = 0.f;
-        for (int i = -radius; i <= radius; ++i)
-            sum += taps[size_t(i + radius)] = std::exp(-float(i * i) / (2.f * s * s));
-        for (auto &t : taps) t /= sum;
-        return taps;
-    };
     auto variance = [](const std::vector<float> &taps)
     {
         const int radius = int(taps.size() / 2);
@@ -96,15 +89,15 @@ std::vector<float> variance_matched_gaussian_taps(float sigma)
         return v;
     };
 
-    // the variance grows with the width, so bisect on it; three sigma either side holds what matters
-    const int radius = std::max(1, int(std::ceil(3.f * sigma)));
+    // the variance grows with the width, so bisect on it, at the radius sigma itself would stop at
+    const int radius = gaussian_radius(sigma);
     float     lo = 1e-3f, hi = sigma + 1.f;
     for (int iteration = 0; iteration < 40; ++iteration)
     {
-        const float mid                                            = 0.5f * (lo + hi);
-        (variance(taps_of(mid, radius)) < sigma * sigma ? lo : hi) = mid;
+        const float mid                                                  = 0.5f * (lo + hi);
+        (variance(gaussian_taps(mid, radius)) < sigma * sigma ? lo : hi) = mid;
     }
-    return taps_of(0.5f * (lo + hi), radius);
+    return gaussian_taps(0.5f * (lo + hi), radius);
 }
 
 /// Convolve \p region of \p src with the separable kernel \p taps_x by \p taps_y.
@@ -357,8 +350,9 @@ Array2Df shifted(const Array2Df &src, const Box2i &region, float dx, float dy, i
 Array2Df gaussian_blurred(const Array2Df &src, const Box2i &region, float sigma_x, float sigma_y,
                           AtomicProgress progress)
 {
-    return convolve_separable(src, region, sigma_x > 0.f ? gaussian_taps(sigma_x) : std::vector<float>{},
-                              sigma_y > 0.f ? gaussian_taps(sigma_y) : std::vector<float>{}, progress);
+    auto taps = [](float sigma)
+    { return sigma > 0.f ? gaussian_taps(sigma, gaussian_radius(sigma)) : std::vector<float>{}; };
+    return convolve_separable(src, region, taps(sigma_x), taps(sigma_y), progress);
 }
 
 namespace

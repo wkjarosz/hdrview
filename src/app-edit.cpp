@@ -165,6 +165,18 @@ const EditPreview *HDRViewApp::edit_preview() const
     return ImGui::GetFrameCount() - m_edit_preview_frame <= 1 ? &m_edit_preview : nullptr;
 }
 
+bool HDRViewApp::begin_navigable_dialog(const char *title, bool &open, bool &folded)
+{
+    // A modal takes the fade's color as it begins, so a clear one leaves the app unfaded around it.
+    ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32_BLACK_TRANS);
+    const bool shown = ImGui::BeginModalDialog(title, open, ImGui::DialogPosition::Center,
+                                               ImGuiWindowFlags_AlwaysAutoResize, &folded, true);
+    ImGui::PopStyleColor();
+    if (shown)
+        m_navigable_dialog_frame = ImGui::GetFrameCount();
+    return shown;
+}
+
 void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
 {
     const auto &info = cmd.info();
@@ -174,17 +186,12 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
     if (open)
         cmd.on_open(ctx);
 
-    // Modal, but leaving the app unfaded and the viewport navigable around it, to look at the image while choosing
-    // the edit. A modal takes the fade's color as it begins. It folds to its title bar, to see more of the image, and
-    // closes from it as Cancel does. Dear ImGui handles that close button itself, which is told apart as the one way
-    // a dialog open going in comes out unshown.
+    // Closed from its title bar as Cancel closes it. Dear ImGui handles that close button itself, which is told apart
+    // as the one way a dialog open going in comes out unshown.
     const char *title    = info.names.front().c_str();
     const bool  was_open = ImGui::IsPopupOpen(title);
-    ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32_BLACK_TRANS);
-    static bool folded = false;
-    const bool  shown  = ImGui::BeginModalDialog(title, open, ImGui::DialogPosition::Center,
-                                                 ImGuiWindowFlags_AlwaysAutoResize, &folded, true);
-    ImGui::PopStyleColor();
+    static bool folded   = false;
+    const bool  shown    = begin_navigable_dialog(title, open, folded);
     if (was_open && !shown)
     {
         m_edit_preview_frame = -2;
@@ -192,8 +199,6 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
     }
     if (shown)
     {
-        m_navigable_dialog_frame = ImGui::GetFrameCount();
-
         // The dialog is as wide as its widest row, and what fills the width (wrapped text, a strip) follows it. Dear
         // ImGui measures a reopened popup on a hidden first frame at no width at all, which wraps text a word to a
         // line; one more hidden frame shows it at the size it settles at.
@@ -241,9 +246,9 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
             // The dialog is drawn against the current image, but confirming applies across the selection. An edit
             // made in the frame has landed already, where drawing its preview would apply it twice; one handed to a
             // worker keeps its preview up until the result lands on the current image.
-            const bool shown = edit_preview() != nullptr;
+            const bool previewed = edit_preview() != nullptr;
             apply_edit_command(cmd);
-            m_edit_preview_frame = shown && m_running_filter ? k_preview_held : -2;
+            m_edit_preview_frame = previewed && m_running_filter ? k_preview_held : -2;
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }

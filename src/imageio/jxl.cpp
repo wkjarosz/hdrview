@@ -701,9 +701,10 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                     std::vector<uint8_t> original(original_size);
                     if (JXL_DEC_SUCCESS == hdrview_JxlDecoderGetColorAsICCProfile(dec.get(),
                                                                                   JXL_COLOR_PROFILE_TARGET_ORIGINAL,
-                                                                                  original.data(), original.size()) &&
-                        ICCProfile(original).is_RGB() && ICCProfile(original).extract_chromaticities(&chr))
-                        original_chr = chr;
+                                                                                  original.data(), original.size()))
+                        if (const ICCProfile profile(original);
+                            profile.is_RGB() && profile.extract_chromaticities(&chr))
+                            original_chr = chr;
                 }
             }
         }

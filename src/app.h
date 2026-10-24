@@ -680,6 +680,12 @@ private:
     void draw_command_palette(bool &);
     /// The save dialog, Save as... for SaveMode_Data and Export rendition... for SaveMode_Rendition.
     void draw_save_dialog(bool &open, SaveMode mode);
+    /// Begin a modal dialog the viewport stays navigable around, as BeginModalDialog() begins one.
+    /**
+        Unfaded, so the image can be looked at while choosing, and foldable to its title bar through \p folded, to
+        see more of it; it closes from its title bar too.
+    */
+    bool begin_navigable_dialog(const char *title, bool &open, bool &folded);
     void draw_confirm_load_session_dialog(bool &open);
     void draw_loading_session_dialog(bool &open);
     void draw_pixel_info() const;

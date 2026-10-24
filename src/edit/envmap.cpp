@@ -118,8 +118,8 @@ struct EnvSource
 {
     int                    mapping;
     int                    levels;
-    float                  spread;
     float                  ratio;
+    float                  spread;
     ivec2                  size;
     const Array2Df *const *charts;
 };
@@ -177,8 +177,8 @@ public:
     {
         m_source.mapping = mapping;
         m_source.levels  = 1;
-        m_source.spread  = k_level_sigma * k_level_sigma;
         m_source.ratio   = k_level_ratio;
+        m_source.spread  = k_level_sigma * k_level_sigma;
         m_source.size    = src.size();
 
         if (shader::envmap_is_cube(mapping))

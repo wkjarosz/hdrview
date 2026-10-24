@@ -123,8 +123,8 @@ public:
         if (m_mode == Mode_Replace)
             if (auto img = ctx.image; img && img->is_valid_group(img->active_group_index(Target_Primary)))
                 if (!group_has_alpha(img->groups[size_t(img->active_group_index(Target_Primary))].type))
-                    ImGui::TextUnformatted("This channel group has no alpha, so the color's alpha has\n"
-                                           "nowhere to go. Blend over instead to use it as coverage.");
+                    ImGui::TextWrappedToWidth("This channel group has no alpha, so the color's alpha has nowhere "
+                                              "to go. Blend over instead to use it as coverage.");
     }
 
     std::optional<PointEdit> point_edit(const EditContext &ctx) const override
