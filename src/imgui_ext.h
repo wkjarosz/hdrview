@@ -149,8 +149,9 @@ enum class DialogPosition
     off a modal, and folding it shows the title bar alone. Its contents still run, out of sight, so what they keep
     doing every frame goes on.
 
-    With \p closable, the title bar also gets a close button, which closes the dialog without running its contents,
-    so it suits a dialog whose Cancel does nothing but close.
+    With \p closable, the title bar also gets a close button, which closes the dialog without running its contents. A
+    dialog whose Cancel does more than close can tell it was closed so: it was open going in (ImGui::IsPopupOpen())
+    and this returns false.
 */
 bool BeginModalDialog(const char *title, bool &open, DialogPosition position = DialogPosition::TopCenter,
                       ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize, bool *folded = nullptr,

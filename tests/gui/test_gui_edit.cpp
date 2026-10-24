@@ -1010,13 +1010,20 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         const auto [lo2, hi2] = shown_corners();
         IM_CHECK(la::length(lo2 - lo1 - by) < 1e-2f);
 
-        // and canceled, the view the preview took over is given back
-        IM_CHECK_NE(app->zoom(), before_zoom);
-        ctx->ItemClick("Cancel");
-        ctx->Yield(2);
-        IM_CHECK(app->edit_preview() == nullptr);
-        IM_CHECK_EQ(app->zoom(), before_zoom);
-        IM_CHECK(la::length(app->vp_pos_at_pixel(float2{0.f}) - before_at) < 1e-3f);
+        // and canceled, the view the preview took over is given back, as it is when the dialog is closed from its
+        // title bar
+        for (const char *close : {"Cancel", "#CLOSE"})
+        {
+            ctx->LogInfo("closed with %s", close);
+            if (std::string{close} == "#CLOSE")
+                open_remap(ctx);
+            IM_CHECK_NE(app->zoom(), before_zoom);
+            ctx->ItemClick(close);
+            ctx->Yield(2);
+            IM_CHECK(app->edit_preview() == nullptr);
+            IM_CHECK_EQ(app->zoom(), before_zoom);
+            IM_CHECK(la::length(app->vp_pos_at_pixel(float2{0.f}) - before_at) < 1e-3f);
+        }
     };
 
     t = IM_REGISTER_TEST(engine, "edit", "remapping resizes the image where its preview was, and undo puts it back");

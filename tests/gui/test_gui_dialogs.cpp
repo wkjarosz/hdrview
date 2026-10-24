@@ -76,11 +76,11 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
 
     // The save and edit dialogs are modal, but leave the viewport to be panned and zoomed around them, to look at
     // the image while choosing: the wheel zooms over the viewport and not over the dialog, and a drag begun in the
-    // viewport pans it. The save dialogs also close from their title bar.
+    // viewport pans it. All of them also close from their title bar.
     struct Navigable
     {
         const char *menu, *dialog, *test;
-        bool        edit; ///< An edit dialog, with an edit's footer, where a save dialog has a close button
+        bool        edit; ///< An edit dialog, with an edit's footer
     };
     for (const Navigable n :
          {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", false},
@@ -96,11 +96,13 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
                 return;
             auto             *app = hdrview();
             const std::string at  = std::string("//") + dialog + "/";
-            OnExit            restore{[app, zoom = app->zoom()]
-                                      {
+            // the view as it was, pan and all, since the drags below move it
+            OnExit restore{[app, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
+                           {
                                app->set_zoom(zoom);
+                               app->reposition_pixel_to_vp_pos(at, float2{0.f});
                                app->set_selection(Box2i{});
-                                      }};
+                           }};
             app->set_selection(Box2i{});
 
             ctx->SetRef("##MainMenuBar");
@@ -171,15 +173,10 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->Yield(3);
             IM_CHECK_EQ(window->Size.y, full);
 
-            if (n.edit)
-                ctx->ItemClick((at + "Cancel").c_str());
-            else
-            {
-                // the arrow sits beside the close button, which closes the dialog as Cancel does
-                IM_CHECK(!ctx->ItemInfo((at + "#FOLD").c_str())
-                              .RectFull.Overlaps(ctx->ItemInfo((at + "#CLOSE").c_str()).RectFull));
-                ctx->ItemClick((at + "#CLOSE").c_str());
-            }
+            // the arrow sits beside the close button, which closes the dialog as Cancel does
+            IM_CHECK(!ctx->ItemInfo((at + "#FOLD").c_str())
+                          .RectFull.Overlaps(ctx->ItemInfo((at + "#CLOSE").c_str()).RectFull));
+            ctx->ItemClick((at + "#CLOSE").c_str());
             wait_for_window_closed(ctx, dialog);
             IM_CHECK(ctx->WindowInfo(dialog, ImGuiTestOpFlags_NoError).Window == nullptr);
         };
