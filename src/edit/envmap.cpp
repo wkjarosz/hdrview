@@ -360,6 +360,9 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
 
     // prepared once for the whole remap: the levels EWA reads, and, for a cube map, the six faces both read instead
     // of the cross
+    // the supersampling set's spread, which is the same for every pixel
+    const float scale = shader::envmap_gaussian_scale(ss, std::max(sigma, 0.f));
+
     const EnvLevels         levels{src, src_mapping, sampling == EnvMapSampling_EWA};
     const shader::EnvSource source = levels.source();
 
@@ -378,7 +381,7 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                     out(x, y) =
                         sampling == EnvMapSampling_EWA
                             ? shader::envmap_ewa(source, dst_mapping, rotation, int2{x, y}, size, ss)
-                            : shader::envmap_supersample(source, dst_mapping, rotation, int2{x, y}, size, ss, sigma);
+                            : shader::envmap_supersample(source, dst_mapping, rotation, int2{x, y}, size, ss, scale);
 
                 ++progress;
             }

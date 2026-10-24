@@ -47,7 +47,7 @@ SHARED_CONST int EDIT_FIRST_COLOR          = EDIT_BRIGHTNESS_CONTRAST;
 
 // ops that read more than a pixel, previewed only
 SHARED_CONST int EDIT_SHIFT                = 10; ///< p0.xy: offset in samples; i0.x: sampler; i0.yz: border modes
-SHARED_CONST int EDIT_REMAP                = 11; ///< p0: size, sigma; m0: rotation; i0: src, dst, sampling, quality
+SHARED_CONST int EDIT_REMAP                = 11; ///< p0: size, spread; m0: rotation; i0: src, dst, sampling, quality
 SHARED_CONST int EDIT_BUMP_NORMAL          = 12; ///< p0.xy: bump_normal()'s scale; i0.xy: border modes
 SHARED_CONST int EDIT_IRRADIANCE           = 13; ///< m0, m1, p0: coefficients; p1.xy: size; i0: mapping, slots shown
 

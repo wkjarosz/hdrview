@@ -140,22 +140,22 @@ SHARED_FN EnvValue envmap_bilinear(EnvSource src, int level, int chart, ivec2 si
 /// The source's direction for \p uv in mapping \p dst, turned by \p rotation.
 SHARED_FN vec3 envmap_remap_dir(int dst, mat3 rotation, vec2 uv) { return mul(rotation, envmap_uv_to_xyz(dst, uv)); }
 
-/// Output pixel \p pixel of a remap to \p dst at \p size, filtered by a Gaussian of \p sigma pixels from \p ss^2 reads.
+/// Output pixel \p pixel of a remap to \p dst at \p size, filtered by a Gaussian from \p ss^2 reads.
 /**
-    Sampled with equal weights at envmap_gaussian_point()'s set around the pixel's center and carried into the source
-    by the remap itself, each sample a bilinear read of the finest level. At a sigma of half a pixel it is
-    envmap_ewa()'s filter, though the reads' own blur is added rather than taken out of the Gaussian, so this is a
-    little softer where the source is shrunk by little. One sample is the bilinear read at the pixel's center, whatever
-    the sigma.
+    Sampled with equal weights at envmap_gaussian_point()'s set around the pixel's center, spread by \p scale, and
+    carried into the source by the remap itself, each sample a bilinear read of the finest level. \p scale is
+    envmap_gaussian_scale(ss, sigma) for a Gaussian of sigma pixels, the same for every pixel, so the caller works it
+    out once. At a sigma of half a pixel it is envmap_ewa()'s filter, though the reads' own blur is added rather than
+    taken out of the Gaussian, so this is a little softer where the source is shrunk by little. One sample is the
+    bilinear read at the pixel's center, whatever the sigma.
 */
 SHARED_FN EnvValue envmap_supersample(EnvSource src, int dst, mat3 rotation, ivec2 pixel, ivec2 size, int ss,
-                                      float sigma)
+                                      float scale)
 {
     ivec2 base = envmap_chart_size(src, 0);
     vec2  uv   = nearest_valid_envmap_uv(
         dst, vec2((float(pixel.x) + 0.5f) / float(size.x), (float(pixel.y) + 0.5f) / float(size.y)));
-    float    scale = envmap_gaussian_scale(ss, max(sigma, 0.0f));
-    EnvValue sum   = EnvValue(0.0f);
+    EnvValue sum = EnvValue(0.0f);
     for (int sy = 0; sy < ss; ++sy)
         for (int sx = 0; sx < ss; ++sx)
         {

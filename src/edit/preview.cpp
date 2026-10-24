@@ -10,6 +10,7 @@
 #include "edit/subject.h"
 #include "image.h"
 #include "shared/edits.h"
+#include "shared/envmap.h"
 
 #include <algorithm>
 
@@ -87,7 +88,11 @@ ShaderEdit shader_edit(const EditPreview &preview)
     else if (const auto &r = preview.remap)
     {
         s.op = shader::EDIT_REMAP;
-        s.p0 = float4{float2(r->size), r->sigma, 0.f};
+        // what spreads the supersampling set, worked out once here rather than at every pixel in the shader
+        const float spread = r->sampling == shader::ENVMAP_SAMPLE_SUPERSAMPLE
+                                 ? shader::envmap_gaussian_scale(r->quality, std::max(r->sigma, 0.f))
+                                 : 0.f;
+        s.p0               = float4{float2(r->size), spread, 0.f};
         s.m0 = padded(r->rotation);
         s.i0 = int4{r->src, r->dst, r->sampling, r->quality};
     }
