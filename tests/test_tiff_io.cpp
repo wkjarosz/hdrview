@@ -216,8 +216,9 @@ TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied
 
     SUBCASE("associated alpha is read as already multiplied into the encoded samples")
     {
-        // pixel 1 holds 128/255 under alpha 128/255: a fully bright color at half coverage, as Photoshop,
-        // OpenImageIO, ImageMagick and vips all store it (a*OETF(C))
+        // pixel 1 holds 128/255 under alpha 128/255: a fully bright color at half coverage, multiplied into the
+        // encoded samples (a*OETF(C)), as Photoshop and OpenImageIO store it, and as vips 8.18 does asked to
+        // premultiply; ImageMagick 7.1.2's associated alpha multiplies the color the same way, but its alpha too
         auto img = load_tiff(rgba_tiff(1, 0x80));
 
         REQUIRE(img->channels.size() == 4);
@@ -226,7 +227,7 @@ TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied
         // dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back gives
         // linear 1.0 times alpha; the transfer applied to the stored value would give EOTF(0.502) = 0.216
         CHECK(img->channels[0](1, 0) == doctest::Approx(k_half).epsilon(0.005));
-        CHECK(img->channels[0](1, 0) != doctest::Approx(0.214f).epsilon(0.01));
+        CHECK(img->channels[0](1, 0) != doctest::Approx(0.216f).epsilon(0.01));
 
         // the opaque pixel is the control, unaffected by any of this
         CHECK(img->channels[0](0, 0) == doctest::Approx(1.f).epsilon(0.001));
@@ -235,7 +236,7 @@ TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied
     SUBCASE("an override changes which of the two the samples go through")
     {
         // Read a file the tag says is associated as straight, so finalize() multiplies instead of the loader
-        // dividing. ImageMagick and vips both write premultiplied samples tagged unassociated.
+        // dividing, for a file whose writer tagged it wrongly.
         ImageLoadOptions opts;
         opts.override_transparency = true;
         opts.transparency_override = TransparencyType_Straight;
