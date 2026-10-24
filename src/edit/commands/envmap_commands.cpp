@@ -288,6 +288,36 @@ public:
         ImGui::Tooltip("Set the size of the result. Irradiance is very smooth, so a small size loses no detail.");
     }
 
+    /// The irradiance of the channels the viewport shows, projected again only when they or the mapping change.
+    std::optional<IrradianceEdit> irradiance_preview(const EditContext &ctx) const override
+    {
+        auto img = ctx.image;
+        if (!img || m_size.x <= 0 || m_size.y <= 0)
+            return std::nullopt;
+
+        const ChannelGroup &group = img->groups[size_t(img->active_group_index(Target_Primary))];
+        const int4          slots = img->shader_slots(Target_Primary);
+        int4                channels{-1};
+        for (int k = 0; k < 4; ++k)
+            if (slots[k] >= 0)
+                channels[k] = group.channels[slots[k]];
+
+        auto &p = m_projected;
+        if (p.image.lock() != img || p.version != img->content_version || p.mapping != m_mapping ||
+            p.channels != channels)
+        {
+            p = Projected{img, img->content_version, m_mapping, channels, {}, 0};
+            for (int k = 0; k < 4; ++k)
+                if (channels[k] >= 0)
+                {
+                    const auto sh = irradiance_coefficients(img->channels[size_t(channels[k])], EnvMapping(m_mapping));
+                    for (int i = 0; i < 9; ++i) p.coefficients[size_t(i)][k] = sh[size_t(i)];
+                    p.shown |= 1 << k;
+                }
+        }
+        return IrradianceEdit{m_mapping, m_size, p.coefficients, p.shown};
+    }
+
     void apply(const EditContext &ctx) override
     {
         const auto m        = EnvMapping(m_mapping);
@@ -302,8 +332,19 @@ public:
     }
 
 private:
-    int  m_mapping = EnvMapping_LatLong;
-    int2 m_size{0, 0};
+    /// What the preview's coefficients were projected from, and the coefficients.
+    struct Projected
+    {
+        std::weak_ptr<const Image> image;
+        int                        version = -1, mapping = -1;
+        int4                       channels{-1};
+        std::array<float4, 9>      coefficients{};
+        int                        shown = 0;
+    };
+
+    int               m_mapping = EnvMapping_LatLong;
+    int2              m_size{0, 0};
+    mutable Projected m_projected; ///< Projecting a large image takes long enough to do only when something changes
 };
 
 } // namespace

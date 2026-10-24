@@ -11,6 +11,8 @@
 #include "fwd.h"
 #include "shared/envmap.h"
 
+#include <array>
+
 /// The ways an environment map can be flattened onto a rectangle.
 /**
     Each is a pair of functions between a direction and a point on the image, all in the same world frame.
@@ -97,9 +99,17 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                          EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2, float sigma = 0.5f,
                          const float3x3 &rotation = float3x3{la::identity}, AtomicProgress progress = {});
 
+/// The nine spherical harmonic coefficients of \p src, a \p mapping of incident radiance, in envmap_sh_basis()'s order.
+/**
+    Integrated over the image's own samples, each weighted by the solid angle it covers (envmap_jacobian()), so every
+    sample contributes once.
+*/
+std::array<float, 9> irradiance_coefficients(const Array2Df &src, EnvMapping mapping, AtomicProgress progress = {});
+
 /// Convolve \p src, a \p mapping of incident radiance, with a clamped cosine, giving irradiance per direction.
 /**
-    Via nine spherical harmonic coefficients, which the cosine kernel's fast falloff makes enough, so this
-    costs the two resolutions added and not multiplied.
+    Via nine spherical harmonic coefficients (irradiance_coefficients()), which the cosine kernel's fast falloff makes
+    enough, so this costs the two resolutions added and not multiplied. Each output sample weighs them by
+    envmap_irradiance_weights() at its direction, as the image shader's preview does.
 */
 Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, AtomicProgress progress = {});

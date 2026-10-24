@@ -11,8 +11,10 @@
 #include <smallthreadpool.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <deque>
+#include <vector>
 
 namespace
 {
@@ -385,69 +387,63 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
     return out;
 }
 
-Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, AtomicProgress progress)
+std::array<float, 9> irradiance_coefficients(const Array2Df &src, EnvMapping mapping, AtomicProgress progress)
 {
-    // Ramamoorthi and Hanrahan: the cosine kernel falls off fast enough in frequency that nine spherical
-    // harmonic coefficients reproduce the irradiance to about a percent.
-    //
-    // Integrated over the image's own samples, each weighted by the solid angle it covers
-    // (envmap_jacobian()), so every sample contributes once.
+    // Ramamoorthi and Hanrahan: the cosine kernel falls off fast enough in frequency that nine spherical harmonic
+    // coefficients reproduce the irradiance to about a percent. Summed a row at a time in double, the rows in
+    // parallel, then the rows together.
     const int2   in_size = src.size();
     const double dA      = 1.0 / (double(in_size.x) * double(in_size.y));
 
-    double sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    std::vector<std::array<double, 9>> rows(size_t(in_size.y), std::array<double, 9>{});
+    progress.set_num_steps(in_size.y);
+    stp::parallel_for(stp::blocked_range<int>(0, in_size.y, 1),
+                      [&](int y0, int y1, int, int)
+                      {
+                          for (int y = y0; y < y1; ++y)
+                          {
+                              if (progress.canceled())
+                                  return;
+                              auto &row = rows[size_t(y)];
+                              for (int x = 0; x < in_size.x; ++x)
+                              {
+                                  const float2 uv{(float(x) + 0.5f) / float(in_size.x),
+                                                  (float(y) + 0.5f) / float(in_size.y)};
+                                  const float  dw = envmap_jacobian(mapping, uv);
+                                  if (dw <= 0.f)
+                                      continue; // not sphere here, so there is nothing to gather
 
-    progress.set_num_steps(in_size.y + 1);
+                                  const float3x3 basis = shader::envmap_sh_basis(envmap_uv_to_xyz(mapping, uv));
+                                  const double   L     = double(src(x, y)) * double(dw) * dA;
+                                  for (int k = 0; k < 9; ++k) row[size_t(k)] += L * double(basis[k / 3][k % 3]);
+                              }
+                              ++progress;
+                          }
+                      });
 
-    for (int y = 0; y < in_size.y; ++y)
-    {
-        if (progress.canceled())
-            return Array2Df{size};
+    std::array<double, 9> sum{};
+    for (const auto &row : rows)
+        for (int k = 0; k < 9; ++k) sum[size_t(k)] += row[size_t(k)];
+    std::array<float, 9> out;
+    for (int k = 0; k < 9; ++k) out[size_t(k)] = float(sum[size_t(k)]);
+    return out;
+}
 
-        for (int x = 0; x < in_size.x; ++x)
-        {
-            const float2 uv{(float(x) + 0.5f) / float(in_size.x), (float(y) + 0.5f) / float(in_size.y)};
-            const float  dw = envmap_jacobian(mapping, uv);
-            if (dw <= 0.f)
-                continue; // not sphere here, so there is nothing to gather
-
-            const float3 d = envmap_uv_to_xyz(mapping, uv);
-            const double L = double(src(x, y)) * double(dw) * dA;
-
-            sh[0] += L * 0.282095;
-            sh[1] += L * 0.488603 * double(d.y);
-            sh[2] += L * 0.488603 * double(d.z);
-            sh[3] += L * 0.488603 * double(d.x);
-            sh[4] += L * 1.092548 * double(d.x) * double(d.y);
-            sh[5] += L * 1.092548 * double(d.y) * double(d.z);
-            sh[6] += L * 0.315392 * (3.0 * double(d.z) * double(d.z) - 1.0);
-            sh[7] += L * 1.092548 * double(d.x) * double(d.z);
-            sh[8] += L * 0.546274 * (double(d.x) * double(d.x) - double(d.y) * double(d.y));
-        }
-
-        ++progress;
-    }
-
-    // the constants that turn those coefficients into irradiance, from the same paper
-    constexpr double c1 = 0.429043, c2 = 0.511664, c3 = 0.743125, c4 = 0.886227, c5 = 0.247708;
+Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, AtomicProgress progress)
+{
+    const auto sh = irradiance_coefficients(src, mapping, progress);
+    if (progress.canceled())
+        return Array2Df{size};
 
     Array2Df out{size};
     for (int y = 0; y < size.y; ++y)
         for (int x = 0; x < size.x; ++x)
         {
-            const float2 uv{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)};
-            const float3 n  = envmap_uv_to_xyz(mapping, uv);
-            const double nx = n.x, ny = n.y, nz = n.z;
-
-            const double e = c1 * sh[8] * (nx * nx - ny * ny) + c3 * sh[6] * nz * nz + c4 * sh[0] - c5 * sh[6] +
-                             2.0 * c1 * (sh[4] * nx * ny + sh[7] * nx * nz + sh[5] * ny * nz) +
-                             2.0 * c2 * (sh[3] * nx + sh[1] * ny + sh[2] * nz);
-
-            // divided by pi: what a white lambertian surface facing this way reflects, which is what an
-            // environment lookup wants
-            out(x, y) = float(e / 3.14159265358979323846);
+            const float2   uv{(float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y)};
+            const float3x3 w = shader::envmap_irradiance_weights(envmap_uv_to_xyz(mapping, uv));
+            float          e = 0.f;
+            for (int k = 0; k < 9; ++k) e += w[k / 3][k % 3] * sh[size_t(k)];
+            out(x, y) = e;
         }
-
-    ++progress;
     return out;
 }

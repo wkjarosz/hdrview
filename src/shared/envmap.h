@@ -444,6 +444,37 @@ SHARED_FN vec2 nearest_valid_envmap_uv(int mapping, vec2 uv)
 }
 
 //
+// Irradiance
+//
+
+/// The nine real spherical harmonics of bands 0 to 2 at direction \p d, the k-th at [k / 3][k % 3].
+/**
+    In Ramamoorthi and Hanrahan's order and normalization, from "An Efficient Representation for Irradiance Environment
+    Maps" (2001), with y up.
+*/
+SHARED_FN mat3 envmap_sh_basis(vec3 d)
+{
+    return mat3(
+        vec3(0.282095f, 0.488603f * d.y, 0.488603f * d.z),
+        vec3(0.488603f * d.x, 1.092548f * d.x * d.y, 1.092548f * d.y * d.z),
+        vec3(0.315392f * (3.0f * d.z * d.z - 1.0f), 1.092548f * d.x * d.z, 0.546274f * (d.x * d.x - d.y * d.y)));
+}
+
+/// What each of envmap_sh_basis()'s coefficients of a radiance adds to the irradiance at normal \p n, over pi.
+/**
+    The clamped cosine scales each band by its own factor, which Ramamoorthi and Hanrahan fold into these weights.
+    Divided by pi, what a white Lambertian surface facing \p n reflects, which is what an environment lookup wants.
+*/
+SHARED_FN mat3 envmap_irradiance_weights(vec3 n)
+{
+    float c1 = 0.429043f, c2 = 0.511664f, c3 = 0.743125f, c4 = 0.886227f, c5 = 0.247708f;
+    return mat3(vec3(c4, 2.0f * c2 * n.y, 2.0f * c2 * n.z),
+                vec3(2.0f * c2 * n.x, 2.0f * c1 * n.x * n.y, 2.0f * c1 * n.y * n.z),
+                vec3(c3 * n.z * n.z - c5, 2.0f * c1 * n.x * n.z, c1 * (n.x * n.x - n.y * n.y))) *
+           (1.0f / ENVMAP_PI);
+}
+
+//
 // Sampling around a point
 //
 

@@ -27,6 +27,7 @@ struct EditPreview
     std::optional<EnvmapRemap> remap;     ///< A remap of the whole image, in place of a point-wise edit
     std::optional<ShiftEdit>   shift;     ///< A shift of the subject's channels, in place of a point-wise edit
     std::optional<BumpEdit>    bump;      ///< A bump map's normals in place of the shown group, if the subject has it
+    std::optional<IrradianceEdit> irradiance; ///< An irradiance map of the whole image, in place of a point-wise edit
     std::optional<Box2i>       window;    ///< The display window of the image shown in place of this one, if reshaped
     EditCommand               *command = nullptr; ///< The command previewed, which a drag over the preview may steer
 };
@@ -44,7 +45,7 @@ struct ShaderEdit
 {
     int      op = 0; ///< An EDIT_ op, or EDIT_NONE
     float4   p0{0.f}, p1{0.f};
-    float3x3 m0{la::identity}, m1{la::identity};
+    float4x4 m0{la::identity}, m1{la::identity};
     int4     i0{0}; ///< The op's integer parameters, for a resampling op
 };
 

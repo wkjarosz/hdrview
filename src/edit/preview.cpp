@@ -21,14 +21,17 @@ std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext
     EditPreview p;
     p.command = &cmd;
     p.remap   = cmd.remap_preview(ctx);
-    // a remap's result keeps the data window's corner, as resample_image_async() leaves it
+    // a remap's or an irradiance map's result keeps the data window's corner, as resample_image_async() leaves it
     if (p.remap)
         p.window = Box2i{ctx.image->data_window.min, ctx.image->data_window.min + p.remap->size};
+    p.irradiance = cmd.irradiance_preview(ctx);
+    if (p.irradiance)
+        p.window = Box2i{ctx.image->data_window.min, ctx.image->data_window.min + p.irradiance->size};
     p.shift = cmd.shift_preview(ctx);
     p.bump  = cmd.bump_preview(ctx);
     if (const auto edit = cmd.point_edit(ctx))
         p.edit = *edit;
-    else if (!p.remap && !p.shift && !p.bump)
+    else if (!p.remap && !p.irradiance && !p.shift && !p.bump)
         return std::nullopt;
     p.M_to_sRGB = cmd.M_to_sRGB_after(ctx);
 
@@ -61,15 +64,31 @@ std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext
     return p;
 }
 
+namespace
+{
+/// \p M in the upper left of a 4x4 matrix, as the shader's mat4 uniforms take a mat3.
+float4x4 padded(const float3x3 &M) { return float4x4{{M[0], 0.f}, {M[1], 0.f}, {M[2], 0.f}, {0.f, 0.f, 0.f, 1.f}}; }
+} // namespace
+
 ShaderEdit shader_edit(const EditPreview &preview)
 {
-    // a remap replaces the whole image, so it comes first, as in the shader
+    // a remap or an irradiance map replaces the whole image, so it comes first, as in the shader
     ShaderEdit s;
-    if (const auto &r = preview.remap)
+    if (const auto &e = preview.irradiance)
+    {
+        const auto &c = e->coefficients;
+        s.op          = shader::EDIT_IRRADIANCE;
+        s.m0          = float4x4{c[0], c[1], c[2], c[3]};
+        s.m1          = float4x4{c[4], c[5], c[6], c[7]};
+        s.p0          = c[8];
+        s.p1          = float4{float2(e->size), 0.f, 0.f};
+        s.i0          = int4{e->mapping, e->shown, 0, 0};
+    }
+    else if (const auto &r = preview.remap)
     {
         s.op = shader::EDIT_REMAP;
         s.p0 = float4{float2(r->size), r->sigma, 0.f};
-        s.m0 = r->rotation;
+        s.m0 = padded(r->rotation);
         s.i0 = int4{r->src, r->dst, r->sampling, r->quality};
     }
     else if (const auto &shift = preview.shift)
@@ -87,7 +106,7 @@ ShaderEdit shader_edit(const EditPreview &preview)
     else
     {
         const PointEdit &e = preview.edit;
-        s                  = ShaderEdit{e.op, e.p0, e.p1, e.m0, e.m1};
+        s                  = ShaderEdit{e.op, e.p0, e.p1, padded(e.m0), padded(e.m1)};
     }
     return s;
 }

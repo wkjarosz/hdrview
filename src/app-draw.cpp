@@ -462,8 +462,8 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.edit_rect", shown.rect);
         m_shader->set_uniform("fsp.edit_p0", edit.p0);
         m_shader->set_uniform("fsp.edit_p1", edit.p1);
-        m_shader->set_uniform("fsp.edit_m0", padded(edit.m0));
-        m_shader->set_uniform("fsp.edit_m1", padded(edit.m1));
+        m_shader->set_uniform("fsp.edit_m0", edit.m0);
+        m_shader->set_uniform("fsp.edit_m1", edit.m1);
         m_shader->set_uniform("fsp.edit_i0", edit.i0);
 
         // a reshaping edit's preview lays the quad over the window the result will have, as the view will show it

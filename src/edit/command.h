@@ -12,6 +12,7 @@
 #include "edit/subject.h"
 #include "fwd.h"
 
+#include <array>
 #include <functional>
 #include <imgui.h>
 #include <memory>
@@ -72,6 +73,16 @@ struct BumpEdit
 {
     float2 scale{1.f}; ///< What bump_normal() scales the slopes across and down by
     int2   borders{0}; ///< The BorderMode across and down
+};
+
+/// An irradiance map, as the image shader previews it: see irradiance_envmap() in edit/envmap.h.
+struct IrradianceEdit
+{
+    int  mapping = 0; ///< The EnvMapping of both the image and the result
+    int2 size{0};     ///< The size the result has
+    /// The nine spherical harmonic coefficients, each across the four channels the viewport shows.
+    std::array<float4, 9> coefficients{};
+    int                   shown = 0; ///< Which of those four slots show a channel at all, a bit each
 };
 
 /// The view's zoom and pan, which an edit dialog previewing a reshaped image takes over and gives back.
@@ -163,6 +174,8 @@ public:
     virtual std::optional<ShiftEdit> shift_preview(const EditContext &) const { return std::nullopt; }
     /// The bump map's conversion to normals this command makes, for the viewport to preview, or none.
     virtual std::optional<BumpEdit> bump_preview(const EditContext &) const { return std::nullopt; }
+    /// The irradiance map this command makes, for the viewport to preview, or none.
+    virtual std::optional<IrradianceEdit> irradiance_preview(const EditContext &) const { return std::nullopt; }
     /// Steer the preview by a drag over it from \p from to \p to, in the previewed image's uv; whether it did.
     /**
         \p size is the previewed image's size in pixels. Only while the command's dialog previews it. A drag it does

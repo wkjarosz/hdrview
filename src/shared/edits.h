@@ -49,7 +49,7 @@ SHARED_CONST int EDIT_FIRST_COLOR          = EDIT_BRIGHTNESS_CONTRAST;
 SHARED_CONST int EDIT_SHIFT                = 10; ///< p0.xy: offset in samples; i0.x: sampler; i0.yz: border modes
 SHARED_CONST int EDIT_REMAP                = 11; ///< p0: output size, sigma; m0: rotation; i0: src, dst, sampling, quality
 SHARED_CONST int EDIT_BUMP_NORMAL          = 12; ///< p0.xy: bump_normal()'s scale; i0.xy: border modes
-SHARED_CONST int EDIT_IRRADIANCE           = 13; ///< m0, m1, p0: the coefficients; p1.xy: output size; i0.x: mapping
+SHARED_CONST int EDIT_IRRADIANCE           = 13; ///< m0, m1, p0: coefficients; p1.xy: size; i0: mapping, slots shown
 
 // What brightness/contrast curves, in p1.x; the L*a*b* ones take m0 to XYZ, m1 back, and the white in p1.yzw.
 SHARED_CONST int CURVE_RGB                 = 0;

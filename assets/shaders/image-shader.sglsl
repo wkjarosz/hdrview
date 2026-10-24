@@ -225,6 +225,22 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
     if (!in_img)
         return value;
 
+    if (fsp.edit_op == EDIT_IRRADIANCE)
+    {
+        // the output pixel uv falls in, at whose center the irradiance is weighed, as irradiance_envmap() weighs it
+        ivec2 size    = ivec2(fsp.edit_p1.xy);
+        int   mapping = fsp.edit_i0.x;
+        ivec2 pixel   = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
+        mat3  w       = envmap_irradiance_weights(envmap_uv_to_xyz(mapping, (vec2(pixel) + 0.5) / vec2(size)));
+        // each coefficient across the four slots: the first four are edit_m0's columns, the next four edit_m1's
+        vec4 irradiance = w[0][0] * fsp.edit_m0[0] + w[0][1] * fsp.edit_m0[1] + w[0][2] * fsp.edit_m0[2] +
+                          w[1][0] * fsp.edit_m0[3] + w[1][1] * fsp.edit_m1[0] + w[1][2] * fsp.edit_m1[1] +
+                          w[2][0] * fsp.edit_m1[2] + w[2][1] * fsp.edit_m1[3] + w[2][2] * fsp.edit_p0;
+        // a slot showing no channel keeps what it shows, an opaque alpha for an image without one
+        bvec4 shown = notEqual(ivec4(fsp.edit_i0.y) & ivec4(1, 2, 4, 8), ivec4(0));
+        return mix(value, irradiance, shown);
+    }
+
     if (fsp.edit_op == EDIT_REMAP)
     {
         // the output pixel uv falls in, so each shows as one color
