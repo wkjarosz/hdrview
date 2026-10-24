@@ -26,7 +26,8 @@ using namespace std;
 
 struct PFMSaveOptions
 {
-}; // PFM has no options
+    int row_order = 0; ///< 0 for the format's bottom to top, 1 for Photoshop's top to bottom
+};
 
 static PFMSaveOptions s_opts;
 
@@ -168,7 +169,8 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename, con
     return {image};
 }
 
-void write_pfm_image(ostream &os, string_view filename, int width, int height, int num_channels, const float data[])
+void write_pfm_image(ostream &os, string_view filename, int width, int height, int num_channels, const float data[],
+                     bool top_to_bottom)
 {
     if (!os)
         throw invalid_argument(fmt::format("write_pfm_image: Error opening file '{}'", filename));
@@ -199,19 +201,22 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
 
     os << (little_endian ? "-1.0000000\n" : "1.0000000\n");
 
-    // data holds its rows top to bottom, and the file stores them bottom to top
+    // data holds its rows top to bottom, and the file stores them bottom to top unless asked otherwise
     const size_t row_floats = (size_t)width * num_channels;
-    for (int y = height - 1; y >= 0; --y)
+    for (int i = 0; i < height; ++i)
+    {
+        const int y = top_to_bottom ? i : height - 1 - i;
         os.write((const char *)(data + y * row_floats), (std::streamsize)(row_floats * sizeof(float)));
+    }
 }
 
-void save_pfm_image(const Image &img, ostream &os, string_view filename)
+void save_pfm_image(const Image &img, ostream &os, string_view filename, bool top_to_bottom)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
     // PFM records no transfer function, and is read back as linear
     auto pixels = img.as_interleaved<float>(&w, &h, &n, TransferFunction::Linear);
-    write_pfm_image(os, filename, w, h, n, pixels.get());
+    write_pfm_image(os, filename, w, h, n, pixels.get(), top_to_bottom);
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
@@ -220,14 +225,24 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
     if (!opts)
         throw std::invalid_argument("PFMSaveOptions pointer is null");
 
-    save_pfm_image(img, os, filename);
+    save_pfm_image(img, os, filename, opts->row_order == 1);
 }
 
 // GUI parameter function
 PFMSaveOptions *pfm_parameters_gui(SaveContext &ctx)
 {
-    // PFM stores linear 32-bit floats, with nothing to choose
-    no_options_entry();
+    // PFM stores linear 32-bit floats; all there is to choose is which way its rows run
+    if (begin_options_table(ctx))
+    {
+        ImGui::PE::Combo("Row order", &s_opts.row_order, "Bottom to top (standard)\0Top to bottom (Photoshop)\0", -1,
+                         "Which row the file stores first. The format puts the bottom row first, as most programs "
+                         "expect, but Photoshop reads and writes the top row first.");
+
+        if (reset_entry())
+            s_opts = PFMSaveOptions{};
+
+        ImGui::PE::End();
+    }
     ctx.hdr = true;
     return &s_opts;
 }

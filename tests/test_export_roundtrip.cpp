@@ -702,6 +702,29 @@ TEST_CASE("every setting of every writer round-trips each transfer function its 
     }
 }
 
+TEST_CASE("a PFM in Photoshop's row order stores the standard file's rows the other way round")
+{
+    // The format stores the bottom row first, which the sweep above holds HDRView and macOS to; Photoshop reads and
+    // writes the top row first, so its option must flip the rows and nothing else. The image's rows all differ.
+    auto               img = make_image(k_rgb);
+    std::ostringstream standard(std::ios::binary), photoshop(std::ios::binary);
+    save_pfm_image(*img, standard, "a.pfm");
+    save_pfm_image(*img, photoshop, "a.pfm", true);
+    const std::string a = standard.str(), b = photoshop.str();
+    REQUIRE(a.size() == b.size());
+
+    const size_t row = size_t(k_size.x) * 3 * sizeof(float), header = a.size() - row * size_t(k_size.y);
+    CHECK(a.compare(0, header, b, 0, header) == 0);
+    int reversed = 0, same = 0;
+    for (int y = 0; y < k_size.y; ++y)
+    {
+        reversed += a.compare(header + size_t(y) * row, row, b, header + size_t(k_size.y - 1 - y) * row, row) == 0;
+        same += a.compare(header + size_t(y) * row, row, b, header + size_t(y) * row, row) == 0;
+    }
+    CHECK(reversed == k_size.y);
+    CHECK(same == 0);
+}
+
 TEST_CASE("every writer's file loads with a channel selector applied, whichever stage applies it")
 {
     // EXR and JPEG XL apply the selector while decoding, and load_image() applies it to every other format's
