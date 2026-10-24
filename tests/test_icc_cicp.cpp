@@ -510,7 +510,7 @@ TEST_CASE("Profiles lcms cannot use are not mistaken for ones it can")
         ++usable;
         CHECK_FALSE(profile.description().empty());
 
-        // CMYK has no colorants of its own to read; its conversion is covered in tests/test_j2k_io.cpp
+        // CMYK has no colorants of its own to read; its conversion is the next test's
         if (profile.is_CMYK())
         {
             ++cmyk;

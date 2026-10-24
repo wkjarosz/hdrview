@@ -3,7 +3,7 @@
 
     The Edit menu, driven the way a user drives it: click the item, then look at the pixels. The
     logic-level suite covers what each command does to the samples; what these add is the wiring between
-    the menu, the dialogs and the commands, and the invalidation that runs after an edit.
+    the menu, the dialogs, their previews and the commands, and the invalidation that runs after an edit.
 */
 
 #include "app.h"
@@ -582,7 +582,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(app->clipboard() != nullptr);
         IM_CHECK(app->clipboard()->size() == app->image(0)->size());
 
-        // edited images left loaded would make the next test's close_all_images() prompt
+        // edited images left loaded would make a later test's close_all_images() prompt
         app->set_selection(Box2i{});
         app->set_clipboard(nullptr);
         reset_images(ctx);
@@ -903,7 +903,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->ItemClick(ICON_MY_LINK);
         ctx->Yield(2);
         IM_CHECK(!disabled("##Border y"));
-        IM_CHECK(borders() == int2{BorderMode_Mirror}); //< y unlinked where it was linked
+        IM_CHECK(borders() == int2{BorderMode_Mirror}); //< unlinked, y stays where it followed x to
         ctx->ComboClick("##Border y/Black");
         ctx->Yield(2);
         IM_CHECK((borders() == int2{BorderMode_Mirror, BorderMode_Black}));

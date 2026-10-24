@@ -1,7 +1,8 @@
 /** \file test_gui_view.cpp
     \author Wojciech Jarosz
 
-    View-menu actions: zoom, the toggles, the exposure and gamma steps, the tonemap reset, and the exposure slider.
+    View-menu actions (zoom, the toggles, the exposure and gamma steps, the tonemap reset) and the toolbar's
+    exposure slider.
 */
 
 #include "app.h"

@@ -1,8 +1,8 @@
 /** \file test_gui_dialogs.cpp
     \author Wojciech Jarosz
 
-    Opens and closes the File-menu dialogs, runs every save format's options panel, and checks what each kind of
-    save writes.
+    Opens and closes the File-menu dialogs, checks that the save and edit dialogs leave the viewport navigable,
+    runs every save format's options panel, and checks what each kind of save writes.
 */
 
 #include "app.h"
@@ -161,7 +161,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const float full = window->Size.y;
             ctx->ItemClick((at + "#FOLD").c_str());
             ctx->Yield(3);
-            // and the sliver Dear ImGui keeps below a title bar for the rounding
+            // the title bar, plus the sliver Dear ImGui keeps below one for the rounding
             IM_CHECK_LE(window->Size.y,
                         window->TitleBarHeight + std::max(0.f, ImGui::GetStyle().WindowRounding - 1.f) + 1.f);
             const float folded_zoom = app->zoom();
@@ -197,7 +197,7 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         IM_CHECK(ctx->WindowInfo("Save as...").Window != nullptr);
 
         // The dialog's keys are its own: keyboard navigation is on while it is open, Down moves within it rather than
-        // through the images behind it, and a shortcut it has no use for, H for a horizontal flip, stands down.
+        // through the images behind it, and a shortcut it has no use for, H to mirror the view, stands down.
         ctx->Yield(2);
         IM_CHECK(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
         const bool flipped = *hdrview()->action("Mirror view horizontally").p_selected;

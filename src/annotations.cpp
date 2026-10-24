@@ -719,8 +719,7 @@ int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransfor
         p = to_lo + t * (to_hi - to_lo);
     }
 
-    // Which is to say the corner the cursor is holding has been renumbered, and the edge midpoints follow
-    // their edges.
+    // Ordering lo and hi renumbers the corner the cursor is holding, and the edge midpoints follow their edges.
     if (index < 4)
         index = flipped_corner(index, flip_x, flip_y);
     else

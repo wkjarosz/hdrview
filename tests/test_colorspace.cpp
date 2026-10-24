@@ -778,7 +778,7 @@ TEST_CASE("axis_scale_fwd/inv round-trip across the range the histogram spans")
             INFO("scale = ", s, ", x = ", x);
             double f = axis_scale_fwd(x, (AxisScale)s);
             REQUIRE(std::isfinite(f));
-            // the sRGB scale runs the shaders' curve, which is float; ample for placing bins on screen
+            // the sRGB scale runs the shaders' transfer function, which is float; ample for placing bins on screen
             const double epsilon = s == AxisScale_SRGB ? 1e-6 : 1e-9;
             CHECK(axis_scale_inv(f, (AxisScale)s) == doctest::Approx(x).epsilon(epsilon));
         }

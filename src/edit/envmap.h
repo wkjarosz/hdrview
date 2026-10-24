@@ -63,7 +63,7 @@ float envmap_jacobian(EnvMapping mapping, float2 uv);
 /// How remapped_envmap() reads the source.
 enum EnvMapSampling : int
 {
-    EnvMapSampling_Point = 0, ///< Supersample a Gaussian of half a pixel
+    EnvMapSampling_Point = 0, ///< Supersample a Gaussian of a chosen width with bilinear reads
     EnvMapSampling_EWA        ///< Elliptical Gaussian over mip levels
 };
 static_assert(EnvMapSampling_Point == shader::ENVMAP_SAMPLE_SUPERSAMPLE &&

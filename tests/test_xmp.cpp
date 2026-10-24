@@ -67,7 +67,8 @@ TEST_CASE("An ordinary XMP packet parses into its schemas")
 
 TEST_CASE("A default namespace declaration does not take the image down with it")
 {
-    // xmlns= has no colon, so it is stored as a plain string; xmlns:dc= then addresses it as an object
+    // xmlns= has no colon, so read as an ordinary attribute it is a plain string, which xmlns:dc= then
+    // addresses as an object
     const std::string with_default_ns = packet(R"(<rdf:Description rdf:about=""
         xmlns="http://purl.org/dc/elements/1.1/"
         xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -150,7 +151,7 @@ TEST_CASE("An image whose XMP the parser dislikes still loads its pixels")
         <dc:title>ok</dc:title>
       </rdf:Description>)");
 
-    // first the control, so a broken fixture cannot masquerade as the bug
+    // first the control, so a broken fixture cannot pass for the XMP's doing
     std::istringstream    plain{png_with_xmp("")};
     std::vector<ImagePtr> plain_images;
     CHECK_NOTHROW(plain_images = load_image(plain, "plain.png"));

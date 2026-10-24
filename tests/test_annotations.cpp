@@ -928,6 +928,8 @@ TEST_CASE("Text is baked at a handful of sizes, and at the same one however far 
     // is quantized and whatever is left over scales the glyphs instead. Two properties matter: the sizes
     // are few and bounded, and the zoom is not one of the things that picks them -- were it, a view being
     // zoomed would rasterize a fresh set every frame and the text would step as it crossed between them.
+    // text_baked_size() takes no zoom, so this checks the first; the box test above checks the second, by way of
+    // the box following the zoom only as its unit says.
     std::set<float> baked_sizes;
 
     for (float size = 0.1f; size < 20000.f; size *= 1.05f)
@@ -951,6 +953,3 @@ TEST_CASE("Text is baked at a handful of sizes, and at the same one however far 
     CHECK(baked_sizes.size() <= 8);
     CHECK(baked_sizes.size() > 1);
 }
-
-// That the zoom is not one of the things picking a baked size is what the box test above checks, by way of
-// the box following the zoom only as its unit says: nothing here takes a zoom to be independent of.

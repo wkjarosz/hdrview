@@ -1,7 +1,7 @@
 /** \file envmap.h
-    The ways an environment map flattens the sphere onto a rectangle, in both directions, and how a point moves
-    across one, which the remap edits and the image shader's preview of them compile from this one source. See shim.h
-    for the dialect it is written in.
+    The ways an environment map flattens the sphere onto a rectangle, in both directions, how a point moves across
+    one, and the spherical harmonics and Gaussian sample set the environment-map edits build on, which those edits and
+    the image shader's previews of them compile from this one source. See shim.h for the dialect it is written in.
 
     A mapping is one of the ENVMAP_ constants below, the values of EnvMapping in src/edit/envmap.h. An image point is
     in [0,1]^2 and a direction on the unit sphere, y up. tests/test_envmap.cpp holds every mapping to its inverse, to
@@ -482,7 +482,7 @@ SHARED_FN mat3 envmap_irradiance_weights(vec3 n)
 /**
     The centers of the unit square's strata, taken to the disc by Shirley and Chiu's concentric map in Dave Cline's
     form, with the fixes its readers posted (the second branch's angle pi/2 - (pi/4)(a/b), which matches the original
-    map, and a guard at the middle, which divided by zero), then given Box-Muller's radius, sqrt(-2 ln(1 - r^2)). No
+    map, and a guard against dividing by zero at the middle), then given Box-Muller's radius, sqrt(-2 ln(1 - r^2)). No
     stratum's center reaches the square's edge, where that radius goes to infinity, so the set stops short of the
     tails and is narrower than the Gaussian; envmap_gaussian_scale() gives it the Gaussian's variance. A set of one is
     the middle point alone.
@@ -510,8 +510,8 @@ SHARED_FN vec2 envmap_gaussian_point(int i, int j, int n)
 
 /// What envmap_gaussian_point()'s \p n by \p n set is scaled by to sample a Gaussian of standard deviation \p sigma.
 /**
-    The set's mean squared radius made the Gaussian's, 2 sigma^2, so that each n has the same variance, the set being
-    the same down both axes and across them.
+    The set's mean squared radius made the Gaussian's, 2 sigma^2, so that every n has the same variance; the set's
+    symmetry splits it equally between the two axes, with no covariance.
 */
 SHARED_FN float envmap_gaussian_scale(int n, float sigma)
 {

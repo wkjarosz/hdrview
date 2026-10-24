@@ -178,7 +178,7 @@ TEST_CASE("What a TIFF declares about its fourth sample, and what an override do
     }
 
 #ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
-    // A separated image's fourth sample is black ink and never coverage, whatever EXTRASAMPLES is absent.
+    // A separated image's fourth sample is black ink and never coverage, with no EXTRASAMPLES needed to say so.
     // Reading it as alpha would make the solid black pixel transparent instead of dark.
     {
         auto img = load_bytes(cmyk_tiff(cmyk_profile()), "cmyk.tif");
@@ -224,7 +224,7 @@ TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied
         CHECK(img->channels[3](1, 0) == doctest::Approx(k_half).epsilon(0.001));
 
         // dividing alpha out before the inverse transfer recovers straight 1.0, and multiplying back gives
-        // linear 1.0 times alpha; the transfer applied to the stored value would give EOTF(0.502) = 0.214
+        // linear 1.0 times alpha; the transfer applied to the stored value would give EOTF(0.502) = 0.216
         CHECK(img->channels[0](1, 0) == doctest::Approx(k_half).epsilon(0.005));
         CHECK(img->channels[0](1, 0) != doctest::Approx(0.214f).epsilon(0.01));
 

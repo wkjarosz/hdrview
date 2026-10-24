@@ -32,7 +32,7 @@ namespace hdrview_test
 
 namespace fs = std::filesystem;
 
-/// Yields until `done` holds, or `timeout` passes. Returns whether it held.
+/// Yields until `done` holds or `timeout` passes, and returns whether it held.
 /**
     The budget is a duration, not a frame count: vsync is off, so a frame costs microseconds.
 */
@@ -70,7 +70,7 @@ inline void reset_images(ImGuiTestContext *ctx)
     wait_until(ctx, [] { return hdrview()->num_images() == 0; });
 }
 
-/// Put the view controls back where a person would leave them, since nothing else resets them between tests.
+/// Puts the view controls back where a person would leave them, since nothing else resets them between tests.
 inline void reset_view_controls(ImGuiTestContext *ctx)
 {
     hdrview()->exposure() = hdrview()->exposure_live() = 0.f;

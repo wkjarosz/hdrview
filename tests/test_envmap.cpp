@@ -470,14 +470,6 @@ TEST_CASE("A cube map's faces join up, so a read at a face edge continues onto t
 
 TEST_CASE("Every edge of a mapping's image is read as the sphere continues past it")
 {
-    // Remapping a mapping onto itself at its own size gives back the image, up to what reconstructing it costs, when a
-    // read past an edge takes the texel the sphere continues into: the other end of a row past a lat-long or
-    // cylindrical seam, the far side of a lat-long pole half a turn round, the same edge mirrored about its midpoint in
-    // the equal-area square, and for the cube layouts the neighboring face, wherever in the image the layout puts it. A
-    // lobe a few texels inside an edge, off its midpoint, differs from one side of the edge to the other, so a read of
-    // the wrong texel there (clamping, or whatever the layout put beside the edge) makes the texels by the image's
-    // edges, or its faces', reconstruct worse than those in the middle, where the lobe peaks. The discs are absent, as
-    // their rim is the one direction -z, which nothing reads across.
     // An output sample moved within its own chart, the image or a cube face, lands where the mapping puts the point it
     // was moved to; moved past the chart, it continues onto the sphere, which the reconstruction below holds the
     // output's edges to as it holds the source's.
@@ -507,6 +499,14 @@ TEST_CASE("Every edge of a mapping's image is read as the sphere continues past 
         CHECK(worst < 1e-4f);
     }
 
+    // Remapping a mapping onto itself at its own size gives back the image, up to what reconstructing it costs, when a
+    // read past an edge takes the texel the sphere continues into: the other end of a row past a lat-long or
+    // cylindrical seam, the far side of a pole half a turn round, the same edge mirrored about its midpoint in the
+    // equal-area square, and for the cube layouts the neighboring face, wherever in the image the layout puts it. A
+    // lobe a few texels inside an edge, off its midpoint, differs from one side of the edge to the other, so a read of
+    // the wrong texel there (clamping, or whatever the layout put beside the edge) makes the texels by the image's
+    // edges, or its faces', reconstruct worse than those in the middle, where the lobe peaks. The discs are absent, as
+    // their rim is the one direction -z, which nothing reads across.
     struct Edge
     {
         int         mapping;

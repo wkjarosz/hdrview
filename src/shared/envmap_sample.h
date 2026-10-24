@@ -11,8 +11,8 @@
     - `EnvValue envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p)`, texel \p p of \p chart at
       \p level, whose charts are \p size, where \p p is always inside the chart.
 
-    A chart is a piece of the sphere laid out flat in its own coordinates: the whole image for every mapping but a
-    cube map, and for a cube map, one face in cube_face_st()'s coordinates. Everything here reads charts in [0,1]^2
+    A chart is a piece of the sphere laid out flat in its own coordinates: the whole image for every mapping but the
+    two cube layouts, and for those, one face in cube_face_st()'s coordinates. Everything here reads charts in [0,1]^2
     and wraps a read past a chart's edge as the sphere continues there.
 */
 
@@ -144,9 +144,9 @@ SHARED_FN vec3 envmap_remap_dir(int dst, mat3 rotation, vec2 uv) { return mul(ro
 /**
     Sampled with equal weights at envmap_gaussian_point()'s set around the pixel's center and carried into the source
     by the remap itself, each sample a bilinear read of the finest level. At a sigma of half a pixel it is
-   envmap_ewa()'s filter, though the reads' own blur is added rather than taken out of the Gaussian, so this is a little
-   softer where the source is shrunk by little. One sample is the bilinear read at the pixel's center, whatever the
-   sigma.
+    envmap_ewa()'s filter, though the reads' own blur is added rather than taken out of the Gaussian, so this is a
+    little softer where the source is shrunk by little. One sample is the bilinear read at the pixel's center, whatever
+    the sigma.
 */
 SHARED_FN EnvValue envmap_supersample(EnvSource src, int dst, mat3 rotation, ivec2 pixel, ivec2 size, int ss,
                                       float sigma)

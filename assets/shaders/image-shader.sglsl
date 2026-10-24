@@ -80,7 +80,7 @@ layout(binding=1) uniform fs_params {
     vec4  edit_p1;                    // the op's second vector of parameters
     mat4  edit_m0;                    // the op's first matrix parameter
     mat4  edit_m1;                    // the op's second matrix parameter
-    ivec4 edit_i0;                    // the op's integer parameters, for a resampling op
+    ivec4 edit_i0;                    // the op's integer parameters, for an op reading more than a pixel
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -197,7 +197,7 @@ struct EnvSource
 };
 vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p)
 {
-    // a cube map's faces are cells of the one image
+    // a cube layout's faces are cells of the one image
     return fetch_shown(envmap_is_cube(src.mapping) ? envmap_face_texel_in_image(src.mapping, chart, p, size.x) : p,
                        level);
 }
@@ -216,9 +216,10 @@ vec4 resample_fetch(ResampleSource src, ivec2 p) { return fetch_shown(p, 0); }
 
 /// The current image's samples \p value at \p uv, changed as the open edit dialog previews them.
 /**
-    A remap fills the output's quad, each output pixel taking the color remapped_envmap() gives it, through
-    envmap_sample.h. Within the subject's rectangle, a shift reads through resample.h as shifted() does, and a point-wise
-    edit maps the stored samples as apply_point_edit() does.
+    A remap or an irradiance map fills the output's quad, each output pixel taking the color remapped_envmap() (through
+    envmap_sample.h) or irradiance_envmap() gives it. Within the subject's rectangle, a shift reads through resample.h
+    as shifted() does, a bump map takes bump_normal() of heights read through resample.h's border modes, and a
+    point-wise edit maps the stored samples as apply_point_edit() does.
 */
 vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
 {

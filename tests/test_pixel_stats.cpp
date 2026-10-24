@@ -34,8 +34,8 @@ int main(int argc, char **argv)
 namespace
 {
 
-// A WxH channel whose value uniquely identifies each pixel, so which region was sampled is visible in the
-// statistics.
+// A WxH channel holding x + 10 y: distinct per pixel up to ten columns wide, and linear, so which region was
+// sampled shows in the statistics.
 Channel make_identifiable_channel(int w, int h)
 {
     Channel c("test", int2{w, h});
@@ -140,7 +140,7 @@ TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else"
             {
                 CAPTURE(x);
                 CAPTURE(y);
-                // half-open, as upload_tile() treats it; Box::contains() would include the max edge
+                // half-open, as upload_tile() treats it
                 const bool inside = x >= tile.min.x && x < tile.max.x && y >= tile.min.y && y < tile.max.y;
                 if (inside)
                     CHECK(c(x, y) == data[size_t(y - tile.min.y) * tile.size().x + (x - tile.min.x)]);
@@ -339,7 +339,7 @@ TEST_CASE("Non-finite samples and FLT_MAX markers are counted apart from the mea
 {
     // The ordinary values 0..43 surround one of each kind of sample that is not a measurement: NaN, the two
     // infinities, and FLT_MAX at either end of the range, which a renderer's depth channel stores wherever the
-    // ray hit nothing (OpenEXR's Blobbies.exr is a third such pixels). The value one step short of FLT_MAX is
+    // ray hit nothing (a third of OpenEXR's Blobbies.exr is such pixels). The value one step short of FLT_MAX is
     // a measurement, however enormous. Without the infinities, NaN takes their pixels, so the clip extremes
     // are seen to come from the markers as much as from the infinities.
     constexpr float k_inf = std::numeric_limits<float>::infinity(), k_nan = std::numeric_limits<float>::quiet_NaN();

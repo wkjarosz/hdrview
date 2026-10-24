@@ -140,11 +140,12 @@ enum class DialogPosition
     None       ///< no positioning; caller may set its own via SetNextWindowPos/SetNextWindowSize
 };
 
-// Handles the open-on-request/startup-frame-safety/centering boilerplate common to every modal dialog:
-// fires ImGui::OpenPopup(title) the frame `open` becomes true (once HelloImGui's startup frames have
-// settled, so a dialog can start out already-open), consumes `open`, applies `position`, then forwards to
-// ImGui::BeginPopupModal. Call ImGui::EndPopup() only when this returns true, as with BeginPopupModal.
+/// Begin a modal dialog, opening it on request and positioning it, as ImGui::BeginPopupModal() does.
 /**
+    Fires ImGui::OpenPopup(title) the frame \p open becomes true (once HelloImGui's startup frames have settled, so
+    a dialog can start out already-open), consumes \p open, applies \p position, then forwards to
+    ImGui::BeginPopupModal(). Call ImGui::EndPopup() only when this returns true, as with BeginPopupModal().
+
     With \p folded, the dialog's title bar also gets the collapse arrow an ordinary window has, which Dear ImGui leaves
     off a modal, and folding it shows the title bar alone. Its contents still run, out of sight, so what they keep
     doing every frame goes on.
@@ -382,12 +383,6 @@ void Tooltip(const char *description, const char *, float wrap_width = -1.f) = d
 void Tooltip(const char *description, const std::function<void()> &more);
 
 /**
-    The right-hand extent of a run of rows, so that something can be hung off all of them at once.
-
-    Fed by calling take() after each item that belongs to a row; it remembers the widest right edge and
-    where the first and last rows sit vertically. See RowBracketButton(), which is what consumes it.
-*/
-/**
     The square plot of a tone curve that the tonal dialogs draw above their sliders: what a level goes in
     as against what it comes out as, over [0,1] and a margin beyond, to show what a curve does past black and
     white. Used like ImPlot itself:
@@ -427,6 +422,11 @@ void ToneCurveHandle(float2 at, ImVec4 color);
 bool ToneCurveDrag(float2 &position, float2 *pressed_at = nullptr);
 void EndToneCurvePlot();
 
+/// The right-hand extent of a run of rows, so that something can be hung off all of them at once.
+/**
+    Fed by calling take() after each item that belongs to a row; it remembers the widest right edge and
+    where the first and last rows sit vertically. See RowBracketButton(), which is what consumes it.
+*/
 struct RowSpan
 {
     float right = 0.f;             ///< Right edge of the widest row so far

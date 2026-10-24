@@ -33,7 +33,7 @@ ImagePtr rgba_pixel_image(float color, float alpha)
     return test_image(int2{1, 1}, 4, [=](int c, int, int) { return c < 3 ? color : alpha; });
 }
 
-// by name, since OpenEXR stores channels alphabetically
+/// The sample of the 1x1 image's channel `name`, found by name since OpenEXR stores channels alphabetically.
 float channel_value(const ImagePtr &img, const std::string &name)
 {
     for (const auto &c : img->channels)
@@ -119,12 +119,11 @@ TEST_CASE("An associated-alpha PNG can be read as premultiplied, against the PNG
     save_png_image(*img, out, "premul.png", /*dither*/ false, /*interlaced*/ false,
                    /*sixteen_bit*/ false, TransferFunction::sRGB);
 
-    // read as the spec says: the samples are taken as straight and multiplied by alpha again
+    // read as the spec says, the samples are taken as straight: EOTF(0.5), multiplied by coverage a second time
     {
         auto image = load_bytes(out.str(), "premul.png");
         REQUIRE(image);
         CHECK(image->transparency == TransparencyType_Straight);
-        // taken as straight: EOTF(0.5) linearized, then multiplied by coverage a second time
         CHECK(channel_value(image, "R") ==
               doctest::Approx(0.5f * to_linear(0.5f, TransferFunction::sRGB)).epsilon(0.05));
     }
@@ -167,7 +166,7 @@ TEST_CASE("A straight-alpha EXR can be read as straight, against the EXR spec")
         auto image = load_bytes(out.str(), "straight.exr", opts);
         REQUIRE(image);
         CHECK(image->transparency == TransparencyType_Straight);
-        // finalize() now multiplies by the coverage the file's samples were never scaled by
+        // finalize() multiplies by the coverage the file's samples were never scaled by
         CHECK(channel_value(image, "R") == doctest::Approx(0.5f).epsilon(0.01));
     }
 }

@@ -881,8 +881,8 @@ TEST_CASE("Generating mipmaps halves the image down to the number of levels aske
     CHECK(img->size() == k_size);
     CHECK(img->history.size() == 0);
 
-    // Several levels to an octave: each smaller than the last, every one a whole number of octaves down the image
-    // halved that many times, as one to an octave makes it, and down to one sample; on a size that rounds unevenly.
+    // Several levels to an octave, on a size that rounds unevenly: each smaller than the last, down to one sample,
+    // and among them the image halved once, twice and so on, the sizes one level to an octave makes.
     const int2 odd{37, 23};
     for (int per_octave = 1; per_octave <= 4; ++per_octave)
     {
@@ -1003,7 +1003,7 @@ TEST_CASE("Regrouping reaches the whole layer from any one of its exploded chann
     REQUIRE(explode);
     REQUIRE(regroup);
 
-    // explode both layers, one at a time, since one group is all that can be selected
+    // explode both layers, one at a time: with nothing selected, a command reaches only the group on screen
     for (int pass = 0; pass < 2; ++pass)
     {
         for (size_t g = 0; g < img->groups.size(); ++g)

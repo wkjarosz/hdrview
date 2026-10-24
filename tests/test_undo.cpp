@@ -214,7 +214,7 @@ TEST_CASE("The history cursor tracks what can be undone and redone")
     CHECK(applied == 2);
     CHECK_FALSE(history.has_redo());
 
-    // walking off either end does nothing, and does not run an entry twice
+    // walking off the oldest end does nothing, and runs no entry an extra time
     CHECK(history.undo(*img));
     CHECK(history.undo(*img));
     CHECK_FALSE(history.undo(*img));
@@ -284,8 +284,8 @@ TEST_CASE("A new edit discards what had been undone, save point included")
 
 TEST_CASE("Rebuilding an image's layers replaces them rather than adding to them")
 {
-    // finalize() appends as it walks the channels, so anything left from an earlier build is duplicated: a
-    // second leaf per node, and channel counts that no longer agree with the channels themselves
+    // finalize() appends as it walks the channels, so a build that kept an earlier one's results would
+    // duplicate them: a second leaf per node, and channel counts that no longer agree with the channels
     auto img = make_test_image();
     img->finalize();
 

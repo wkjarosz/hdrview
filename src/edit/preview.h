@@ -34,8 +34,8 @@ struct EditPreview
 
 /// The preview of \p cmd as applying it in \p ctx would change its image, or none for a command that has none.
 /**
-    A point-wise edit or a shift covers what apply_point_edit() or modify_channels_async() would: within the subject's
-    rectangle, the subject's channels among those the shader shows, or for a color op the shown group, if the subject
+    A point-wise edit, a shift or a bump map covers what applying it would: within the subject's rectangle, the
+    subject's channels among those the shader shows, or for a color op or a bump map the shown group, if the subject
     includes it.
 */
 std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext &ctx);
@@ -46,8 +46,8 @@ struct ShaderEdit
     int      op = 0; ///< An EDIT_ op, or EDIT_NONE
     float4   p0{0.f}, p1{0.f};
     float4x4 m0{la::identity}, m1{la::identity};
-    int4     i0{0}; ///< The op's integer parameters, for a resampling op
+    int4     i0{0}; ///< The op's integer parameters, for an op that has any
 };
 
-/// The edit the image shader dispatches on for \p preview, a shift or remap packed as EDIT_SHIFT or EDIT_REMAP.
+/// The edit the image shader dispatches on for \p preview, with a shift, bump map, remap or irradiance map packed in.
 ShaderEdit shader_edit(const EditPreview &preview);

@@ -81,7 +81,7 @@ static void use_flat_list_mode(ImGuiTestContext *ctx)
     ctx->Yield(2);
 }
 
-/// The channel-group rows named "(R,G,B,A)", one per fixture, matched by name rather than by depth.
+/// The channel-group rows named "(R,G,B,A)", one per fixture, matched by name since header cells share their depth.
 static std::vector<ImGuiID> gather_rgba_group_rows(ImGuiTestContext *ctx)
 {
     ImGuiTestItemList all_items;
@@ -253,7 +253,7 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
             IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
         }
 
-        // edited images left loaded would make the next test's close_all_images() prompt
+        // edited images left loaded would make a later test's close_all_images() prompt
         reset_images(ctx);
     };
 

@@ -38,16 +38,16 @@ SHARED_CONST int EDIT_FILL_BLEND           = 5; ///< p0: the color; p1.x: the al
 
 // color ops
 SHARED_CONST int EDIT_BRIGHTNESS_CONTRAST  = 6; ///< p0: slope, midpoint, bias, shape; p1.x: what it curves
-SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< p0.x: hue turns; m0: saturation; p0.z: lightness; p1.x: whether premultiplied
+SHARED_CONST int EDIT_HUE_SATURATION       = 7; ///< p0.xz: hue turns, lightness; m0: saturation; p1.x: premultiplied
 SHARED_CONST int EDIT_MATRIX               = 8; ///< m0: the matrix applied to the color
 SHARED_CONST int EDIT_FLATTEN              = 9; ///< p0: the straight background composited under the color
 
-/// The first color op: the ops below it map samples one at a time.
+/// The first color op: the ops before it map samples one at a time.
 SHARED_CONST int EDIT_FIRST_COLOR          = EDIT_BRIGHTNESS_CONTRAST;
 
 // ops that read more than a pixel, previewed only
 SHARED_CONST int EDIT_SHIFT                = 10; ///< p0.xy: offset in samples; i0.x: sampler; i0.yz: border modes
-SHARED_CONST int EDIT_REMAP                = 11; ///< p0: output size, sigma; m0: rotation; i0: src, dst, sampling, quality
+SHARED_CONST int EDIT_REMAP                = 11; ///< p0: size, sigma; m0: rotation; i0: src, dst, sampling, quality
 SHARED_CONST int EDIT_BUMP_NORMAL          = 12; ///< p0.xy: bump_normal()'s scale; i0.xy: border modes
 SHARED_CONST int EDIT_IRRADIANCE           = 13; ///< m0, m1, p0: coefficients; p1.xy: size; i0: mapping, slots shown
 
@@ -292,7 +292,7 @@ SHARED_FN float edit_sample(int op, float v, int slot, vec4 p0, vec4 p1)
     return v;
 }
 
-/// A color group's samples \p c, as the color op \p op maps them; alpha is left as it is but by Flatten.
+/// A color group's samples \p c, as the color op \p op maps them; alpha is left as it is except by Flatten.
 SHARED_FN vec4 edit_color(int op, vec4 c, vec4 p0, vec4 p1, mat3 m0, mat3 m1)
 {
     vec3 rgb = vec3(c.x, c.y, c.z);

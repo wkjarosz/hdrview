@@ -121,9 +121,8 @@ void HDRViewApp::draw_save_dialog(bool &open, SaveMode mode)
 {
     const bool rendition = mode == SaveMode_Rendition;
     // Modal, but leaving the app unfaded and the viewport navigable around it, to look at the image while choosing
-    // how to write it. A modal takes the fade's color as it begins.
-    // It folds to its title bar, to see more of the image while choosing how to write it, and closes from it as Cancel
-    // does.
+    // how to write it. A modal takes the fade's color as it begins. It folds to its title bar, to see more of the
+    // image, and closes from it as Cancel does.
     ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32_BLACK_TRANS);
     static bool folded = false;
     const bool  shown =

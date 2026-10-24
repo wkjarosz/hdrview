@@ -114,9 +114,9 @@ public:
                 m_size.y = std::max(1, int(std::lround(double(m_size.x) / double(envmapping_aspect(m_dst_mapping)))));
         }
 
-        // The sliders keep their own angles, since at a quarter-turn pitch the rotation cannot tell yaw from roll. The
-        // rotation itself is a quaternion, so the many small turns of a drag compose exactly, and the sliders follow
-        // it.
+        // The sliders keep their own angles, since at a quarter-turn pitch the rotation cannot tell yaw from roll.
+        // The rotation itself is a quaternion, so the many small turns of a drag compose exactly, and the sliders
+        // follow it.
         const float3 before_angles = m_angles;
         ImGui::SliderFloat("Yaw", &m_angles.x, -180.f, 180.f, "%.1f deg");
         ImGui::Tooltip("Rotate the environment around the vertical axis. In a lat-long this shifts the image "

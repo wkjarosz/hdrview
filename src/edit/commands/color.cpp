@@ -543,7 +543,6 @@ private:
         const ImVec4 active{1.f, 1.f, 1.f, 0.85f};
         const ImVec4 faint{1.f, 1.f, 1.f, 0.18f};
 
-        // both are drawn whichever is in force, the other faint
         ImGui::ToneCurve("rational", rational, m_linear ? faint : active);
         ImGui::ToneCurve("line", linear, m_linear ? active : faint);
 

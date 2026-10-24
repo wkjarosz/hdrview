@@ -53,7 +53,8 @@ ImagePtr make_test_image(int2 size, Box2i data_window = {}, Box2i display_window
     return img;
 }
 
-// Saves img to an in-memory buffer (enabling all channel groups) and reloads it, returning the reloaded parts.
+// Saves img to an in-memory buffer and reloads it, returning the reloaded parts; by default every channel group
+// is saved.
 std::vector<ImagePtr> save_and_reload(const Image &img, EXRSaveOptions opts)
 {
     std::ostringstream out(std::ios::binary);

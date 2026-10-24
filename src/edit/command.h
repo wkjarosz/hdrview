@@ -25,8 +25,7 @@ enum EditExtent : int
 {
     Extent_Pixels = 0,     ///< Pixels within the channels the image already had
     Extent_Structure,      ///< The channel list or the windows: the layer tree is rebuilt and the view refit
-    Extent_StructureInView ///< As Extent_Structure, but the view stays put, since a preview has already framed the
-                           ///< result
+    Extent_StructureInView ///< As Extent_Structure, but the view stays where a preview has already framed the result
 };
 
 /// Produces a rectangle of one channel, in channel-local coordinates.
@@ -131,9 +130,9 @@ struct EditContext
 
 /// One undoable edit: what it is called, what it draws, and what it does.
 /**
-    Add one by writing a subclass and naming it in the table in commands.cpp. Parameters live as members, so
-    they persist between openings; HDRViewApp::draw_edit_command_dialog() draws the dialog shell around draw(): the
-    "Apply to" controls, then a footer of Selection only, Preview and Cancel/Confirm.
+    Add one by writing a subclass and adding it in its file's add_*_commands() (edit/commands/). Parameters live as
+    members, so they persist between openings; HDRViewApp::draw_edit_command_dialog() draws the dialog shell around
+    draw(): the "Apply to" controls, then a footer of Selection only, Preview and Cancel/Confirm.
 */
 class EditCommand
 {

@@ -175,8 +175,8 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
 
     // Modal, but leaving the app unfaded and the viewport navigable around it, to look at the image while choosing
     // the edit. A modal takes the fade's color as it begins. It folds to its title bar, to see more of the image, and
-    // closes from it as Cancel does: Dear ImGui closes it there itself, and only that leaves a dialog that was open
-    // going in unshown coming out.
+    // closes from it as Cancel does. Dear ImGui handles that close button itself, which is told apart as the one way
+    // a dialog open going in comes out unshown.
     const char *title    = info.names.front().c_str();
     const bool  was_open = ImGui::IsPopupOpen(title);
     ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32_BLACK_TRANS);
@@ -199,8 +199,8 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
         if (ImGui::IsWindowAppearing())
             ImGui::GetCurrentWindow()->HiddenFramesCannotSkipItems = 2;
 
-        // Point-wise edits, shifts and remaps preview in the viewport as the controls move, through the code that
-        // applies them; ctx.previewing tells the command, before it draws, whether this one does.
+        // A command that describes a preview shows it in the viewport as the controls move, through the code that
+        // applies it; ctx.previewing tells the command, before it draws, whether this one does.
         static bool preview     = true;
         const bool  previewable = make_edit_preview(cmd, ctx).has_value();
         ctx.previewing         = preview && previewable;

@@ -103,7 +103,7 @@ TEST_CASE("The HEIF and AVIF save entries write files branded and labeled as wha
             if (avif || brand.rfind("hei", 0) == 0)
                 CHECK(w.bit_depth == (tf == TransferFunction::sRGB ? 8 : 10));
 
-            // and the loader reads it on its own grid, whatever the codec did to the values
+            // and the loader reads an 8-bit file back onto 8-bit code values, whatever the codec did to them
             if (w.bit_depth == 8)
             {
                 const auto back = load_bytes(out.str(), avif ? "a.avif" : "a.heif");

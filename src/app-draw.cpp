@@ -24,7 +24,7 @@ const Box2i *reshaped_window(const EditPreview *preview)
 
 /// \p M padded into a 4x4, the form a 3x3 matrix uniform has to take.
 /**
-    Passed as a 3x3, the data did not reach MSL properly, which showed as rapid flickering.
+    Passed as a 3x3, the data does not reach MSL intact, which shows as rapid flickering.
 */
 float4x4 padded(const float3x3 &M) { return float4x4{{M[0], 0.f}, {M[1], 0.f}, {M[2], 0.f}, {0.f, 0.f, 0.f, 1.f}}; }
 

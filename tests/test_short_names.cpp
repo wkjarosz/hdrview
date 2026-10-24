@@ -39,7 +39,7 @@ TEST_CASE("shorten_names keeps a collection distinguishable, whatever its names 
         auto shortened = shorten_names(names);
         REQUIRE(shortened.size() == names.size());
 
-        // whatever every name begins or ends with is elided, once it is long enough to be worth an ellipsis
+        // the prefix every name shares is elided, once it is long enough to be worth an ellipsis
         size_t common = 0, common_end = 0;
         while (!names.empty() && std::all_of(names.begin(), names.end(), [&](const string &n)
                                              { return n.size() > common && n[common] == names[0][common]; }))

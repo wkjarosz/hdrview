@@ -326,8 +326,8 @@ float3 envmap_euler(const float3x3 &R, float roll)
     const float pitch = std::asin(std::clamp(-R[2][1], -1.f, 1.f));
     if (std::abs(R[2][1]) > 1.f - 1e-6f)
     {
-        // there yaw and roll turn about the same axis, and the first column is a turn by yaw - sin(pitch) * roll about
-        // +y
+        // there yaw and roll turn about the same axis, and the first column is a turn about +y by
+        // yaw - sin(pitch) * roll
         const float sp = -R[2][1] > 0.f ? 1.f : -1.f;
         return float3{std::remainder(std::atan2(-R[0][2], R[0][0]) + sp * roll, 2.f * k_pi), pitch, roll};
     }

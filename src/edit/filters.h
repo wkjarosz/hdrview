@@ -135,9 +135,9 @@ std::vector<int2> mip_level_sizes(int2 size, int per_octave);
 /// The mip level of \p size below \p previous, filtered from it by \p filter, a MipFilter.
 /**
     Box and Mitchell are stb's resampler's. A Gaussian blurs the level by \p sigma of its own samples, which are r of
-    \p previous's, given that \p previous is already blurred by \p blurred of its own: it adds what that lacks,
-    sqrt((r sigma)^2 - blurred^2 - reads), and reads the result bilinearly at the level's sample centers, whose own
-    blur is reads. Gaussians compose, so along a chain of these each level is as if filtered from the image itself,
-    whose own blur is none.
+    \p previous's, given that \p previous is already blurred by \p blurred of its own. The level is read bilinearly
+    from \p previous at its sample centers, which blurs by a variance v of its own, so \p previous is first blurred by
+    what that lacks, sqrt((r sigma)^2 - blurred^2 - v). Gaussians compose, so along a chain of these each level is as
+    if filtered from the image itself, whose own blur is none.
 */
 Array2Df mip_level(const Array2Df &previous, int2 size, int filter, float sigma = 0.5f, float blurred = 0.f);

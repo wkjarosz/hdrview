@@ -1,6 +1,7 @@
 /** \file resample.h
-    Reading an image between its samples and past its edges, as the Shift edit does on the CPU and the image shader's
-    preview of it does on the GPU, compiled from this one source. See shim.h for the dialect it is written in.
+    Reading an image between its samples and past its edges, as the Shift and Bump to normal map edits do on the CPU
+    and the image shader's previews of them do on the GPU, compiled from this one source. See shim.h for the dialect
+    it is written in.
 
     The two differ only in where the samples come from, so the includer supplies that before including this file:
     - `ResampleValue`, what one sample read gives: one channel's float on the CPU, the four shown channels' vec4 on

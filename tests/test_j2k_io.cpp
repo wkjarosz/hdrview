@@ -565,7 +565,7 @@ TEST_CASE("Every file in a real JPEG 2000 corpus either decodes or is refused")
                 CHECK(img->size().y > 0);
                 CHECK_FALSE(img->channels.empty());
                 for (const auto &ch : img->channels) CHECK(ch.size() == img->size());
-                // each header entry is an object of value/string/type/description, as the info panel wants
+                // counted for the report below, from the block coder the header names
                 if (img->metadata["header"]["Block coder"].value("value", std::string{}) == "HTJ2K")
                     ++high_throughput;
             }
