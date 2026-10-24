@@ -124,15 +124,28 @@ void select_channels_group(Image &img, int channel)
 /**
     Leaves the viewport on whichever group now holds \p follow. Ungrouping and regrouping are this in both
     directions.
+
+    The selection is kept on the channels, so every group the rebuild makes of selected channels would come out
+    selected. Where any of \p channels was selected, the group on screen is selected in their place.
 */
 std::function<void(Image &)> mark_ungrouped(std::vector<int> channels, int follow, bool ungrouped)
 {
     return [channels = std::move(channels), follow, ungrouped](Image &img)
     {
-        for (int c : channels) img.channels[size_t(c)].ungrouped = ungrouped;
+        bool selected = false;
+        for (int c : channels)
+        {
+            selected |= img.channels[size_t(c)].selected;
+            img.channels[size_t(c)].ungrouped = ungrouped;
+        }
         img.rebuild_layers();
         if (follow >= 0)
             select_channels_group(img, follow);
+        if (selected)
+        {
+            for (int c : channels) img.channels[size_t(c)].selected = false;
+            img.select_group(img.selected_group);
+        }
     };
 }
 

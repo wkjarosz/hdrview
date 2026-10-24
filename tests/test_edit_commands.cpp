@@ -1148,12 +1148,16 @@ TEST_CASE("A group command covers every group it is given, as one entry, and not
 
         TestEditContext ctx{img};
 
-        // regrouping has nothing to put back until something has been taken apart; the selection rides on
-        // the channels, so it survives the rebuild that renumbers the groups
+        // regrouping has nothing to put back until something has been taken apart, which leaves only the group
+        // on screen selected, so the pieces of both groups are selected again, all but the depth
         if (name == "Regroup channels")
         {
             find_command("Ungroup channels")->apply(ctx);
             REQUIRE(img->history.size() == 1);
+            const int z = group_of_channel(img, "Z");
+            for (int g = 0; g < int(img->groups.size()); ++g)
+                if (g != z)
+                    img->select_group(g);
             ctx.retarget();
             REQUIRE(ctx.target_groups.size() == 7);
         }
@@ -1252,8 +1256,8 @@ TEST_CASE("A group command pointed at a group outside the selection acts on it a
                                                      ? std::vector<std::string>{"G"}
                                                      : std::vector<std::string>{"R", "G", "B", "A"};
 
-        // pointing inside the selection covers the selection, as a click inside one keeps it; outside, only the
-        // group pointed at
+        // pointing inside the selection covers the selection, as a right-click inside it does in the Images panel;
+        // outside, only the group pointed at
         ctx.retarget(img->selected_groups().front());
         CHECK(ctx.target_groups == img->selected_groups());
         ctx.retarget(pointed);
@@ -1315,7 +1319,7 @@ TEST_CASE("A group command pointed at a group outside the selection acts on it a
     }
 }
 
-TEST_CASE("A group command keeps the group on screen through its rebuild, and undoing it keeps the selection")
+TEST_CASE("A group command keeps the group on screen, selected alone if it was, through its rebuild and its undo")
 {
     // Pointed at a group other than the one on screen: the rebuild renumbers the groups, so the viewport has to
     // follow its group to a new index, and a structural entry has to bring the channels back with their selected
@@ -1338,6 +1342,31 @@ TEST_CASE("A group command keeps the group on screen through its rebuild, and un
 
         REQUIRE(img->history.undo(*img));
         CHECK(snapshot(img) == before);
+    }
+
+    // And pointed at the group on screen, which is selected: of the groups it makes, only the one on screen is
+    // selected, as its undo leaves only the group it was, where the channels' flags would select every one.
+    for (const std::string name : {"Ungroup channels", "Regroup channels"})
+    {
+        CAPTURE(name);
+
+        auto            img = make_layered_image();
+        TestEditContext ctx{img};
+        img->selected_group = group_of_channel(img, "R");
+        img->select_group(img->selected_group);
+        if (name == "Regroup channels")
+        {
+            ctx.retarget(img->selected_group);
+            find_command("Ungroup channels")->apply(ctx);
+        }
+        ctx.retarget(img->selected_group);
+        const auto selected = img->selected_groups();
+        REQUIRE(selected == std::vector<int>{img->selected_group});
+
+        find_command(name)->apply(ctx);
+        CHECK(img->selected_groups() == std::vector<int>{img->selected_group});
+        REQUIRE(img->history.undo(*img));
+        CHECK(img->selected_groups() == selected);
     }
 }
 

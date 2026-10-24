@@ -147,8 +147,8 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         IM_CHECK_EQ(img->reference_group, -1);
     };
 
-    // the whole click state machine in one walk: a plain click collapses the selection or moves current
-    // through it, ctrl/cmd toggles, and neither may empty the selection or put current outside it
+    // the whole click state machine in one walk: a plain click selects its row alone, inside the selection or not,
+    // ctrl/cmd toggles, and neither may empty the selection or put current outside it
     t           = IM_REGISTER_TEST(engine, "navigation", "ctrl_click_multi_selection");
     t->TestFunc = [](ImGuiTestContext *ctx)
     {
@@ -172,11 +172,18 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         IM_CHECK(image_is_selected(1));
         IM_CHECK_EQ(hdrview()->current_image_index(), 0);
 
-        // a plain click inside the selection keeps it, and only moves current
+        // and a plain click inside the selection narrows it to that row, as it would anywhere else
         ctx->ItemClick(row_ids[1]);
         IM_CHECK_EQ(hdrview()->current_image_index(), 1);
-        IM_CHECK(image_is_selected(0));
+        IM_CHECK(!image_is_selected(0));
         IM_CHECK(image_is_selected(1));
+
+        // ctrl/cmd adds the other back, leaving current where it is
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->ItemClick(row_ids[0]);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+        IM_CHECK(image_is_selected(0));
+        IM_CHECK_EQ(hdrview()->current_image_index(), 1);
 
         // taking the current row out of the selection hands current to what is left of it
         ctx->KeyDown(ImGuiMod_Ctrl);
@@ -241,16 +248,27 @@ void RegisterTests_Navigation(ImGuiTestEngine *engine)
         ctx->KeyUp(ImGuiMod_Ctrl);
         for (int i = 0; i < 2; ++i) IM_CHECK(image_is_selected(i));
 
+        // a plain click on a group inside the selection narrows it to that group, and ctrl/cmd adds the other back
+        ctx->ItemClick(group_ids[1]);
+        IM_CHECK(!image_is_selected(0));
+        IM_CHECK(image_is_selected(1));
+        ctx->KeyDown(ImGuiMod_Ctrl);
+        ctx->ItemClick(group_ids[0]);
+        ctx->KeyUp(ImGuiMod_Ctrl);
+        for (int i = 0; i < 2; ++i) IM_CHECK(image_is_selected(i));
+
         // right-clicking a row inside the selection covers the whole selection
         ctx->ItemClick(group_ids[1], ImGuiMouseButton_Right);
         ctx->ItemClick("//$FOCUSED/Ungroup channels");
         // the action is posted to the main thread, since it rebuilds the layer list the panel is walking
         ctx->Yield(4);
 
+        // each image's group taken apart, and of its pieces only the one on screen selected
         for (int i = 0; i < 2; ++i)
         {
             IM_CHECK_EQ((int)hdrview()->image(i)->groups.size(), 4);
             IM_CHECK_EQ((int)hdrview()->image(i)->history.size(), 1);
+            IM_CHECK((hdrview()->image(i)->selected_groups() == std::vector<int>{hdrview()->image(i)->selected_group}));
         }
 
         // edited images left loaded would make a later test's close_all_images() prompt

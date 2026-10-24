@@ -310,6 +310,8 @@ public:
         whole selection.
     */
     void set_current_group(int index, int group);
+    /// Make group \p group of image \p index current and the only target selected, as a plain click does.
+    void select_group_alone(int index, int group);
     /// Add group \p group of image \p index to the selection, or take it out.
     void toggle_group_selected(int index, int group);
     /// Select every image between the current one and \p index, each by the group it is showing.

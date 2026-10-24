@@ -785,6 +785,16 @@ void HDRViewApp::set_current_group(int index, int group)
     }
 }
 
+void HDRViewApp::select_group_alone(int index, int group)
+{
+    auto img = image(index);
+    if (!img || !img->is_valid_group(group))
+        return;
+
+    for (auto &i : m_images) i->deselect_all();
+    set_current_group(index, group);
+}
+
 void HDRViewApp::toggle_group_selected(int index, int group)
 {
     // logic:
@@ -1256,7 +1266,7 @@ void HDRViewApp::draw_file_window()
                     else if (io.KeyShift)
                         m_reference = is_reference ? -1 : i;
                     else
-                        set_current_image_index(i);
+                        select_group_alone(i, img->selected_group);
                     set_image_textures();
                     spdlog::trace("Clicked image {}; current is {}, reference is {}", i, m_current, m_reference);
                 }
