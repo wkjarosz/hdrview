@@ -81,14 +81,17 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     {
         std::string menu;
         const char *dialog, *test;
-        bool        edit; ///< An edit dialog, with an edit's footer
+        bool          edit;    ///< An edit dialog whose footer offers Selection only
+        ImGuiKeyChord pan = 0; ///< The modifier a drag needs to pan the view, for a preview that takes drags
     };
     for (const Navigable &n :
          {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", false},
           Navigable{"File/Export rendition...", "Export rendition...",
                     "export_rendition_lets_the_viewport_be_navigated", false},
           Navigable{edit_menu_item("Channel mixer..."), "Channel mixer...",
-                    "edit_dialog_lets_the_viewport_be_navigated", true}})
+                    "edit_dialog_lets_the_viewport_be_navigated", true},
+          Navigable{edit_menu_item("Remap envmap..."), "Remap envmap...", "remap_lets_the_viewport_be_navigated", false,
+                    ImGuiMod_Alt}})
     {
         t           = IM_REGISTER_TEST(engine, "dialogs", n.test);
         t->TestFunc = [n](ImGuiTestContext *ctx)
@@ -143,9 +146,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->Yield(2);
             IM_CHECK_EQ(app->zoom(), over_viewport);
 
-            // a drag from the corner moves the pixel under it along
+            // a drag from the corner moves the pixel under it along, with a modifier where the preview takes drags
             const float2 before = app->pixel_at_app_pos(corner);
-            drag(ctx, corner, float2{HelloImGui::EmSize(4.f), HelloImGui::EmSize(3.f)});
+            drag(ctx, corner, float2{HelloImGui::EmSize(4.f), HelloImGui::EmSize(3.f)}, n.pan);
             IM_CHECK(la::length(app->pixel_at_app_pos(corner) - before) > 0.f);
 
             // and a drag begun on the dialog's own widgets is theirs, even carried out over the viewport: a press on
@@ -159,10 +162,11 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->Yield(2);
             IM_CHECK_EQ(la::length(app->pixel_at_app_pos(corner) - held), 0.f);
 
-            // its title bar's arrow folds it to the title bar, out of the way, and back
-            const float full = window->Size.y;
+            // its title bar's arrow folds it to the title bar, out of the way and as wide as it was, and back
+            const float full = window->Size.y, width = window->Size.x;
             ctx->ItemClick((at + "#FOLD").c_str());
             ctx->Yield(3);
+            IM_CHECK_EQ(window->Size.x, width);
             // the title bar, plus the sliver Dear ImGui keeps below one for the rounding
             IM_CHECK_LE(window->Size.y,
                         window->TitleBarHeight + std::max(0.f, ImGui::GetStyle().WindowRounding - 1.f) + 1.f);

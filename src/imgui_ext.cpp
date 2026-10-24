@@ -1151,14 +1151,16 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position, Im
     }
 
     // Folded, the dialog keeps its width and shrinks to its title bar, as a collapsed window does, but for the sliver
-    // below it that Dear ImGui keeps for the rounded corners. A collapsed window is exempt from the style's least
-    // height, which the dialog lowers to the title bar.
+    // below it that Dear ImGui keeps for the rounded corners. The width is the one it had unfolded, since a zero one
+    // would refit it to its contents each frame, and not to the same width. A collapsed window is exempt from the
+    // style's least height, which the dialog lowers to the title bar.
     const bool fold = folded && *folded;
     if (fold)
     {
         flags &= ~ImGuiWindowFlags_AlwaysAutoResize;
         flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar;
-        ImGui::SetNextWindowSize(ImVec2(0.f, ImGui::GetFrameHeight()));
+        const ImGuiWindow *window = ImGui::FindWindowByName(title);
+        ImGui::SetNextWindowSize(ImVec2(window ? window->Size.x : 0.f, ImGui::GetFrameHeight()));
         ImGui::PushStyleVarY(ImGuiStyleVar_WindowMinSize, ImGui::GetFrameHeight());
     }
 
