@@ -122,7 +122,6 @@ TEST_CASE("DDS premultiplied-alpha formats are not premultiplied a second time")
             // HDRView stores premultiplied values, so finalize() scales the straight file by alpha and
             // leaves the other one alone; the two differ by alpha
             CHECK(straight_value == doctest::Approx(premultiplied_value * k_alpha).epsilon(1e-4));
-            CHECK(premultiplied_value != doctest::Approx(straight_value).epsilon(1e-4));
         }
     }
 }

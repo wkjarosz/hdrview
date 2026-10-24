@@ -140,9 +140,8 @@ TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else"
             {
                 CAPTURE(x);
                 CAPTURE(y);
-                // half-open, as upload_tile() treats it
-                const bool inside = x >= tile.min.x && x < tile.max.x && y >= tile.min.y && y < tile.max.y;
-                if (inside)
+                // contains() is half-open, as upload_tile() treats a tile
+                if (tile.contains(int2{x, y}))
                     CHECK(c(x, y) == data[size_t(y - tile.min.y) * tile.size().x + (x - tile.min.x)]);
                 else
                     CHECK(c(x, y) == expected(x, y));
@@ -187,7 +186,7 @@ TEST_CASE("Channel::upload_tile writes the requested rectangle and nothing else"
             {
                 CAPTURE(x);
                 CAPTURE(y);
-                if (x >= w - 2 && y >= h - 2)
+                if (tile.contains(int2{x, y}))
                     CHECK(c(x, y) == data[size_t(y - tile.min.y) * tile.size().x + (x - tile.min.x)]);
                 else
                     CHECK(c(x, y) == expected(x, y));

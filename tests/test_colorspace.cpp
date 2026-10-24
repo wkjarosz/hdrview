@@ -60,17 +60,8 @@ TEST_CASE("to_linear/from_linear round-trip for every TransferFunction")
     }
 }
 
-// Narrow (studio) range packs luma into 16..235, a span of 219.
-TEST_CASE("narrow-range dequantization maps the studio range to [0,1]")
-{
-    CHECK(dequantize_narrow<uint8_t>(16) == doctest::Approx(0.f));
-    CHECK(dequantize_narrow<uint8_t>(235) == doctest::Approx(1.f));
-    CHECK(dequantize_narrow<uint16_t>(16 * 256) == doctest::Approx(0.f));
-    CHECK(dequantize_narrow<uint16_t>(235 * 256) == doctest::Approx(1.f));
-}
-
-TEST_CASE(
-    "quantize_full/dequantize_full round-trip within quantization error, and non-finite input stays representable")
+TEST_CASE("full-range quantization round-trips within its error and keeps non-finite input representable, and "
+          "narrow range maps the studio range to [0,1]")
 {
     for (float x : {0.0f, 0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f})
     {
@@ -87,6 +78,12 @@ TEST_CASE(
     CHECK(quantize_full<uint16_t>(nan, 0, 0, false) == 0);
     CHECK(quantize_full<uint8_t>(inf, 0, 0, false) == 255);
     CHECK(quantize_full<uint8_t>(-inf, 0, 0, false) == 0);
+
+    // narrow (studio) range packs luma into 16..235 at 8 bits, and into those codes shifted up 8 bits at 16
+    CHECK(dequantize_narrow<uint8_t>(16) == doctest::Approx(0.f));
+    CHECK(dequantize_narrow<uint8_t>(235) == doctest::Approx(1.f));
+    CHECK(dequantize_narrow<uint16_t>(16 * 256) == doctest::Approx(0.f));
+    CHECK(dequantize_narrow<uint16_t>(235 * 256) == doctest::Approx(1.f));
 }
 
 TEST_CASE("color_u32_to_f128/color_f128_to_u32 round-trip exactly")
