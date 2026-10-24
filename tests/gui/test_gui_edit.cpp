@@ -890,8 +890,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         IM_CHECK(preview && preview->shift);
         IM_CHECK(la::length(preview->shift->offset - float2{3.f + 19.f / 2.5f, 8.f / 2.5f}) < 1e-3f);
 
-        // The borders, linked to start with, where y follows x and cannot be set itself; unlinked, each is set on
-        // its own; and linked again, y takes x's.
+        // The borders, linked to start with, where y follows x and cannot be set itself; unlinked, y starts where it
+        // followed x to and each is set on its own; and linked again, y takes x's.
         auto borders  = [app] { return app->edit_preview()->shift->borders; };
         auto disabled = [ctx](const char *ref)
         { return (ctx->ItemInfo(ref).ItemFlags & ImGuiItemFlags_Disabled) != 0; };
@@ -903,6 +903,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->ItemClick(ICON_MY_LINK);
         ctx->Yield(2);
         IM_CHECK(!disabled("##Border (y)"));
+        IM_CHECK(borders() == int2{BorderMode_Mirror}); //< y unlinked where it was linked
         ctx->ComboClick("##Border (y)/Black");
         ctx->Yield(2);
         IM_CHECK((borders() == int2{BorderMode_Mirror, BorderMode_Black}));
