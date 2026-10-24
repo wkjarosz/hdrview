@@ -383,12 +383,13 @@ TEST_CASE("Every edit that applies changes the image as one undo entry, and one 
             CAPTURE(name);
             CAPTURE(pass);
 
-            // Inside the selection, a NaN and an infinity for zapping to replace, and samples either side of
-            // [0,1] for clamping to bring in. The gremlins are in the alpha channel, which a seamless paste
+            // Inside the selection, a NaN and infinities of both signs for zapping to replace, and samples either
+            // side of [0,1] for clamping to bring in. The gremlins are in the alpha channel, which a seamless paste
             // leaves alone, since one in a channel it solves for keeps the solve from converging.
             auto img               = make_image();
             img->channels[3](3, 2) = std::numeric_limits<float>::quiet_NaN();
             img->channels[3](2, 1) = std::numeric_limits<float>::infinity();
+            img->channels[3](4, 3) = -std::numeric_limits<float>::infinity();
             img->channels[2](4, 3) = 1.75f;
             img->channels[0](3, 1) = -0.25f;
             img->is_live           = pass == Pass_Live;
@@ -398,8 +399,9 @@ TEST_CASE("Every edit that applies changes the image as one undo entry, and one 
             if (pass == Pass_Selection)
                 ctx.roi = k_roi;
 
-            const Snapshot before = snapshot(img);
-            const int      steps  = img->history.size();
+            const Snapshot           before = snapshot(img);
+            const std::vector<float> was    = samples(img);
+            const int                steps  = img->history.size();
 
             // as the dialog does; several commands read their starting settings off the image here
             cmd->on_open(ctx);
@@ -437,6 +439,32 @@ TEST_CASE("Every edit that applies changes the image as one undo entry, and one 
                 CHECK(after != before);
             else
                 CHECK(after == before);
+
+            // The edits defined sample by sample, held to that definition where they reach: clamping takes each
+            // sample to the nearest value in [0,1], of which a NaN has none, and zapping replaces exactly the
+            // non-finite samples, with the median test_filters.cpp checks.
+            if (name == "Clamp to [0,1]" || name == "Zap gremlins...")
+            {
+                const Box2i              covered = pass == Pass_Selection ? k_roi : Box2i{int2{0}, k_size};
+                const std::vector<float> now     = samples(img);
+                const int                per     = k_size.x * k_size.y;
+                for (size_t i = 0; i < now.size(); ++i)
+                {
+                    const int2 p{int(i) % per % k_size.x, int(i) % per / k_size.x};
+                    CAPTURE(i);
+                    if (!covered.contains(p))
+                        CHECK(now[i] == was[i]);
+                    else if (name == "Clamp to [0,1]")
+                    {
+                        if (!std::isnan(was[i]))
+                            CHECK(now[i] == std::clamp(was[i], 0.f, 1.f));
+                    }
+                    else if (std::isfinite(was[i]))
+                        CHECK(now[i] == was[i]);
+                    else
+                        CHECK(std::isfinite(now[i]));
+                }
+            }
 
             // the entry restores everything, structure and color metadata included, in both directions
             REQUIRE(img->history.undo(*img));
@@ -820,52 +848,6 @@ TEST_CASE("A command with no image to work on does nothing rather than crashing"
     }
 }
 
-TEST_CASE("Clamping leaves every sample inside the unit range")
-{
-    auto            img = make_image();
-    TestEditContext ctx{img};
-    ctx.subject.scope = EditSubject::Scope_AllChannels;
-
-    // pushed well outside [0,1] first, so the clamp has something to do at both ends
-    for (auto &ch : img->channels)
-        for (int i = 0; i < ch.num_elements(); ++i) ch(i) = ch(i) * 4.f - 1.5f;
-
-    auto cmd = find_command("Clamp to [0,1]");
-    REQUIRE(cmd);
-    cmd->apply(ctx);
-
-    for (const auto &ch : img->channels)
-        for (int i = 0; i < ch.num_elements(); ++i)
-        {
-            CHECK(ch(i) >= 0.f);
-            CHECK(ch(i) <= 1.f);
-        }
-}
-
-TEST_CASE("Zapping gremlins replaces the non-finite samples and leaves the rest")
-{
-    auto            img = make_image();
-    TestEditContext ctx{img};
-    ctx.subject.scope = EditSubject::Scope_AllChannels;
-
-    auto       &ch   = img->channels[0];
-    const float kept = ch(2, 2);
-    ch(0, 0)         = std::numeric_limits<float>::quiet_NaN();
-    ch(1, 0)         = std::numeric_limits<float>::infinity();
-    ch(3, 1)         = -std::numeric_limits<float>::infinity();
-
-    auto cmd = find_command("Zap gremlins...");
-    REQUIRE(cmd);
-    cmd->apply(ctx);
-
-    // every gremlin gone...
-    for (const auto &c : img->channels)
-        for (int i = 0; i < c.num_elements(); ++i) CHECK(std::isfinite(c(i)));
-
-    // ...and the samples that were already fine untouched
-    CHECK(ch(2, 2) == kept);
-}
-
 TEST_CASE("Generating mipmaps halves the image down to the number of levels asked for")
 {
     // separate images, since an Image's channels share one data window and a chain of different sizes has
@@ -897,6 +879,28 @@ TEST_CASE("Generating mipmaps halves the image down to the number of levels aske
 
     // down to one sample, where a pyramid stops
     CHECK(made.back()->size() == int2{1, 1});
+
+    // Each level filtered from the one before, as a mip chain is: every channel what one filter makes of the level
+    // above, the same filter all the way down. What each filter does to the samples is the business of the tests
+    // below; a Gaussian's sigma is the dialog's default.
+    std::vector<int> agree(MipFilter_COUNT);
+    std::iota(agree.begin(), agree.end(), 0);
+    const Image *previous = img.get();
+    for (size_t i = 0; i < made.size(); ++i)
+    {
+        CAPTURE(i);
+        auto made_by = [&](int filter)
+        {
+            for (size_t c = 0; c < made[i]->channels.size(); ++c)
+                if (values(made[i]->channels[c]) !=
+                    values(mip_level(previous->channels[c], made[i]->size(), filter, 0.5f, i ? 0.5f : 0.f)))
+                    return false;
+            return true;
+        };
+        agree.erase(std::remove_if(agree.begin(), agree.end(), [&](int f) { return !made_by(f); }), agree.end());
+        CHECK(agree.size() == 1);
+        previous = made[i].get();
+    }
 
     // and the image it came from is untouched: this makes images, it does not edit one
     CHECK(img->size() == k_size);
@@ -930,37 +934,19 @@ TEST_CASE("Generating mipmaps halves the image down to the number of levels aske
 
 TEST_CASE("A mip level is averaged from its samples rather than dropping three of every four")
 {
-    // a checkerboard alternating every sample averages to its mean; picking one of each four would keep it
-    // at one extreme or the other
-    auto img = std::make_shared<Image>(int2{16, 16}, 1);
+    // A checkerboard alternating every sample averages to its mean, under every filter, a halving or half of one
+    // down; picking one of each four would keep it at one extreme or the other.
+    Array2Df checker{int2{16, 16}};
     for (int y = 0; y < 16; ++y)
-        for (int x = 0; x < 16; ++x) img->channels[0](x, y) = ((x + y) % 2) ? 1.f : 0.f;
-    img->rebuild_layers();
+        for (int x = 0; x < 16; ++x) checker(x, y) = ((x + y) % 2) ? 1.f : 0.f;
 
-    TestEditContext ctx{img};
-    auto            cmd = find_command("Generate mipmaps...");
-    REQUIRE(cmd);
-    cmd->on_open(ctx);
-    cmd->apply(ctx);
-
-    REQUIRE_FALSE(ctx.added.empty());
-    const auto &half = ctx.added.front();
-
-    for (int i = 0; i < half->channels[0].num_elements(); ++i)
-    {
-        CAPTURE(i);
-        CHECK(half->channels[0](i) == doctest::Approx(0.5f).epsilon(0.2));
-    }
-
-    // and so does every filter, a halving or half of one down
     for (int filter = 0; filter < MipFilter_COUNT; ++filter)
         for (int per_octave : {1, 2})
         {
             CAPTURE(mip_filter_name(filter));
             CAPTURE(per_octave);
-            const Array2Df level =
-                mip_level(img->channels[0], mip_level_sizes(int2{16, 16}, per_octave).front(), filter);
-            float worst = 0.f;
+            const Array2Df level = mip_level(checker, mip_level_sizes(checker.size(), per_octave).front(), filter);
+            float          worst = 0.f;
             for (int i = 0; i < level.num_elements(); ++i) worst = std::max(worst, std::abs(level(i) - 0.5f));
             CHECK(worst < 0.15f);
         }
@@ -1241,7 +1227,9 @@ TEST_CASE("A group command pointed at a group outside the selection acts on it a
 {
     // Pointing at a group is not selecting it: right-clicking one in the Images panel acts on that group and
     // leaves the selection where it was. A lone channel the command does not reach, taken apart or never
-    // grouped, has to keep its flag through the command and its undo both.
+    // grouped, has to keep its flag through the command and its undo both. The rebuild renumbers the groups,
+    // so the viewport has to follow the group it shows to a new index, and the undo has to bring back the
+    // channels with their selected flags and the group the viewport showed.
     for (const std::string name : {"Ungroup channels", "Regroup channels", "Delete channel group"})
     {
         CAPTURE(name);
@@ -1282,6 +1270,7 @@ TEST_CASE("A group command pointed at a group outside the selection acts on it a
 
         const Snapshot before   = snapshot(img);
         const auto     selected = selected_names(img);
+        const auto     shown    = names_of(img, img->selected_group);
 
         cmd->apply(ctx);
 
@@ -1311,41 +1300,19 @@ TEST_CASE("A group command pointed at a group outside the selection acts on it a
             }
         }
 
-        // the selection stays where it was, though the rebuild renumbered the groups
+        // the selection and the group on screen stay where they were, though the rebuild renumbered the groups
         CHECK(selected_names(img) == selected);
-
-        REQUIRE(img->history.undo(*img));
-        CHECK(snapshot(img).content() == before.content());
-    }
-}
-
-TEST_CASE("A group command keeps the group on screen, selected alone if it was, through its rebuild and its undo")
-{
-    // Pointed at a group other than the one on screen: the rebuild renumbers the groups, so the viewport has to
-    // follow its group to a new index, and a structural entry has to bring the channels back with their selected
-    // flags and the group the viewport showed.
-    for (const std::string name : {"Ungroup channels", "Regroup channels", "Delete channel group"})
-    {
-        CAPTURE(name);
-
-        auto            img = make_layered_image();
-        TestEditContext ctx{img};
-        point_outside_selection(ctx, name);
-
-        const Snapshot before = snapshot(img);
-        const auto     shown  = names_of(img, img->selected_group);
-
-        auto cmd = find_command(name);
-        REQUIRE(cmd);
-        cmd->apply(ctx);
         CHECK(names_of(img, img->selected_group) == shown);
 
         REQUIRE(img->history.undo(*img));
         CHECK(snapshot(img) == before);
     }
+}
 
-    // And pointed at the group on screen, which is selected: of the groups it makes, only the one on screen is
-    // selected, as its undo leaves only the group it was, where the channels' flags would select every one.
+TEST_CASE("Pointed at the group on screen, a group command leaves only that group selected, and so does its undo")
+{
+    // Of the groups it makes, only the one on screen is selected, as its undo leaves only the group it was, where
+    // the channels' flags would select every one.
     for (const std::string name : {"Ungroup channels", "Regroup channels"})
     {
         CAPTURE(name);
