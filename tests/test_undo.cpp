@@ -301,43 +301,46 @@ TEST_CASE("Rebuilding an image's layers replaces them rather than adding to them
     CHECK(img->groups.size() == groups);
 }
 
-TEST_CASE("Cropping keeps the samples inside the box and makes them the whole image")
+TEST_CASE("Cropping keeps the samples where the box meets the image and makes them the whole image")
 {
-    auto img = make_test_image();
-    img->finalize();
+    // A box inside the image, one hanging over its far corner, one only touching its edge, and one past it. The
+    // box is half-open, so the edge it touches has no samples in common with it; a box meeting none is no crop.
+    const Box2i boxes[] = {{{1, 1}, {4, 3}}, {{3, 1}, {9, 9}}, {{5, 0}, {8, 3}}, {{20, 20}, {30, 30}}};
 
-    const Box2i box{{1, 1}, {4, 3}}; // half-open: 3 wide, 2 tall
-    img->crop(box);
-
-    CHECK(img->size() == int2{3, 2});
-    CHECK(img->data_window == box);
-    // what is left is the whole image, not a crop sitting inside the old canvas
-    CHECK(img->display_window == box);
-
-    for (int c = 0; c < int(img->channels.size()); ++c)
+    for (const Box2i &box : boxes)
     {
-        CHECK(img->channels[size_t(c)].size() == int2{3, 2});
-        for (int y = 0; y < 2; ++y)
-            for (int x = 0; x < 3; ++x)
-            {
-                CAPTURE(x);
-                CAPTURE(y);
-                // the sample that was at box.min + (x,y) before
-                CHECK(img->channels[size_t(c)](x, y) == expected(c, x + box.min.x, y + box.min.y));
-            }
+        CAPTURE(box);
+        auto img = make_test_image();
+        img->finalize();
+        img->crop(box);
+
+        Box2i kept = box;
+        kept.intersect(Box2i{int2{0}, k_size});
+        if (!kept.has_volume())
+        {
+            CHECK(img->size() == k_size);
+            CHECK(matches_original(img));
+            continue;
+        }
+
+        CHECK(img->size() == kept.size());
+        CHECK(img->data_window == kept);
+        // what is left is the whole image, not a crop sitting inside the old canvas
+        CHECK(img->display_window == kept);
+
+        for (int c = 0; c < int(img->channels.size()); ++c)
+        {
+            REQUIRE(img->channels[size_t(c)].size() == kept.size());
+            for (int y = 0; y < kept.size().y; ++y)
+                for (int x = 0; x < kept.size().x; ++x)
+                {
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    // the sample that was at kept.min + (x,y) before
+                    CHECK(img->channels[size_t(c)](x, y) == expected(c, x + kept.min.x, y + kept.min.y));
+                }
+        }
     }
-}
-
-TEST_CASE("Cropping to nothing leaves the image alone")
-{
-    auto img = make_test_image();
-    img->finalize();
-
-    // entirely outside the data window, so the intersection is empty
-    img->crop(Box2i{{20, 20}, {30, 30}});
-
-    CHECK(img->size() == k_size);
-    CHECK(matches_original(img));
 }
 
 TEST_CASE("Resizing the canvas puts the old samples where the anchor says, cutting or zero-filling the rest")
@@ -425,14 +428,6 @@ TEST_CASE("A structural entry restores the samples, the windows, and the layer t
     CHECK(img->size() == int2{2, 1});
 }
 
-TEST_CASE("Resampling to the same size changes nothing")
-{
-    auto img = make_test_image();
-    img->finalize();
-    img->resample(k_size);
-    CHECK(matches_original(img));
-}
-
 TEST_CASE("Reducing keeps each channel's light, and resizes every channel and both windows together")
 {
     // under a point-sampled reduction a lone bright sample lands between the output samples and vanishes;
@@ -444,6 +439,11 @@ TEST_CASE("Reducing keeps each channel's light, and resizes every channel and bo
     img->finalize();
     // a display window smaller than the data, which a resample replaces with the new whole image
     img->display_window = Box2i{int2{1, 1}, int2{9, 5}};
+
+    // to the size it already has, a resample moves and spreads nothing
+    const auto unchanged = samples(img);
+    img->resample(int2{16, 12});
+    CHECK(samples(img) == unchanged);
 
     img->resample(int2{4, 3});
 
@@ -498,7 +498,7 @@ TEST_CASE("An edit of the color metadata undoes as one entry, however many frame
     img->compute_color_transform();
     img->metadata["color profile"] = "as loaded";
     const auto original            = ColorMetadata::of(*img);
-    const bool pixels_before       = matches_original(img);
+    REQUIRE(matches_original(img));
 
     ColorMetadataEdit edit;
     // what one frame of the panel does to the image, while a widget is active or once it lets go
@@ -533,7 +533,7 @@ TEST_CASE("An edit of the color metadata undoes as one entry, however many frame
     CHECK(ColorMetadata::of(*img) == original);
     CHECK(img->history.redo(*img));
     CHECK(ColorMetadata::of(*img) == edited);
-    CHECK(matches_original(img) == pixels_before); //< and no pixel moved
+    CHECK(matches_original(img)); //< and no pixel moved
 
     // a drag that ends where it began is no edit
     frame([&] { move_white(float2{0.30f, 0.30f}); }, true);
