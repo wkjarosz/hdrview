@@ -1057,7 +1057,12 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto      *app      = hdrview();
         const int2 original = img->size();
         const auto samples  = snapshot(img);
-        OnExit     restore{[&, zoom = app->zoom()] { app->set_zoom(zoom); }};
+        // the view as it was, since the drag below pans it
+        OnExit restore{[&, zoom = app->zoom(), at = app->vp_pos_at_pixel(float2{0.f})]
+                       {
+                           app->set_zoom(zoom);
+                           app->reposition_pixel_to_vp_pos(at, float2{0.f});
+                       }};
 
         // panned while it is previewed, so the result is seen to land where its preview was, not where a fit would
         // put it
@@ -1072,7 +1077,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // structural and computed off the main thread at once: the result is a different size than what it was
         // computed from, so there is no rectangle to write back
         ctx->ItemClick("Remap");
-        wait_until(ctx, [&] { return img->history.has_undo(); });
+        IM_CHECK(wait_until(ctx, [&] { return img->history.has_undo(); }));
 
         IM_CHECK(img->size() == shown->size);
         IM_CHECK(la::length(app->vp_pos_at_pixel(float2(img->data_window.min)) - lo) < 1e-3f);

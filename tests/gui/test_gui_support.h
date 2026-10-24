@@ -68,6 +68,8 @@ inline void reset_images(ImGuiTestContext *ctx)
 {
     hdrview()->close_all_images_immediately();
     wait_until(ctx, [] { return hdrview()->num_images() == 0; });
+    // and at 100%, which a reshaping edit's refit or a test's zoom would otherwise carry into the next image loaded
+    hdrview()->set_zoom(1.f);
 }
 
 /// Puts the view controls back where a person would leave them, since nothing else resets them between tests.
