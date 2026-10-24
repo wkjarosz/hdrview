@@ -161,6 +161,14 @@ public:
             ImGui::SliderInt("Samples per axis", &m_samples, 1, 8);
             ImGui::Tooltip("Set the number of samples along each axis of an output pixel. The cost grows with the "
                            "square of this value.");
+            ImGui::BeginDisabled(m_samples <= 1);
+            ImGui::SliderFloat("Sigma", &m_sigma, 0.2f, 1.5f, "%.2f px");
+            ImGui::EndDisabled();
+            ImGui::Tooltip("Set the width of the Gaussian the samples are spread over, in output pixels. Larger "
+                           "values blur more and alias less. A single sample reads the pixel's center, whatever its "
+                           "width. Ctrl-click to type a value outside the slider's range.");
+            // the range is for dragging; a value typed in past it is kept, as long as it is not negative
+            m_sigma = std::max(m_sigma, 0.f);
         }
 
         // While previewing, fit the view to the output when the preview starts and whenever the output's size changes,
@@ -187,7 +195,7 @@ public:
     {
         if (m_size.x <= 0 || m_size.y <= 0)
             return std::nullopt;
-        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size, la::qmat(m_rotation), m_sampling, quality()};
+        return EnvmapRemap{m_src_mapping, m_dst_mapping, m_size, la::qmat(m_rotation), m_sampling, quality(), m_sigma};
     }
 
     /// Turns the sphere so that what was seen at \p from is seen at \p to.
@@ -214,7 +222,7 @@ public:
             [r = *r](const Array2Df &src, AtomicProgress p)
             {
                 return remapped_envmap(src, r.size, EnvMapping(r.dst), EnvMapping(r.src), EnvMapSampling(r.sampling),
-                                       r.quality, r.rotation, p);
+                                       r.quality, r.sigma, r.rotation, p);
             },
             framing() ? Extent_StructureInView : Extent_Structure);
         m_applied = true;
@@ -237,13 +245,14 @@ private:
     Box2i     m_framed; ///< The output window the view was last fit to, while a preview frames it
     bool      m_applied = false;
 
-    int  m_src_mapping = EnvMapping_LatLong;
-    int  m_dst_mapping = EnvMapping_Angular;
-    int2 m_size{0, 0};
-    int  m_samples     = 8; ///< Per axis, when supersampling
-    int  m_max_aniso   = 8; ///< For EWA
-    int  m_sampling    = EnvMapSampling_EWA;
-    bool m_auto_aspect = true;
+    int   m_src_mapping = EnvMapping_LatLong;
+    int   m_dst_mapping = EnvMapping_Angular;
+    int2  m_size{0, 0};
+    int   m_samples     = 8;    ///< Per axis, when supersampling
+    float m_sigma       = 0.5f; ///< The supersampling Gaussian's standard deviation, in output pixels
+    int   m_max_aniso   = 8;    ///< For EWA
+    int   m_sampling    = EnvMapSampling_EWA;
+    bool  m_auto_aspect = true;
 };
 
 class Irradiance final : public EditCommand

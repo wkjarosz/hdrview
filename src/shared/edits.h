@@ -47,7 +47,7 @@ SHARED_CONST int EDIT_FIRST_COLOR          = EDIT_BRIGHTNESS_CONTRAST;
 
 // resampling ops, previewed only
 SHARED_CONST int EDIT_SHIFT                = 10; ///< p0.xy: offset in samples; i0.x: sampler; i0.yz: border modes
-SHARED_CONST int EDIT_REMAP                = 11; ///< p0.xy: output size; m0: rotation; i0: src, dst, sampling, quality
+SHARED_CONST int EDIT_REMAP                = 11; ///< p0: output size, sigma; m0: rotation; i0: src, dst, sampling, quality
 
 // What brightness/contrast curves, in p1.x; the L*a*b* ones take m0 to XYZ, m1 back, and the white in p1.yzw.
 SHARED_CONST int CURVE_RGB                 = 0;

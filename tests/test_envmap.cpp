@@ -253,7 +253,7 @@ TEST_CASE("Remapping carries a value with the direction it belongs to")
                 CAPTURE(sampler);
 
                 const Array2Df out = remapped_envmap(src, int2{48, 48}, EnvMapping(dst_m), EnvMapping(src_m),
-                                                     EnvMapSampling(sampler), 4, R);
+                                                     EnvMapSampling(sampler), 4, 0.5f, R);
 
                 // away from the edges, where the disc mappings run out of sphere and the cube cross is empty, and
                 // only where the destination has a direction at all
@@ -694,11 +694,20 @@ TEST_CASE(
 
     // Each sampler is linear, and a sinusoid along one axis is orthogonal to any along the other, so one remap measures
     // a probe along each axis at once. Supersampling's bilinear reads blur by a tent of a source texel besides, a sixth
-    // of a squared texel, which EWA takes out of its Gaussian and supersampling adds to it.
+    // of a squared texel, which EWA takes out of its Gaussian and supersampling adds to it. Supersampling's Gaussian is
+    // the one it is given, so it is also held to a narrower one than EWA's, which lets more past Nyquist through.
+    struct Filter
+    {
+        int   sampler;
+        float sigma; ///< in output pixels
+    };
     for (const Shape &shape : shapes)
-        for (int sampler : {EnvMapSampling_EWA, EnvMapSampling_Point})
+        for (const Filter filter :
+             {Filter{EnvMapSampling_EWA, 0.5f}, Filter{EnvMapSampling_Point, 0.5f}, Filter{EnvMapSampling_Point, 0.3f}})
         {
+            const int sampler = filter.sampler;
             CAPTURE(sampler);
+            CAPTURE(filter.sigma);
             CAPTURE(std::string(shape.what));
             CAPTURE(shape.kx);
             CAPTURE(shape.ky);
@@ -739,8 +748,9 @@ TEST_CASE(
                     for (int y = 0; y < H; ++y)
                         for (int x = 0; x < W; ++x) src(x, y) = 0.5f + probe[0][size_t(x)] + probe[1][size_t(y)];
                     const bool     ewa = sampler == EnvMapSampling_EWA;
-                    const Array2Df out = remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_LatLong,
-                                                         EnvMapSampling(sampler), ewa ? shape.max_aniso : 4);
+                    const Array2Df out =
+                        remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_LatLong, EnvMapSampling(sampler),
+                                        ewa ? shape.max_aniso : 4, filter.sigma);
 
                     for (int a = 0; a < 2; ++a)
                     {
@@ -761,11 +771,12 @@ TEST_CASE(
                         if (!aliasing)
                         {
                             const double sigma = std::sqrt(-std::log(response) / (2.0 * M_PI * M_PI / 16.0));
-                            const double want  = ewa ? 0.5 : std::sqrt(0.25 + 1.0 / (6.0 * k[a] * k[a]));
+                            const double want =
+                                std::sqrt(filter.sigma * filter.sigma + (ewa ? 0.0 : 1.0 / (6.0 * k[a] * k[a])));
                             CHECK(sigma > want - 0.05);
                             CHECK(sigma < want + 0.05);
                         }
-                        else
+                        else if (filter.sigma >= 0.5f)
                             // a Gaussian of half a pixel passes 0.06 here; one read per level, levels an octave apart,
                             // or four samples a side, two or three times that
                             CHECK(response < 0.15);

@@ -234,6 +234,7 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
         int   dst_map  = fsp.edit_i0.y;
         int   sampling = fsp.edit_i0.z;
         int   quality  = fsp.edit_i0.w;
+        float sigma    = fsp.edit_p0.z;
         ivec2 pixel    = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
 
         // the textures' mipmaps average 2x2 blocks, halving each level and blurring by a quarter of a squared texel
@@ -247,7 +248,7 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
         }
 
         return sampling == ENVMAP_SAMPLE_EWA ? envmap_ewa(src, dst_map, R, pixel, size, quality)
-                                             : envmap_supersample(src, dst_map, R, pixel, size, quality);
+                                             : envmap_supersample(src, dst_map, R, pixel, size, quality, sigma);
     }
 
     if (!all(greaterThanEqual(uv, fsp.edit_rect.xy)) || !all(lessThan(uv, fsp.edit_rect.zw)))

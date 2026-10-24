@@ -67,7 +67,7 @@ ShaderEdit shader_edit(const EditPreview &preview)
     if (const auto &r = preview.remap)
     {
         s.op = shader::EDIT_REMAP;
-        s.p0 = float4{float2(r->size), 0.f, 0.f};
+        s.p0 = float4{float2(r->size), r->sigma, 0.f};
         s.m0 = r->rotation;
         s.i0 = int4{r->src, r->dst, r->sampling, r->quality};
     }

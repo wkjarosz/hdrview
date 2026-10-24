@@ -348,7 +348,8 @@ float4 rotation_between(float3 from, float3 to)
 }
 
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         EnvMapSampling sampling, int supersample, const float3x3 &rotation, AtomicProgress progress)
+                         EnvMapSampling sampling, int supersample, float sigma, const float3x3 &rotation,
+                         AtomicProgress progress)
 {
     Array2Df out{size};
 
@@ -372,9 +373,10 @@ Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping,
                     return;
 
                 for (int x = 0; x < size.x; ++x)
-                    out(x, y) = sampling == EnvMapSampling_EWA
-                                    ? shader::envmap_ewa(source, dst_mapping, rotation, int2{x, y}, size, ss)
-                                    : shader::envmap_supersample(source, dst_mapping, rotation, int2{x, y}, size, ss);
+                    out(x, y) =
+                        sampling == EnvMapSampling_EWA
+                            ? shader::envmap_ewa(source, dst_mapping, rotation, int2{x, y}, size, ss)
+                            : shader::envmap_supersample(source, dst_mapping, rotation, int2{x, y}, size, ss, sigma);
 
                 ++progress;
             }

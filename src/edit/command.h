@@ -56,6 +56,7 @@ struct EnvmapRemap
     float3x3 rotation{la::identity}; ///< Turns a direction of the result into the source's
     int      sampling = 0;           ///< An EnvMapSampling: how the source is read
     int      quality  = 1;           ///< Samples per axis, or EWA's maximum anisotropy
+    float    sigma    = 0.5f;        ///< The supersampling Gaussian's standard deviation, in output pixels
 };
 
 /// A shift of the subject's channels, as the image shader previews it: see shifted() in edit/filters.h.
