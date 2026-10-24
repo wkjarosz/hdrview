@@ -441,9 +441,9 @@ struct RowSpan
     A button at the open end of a bracket joining \p rows, as Photoshop joins a width to a height.
 
     The bracket says what the button means better than the button can -- these rows are tied, and here is
-    where -- and is drawn only when \p bracketed, since an open chain has nothing to join. Positioned
-    entirely from \p rows, leaving the cursor where it found it, so it can be called after the rows are
-    laid out without disturbing what follows them.
+    where -- and is whole when \p bracketed and broken in the middle when not, as the chain on an open link is.
+    Positioned entirely from \p rows, leaving the cursor where it found it, so it can be called after the rows
+    are laid out without disturbing what follows them.
 
     \returns Whether the button was pressed this frame.
 */

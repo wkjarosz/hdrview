@@ -1226,14 +1226,18 @@ bool RowBracketButton(const char *icon, const RowSpan &rows, bool bracketed, con
 
     ImGui::SetCursorScreenPos(restore);
 
+    // whole while the rows are joined, and broken in its middle third while they are not, as the chain is
+    auto       *dl  = ImGui::GetWindowDrawList();
+    const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+    dl->AddLine(ImVec2(x0, rows.first), ImVec2(x1, rows.first), col);
+    dl->AddLine(ImVec2(x1, rows.last), ImVec2(x0, rows.last), col);
     if (bracketed)
-    {
-        auto       *dl  = ImGui::GetWindowDrawList();
-        const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-
-        dl->AddLine(ImVec2(x0, rows.first), ImVec2(x1, rows.first), col);
         dl->AddLine(ImVec2(x1, rows.first), ImVec2(x1, rows.last), col);
-        dl->AddLine(ImVec2(x1, rows.last), ImVec2(x0, rows.last), col);
+    else
+    {
+        const float third = (rows.last - rows.first) / 3.f;
+        dl->AddLine(ImVec2(x1, rows.first), ImVec2(x1, rows.first + third), col);
+        dl->AddLine(ImVec2(x1, rows.last - third), ImVec2(x1, rows.last), col);
     }
 
     return pressed;
