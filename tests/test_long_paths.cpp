@@ -69,7 +69,7 @@ TEST_CASE("BackgroundImageLoader opens an image at a path longer than 260 charac
                     loaded.push_back(img);
             }));
         if (loaded.empty())
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     REQUIRE(loaded.size() == 1);

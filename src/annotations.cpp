@@ -625,6 +625,17 @@ std::vector<float2> simplify_polyline(const std::vector<float2> &path, float tol
     return out;
 }
 
+/// Corner \p index of a box once it flips: across x, left exchanges with right, and across y, top with bottom.
+static int flipped_corner(int index, bool flip_x, bool flip_y)
+{
+    static constexpr int mirrored_x[4] = {1, 0, 3, 2}, mirrored_y[4] = {3, 2, 1, 0};
+    if (flip_x)
+        index = mirrored_x[index];
+    if (flip_y)
+        index = mirrored_y[index];
+    return index;
+}
+
 int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransform *xform)
 {
     if (a.shape == Annotation::Shape::Text)
@@ -634,8 +645,8 @@ int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransfor
             return index;
 
         // The corner opposite the one being dragged stays where it is.
-        const float2 fixed{index == 0 || index == 3 ? lo.x + extent.x : lo.x,
-                           index == 0 || index == 1 ? lo.y + extent.y : lo.y};
+        const bool   left = index == 0 || index == 3, top = index == 0 || index == 1;
+        const float2 fixed{left ? lo.x + extent.x : lo.x, top ? lo.y + extent.y : lo.y};
 
         // Glyphs cannot be stretched, so the box's new height is what the font size follows. A drag that
         // would turn it inside out is ignored.
@@ -656,7 +667,9 @@ int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransfor
 
         a.font_size = size;
         a.p0()      = new_lo + text_anchor_offset(a.text_align, new_extent);
-        return index;
+
+        // a box that lands across the fixed corner has the cursor holding another of its corners
+        return flipped_corner(index, left ? to.x > fixed.x : to.x < fixed.x, top ? to.y > fixed.y : to.y < fixed.y);
     }
 
     if (a.shape == Annotation::Shape::Line || a.shape == Annotation::Shape::Arrow)
@@ -706,16 +719,10 @@ int move_annotation_handle(Annotation &a, int index, float2 to, const VgTransfor
         p = to_lo + t * (to_hi - to_lo);
     }
 
-    // Which is to say the corner the cursor is holding has been renumbered: a horizontal flip exchanges
-    // left with right, a vertical one top with bottom, and the edge midpoints follow their edges.
-    static constexpr int mirrored_x[4] = {1, 0, 3, 2}, mirrored_y[4] = {3, 2, 1, 0};
+    // Which is to say the corner the cursor is holding has been renumbered, and the edge midpoints follow
+    // their edges.
     if (index < 4)
-    {
-        if (flip_x)
-            index = mirrored_x[index];
-        if (flip_y)
-            index = mirrored_y[index];
-    }
+        index = flipped_corner(index, flip_x, flip_y);
     else
     {
         if (flip_y && (index == 4 || index == 6))

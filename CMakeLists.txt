@@ -332,10 +332,9 @@ endfunction()
 # =====================================================================================
 include(cmake/SokolShaderCompiler.cmake)
 
-# Headers under src/shared/ that the shaders @include, compiled as C++ too (see src/shared/shim.h)
-set(HDRVIEW_SHARED_SHADER_HEADERS
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/shim.h ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/constants.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/colorspace.h ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/pipeline.h)
+# The headers under src/shared/ that the shaders @include and C++ compiles too (see src/shared/shim.h), globbed so a
+# new one is picked up
+file(GLOB HDRVIEW_SHARED_SHADER_HEADERS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/*.h)
 
 # Generates the image-shader_{vert,frag}.{glsl,metal} that Shader::from_asset() loads at runtime.
 # The output goes into ${CMAKE_CURRENT_BINARY_DIR}/assets/shaders, which hello_imgui_add_app(...
@@ -1751,6 +1750,7 @@ set(HDRVIEW_SOURCES
     src/edit/commands/tonal.cpp
     src/edit/commands/transform.cpp
     src/edit/envmap.cpp
+    src/edit/preview.cpp
     src/edit/poisson.cpp
     src/edit/filters.cpp
     src/edit/edit_ops.cpp src/edit/subject.cpp
@@ -1905,7 +1905,7 @@ if(HDRVIEW_BUILD_TESTS AND NOT EMSCRIPTEN)
                                 tests/test_exr_io.cpp tests/test_png_io.cpp tests/test_tiff_io.cpp tests/test_gainmap.cpp
                                 tests/test_alpha.cpp tests/test_image_groups.cpp tests/test_assets.cpp tests/test_long_paths.cpp tests/test_loader_limits.cpp tests/test_streams.cpp tests/test_library_versions.cpp tests/test_colour_reference.cpp tests/test_hdr_metadata.cpp tests/test_rolloff_settings.cpp
                                 tests/test_short_names.cpp tests/test_path_helpers.cpp tests/test_index_helpers.cpp tests/test_psd_metadata.cpp tests/test_endian_utils.cpp
-                                tests/test_icc_gray_alpha.cpp tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_apple.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_jxl_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
+                                tests/test_qoi_io.cpp tests/test_icc_cicp.cpp tests/test_dds_io.cpp tests/test_line_helpers.cpp tests/test_orientation_windows.cpp tests/test_undo.cpp tests/test_edit_commands.cpp tests/test_filters.cpp tests/test_envmap.cpp tests/test_poisson.cpp tests/test_export_roundtrip.cpp tests/test_apple.cpp tests/test_heif_io.cpp tests/test_j2k_io.cpp tests/test_jxl_io.cpp tests/test_xmp.cpp tests/test_exif.cpp
                                 tests/test_vector_overlay.cpp tests/test_annotations.cpp
                                 ${HDRVIEW_IPC_TESTS}
   )
@@ -2203,7 +2203,6 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_main.cpp
     tests/gui/test_gui_smoke.cpp
     tests/gui/test_gui_dialogs.cpp
-    tests/gui/test_gui_image_io.cpp
     tests/gui/test_gui_view.cpp
     tests/gui/test_gui_viewport.cpp
     tests/gui/test_gui_display.cpp
@@ -2219,6 +2218,10 @@ if(HDRVIEW_BUILD_GUI_TESTS AND NOT EMSCRIPTEN)
     tests/gui/test_gui_screenshots.cpp
   )
   hdrview_setup_target(hdrview_gui_tests)
+  # it draws through the same compiled shaders as HDRView, so building it alone has to regenerate them too
+  if(HDRVIEW_SOKOL_SHDC_TARGETS)
+    add_dependencies(hdrview_gui_tests ${HDRVIEW_SOKOL_SHDC_TARGETS})
+  endif()
   target_compile_definitions(hdrview_gui_tests PRIVATE HDRVIEW_ENABLE_GUI_TEST_ENGINE)
   # the app's own icons, as small always-present image fixtures for the tests/gui/ suite
   target_compile_definitions(

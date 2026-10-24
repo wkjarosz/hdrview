@@ -76,4 +76,11 @@ bool modify_colors(const EditContext &ctx, const std::string &name,
                    const std::function<float4(const float4 &, int2, int)> &op,
                    const std::function<void(Image &)>                     &retag = {});
 
+/// Apply \p edit to the subject: a per-sample op through modify_pixels(), a color op through modify_colors().
+/**
+    \p retag goes to modify_colors(), so it applies only with a color op.
+*/
+bool apply_point_edit(const EditContext &ctx, const std::string &name, const PointEdit &edit,
+                      const std::function<void(Image &)> &retag = {});
+
 ///@}

@@ -680,6 +680,15 @@ public:
     static void set_null_texture(Target_ target = Target_Primary);
     void        set_as_texture(Target_ target = Target_Primary);
 
+    static constexpr int k_slot_white = -1; ///< A shader slot bound to a texture of ones
+    static constexpr int k_slot_black = -2; ///< A shader slot bound to a texture of zeros
+    /// Which of the shown group's channels each of the shader's four slots samples, as set_as_texture() binds them.
+    /**
+        A position in the group's channel list, or k_slot_white or k_slot_black. One channel fills the three color
+        slots, a luminance-alpha pair puts its alpha in the fourth, and a slot nothing fills is opaque or black.
+    */
+    int4 shader_slots(Target_ target = Target_Primary) const;
+
     /**
         \name Geometric operations
 

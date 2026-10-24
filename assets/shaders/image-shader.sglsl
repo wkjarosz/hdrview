@@ -36,37 +36,51 @@ void main()
 @include ../../src/shared/constants.h
 @include ../../src/shared/colorspace.h
 @include ../../src/shared/pipeline.h
+@include ../../src/shared/edits.h
+@include ../../src/shared/envmap.h
 
 layout(binding=1) uniform fs_params {
-    int   has_reference;
-    int   do_dither;
-    vec2  randomness;
-    int   blend_mode;
-    int   channel;
-    float gain;
-    float offset;
-    float gamma;
-    int   tonemap_mode;
-    int   clamp_to_LDR;
-    int   rolloff;
-    float rolloff_preserve_hue;
-    float rolloff_ceiling;
-    int   rolloff_has_peak;
-    float rolloff_peak;
-    int   bg_mode;
-    vec4  bg_color;
-    int   reverse_colormap;
-    vec3  primary_yw;
-    int   primary_luminance_chroma;
-    mat4  primary_M_to_sRGB;
-    vec3  secondary_yw;
-    int   secondary_luminance_chroma;
-    mat4  secondary_M_to_sRGB;
-    float time;
-    ivec2 clip_warnings;
-    vec2  clip_range;
-    int   primary_straight_alpha;
-    int   secondary_straight_alpha;
+    int   has_reference;              // whether a reference image is blended with the current one
+    int   do_dither;                  // whether the output is dithered
+    vec2  randomness;                 // a per-frame offset into the dither texture
+    int   blend_mode;                 // how the reference is blended in, a BlendMode_
+    int   channel;                    // which channels are shown, a Channels_
+    float gain;                       // 2^exposure
+    float offset;                     // added after the gain
+    float gamma;                      // the gamma tonemap's exponent
+    int   tonemap_mode;               // a Tonemap_
+    int   clamp_to_LDR;               // whether the output is clamped to [0, 1]
+    int   rolloff;                    // whether highlights roll off toward rolloff_ceiling
+    float rolloff_preserve_hue;       // 1 rolls off the brightest channel, 0 each channel separately
+    float rolloff_ceiling;            // in stops above SDR white
+    int   rolloff_has_peak;           // whether rolloff_peak is known
+    float rolloff_peak;               // the content's peak, in stops above SDR white
+    int   bg_mode;                    // a BGMode_
+    vec4  bg_color;                   // the background under BGMode_Custom_Color
+    int   reverse_colormap;           // whether the colormap runs backward
+    vec3  primary_yw;                 // the current image's luminance weights
+    int   primary_luminance_chroma;   // whether the current image shows a luminance/chroma group
+    mat4  primary_M_to_sRGB;          // from the current image's primaries to linear sRGB
+    vec3  secondary_yw;               // the reference's luminance weights
+    int   secondary_luminance_chroma; // whether the reference shows a luminance/chroma group
+    mat4  secondary_M_to_sRGB;        // from the reference's primaries to linear sRGB
+    float time;                       // in seconds, which moves the clip warnings' stripes
+    ivec2 clip_warnings;              // whether crushed (x) and clipped (y) values are striped
+    vec2  clip_range;                 // the values below and above which they count as crushed and clipped
+    int   primary_straight_alpha;     // whether the current image's alpha is straight
+    int   secondary_straight_alpha;   // whether the reference's alpha is straight
+    int   primary_levels;             // the mip levels the current image's textures have
+    // an edit dialog's preview of the current image: see EditPreview and shader_edit() in src/edit/preview.h, and
+    // src/shared/edits.h for the slots each op reads
+    int   edit_op;                    // an EDIT_ op, or EDIT_NONE
+    ivec4 edit_slots;                 // which of the subject's channels each slot shows, or -1 for none
+    int   edit_color;                 // whether a color op reaches the shown group
+    vec4  edit_rect;                  // the subject's rectangle in uv: min, then max
+    vec4  edit_p0;                    // the op's first vector of parameters
+    vec4  edit_p1;                    // the op's second vector of parameters
+    mat4  edit_m0;                    // the op's first matrix parameter
+    mat4  edit_m1;                    // the op's second matrix parameter
+    ivec4 edit_i0;                    // the op's integer parameters, for a resampling op
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -145,6 +159,156 @@ float sample_channel(texture2D tex, sampler smp, vec2 uv, bool within_image)
     return within_image ? value : 0.0;
 }
 
+/// Texel \p p of \p tex at \p level; a slot showing no channel is a single texel, read wherever \p p is.
+float fetch_channel(texture2D tex, sampler smp, ivec2 p, int level)
+{
+    ivec2 n = textureSize(sampler2D(tex, smp), 0);
+    return n.x == 1 && n.y == 1 ? texelFetch(sampler2D(tex, smp), ivec2(0), 0).r
+                                : texelFetch(sampler2D(tex, smp), p, level).r;
+}
+
+/// Texel \p p of the four shown channels at \p level.
+vec4 fetch_shown(ivec2 p, int level)
+{
+    return vec4(fetch_channel(primary_0_texture, primary_0_sampler, p, level),
+                fetch_channel(primary_1_texture, primary_1_sampler, p, level),
+                fetch_channel(primary_2_texture, primary_2_sampler, p, level),
+                fetch_channel(primary_3_texture, primary_3_sampler, p, level));
+}
+
+/// The image's size: the largest of the four slots', since a slot showing no channel is one texel.
+ivec2 shown_size()
+{
+    return max(max(textureSize(sampler2D(primary_0_texture, primary_0_sampler), 0),
+                   textureSize(sampler2D(primary_1_texture, primary_1_sampler), 0)),
+               max(textureSize(sampler2D(primary_2_texture, primary_2_sampler), 0),
+                   textureSize(sampler2D(primary_3_texture, primary_3_sampler), 0)));
+}
+
+// What src/shared/envmap_sample.h reads here: the four shown channels at once, from the textures' mipmaps.
+#define EnvValue vec4
+struct EnvSource
+{
+    int   mapping;
+    int   levels;
+    float ratio;
+    float spread;
+    ivec2 size;
+};
+vec4 envmap_fetch(EnvSource src, int level, int chart, ivec2 size, ivec2 p)
+{
+    // a cube map's faces are cells of the one image
+    return fetch_shown(envmap_is_cube(src.mapping) ? envmap_face_texel_in_image(src.mapping, chart, p, size.x) : p,
+                       level);
+}
+
+@include ../../src/shared/envmap_sample.h
+
+// What src/shared/resample.h reads here: the four shown channels at once, from the textures' finest level.
+#define ResampleValue vec4
+struct ResampleSource
+{
+    ivec2 size;
+};
+vec4 resample_fetch(ResampleSource src, ivec2 p) { return fetch_shown(p, 0); }
+
+@include ../../src/shared/resample.h
+
+/// The current image's samples \p value at \p uv, changed as the open edit dialog previews them.
+/**
+    A remap fills the output's quad, each output pixel taking the color remapped_envmap() gives it, through
+    envmap_sample.h. Within the subject's rectangle, a shift reads through resample.h as shifted() does, and a point-wise
+    edit maps the stored samples as apply_point_edit() does.
+*/
+vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
+{
+    if (!in_img)
+        return value;
+
+    if (fsp.edit_op == EDIT_IRRADIANCE)
+    {
+        // the output pixel uv falls in, at whose center the irradiance is weighed, as irradiance_envmap() weighs it
+        ivec2 size    = ivec2(fsp.edit_p1.xy);
+        int   mapping = fsp.edit_i0.x;
+        ivec2 pixel   = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
+        mat3  w       = envmap_irradiance_weights(envmap_uv_to_xyz(mapping, (vec2(pixel) + 0.5) / vec2(size)));
+        // each coefficient across the four slots: the first four are edit_m0's columns, the next four edit_m1's
+        vec4 irradiance = w[0][0] * fsp.edit_m0[0] + w[0][1] * fsp.edit_m0[1] + w[0][2] * fsp.edit_m0[2] +
+                          w[1][0] * fsp.edit_m0[3] + w[1][1] * fsp.edit_m1[0] + w[1][2] * fsp.edit_m1[1] +
+                          w[2][0] * fsp.edit_m1[2] + w[2][1] * fsp.edit_m1[3] + w[2][2] * fsp.edit_p0;
+        // a slot showing no channel keeps what it shows, an opaque alpha for an image without one
+        bvec4 shown = notEqual(ivec4(fsp.edit_i0.y) & ivec4(1, 2, 4, 8), ivec4(0));
+        return mix(value, irradiance, shown);
+    }
+
+    if (fsp.edit_op == EDIT_REMAP)
+    {
+        // the output pixel uv falls in, so each shows as one color
+        ivec2 size     = ivec2(fsp.edit_p0.xy);
+        mat3  R        = mat3(fsp.edit_m0);
+        int   src_map  = fsp.edit_i0.x;
+        int   dst_map  = fsp.edit_i0.y;
+        int   sampling = fsp.edit_i0.z;
+        int   quality  = fsp.edit_i0.w;
+        float sigma    = fsp.edit_p0.z;
+        ivec2 pixel    = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
+
+        // the textures' mipmaps average 2x2 blocks, halving each level and blurring by a quarter of a squared texel
+        EnvSource src = EnvSource(src_map, fsp.primary_levels, 2.0, 0.25, shown_size());
+        // a level of the whole image's mipmaps holds whole texels of each face only while it halves the face size
+        // exactly, so as many levels as the face size has trailing zero bits, after the finest
+        if (envmap_is_cube(src.mapping))
+        {
+            int n      = envmap_face_size(src.mapping, src.size);
+            src.levels = min(src.levels, int(log2(float(n & -n))) + 1);
+        }
+
+        return sampling == ENVMAP_SAMPLE_EWA ? envmap_ewa(src, dst_map, R, pixel, size, quality)
+                                             : envmap_supersample(src, dst_map, R, pixel, size, quality, sigma);
+    }
+
+    if (!all(greaterThanEqual(uv, fsp.edit_rect.xy)) || !all(lessThan(uv, fsp.edit_rect.zw)))
+        return value;
+
+    if (fsp.edit_op == EDIT_SHIFT)
+    {
+        vec2           offset  = fsp.edit_p0.xy;
+        int            interp  = fsp.edit_i0.x;
+        ivec2          borders = fsp.edit_i0.yz;
+        ResampleSource src     = ResampleSource(shown_size());
+        vec4           shifted = resample_shifted(src, ivec2(floor(uv * vec2(src.size))), offset, interp, borders.x,
+                                                  borders.y);
+        return mix(value, shifted, greaterThanEqual(fsp.edit_slots, ivec4(0)));
+    }
+
+    if (fsp.edit_op == EDIT_BUMP_NORMAL)
+    {
+        if (fsp.edit_color == 0)
+            return value;
+        // a color group's first three channels make the height; its alpha says nothing about it
+        vec2           scale   = fsp.edit_p0.xy;
+        ivec2          borders = fsp.edit_i0.xy;
+        ResampleSource src     = ResampleSource(shown_size());
+        ivec2          p       = ivec2(floor(uv * vec2(src.size)));
+        float          h       = dot(resample_bordered(src, p.x, p.y, borders.x, borders.y).xyz, vec3(1.0 / 3.0));
+        float          across  = dot(resample_bordered(src, p.x + 1, p.y, borders.x, borders.y).xyz, vec3(1.0 / 3.0));
+        float          down    = dot(resample_bordered(src, p.x, p.y + 1, borders.x, borders.y).xyz, vec3(1.0 / 3.0));
+        return vec4(bump_normal(h, across, down, scale), 1.0);
+    }
+
+    if (fsp.edit_op == EDIT_NONE)
+        return value;
+    if (fsp.edit_op >= EDIT_FIRST_COLOR)
+        return fsp.edit_color != 0
+                   ? edit_color(fsp.edit_op, value, fsp.edit_p0, fsp.edit_p1, mat3(fsp.edit_m0), mat3(fsp.edit_m1))
+                   : value;
+    vec4 edited = value;
+    for (int k = 0; k < 4; ++k)
+        if (fsp.edit_slots[k] >= 0)
+            edited[k] = edit_sample(fsp.edit_op, value[k], fsp.edit_slots[k], fsp.edit_p0, fsp.edit_p1);
+    return edited;
+}
+
 void main()
 {
     vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
@@ -172,6 +336,7 @@ void main()
         sample_channel(primary_1_texture, primary_1_sampler, primary_uv, in_img),
         sample_channel(primary_2_texture, primary_2_sampler, primary_uv, in_img),
         sample_channel(primary_3_texture, primary_3_sampler, primary_uv, in_img));
+    value = edit_preview(value, primary_uv, in_img);
 
     if (fsp.primary_luminance_chroma != 0)
         value.xyz = YC_to_RGB(value.xyz, fsp.primary_yw);

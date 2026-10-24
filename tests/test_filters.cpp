@@ -7,10 +7,14 @@
 #include <doctest/doctest.h>
 
 #include "edit/filters.h"
+#include "edit/poisson.h"
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <string>
+#include <vector>
 
 /// The whole of \p a, for the cases that are about the filter and not the region.
 static Box2i whole(const Array2Df &a) { return Box2i{int2{0}, a.size()}; }
@@ -18,26 +22,34 @@ static Box2i whole(const Array2Df &a) { return Box2i{int2{0}, a.size()}; }
 namespace
 {
 
-/// Sum of every sample, which a normalized blur must preserve away from the edges.
-double total(const Array2Df &a)
-{
-    double sum = 0.0;
-    for (int i = 0; i < a.num_elements(); ++i) sum += a(i);
-    return sum;
-}
-
-Array2Df impulse(int2 size)
-{
-    Array2Df a{size};
-    a(size.x / 2, size.y / 2) = 1.f;
-    return a;
-}
-
 Array2Df constant(int2 size, float v)
 {
     Array2Df a{size};
     for (int i = 0; i < a.num_elements(); ++i) a(i) = v;
     return a;
+}
+
+Array2Df ramp(int2 size)
+{
+    Array2Df a{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) a(x, y) = 0.5f + 0.25f * float(x) - 0.125f * float(y);
+    return a;
+}
+
+Array2Df noise(int2 size)
+{
+    Array2Df a{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) a(x, y) = std::sin(1.7f * x + 0.3f) * std::cos(2.1f * y - 0.4f);
+    return a;
+}
+
+float max_difference(const Array2Df &a, const Array2Df &b)
+{
+    float worst = 0.f;
+    for (int i = 0; i < a.num_elements(); ++i) worst = std::max(worst, std::abs(a(i) - b(i)));
+    return worst;
 }
 
 } // namespace
@@ -75,46 +87,91 @@ TEST_CASE("Every filter leaves a constant image alone")
         }
 }
 
-TEST_CASE("A blur conserves what it spreads")
+TEST_CASE("A blur's impulse response is centered, symmetric, conserves its mass, and is as wide as asked")
 {
-    // an impulse well away from the border, so every tap lands inside the image
-    const Array2Df src = impulse(int2{64, 64});
+    // An impulse well away from the border, so every tap lands inside the image, blurred along one axis at a
+    // time: the other axis then has to stay a single row or column, with no variance at all. Each kernel's
+    // variance is known in closed form: a box of half-width r is the discrete uniform on [-r, r], of variance
+    // r(r+1)/3, and n passes of it add up to n times that. Long along the blurred axis, and a few samples
+    // across the other, which is all it takes to see one spread there.
+    struct Case
+    {
+        std::string                                     what;
+        std::function<Array2Df(const Array2Df &, bool)> blur; ///< blurs across when the flag is set, else down
+        double                                          variance, tolerance;
+    };
+    std::vector<Case> cases;
 
-    CHECK(total(gaussian_blurred(src, whole(src), 2.f, 2.f)) == doctest::Approx(1.0).epsilon(1e-4));
-    CHECK(total(box_blurred(src, whole(src), 3, 3)) == doctest::Approx(1.0).epsilon(1e-4));
-}
+    // truncated at three sigma and renormalized, which takes up to about two percent off the variance
+    for (float s : {1.f, 2.5f, 6.f})
+        cases.push_back({"gaussian " + std::to_string(s), [s](const Array2Df &a, bool x)
+                         { return gaussian_blurred(a, whole(a), x ? s : 0.f, x ? 0.f : s); }, double(s) * s, 0.03});
 
-TEST_CASE("A blur spreads an impulse symmetrically about where it was")
-{
-    const Array2Df out = gaussian_blurred(impulse(int2{33, 33}), Box2i{int2{0}, int2{33, 33}}, 2.f, 2.f);
-    const int      c   = 16;
+    // the box widths are odd integers, which keeps the variance within a few percent of the target
+    for (float s : {2.5f, 6.f})
+        for (int n : {2, 4, 6, 10})
+            cases.push_back(
+                {"fast gaussian " + std::to_string(s) + " x" + std::to_string(n), [s, n](const Array2Df &a, bool x)
+                 { return fast_gaussian_blurred(a, whole(a), x ? s : 0.f, x ? 0.f : s, n); }, double(s) * s, 0.08});
 
-    // the peak stays put and opposite neighbors match; an off-center kernel would break either
-    CHECK(out(c, c) > out(c + 1, c));
-    CHECK(out(c + 1, c) == doctest::Approx(out(c - 1, c)));
-    CHECK(out(c, c + 1) == doctest::Approx(out(c, c - 1)));
-    CHECK(out(c + 1, c) == doctest::Approx(out(c, c + 1)));
-}
+    for (int r : {1, 3})
+        for (int n : {1, 2, 4})
+            cases.push_back({"box " + std::to_string(r) + " x" + std::to_string(n), [r, n](const Array2Df &a, bool x)
+                             { return box_blurred(a, whole(a), x ? r : 0, x ? 0 : r, n); },
+                             double(n) * r * (r + 1) / 3.0, 1e-3});
 
-TEST_CASE("A sigma of zero along an axis leaves that axis alone")
-{
-    Array2Df src{int2{9, 9}};
-    for (int y = 0; y < 9; ++y)
-        for (int x = 0; x < 9; ++x) src(x, y) = float(x);
+    for (const auto &c : cases)
+        for (bool across : {true, false})
+        {
+            CAPTURE(c.what);
+            CAPTURE(across);
 
-    // blurring only vertically cannot change a pattern that varies only horizontally
-    const Array2Df out = gaussian_blurred(src, whole(src), 0.f, 3.f);
-    for (int y = 0; y < 9; ++y)
-        for (int x = 0; x < 9; ++x) CHECK(out(x, y) == doctest::Approx(float(x)));
-}
+            const int2 size = across ? int2{81, 9} : int2{9, 81};
+            const int2 center{size.x / 2, size.y / 2};
+            Array2Df   impulse{size};
+            impulse(center.x, center.y) = 1.f;
 
-TEST_CASE("A wider blur flattens more than a narrower one")
-{
-    const Array2Df src   = impulse(int2{64, 64});
-    const Array2Df tight = gaussian_blurred(src, whole(src), 1.f, 1.f);
-    const Array2Df wide  = gaussian_blurred(src, whole(src), 8.f, 8.f);
+            const Array2Df out = c.blur(impulse, across);
+            REQUIRE(out.size() == size);
 
-    CHECK(tight(32, 32) > wide(32, 32));
+            double total = 0.0, mean[2] = {0.0, 0.0};
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                {
+                    total += out(x, y);
+                    mean[0] += out(x, y) * double(x);
+                    mean[1] += out(x, y) * double(y);
+                }
+            mean[0] /= total;
+            mean[1] /= total;
+
+            double var[2] = {0.0, 0.0};
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x)
+                {
+                    var[0] += out(x, y) * (double(x) - mean[0]) * (double(x) - mean[0]);
+                    var[1] += out(x, y) * (double(y) - mean[1]) * (double(y) - mean[1]);
+                }
+            var[0] /= total;
+            var[1] /= total;
+
+            CHECK(total == doctest::Approx(1.0).epsilon(1e-4));
+            CHECK(mean[0] == doctest::Approx(center.x).epsilon(1e-5));
+            CHECK(mean[1] == doctest::Approx(center.y).epsilon(1e-5));
+
+            const int blurred = across ? 0 : 1;
+            CHECK(var[blurred] == doctest::Approx(c.variance).epsilon(c.tolerance));
+            CHECK(var[1 - blurred] < 1e-6);
+
+            // mirrored through the center along the line it spread over; a lopsided kernel can keep its mean
+            for (int i = 0; i <= center[blurred]; ++i)
+            {
+                CAPTURE(i);
+                const int2 p = across ? int2{i, center.y} : int2{center.x, i};
+                const int2 q = 2 * center - p;
+                CHECK(std::abs(out(p.x, p.y) - out(q.x, q.y)) < 1e-6f);
+            }
+        }
 }
 
 TEST_CASE("Unsharp masking with no amount changes nothing")
@@ -141,65 +198,70 @@ TEST_CASE("Unsharp masking increases the contrast of an edge")
 
 TEST_CASE("Filtering a region gives exactly what filtering everything would have")
 {
-    // every filter is run both ways and compared sample for sample
+    // Every filter, run both ways and compared sample for sample, over a region with real samples on every
+    // side, where reading beyond it matters, and over one in each corner, where the kernel hangs off two
+    // sides and has to clamp against the image's edge rather than the region's. The iterated boxes read
+    // beyond what each pass produces, so their chain grows the region once per pass and has to clip it.
     Array2Df src{int2{40, 30}};
     for (int y = 0; y < 30; ++y)
         for (int x = 0; x < 40; ++x) src(x, y) = std::sin(0.3f * x) * std::cos(0.2f * y);
 
-    // touching neither edge, so the region has real samples on all four sides and reading beyond it matters
-    const Box2i region{{7, 5}, {23, 19}};
-    const int2  extent = region.size();
+    // with gremlins, for the one filter that reads them, scattered so every region has some
+    Array2Df gremlins = src;
+    for (int y = 0; y < 30; y += 4)
+        for (int x = (y / 4) % 3; x < 40; x += 5)
+            gremlins(x, y) =
+                (x + y) % 2 ? std::numeric_limits<float>::quiet_NaN() : std::numeric_limits<float>::infinity();
 
-    const Array2Df all_g = gaussian_blurred(src, whole(src), 2.5f, 1.5f);
-    const Array2Df sub_g = gaussian_blurred(src, region, 2.5f, 1.5f);
-
-    const Array2Df all_b = box_blurred(src, whole(src), 3, 2);
-    const Array2Df sub_b = box_blurred(src, region, 3, 2);
-
-    const Array2Df all_u = unsharp_masked(src, whole(src), 2.f, 1.5f);
-    const Array2Df sub_u = unsharp_masked(src, region, 2.f, 1.5f);
-
+    using Filter = std::function<Array2Df(const Array2Df &, const Box2i &)>;
+    struct Case
+    {
+        std::string     what;
+        Filter          filter;
+        const Array2Df *input;
+    };
+    std::vector<Case> cases = {
+        {"gaussian", [](const Array2Df &a, const Box2i &r) { return gaussian_blurred(a, r, 2.5f, 1.5f); }, &src},
+        {"fast gaussian", [](const Array2Df &a, const Box2i &r) { return fast_gaussian_blurred(a, r, 3.f, 2.f, 4); },
+         &src},
+        {"box", [](const Array2Df &a, const Box2i &r) { return box_blurred(a, r, 3, 2); }, &src},
+        {"iterated box", [](const Array2Df &a, const Box2i &r) { return box_blurred(a, r, 2, 3, 4); }, &src},
+        {"unsharp masked", [](const Array2Df &a, const Box2i &r) { return unsharp_masked(a, r, 2.f, 1.5f); }, &src},
+        {"median over a disc", [](const Array2Df &a, const Box2i &r) { return median_filtered(a, r, 2.f, true); },
+         &src},
+        {"median over a square", [](const Array2Df &a, const Box2i &r) { return median_filtered(a, r, 2.f, false); },
+         &src},
+        {"zapped", [](const Array2Df &a, const Box2i &r) { return zapped_gremlins(a, r); }, &gremlins},
+    };
     // fractional, so the shift reads between samples and a region with the wrong coordinates lands on a
-    // different phase, not just in the wrong place
-    const Array2Df all_s = shifted(src, whole(src), 3.5f, -2.25f, Sampler_Bicubic, BorderMode_Repeat);
-    const Array2Df sub_s = shifted(src, region, 3.5f, -2.25f, Sampler_Bicubic, BorderMode_Repeat);
+    // different phase, not just in the wrong place; far enough that every border mode is reached
+    for (int border = 0; border < BorderMode_COUNT; ++border)
+        cases.push_back({"shifted, border " + std::to_string(border), [border](const Array2Df &a, const Box2i &r)
+                         { return shifted(a, r, 3.5f, -2.25f, Sampler_Bicubic, border, border); }, &src});
 
-    REQUIRE(sub_g.size() == extent);
-    REQUIRE(sub_b.size() == extent);
-    REQUIRE(sub_u.size() == extent);
-    REQUIRE(sub_s.size() == extent);
+    const Box2i regions[] = {Box2i{{7, 5}, {23, 19}}, Box2i{{0, 0}, {6, 5}}, Box2i{{33, 26}, {40, 30}}};
 
-    for (int y = 0; y < extent.y; ++y)
-        for (int x = 0; x < extent.x; ++x)
+    for (const auto &c : cases)
+    {
+        CAPTURE(c.what);
+        const Array2Df all = c.filter(*c.input, whole(*c.input));
+
+        for (const Box2i &region : regions)
         {
-            CAPTURE(x);
-            CAPTURE(y);
-            const int sx = region.min.x + x, sy = region.min.y + y;
-            CHECK(sub_g(x, y) == doctest::Approx(all_g(sx, sy)));
-            CHECK(sub_b(x, y) == doctest::Approx(all_b(sx, sy)));
-            CHECK(sub_u(x, y) == doctest::Approx(all_u(sx, sy)));
-            CHECK(sub_s(x, y) == doctest::Approx(all_s(sx, sy)));
+            CAPTURE(region.min.x);
+            CAPTURE(region.min.y);
+            const Array2Df sub = c.filter(*c.input, region);
+
+            REQUIRE(sub.size() == region.size());
+            for (int y = 0; y < region.size().y; ++y)
+                for (int x = 0; x < region.size().x; ++x)
+                {
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    CHECK(sub(x, y) == doctest::Approx(all(region.min.x + x, region.min.y + y)));
+                }
         }
-}
-
-TEST_CASE("A region against the image's edge still clamps rather than reading past it")
-{
-    Array2Df src{int2{20, 16}};
-    for (int y = 0; y < 16; ++y)
-        for (int x = 0; x < 20; ++x) src(x, y) = float(x + y);
-
-    // cornered, so the kernel hangs off two sides and the clamping fills it
-    const Box2i    region{{0, 0}, {5, 4}};
-    const Array2Df all = gaussian_blurred(src, whole(src), 3.f, 3.f);
-    const Array2Df sub = gaussian_blurred(src, region, 3.f, 3.f);
-
-    for (int y = 0; y < 4; ++y)
-        for (int x = 0; x < 5; ++x)
-        {
-            CAPTURE(x);
-            CAPTURE(y);
-            CHECK(sub(x, y) == doctest::Approx(all(x, y)));
-        }
+    }
 }
 
 namespace
@@ -213,20 +275,6 @@ float box_reference(const Array2Df &a, int x, int y, int rx, int ry)
         for (int dx = -rx; dx <= rx; ++dx)
             sum += a(std::clamp(x + dx, 0, a.width() - 1), std::clamp(y + dy, 0, a.height() - 1));
     return sum / float((2 * rx + 1) * (2 * ry + 1));
-}
-
-/// Variance of a kernel about its center, which is what the Gaussian approximations are matched on.
-double kernel_variance(const Array2Df &k, int2 center)
-{
-    double total = 0.0, moment = 0.0;
-    for (int y = 0; y < k.height(); ++y)
-        for (int x = 0; x < k.width(); ++x)
-        {
-            const double w = k(x, y);
-            total += w;
-            moment += w * double(x - center.x) * double(x - center.x);
-        }
-    return moment / total;
 }
 
 } // namespace
@@ -266,26 +314,6 @@ TEST_CASE("Repeating a box blur is the same as blurring the result again")
     for (int i = 0; i < twice.num_elements(); ++i) CHECK(twice(i) == doctest::Approx(manual(i)));
 }
 
-TEST_CASE("Iterating a fast Gaussian changes its shape, not its width")
-{
-    // quality is separate from amount, so raising it does not force the blur to be re-tuned. Measured as the
-    // variance of the kernel the filter produces.
-    const int2 size{129, 1};
-    const int2 center{64, 0};
-
-    Array2Df impulse_src{size};
-    impulse_src(center.x, 0) = 1.f;
-
-    const float sigma = 6.f;
-    for (int n : {2, 4, 6, 10})
-    {
-        CAPTURE(n);
-        const Array2Df k = fast_gaussian_blurred(impulse_src, Box2i{int2{0}, size}, sigma, 0.f, n);
-        // rounding the box width to an odd integer keeps this from being exact
-        CHECK(std::sqrt(kernel_variance(k, center)) == doctest::Approx(sigma).epsilon(0.06));
-    }
-}
-
 TEST_CASE("A fast Gaussian approaches the real one as it iterates")
 {
     const int2 size{129, 1};
@@ -309,30 +337,6 @@ TEST_CASE("A fast Gaussian approaches the real one as it iterates")
     // to an odd integer and a given count can land better than the next one up.
     CHECK(error_against_exact(6) < error_against_exact(1));
     CHECK(error_against_exact(12) < error_against_exact(2));
-}
-
-TEST_CASE("An iterated box over a region agrees with the same over the whole image")
-{
-    // each pass reads beyond what it produces, so a chain of them grows the region once per pass, and clips
-    // to the image or the clamping at the edges stops matching
-    Array2Df src{int2{48, 36}};
-    for (int y = 0; y < 36; ++y)
-        for (int x = 0; x < 48; ++x) src(x, y) = std::sin(0.4f * x) * std::cos(0.3f * y);
-
-    for (const Box2i &region : {Box2i{{9, 7}, {26, 22}}, Box2i{{0, 0}, {6, 5}}})
-    {
-        const Array2Df all = box_blurred(src, whole(src), 2, 3, 4);
-        const Array2Df sub = box_blurred(src, region, 2, 3, 4);
-
-        REQUIRE(sub.size() == region.size());
-        for (int y = 0; y < region.size().y; ++y)
-            for (int x = 0; x < region.size().x; ++x)
-            {
-                CAPTURE(x);
-                CAPTURE(y);
-                CHECK(sub(x, y) == doctest::Approx(all(region.min.x + x, region.min.y + y)));
-            }
-    }
 }
 
 namespace
@@ -359,107 +363,45 @@ int expected_wrap(int p, int extent, int mode)
     }
 }
 
-Array2Df ramp(int2 size)
-{
-    Array2Df a{size};
-    for (int y = 0; y < size.y; ++y)
-        for (int x = 0; x < size.x; ++x) a(x, y) = 0.5f + 0.25f * float(x) - 0.125f * float(y);
-    return a;
-}
-
-Array2Df noise(int2 size)
-{
-    Array2Df a{size};
-    for (int y = 0; y < size.y; ++y)
-        for (int x = 0; x < size.x; ++x) a(x, y) = std::sin(1.7f * x + 0.3f) * std::cos(2.1f * y - 0.4f);
-    return a;
-}
-
 } // namespace
 
 TEST_CASE("A whole-sample shift moves samples without touching their values")
 {
     // A whole-sample shift is a permutation of the samples, not a filter over them, so no sampler may leave a
-    // fingerprint. Swept over all three, since the sampler is not consulted when the offset is whole.
+    // fingerprint. Swept over all three, since the sampler is not consulted when the offset is whole, under
+    // each border mode; and under every pair of them for one sampler, since the axes take theirs
+    // independently: a lat-long environment map wraps in longitude and not in latitude.
     const Array2Df src = noise(int2{17, 13});
 
     for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
-        for (int border = 0; border < BorderMode_COUNT; ++border)
-            // beyond the image as well as within it, and negative, since wrapping a large offset is where a
-            // modulus with the wrong sign shows up
-            for (int2 d : {int2{0, 0}, int2{3, 0}, int2{0, -2}, int2{5, 7}, int2{-9, -11}, int2{40, -31}})
-            {
-                CAPTURE(sampler);
-                CAPTURE(border);
-                CAPTURE(d.x);
-                CAPTURE(d.y);
-
-                const Array2Df out = shifted(src, whole(src), float(d.x), float(d.y), sampler, border, border);
-
-                for (int y = 0; y < src.height(); ++y)
-                    for (int x = 0; x < src.width(); ++x)
-                    {
-                        const int   sx   = expected_wrap(x - d.x, src.width(), border);
-                        const int   sy   = expected_wrap(y - d.y, src.height(), border);
-                        const float want = (sx < 0 || sy < 0) ? 0.f : src(sx, sy);
-                        REQUIRE(out(x, y) == doctest::Approx(want));
-                    }
-            }
-}
-
-TEST_CASE("Wrapping makes a shift reversible, and a shift by the whole image nothing at all")
-{
-    // sliding a tiling texture to bring its seam into view has to be undoable by sliding back, with no sample
-    // lost off the edge in between
-    const Array2Df src = noise(int2{16, 12});
-
-    for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
-    {
-        CAPTURE(sampler);
-
-        const Array2Df there = shifted(src, whole(src), 5.f, -3.f, sampler, BorderMode_Repeat, BorderMode_Repeat);
-        const Array2Df back  = shifted(there, whole(there), -5.f, 3.f, sampler, BorderMode_Repeat, BorderMode_Repeat);
-
-        // a whole turn around the image, which wrapping makes indistinguishable from standing still
-        const Array2Df turn = shifted(src, whole(src), float(src.width()), float(-2 * src.height()), sampler,
-                                      BorderMode_Repeat, BorderMode_Repeat);
-
-        for (int i = 0; i < src.num_elements(); ++i)
-        {
-            REQUIRE(back(i) == doctest::Approx(src(i)));
-            REQUIRE(turn(i) == doctest::Approx(src(i)));
-        }
-    }
-}
-
-TEST_CASE("A fractional shift reconstructs instead of snapping to a sample")
-{
-    // an offset landing between two samples must not round to one of them
-    const Array2Df src = noise(int2{24, 18});
-
-    for (int sampler = 0; sampler < Sampler_COUNT; ++sampler)
-        for (int border : {BorderMode_Edge, BorderMode_Repeat, BorderMode_Mirror})
-        {
-            CAPTURE(sampler);
-            CAPTURE(border);
-
-            // bracketing is bilinear's promise alone: bicubic's negative lobes overshoot to keep an edge
-            // sharp, and its accuracy is measured on a ramp below
-            if (sampler != Sampler_Bilinear)
-                continue;
-
-            // half a sample across, away from the edges so the border mode does not enter into it
-            const Array2Df half = shifted(src, whole(src), 0.5f, 0.f, sampler, border, border);
-            for (int y = 2; y < src.height() - 2; ++y)
-                for (int x = 2; x < src.width() - 2; ++x)
+        for (int border_x = 0; border_x < BorderMode_COUNT; ++border_x)
+            for (int border_y = 0; border_y < BorderMode_COUNT; ++border_y)
+                // beyond the image as well as within it, and negative, since wrapping a large offset is where a
+                // modulus with the wrong sign shows up; and a whole number of turns around the image, which
+                // wrapping makes indistinguishable from standing still
+                for (int2 d :
+                     {int2{0, 0}, int2{3, 0}, int2{0, -2}, int2{5, 7}, int2{-9, -11}, int2{40, -31}, int2{17, -26}})
                 {
-                    CAPTURE(x);
-                    CAPTURE(y);
+                    if (border_x != border_y && sampler != Sampler_Bilinear)
+                        continue;
 
-                    // halfway between the two samples it sits between, which rounding to either would not give
-                    REQUIRE(half(x, y) == doctest::Approx(0.5f * (src(x - 1, y) + src(x, y))));
+                    CAPTURE(sampler);
+                    CAPTURE(border_x);
+                    CAPTURE(border_y);
+                    CAPTURE(d.x);
+                    CAPTURE(d.y);
+
+                    const Array2Df out = shifted(src, whole(src), float(d.x), float(d.y), sampler, border_x, border_y);
+
+                    for (int y = 0; y < src.height(); ++y)
+                        for (int x = 0; x < src.width(); ++x)
+                        {
+                            const int   sx   = expected_wrap(x - d.x, src.width(), border_x);
+                            const int   sy   = expected_wrap(y - d.y, src.height(), border_y);
+                            const float want = (sx < 0 || sy < 0) ? 0.f : src(sx, sy);
+                            REQUIRE(out(x, y) == want);
+                        }
                 }
-        }
 }
 
 TEST_CASE("A ramp lands where the shift says, rather than half a sample off")
@@ -521,72 +463,31 @@ TEST_CASE("Each border mode fills the exposed strip with what it says it does")
     CHECK(column(BorderMode_Mirror, 1) == doctest::Approx(1.f));
 }
 
-TEST_CASE("The two axes take their border modes independently")
+TEST_CASE("A median removes a lone outlier and keeps an edge, over either window shape")
 {
-    // a lat-long environment map wraps in longitude and not in latitude
-    Array2Df src{int2{4, 4}};
-    for (int y = 0; y < 4; ++y)
-        for (int x = 0; x < 4; ++x) src(x, y) = float(x) + 10.f * float(y);
+    // A median is an order statistic: one wild sample, a firefly, vanishes instead of being smeared over its
+    // neighbors, and on either side of a step it picks a sample from that side, where a blur would soften it.
+    const int2 size{21, 21};
 
-    const Array2Df out = shifted(src, whole(src), 1.f, 1.f, Sampler_Nearest, BorderMode_Repeat, BorderMode_Black);
+    Array2Df firefly = constant(size, 0.2f);
+    firefly(10, 10)  = 50.f;
 
-    // across: the last column has come round to the first; down: nothing came from above
-    CHECK(out(0, 1) == doctest::Approx(3.f));
-    CHECK(out(0, 0) == doctest::Approx(0.f));
-    CHECK(out(2, 0) == doctest::Approx(0.f));
-}
+    Array2Df step{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x) step(x, y) = x < 10 ? 0.f : 1.f;
 
-TEST_CASE("A median removes a lone outlier where a mean only spreads it")
-{
-    // one wild sample, a firefly, vanishes instead of being smeared over its neighbors
-    Array2Df src{int2{9, 9}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = 0.5f;
-    src(4, 4) = 1000.f;
+    for (bool disc : {true, false})
+    {
+        CAPTURE(disc);
 
-    const Array2Df med = median_filtered(src, whole(src), 2.f);
-    const Array2Df avg = gaussian_blurred(src, whole(src), 2.f, 2.f);
+        // gone entirely, and its neighbors untouched
+        const Array2Df clean = median_filtered(firefly, whole(firefly), 3.f, disc);
+        for (int i = 0; i < clean.num_elements(); ++i) CHECK(clean(i) == 0.2f);
 
-    // gone entirely, and its neighbors untouched
-    CHECK(med(4, 4) == doctest::Approx(0.5f));
-    CHECK(med(5, 4) == doctest::Approx(0.5f));
-
-    // whereas the blur has pushed it outwards
-    CHECK(avg(4, 4) > 0.6f);
-    CHECK(avg(5, 4) > 0.6f);
-}
-
-TEST_CASE("A median keeps an edge that a blur would soften")
-{
-    // a median is an order statistic, so on either side of a step it picks a sample from that side
-    Array2Df src{int2{16, 16}};
-    for (int y = 0; y < 16; ++y)
-        for (int x = 0; x < 16; ++x) src(x, y) = x < 8 ? 0.f : 1.f;
-
-    const Array2Df med = median_filtered(src, whole(src), 2.f);
-
-    // two samples clear of the step, the sides are still what they were
-    CHECK(med(5, 8) == doctest::Approx(0.f));
-    CHECK(med(10, 8) == doctest::Approx(1.f));
-}
-
-TEST_CASE("A median over a region agrees with the same over the whole image")
-{
-    Array2Df src{int2{30, 24}};
-    for (int y = 0; y < 24; ++y)
-        for (int x = 0; x < 24 && x < 30; ++x) src(x, y) = float((x * 5 + y * 3) % 7);
-
-    const Box2i    region{{6, 5}, {19, 16}};
-    const Array2Df all = median_filtered(src, whole(src), 2.f);
-    const Array2Df sub = median_filtered(src, region, 2.f);
-
-    REQUIRE(sub.size() == region.size());
-    for (int y = 0; y < region.size().y; ++y)
-        for (int x = 0; x < region.size().x; ++x)
-        {
-            CAPTURE(x);
-            CAPTURE(y);
-            CHECK(sub(x, y) == doctest::Approx(all(region.min.x + x, region.min.y + y)));
-        }
+        // the step stays where it was, as sharp as it was
+        const Array2Df kept = median_filtered(step, whole(step), 3.f, disc);
+        for (int i = 0; i < kept.num_elements(); ++i) CHECK(kept(i) == step(i));
+    }
 }
 
 TEST_CASE("A radius of zero leaves every sample as it was")
@@ -598,80 +499,84 @@ TEST_CASE("A radius of zero leaves every sample as it was")
     for (int i = 0; i < out.num_elements(); ++i) CHECK(out(i) == doctest::Approx(src(i)));
 }
 
-TEST_CASE("A canceled filter stops early and reports that it did")
+TEST_CASE("Every filter that reports progress runs it to the end, and stops early once canceled")
 {
-    Array2Df src{int2{64, 64}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i % 13);
+    // Canceled before it starts, a filter returns a partial answer the caller must discard, so on input with
+    // something to filter it has to differ from the finished one: a filter ignoring the flag returns that
+    // instead. Box chains take two passes or more, since a cancel is read between passes.
+    const int2     size{32, 24};
+    const Array2Df src = noise(size);
 
-    // already canceled before it starts, so what comes back is a partial answer the caller must discard
-    AtomicProgress progress{true};
-    progress.cancel();
+    Array2Df mask{size};
+    for (int y = 2; y < size.y - 2; ++y)
+        for (int x = 2; x < size.x - 2; ++x) mask(x, y) = 1.f;
+    const Array2Df flat = constant(size, 0.5f);
 
-    const Array2Df out = median_filtered(src, whole(src), 4.f, true, progress);
+    using Filter = std::function<Array2Df(AtomicProgress)>;
+    const struct
+    {
+        const char *what;
+        Filter      filter;
+    } cases[] = {
+        {"gaussian", [&](AtomicProgress p) { return gaussian_blurred(src, whole(src), 2.f, 3.f, p); }},
+        {"box", [&](AtomicProgress p) { return box_blurred(src, whole(src), 2, 1, 3, p); }},
+        {"fast gaussian", [&](AtomicProgress p) { return fast_gaussian_blurred(src, whole(src), 2.f, 3.f, 4, p); }},
+        {"median over a disc", [&](AtomicProgress p) { return median_filtered(src, whole(src), 2.f, true, p); }},
+        {"median over a square", [&](AtomicProgress p) { return median_filtered(src, whole(src), 2.f, false, p); }},
+        {"unsharp masked", [&](AtomicProgress p) { return unsharp_masked(src, whole(src), 2.f, 1.5f, p); }},
+        {"poisson", [&](AtomicProgress p) { return poisson_blended(flat, src, mask, 500, 1e-6f, p); }},
+    };
 
-    CHECK(progress.canceled());
-    CHECK(out.size() == src.size()); // still the right shape, just not filled in
+    for (const auto &c : cases)
+    {
+        CAPTURE(c.what);
+
+        AtomicProgress finished{true};
+        const Array2Df done = c.filter(finished);
+        CHECK_FALSE(finished.canceled());
+        CHECK(finished.progress() == doctest::Approx(1.f).epsilon(0.001));
+
+        AtomicProgress canceled{true};
+        canceled.cancel();
+        const Array2Df partial = c.filter(canceled);
+        CHECK(partial.size() == done.size()); // still the right shape, just not filled in
+        CHECK(max_difference(partial, done) > 1e-3f);
+    }
 }
 
-TEST_CASE("An uncancelled filter reports its way to complete")
+TEST_CASE("Zapping replaces exactly the non-finite samples, each with the median of its finite neighbors")
 {
-    Array2Df src{int2{16, 16}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i % 5);
+    // One image holding every case: a NaN in a smooth area; an infinity beside a wild but finite neighbor,
+    // which a mean of the ring would be dragged by and its median is not; finite extremes, which are data
+    // and not gremlins; and a 3x3 block of NaNs, whose center has no finite neighbor and takes the
+    // replacement, and whose rim takes the median of the finite samples it does reach.
+    constexpr float nan  = std::numeric_limits<float>::quiet_NaN();
+    constexpr float inf  = std::numeric_limits<float>::infinity();
+    constexpr float base = 0.4f, replacement = -1.f;
 
-    AtomicProgress progress{true};
-    median_filtered(src, whole(src), 2.f, true, progress);
+    Array2Df src = constant(int2{12, 10}, base);
+    src(2, 2)    = nan;
+    src(6, 2)    = inf;
+    src(7, 2)    = 1000.f;
+    src(0, 9)    = 1e30f;
+    src(11, 8)   = -1e30f;
+    for (int y = 5; y < 8; ++y)
+        for (int x = 3; x < 6; ++x) src(x, y) = nan;
 
-    CHECK_FALSE(progress.canceled());
-    CHECK(progress.progress() == doctest::Approx(1.f).epsilon(0.001));
-}
+    const Array2Df out = zapped_gremlins(src, whole(src), replacement);
 
-TEST_CASE("Zapping a gremlin fills it from its neighbors")
-{
-    // what goes back has to agree with the surroundings, so a firefly in a smooth region leaves no trace
-    Array2Df src{int2{9, 9}};
-    for (int y = 0; y < 9; ++y)
-        for (int x = 0; x < 9; ++x) src(x, y) = 0.4f;
-    src(4, 4) = std::numeric_limits<float>::quiet_NaN();
-    src(2, 6) = std::numeric_limits<float>::infinity();
-
-    const Array2Df out = zapped_gremlins(src, whole(src));
-
-    CHECK(out(4, 4) == doctest::Approx(0.4f));
-    CHECK(out(2, 6) == doctest::Approx(0.4f));
-}
-
-TEST_CASE("Zapping leaves every finite sample exactly as it was")
-{
-    // including extreme ones: a very bright highlight is data, not a gremlin
-    Array2Df src{int2{8, 8}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i) * 0.5f;
-    src(3, 3) = 1e30f;
-    src(5, 5) = -1e30f;
-
-    const Array2Df out = zapped_gremlins(src, whole(src));
-    for (int i = 0; i < src.num_elements(); ++i) CHECK(out(i) == src(i));
-}
-
-TEST_CASE("A gremlin with no finite neighbor falls back to the replacement")
-{
-    // in the middle of a run of them there is nothing to take a median of
-    Array2Df src{int2{5, 5}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = std::numeric_limits<float>::quiet_NaN();
-
-    const Array2Df out = zapped_gremlins(src, whole(src), -1.f);
-    for (int i = 0; i < out.num_elements(); ++i) CHECK(out(i) == -1.f);
-}
-
-TEST_CASE("Zapping takes the median rather than the mean of the ring")
-{
-    // a mean would be dragged by an outlier among the neighbors; the median is not
-    Array2Df src{int2{3, 3}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = 1.f;
-    src(0, 0) = 1000.f;                                  // one wild but finite neighbor
-    src(1, 1) = std::numeric_limits<float>::quiet_NaN(); // the gremlin, ringed by the other eight
-
-    const Array2Df out = zapped_gremlins(src, whole(src));
-    CHECK(out(1, 1) == doctest::Approx(1.f));
+    for (int y = 0; y < src.height(); ++y)
+        for (int x = 0; x < src.width(); ++x)
+        {
+            CAPTURE(x);
+            CAPTURE(y);
+            if (std::isfinite(src(x, y)))
+                CHECK(out(x, y) == src(x, y)); // exactly, however extreme
+            else if (x == 4 && y == 6)
+                CHECK(out(x, y) == replacement);
+            else
+                CHECK(out(x, y) == base);
+        }
 }
 
 TEST_CASE("The median window's shape changes what it sees")
@@ -693,14 +598,4 @@ TEST_CASE("The median window's shape changes what it sees")
     bool any_different = false;
     for (int i = 0; i < disc.num_elements() && !any_different; ++i) any_different = disc(i) != square(i);
     CHECK(any_different);
-}
-
-TEST_CASE("Both median window shapes remove a lone outlier")
-{
-    Array2Df src{int2{21, 21}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = 0.2f;
-    src(10, 10) = 50.f;
-
-    CHECK(median_filtered(src, whole(src), 3.f, true)(10, 10) == doctest::Approx(0.2f));
-    CHECK(median_filtered(src, whole(src), 3.f, false)(10, 10) == doctest::Approx(0.2f));
 }

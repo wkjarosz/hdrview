@@ -1,8 +1,9 @@
 /** \file test_gui_stats.cpp
     \author Wojciech Jarosz
 
-    Loads a fixture image and asserts on the computed PixelStats for its current channel group, read off
-    Channel::get_stats(): the "Pixel statistics" window's text has no per-cell widget ID to read back.
+    Loads a fixture image and asserts on the PixelStats the app computes for its current channel group, read off
+    Channel::get_stats(): the "Pixel statistics" window's text has no per-cell widget ID to read back. What the
+    statistics hold is test_pixel_stats.cpp's subject.
 */
 
 #include "app.h"
@@ -16,39 +17,39 @@
 
 using namespace hdrview_test;
 
-#ifndef HDRVIEW_GUI_TEST_IMAGE
-#error "HDRVIEW_GUI_TEST_IMAGE must be defined by CMake to a small fixture image path"
+#ifndef HDRVIEW_GUI_TEST_IMAGE_2
+#error "HDRVIEW_GUI_TEST_IMAGE_2 must be defined by CMake to a small fixture image path"
 #endif
+
+/// Starts from the small fixture alone, whatever an earlier test left loaded.
+static bool load_fixture(ImGuiTestContext *ctx)
+{
+    reset_images(ctx);
+    IM_CHECK_SILENT_RETV(load_and_wait(ctx, {HDRVIEW_GUI_TEST_IMAGE_2}) == 1, false);
+    return true;
+}
 
 void RegisterTests_Stats(ImGuiTestEngine *engine)
 {
-    ImGuiTest *t = IM_REGISTER_TEST(engine, "stats", "computed_and_bounded");
+    ImGuiTest *t = IM_REGISTER_TEST(engine, "stats", "the app schedules stats for the current group");
     t->TestFunc  = [](ImGuiTestContext *ctx)
     {
-        if (hdrview()->num_images() == 0)
-        {
-            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-            wait_for_loads(ctx);
-        }
-        IM_CHECK(hdrview()->num_images() > 0);
+        if (!load_fixture(ctx))
+            return;
 
+        // nothing asks for them here: loading an image and showing it is what schedules them
         auto img = hdrview()->current_image();
         IM_CHECK(img != nullptr);
         auto &group = img->groups[img->selected_group];
-        IM_CHECK(group.num_channels > 0);
+        for (int c = 0; c < group.num_channels; ++c)
+        {
+            PixelStats *stats = wait_for_stats(ctx, img->channels[group.channels[c]]);
+            IM_CHECK(stats != nullptr && stats->computed);
 
-        PixelStats *stats = wait_for_stats(ctx, img->channels[group.channels[0]]);
-        IM_CHECK(stats != nullptr);
-        IM_CHECK(stats->computed);
-
-        const auto &s = stats->summary;
-        IM_CHECK_EQ(s.nan_pixels, 0);
-        IM_CHECK_EQ(s.inf_pixels, 0);
-        IM_CHECK(s.valid_pixels > 0);
-        IM_CHECK(s.valid_pixels <= img->size().x * img->size().y);
-        IM_CHECK(s.minimum <= s.average);
-        IM_CHECK(s.average <= s.maximum);
-        IM_CHECK(s.stddev >= 0.0);
+            // over the whole image, every pixel accounted for once
+            const auto &s = stats->summary;
+            IM_CHECK_EQ(s.valid_pixels + s.nan_pixels + s.inf_pixels, img->size().x * img->size().y);
+        }
     };
 
     t           = IM_REGISTER_TEST(engine, "stats", "selection_off_the_image_computes_empty_stats");
@@ -57,12 +58,8 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         // the app-level counterpart to test_pixel_stats.cpp's "A selection that misses the channel": a
         // selection is never clamped to the image, so one dragged into the empty area beside it reaches
         // PixelStats::calculate() as a region that intersects the data window into an inverted box
-        if (hdrview()->num_images() == 0)
-        {
-            hdrview()->load_images({HDRVIEW_GUI_TEST_IMAGE});
-            wait_for_loads(ctx);
-        }
-        IM_CHECK(hdrview()->num_images() > 0);
+        if (!load_fixture(ctx))
+            return;
 
         auto img = hdrview()->current_image();
         IM_CHECK(img != nullptr);

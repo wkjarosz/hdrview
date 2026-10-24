@@ -132,43 +132,68 @@ TEST_CASE("DDS premultiplied-alpha formats are not premultiplied a second time")
 // bcdec's own test images, one per block format, decoded by the library HDRView links for exactly this.
 // The BC7 one reaches a left shift of an uninitialized endpoint inside bcdec, suppressed for UBSan in
 // .github/ubsan-suppressions.txt.
-TEST_CASE("Every block format bcdec ships decodes to the size its header declares")
+TEST_CASE("Every block format bcdec ships decodes, and the renditions of one image agree")
 {
     namespace fs = std::filesystem;
 
-    int files = 0;
-    for (const auto &entry : fs::directory_iterator(HDRVIEW_TEST_BCDEC_DIR))
+    const auto load = [](const fs::path &path)
     {
-        const auto path = entry.path();
-        if (path.extension() != ".dds")
-            continue;
-
-        const std::string name = path.filename().string();
-        CAPTURE(name);
-
         std::ifstream in(path, std::ios::binary);
         REQUIRE(in.good());
         const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        // the samples as stored: load_image() would premultiply the ones with alpha
+        return load_bytes(load_dds_image, bytes, path.filename().string().c_str());
+    };
 
-        // DDS_HEADER follows the four-byte magic: dwSize, dwFlags, then height and width
-        REQUIRE(bytes.size() > 20);
-        REQUIRE(bytes.compare(0, 4, "DDS ") == 0);
-        auto u32 = [&bytes](size_t at)
+    int files = 0;
+    for (const auto &entry : fs::directory_iterator(HDRVIEW_TEST_BCDEC_DIR))
+        if (entry.path().extension() == ".dds")
         {
-            return (uint32_t)(uint8_t)bytes[at] | ((uint32_t)(uint8_t)bytes[at + 1] << 8) |
-                   ((uint32_t)(uint8_t)bytes[at + 2] << 16) | ((uint32_t)(uint8_t)bytes[at + 3] << 24);
-        };
+            CAPTURE(entry.path().filename().string());
+            const auto img = load(entry.path());
+            REQUIRE(img);
+            CHECK(img->size().x > 0);
+            CHECK(img->size().y > 0);
+            REQUIRE_FALSE(img->channels.empty());
+            ++files;
+        }
+    CHECK(files >= 7);
 
-        auto img = load_bytes(load_dds_image, bytes, name.c_str());
-        REQUIRE(img);
-        img->finalize();
-
-        CHECK(img->size().y == (int)u32(12));
-        CHECK(img->size().x == (int)u32(16));
-        REQUIRE_FALSE(img->channels.empty());
-        ++files;
+    // One photograph as BC3 (RGBA), BC5 (its R and G, named u and v as a normal map's are), BC7 (RGBA) and BC4 (its
+    // luma), all unsigned normalized. What two of them hold has to decode to the same picture within the codecs'
+    // error, which one format decoded with its endpoints, indices or channels mistaken exceeds several times over.
+    const fs::path dir = HDRVIEW_TEST_BCDEC_DIR;
+    const auto     bc7 = load(dir / "dice_bc7.dds");
+    REQUIRE(bc7);
+    REQUIRE(bc7->channels.size() == 4);
+    const auto mean_difference = [&](const Channel &got, auto &&want)
+    {
+        double sum = 0.;
+        for (int i = 0; i < got.num_elements(); ++i) sum += std::abs(double(got(i)) - want(i));
+        return sum / got.num_elements();
+    };
+    for (const char *name : {"dice_bc3.dds", "dice_bc5.dds"})
+    {
+        CAPTURE(std::string{name});
+        const auto other = load(dir / name);
+        REQUIRE(other);
+        REQUIRE(other->size() == bc7->size());
+        for (size_t c = 0; c < other->channels.size(); ++c)
+        {
+            CAPTURE(c);
+            CHECK(mean_difference(other->channels[c], [&](int i) { return double(bc7->channels[c](i)); }) < 0.01);
+        }
     }
-    CHECK(files > 0);
+
+    const auto bc4 = load(dir / "dice_bc4.dds");
+    REQUIRE(bc4);
+    REQUIRE(bc4->size() == bc7->size());
+    REQUIRE(bc4->channels.size() == 1);
+    // BT.601's luma weights, which come closest; the gray conversion that made the file is not known exactly
+    CHECK(mean_difference(
+              bc4->channels[0], [&](int i)
+              { return 0.299 * bc7->channels[0](i) + 0.587 * bc7->channels[1](i) + 0.114 * bc7->channels[2](i); }) <
+          0.02);
 }
 
 #endif // HDRVIEW_TEST_BCDEC_DIR

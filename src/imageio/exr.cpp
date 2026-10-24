@@ -816,7 +816,21 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img, SaveContext &ctx)
         ImGui::PE::End();
     }
 
+    bool alpha = false;
+    for (int g = 0; g < (int)img->groups.size(); ++g)
+        alpha |= s_opts.group_enabled[g] && group_has_alpha(img->groups[g].type);
+    caveat_entry(exr_caveat(alpha));
+
     ctx.hdr = true; //< always floating point
     ctx.records_primaries = true; //< in the chromaticities attribute
     return &s_opts;
+}
+
+// macOS 27's ImageIO measured by test_export_roundtrip.cpp
+Caveat exr_caveat(bool alpha)
+{
+    if (alpha)
+        return {Misreader_macOS, "macOS 27 apps read an EXR's premultiplied color as straight, which darkens its "
+                                 "translucent pixels."};
+    return {};
 }

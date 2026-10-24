@@ -134,7 +134,11 @@ void HDRViewApp::enable_gui_test_engine(void (*register_tests)(ImGuiTestEngine *
         // frames (see MouseMoveToPos() in imgui_te_context.cpp); Fast teleports it in 2 frames.
         io.ConfigRunSpeed = ImGuiTestRunSpeed_Fast;
         register_tests(engine);
-        ImGuiTestEngine_QueueTests(engine, ImGuiTestGroup_Tests, nullptr, ImGuiTestRunFlags_RunFromCommandLine);
+        // HDRVIEW_GUI_TEST_FILTER picks tests by the engine's filter syntax: comma-separated substrings of a test's
+        // name or category, '^' anchoring one to the start and '-' excluding; unset, every test runs
+        const char *filter = getenv("HDRVIEW_GUI_TEST_FILTER");
+        ImGuiTestEngine_QueueTests(engine, ImGuiTestGroup_Tests, filter && *filter ? filter : nullptr,
+                                   ImGuiTestRunFlags_RunFromCommandLine);
     };
     // HelloImGui's own PostSwap hook steps the running test forward each frame; this watches for the queue
     // draining and asks the app to exit via m_params.appShallExit, as a window-close request does.

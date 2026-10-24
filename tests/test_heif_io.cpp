@@ -15,6 +15,7 @@
 using namespace hdrview_test;
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -101,6 +102,20 @@ TEST_CASE("The HEIF and AVIF save entries write files branded and labeled as wha
             // the automatic bit depth is 10 for PQ; a .heif may hold JPEG, which has only 8, so only HEVC is held to it
             if (avif || brand.rfind("hei", 0) == 0)
                 CHECK(w.bit_depth == (tf == TransferFunction::sRGB ? 8 : 10));
+
+            // and the loader reads it on its own grid, whatever the codec did to the values
+            if (w.bit_depth == 8)
+            {
+                const auto back = load_bytes(out.str(), avif ? "a.avif" : "a.heif");
+                REQUIRE(back);
+                float off_grid = 0.f;
+                for (float v : samples(back))
+                {
+                    const float code = 255.f * from_linear(v, tf);
+                    off_grid         = std::max(off_grid, std::abs(code - std::round(code)));
+                }
+                CHECK(off_grid < 0.01f);
+            }
         }
 }
 

@@ -7,93 +7,44 @@
 #include "edit/filters.h"
 
 #include "common.h"
+#include "shared/shim.h"
+#include "stb_image_resize2.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
 #include <smallthreadpool.h>
+#include <stdexcept>
 #include <vector>
 
-int wrap_coord(int p, int extent, int mode)
+namespace shader
 {
-    if (p >= 0 && p < extent)
-        return p;
+using ResampleValue = float;
 
-    switch (mode)
-    {
-    case BorderMode_Edge: return std::clamp(p, 0, extent - 1);
-    case BorderMode_Repeat: return mod(p, extent);
-    case BorderMode_Mirror:
-    {
-        // the reflection has period twice the extent and folds in the middle of it, so -1 lands on 0 and
-        // extent lands on extent-1
-        const int period = 2 * extent;
-        const int q      = mod(p, period);
-        return q < extent ? q : period - 1 - q;
-    }
-    case BorderMode_Black:
-    default: return -1;
-    }
-}
+/// The image as resample.h reads it on the CPU.
+struct ResampleSource
+{
+    ivec2           size;
+    const Array2Df *image;
+};
+
+inline float resample_fetch(ResampleSource src, ivec2 p) { return (*src.image)(p.x, p.y); }
+} // namespace shader
+
+#include "shared/resample.h"
+
+static_assert(BorderMode_Black == shader::BORDER_BLACK && BorderMode_Edge == shader::BORDER_EDGE &&
+                  BorderMode_Repeat == shader::BORDER_REPEAT && BorderMode_Mirror == shader::BORDER_MIRROR,
+              "BorderMode must match src/shared/resample.h");
+static_assert(Sampler_Nearest == shader::SAMPLER_NEAREST && Sampler_Bilinear == shader::SAMPLER_BILINEAR &&
+                  Sampler_Bicubic == shader::SAMPLER_BICUBIC,
+              "Sampler must match src/shared/resample.h");
+
+int wrap_coord(int p, int extent, int mode) { return shader::resample_wrap(p, extent, mode); }
 
 namespace
 {
-
-/// One sample of \p a read through the border modes; zero where they say there is nothing.
-inline float bordered(const Array2Df &a, int x, int y, int mx, int my)
-{
-    x = wrap_coord(x, a.width(), mx);
-    y = wrap_coord(y, a.height(), my);
-    return (x < 0 || y < 0) ? 0.f : a(x, y);
-}
-
-/// One tap of the interpolating cubic with a = -0.75, as Photoshop's "bicubic".
-/**
-    A function, not a lambda: MSVC will not read a constexpr local from inside a captureless lambda.
-*/
-inline float cubic_weight(float d)
-{
-    constexpr float A = -0.75f;
-
-    d = std::abs(d);
-    return d <= 1.f ? ((A + 2.f) * d - (A + 3.f)) * d * d + 1.f : ((A * d - 5.f * A) * d + 8.f * A) * d - 4.f * A;
-}
-
-/// Value of \p a at the continuous position \p sx, \p sy, with samples at the centers of their cells.
-float sample_at(const Array2Df &a, float sx, float sy, int sampler, int mx, int my)
-{
-    if (sampler == Sampler_Nearest)
-        return bordered(a, int(std::floor(sx)), int(std::floor(sy)), mx, my);
-
-    // shift so a sample sits at the center of its cell rather than at its corner
-    sx -= 0.5f;
-    sy -= 0.5f;
-
-    const int   x0 = int(std::floor(sx)), y0 = int(std::floor(sy));
-    const float tx = sx - float(x0), ty = sy - float(y0);
-
-    if (sampler == Sampler_Bilinear)
-    {
-        const float top = lerp(bordered(a, x0, y0, mx, my), bordered(a, x0 + 1, y0, mx, my), tx);
-        const float bot = lerp(bordered(a, x0, y0 + 1, mx, my), bordered(a, x0 + 1, y0 + 1, mx, my), tx);
-        return lerp(top, bot, ty);
-    }
-
-    float value = 0.f, total = 0.f;
-    for (int j = -1; j <= 2; ++j)
-    {
-        const float wy = cubic_weight(ty - float(j));
-        for (int i = -1; i <= 2; ++i)
-        {
-            const float w = cubic_weight(tx - float(i)) * wy;
-            value += w * bordered(a, x0 + i, y0 + j, mx, my);
-            total += w;
-        }
-    }
-    // the taps sum to one analytically; dividing keeps that true against rounding
-    return total != 0.f ? value / total : value;
-}
 
 /// Normalized 1D Gaussian taps, truncated at three standard deviations.
 /**
@@ -115,6 +66,45 @@ std::vector<float> gaussian_taps(float sigma)
     for (auto &t : taps) t /= sum;
 
     return taps;
+}
+
+/// Normalized 1D Gaussian taps whose variance is exactly \p sigma squared, or none for a sigma of zero.
+/**
+    Sampled at whole samples, a Gaussian narrower than a sample or so has far less variance than its own, and as good
+    as none below half of one. These are a sampled Gaussian of whatever width gives the taps the variance asked for,
+    which a chain of small blurs needs, as each must add exactly its share.
+*/
+std::vector<float> variance_matched_gaussian_taps(float sigma)
+{
+    if (sigma <= 0.f)
+        return {};
+
+    auto taps_of = [](float s, int radius)
+    {
+        std::vector<float> taps(size_t(2 * radius + 1));
+        float              sum = 0.f;
+        for (int i = -radius; i <= radius; ++i)
+            sum += taps[size_t(i + radius)] = std::exp(-float(i * i) / (2.f * s * s));
+        for (auto &t : taps) t /= sum;
+        return taps;
+    };
+    auto variance = [](const std::vector<float> &taps)
+    {
+        const int radius = int(taps.size() / 2);
+        float     v      = 0.f;
+        for (int i = -radius; i <= radius; ++i) v += taps[size_t(i + radius)] * float(i * i);
+        return v;
+    };
+
+    // the variance grows with the width, so bisect on it; three sigma either side holds what matters
+    const int radius = std::max(1, int(std::ceil(3.f * sigma)));
+    float     lo = 1e-3f, hi = sigma + 1.f;
+    for (int iteration = 0; iteration < 40; ++iteration)
+    {
+        const float mid                                            = 0.5f * (lo + hi);
+        (variance(taps_of(mid, radius)) < sigma * sigma ? lo : hi) = mid;
+    }
+    return taps_of(0.5f * (lo + hi), radius);
 }
 
 /// Convolve \p region of \p src with the separable kernel \p taps_x by \p taps_y.
@@ -347,28 +337,19 @@ const char *sampler_name(int sampler)
 
 Array2Df shifted(const Array2Df &src, const Box2i &region, float dx, float dy, int sampler, int border_x, int border_y)
 {
-    const int2 size = region.size();
-    Array2Df   out{size};
-
-    // a whole-sample offset needs no reconstruction, so shifting one way and back returns what was there
-    const bool integral = dx == std::floor(dx) && dy == std::floor(dy);
+    const int2                   size = region.size();
+    const shader::ResampleSource view{src.size(), &src};
+    Array2Df                     out{size};
 
     const int block_size = std::max(1, 1024 * 1024 / std::max(1, size.x));
-    stp::parallel_for(
-        stp::blocked_range<int>(0, size.y, block_size),
-        [&](int y0, int y1, int, int)
-        {
-            for (int y = y0; y < y1; ++y)
-                for (int x = 0; x < size.x; ++x)
-                {
-                    // the sample that has to travel to here is the one that far back
-                    const float sx = float(region.min.x + x) - dx;
-                    const float sy = float(region.min.y + y) - dy;
-
-                    out(x, y) = integral ? bordered(src, int(std::lround(sx)), int(std::lround(sy)), border_x, border_y)
-                                         : sample_at(src, sx + 0.5f, sy + 0.5f, sampler, border_x, border_y);
-                }
-        });
+    stp::parallel_for(stp::blocked_range<int>(0, size.y, block_size),
+                      [&](int y0, int y1, int, int)
+                      {
+                          for (int y = y0; y < y1; ++y)
+                              for (int x = 0; x < size.x; ++x)
+                                  out(x, y) = shader::resample_shifted(view, region.min + int2{x, y}, float2{dx, dy},
+                                                                       sampler, border_x, border_y);
+                      });
 
     return out;
 }
@@ -565,5 +546,71 @@ Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replace
                               }
                       });
 
+    return out;
+}
+
+const char *mip_filter_name(int filter)
+{
+    static const char *names[MipFilter_COUNT] = {"Box", "Mitchell", "Gaussian"};
+    return filter >= 0 && filter < MipFilter_COUNT ? names[filter] : "";
+}
+
+std::vector<int2> mip_level_sizes(int2 size, int per_octave)
+{
+    std::vector<int2> sizes;
+    int2              last = size;
+    for (int l = 1; la::maxelem(last) > 1; ++l)
+    {
+        const double s    = std::exp2(-double(l) / double(std::max(1, per_octave)));
+        const int2   next = la::max(int2{int(std::floor(size.x * s)), int(std::floor(size.y * s))}, int2{1});
+        if (next != last)
+            sizes.push_back(last = next);
+    }
+    return sizes;
+}
+
+Array2Df mip_level(const Array2Df &previous, int2 size, int filter, float sigma, float blurred)
+{
+    const int2 n = previous.size();
+    Array2Df   out{size};
+    if (filter != MipFilter_Gaussian)
+    {
+        if (!stbir_resize(previous.data(), n.x, n.y, 0, out.data(), size.x, size.y, 0, STBIR_1CHANNEL, STBIR_TYPE_FLOAT,
+                          STBIR_EDGE_CLAMP, filter == MipFilter_Box ? STBIR_FILTER_BOX : STBIR_FILTER_MITCHELL))
+            throw std::runtime_error{"Failed to resample image."};
+        return out;
+    }
+
+    // where each of the level's samples falls among the previous level's, held inside them
+    const float2 ratio{float(n.x) / float(size.x), float(n.y) / float(size.y)};
+    auto at = [&](int i, int a) { return std::clamp((float(i) + 0.5f) * ratio[a] - 0.5f, 0.f, float(n[a] - 1)); };
+
+    // A bilinear read a fraction t past a sample blurs by t (1 - t) of a squared sample, so the reads blur by the mean
+    // of that over the positions they take, a sixth for positions spread evenly and a quarter for a halving's, which
+    // all fall halfway; the blur makes up what the level lacks after the previous level's and the reads'.
+    auto lacking = [&](int a)
+    {
+        double reads = 0.0;
+        for (int i = 0; i < size[a]; ++i)
+        {
+            const float t = at(i, a) - std::floor(at(i, a));
+            reads += double(t) * double(1.f - t);
+        }
+        reads /= double(size[a]);
+        return std::sqrt(std::max(0.f, sigma * sigma * ratio[a] * ratio[a] - blurred * blurred - float(reads)));
+    };
+    const Array2Df smooth = convolve_separable(previous, Box2i{int2{0}, n}, variance_matched_gaussian_taps(lacking(0)),
+                                               variance_matched_gaussian_taps(lacking(1)), {});
+
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            const float2 p{at(x, 0), at(y, 1)};
+            const int2   p0 = int2(la::floor(p));
+            const int2   p1 = la::min(p0 + 1, n - 1);
+            const float2 t  = p - float2(p0);
+            out(x, y)       = (1.f - t.y) * ((1.f - t.x) * smooth(p0.x, p0.y) + t.x * smooth(p1.x, p0.y)) +
+                              t.y * ((1.f - t.x) * smooth(p0.x, p1.y) + t.x * smooth(p1.x, p1.y));
+        }
     return out;
 }

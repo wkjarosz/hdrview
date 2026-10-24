@@ -3,12 +3,18 @@
 
     Closes the reference image while a comparison against it is being computed: Channel::update_stats()
     hands the async task raw Channel pointers into the reference but retains a shared_ptr only to the
-    current image. Run under AddressSanitizer, where a stale read shows up as heap-use-after-free.
+    current image. A stale read shows up only under AddressSanitizer, as heap-use-after-free, so this
+    registers nothing in any other build.
 */
+
+#include "test_gui_registry.h"
+
+#include "../test_asan.h"
+
+#ifdef HDRVIEW_TEST_ASAN
 
 #include "app.h"
 #include "image.h"
-#include "test_gui_registry.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
 #include "imgui_test_engine/imgui_te_engine.h"
@@ -56,3 +62,9 @@ void RegisterTests_Lifetime(ImGuiTestEngine *engine)
         IM_CHECK(hdrview()->num_images() == 1);
     };
 }
+
+#else // !HDRVIEW_TEST_ASAN
+
+void RegisterTests_Lifetime(ImGuiTestEngine *) {}
+
+#endif

@@ -364,6 +364,17 @@ static auto chroma_name(heif_chroma ch)
     }
 }
 
+/// The interleaved RGB layout to decode \p handle into: bytes for an 8-bit image, 16-bit words above.
+/**
+    Asked for words, libheif widens an 8-bit image to 10 bits, which moves samples off the 8-bit grid.
+*/
+static heif_chroma heif_rgb_chroma(const heif_image_handle *handle, bool alpha)
+{
+    if (heif_image_handle_get_luma_bits_per_pixel(handle) <= 8)
+        return alpha ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB;
+    return alpha ? heif_chroma_interleaved_RRGGBBAA_LE : heif_chroma_interleaved_RRGGBB_LE;
+}
+
 /// Copy one decoded plane into `out` as interleaved floats in [0,1], returning its bits per channel.
 static int normalize_heif_plane(heif_image *himage, heif_channel plane, int2 size, int cpp, float *out)
 {
@@ -612,7 +623,7 @@ static GainmapImage decode_aux_gainmap(heif_image_handle *aux_handle)
     const bool mono = (preferred_chroma == heif_chroma_monochrome);
 
     const heif_colorspace out_colorspace = mono ? heif_colorspace_monochrome : heif_colorspace_RGB;
-    const heif_chroma     out_chroma     = mono ? heif_chroma_monochrome : heif_chroma_interleaved_RRGGBB_LE;
+    const heif_chroma     out_chroma     = mono ? heif_chroma_monochrome : heif_rgb_chroma(aux_handle, false);
     const heif_channel    out_plane      = mono ? heif_channel_Y : heif_channel_interleaved;
     const int             channels       = mono ? 1 : 3;
 
@@ -805,7 +816,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 }
                 else
                 {
-                    out_chroma = has_alpha ? heif_chroma_interleaved_RRGGBBAA_LE : heif_chroma_interleaved_RRGGBB_LE;
+                    out_chroma     = heif_rgb_chroma(ihandle.get(), has_alpha);
                     out_colorspace = heif_colorspace_RGB;
                     out_planes[0]  = heif_channel_interleaved;
                     size.z         = has_alpha ? 4 : 3;
@@ -1225,13 +1236,15 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             }(),
             heif_image_release);
 
-        // copies channels [first, first + count) of every pixel into a plane, at the file's bit depth; samples
-        // above 8 bits are 16-bit words in the host's (little-endian) order, which the _LE chromas name
+        // Copies channels [first, first + count) of every pixel into a plane, at the file's bit depth; samples
+        // above 8 bits are 16-bit words in the host's (little-endian) order, which the _LE chromas name. A 16-bit
+        // sample is rescaled to the depth's own full scale, (2^bits - 1) / 65535, not shifted down, which would
+        // stretch it by 2^bits / (2^bits - 1).
         auto fill_plane = [&](heif_channel channel, int first, int count)
         {
-            int       stride = 0;
-            uint8_t  *plane  = heif_image_get_plane(heif_img.get(), channel, &stride);
-            const int shift  = 16 - bit_depth;
+            int          stride = 0;
+            uint8_t     *plane  = heif_image_get_plane(heif_img.get(), channel, &stride);
+            const double scale  = double((1 << bit_depth) - 1) / 65535.0;
             for (int y = 0; y < h; ++y)
                 for (int x = 0; x < w; ++x)
                     for (int c = 0; c < count; ++c)
@@ -1239,8 +1252,8 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
                         const size_t src = ((size_t)y * w + x) * n + first + c;
                         const size_t dst = (size_t)x * count + c;
                         if (pixels16)
-                            reinterpret_cast<uint16_t *>(plane + y * (size_t)stride)[dst] = uint16_t(
-                                std::min<int>((pixels16[src] + (1 << shift >> 1)) >> shift, (1 << bit_depth) - 1));
+                            reinterpret_cast<uint16_t *>(plane + y * (size_t)stride)[dst] =
+                                uint16_t(std::lround(pixels16[src] * scale));
                         else
                             plane[y * (size_t)stride + dst] = pixels8[src];
                     }
@@ -1273,7 +1286,9 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             throw std::runtime_error("HEIF: Failed to allocate nclx profile");
         nclx->color_primaries          = (heif_color_primaries)(convert_to_sRGB ? 1 : cicp_primaries);
         nclx->transfer_characteristics = transfer_function_to_heif(tf);
-        nclx->matrix_coefficients      = nclx->color_primaries == heif_color_primaries_ITU_R_BT_2020_2_and_2100_0
+        // lossless only codes RGB as it stands, the identity matrix, since a conversion to YCbCr rounds
+        nclx->matrix_coefficients      = params->lossless ? heif_matrix_coefficients_RGB_GBR
+                                         : nclx->color_primaries == heif_color_primaries_ITU_R_BT_2020_2_and_2100_0
                                              ? heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance
                                              : heif_matrix_coefficients_ITU_R_BT_709_5;
         nclx->full_range_flag          = true;
@@ -1369,11 +1384,13 @@ catch (const std::exception &err) { throw std::runtime_error(fmt::format("HEIF e
 
 // libaom accepts lossless coding only with chroma delta-q off, and the tuning metric its libheif plugin
 // defaults to for a still image ("auto", i.e. AOM_TUNE_IQ) turns delta-q on, so the two must be set
-// together. Plugins with no "tune" parameter reject the call.
+// together. Lossless also keeps every chroma sample, where the plugins default to 4:2:0. Plugins with no
+// such parameter reject the call.
 static void set_heif_lossless(heif_encoder *enc, bool lossless)
 {
     heif_encoder_set_lossless(enc, lossless);
     (void)heif_encoder_set_parameter_string(enc, "tune", lossless ? "ssim" : "auto");
+    (void)heif_encoder_set_parameter_string(enc, "chroma", lossless ? "444" : "420");
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool lossless,

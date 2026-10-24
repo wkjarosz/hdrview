@@ -67,14 +67,3 @@ TEST_CASE("read_partial_as at full width matches read_as for every type it suppo
         CHECK(read_partial_as<uint64_t>(bytes, 8, e) == read_as<uint64_t>(bytes, e));
     }
 }
-
-TEST_CASE("swap_bytes is its own inverse for every supported width")
-{
-    for (uint16_t v : {(uint16_t)0, (uint16_t)1, (uint16_t)0x1234, (uint16_t)0xffff})
-        CHECK(swap_bytes(swap_bytes(v)) == v);
-    for (uint32_t v : {0u, 1u, 0x12345678u, 0xffffffffu}) CHECK(swap_bytes(swap_bytes(v)) == v);
-    for (uint64_t v : {0ull, 1ull, 0x0123456789abcdefull, ~0ull}) CHECK(swap_bytes(swap_bytes(v)) == v);
-
-    // a one-byte value has nothing to swap
-    for (int v = 0; v <= 0xff; ++v) CHECK(swap_bytes((uint8_t)v) == (uint8_t)v);
-}

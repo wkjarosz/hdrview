@@ -74,16 +74,18 @@ TEST_CASE("A default namespace declaration does not take the image down with it"
         <dc:title>ok</dc:title>
       </rdf:Description>)");
 
+    // and what the packet says survives the collision
     json j;
     CHECK_NOTHROW(j = parse(with_default_ns));
-    CHECK(j.is_object());
+    CHECK(j.value("dc", json::object()).value("title", std::string{}) == "ok");
 
     // the same collision reached through an element's own attributes
     const std::string prefix_used_twice = packet(R"(<rdf:Description rdf:about=""
         xmlns:dc="http://purl.org/dc/elements/1.1/"
         dc="plain"
         dc:title="structured"/>)");
-    CHECK_NOTHROW(parse(prefix_used_twice));
+    CHECK_NOTHROW(j = parse(prefix_used_twice));
+    CHECK(j.dump().find("structured") != std::string::npos);
 
     // and through a child element whose prefix an attribute already claimed as a plain value
     const std::string child_after_attribute = packet(R"(<rdf:Description rdf:about=""
@@ -91,7 +93,8 @@ TEST_CASE("A default namespace declaration does not take the image down with it"
         dc="plain">
         <dc:title>structured</dc:title>
       </rdf:Description>)");
-    CHECK_NOTHROW(parse(child_after_attribute));
+    CHECK_NOTHROW(j = parse(child_after_attribute));
+    CHECK(j.dump().find("structured") != std::string::npos);
 }
 
 TEST_CASE("A packet that cannot be parsed yields nothing rather than throwing")
@@ -159,4 +162,7 @@ TEST_CASE("An image whose XMP the parser dislikes still loads its pixels")
     CHECK_NOTHROW(images = load_image(is, "xmp-test.png"));
     REQUIRE(images.size() == 1);
     CHECK(images[0]->size() == int2{1, 1});
+    // and the packet still reaches the metadata the Info panel reads
+    REQUIRE(images[0]->metadata.contains("xmp"));
+    CHECK(images[0]->metadata["xmp"].value("dc", json::object()).value("title", std::string{}) == "ok");
 }

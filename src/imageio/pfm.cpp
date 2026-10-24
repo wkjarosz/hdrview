@@ -119,11 +119,17 @@ unique_ptr<float[]> load_pfm_image(istream &is, string_view filename, int *width
         char c;
         while (is.get(c) && c != '\r' && c != '\n');
 
-        // Read the rest of the file
-        is.read(reinterpret_cast<char *>(data.get()), num_bytes);
-        if (is.gcount() < (streamsize)num_bytes)
-            throw invalid_argument{
-                fmt::format("load_pfm_image: Expected {} bytes, but could only read {} bytes", is.gcount(), num_bytes)};
+        // the file stores its rows bottom to top, and data holds them top to bottom
+        const size_t row_floats = size_t(*width) * (*num_channels);
+        size_t       read_bytes = 0;
+        for (int y = *height - 1; y >= 0; --y)
+        {
+            is.read(reinterpret_cast<char *>(data.get() + y * row_floats), row_floats * sizeof(float));
+            read_bytes += is.gcount();
+            if (!is)
+                throw invalid_argument{fmt::format("load_pfm_image: Expected {} bytes, but could only read {} bytes",
+                                                   num_bytes, read_bytes)};
+        }
 
         // multiply data by scale factor
         for (size_t i = 0; i < num_floats; ++i) data[i] = scale * reinterpret_as_host_endian(data[i], big_endian);
@@ -193,7 +199,10 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
 
     os << (little_endian ? "-1.0000000\n" : "1.0000000\n");
 
-    os.write((const char *)data, (std::streamsize)((size_t)width * height * num_channels * sizeof(float)));
+    // data holds its rows top to bottom, and the file stores them bottom to top
+    const size_t row_floats = (size_t)width * num_channels;
+    for (int y = height - 1; y >= 0; --y)
+        os.write((const char *)(data + y * row_floats), (std::streamsize)(row_floats * sizeof(float)));
 }
 
 void save_pfm_image(const Image &img, ostream &os, string_view filename)

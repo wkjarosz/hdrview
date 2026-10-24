@@ -7,6 +7,7 @@
 #include "edit/edit_ops.h"
 
 #include "image.h"
+#include "shared/edits.h"
 
 #include <numeric>
 #include <smallthreadpool.h>
@@ -106,7 +107,7 @@ bool modify_image(const EditContext &ctx, const string &name, const function<voi
         img->history.add(std::move(entry));
 
     // the channel list changed wholesale, so the layers and groups built from its names are rebuilt
-    if (extent == Extent_Structure)
+    if (extent != Extent_Pixels)
         img->rebuild_layers();
 
     ++img->content_version; // invalidates the cached statistics and histograms
@@ -217,4 +218,15 @@ bool modify_colors(const EditContext &ctx, const string &name, const function<fl
                 return std::make_unique<ColorMetadataUndo>(image, channels, bounds, n);
             return std::make_unique<ChannelRectUndo>(image, channels, bounds, n);
         });
+}
+
+bool apply_point_edit(const EditContext &ctx, const string &name, const PointEdit &edit,
+                      const function<void(Image &)> &retag)
+{
+    if (edit.op < shader::EDIT_FIRST_COLOR)
+        return modify_pixels(ctx, name, [edit](float v, int2, int slot)
+                             { return shader::edit_sample(edit.op, v, slot, edit.p0, edit.p1); });
+    return modify_colors(
+        ctx, name, [edit](const float4 &c, int2, int)
+        { return shader::edit_color(edit.op, c, edit.p0, edit.p1, edit.m0, edit.m1); }, retag);
 }

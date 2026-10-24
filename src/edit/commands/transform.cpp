@@ -172,8 +172,7 @@ public:
                      ICON_MY_IMAGE_SIZE,
                      ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_I,
                      true,
-                     "Resize",
-                     30.f})
+                     "Resize"})
     {
         // replaces the image rather than writing into it, so the subject has nothing to say about it
         m_info.draws_subject_selector = false;
@@ -209,9 +208,9 @@ public:
         // which way the resampling will go: shrinking averages over the samples each output covers,
         // growing interpolates between them
         if (m_size.x < original.x || m_size.y < original.y)
-            ImGui::TextUnformatted("Reducing: samples are averaged.");
+            ImGui::TextWrappedToWidth("Reducing: samples are averaged.");
         else if (m_size.x > original.x || m_size.y > original.y)
-            ImGui::TextUnformatted("Enlarging: samples are interpolated.");
+            ImGui::TextWrappedToWidth("Enlarging: samples are interpolated.");
     }
 
     void apply(const EditContext &ctx) override
@@ -233,7 +232,7 @@ class CanvasSize final : public EditCommand
 public:
     CanvasSize() :
         EditCommand(
-            {{"Canvas size..."}, ICON_MY_CANVAS_SIZE, ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C, true, "Resize", 30.f})
+            {{"Canvas size..."}, ICON_MY_CANVAS_SIZE, ImGuiMod_Alt | ImGuiMod_Ctrl | ImGuiKey_C, true, "Resize"})
     {
         m_info.draws_subject_selector = false;
     }
@@ -266,6 +265,8 @@ public:
         ImGui::TextFmt("Current: {} x {} pixels", original.x, original.y);
         ImGui::Separator();
 
+        // the size on the left, and beside it where the existing pixels go
+        ImGui::BeginGroup();
         // a relative size counts down as well as up, so it is not bounded below by one
         size_fields(&m_size, &m_units, &m_locked, original, m_relative ? -65536 : 1);
 
@@ -281,9 +282,11 @@ public:
             const int2 target = la::max(original + m_size, int2{1});
             ImGui::TextFmt("Result: {} x {} pixels", target.x, target.y);
         }
+        ImGui::EndGroup();
 
-        ImGui::SeparatorText("Anchor");
-        ImGui::TextUnformatted("Where the existing pixels sit in the new canvas.");
+        ImGui::SameLine(0.f, HelloImGui::EmSize(2.f));
+        ImGui::BeginGroup();
+        ImGui::TextUnformatted("Anchor");
         for (int row = 0; row < 3; ++row)
             for (int col = 0; col < 3; ++col)
             {
@@ -292,7 +295,9 @@ public:
                     ImGui::SameLine();
                 if (ImGui::RadioButton(fmt::format("##anchor{}", i).c_str(), int(m_anchor) == i))
                     m_anchor = Image::CanvasAnchor(i);
+                ImGui::Tooltip("Where the existing pixels sit in the new canvas.");
             }
+        ImGui::EndGroup();
     }
 
     void apply(const EditContext &ctx) override

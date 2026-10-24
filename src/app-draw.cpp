@@ -16,6 +16,28 @@
 
 using namespace std;
 
+namespace
+{
+/// The display window of the image a reshaping edit's preview shows in place of the current one, or none.
+const Box2i *reshaped_window(const EditPreview *preview)
+{ return preview && preview->window ? &*preview->window : nullptr; }
+
+/// \p M padded into a 4x4, the form a 3x3 matrix uniform has to take.
+/**
+    Passed as a 3x3, the data did not reach MSL properly, which showed as rapid flickering.
+*/
+float4x4 padded(const float3x3 &M) { return float4x4{{M[0], 0.f}, {M[1], 0.f}, {M[2], 0.f}, {0.f, 0.f, 0.f, 1.f}}; }
+
+/// How many mip levels \p img's textures have: the whole chain where they minify through one, else only the finest.
+int texture_levels(const ConstImagePtr &img)
+{
+    const Texture *t = img && !img->channels.empty() ? img->channels.front().texture.get() : nullptr;
+    if (!t || t->min_interpolation_mode() != Texture::InterpolationMode::Trilinear)
+        return 1;
+    return int(std::floor(std::log2(float(la::maxelem(t->size()))))) + 1;
+}
+} // namespace
+
 void HDRViewApp::draw_pixel_grid() const
 {
     if (!current_image())
@@ -61,8 +83,9 @@ void HDRViewApp::draw_pixel_grid() const
 
 void HDRViewApp::draw_pixel_info() const
 {
+    // not while an edit is previewed, when the stored values would contradict the colors shown
     auto img = current_image();
-    if (!img || !m_draw_pixel_info)
+    if (!img || !m_draw_pixel_info || edit_preview())
         return;
 
     // These numbers report the same pixel the status bar does, values and labels alike; see
@@ -158,7 +181,20 @@ void HDRViewApp::draw_image_border() const
     if (!cimg && !rimg)
         return;
 
-    if (cimg && cimg->data_window.has_volume())
+    if (const Box2i *window = reshaped_window(edit_preview()))
+    {
+        // a reshaping edit's preview shows the result's window, which is all of the current image the view shows
+        const Box2f w{*window};
+        ImGui::PushRowColors(true, false);
+        if (m_draw_data_window)
+            ImGui::DrawLabeledRect(
+                draw_list,
+                Box2f{app_pos_at_vp_pos(vp_pos_at_pixel(w.min, w)), app_pos_at_vp_pos(vp_pos_at_pixel(w.max, w))}
+                    .make_valid(),
+                ImGui::GetColorU32(ImGuiCol_HeaderActive), "Data window", {0.f, 0.f}, true);
+        ImGui::PopStyleColor(3);
+    }
+    else if (cimg && cimg->data_window.has_volume())
     {
         auto data_window =
             Box2f{app_pos_at_pixel(float2{cimg->data_window.min}), app_pos_at_pixel(float2{cimg->data_window.max})}
@@ -195,7 +231,7 @@ void HDRViewApp::draw_image_border() const
         ImGui::PopStyleColor(3);
     }
 
-    if (m_roi_live.has_volume())
+    if (m_roi_live.has_volume() && !reshaped_window(edit_preview()))
     {
         Box2f crop_window{app_pos_at_pixel(float2{m_roi_live.min}), app_pos_at_pixel(float2{m_roi_live.max})};
         ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
@@ -362,10 +398,9 @@ void HDRViewApp::draw_image() const
             int                 group_idx = img->active_group_index(target);
             const ChannelGroup &group     = img->groups[group_idx];
 
-            // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
-            // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
-            M_to_sRGB = float4x4{
-                {img->M_to_sRGB[0], 0.f}, {img->M_to_sRGB[1], 0.f}, {img->M_to_sRGB[2], 0.f}, {0.f, 0.f, 0.f, 1.f}};
+            // an edit preview that retags the current image shows it through the matrix the new tag gives
+            const auto *preview = target == Target_Primary ? edit_preview() : nullptr;
+            M_to_sRGB           = padded(preview && preview->M_to_sRGB ? *preview->M_to_sRGB : img->M_to_sRGB);
             luminance_chroma =
                 (int)(group.type == ChannelGroup::YC_Channels || group.type == ChannelGroup::YCA_Channels);
             straight_alpha = (int)(img->transparency == TransparencyType_Straight);
@@ -416,9 +451,34 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.bg_color", m_bg_color);
         m_shader->set_uniform("fsp.reverse_colormap", (int)m_reverse_colormap);
         m_shader->set_uniform("fsp.has_reference", (int)has_reference);
+        // an edit dialog's preview, applied to the current image's samples as stored; see edit_preview()
+        const EditPreview *preview = edit_preview();
+        const EditPreview  shown   = preview ? *preview : EditPreview{};
+        const ShaderEdit   edit    = shader_edit(shown);
+        m_shader->set_uniform("fsp.primary_levels", texture_levels(current_image()));
+        m_shader->set_uniform("fsp.edit_op", edit.op);
+        m_shader->set_uniform("fsp.edit_slots", shown.slots);
+        m_shader->set_uniform("fsp.edit_color", (int)shown.color);
+        m_shader->set_uniform("fsp.edit_rect", shown.rect);
+        m_shader->set_uniform("fsp.edit_p0", edit.p0);
+        m_shader->set_uniform("fsp.edit_p1", edit.p1);
+        m_shader->set_uniform("fsp.edit_m0", edit.m0);
+        m_shader->set_uniform("fsp.edit_m1", edit.m1);
+        m_shader->set_uniform("fsp.edit_i0", edit.i0);
 
-        m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
-        m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
+        // a reshaping edit's preview lays the quad over the window the result will have, as the view will show it
+        if (const Box2i *window = reshaped_window(preview))
+        {
+            const Box2f  w{*window};
+            const float2 lo = vp_pos_at_pixel(w.min, w), hi = vp_pos_at_pixel(w.max, w);
+            m_shader->set_uniform("vsp.primary_pos", lo / viewport_size());
+            m_shader->set_uniform("vsp.primary_scale", (hi - lo) / viewport_size());
+        }
+        else
+        {
+            m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
+            m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
+        }
         m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
         m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
 
@@ -519,11 +579,18 @@ void HDRViewApp::draw_background()
         draw_image();
         m_render_pass->end();
 
+        // A reshaping preview shows the result, where overlays placed by the current image's pixels would be
+        // misplaced; the border outlines the result instead.
+        const bool reshaped = reshaped_window(edit_preview()) != nullptr;
         draw_pixel_info();
-        draw_pixel_grid();
+        if (!reshaped)
+            draw_pixel_grid();
         draw_image_border();
-        draw_vector_overlays();
-        draw_tool_decorations();
+        if (!reshaped)
+        {
+            draw_vector_overlays();
+            draw_tool_decorations();
+        }
     }
     catch (const exception &e)
     {

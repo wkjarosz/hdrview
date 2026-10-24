@@ -7,9 +7,11 @@
 #pragma once
 
 #include "array2d.h"
-#include "box.h"
 #include "edit/progress.h"
 #include "fwd.h"
+#include "shared/envmap.h"
+
+#include <array>
 
 /// The ways an environment map can be flattened onto a rectangle.
 /**
@@ -27,35 +29,29 @@ enum EnvMapping : int
 
     EnvMapping_COUNT
 };
+// the shader's names for them, which the shared mappings branch on
+static_assert(EnvMapping_Angular == shader::ENVMAP_ANGULAR && EnvMapping_MirrorBall == shader::ENVMAP_MIRROR_BALL &&
+              EnvMapping_LatLong == shader::ENVMAP_LAT_LONG && EnvMapping_Cylindrical == shader::ENVMAP_CYLINDRICAL &&
+              EnvMapping_CubeMap == shader::ENVMAP_CUBE_MAP && EnvMapping_CubeMapColumn == shader::ENVMAP_CUBE_COLUMN &&
+              EnvMapping_EqualArea == shader::ENVMAP_EQUAL_AREA);
 
 const char *envmapping_name(int mapping);
 
 /// Width divided by height for an image in \p mapping that wastes no resolution.
 float envmapping_aspect(int mapping);
 
-/// Direction for a point on the image, both in [0,1]^2 and on the unit sphere respectively.
-float3 envmap_uv_to_xyz(EnvMapping mapping, float2 uv);
-/// Point on the image for a direction; the inverse of envmap_uv_to_xyz().
-float2 envmap_xyz_to_uv(EnvMapping mapping, float3 xyz);
+// The mappings themselves, which the image shader shares (src/shared/envmap.h): envmap_uv_to_xyz() and its inverse
+// envmap_xyz_to_uv(), envmap_uv_is_valid() and nearest_valid_envmap_uv(), each taking an EnvMapping.
+using shader::envmap_uv_is_valid;
+using shader::envmap_uv_to_xyz;
+using shader::envmap_xyz_to_uv;
+using shader::nearest_valid_envmap_uv;
 
 /// Where \p uv in the \p src mapping falls in the \p dst mapping.
 inline float2 convert_envmap_uv(EnvMapping dst, EnvMapping src, float2 uv)
 {
     return envmap_xyz_to_uv(dst, envmap_uv_to_xyz(src, uv));
 }
-
-/// Whether \p uv is part of the sphere at all in \p mapping.
-/**
-    The discs leave their corners empty and the cube cross leaves four; anything summing over the image has
-    to skip those.
-*/
-bool envmap_uv_is_valid(EnvMapping mapping, float2 uv);
-
-/// Nearest point of the sphere to \p uv (\p uv itself if it is already on the sphere).
-/**
-    Fills the empty corners of a disc or cube cross so bilinear reads at the rim don't pull in zeros.
-*/
-float2 nearest_valid_envmap_uv(EnvMapping mapping, float2 uv);
 
 /// Solid angle per unit image area at \p uv, in steradians; 0 off the sphere.
 /**
@@ -67,24 +63,53 @@ float envmap_jacobian(EnvMapping mapping, float2 uv);
 /// How remapped_envmap() reads the source.
 enum EnvMapSampling : int
 {
-    EnvMapSampling_Point = 0, ///< Supersample and average
-    EnvMapSampling_EWA        ///< Elliptical filter over a mip pyramid
+    EnvMapSampling_Point = 0, ///< Supersample a Gaussian of half a pixel
+    EnvMapSampling_EWA        ///< Elliptical Gaussian over mip levels
 };
+static_assert(EnvMapSampling_Point == shader::ENVMAP_SAMPLE_SUPERSAMPLE &&
+                  EnvMapSampling_EWA == shader::ENVMAP_SAMPLE_EWA,
+              "EnvMapSampling must match src/shared/envmap.h");
+
+/// The rotation that turns by \p yaw about +y, then \p pitch about +x, then \p roll about +z, all in radians.
+/**
+    R = Ry(yaw) Rx(pitch) Rz(roll): yaw turns the horizon around the up axis, pitch tips it, and roll turns about
+    the view's forward axis.
+*/
+float3x3 envmap_rotation(float yaw, float pitch, float roll);
+/// The yaw, pitch and roll of \p rotation, with pitch in [-pi/2, pi/2]; the inverse of envmap_rotation().
+/**
+    At a pitch of a quarter turn the yaw and the roll turn about the same axis, so only their sum or difference is
+    set; the roll is then taken as \p roll and the yaw makes up the rest.
+*/
+float3 envmap_euler(const float3x3 &rotation, float roll = 0.f);
+/// The shortest rotation, as a unit quaternion (x, y, z, w), taking unit direction \p from to unit direction \p to.
+float4 rotation_between(float3 from, float3 to);
 
 /**
-    Resample \p src, a \p src_mapping of the sphere, into \p dst_mapping at \p size.
+    Resample \p src, a \p src_mapping of the sphere, into \p dst_mapping at \p size, turned by \p rotation.
 
-    Point sampling averages \p supersample^2 samples per output pixel. EWA reads a mip pyramid through an
-    ellipse fitted to the pixel's footprint in the source (PBRT's MIPMap::EWA); there \p supersample is the
-    maximum anisotropy.
+    The output's direction d reads the source in direction rotation d. Both samplers filter each pixel with a
+    Gaussian, carried into the source by the remap. Point sampling spreads \p supersample^2 bilinear reads as a
+    Gaussian of \p sigma pixels is, and takes each through the remap itself. EWA takes a Gaussian of half a pixel
+    through the remap's local stretch: it reads the mip levels its short axis calls for, at points along its long
+    axis; there \p supersample is the maximum anisotropy. Both are envmap_supersample() and envmap_ewa() in
+    src/shared/envmap_sample.h, which the image shader's preview shares.
 */
 Array2Df remapped_envmap(const Array2Df &src, int2 size, EnvMapping dst_mapping, EnvMapping src_mapping,
-                         EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2,
-                         AtomicProgress progress = {});
+                         EnvMapSampling sampling = EnvMapSampling_Point, int supersample = 2, float sigma = 0.5f,
+                         const float3x3 &rotation = float3x3{la::identity}, AtomicProgress progress = {});
+
+/// The nine spherical harmonic coefficients of \p src, a \p mapping of incident radiance, in envmap_sh_basis()'s order.
+/**
+    Integrated over the image's own samples, each weighted by the solid angle it covers (envmap_jacobian()), so every
+    sample contributes once.
+*/
+std::array<float, 9> irradiance_coefficients(const Array2Df &src, EnvMapping mapping, AtomicProgress progress = {});
 
 /// Convolve \p src, a \p mapping of incident radiance, with a clamped cosine, giving irradiance per direction.
 /**
-    Via nine spherical harmonic coefficients, which the cosine kernel's fast falloff makes enough, so this
-    costs the two resolutions added and not multiplied.
+    Via nine spherical harmonic coefficients (irradiance_coefficients()), which the cosine kernel's fast falloff makes
+    enough, so this costs the two resolutions added and not multiplied. Each output sample weighs them by
+    envmap_irradiance_weights() at its direction, as the image shader's preview does.
 */
 Array2Df irradiance_envmap(const Array2Df &src, int2 size, EnvMapping mapping, AtomicProgress progress = {});

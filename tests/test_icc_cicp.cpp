@@ -77,48 +77,68 @@ std::string gray16_tiff(const std::vector<uint16_t> &codes, const std::vector<ui
 
 // ICC.1:2022 lets a profile declare CICP code points directly. HDRView reads them from the profile bytes;
 // LCMS only gained the tag in 2.16 and libjxl vendors 2.10.
-TEST_CASE("ICC cicp tag is read from the profile bytes")
+TEST_CASE("An ICC cicp tag is read from the profile bytes, and decodes by its transfer function alone")
 {
-    SUBCASE("PQ at BT.2020 primaries")
+    struct Tag
     {
-        auto bytes = icc_bytes_with_cicp(9, 16, 0, 1);
-        auto codes = ICCProfile(bytes.data(), bytes.size()).cicp();
-        CHECK(codes.valid());
-        CHECK(codes.cp() == 9);
-        CHECK(codes.tc() == 16);
-        CHECK(codes.is_HDR());
-        CHECK(codes.transfer_function().type == TransferFunction::BT2100_PQ);
-    }
+        int                     cp, tc;
+        TransferFunction::Type_ tf;
+        bool                    hdr;
+        ColorGamut_             gamut;
+    };
+    const Tag tags[] = {
+        {9, 16, TransferFunction::BT2100_PQ, true, ColorGamut_BT2020_2100},
+        {9, 18, TransferFunction::BT2100_HLG, true, ColorGamut_BT2020_2100},
+        {1, 13, TransferFunction::sRGB, false, ColorGamut_sRGB_BT709},
+        {1, 8, TransferFunction::Linear, false, ColorGamut_sRGB_BT709},
+    };
+    constexpr int num = 33;
 
-    SUBCASE("HLG at BT.2020 primaries")
-    {
-        auto bytes = icc_bytes_with_cicp(9, 18, 0, 1);
-        auto codes = ICCProfile(bytes.data(), bytes.size()).cicp();
-        CHECK(codes.valid());
-        CHECK(codes.tc() == 18);
-        CHECK(codes.is_HDR());
-        CHECK(codes.transfer_function().type == TransferFunction::BT2100_HLG);
-    }
+    for (const Tag &t : tags)
+        for (int fr : {0, 1})
+        {
+            INFO("cicp ", t.cp, "-", t.tc, "-0-", fr);
+            const auto       bytes = icc_bytes_with_cicp(uint8_t(t.cp), uint8_t(t.tc), 0, uint8_t(fr));
+            const ICCProfile profile(bytes.data(), bytes.size());
+            for (const CICPProfile &codes : {profile.cicp(), icc_cicp_tag(bytes.data(), bytes.size())})
+            {
+                REQUIRE(codes.valid());
+                CHECK(codes.cp() == t.cp);
+                CHECK(codes.tc() == t.tc);
+                CHECK(codes.mc() == 0);
+                CHECK(codes.fr() == fr);
+                CHECK(codes.is_HDR() == t.hdr);
+                CHECK(codes.transfer_function().type == t.tf);
+            }
 
-    SUBCASE("an SDR tag is read but is not HDR")
-    {
-        auto bytes = icc_bytes_with_cicp(1, 13, 0, 1);
-        auto codes = ICCProfile(bytes.data(), bytes.size()).cicp();
-        CHECK(codes.valid());
-        CHECK(!codes.is_HDR());
-    }
+            // The tag is authoritative, and the only description of an HDR encoding a profile can hold: the ICC PCS
+            // is normalized to media white, so transforming through the profile would clamp away everything above
+            // diffuse white. The range is the loader's to apply when it dequantizes, so the ramp decodes the same
+            // whichever range the tag declares.
+            std::vector<float> pixels(num * 3);
+            for (int i = 0; i < num * 3; ++i) pixels[i] = float(i / 3) / (num - 1);
+            std::string    description;
+            Chromaticities chr;
+            REQUIRE(
+                profile.linearize_pixels(pixels.data(), int3{num, 1, 3}, /*keep_primaries*/ true, &description, &chr));
+            CHECK(description == profile.cicp().short_name());
+            CHECK(approx_equal(chr, gamut_chromaticities(t.gamut)));
+            for (int i = 0; i < num * 3; ++i)
+            {
+                const float want = to_linear(float(i / 3) / (num - 1), TransferFunction{t.tf});
+                INFO("sample ", i, ": got ", pixels[i], ", want ", want);
+                CHECK(pixels[i] == doctest::Approx(want).epsilon(1e-5));
+            }
+        }
 
-    SUBCASE("a profile without the tag reports no code points")
-    {
-        std::vector<uint8_t> v(132, 0);
-        patch<uint32_t>(v, 0, (uint32_t)v.size(), Endian::Big);
-        patch<uint32_t>(v, 128, 0, Endian::Big); // no tags
-        CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
-    }
+    // and a profile without the tag reports no code points
+    std::vector<uint8_t> v(132, 0);
+    patch<uint32_t>(v, 0, (uint32_t)v.size(), Endian::Big);
+    patch<uint32_t>(v, 128, 0, Endian::Big); // no tags
+    CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
+    CHECK(!icc_cicp_tag(v.data(), v.size()).valid());
 }
 
-// The ICC PCS is normalized to media white, so transforming through the profile would clamp away everything
-// above diffuse white.
 TEST_CASE("A CICP profile's name reads back as its codes, which its description names")
 {
     // every code H.273 assigns each of the four fields, and some it leaves reserved: the label short_name() writes is
@@ -144,25 +164,6 @@ TEST_CASE("A CICP profile's name reads back as its codes, which its description 
     // unspecified primaries are named so, not as the BT.709 they stand in for
     CHECK(CICPProfile{std::array<int, 4>{{2, 13, 0, 1}}}.fields()[0].meaning == "Unspecified");
     CHECK_FALSE(CICPProfile::from_name("sRGB IEC61966-2.1"));
-}
-
-TEST_CASE("An ICC profile whose cicp tag declares PQ keeps its HDR range")
-{
-    auto       bytes = icc_bytes_with_cicp(9, 16, 0, 1);
-    ICCProfile profile(bytes.data(), bytes.size());
-
-    std::vector<float> pixels{1.f, 1.f, 1.f, 0.5f, 0.5f, 0.5f};
-    std::string        description;
-    Chromaticities     chr;
-
-    REQUIRE(profile.linearize_pixels(pixels.data(), int3{2, 1, 3}, /*keep_primaries*/ true, &description, &chr));
-
-    // fully-encoded PQ is far above SDR white
-    CHECK(pixels[0] > 40.f);
-    CHECK(pixels[0] == doctest::Approx(10000.f / 203.f).epsilon(1e-3)); // PQ 1.0 is 10000 nits over a 203-nit white
-    // mid-code PQ is a much dimmer absolute level, so this is the transfer function and not a scale factor
-    CHECK(pixels[3] < 1.f);
-    CHECK(pixels[3] > 0.f);
 }
 
 // The tag is parsed straight from untrusted bytes.
@@ -211,7 +212,11 @@ TEST_CASE("ICC cicp parsing rejects malformed profiles")
         CHECK(!ICCProfile(v.data(), v.size()).cicp().valid());
     }
 
-    SUBCASE("a null buffer is handled") { CHECK(!ICCProfile(nullptr, 0).cicp().valid()); }
+    SUBCASE("a null buffer is handled")
+    {
+        CHECK(!ICCProfile(nullptr, 0).cicp().valid());
+        CHECK(!icc_cicp_tag(nullptr, 0).valid());
+    }
 }
 
 // The range flag lives only in the cicp tag; TIFF has no field of its own for it. Transfer characteristic 8
@@ -255,17 +260,6 @@ TEST_CASE("A cicp tag declaring narrow video range is dequantized 16..235")
         CHECK(ch(0, 0) < 0.f);
         CHECK(ch(1, 0) > 1.f);
     }
-}
-
-TEST_CASE("icc_cicp_tag reports the video range flag")
-{
-    auto narrow = icc_bytes_with_cicp(9, 18, 0, 0);
-    auto full   = icc_bytes_with_cicp(9, 18, 0, 1);
-
-    CHECK(icc_cicp_tag(narrow.data(), narrow.size()).fr() == 0);
-    CHECK(icc_cicp_tag(full.data(), full.size()).fr() == 1);
-    CHECK(icc_cicp_tag(narrow.data(), narrow.size()).valid());
-    CHECK(!icc_cicp_tag(nullptr, 0).valid());
 }
 
 TEST_CASE("A profile built for a transfer function reads back as that transfer function and those primaries")
@@ -358,6 +352,25 @@ TEST_CASE("A profile built for a transfer function reads back as that transfer f
         auto pixels = ramp(1);
         REQUIRE(gray.linearize_pixels(pixels.data(), int3{num, 1, 1}, true));
         CHECK(worst_error(pixels, want, 1) <= 2e-3f);
+
+        // and beside an alpha ramp, which stays as it was: a transform advancing one float per pixel would cover
+        // only the first half of the buffer, reading alternating luminance and alpha as consecutive gray pixels
+        std::vector<float> gray_alpha(num * 2), alpha(num);
+        for (int i = 0; i < num; ++i)
+        {
+            alpha[i]              = 1.f - float(i) / (num - 1);
+            gray_alpha[2 * i]     = float(i) / (num - 1);
+            gray_alpha[2 * i + 1] = alpha[i];
+        }
+        REQUIRE(gray.linearize_pixels(gray_alpha.data(), int3{num, 1, 2}, /*keep_primaries*/ false));
+        float worst_luminance = 0.f, worst_alpha = 0.f;
+        for (int i = 0; i < num; ++i)
+        {
+            worst_luminance = std::max(worst_luminance, std::abs(gray_alpha[2 * i] - want[i]) / std::max(1.f, want[i]));
+            worst_alpha     = std::max(worst_alpha, std::abs(gray_alpha[2 * i + 1] - alpha[i]));
+        }
+        CHECK(worst_luminance <= 2e-3f);
+        CHECK(worst_alpha <= 1e-6f);
     }
 }
 
@@ -408,9 +421,13 @@ TEST_CASE("Profiles encoding the same color space agree on its primaries")
             CAPTURE(first_name);
             CAPTURE(name);
             CHECK(got.red.x == doctest::Approx(want.red.x).epsilon(1e-3));
+            CHECK(got.red.y == doctest::Approx(want.red.y).epsilon(1e-3));
+            CHECK(got.green.x == doctest::Approx(want.green.x).epsilon(1e-3));
             CHECK(got.green.y == doctest::Approx(want.green.y).epsilon(1e-3));
             CHECK(got.blue.x == doctest::Approx(want.blue.x).epsilon(1e-3));
+            CHECK(got.blue.y == doctest::Approx(want.blue.y).epsilon(1e-3));
             CHECK(got.white.x == doctest::Approx(want.white.x).epsilon(1e-3));
+            CHECK(got.white.y == doctest::Approx(want.white.y).epsilon(1e-3));
         }
     }
 
@@ -525,3 +542,57 @@ TEST_CASE("Profiles lcms cannot use are not mistaken for ones it can")
 }
 
 #endif // HDRVIEW_TEST_LCMS_TESTBED_DIR
+
+#if HDRVIEW_ENABLE_LCMS2
+
+
+#ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
+
+TEST_CASE("a CMYK ICC profile converts ink to color, and only inverts it when told to")
+{
+    // lcms's own CMYK printer profile. It says of itself that it is not suitable for real use, which is
+    // beside the point: its color space is CMYK, and that is the property the conversion turns on.
+    std::ifstream in(std::string(HDRVIEW_TEST_LCMS_TESTBED_DIR) + "/test1.icc", std::ios::binary);
+    REQUIRE(in.good());
+    const std::string bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    ICCProfile        profile{reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()};
+    REQUIRE(profile.valid());
+    REQUIRE(profile.is_CMYK());
+
+    // bare paper and a solid hit of black, as a file storing ink directly writes them
+    const auto ink = [] { return std::vector<float>{0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 1.f}; };
+
+    // A CMYK profile has no primaries of its own to keep, so the default has to convert anyway rather than
+    // asking for colorants that are not there and giving up.
+    for (bool keep_primaries : {true, false})
+    {
+        CAPTURE(keep_primaries);
+        auto pixels = ink();
+        REQUIRE(profile.linearize_pixels(pixels.data(), int3{2, 1, 4}, keep_primaries, nullptr, nullptr,
+                                         /*cmyk_is_inverted*/ false));
+
+        for (int c = 0; c < 3; ++c)
+        {
+            CAPTURE(c);
+            CHECK(pixels[c] > 0.5f);     // paper
+            CHECK(pixels[4 + c] < 0.2f); // solid black
+        }
+        CHECK(pixels[3] == doctest::Approx(1.f)); // the conversion writes an opaque alpha
+    }
+
+    // Adobe's JPEGs store the same ink inverted, and nothing in the profile says which convention a file
+    // used, so the caller states it. Bare paper is what separates the two: read the wrong way up it is not
+    // an absence of ink but a full hit of every one.
+    auto inverted = ink();
+    REQUIRE(profile.linearize_pixels(inverted.data(), int3{2, 1, 4}, /*keep_primaries*/ false, nullptr, nullptr,
+                                     /*cmyk_is_inverted*/ true));
+    for (int c = 0; c < 3; ++c)
+    {
+        CAPTURE(c);
+        CHECK(inverted[c] < 0.2f);
+    }
+}
+
+#endif // HDRVIEW_TEST_LCMS_TESTBED_DIR
+
+#endif // HDRVIEW_ENABLE_LCMS2

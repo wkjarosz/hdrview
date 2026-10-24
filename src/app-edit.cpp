@@ -10,9 +10,12 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "imgui_internal.h"
 
 #include <hello_imgui/hello_imgui.h>
 
+#include <algorithm>
+#include <limits>
 #include <numeric>
 #include <smallthreadpool.h>
 #include <spdlog/spdlog.h>
@@ -20,6 +23,12 @@
 
 using std::function;
 using std::string;
+
+namespace
+{
+/// The preview frame of an edit confirmed and handed to a worker, whose preview stays up until its result lands.
+constexpr int k_preview_held = std::numeric_limits<int>::max();
+} // namespace
 
 ImagePtr HDRViewApp::target_image() { return m_target_image_override ? m_target_image_override : current_image(); }
 
@@ -90,7 +99,7 @@ EditContext HDRViewApp::edit_context(ImagePtr img)
         // recomputes each group's visibility and the layer tree's counts, then rebinds the textures
         update_visibility();
 
-        // the view was framing an image of a different size
+        // the view was framing an image of a different size, unless a preview already had it framing the result
         if (extent == Extent_Structure)
             fit_display_window();
     };
@@ -99,8 +108,20 @@ EditContext HDRViewApp::edit_context(ImagePtr img)
     const EditSubject subject       = ctx.subject;
     ctx.modify_channels_async       = [this, subject_image, subject](const string &name, const ChannelFilter &filter)
     { modify_channels_async(subject_image, name, subject, filter); };
-    ctx.resample_image_async = [this, subject_image](const string &name, int2 size, const ChannelResampler &op)
-    { resample_image_async(subject_image, name, size, op); };
+    ctx.resample_image_async =
+        [this, subject_image](const string &name, int2 size, const ChannelResampler &op, EditExtent extent)
+    { resample_image_async(subject_image, name, size, op, extent); };
+    ctx.view     = [this] { return ViewState{m_zoom, m_translate}; };
+    ctx.set_view = [this](const ViewState &v)
+    {
+        set_zoom(v.zoom);
+        m_translate = v.translate;
+    };
+    ctx.fit_view = [this](const Box2i &window)
+    {
+        set_zoom(minelem(viewport_size() / float2(window.size())));
+        center();
+    };
 
     return ctx;
 }
@@ -135,6 +156,14 @@ bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
     return cmd.enabled(edit_context());
 }
 
+const EditPreview *HDRViewApp::edit_preview() const
+{
+    if (m_edit_preview_frame == k_preview_held)
+        return m_running_filter ? &m_edit_preview : nullptr;
+    // the dialogs ask during the frame, after the viewport has drawn, so last frame's request is this frame's
+    return ImGui::GetFrameCount() - m_edit_preview_frame <= 1 ? &m_edit_preview : nullptr;
+}
+
 void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
 {
     const auto &info = cmd.info();
@@ -144,29 +173,82 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
     if (open)
         cmd.on_open(ctx);
 
-    if (ImGui::BeginModalDialog(info.names.front().c_str(), open, ImGui::DialogPosition::Center))
+    // Modal, but leaving the app unfaded and the viewport navigable around it, to look at the image while choosing
+    // the edit. A modal takes the fade's color as it begins. It folds to its title bar, to see more of the image, and
+    // closes from it as Cancel does: Dear ImGui closes it there itself, and only that leaves a dialog that was open
+    // going in unshown coming out.
+    const char *title    = info.names.front().c_str();
+    const bool  was_open = ImGui::IsPopupOpen(title);
+    ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32_BLACK_TRANS);
+    static bool folded = false;
+    const bool  shown  = ImGui::BeginModalDialog(title, open, ImGui::DialogPosition::Center,
+                                                 ImGuiWindowFlags_AlwaysAutoResize, &folded, true);
+    ImGui::PopStyleColor();
+    if (was_open && !shown)
     {
-        // a minimum width, set by an item of that width: these dialogs are AlwaysAutoResize, which sizes
-        // the window from its contents and ignores a size set from outside
-        ImGui::Dummy(ImVec2(info.width_em * HelloImGui::EmSize(), 0.f));
+        m_edit_preview_frame = -2;
+        cmd.on_close(ctx);
+    }
+    if (shown)
+    {
+        m_navigable_dialog_frame = ImGui::GetFrameCount();
+
+        // The dialog is as wide as its widest row, and what fills the width (wrapped text, a strip) follows it. Dear
+        // ImGui measures a reopened popup on a hidden first frame at no width at all, which wraps text a word to a
+        // line; one more hidden frame shows it at the size it settles at.
+        if (ImGui::IsWindowAppearing())
+            ImGui::GetCurrentWindow()->HiddenFramesCannotSkipItems = 2;
+
+        // Point-wise edits, shifts and remaps preview in the viewport as the controls move, through the code that
+        // applies them; ctx.previewing tells the command, before it draws, whether this one does.
+        static bool preview     = true;
+        const bool  previewable = make_edit_preview(cmd, ctx).has_value();
+        ctx.previewing         = preview && previewable;
 
         cmd.draw(ctx);
 
         if (info.draws_subject_selector)
             draw_edit_subject_selector();
 
+        // The footer: what the edit covers and whether it is previewed, beside the buttons. Selection only is shown
+        // only while there is a selection, without which an edit covers the whole image anyway.
+        if (info.draws_subject_selector && m_roi.has_volume())
+        {
+            ImGui::Checkbox("Selection only", &m_edit_subject.selection_only);
+            ImGui::Tooltip("Edit only the part of the image under the selection.");
+            ImGui::SameLine();
+        }
+
+        if (previewable)
+        {
+            ImGui::Checkbox("Preview", &preview);
+            ImGui::Tooltip("Show the edit on the current image before it is applied.");
+            ImGui::SameLine();
+            if (ctx.previewing)
+                if (auto p = make_edit_preview(cmd, ctx))
+                {
+                    m_edit_preview       = *p;
+                    m_edit_preview_frame = ImGui::GetFrameCount();
+                }
+        }
+
         // applied on confirm, not as the controls move: an edit per frame of a drag would fill the
         // history and rewrite every pixel it covers
         const auto result = ImGui::DialogButtons(info.confirm.c_str());
         if (result == ImGui::DialogResult::Confirm)
         {
-            // the dialog is drawn against the current image, but confirming applies across the selection
+            // The dialog is drawn against the current image, but confirming applies across the selection. An edit
+            // made in the frame has landed already, where drawing its preview would apply it twice; one handed to a
+            // worker keeps its preview up until the result lands on the current image.
+            const bool shown = edit_preview() != nullptr;
             apply_edit_command(cmd);
+            m_edit_preview_frame = shown && m_running_filter ? k_preview_held : -2;
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
         else if (result == ImGui::DialogResult::Cancel)
         {
+            m_edit_preview_frame = -2;
             cmd.on_close(ctx);
             ImGui::CloseCurrentPopup();
         }
@@ -299,18 +381,18 @@ void HDRViewApp::draw_edit_subject_selector()
     auto       img     = current_image();
     const bool matters = scope_matters(img);
 
-    ImGui::SeparatorText("Apply to");
-
-    // always settable, since the setting is remembered across images
-    for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
-        if (ImGui::RadioButton(edit_scope_name(i), m_edit_subject.scope == i))
-            m_edit_subject.scope = EditSubject::Scope(i);
-    if (!matters && img)
-        ImGui::Tooltip("This image has a single channel group, so all three choices cover the same channels.");
-
-    ImGui::Checkbox("Selection only", &m_edit_subject.selection_only);
-    if (!m_roi.has_volume())
-        ImGui::Tooltip("There is no selection, so edits cover the whole image.");
+    // always settable, since the setting is remembered across images; the footer has "Selection only"
+    ImGui::Spacing();
+    if (ImGui::BeginCombo("Apply to", edit_scope_name(m_edit_subject.scope)))
+    {
+        for (int i = 0; i < EditSubject::Scope_COUNT; ++i)
+            if (ImGui::Selectable(edit_scope_name(i), m_edit_subject.scope == i))
+                m_edit_subject.scope = EditSubject::Scope(i);
+        ImGui::EndCombo();
+    }
+    ImGui::Tooltip(!matters && img ? "Which channels the edit covers. This image has a single channel group, so all "
+                                     "three choices cover the same channels."
+                                   : "Which channels the edit covers.");
 }
 
 /// A filter running off the main thread, with what is needed to finish or abandon it.
@@ -328,7 +410,8 @@ struct HDRViewApp::RunningFilter
     /// Filters one of `channels`, given its index among them and a share of the progress bar.
     std::function<Array2Df(const Array2Df &, int, AtomicProgress)> filter;
 
-    int2                  new_size{0}; ///< The size of the results; zero keeps the image's shape.
+    int2                  new_size{0};               ///< The size of the results; zero keeps the image's shape.
+    EditExtent            extent = Extent_Structure; ///< How a reshaping lands, whether the view refits to it
     std::vector<Array2Df> results;
     AtomicProgress        progress{true};
     std::atomic<bool>     done{false};
@@ -376,14 +459,16 @@ void HDRViewApp::modify_channels_async(const ImagePtr &img, const string &name, 
     start_filter(std::move(running));
 }
 
-void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, int2 size, const ChannelResampler &op)
+void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, int2 size, const ChannelResampler &op,
+                                      EditExtent extent)
 {
     if (!can_edit(img) || size.x <= 0 || size.y <= 0)
         return;
 
     if (m_running_filter)
     {
-        m_filter_queue.push_back([this, img, name, size, op] { resample_image_async(img, name, size, op); });
+        m_filter_queue.push_back([this, img, name, size, op, extent]
+                                 { resample_image_async(img, name, size, op, extent); });
         return;
     }
 
@@ -392,6 +477,7 @@ void HDRViewApp::resample_image_async(const ImagePtr &img, const string &name, i
     running->name     = name;
     running->bounds   = img->data_window;
     running->new_size = size;
+    running->extent   = extent;
     running->channels.resize(img->channels.size());
     for (size_t i = 0; i < img->channels.size(); ++i) running->channels[i] = int(i);
     running->filter = [op](const Array2Df &channel, int, AtomicProgress p) { return op(channel, p); };
@@ -456,6 +542,10 @@ void HDRViewApp::drain_running_filter()
     auto running     = std::move(m_running_filter);
     m_running_filter = nullptr;
 
+    // a preview held for this result ends as it lands, or with the run
+    if (m_edit_preview_frame == k_preview_held && (running->image == current_image() || running->progress.canceled()))
+        m_edit_preview_frame = -2;
+
     // a partial result is a wrong one, so an abandoned run changes nothing
     if (running->progress.canceled())
     {
@@ -489,7 +579,7 @@ void HDRViewApp::drain_running_filter()
                 image.data_window    = Box2i{image.data_window.min, image.data_window.min + size};
                 image.display_window = image.data_window;
             },
-            structure_undo, Extent_Structure);
+            structure_undo, running->extent);
         start_next_filter();
         return;
     }

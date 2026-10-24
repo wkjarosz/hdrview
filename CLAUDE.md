@@ -137,9 +137,13 @@ cmake --preset macos-arm64-cpm -DHDRVIEW_BUILD_GUI_TESTS=ON
 cmake --build --preset macos-arm64-cpm-release --target hdrview_gui_tests
 ./build/macos-arm64-cpm/Release/hdrview_gui_tests   # runs the queued tests, prints a pass/fail summary, exits with the result
 ```
-The binary takes no arguments: it opens a real HDRView window, runs every registered test, and exits. There
-is no headless mode, since capture and input both go through a live GL context, so CI runs it under
-`xvfb-run`.
+The binary takes no arguments: it opens a real HDRView window, runs every registered test, and exits.
+`HDRVIEW_GUI_TEST_FILTER` narrows the run with the engine's filter syntax: comma-separated, case-insensitive
+substrings of a test's name or category, `^` anchoring one to the start and `-` excluding, e.g.
+`HDRVIEW_GUI_TEST_FILTER=navigated,hue ./hdrview_gui_tests`. A full run takes about a minute, so run only the
+tests a change can affect; CI runs the whole suite on Linux. There is no headless mode, since capture and input
+both go through a live GL context, so CI runs it under `xvfb-run`, whose OpenGL is a software rasterizer: keep
+what a test previews cheap per pixel, or its frames grow slow enough to trip the engine's watchdog.
 Test source lives under `tests/gui/`, one file per category (mirroring Dear ImGui's own `imgui_test_suite`
 convention), each exposing a `RegisterTests_X(ImGuiTestEngine*)` aggregated by
 `tests/gui/test_gui_registry.h`. `src/app.h`/`src/app-windows.cpp` add a small
@@ -267,6 +271,20 @@ transforms.
 texture. `image-gui.cpp` holds the ImGui-facing rendering/inspection code for a single image (histograms,
 stats), separate from `image.cpp`'s data-model logic.
 
+### Edit commands and their previews
+An edit command (`src/edit/command.h`) describes its effect through `point_edit()`, `shift_preview()`,
+`remap_preview()`, `bump_preview()` or `irradiance_preview()`, and `apply()` runs that same description
+(`apply_point_edit()`, `shifted()`, `remapped_envmap()`, `bump_normal()`, `irradiance_envmap()`), so a preview
+cannot drift from the edit. `make_edit_preview()` (`src/edit/preview.cpp`) adds what the shader needs: the slots
+and rectangle the subject covers, and for a remap the window the result will have. The dialog shell
+(`draw_edit_command_dialog()`) posts it each frame and `edit_preview()` returns it for that frame and the next,
+since the viewport draws before the dialogs; it ends as the dialog closes, except that an edit handed to a worker
+keeps it up until the result lands. `draw_image()` passes it as uniforms, which `shader_edit()` packs into one op
+and the slots `src/shared/edits.h` lists for it, and the image shader's `edit_preview()` applies it to the stored
+samples. A command may take drags over its preview (`drag_preview()`), and one that reshapes the image frames its
+result through `EditContext::view`, `set_view` and `fit_view`. Pixel readouts are hidden while a preview shows.
+Keep preview logic in `src/edit/`, not in `HDRViewApp`.
+
 ### Image I/O: pluggable loader registry
 `src/imageio/image_loader.h` declares `BackgroundImageLoader`, which loads images asynchronously (off the
 main thread, tile-uploaded to the GPU across frames to avoid stalling), watches directories for changed
@@ -387,6 +405,11 @@ brings a few shared names into the global namespace with `using`, and its `tonem
 code is float only, as shading languages have no double; `tests/test_colour_reference.cpp` holds it to
 colour-science's values, and `tests/test_colorspace.cpp` to its own inverses and symmetries. Shader math belongs in `src/shared/`
 rather than copied into an `.sglsl` and mirrored in C++.
+`edits.h` holds the point-wise edits (an `EDIT_` op and the vectors and matrices it reads), `resample.h` Shift's
+border modes and samplers, and `envmap.h`/`envmap_sample.h` the environment-map mappings and their filtered
+reads. `resample.h` and `envmap_sample.h` leave where the samples come from to the includer, which defines a
+value type, a `*Source` struct and a `*_fetch()` before including them: one channel's `Array2Df` on the CPU, the
+four shown channels' textures (and their mipmaps) in the shader.
 
 **Working color space and the HDR display "colorpass".** Everything HDRView draws — image content *and*
 Dear ImGui's own UI, which has no notion of display color space — is emitted in **extended sRGB**: sRGB

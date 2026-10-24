@@ -8,7 +8,6 @@ struct ImGuiTestEngine;
 
 void RegisterTests_Smoke(ImGuiTestEngine *engine);
 void RegisterTests_Dialogs(ImGuiTestEngine *engine);
-void RegisterTests_ImageIO(ImGuiTestEngine *engine);
 void RegisterTests_View(ImGuiTestEngine *engine);
 void RegisterTests_Viewport(ImGuiTestEngine *engine);
 void RegisterTests_Display(ImGuiTestEngine *engine);
@@ -30,7 +29,6 @@ inline void RegisterAllGuiTests(ImGuiTestEngine *engine)
 {
     RegisterTests_Smoke(engine);
     RegisterTests_Dialogs(engine);
-    RegisterTests_ImageIO(engine);
     RegisterTests_View(engine);
     RegisterTests_Viewport(engine);
     RegisterTests_Display(engine);
