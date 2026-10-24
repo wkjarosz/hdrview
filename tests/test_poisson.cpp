@@ -99,10 +99,11 @@ TEST_CASE("A source with no gradients leaves a smooth patch, symmetric where the
     CHECK(out(32, 32) == doctest::Approx(0.5f).epsilon(0.02));
 }
 
-TEST_CASE("The default iteration count is enough for the regions a paste actually covers")
+TEST_CASE("The default iteration count and tolerance are enough for the regions a paste actually covers")
 {
-    // Measured by how far from harmonic the result is, which a constant source asks for and which needs no
-    // reference solve to compare against. The size is about the largest a paste covers in practice.
+    // Solved at the defaults, which are what a paste solves with, and measured by how far from harmonic the
+    // result is, which a constant source asks for and which needs no reference solve to compare against. The
+    // size is about the largest a paste covers in practice.
     const int2 size{256, 256};
 
     Array2Df background{size};
@@ -112,19 +113,20 @@ TEST_CASE("The default iteration count is enough for the regions a paste actuall
     const Array2Df source = filled(size, 0.5f);
     const Array2Df mask   = interior_mask(size, 1);
 
-    const Array2Df got = poisson_blended(background, source, mask, 300, 1e-6f);
+    const Array2Df got = poisson_blended(background, source, mask);
     const Array2Df lap = laplacian(got);
 
     float worst = 0.f;
     for (int y = 2; y < size.y - 2; ++y)
         for (int x = 2; x < size.x - 2; ++x) worst = std::max(worst, std::abs(lap(x, y)));
 
+    // converged, this is about 2e-3; ten iterations leave it at 4e-2
     CAPTURE(worst);
-    CHECK(worst < 1e-3f);
+    CHECK(worst < 5e-3f);
 
     // and a bound no solve comes near gives the same answer to the bit, so the solve stopped on its own and
-    // not at the bound
-    CHECK(max_difference(got, poisson_blended(background, source, mask, k_unbounded, 1e-6f)) == 0.f);
+    // not at the default bound
+    CHECK(max_difference(got, poisson_blended(background, source, mask, k_unbounded)) == 0.f);
 }
 
 TEST_CASE("The Laplacian of a plane is zero, and of a known quadratic is its known value")
@@ -247,10 +249,11 @@ TEST_CASE("A solve stops once the residual is small enough, however much further
         }
         CHECK_FALSE(reaches(hi - 1));
 
-        // a few dozen conjugate-gradient steps for a thousand unknowns, far below the bound
+        // a few dozen conjugate-gradient steps for a thousand unknowns, where steepest descent takes about five
+        // times as many
         CAPTURE(hi);
         CHECK(hi > 1);
-        CHECK(hi < 1000);
+        CHECK(hi < 100);
 
         // and what it stopped at is an answer, not the background it started from
         CHECK(max_difference(answers[i], background) > 0.05f);
