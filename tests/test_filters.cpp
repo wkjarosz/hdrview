@@ -87,6 +87,63 @@ TEST_CASE("Every filter leaves a constant image alone")
         }
 }
 
+TEST_CASE("Every filter hands back its input at its null setting")
+{
+    // No blur, no sharpening, a window of a single sample, nothing to zap and no shift, over a region away from the
+    // origin and reaching the far edges, where a kernel or coordinates off by one sample would show. Exact, except
+    // that a box's running sum adds and subtracts each sample once on its way along the line, which can round its
+    // last bit.
+    const Array2Df src = noise(int2{17, 13});
+    const Box2i    region{{3, 2}, src.size()};
+
+    using Filter = std::function<Array2Df(const Array2Df &, const Box2i &)>;
+    struct Case
+    {
+        std::string what;
+        Filter      filter;
+        float       tolerance;
+    };
+    std::vector<Case> cases = {
+        {"gaussian", [](const Array2Df &a, const Box2i &r) { return gaussian_blurred(a, r, 0.f, 0.f); }, 0.f},
+        {"box", [](const Array2Df &a, const Box2i &r) { return box_blurred(a, r, 0, 0); }, 1e-6f},
+        {"iterated box", [](const Array2Df &a, const Box2i &r) { return box_blurred(a, r, 0, 0, 2); }, 1e-6f},
+        {"fast gaussian", [](const Array2Df &a, const Box2i &r) { return fast_gaussian_blurred(a, r, 0.f, 0.f, 2); },
+         1e-6f},
+        {"unsharp masked", [](const Array2Df &a, const Box2i &r) { return unsharp_masked(a, r, 2.f, 0.f); }, 0.f},
+        {"median over a disc", [](const Array2Df &a, const Box2i &r) { return median_filtered(a, r, 0.f, true); }, 0.f},
+        {"median over a square", [](const Array2Df &a, const Box2i &r) { return median_filtered(a, r, 0.f, false); },
+         0.f},
+        // narrower than a sample, so the disc holds only its center, though the square around it is 3x3
+        {"median over a disc of radius 1/2",
+         [](const Array2Df &a, const Box2i &r) { return median_filtered(a, r, 0.5f, true); }, 0.f},
+        {"zapped", [](const Array2Df &a, const Box2i &r) { return zapped_gremlins(a, r); }, 0.f},
+    };
+    // each sampler and each border mode at least once; the whole-sample shifts below pair them all at other offsets
+    for (int border = 0; border < BorderMode_COUNT; ++border)
+    {
+        const int sampler = border % Sampler_COUNT;
+        cases.push_back({"shifted, sampler " + std::to_string(sampler) + ", border " + std::to_string(border),
+                         [sampler, border](const Array2Df &a, const Box2i &r)
+                         { return shifted(a, r, 0.f, 0.f, sampler, border, border); }, 0.f});
+    }
+
+    for (const auto &c : cases)
+    {
+        CAPTURE(c.what);
+        const Array2Df out = c.filter(src, region);
+        REQUIRE(out.size() == region.size());
+        // written so a NaN, which fails every comparison, counts as changed
+        int changed = 0;
+        for (int y = 0; y < out.height(); ++y)
+            for (int x = 0; x < out.width(); ++x)
+            {
+                const float d = std::abs(out(x, y) - src(region.min.x + x, region.min.y + y));
+                changed += !(d <= c.tolerance);
+            }
+        CHECK(changed == 0);
+    }
+}
+
 TEST_CASE("A blur's impulse response is centered, symmetric, conserves its mass, and is as wide as asked")
 {
     // An impulse well away from the border, so every tap lands inside the image, blurred along one axis at a
@@ -172,15 +229,6 @@ TEST_CASE("A blur's impulse response is centered, symmetric, conserves its mass,
                 CHECK(std::abs(out(p.x, p.y) - out(q.x, q.y)) < 1e-6f);
             }
         }
-}
-
-TEST_CASE("Unsharp masking with no amount changes nothing")
-{
-    Array2Df src{int2{16, 16}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i % 7) * 0.1f;
-
-    const Array2Df out = unsharp_masked(src, whole(src), 2.f, 0.f);
-    for (int i = 0; i < src.num_elements(); ++i) CHECK(out(i) == doctest::Approx(src(i)));
 }
 
 TEST_CASE("Unsharp masking increases the contrast of an edge")
@@ -379,8 +427,7 @@ TEST_CASE("A whole-sample shift moves samples without touching their values")
                 // beyond the image as well as within it, and negative, since wrapping a large offset is where a
                 // modulus with the wrong sign shows up; and a whole number of turns around the image, which
                 // wrapping makes indistinguishable from standing still
-                for (int2 d :
-                     {int2{0, 0}, int2{3, 0}, int2{0, -2}, int2{5, 7}, int2{-9, -11}, int2{40, -31}, int2{17, -26}})
+                for (int2 d : {int2{3, 0}, int2{0, -2}, int2{5, 7}, int2{-9, -11}, int2{40, -31}, int2{17, -26}})
                 {
                     if (border_x != border_y && sampler != Sampler_Bilinear)
                         continue;
@@ -463,40 +510,74 @@ TEST_CASE("Each border mode fills the exposed strip with what it says it does")
     CHECK(column(BorderMode_Mirror, 1) == doctest::Approx(1.f));
 }
 
-TEST_CASE("A median removes a lone outlier and keeps an edge, over either window shape")
+namespace
 {
-    // A median is an order statistic: one wild sample, a firefly, vanishes instead of being smeared over its
-    // neighbors, and on either side of a step it picks a sample from that side, where a blur would soften it.
-    const int2 size{21, 21};
 
-    Array2Df firefly = constant(size, 0.2f);
-    firefly(10, 10)  = 50.f;
+/// The middle of the samples within \p radius of (x, y), over a disc or its bounding square, clamped at the edges.
+float median_reference(const Array2Df &a, int x, int y, float radius, bool disc)
+{
+    const int          r = int(std::ceil(radius));
+    std::vector<float> window;
+    window.reserve(size_t((2 * r + 1) * (2 * r + 1)));
+    for (int dy = -r; dy <= r; ++dy)
+        for (int dx = -r; dx <= r; ++dx)
+            if (!disc || float(dx * dx + dy * dy) <= radius * radius)
+                window.push_back(a(std::clamp(x + dx, 0, a.width() - 1), std::clamp(y + dy, 0, a.height() - 1)));
+    std::sort(window.begin(), window.end());
+    return window[window.size() / 2];
+}
 
+/// How many samples of \p a and \p b differ.
+int num_different(const Array2Df &a, const Array2Df &b)
+{
+    int n = 0;
+    for (int i = 0; i < a.num_elements(); ++i) n += a(i) != b(i);
+    return n;
+}
+
+} // namespace
+
+TEST_CASE("A median takes the middle of its window, so it removes a lone outlier and keeps an edge")
+{
+    // Checked against a direct median, over either window shape, on a field with neither smoothness nor symmetry:
+    // both windows are symmetric about their center, so anything with that symmetry makes the two agree. A square
+    // reaches root-two farther at its corners than along its axes, which a disc does not, and at a fractional
+    // radius the disc of 1.5 is the 3x3 square while the square of 1.5 is 5x5.
+    const int2 size{15, 15};
+
+    Array2Df field{size};
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            const unsigned h = unsigned(x) * 73856093u ^ unsigned(y) * 19349663u;
+            field(x, y)      = float(h % 1024u) / 1024.f;
+        }
+
+    // A median is an order statistic: on either side of a step it picks a sample from that side, where a blur would
+    // soften it, and one wild sample, a firefly, vanishes instead of being smeared over its neighbors. This one sits
+    // on the dark side, near enough to the step that the windows straddling it see the firefly too.
     Array2Df step{size};
     for (int y = 0; y < size.y; ++y)
-        for (int x = 0; x < size.x; ++x) step(x, y) = x < 10 ? 0.f : 1.f;
+        for (int x = 0; x < size.x; ++x) step(x, y) = x < 7 ? 0.f : 1.f;
+    Array2Df firefly = step;
+    firefly(3, 7)    = 50.f;
 
     for (bool disc : {true, false})
     {
         CAPTURE(disc);
 
-        // gone entirely, and its neighbors untouched
-        const Array2Df clean = median_filtered(firefly, whole(firefly), 3.f, disc);
-        for (int i = 0; i < clean.num_elements(); ++i) CHECK(clean(i) == 0.2f);
+        for (float radius : {1.5f, 3.f})
+        {
+            CAPTURE(radius);
+            Array2Df expected{size};
+            for (int y = 0; y < size.y; ++y)
+                for (int x = 0; x < size.x; ++x) expected(x, y) = median_reference(field, x, y, radius, disc);
+            CHECK(num_different(median_filtered(field, whole(field), radius, disc), expected) == 0);
+        }
 
-        // the step stays where it was, as sharp as it was
-        const Array2Df kept = median_filtered(step, whole(step), 3.f, disc);
-        for (int i = 0; i < kept.num_elements(); ++i) CHECK(kept(i) == step(i));
+        // the firefly gone, and the step where it was, as sharp as it was
+        CHECK(num_different(median_filtered(firefly, whole(firefly), 3.f, disc), step) == 0);
     }
-}
-
-TEST_CASE("A radius of zero leaves every sample as it was")
-{
-    Array2Df src{int2{8, 6}};
-    for (int i = 0; i < src.num_elements(); ++i) src(i) = float(i);
-
-    const Array2Df out = median_filtered(src, whole(src), 0.f);
-    for (int i = 0; i < out.num_elements(); ++i) CHECK(out(i) == doctest::Approx(src(i)));
 }
 
 TEST_CASE("Every filter that reports progress runs it to the end, and stops early once canceled")
@@ -547,9 +628,10 @@ TEST_CASE("Every filter that reports progress runs it to the end, and stops earl
 TEST_CASE("Zapping replaces exactly the non-finite samples, each with the median of its finite neighbors")
 {
     // One image holding every case: a NaN in a smooth area; an infinity beside a wild but finite neighbor,
-    // which a mean of the ring would be dragged by and its median is not; finite extremes, which are data
-    // and not gremlins; and a 3x3 block of NaNs, whose center has no finite neighbor and takes the
-    // replacement, and whose rim takes the median of the finite samples it does reach.
+    // which a mean of the ring would be dragged by and its median is not; a negative infinity on the edge, where
+    // the ring reaches past the image; finite extremes, which are data and not gremlins; and a 3x3 block of NaNs,
+    // whose center has no finite neighbor and takes the replacement, and whose rim takes the median of the finite
+    // samples it does reach.
     constexpr float nan  = std::numeric_limits<float>::quiet_NaN();
     constexpr float inf  = std::numeric_limits<float>::infinity();
     constexpr float base = 0.4f, replacement = -1.f;
@@ -558,6 +640,7 @@ TEST_CASE("Zapping replaces exactly the non-finite samples, each with the median
     src(2, 2)    = nan;
     src(6, 2)    = inf;
     src(7, 2)    = 1000.f;
+    src(11, 4)   = -inf;
     src(0, 9)    = 1e30f;
     src(11, 8)   = -1e30f;
     for (int y = 5; y < 8; ++y)
@@ -577,25 +660,4 @@ TEST_CASE("Zapping replaces exactly the non-finite samples, each with the median
             else
                 CHECK(out(x, y) == base);
         }
-}
-
-TEST_CASE("The median window's shape changes what it sees")
-{
-    // A square window reaches root-two farther at its corners than along its axes, so near a diagonal edge it
-    // takes in samples the inscribed circle does not. Not a smooth or symmetric field: both windows are
-    // symmetric about their center, so anything with that symmetry makes the two agree.
-    Array2Df src{int2{21, 21}};
-    for (int y = 0; y < 21; ++y)
-        for (int x = 0; x < 21; ++x)
-        {
-            const unsigned h = unsigned(x) * 73856093u ^ unsigned(y) * 19349663u;
-            src(x, y)        = float(h % 1024u) / 1024.f;
-        }
-
-    const Array2Df disc   = median_filtered(src, whole(src), 3.f, true);
-    const Array2Df square = median_filtered(src, whole(src), 3.f, false);
-
-    bool any_different = false;
-    for (int i = 0; i < disc.num_elements() && !any_different; ++i) any_different = disc(i) != square(i);
-    CHECK(any_different);
 }
