@@ -783,20 +783,20 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Blur...");
 
         ctx->ItemClick("Gaussian");
-        IM_CHECK(ctx->ItemExists("Sigma"));
-        IM_CHECK(!ctx->ItemExists("Half width"));
+        IM_CHECK(ctx->ItemExists("##Horizontal sigma"));
+        IM_CHECK(!ctx->ItemExists("##Horizontal half width"));
         // quality belongs to the approximation alone; the exact kernel has nothing to trade
         IM_CHECK(!ctx->ItemExists("Quality"));
 
         ctx->ItemClick("Fast Gaussian");
-        IM_CHECK(ctx->ItemExists("Sigma"));
+        IM_CHECK(ctx->ItemExists("##Horizontal sigma"));
         IM_CHECK(ctx->ItemExists("Quality"));
-        IM_CHECK(!ctx->ItemExists("Half width"));
+        IM_CHECK(!ctx->ItemExists("##Horizontal half width"));
 
         ctx->ItemClick("Box");
-        IM_CHECK(ctx->ItemExists("Half width"));
+        IM_CHECK(ctx->ItemExists("##Horizontal half width"));
         IM_CHECK(ctx->ItemExists("Passes"));
-        IM_CHECK(!ctx->ItemExists("Sigma"));
+        IM_CHECK(!ctx->ItemExists("##Horizontal sigma"));
 
         ctx->ItemClick("Cancel");
     };
@@ -889,6 +889,21 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         preview = app->edit_preview();
         IM_CHECK(preview && preview->shift);
         IM_CHECK(la::length(preview->shift->offset - float2{3.f + 19.f / 2.5f, 8.f / 2.5f}) < 1e-3f);
+
+        // The borders, linked to start with: unlinked, each is set on its own; linked again, the vertical one takes
+        // the horizontal one's; and while linked, setting either sets both.
+        auto borders = [app] { return app->edit_preview()->shift->borders; };
+        IM_CHECK(borders() == int2{BorderMode_Repeat});
+        ctx->ItemClick(ICON_MY_LINK);
+        ctx->ComboClick("##Vertical border/Black");
+        ctx->Yield(2);
+        IM_CHECK((borders() == int2{BorderMode_Repeat, BorderMode_Black}));
+        ctx->ItemClick(ICON_MY_UNLINK);
+        ctx->Yield(2);
+        IM_CHECK(borders() == int2{BorderMode_Repeat});
+        ctx->ComboClick("##Vertical border/Mirror");
+        ctx->Yield(2);
+        IM_CHECK(borders() == int2{BorderMode_Mirror});
 
         ctx->ItemClick("Cancel");
         ctx->Yield(2);

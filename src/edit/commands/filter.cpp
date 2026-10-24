@@ -21,31 +21,65 @@
 #include "shared/edits.h"
 
 #include <cmath>
+#include <string>
 
 namespace
 {
+/// A setting per axis, as two rows drawn by \p field, joined by a link that keeps them the same.
+/**
+    As Image size joins its width and height: the link at the open end of a bracket around the two rows, labeled
+    "Horizontal" and "Vertical" \p noun. While it is closed, setting either row sets both, and \p y follows \p x.
+    \p field draws one row's widget under the ID it is given and says whether it changed the value.
+*/
+template <typename T, typename Field>
+void axis_pair(const char *noun, T *x, T *y, bool *linked, const char *tooltip, Field &&field)
+{
+    if (*linked)
+        *y = *x;
+
+    ImGui::RowSpan rows;
+    auto           row = [&](const char *axis, T *value)
+    {
+        const std::string label   = fmt::format("{} {}", axis, noun);
+        const bool        changed = field(("##" + label).c_str(), value);
+        if (tooltip)
+            ImGui::Tooltip(tooltip);
+        rows.take();
+
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TextUnformatted(label.c_str());
+        rows.take();
+        return changed;
+    };
+
+    if (row("Horizontal", x) && *linked)
+        *y = *x;
+    if (row("Vertical", y) && *linked)
+        *x = *y;
+
+    const std::string link = fmt::format(*linked ? "Both directions use the same {}. Click to unlink."
+                                                 : "Each direction has its own {}. Click to link.",
+                                         noun);
+    if (ImGui::RowBracketButton(*linked ? ICON_MY_LINK : ICON_MY_UNLINK, rows, *linked, link.c_str()))
+        *linked = !*linked;
+}
+
 /// The border-mode pair the resampling commands offer.
 void border_fields(int *border_x, int *border_y, bool *linked, const char *tooltip)
 {
-    auto combo = [](const char *label, int *value)
-    {
-        if (ImGui::BeginCombo(label, border_mode_name(*value)))
-        {
-            for (int i = 0; i < BorderMode_COUNT; ++i)
-                if (ImGui::Selectable(border_mode_name(i), *value == i))
-                    *value = i;
-            ImGui::EndCombo();
-        }
-    };
-
-    combo("Border", border_x);
-    ImGui::Tooltip(tooltip);
-
-    ImGui::Checkbox("Same in both directions", linked);
-    if (!*linked)
-        combo("Border (vertical)", border_y);
-    else
-        *border_y = *border_x;
+    axis_pair("border", border_x, border_y, linked, tooltip,
+              [](const char *id, int *value)
+              {
+                  bool changed = false;
+                  if (ImGui::BeginCombo(id, border_mode_name(*value)))
+                  {
+                      for (int i = 0; i < BorderMode_COUNT; ++i)
+                          if (ImGui::Selectable(border_mode_name(i), *value == i))
+                              *value = i, changed = true;
+                      ImGui::EndCombo();
+                  }
+                  return changed;
+              });
 }
 
 class Blur final : public EditCommand
@@ -64,10 +98,8 @@ public:
 
         if (m_kind == Kind_Box)
         {
-            ImGui::SliderInt("Half width", &m_half_width, 0, 64);
-            ImGui::Checkbox("Same in both directions", &m_link_axes);
-            if (!m_link_axes)
-                ImGui::SliderInt("Half width (vertical)", &m_half_width_y, 0, 64);
+            axis_pair("half width", &m_half_width, &m_half_width_y, &m_link_axes, nullptr,
+                      [](const char *id, int *value) { return ImGui::SliderInt(id, value, 0, 64); });
 
             // here repeating widens the result, this being the box blur as an effect in its own right
             ImGui::SliderInt("Passes", &m_iterations, 1, 16);
@@ -75,10 +107,8 @@ public:
         }
         else
         {
-            ImGui::SliderFloat("Sigma", &m_sigma, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
-            ImGui::Checkbox("Same in both directions", &m_link_axes);
-            if (!m_link_axes)
-                ImGui::SliderFloat("Sigma (vertical)", &m_sigma_y, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            axis_pair("sigma", &m_sigma, &m_sigma_y, &m_link_axes, nullptr, [](const char *id, float *value)
+                      { return ImGui::SliderFloat(id, value, 0.f, 64.f, "%.2f", ImGuiSliderFlags_Logarithmic); });
 
             if (m_kind == Kind_FastGaussian)
             {
