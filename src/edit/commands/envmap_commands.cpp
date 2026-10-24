@@ -147,8 +147,8 @@ public:
                        "a lot (e.g. near the poles of a lat-long).");
         ImGui::SameLine();
         ImGui::RadioButton("Point", &m_sampling, EnvMapSampling_Point);
-        ImGui::Tooltip("Average a grid of samples within each output pixel. Can alias when shrinking the image "
-                       "by more than the number of samples per axis.");
+        ImGui::Tooltip("Average samples spread around each output pixel in a Gaussian. Can alias when shrinking "
+                       "the image by more than the number of samples per axis.");
 
         if (m_sampling == EnvMapSampling_EWA)
         {

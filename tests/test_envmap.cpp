@@ -478,6 +478,35 @@ TEST_CASE("Every edge of a mapping's image is read as the sphere continues past 
     // the wrong texel there (clamping, or whatever the layout put beside the edge) makes the texels by the image's
     // edges, or its faces', reconstruct worse than those in the middle, where the lobe peaks. The discs are absent, as
     // their rim is the one direction -z, which nothing reads across.
+    // An output sample moved within its own chart, the image or a cube face, lands where the mapping puts the point it
+    // was moved to; moved past the chart, it continues onto the sphere, which the reconstruction below holds the
+    // output's edges to as it holds the source's.
+    for (int m = 0; m < EnvMapping_COUNT; ++m)
+    {
+        CAPTURE(std::string(name_of(m)));
+        const int2 size  = size_for(m, 72);
+        const int  face  = shader::envmap_is_cube(m) ? shader::envmap_face_size(m, size) : 0;
+        const auto chart = [&](float2 q) { return face ? int2(la::floor(q / float(face))) : int2{0}; };
+        float      worst = 0.f;
+        for (int y = 0; y < size.y; y += 3)
+            for (int x = 0; x < size.x; x += 3)
+            {
+                const float2 c{x + 0.5f, y + 0.5f};
+                for (float2 o : {float2{0.7f, 0.3f}, float2{-0.4f, 0.9f}, float2{-0.8f, -0.6f}})
+                {
+                    const float2 q = c + o;
+                    if (!all(gequal(q, float2{0.f})) || !all(less(q, float2(size))) || chart(q) != chart(c) ||
+                        !envmap_uv_is_valid(EnvMapping(m), c / float2(size)) ||
+                        !envmap_uv_is_valid(EnvMapping(m), q / float2(size)))
+                        continue;
+                    const float3 moved  = shader::envmap_moved_dir(m, size, c / float2(size), o);
+                    const float3 direct = envmap_uv_to_xyz(EnvMapping(m), q / float2(size));
+                    worst               = std::max(worst, la::length(moved - direct));
+                }
+            }
+        CHECK(worst < 1e-4f);
+    }
+
     struct Edge
     {
         int         mapping;
@@ -609,8 +638,31 @@ TEST_CASE("Irradiance is the cosine-weighted average of what each mapping holds,
         }
 }
 
-TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, and keeps out what is past Nyquist")
+TEST_CASE(
+    "Both samplers blur by half an output pixel whatever shape the reduction is, and keep out what is past Nyquist")
 {
+    // Supersampling's samples are a set that stands for the Gaussian of half a pixel: its variance, a quarter of a
+    // squared pixel down each axis and none across, at every count the dialog offers, though the stratum centers it
+    // comes from stop short of the Gaussian's tails.
+    for (int n = 1; n <= 8; ++n)
+    {
+        CAPTURE(n);
+        const float scale  = shader::envmap_gaussian_scale(n, 0.5f);
+        double      mean_x = 0.0, mean_y = 0.0, xx = 0.0, yy = 0.0, xy = 0.0;
+        for (int j = 0; j < n; ++j)
+            for (int i = 0; i < n; ++i)
+            {
+                const float2 p = scale * shader::envmap_gaussian_point(i, j, n);
+                mean_x += p.x, mean_y += p.y, xx += p.x * p.x, yy += p.y * p.y, xy += p.x * p.y;
+            }
+        const double count = double(n * n), want = n == 1 ? 0.0 : 0.25;
+        CHECK(std::abs(mean_x / count) < 1e-6);
+        CHECK(std::abs(mean_y / count) < 1e-6);
+        CHECK(xx / count == doctest::Approx(want));
+        CHECK(yy / count == doctest::Approx(want));
+        CHECK(std::abs(xy / count) < 1e-6);
+    }
+
     // A lat-long remapped onto itself at another size is a pure scaling, the same at every pixel, so a sinusoid in the
     // source comes out a sinusoid, attenuated by the filter's response at its frequency. A Gaussian of sigma output
     // pixels passes exp(-2 pi^2 sigma^2 nu^2) of a frequency of nu cycles per pixel, which gives the blur's sigma from
@@ -640,80 +692,86 @@ TEST_CASE("EWA blurs by half an output pixel whatever shape the reduction is, an
                             {"reduced further in x than in y", 6.f, 2.f, 8},
                             {"too eccentric for its anisotropy cap", 8.f, 1.f, 1}};
 
-    // EWA is linear, and a sinusoid along one axis is orthogonal to any along the other, so one remap measures a probe
-    // along each axis at once
+    // Each sampler is linear, and a sinusoid along one axis is orthogonal to any along the other, so one remap measures
+    // a probe along each axis at once. Supersampling's bilinear reads blur by a tent of a source texel besides, a sixth
+    // of a squared texel, which EWA takes out of its Gaussian and supersampling adds to it.
     for (const Shape &shape : shapes)
-    {
-        CAPTURE(std::string(shape.what));
-        CAPTURE(shape.kx);
-        CAPTURE(shape.ky);
+        for (int sampler : {EnvMapSampling_EWA, EnvMapSampling_Point})
+        {
+            CAPTURE(sampler);
+            CAPTURE(std::string(shape.what));
+            CAPTURE(shape.kx);
+            CAPTURE(shape.ky);
 
-        const int2   size{int(std::lround(W / shape.kx)), int(std::lround(H / shape.ky))};
-        const int2   src_size{W, H};
-        const float2 k{shape.kx, shape.ky};
+            const int2   size{int(std::lround(W / shape.kx)), int(std::lround(H / shape.ky))};
+            const int2   src_size{W, H};
+            const float2 k{shape.kx, shape.ky};
 
-        // at several phases, since where the output's pixels fall on the source's texels changes what a read blurs by,
-        // and can put an aliased frequency's samples on its zeros
-        for (double offset : {0.0, 0.25 * M_PI, 0.5 * M_PI, 0.75 * M_PI})
-            // the blur probe, a quarter cycle per output pixel, and the aliasing one, three quarters
-            for (bool aliasing : {false, true})
-            {
-                CAPTURE(offset);
-                CAPTURE(aliasing);
-                // An axis the shape does not reduce is not probed: at the source's own scale reads land on its texels,
-                // and the capped shape's short axis is widened on purpose. The aliasing probe, 3/(4k) cycles per source
-                // pixel, is below the source's own Nyquist only for k > 1.5.
-                bool probed[2];
-                int  cycles[2];
-                for (int a = 0; a < 2; ++a)
+            // at several phases, since where the output's pixels fall on the source's texels changes what a read blurs
+            // by, and can put an aliased frequency's samples on its zeros
+            for (double offset : {0.0, 0.25 * M_PI, 0.5 * M_PI, 0.75 * M_PI})
+                // the blur probe, a quarter cycle per output pixel, and the aliasing one, three quarters
+                for (bool aliasing : {false, true})
                 {
-                    probed[a] = k[a] > 1.f && (!aliasing || k[a] > 1.5f);
-                    cycles[a] = aliasing ? size[a] - size[a] / 4 : size[a] / 4;
-                }
-                if (!probed[0] && !probed[1])
-                    continue;
-
-                std::vector<float> probe[2];
-                for (int a = 0; a < 2; ++a)
-                    for (int i = 0; i < src_size[a]; ++i)
-                        probe[a].push_back(
-                            probed[a]
-                                ? 0.25f * float(std::cos(2.0 * M_PI * cycles[a] * (i + 0.5) / src_size[a] + offset))
-                                : 0.f);
-                Array2Df src{src_size};
-                for (int y = 0; y < H; ++y)
-                    for (int x = 0; x < W; ++x) src(x, y) = 0.5f + probe[0][size_t(x)] + probe[1][size_t(y)];
-                const Array2Df out = remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_LatLong,
-                                                     EnvMapSampling_EWA, shape.max_aniso);
-
-                for (int a = 0; a < 2; ++a)
-                {
-                    if (!probed[a])
-                        continue;
-                    CAPTURE(a);
-                    // how much of the probe's amplitude comes out at a quarter cycle per output pixel along its axis
-                    double c = 0.0, s = 0.0;
-                    for (int y = 0; y < size.y; ++y)
-                        for (int x = 0; x < size.x; ++x)
-                        {
-                            const double phase = 2.0 * M_PI * (size[a] / 4) * ((a == 0 ? x : y) + 0.5) / size[a];
-                            c += out(x, y) * std::cos(phase);
-                            s += out(x, y) * std::sin(phase);
-                        }
-                    const double response = std::sqrt(c * c + s * s) * 2.0 / double(size.x * size.y) / 0.25;
-                    if (!aliasing)
+                    CAPTURE(offset);
+                    CAPTURE(aliasing);
+                    // An axis the shape does not reduce is not probed: at the source's own scale reads land on its
+                    // texels, and the capped shape's short axis is widened on purpose. The aliasing probe, 3/(4k)
+                    // cycles per source pixel, is below the source's own Nyquist only for k > 1.5.
+                    bool probed[2];
+                    int  cycles[2];
+                    for (int a = 0; a < 2; ++a)
                     {
-                        const double sigma = std::sqrt(-std::log(response) / (2.0 * M_PI * M_PI / 16.0));
-                        CHECK(sigma > 0.45);
-                        CHECK(sigma < 0.55);
+                        probed[a] = k[a] > 1.f && (!aliasing || k[a] > 1.5f);
+                        cycles[a] = aliasing ? size[a] - size[a] / 4 : size[a] / 4;
                     }
-                    else
-                        // a Gaussian of half a pixel passes 0.06 here; one read per level, or levels an octave apart,
-                        // two or three times that
-                        CHECK(response < 0.15);
+                    if (!probed[0] && !probed[1])
+                        continue;
+
+                    std::vector<float> probe[2];
+                    for (int a = 0; a < 2; ++a)
+                        for (int i = 0; i < src_size[a]; ++i)
+                            probe[a].push_back(
+                                probed[a]
+                                    ? 0.25f * float(std::cos(2.0 * M_PI * cycles[a] * (i + 0.5) / src_size[a] + offset))
+                                    : 0.f);
+                    Array2Df src{src_size};
+                    for (int y = 0; y < H; ++y)
+                        for (int x = 0; x < W; ++x) src(x, y) = 0.5f + probe[0][size_t(x)] + probe[1][size_t(y)];
+                    const bool     ewa = sampler == EnvMapSampling_EWA;
+                    const Array2Df out = remapped_envmap(src, size, EnvMapping_LatLong, EnvMapping_LatLong,
+                                                         EnvMapSampling(sampler), ewa ? shape.max_aniso : 4);
+
+                    for (int a = 0; a < 2; ++a)
+                    {
+                        if (!probed[a])
+                            continue;
+                        CAPTURE(a);
+                        // how much of the probe's amplitude comes out at a quarter cycle per output pixel along its
+                        // axis
+                        double c = 0.0, s = 0.0;
+                        for (int y = 0; y < size.y; ++y)
+                            for (int x = 0; x < size.x; ++x)
+                            {
+                                const double phase = 2.0 * M_PI * (size[a] / 4) * ((a == 0 ? x : y) + 0.5) / size[a];
+                                c += out(x, y) * std::cos(phase);
+                                s += out(x, y) * std::sin(phase);
+                            }
+                        const double response = std::sqrt(c * c + s * s) * 2.0 / double(size.x * size.y) / 0.25;
+                        if (!aliasing)
+                        {
+                            const double sigma = std::sqrt(-std::log(response) / (2.0 * M_PI * M_PI / 16.0));
+                            const double want  = ewa ? 0.5 : std::sqrt(0.25 + 1.0 / (6.0 * k[a] * k[a]));
+                            CHECK(sigma > want - 0.05);
+                            CHECK(sigma < want + 0.05);
+                        }
+                        else
+                            // a Gaussian of half a pixel passes 0.06 here; one read per level, levels an octave apart,
+                            // or four samples a side, two or three times that
+                            CHECK(response < 0.15);
+                    }
                 }
-            }
-    }
+        }
 }
 
 TEST_CASE("Snapping to the sphere lands on it, and leaves alone what is already on it")

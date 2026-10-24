@@ -1,6 +1,7 @@
 /** \file envmap.h
-    The ways an environment map flattens the sphere onto a rectangle, in both directions, which the remap edits and
-    the image shader's preview of them compile from this one source. See shim.h for the dialect it is written in.
+    The ways an environment map flattens the sphere onto a rectangle, in both directions, and how a point moves
+    across one, which the remap edits and the image shader's preview of them compile from this one source. See shim.h
+    for the dialect it is written in.
 
     A mapping is one of the ENVMAP_ constants below, the values of EnvMapping in src/edit/envmap.h. An image point is
     in [0,1]^2 and a direction on the unit sphere, y up. tests/test_envmap.cpp holds every mapping to its inverse, to
@@ -440,6 +441,90 @@ SHARED_FN vec2 nearest_valid_envmap_uv(int mapping, vec2 uv)
         return dot(dc, dc) <= dot(dr, dr) ? to_column : to_row;
     }
     return uv;
+}
+
+//
+// Sampling around a point
+//
+
+/// Point (\p i, \p j) of an \p n by \p n set of equally weighted samples of a Gaussian, before its scaling.
+/**
+    The centers of the unit square's strata, taken to the disc by Shirley and Chiu's concentric map in Dave Cline's
+    form, with the fixes its readers posted (the second branch's angle pi/2 - (pi/4)(a/b), which matches the original
+    map, and a guard at the middle, which divided by zero), then given Box-Muller's radius, sqrt(-2 ln(1 - r^2)). No
+    stratum's center reaches the square's edge, where that radius goes to infinity, so the set stops short of the
+    tails and is narrower than the Gaussian; envmap_gaussian_scale() gives it the Gaussian's variance. A set of one is
+    the middle point alone.
+*/
+SHARED_FN vec2 envmap_gaussian_point(int i, int j, int n)
+{
+    float a = 2.0f * (float(i) + 0.5f) / float(n) - 1.0f, b = 2.0f * (float(j) + 0.5f) / float(n) - 1.0f;
+    float r, phi;
+    if (abs(a) > abs(b))
+    {
+        r   = a;
+        phi = (ENVMAP_PI / 4.0f) * (b / a);
+    }
+    else if (b != 0.0f)
+    {
+        r   = b;
+        phi = ENVMAP_PI / 2.0f - (ENVMAP_PI / 4.0f) * (a / b);
+    }
+    else
+        return vec2(0.0f);
+    // r is signed, so r (cos phi, sin phi) is the point on the disc, and its radius is |r|
+    float g = sqrt(-2.0f * log(1.0f - r * r));
+    return (g / abs(r)) * vec2(r * cos(phi), r * sin(phi));
+}
+
+/// What envmap_gaussian_point()'s \p n by \p n set is scaled by to sample a Gaussian of standard deviation \p sigma.
+/**
+    The set's mean squared radius made the Gaussian's, 2 sigma^2, so that each n has the same variance, the set being
+    the same down both axes and across them.
+*/
+SHARED_FN float envmap_gaussian_scale(int n, float sigma)
+{
+    float sum = 0.0f;
+    for (int j = 0; j < n; ++j)
+        for (int i = 0; i < n; ++i)
+        {
+            vec2 p = envmap_gaussian_point(i, j, n);
+            sum += dot(p, p);
+        }
+    return sum > 0.0f ? sigma * sqrt(2.0f * float(n * n) / sum) : 0.0f;
+}
+
+/// The direction of output point \p uv of \p dst at \p size, moved \p o output pixels, as the sphere continues.
+/**
+    A cube layout's point moves across the plane of its own face, which goes on past the face's edges to the
+    directions of the faces beyond, as the cube does; the layout's next cell may hold another face entirely. Elsewhere
+    the point moves across the image: past a lat-long's edges its own functions continue onto the sphere, past a
+    cylinder's pole it comes back down half a turn round, and past the equal-area square's edge it folds back across
+    it. Past a disc's rim, the one direction -z, it stops at the rim.
+*/
+SHARED_FN vec3 envmap_moved_dir(int dst, ivec2 size, vec2 uv, vec2 o)
+{
+    if (envmap_is_cube(dst))
+    {
+        vec3  d    = envmap_uv_to_xyz(dst, uv);
+        int   face = cube_face_of(d);
+        float n    = float(envmap_face_size(dst, size));
+        // the column turns a face's st as column_st() says, which is a flip either across or down
+        vec2 step = dst == ENVMAP_CUBE_COLUMN ? (column_flips_s(face) ? vec2(-o.x, o.y) : vec2(o.x, -o.y)) : o;
+        return normalize(cube_face_vector(face, cube_face_st(face, d) + step / n));
+    }
+
+    vec2 p = uv + o / vec2(float(size.x), float(size.y));
+    if (dst == ENVMAP_CYLINDRICAL && (p.y < 0.0f || p.y > 1.0f))
+        p = vec2(p.x + 0.5f, p.y < 0.0f ? -p.y : 2.0f - p.y);
+    else if (dst == ENVMAP_EQUAL_AREA)
+    {
+        if (p.x < 0.0f || p.x > 1.0f)
+            p = vec2(p.x < 0.0f ? -p.x : 2.0f - p.x, 1.0f - p.y);
+        if (p.y < 0.0f || p.y > 1.0f)
+            p = vec2(1.0f - p.x, p.y < 0.0f ? -p.y : 2.0f - p.y);
+    }
+    return envmap_uv_to_xyz(dst, nearest_valid_envmap_uv(dst, p));
 }
 
 SHARED_END

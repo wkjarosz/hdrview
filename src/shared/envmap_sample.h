@@ -140,21 +140,25 @@ SHARED_FN EnvValue envmap_bilinear(EnvSource src, int level, int chart, ivec2 si
 /// The source's direction for \p uv in mapping \p dst, turned by \p rotation.
 SHARED_FN vec3 envmap_remap_dir(int dst, mat3 rotation, vec2 uv) { return mul(rotation, envmap_uv_to_xyz(dst, uv)); }
 
-/// Output pixel \p pixel of a remap to \p dst at \p size, as the average of \p ss by \p ss bilinear reads.
+/// Output pixel \p pixel of a remap to \p dst at \p size, filtered by a Gaussian of half a pixel from \p ss^2 reads.
 /**
-    Each read is snapped onto the sphere like the pixel itself, since a sub-sample can land off it even where the
-    pixel's center did not.
+    The Gaussian of envmap_ewa()'s filter, sampled with equal weights at envmap_gaussian_point()'s set around the
+    pixel's center and carried into the source by the remap itself, each sample a bilinear read of the finest level.
+    That read's own blur is added rather than taken out of the Gaussian, so this is a little softer than envmap_ewa()
+    where the source is shrunk by little. One sample is the bilinear read at the pixel's center.
 */
 SHARED_FN EnvValue envmap_supersample(EnvSource src, int dst, mat3 rotation, ivec2 pixel, ivec2 size, int ss)
 {
-    ivec2    base = envmap_chart_size(src, 0);
-    EnvValue sum  = EnvValue(0.0f);
+    ivec2 base = envmap_chart_size(src, 0);
+    vec2  uv   = nearest_valid_envmap_uv(
+        dst, vec2((float(pixel.x) + 0.5f) / float(size.x), (float(pixel.y) + 0.5f) / float(size.y)));
+    float    scale = envmap_gaussian_scale(ss, 0.5f);
+    EnvValue sum   = EnvValue(0.0f);
     for (int sy = 0; sy < ss; ++sy)
         for (int sx = 0; sx < ss; ++sx)
         {
-            vec2 uv = nearest_valid_envmap_uv(dst, vec2((float(pixel.x) + (float(sx) + 0.5f) / float(ss)) / float(size.x),
-                                                        (float(pixel.y) + (float(sy) + 0.5f) / float(ss)) / float(size.y)));
-            vec3 p  = envmap_locate(src.mapping, envmap_remap_dir(dst, rotation, uv));
+            vec3 d = envmap_moved_dir(dst, size, uv, scale * envmap_gaussian_point(sx, sy, ss));
+            vec3 p = envmap_locate(src.mapping, mul(rotation, d));
             sum += envmap_bilinear(src, 0, int(p.z), base, vec2(p.x, p.y));
         }
     return sum / float(ss * ss);
