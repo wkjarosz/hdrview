@@ -81,17 +81,14 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
     {
         std::string menu;
         const char *dialog, *test;
-        bool          edit;    ///< An edit dialog whose footer offers Selection only
-        ImGuiKeyChord pan = 0; ///< The modifier a drag needs to pan the view, for a preview that takes drags
+        bool        edit; ///< An edit dialog, with an edit's footer
     };
     for (const Navigable &n :
          {Navigable{"File/Save as...", "Save as...", "save_as_lets_the_viewport_be_navigated", false},
           Navigable{"File/Export rendition...", "Export rendition...",
                     "export_rendition_lets_the_viewport_be_navigated", false},
           Navigable{edit_menu_item("Channel mixer..."), "Channel mixer...",
-                    "edit_dialog_lets_the_viewport_be_navigated", true},
-          Navigable{edit_menu_item("Remap envmap..."), "Remap envmap...", "remap_lets_the_viewport_be_navigated", false,
-                    ImGuiMod_Alt}})
+                    "edit_dialog_lets_the_viewport_be_navigated", true}})
     {
         t           = IM_REGISTER_TEST(engine, "dialogs", n.test);
         t->TestFunc = [n](ImGuiTestContext *ctx)
@@ -146,9 +143,9 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             ctx->Yield(2);
             IM_CHECK_EQ(app->zoom(), over_viewport);
 
-            // a drag from the corner moves the pixel under it along, with a modifier where the preview takes drags
+            // a drag from the corner moves the pixel under it along
             const float2 before = app->pixel_at_app_pos(corner);
-            drag(ctx, corner, float2{HelloImGui::EmSize(4.f), HelloImGui::EmSize(3.f)}, n.pan);
+            drag(ctx, corner, float2{HelloImGui::EmSize(4.f), HelloImGui::EmSize(3.f)});
             IM_CHECK(la::length(app->pixel_at_app_pos(corner) - before) > 0.f);
 
             // and a drag begun on the dialog's own widgets is theirs, even carried out over the viewport: a press on

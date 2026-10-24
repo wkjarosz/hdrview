@@ -446,6 +446,15 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 // applying on confirm keeps a dragged slider from filling the history, so cancelling has to leave both
                 // the pixels and the history alone, whatever the controls were set to
                 open();
+                // folded to its title bar, it keeps its width
+                const ImGuiWindow *dialog = ctx->WindowInfo(("//" + escaped(name)).c_str()).Window;
+                IM_CHECK_SILENT(dialog != nullptr);
+                const float width = dialog->Size.x;
+                ctx->ItemClick("#FOLD");
+                ctx->Yield(3);
+                IM_CHECK_EQ(dialog->Size.x, width);
+                ctx->ItemClick("#FOLD");
+                ctx->Yield(2);
                 ctx->KeyPress(ImGuiKey_Escape);
                 IM_CHECK(dialog_closed(ctx, name));
                 IM_CHECK(app->edit_preview() == nullptr);
