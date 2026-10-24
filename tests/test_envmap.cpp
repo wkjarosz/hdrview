@@ -834,38 +834,41 @@ TEST_CASE("What is not sphere is filled from the sphere's edge rather than left 
 {
     // An image's empty corners sit against the edge of the sphere, so a later bilinear read near that edge
     // reaches into them. Left at zero they darken the rim; carrying the nearest direction outward makes them
-    // agree with their neighbors.
+    // agree with their neighbors. Both samplers snap the pixel's direction before filtering around it.
     auto f = [](float3 d) { return 0.5f + 0.4f * d.y; }; // always well away from zero
 
     const Array2Df src = make_envmap(int2{128, 128}, EnvMapping_LatLong, f);
+    constexpr int  n   = 64;
 
-    for (int dst_m : {EnvMapping_Angular, EnvMapping_MirrorBall, EnvMapping_CubeMap})
-    {
-        CAPTURE(std::string(name_of(dst_m)));
+    for (int sampler : {EnvMapSampling_Point, EnvMapSampling_EWA})
+        for (int dst_m : {EnvMapping_Angular, EnvMapping_MirrorBall, EnvMapping_CubeMap})
+        {
+            CAPTURE(sampler);
+            CAPTURE(std::string(name_of(dst_m)));
 
-        const Array2Df out =
-            remapped_envmap(src, int2{64, 64}, EnvMapping(dst_m), EnvMapping_LatLong, EnvMapSampling_Point, 2);
+            const Array2Df out =
+                remapped_envmap(src, int2{n, n}, EnvMapping(dst_m), EnvMapping_LatLong, EnvMapSampling(sampler), 2);
 
-        for (int y = 0; y < 64; ++y)
-            for (int x = 0; x < 64; ++x)
-            {
-                const float2 uv{(x + 0.5f) / 64.f, (y + 0.5f) / 64.f};
-                if (envmap_uv_is_valid(EnvMapping(dst_m), uv))
-                    continue;
+            for (int y = 0; y < n; ++y)
+                for (int x = 0; x < n; ++x)
+                {
+                    const float2 uv{(x + 0.5f) / n, (y + 0.5f) / n};
+                    if (envmap_uv_is_valid(EnvMapping(dst_m), uv))
+                        continue;
 
-                CAPTURE(x);
-                CAPTURE(y);
+                    CAPTURE(x);
+                    CAPTURE(y);
 
-                // what the nearest real direction holds, which is what was written there
-                const float2 snapped  = nearest_valid_envmap_uv(EnvMapping(dst_m), uv);
-                const float  expected = f(envmap_uv_to_xyz(EnvMapping(dst_m), snapped));
+                    // what the nearest real direction holds, which is what was written there
+                    const float2 snapped  = nearest_valid_envmap_uv(EnvMapping(dst_m), uv);
+                    const float  expected = f(envmap_uv_to_xyz(EnvMapping(dst_m), snapped));
 
-                CHECK(out(x, y) == doctest::Approx(expected).epsilon(0.05));
+                    CHECK(out(x, y) == doctest::Approx(expected).epsilon(0.05));
 
-                // and not zero
-                CHECK(out(x, y) > 0.05f);
-            }
-    }
+                    // and not zero
+                    CHECK(out(x, y) > 0.05f);
+                }
+        }
 }
 
 TEST_CASE("Magnifying reconstructs rather than repeating source texels")

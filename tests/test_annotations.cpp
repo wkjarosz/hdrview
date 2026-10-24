@@ -523,12 +523,16 @@ TEST_CASE("A dragged handle follows the cursor, and the side it pivots about sta
                         CHECK(box.max[k] == doctest::Approx(side[k] ? std::max(pivot, to[k]) : box0.max[k]));
                     }
 
-                    // Rect and Ellipse come back ordered, so everything downstream can read p0 as the low
-                    // corner; a scribble's points are its path, which a flip mirrors.
-                    if (shape != Annotation::Shape::Freehand)
+                    // Every point keeps its place within the box, so a scribble's whole path moves with it, and
+                    // Rect and Ellipse, whose points are the box's corners, come back ordered with p0 the low one.
+                    REQUIRE(a.points.size() == before.points.size());
+                    for (size_t p = 0; p < a.points.size(); ++p)
                     {
-                        CHECK(a.p0().x <= a.p1().x);
-                        CHECK(a.p0().y <= a.p1().y);
+                        CAPTURE(p);
+                        const float2 t0 = (before.points[p] - box0.min) / (box0.max - box0.min);
+                        const float2 t  = (a.points[p] - box.min) / (box.max - box.min);
+                        CHECK(t.x == doctest::Approx(t0.x).epsilon(1e-4));
+                        CHECK(t.y == doctest::Approx(t0.y).epsilon(1e-4));
                     }
                 }
             }
@@ -688,34 +692,6 @@ TEST_CASE("A scribble is picked up on its path, not merely inside its box")
 
     // Outside the box entirely.
     CHECK(annotation_at({a}, float2{500.f, 500.f}, x, k_slop) == -1);
-}
-
-TEST_CASE("Resizing a scribble carries its whole path")
-{
-    // A scribble is resized by the box around it, so every point has to move with that box -- not just the
-    // two the other shapes are described by.
-    Annotation       a      = sample(Annotation::Shape::Freehand);
-    const Annotation before = a;
-    const Box2f      box0   = a.bounds();
-
-    // Drag the low corner out, doubling the box in both directions.
-    move_annotation_handle(a, 0, box0.min - (box0.max - box0.min));
-
-    REQUIRE(a.points.size() == before.points.size());
-    const Box2f box1 = a.bounds();
-
-    // Every point is still inside the box it belongs to, and where it was within it.
-    for (size_t i = 0; i < a.points.size(); ++i)
-    {
-        CAPTURE(i);
-        const float2 t0 = (before.points[i] - box0.min) / (box0.max - box0.min);
-        const float2 t1 = (a.points[i] - box1.min) / (box1.max - box1.min);
-        CHECK(t1.x == doctest::Approx(t0.x).epsilon(1e-4));
-        CHECK(t1.y == doctest::Approx(t0.y).epsilon(1e-4));
-    }
-
-    // And the box really did change, so the check above is not comparing a shape with itself.
-    CHECK(box1.max.x - box1.min.x == doctest::Approx(2.f * (box0.max.x - box0.min.x)));
 }
 
 TEST_CASE("A smoothed scribble is a curve through the stroke that was drawn")
