@@ -541,12 +541,7 @@ TEST_CASE("Profiles lcms cannot use are not mistaken for ones it can")
     CHECK(cmyk >= 1);
 }
 
-#endif // HDRVIEW_TEST_LCMS_TESTBED_DIR
-
 #if HDRVIEW_ENABLE_LCMS2
-
-
-#ifdef HDRVIEW_TEST_LCMS_TESTBED_DIR
 
 TEST_CASE("a CMYK ICC profile converts ink to color, and only inverts it when told to")
 {
@@ -593,6 +588,6 @@ TEST_CASE("a CMYK ICC profile converts ink to color, and only inverts it when to
     }
 }
 
-#endif // HDRVIEW_TEST_LCMS_TESTBED_DIR
-
 #endif // HDRVIEW_ENABLE_LCMS2
+
+#endif // HDRVIEW_TEST_LCMS_TESTBED_DIR
