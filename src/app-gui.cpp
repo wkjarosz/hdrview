@@ -436,6 +436,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Flip image vertically"));
         MenuItem(action("Rotate 90 degrees clockwise"));
         MenuItem(action("Rotate 90 degrees counter-clockwise"));
+        MenuItem(action("Shift..."));
         MenuItem(action("Crop to selection"));
         MenuItem(action("Image size..."));
         MenuItem(action("Canvas size..."));
@@ -456,6 +457,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Channel mixer..."));
         MenuItem(action("Hue/saturation..."));
         MenuItem(action("Flatten..."));
+        MenuItem(action("Bump to normal map..."));
 
         ImGui::SeparatorText("Channels");
 
@@ -469,8 +471,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Blur..."));
         MenuItem(action("Unsharp mask..."));
         MenuItem(action("Median filter..."));
-        MenuItem(action("Shift..."));
-        MenuItem(action("Bump to normal map..."));
 
         ImGui::SeparatorText("Environment maps");
 
