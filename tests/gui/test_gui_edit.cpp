@@ -273,250 +273,259 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         reset_images(ctx);
     };
 
-    t           = IM_REGISTER_TEST(engine, "edit", "every edit dialog cancels, confirms as one edit, and undoes");
-    t->TestFunc = [](ImGuiTestContext *ctx)
+    // In two parts, each every other command, which keeps either well inside the engine's watchdog under CI's
+    // software rasterizer.
+    for (int part = 0; part < 2; ++part)
     {
-        /*
-            The dialog counterpart of the sweep above, over the whole image: each opens from its menu item, Escape
-            leaves the image and its history alone, and confirming lands one entry that changes the samples or the
-            size, which one Undo takes back. A reshaped image is then inverted, since the next edit writes into the
-            textures the reshaping left. A command whose defaults change nothing is given a setting first, through
-            its own controls, since the command keeps its settings between openings.
-        */
-        struct Case
+        t = IM_REGISTER_TEST(engine, "edit",
+                             part == 0 ? "every edit dialog cancels, confirms as one edit, and undoes (1 of 2)"
+                                       : "every edit dialog cancels, confirms as one edit, and undoes (2 of 2)");
+        t->TestFunc = [part](ImGuiTestContext *ctx)
         {
-            /// Run before the dialog opens, on the image it will edit.
-            std::function<void(ImGuiTestContext *, const ImagePtr &)> before_open;
-            /// Run in the dialog, with the ref set to it, each time it opens.
-            std::function<void(ImGuiTestContext *)> settings;
-            /// Checks particular to the command, once its edit has landed, given the samples it started from.
-            std::function<void(ImGuiTestContext *, const ConstImagePtr &, const vector<float> &)> check;
-            bool enter       = false; ///< Confirmed with Enter, rather than with the confirm button
-            int  adds_images = 0;     ///< Images it puts in the list, in place of an edit to the current one
-        };
-
-        auto mixed_to_gray = [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
-        {
-            // monochrome means the three channels came out equal, which says the mix ran
-            const auto &group = img->groups[img->selected_group];
-            IM_CHECK_SILENT(group.num_channels >= 3);
-            const auto &r     = img->channels[group.channels[0]];
-            const auto &g     = img->channels[group.channels[1]];
-            const auto &b     = img->channels[group.channels[2]];
-            float       worst = 0.f;
-            for (int i = 0; i < r.num_elements(); ++i)
-                worst = std::max({worst, std::fabs(r(i) - g(i)), std::fabs(r(i) - b(i))});
-            IM_CHECK_LT(worst, 1e-5f);
-        };
-        auto turned_hue = [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &before)
-        {
-            // a turn, with saturation and lightness at zero, keeps each pixel's smallest and largest component and
-            // moves the one between
-            const int4   ch             = img->groups[img->selected_group].channels;
-            const size_t n              = size_t(img->channels[ch[0]].num_elements());
-            int          ranges_changed = 0;
-            float        moved          = 0.f;
-            for (size_t i = 0; i < n; ++i)
+            /*
+                The dialog counterpart of the sweep above, over the whole image: each opens from its menu item, Escape
+                leaves the image and its history alone, and confirming lands one entry that changes the samples or the
+                size, which one Undo takes back. A reshaped image is then inverted, since the next edit writes into the
+                textures the reshaping left. A command whose defaults change nothing is given a setting first, through
+                its own controls, since the command keeps its settings between openings.
+            */
+            struct Case
             {
-                const float3 a{before[ch[0] * n + i], before[ch[1] * n + i], before[ch[2] * n + i]};
-                const float3 b{img->channels[ch[0]](int(i)), img->channels[ch[1]](int(i)),
-                               img->channels[ch[2]](int(i))};
-                ranges_changed += std::fabs(la::minelem(a) - la::minelem(b)) > 1e-4f ||
-                                  std::fabs(la::maxelem(a) - la::maxelem(b)) > 1e-4f;
-                moved = std::max(moved, la::maxelem(la::abs(a - b)));
-            }
-            IM_CHECK_EQ(ranges_changed, 0);
-            IM_CHECK_GT(moved, 1e-3f); //< a turn, not rounding
-        };
-
-        const std::map<string, Case> cases{
-            {"Seamless paste...",
-             {[](ImGuiTestContext *ctx, const ImagePtr &img)
-              {
-                  // a patch of the middle, which lands at the corner
-                  const int2 c = img->data_window.min + img->size() / 2;
-                  hdrview()->set_selection(Box2i{c - 16, c + 16});
-                  ctx->Yield();
-                  menu_click(ctx, "Edit/Copy");
-                  hdrview()->set_selection(Box2i{});
-                  ctx->Yield();
-              }}},
-            {"Exposure/gamma...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Exposure", 1.f); }}},
-            {"Brightness/contrast...",
-             {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Brightness", 0.4f); }}},
-            {"Convert color space...",
-             {nullptr, [](ImGuiTestContext *ctx) { ctx->ComboClick("Primaries##to/ACES AP0"); },
-              [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
-              { IM_CHECK_EQ(img->color_space, ColorGamut_ACES_AP0); }}},
-            {"Channel mixer...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemClick("Monochrome"); }, mixed_to_gray}},
-            {"Hue/saturation...",
-             {nullptr,
-              [](ImGuiTestContext *ctx)
-              {
-                  ctx->ItemInputValue("Saturation", 0.f);
-                  ctx->ItemInputValue("Lightness", 0.f);
-                  // the lower strip turns the hue as it is dragged
-                  ctx->ItemDragWithDelta("The hue wheel as these settings would leave it; drag it to turn the hue",
-                                         ImVec2(HelloImGui::EmSize(3.f), 0.f));
-              },
-              turned_hue}},
-            {"Image size...",
-             {nullptr,
-              [](ImGuiTestContext *ctx)
-              {
-                  ctx->ComboClick("Units/Pixels");
-                  ctx->ItemInputValue("##width", 48);
-              },
-              [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
-              { IM_CHECK_EQ(img->size().x, 48); }}},
-            // a width of 40, or 40 more, whichever way the dialog was left
-            {"Canvas size...",
-             {nullptr,
-              [](ImGuiTestContext *ctx)
-              {
-                  ctx->ComboClick("Units/Pixels");
-                  ctx->ItemInputValue("##width", 40);
-              }}},
-            {"Generate mipmaps...",
-             {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Levels", 2); }, nullptr, false, 2}},
-            {"Blur...", {nullptr, nullptr, nullptr, true}},
-            {"Unsharp mask...", {nullptr, nullptr, nullptr, true}},
-            {"Median filter...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Radius", 1.5f); }}},
-            {"Shift...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("X, Y offset/$$0", 3.f); }}},
-            {"Zap gremlins...",
-             {[](ImGuiTestContext *, const ImagePtr &img)
-              { img->channels[0](img->size() / 2) = std::numeric_limits<float>::quiet_NaN(); }, nullptr,
-              [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
-              { IM_CHECK(std::isfinite(img->channels[0](img->size() / 2))); }}},
-            {"Bump to normal map...", {nullptr, nullptr, nullptr, true}},
-            {"Remap envmap...", {nullptr, small_remap_settings}},
-            // tiny: the convolution costs the two resolutions multiplied together, and the result is smooth
-            {"Irradiance envmap...",
-             {nullptr,
-              [](ImGuiTestContext *ctx)
-              {
-                  ctx->ItemInputValue("Size/$$0", 8);
-                  ctx->ItemInputValue("Size/$$1", 6);
-              },
-              [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
-              {
-                  IM_CHECK((img->size() == int2{8, 6}));
-                  for (const auto &c : img->channels) IM_CHECK((c.size() == int2{8, 6}));
-              }}},
-        };
-
-        auto *app      = hdrview();
-        int   expected = 0, exercised = 0;
-        for (const auto &cmd : all_edit_commands()) expected += cmd->info().has_dialog;
-        // a case for a name no command has any more is a setting silently lost
-        for (const auto &[name, c] : cases)
-        {
-            bool found = false;
-            for (const auto &cmd : all_edit_commands()) found |= cmd->info().names.front() == name;
-            IM_CHECK_NO_RET(found);
-            if (!found)
-                ctx->LogError("no command is called %s", name.c_str());
-        }
-
-        for (const auto &cmd : all_edit_commands())
-        {
-            const auto &info = cmd->info();
-            if (!info.has_dialog)
-                continue;
-
-            const string name = info.names.front();
-            ctx->LogInfo("%s", name.c_str());
-            const auto  found = cases.find(name);
-            const Case &c     = found != cases.end() ? found->second : Case{};
-
-            if (!load_fixture(ctx))
-                return;
-            auto img = app->current_image();
-            if (c.before_open)
-                c.before_open(ctx, img);
-            const int2 size   = img->size();
-            const auto before = snapshot(img);
-
-            auto open = [&]
-            {
-                menu_click(ctx, "Edit/" + escaped(name));
-                ctx->SetRef(escaped(name).c_str());
-                if (c.settings)
-                    c.settings(ctx);
-                ctx->Yield();
+                /// Run before the dialog opens, on the image it will edit.
+                std::function<void(ImGuiTestContext *, const ImagePtr &)> before_open;
+                /// Run in the dialog, with the ref set to it, each time it opens.
+                std::function<void(ImGuiTestContext *)> settings;
+                /// Checks particular to the command, once its edit has landed, given the samples it started from.
+                std::function<void(ImGuiTestContext *, const ConstImagePtr &, const vector<float> &)> check;
+                bool enter       = false; ///< Confirmed with Enter, rather than with the confirm button
+                int  adds_images = 0;     ///< Images it puts in the list, in place of an edit to the current one
             };
 
-            // applying on confirm keeps a dragged slider from filling the history, so cancelling has to leave both
-            // the pixels and the history alone, whatever the controls were set to
-            open();
-            ctx->KeyPress(ImGuiKey_Escape);
-            IM_CHECK(dialog_closed(ctx, name));
-            IM_CHECK(app->edit_preview() == nullptr);
-            IM_CHECK(same(snapshot(img), before));
-            IM_CHECK_EQ(img->history.size(), 0);
-            IM_CHECK_EQ(app->num_images(), 1);
-
-            // A point-wise edit lands in the frame it was confirmed, and takes its preview down with it, or the next
-            // frame would draw it applied twice; the rest are handed to a worker and land later.
-            const bool in_frame = cmd->point_edit(app->edit_context(img)).has_value();
-            open();
-            if (c.enter)
-                ctx->KeyPress(ImGuiKey_Enter);
-            else
-                ctx->ItemClick(info.confirm.c_str());
-            if (in_frame)
+            auto mixed_to_gray = [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
             {
-                IM_CHECK_EQ(img->history.size(), 1);
+                // monochrome means the three channels came out equal, which says the mix ran
+                const auto &group = img->groups[img->selected_group];
+                IM_CHECK_SILENT(group.num_channels >= 3);
+                const auto &r     = img->channels[group.channels[0]];
+                const auto &g     = img->channels[group.channels[1]];
+                const auto &b     = img->channels[group.channels[2]];
+                float       worst = 0.f;
+                for (int i = 0; i < r.num_elements(); ++i)
+                    worst = std::max({worst, std::fabs(r(i) - g(i)), std::fabs(r(i) - b(i))});
+                IM_CHECK_LT(worst, 1e-5f);
+            };
+            auto turned_hue = [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &before)
+            {
+                // a turn, with saturation and lightness at zero, keeps each pixel's smallest and largest component and
+                // moves the one between
+                const int4   ch             = img->groups[img->selected_group].channels;
+                const size_t n              = size_t(img->channels[ch[0]].num_elements());
+                int          ranges_changed = 0;
+                float        moved          = 0.f;
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const float3 a{before[ch[0] * n + i], before[ch[1] * n + i], before[ch[2] * n + i]};
+                    const float3 b{img->channels[ch[0]](int(i)), img->channels[ch[1]](int(i)),
+                                   img->channels[ch[2]](int(i))};
+                    ranges_changed += std::fabs(la::minelem(a) - la::minelem(b)) > 1e-4f ||
+                                      std::fabs(la::maxelem(a) - la::maxelem(b)) > 1e-4f;
+                    moved = std::max(moved, la::maxelem(la::abs(a - b)));
+                }
+                IM_CHECK_EQ(ranges_changed, 0);
+                IM_CHECK_GT(moved, 1e-3f); //< a turn, not rounding
+            };
+
+            const std::map<string, Case> cases{
+                {"Seamless paste...",
+                 {[](ImGuiTestContext *ctx, const ImagePtr &img)
+                  {
+                      // a patch of the middle, which lands at the corner
+                      const int2 c = img->data_window.min + img->size() / 2;
+                      hdrview()->set_selection(Box2i{c - 16, c + 16});
+                      ctx->Yield();
+                      menu_click(ctx, "Edit/Copy");
+                      hdrview()->set_selection(Box2i{});
+                      ctx->Yield();
+                  }}},
+                {"Exposure/gamma...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Exposure", 1.f); }}},
+                {"Brightness/contrast...",
+                 {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Brightness", 0.4f); }}},
+                {"Convert color space...",
+                 {nullptr, [](ImGuiTestContext *ctx) { ctx->ComboClick("Primaries##to/ACES AP0"); },
+                  [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
+                  { IM_CHECK_EQ(img->color_space, ColorGamut_ACES_AP0); }}},
+                {"Channel mixer...",
+                 {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemClick("Monochrome"); }, mixed_to_gray}},
+                {"Hue/saturation...",
+                 {nullptr,
+                  [](ImGuiTestContext *ctx)
+                  {
+                      ctx->ItemInputValue("Saturation", 0.f);
+                      ctx->ItemInputValue("Lightness", 0.f);
+                      // the lower strip turns the hue as it is dragged
+                      ctx->ItemDragWithDelta("The hue wheel as these settings would leave it; drag it to turn the hue",
+                                             ImVec2(HelloImGui::EmSize(3.f), 0.f));
+                  },
+                  turned_hue}},
+                {"Image size...",
+                 {nullptr,
+                  [](ImGuiTestContext *ctx)
+                  {
+                      ctx->ComboClick("Units/Pixels");
+                      ctx->ItemInputValue("##width", 48);
+                  },
+                  [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
+                  { IM_CHECK_EQ(img->size().x, 48); }}},
+                // a width of 40, or 40 more, whichever way the dialog was left
+                {"Canvas size...",
+                 {nullptr,
+                  [](ImGuiTestContext *ctx)
+                  {
+                      ctx->ComboClick("Units/Pixels");
+                      ctx->ItemInputValue("##width", 40);
+                  }}},
+                {"Generate mipmaps...",
+                 {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Levels", 2); }, nullptr, false, 2}},
+                {"Blur...", {nullptr, nullptr, nullptr, true}},
+                {"Unsharp mask...", {nullptr, nullptr, nullptr, true}},
+                {"Median filter...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Radius", 1.5f); }}},
+                {"Shift...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("X, Y offset/$$0", 3.f); }}},
+                {"Zap gremlins...",
+                 {[](ImGuiTestContext *, const ImagePtr &img)
+                  { img->channels[0](img->size() / 2) = std::numeric_limits<float>::quiet_NaN(); }, nullptr,
+                  [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
+                  { IM_CHECK(std::isfinite(img->channels[0](img->size() / 2))); }}},
+                {"Bump to normal map...", {nullptr, nullptr, nullptr, true}},
+                {"Remap envmap...", {nullptr, small_remap_settings}},
+                // tiny: the convolution costs the two resolutions multiplied together, and the result is smooth
+                {"Irradiance envmap...",
+                 {nullptr,
+                  [](ImGuiTestContext *ctx)
+                  {
+                      ctx->ItemInputValue("Size/$$0", 8);
+                      ctx->ItemInputValue("Size/$$1", 6);
+                  },
+                  [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
+                  {
+                      IM_CHECK((img->size() == int2{8, 6}));
+                      for (const auto &c : img->channels) IM_CHECK((c.size() == int2{8, 6}));
+                  }}},
+            };
+
+            // this part's commands: every other one with a dialog
+            auto                            *app      = hdrview();
+            const auto                       commands = all_edit_commands();
+            std::vector<const EditCommand *> ours;
+            int                              dialogs = 0;
+            for (const auto &cmd : commands)
+                if (cmd->info().has_dialog && dialogs++ % 2 == part)
+                    ours.push_back(cmd.get());
+            // a case for a name no command has any more is a setting silently lost
+            for (const auto &[name, c] : cases)
+            {
+                bool found = false;
+                for (const auto &cmd : all_edit_commands()) found |= cmd->info().names.front() == name;
+                IM_CHECK_NO_RET(found);
+                if (!found)
+                    ctx->LogError("no command is called %s", name.c_str());
+            }
+
+            for (const EditCommand *cmd : ours)
+            {
+                const auto &info = cmd->info();
+
+                const string name = info.names.front();
+                ctx->LogInfo("%s", name.c_str());
+                const auto  found = cases.find(name);
+                const Case &c     = found != cases.end() ? found->second : Case{};
+
+                if (!load_fixture(ctx))
+                    return;
+                auto img = app->current_image();
+                if (c.before_open)
+                    c.before_open(ctx, img);
+                const int2 size   = img->size();
+                const auto before = snapshot(img);
+
+                auto open = [&]
+                {
+                    menu_click(ctx, "Edit/" + escaped(name));
+                    ctx->SetRef(escaped(name).c_str());
+                    if (c.settings)
+                        c.settings(ctx);
+                    ctx->Yield();
+                };
+
+                // applying on confirm keeps a dragged slider from filling the history, so cancelling has to leave both
+                // the pixels and the history alone, whatever the controls were set to
+                open();
+                ctx->KeyPress(ImGuiKey_Escape);
+                IM_CHECK(dialog_closed(ctx, name));
                 IM_CHECK(app->edit_preview() == nullptr);
-            }
-            ++exercised;
-
-            IM_CHECK(wait_until(ctx, [&] { return img->history.has_undo() || app->num_images() > 1; }));
-            IM_CHECK(dialog_closed(ctx, name));
-            IM_CHECK(app->edit_preview() == nullptr);
-
-            if (c.adds_images)
-            {
-                // beside the image they were made from, which they leave alone
-                IM_CHECK_EQ(app->num_images(), 1 + c.adds_images);
-                IM_CHECK_EQ(img->history.size(), 0);
                 IM_CHECK(same(snapshot(img), before));
-                continue;
-            }
+                IM_CHECK_EQ(img->history.size(), 0);
+                IM_CHECK_EQ(app->num_images(), 1);
 
-            IM_CHECK_EQ(app->num_images(), 1);
-            IM_CHECK_EQ(img->history.size(), 1);
-            IM_CHECK(!img->history.undo_name().empty());
-            IM_CHECK(img->history.is_modified());
-            const bool reshaped = img->size() != size;
-            IM_CHECK(reshaped || !same(snapshot(img), before));
-            if (c.check)
-                c.check(ctx, img, before);
+                // A point-wise edit lands in the frame it was confirmed, and takes its preview down with it, or the
+                // next frame would draw it applied twice; the rest are handed to a worker and land later.
+                const bool in_frame = cmd->point_edit(app->edit_context(img)).has_value();
+                open();
+                if (c.enter)
+                    ctx->KeyPress(ImGuiKey_Enter);
+                else
+                    ctx->ItemClick(info.confirm.c_str());
+                if (in_frame)
+                {
+                    IM_CHECK_EQ(img->history.size(), 1);
+                    IM_CHECK(app->edit_preview() == nullptr);
+                }
 
-            // A reshaping replaces every channel and its texture, and the next edit writes a tile into whatever came
-            // back. Driven through the menu: an edit invoked from the test's own thread builds its textures there,
-            // where there is no GL context, and gets back a texture handle of zero.
-            if (reshaped)
-            {
-                const auto reshaped_samples = snapshot(img);
-                menu_click(ctx, "Edit/Invert");
-                IM_CHECK_EQ(img->history.size(), 2);
-                IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Invert");
-                IM_CHECK(!same(snapshot(img), reshaped_samples));
+                IM_CHECK(wait_until(ctx, [&] { return img->history.has_undo() || app->num_images() > 1; }));
+                IM_CHECK(dialog_closed(ctx, name));
+                IM_CHECK(app->edit_preview() == nullptr);
+
+                if (c.adds_images)
+                {
+                    // beside the image they were made from, which they leave alone
+                    IM_CHECK_EQ(app->num_images(), 1 + c.adds_images);
+                    IM_CHECK_EQ(img->history.size(), 0);
+                    IM_CHECK(same(snapshot(img), before));
+                    continue;
+                }
+
+                IM_CHECK_EQ(app->num_images(), 1);
+                IM_CHECK_EQ(img->history.size(), 1);
+                IM_CHECK(!img->history.undo_name().empty());
+                IM_CHECK(img->history.is_modified());
+                const bool reshaped = img->size() != size;
+                IM_CHECK(reshaped || !same(snapshot(img), before));
+                if (c.check)
+                    c.check(ctx, img, before);
+
+                // A reshaping replaces every channel and its texture, and the next edit writes a tile into whatever
+                // came back. Driven through the menu: an edit invoked from the test's own thread builds its textures
+                // there, where there is no GL context, and gets back a texture handle of zero.
+                if (reshaped)
+                {
+                    const auto reshaped_samples = snapshot(img);
+                    menu_click(ctx, "Edit/Invert");
+                    IM_CHECK_EQ(img->history.size(), 2);
+                    IM_CHECK_STR_EQ(img->history.undo_name().c_str(), "Invert");
+                    IM_CHECK(!same(snapshot(img), reshaped_samples));
+                    menu_click(ctx, "Edit/Undo");
+                }
+
                 menu_click(ctx, "Edit/Undo");
+                IM_CHECK(img->size() == size);
+                IM_CHECK(same(snapshot(img), before));
+                IM_CHECK(!img->history.has_undo());
             }
 
-            menu_click(ctx, "Edit/Undo");
-            IM_CHECK(img->size() == size);
-            IM_CHECK(same(snapshot(img), before));
-            IM_CHECK(!img->history.has_undo());
-        }
-        IM_CHECK_EQ(exercised, expected);
-
-        hdrview()->set_clipboard(nullptr);
-        reset_view_controls(ctx);
-        reset_images(ctx);
-    };
+            hdrview()->set_clipboard(nullptr);
+            reset_view_controls(ctx);
+            reset_images(ctx);
+        };
+    }
 
     t           = IM_REGISTER_TEST(engine, "edit", "an edit covers every selected image, but cut only the current one");
     t->TestFunc = [](ImGuiTestContext *ctx)
