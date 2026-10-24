@@ -389,7 +389,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                 {"Blur...", {nullptr, nullptr, nullptr, true}},
                 {"Unsharp mask...", {nullptr, nullptr, nullptr, true}},
                 {"Median filter...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Radius", 1.5f); }}},
-                {"Shift...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("X, Y offset/$$0", 3.f); }}},
+                {"Shift...", {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemInputValue("Offset x, y/$$0", 3.f); }}},
                 {"Zap gremlins...",
                  {[](ImGuiTestContext *, const ImagePtr &img)
                   { img->channels[0](img->size() / 2) = std::numeric_limits<float>::quiet_NaN(); }, nullptr,
@@ -783,20 +783,20 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         ctx->SetRef("Blur...");
 
         ctx->ItemClick("Gaussian");
-        IM_CHECK(ctx->ItemExists("##Sigma (x)"));
-        IM_CHECK(!ctx->ItemExists("##Half-size (x)"));
+        IM_CHECK(ctx->ItemExists("##Sigma x"));
+        IM_CHECK(!ctx->ItemExists("##Half-size x"));
         // quality belongs to the approximation alone; the exact kernel has nothing to trade
         IM_CHECK(!ctx->ItemExists("Quality"));
 
         ctx->ItemClick("Fast Gaussian");
-        IM_CHECK(ctx->ItemExists("##Sigma (x)"));
+        IM_CHECK(ctx->ItemExists("##Sigma x"));
         IM_CHECK(ctx->ItemExists("Quality"));
-        IM_CHECK(!ctx->ItemExists("##Half-size (x)"));
+        IM_CHECK(!ctx->ItemExists("##Half-size x"));
 
         ctx->ItemClick("Box");
-        IM_CHECK(ctx->ItemExists("##Half-size (x)"));
+        IM_CHECK(ctx->ItemExists("##Half-size x"));
         IM_CHECK(ctx->ItemExists("Passes"));
-        IM_CHECK(!ctx->ItemExists("##Sigma (x)"));
+        IM_CHECK(!ctx->ItemExists("##Sigma x"));
 
         ctx->ItemClick("Cancel");
     };
@@ -869,8 +869,8 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         // subject's
         menu_click(ctx, "Edit/Shift...");
         ctx->SetRef("Shift...");
-        ctx->ItemInputValue("X, Y offset/$$0", 3.0f);
-        ctx->ItemInputValue("X, Y offset/$$1", 0.0f);
+        ctx->ItemInputValue("Offset x, y/$$0", 3.0f);
+        ctx->ItemInputValue("Offset x, y/$$1", 0.0f);
         ctx->Yield(2);
         const EditPreview *preview = app->edit_preview();
         IM_CHECK(preview && preview->shift);
@@ -896,15 +896,15 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
         auto disabled = [ctx](const char *ref)
         { return (ctx->ItemInfo(ref).ItemFlags & ImGuiItemFlags_Disabled) != 0; };
         IM_CHECK(borders() == int2{BorderMode_Repeat});
-        IM_CHECK(disabled("##Border (y)"));
-        ctx->ComboClick("##Border (x)/Mirror");
+        IM_CHECK(disabled("##Border y"));
+        ctx->ComboClick("##Border x/Mirror");
         ctx->Yield(2);
         IM_CHECK(borders() == int2{BorderMode_Mirror});
         ctx->ItemClick(ICON_MY_LINK);
         ctx->Yield(2);
-        IM_CHECK(!disabled("##Border (y)"));
+        IM_CHECK(!disabled("##Border y"));
         IM_CHECK(borders() == int2{BorderMode_Mirror}); //< y unlinked where it was linked
-        ctx->ComboClick("##Border (y)/Black");
+        ctx->ComboClick("##Border y/Black");
         ctx->Yield(2);
         IM_CHECK((borders() == int2{BorderMode_Mirror, BorderMode_Black}));
         ctx->ItemClick(ICON_MY_UNLINK);

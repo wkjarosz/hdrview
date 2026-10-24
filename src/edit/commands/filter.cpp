@@ -28,7 +28,7 @@ namespace
 /// A setting per axis, as two rows drawn by \p field, joined by a link that keeps them the same.
 /**
     As Image size joins its width and height: the link at the open end of a bracket around the two rows, labeled
-    \p name followed by (x) and (y). While it is closed, \p y follows \p x and its row is disabled. \p field draws one
+    \p name followed by x and y. While it is closed, \p y follows \p x and its row is disabled. \p field draws one
     row's widget under the ID it is given.
 */
 template <typename T, typename Field>
@@ -37,7 +37,7 @@ void axis_pair(const char *name, T *x, T *y, bool *linked, const char *tooltip, 
     ImGui::RowSpan rows;
     auto           row = [&](const char *axis, T *value)
     {
-        const std::string label = fmt::format("{} ({})", name, axis);
+        const std::string label = fmt::format("{} {}", name, axis);
         field(("##" + label).c_str(), value);
         if (tooltip)
             ImGui::Tooltip(tooltip);
@@ -228,7 +228,7 @@ public:
 
     void draw(EditContext &) override
     {
-        ImGui::DragFloat2("X, Y offset", &m_offset.x, 0.25f, 0.f, 0.f, "%.2f px");
+        ImGui::DragFloat2("Offset x, y", &m_offset.x, 0.25f, 0.f, 0.f, "%.2f px");
         ImGui::Tooltip("Shift the image by this many pixels. Positive values move it right and down, and "
                        "fractional offsets are interpolated using the sampler below.\n\nYou can also drag the "
                        "preview to move the image with the mouse. Alt-drag to pan the view instead.");
