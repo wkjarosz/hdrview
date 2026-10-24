@@ -274,15 +274,15 @@ stats), separate from `image.cpp`'s data-model logic.
 ### Edit commands and their previews
 An edit command (`src/edit/command.h`) describes its effect through `point_edit()`, `shift_preview()` or
 `remap_preview()`, and `apply()` runs that same description (`apply_point_edit()`, `shifted()`,
-`remapped_envmap()`), so a preview cannot drift from the edit. `make_edit_preview()` (`src/edit/preview.cpp`)
-adds what the shader needs: the slots and rectangle the subject covers, and for a remap the window the result will
+`remapped_envmap()`), so a preview cannot drift from the edit. `make_edit_preview()` (`src/edit/preview.cpp`) adds
+what the shader needs: the slots and rectangle the subject covers, and for a remap the window the result will
 have. The dialog shell (`draw_edit_command_dialog()`) posts it each frame and `edit_preview()` returns it for that
-frame and the next, since the viewport draws before the dialogs; it ends as the dialog closes, except that an
-edit handed to a worker keeps it up until the result lands. `draw_image()` passes it as uniforms and the image
-shader's `edit_preview()` applies it to the stored samples. A command may take drags over its preview
-(`drag_preview()`), and one that reshapes the image frames its result through `EditContext::view`, `set_view`
-and `fit_view`. Pixel readouts are hidden while a preview shows. Keep preview logic in `src/edit/`, not in
-`HDRViewApp`.
+frame and the next, since the viewport draws before the dialogs; it ends as the dialog closes, except that an edit
+handed to a worker keeps it up until the result lands. `draw_image()` passes it as uniforms, which `shader_edit()`
+packs into one op and the slots `src/shared/edits.h` lists for it, and the image shader's `edit_preview()` applies
+it to the stored samples. A command may take drags over its preview (`drag_preview()`), and one that reshapes the
+image frames its result through `EditContext::view`, `set_view` and `fit_view`. Pixel readouts are hidden while a
+preview shows. Keep preview logic in `src/edit/`, not in `HDRViewApp`.
 
 ### Image I/O: pluggable loader registry
 `src/imageio/image_loader.h` declares `BackgroundImageLoader`, which loads images asynchronously (off the

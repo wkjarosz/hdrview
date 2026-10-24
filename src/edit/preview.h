@@ -37,3 +37,15 @@ struct EditPreview
     includes it.
 */
 std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext &ctx);
+
+/// A preview's edit as the image shader's edit_ uniforms hold it: one op, and the slots edits.h lists for it.
+struct ShaderEdit
+{
+    int      op = 0; ///< An EDIT_ op, or EDIT_NONE
+    float4   p0{0.f}, p1{0.f};
+    float3x3 m0{la::identity}, m1{la::identity};
+    int4     i0{0}; ///< A resampling op's integers
+};
+
+/// The edit the image shader dispatches on for \p preview, a shift or remap packed as EDIT_SHIFT or EDIT_REMAP.
+ShaderEdit shader_edit(const EditPreview &preview);

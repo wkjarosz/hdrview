@@ -59,3 +59,28 @@ std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext
     p.rect            = float4{lo.x, lo.y, hi.x, hi.y};
     return p;
 }
+
+ShaderEdit shader_edit(const EditPreview &preview)
+{
+    // a remap replaces the whole image, so it comes first, as in the shader
+    ShaderEdit s;
+    if (const auto &r = preview.remap)
+    {
+        s.op = shader::EDIT_REMAP;
+        s.p0 = float4{float2(r->size), 0.f, 0.f};
+        s.m0 = r->rotation;
+        s.i0 = int4{r->src, r->dst, r->sampling, r->quality};
+    }
+    else if (const auto &shift = preview.shift)
+    {
+        s.op = shader::EDIT_SHIFT;
+        s.p0 = float4{shift->offset, 0.f, 0.f};
+        s.i0 = int4{shift->sampler, shift->borders.x, shift->borders.y, 0};
+    }
+    else
+    {
+        const PointEdit &e = preview.edit;
+        s                  = ShaderEdit{e.op, e.p0, e.p1, e.m0, e.m1};
+    }
+    return s;
+}

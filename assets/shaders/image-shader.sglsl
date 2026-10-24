@@ -40,59 +40,47 @@ void main()
 @include ../../src/shared/envmap.h
 
 layout(binding=1) uniform fs_params {
-    int   has_reference;
-    int   do_dither;
-    vec2  randomness;
-    int   blend_mode;
-    int   channel;
-    float gain;
-    float offset;
-    float gamma;
-    int   tonemap_mode;
-    int   clamp_to_LDR;
-    int   rolloff;
-    float rolloff_preserve_hue;
-    float rolloff_ceiling;
-    int   rolloff_has_peak;
-    float rolloff_peak;
-    int   bg_mode;
-    vec4  bg_color;
-    int   reverse_colormap;
-    vec3  primary_yw;
-    int   primary_luminance_chroma;
-    mat4  primary_M_to_sRGB;
-    vec3  secondary_yw;
-    int   secondary_luminance_chroma;
-    mat4  secondary_M_to_sRGB;
-    float time;
-    ivec2 clip_warnings;
-    vec2  clip_range;
-    int   primary_straight_alpha;
-    int   secondary_straight_alpha;
-    // an edit dialog's preview of the current image; see EditPreview in src/edit/preview.h
-    int   edit_op;
-    ivec4 edit_slots;
-    int   edit_color;
-    vec4  edit_rect;
-    vec4  edit_p0;
-    vec4  edit_p1;
-    mat4  edit_m0;
-    mat4  edit_m1;
-    // a remap dialog's preview, which reads the current image as remap_src and shows it as remap_dst, rotated by
-    // remap_rotation
-    int   remap;
-    int   remap_src;
-    int   remap_dst;
-    mat4  remap_rotation;
-    vec2  remap_size;
-    int   remap_sampling; // an ENVMAP_SAMPLE_ constant
-    int   remap_quality;  // samples per axis, or EWA's maximum anisotropy
-    int   remap_levels;   // the mip levels the current image's textures have
-    // a shift dialog's preview, which moves the subject's channels by shift_offset samples; see ShiftEdit
-    int   shift;
-    vec2  shift_offset;
-    int   shift_sampler;
-    ivec2 shift_borders;
+    int   has_reference;              // whether a reference image is blended with the current one
+    int   do_dither;                  // whether the output is dithered
+    vec2  randomness;                 // a per-frame offset into the dither texture
+    int   blend_mode;                 // how the reference is blended in, a BlendMode_
+    int   channel;                    // which channels are shown, a Channels_
+    float gain;                       // 2^exposure
+    float offset;                     // added after the gain
+    float gamma;                      // the gamma tonemap's exponent
+    int   tonemap_mode;               // a Tonemap_
+    int   clamp_to_LDR;               // whether the output is clamped to [0, 1]
+    int   rolloff;                    // whether highlights roll off toward rolloff_ceiling
+    float rolloff_preserve_hue;       // 1 rolls off the brightest channel, 0 each channel separately
+    float rolloff_ceiling;            // in stops above SDR white
+    int   rolloff_has_peak;           // whether rolloff_peak is known
+    float rolloff_peak;               // the content's peak, in stops above SDR white
+    int   bg_mode;                    // a BGMode_
+    vec4  bg_color;                   // the background under BGMode_Custom_Color
+    int   reverse_colormap;           // whether the colormap runs backward
+    vec3  primary_yw;                 // the current image's luminance weights
+    int   primary_luminance_chroma;   // whether the current image shows a luminance/chroma group
+    mat4  primary_M_to_sRGB;          // from the current image's primaries to linear sRGB
+    vec3  secondary_yw;               // the reference's luminance weights
+    int   secondary_luminance_chroma; // whether the reference shows a luminance/chroma group
+    mat4  secondary_M_to_sRGB;        // from the reference's primaries to linear sRGB
+    float time;                       // in seconds, which moves the clip warnings' stripes
+    ivec2 clip_warnings;              // whether crushed (x) and clipped (y) values are striped
+    vec2  clip_range;                 // the values below and above which they count as crushed and clipped
+    int   primary_straight_alpha;     // whether the current image's alpha is straight
+    int   secondary_straight_alpha;   // whether the reference's alpha is straight
+    int   primary_levels;             // the mip levels the current image's textures have
+    // an edit dialog's preview of the current image: see EditPreview and shader_edit() in src/edit/preview.h, and
+    // src/shared/edits.h for the slots each op reads
+    int   edit_op;                    // an EDIT_ op, or EDIT_NONE
+    ivec4 edit_slots;                 // which of the subject's channels each slot shows, or -1 for none
+    int   edit_color;                 // whether a color op reaches the shown group
+    vec4  edit_rect;                  // the subject's rectangle in uv: min, then max
+    vec4  edit_p0;                    // the op's first vector
+    vec4  edit_p1;                    // its second
+    mat4  edit_m0;                    // its first matrix
+    mat4  edit_m1;                    // its second
+    ivec4 edit_i0;                    // a resampling op's integers
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
@@ -237,14 +225,19 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
     if (!in_img)
         return value;
 
-    if (fsp.remap != 0)
+    if (fsp.edit_op == EDIT_REMAP)
     {
         // the output pixel uv falls in, so each shows as one color
-        ivec2 size  = ivec2(fsp.remap_size);
-        ivec2 pixel = clamp(ivec2(floor(uv * fsp.remap_size)), ivec2(0), size - 1);
+        ivec2 size     = ivec2(fsp.edit_p0.xy);
+        mat3  R        = mat3(fsp.edit_m0);
+        int   src_map  = fsp.edit_i0.x;
+        int   dst_map  = fsp.edit_i0.y;
+        int   sampling = fsp.edit_i0.z;
+        int   quality  = fsp.edit_i0.w;
+        ivec2 pixel    = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
 
         // the textures' mipmaps average 2x2 blocks, halving each level and blurring by a quarter of a squared texel
-        EnvSource src = EnvSource(fsp.remap_src, fsp.remap_levels, 2.0, 0.25, shown_size());
+        EnvSource src = EnvSource(src_map, fsp.primary_levels, 2.0, 0.25, shown_size());
         // a level of the whole image's mipmaps holds whole texels of each face only while it halves the face size
         // exactly, so as many levels as the face size has trailing zero bits, after the finest
         if (envmap_is_cube(src.mapping))
@@ -253,20 +246,21 @@ vec4 edit_preview(vec4 value, vec2 uv, bool in_img)
             src.levels = min(src.levels, int(log2(float(n & -n))) + 1);
         }
 
-        mat3 R = mat3(fsp.remap_rotation);
-        return fsp.remap_sampling == ENVMAP_SAMPLE_EWA
-                   ? envmap_ewa(src, fsp.remap_dst, R, pixel, size, fsp.remap_quality)
-                   : envmap_supersample(src, fsp.remap_dst, R, pixel, size, fsp.remap_quality);
+        return sampling == ENVMAP_SAMPLE_EWA ? envmap_ewa(src, dst_map, R, pixel, size, quality)
+                                             : envmap_supersample(src, dst_map, R, pixel, size, quality);
     }
 
     if (!all(greaterThanEqual(uv, fsp.edit_rect.xy)) || !all(lessThan(uv, fsp.edit_rect.zw)))
         return value;
 
-    if (fsp.shift != 0)
+    if (fsp.edit_op == EDIT_SHIFT)
     {
+        vec2           offset  = fsp.edit_p0.xy;
+        int            interp  = fsp.edit_i0.x;
+        ivec2          borders = fsp.edit_i0.yz;
         ResampleSource src     = ResampleSource(shown_size());
-        vec4           shifted = resample_shifted(src, ivec2(floor(uv * vec2(src.size))), fsp.shift_offset,
-                                                  fsp.shift_sampler, fsp.shift_borders.x, fsp.shift_borders.y);
+        vec4           shifted = resample_shifted(src, ivec2(floor(uv * vec2(src.size))), offset, interp, borders.x,
+                                                  borders.y);
         return mix(value, shifted, greaterThanEqual(fsp.edit_slots, ivec4(0)));
     }
 

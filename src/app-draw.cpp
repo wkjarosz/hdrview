@@ -453,17 +453,18 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("fsp.has_reference", (int)has_reference);
         // an edit dialog's preview, applied to the current image's samples as stored; see edit_preview()
         const EditPreview *preview = edit_preview();
-        const EditPreview  edit    = preview ? *preview : EditPreview{};
-        const EnvmapRemap  remap   = edit.remap.value_or(EnvmapRemap{});
-        const ShiftEdit    shift   = edit.shift.value_or(ShiftEdit{});
-        m_shader->set_uniform("fsp.edit_op", edit.edit.op);
-        m_shader->set_uniform("fsp.edit_slots", edit.slots);
-        m_shader->set_uniform("fsp.edit_color", (int)edit.color);
-        m_shader->set_uniform("fsp.edit_rect", edit.rect);
-        m_shader->set_uniform("fsp.edit_p0", edit.edit.p0);
-        m_shader->set_uniform("fsp.edit_p1", edit.edit.p1);
-        m_shader->set_uniform("fsp.edit_m0", padded(edit.edit.m0));
-        m_shader->set_uniform("fsp.edit_m1", padded(edit.edit.m1));
+        const EditPreview  shown   = preview ? *preview : EditPreview{};
+        const ShaderEdit   edit    = shader_edit(shown);
+        m_shader->set_uniform("fsp.primary_levels", texture_levels(current_image()));
+        m_shader->set_uniform("fsp.edit_op", edit.op);
+        m_shader->set_uniform("fsp.edit_slots", shown.slots);
+        m_shader->set_uniform("fsp.edit_color", (int)shown.color);
+        m_shader->set_uniform("fsp.edit_rect", shown.rect);
+        m_shader->set_uniform("fsp.edit_p0", edit.p0);
+        m_shader->set_uniform("fsp.edit_p1", edit.p1);
+        m_shader->set_uniform("fsp.edit_m0", padded(edit.m0));
+        m_shader->set_uniform("fsp.edit_m1", padded(edit.m1));
+        m_shader->set_uniform("fsp.edit_i0", edit.i0);
 
         // a reshaping edit's preview lays the quad over the window the result will have, as the view will show it
         if (const Box2i *window = reshaped_window(preview))
@@ -478,18 +479,6 @@ void HDRViewApp::draw_image() const
             m_shader->set_uniform("vsp.primary_pos", image_position(current_image()));
             m_shader->set_uniform("vsp.primary_scale", image_scale(current_image()));
         }
-        m_shader->set_uniform("fsp.remap", (int)edit.remap.has_value());
-        m_shader->set_uniform("fsp.remap_src", remap.src);
-        m_shader->set_uniform("fsp.remap_dst", remap.dst);
-        m_shader->set_uniform("fsp.remap_rotation", padded(remap.rotation));
-        m_shader->set_uniform("fsp.remap_size", float2(remap.size));
-        m_shader->set_uniform("fsp.remap_sampling", remap.sampling);
-        m_shader->set_uniform("fsp.remap_quality", remap.quality);
-        m_shader->set_uniform("fsp.remap_levels", texture_levels(current_image()));
-        m_shader->set_uniform("fsp.shift", (int)edit.shift.has_value());
-        m_shader->set_uniform("fsp.shift_offset", shift.offset);
-        m_shader->set_uniform("fsp.shift_sampler", shift.sampler);
-        m_shader->set_uniform("fsp.shift_borders", shift.borders);
         m_shader->set_uniform("vsp.secondary_pos", secondary_pos);
         m_shader->set_uniform("vsp.secondary_scale", secondary_scale);
 
