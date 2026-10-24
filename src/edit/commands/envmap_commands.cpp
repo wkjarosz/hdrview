@@ -178,9 +178,11 @@ public:
             ImGui::RightAligned right(ImGui::CalcTextSize("Reset rotation").x + 2.f * style.FramePadding.x);
             if (ImGui::Button("Reset rotation"))
                 m_angles = float3{0.f};
-            ImGui::Tooltip("Set yaw, pitch and roll back to zero.\n\nYou can also rotate the environment by "
-                           "dragging the preview. Alt-drag to pan the view instead.");
+            ImGui::Tooltip("Set yaw, pitch and roll back to zero.");
         }
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrappedToWidth("Drag the preview to rotate the environment. Alt-drag to pan the view instead.");
+        ImGui::PopStyleColor();
         if (m_angles != before_angles)
         {
             const float3 r = m_angles * k_radians_per_degree;
@@ -211,8 +213,7 @@ public:
             ImGui::SliderFloat("Sigma", &m_sigma, 0.2f, 1.5f, "%.2f px");
             ImGui::EndDisabled();
             ImGui::Tooltip("Set the width of the Gaussian the samples are spread over, in output pixels. Larger "
-                           "values blur more and alias less. A single sample reads the pixel's center, whatever its "
-                           "width. Ctrl-click to type a value outside the slider's range.");
+                           "values blur more and alias less.");
             // the range is for dragging; a value typed in past it is kept, as long as it is not negative
             m_sigma = std::max(m_sigma, 0.f);
         }

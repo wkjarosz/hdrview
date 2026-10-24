@@ -230,8 +230,10 @@ public:
     {
         ImGui::DragFloat2("Offset x, y", &m_offset.x, 0.25f, 0.f, 0.f, "%.2f px");
         ImGui::Tooltip("Shift the image by this many pixels. Positive values move it right and down, and "
-                       "fractional offsets are interpolated using the sampler below.\n\nYou can also drag the "
-                       "preview to move the image with the mouse. Alt-drag to pan the view instead.");
+                       "fractional offsets are interpolated using the sampler below.");
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrappedToWidth("Drag the preview to move the image. Alt-drag to pan the view instead.");
+        ImGui::PopStyleColor();
 
         border_fields(&m_border_x, &m_border_y, &m_link_borders,
                       "Set what fills in where the shift moves the image away from an edge. Repeat wraps the "

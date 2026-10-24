@@ -75,8 +75,8 @@ public:
         if (m_filter == MipFilter_Gaussian)
         {
             ImGui::SliderFloat("Sigma", &m_sigma, 0.2f, 1.5f, "%.2f px");
-            ImGui::Tooltip("Set the width of the Gaussian, in each level's own pixels. Larger values blur more and "
-                           "alias less. Ctrl-click to type a value outside the slider's range.");
+            ImGui::Tooltip("Set the width of the Gaussian, in each level's pixels. Larger values blur more and alias "
+                           "less.");
             // the range is for dragging; a value typed in past it is kept, as long as it is not negative
             m_sigma = std::max(m_sigma, 0.f);
         }
@@ -84,7 +84,7 @@ public:
         const int per_octave = m_per_octave;
         ImGui::SliderInt("Levels per octave", &m_per_octave, 1, 4);
         ImGui::Tooltip("Set how many levels to make for each halving of the size. One halves the image each level; "
-                       "two shrinks it by the square root of two, so every other level is a halving.");
+                       "two shrinks it by the square root of two, so every other level is half the resolution.");
         m_per_octave = std::clamp(m_per_octave, 1, 4);
 
         const auto sizes = mip_level_sizes(img->size(), m_per_octave);

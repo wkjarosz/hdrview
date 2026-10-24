@@ -232,8 +232,7 @@ public:
         }
 
         ImGui::Checkbox("Normalize", &m_normalize);
-        ImGui::Tooltip("Divides each row by its own total, so the mix neither brightens nor darkens. Off, a "
-                       "total above 100% lightens the result and one below darkens it.");
+        ImGui::Tooltip("Divides each row by its own total, so the mix neither brightens nor darkens.");
     }
 
     std::optional<PointEdit> point_edit(const EditContext &) const override
