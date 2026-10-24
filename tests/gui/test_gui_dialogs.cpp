@@ -322,6 +322,15 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         const float exposure = app->exposure_live(), gamma = app->gamma_live();
         const auto  tonemap = app->tonemap();
         const bool  clamp = app->clamp_to_LDR(), rolling = roll_off;
+        // put back however the test ends, a failed check returning early
+        OnExit restore{[&, exposure, gamma, tonemap, clamp, rolling]
+                       {
+                           app->exposure_live() = exposure;
+                           app->gamma_live()    = gamma;
+                           app->tonemap()       = tonemap;
+                           app->clamp_to_LDR()  = clamp;
+                           roll_off             = rolling;
+                       }};
         app->exposure_live() = 2.f;
         app->gamma_live()    = 1.f;
         app->tonemap()       = Tonemap_Gamma;
@@ -379,12 +388,6 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
         group.type = ChannelGroup::RGB_Channels;
         IM_CHECK_EQ(app->image_to_save(HDRViewApp::SaveMode_Rendition, false, 0.f)->channels.size(), 3u);
         group.type = type;
-
-        app->exposure_live() = exposure;
-        app->gamma_live()    = gamma;
-        app->tonemap()       = tonemap;
-        app->clamp_to_LDR()  = clamp;
-        roll_off             = rolling;
     };
 
     // What Export rendition writes for a gain-map format, through the dialog the way a user saves: the file reads
@@ -420,22 +423,18 @@ void RegisterTests_Dialogs(ImGuiTestEngine *engine)
             const auto  tonemap = app->tonemap();
             const bool  clamp = app->clamp_to_LDR(), rolling = roll_off;
             // a failed check returns early, so the view and the test hooks are put back however the test ends
-            struct Restore
-            {
-                std::function<void()> undo;
-                ~Restore() { undo(); }
-            } restore{[&, exposure, gamma, tonemap, clamp, rolling]
-                      {
-                          app->test_save_path().clear();
+            OnExit restore{[&, exposure, gamma, tonemap, clamp, rolling]
+                           {
+                               app->test_save_path().clear();
 #if HDRVIEW_ENABLE_LIBJXL
-                          jxl_gain_map_option() = 0;
+                               jxl_gain_map_option() = 0;
 #endif
-                          app->exposure_live() = exposure;
-                          app->gamma_live()    = gamma;
-                          app->tonemap()       = tonemap;
-                          app->clamp_to_LDR()  = clamp;
-                          roll_off             = rolling;
-                      }};
+                               app->exposure_live() = exposure;
+                               app->gamma_live()    = gamma;
+                               app->tonemap()       = tonemap;
+                               app->clamp_to_LDR()  = clamp;
+                               roll_off             = rolling;
+                           }};
             app->exposure_live() = 2.f;
             app->gamma_live()    = 1.f;
             app->tonemap()       = Tonemap_Gamma;

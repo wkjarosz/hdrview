@@ -81,7 +81,7 @@ void RegisterTests_Stats(ImGuiTestEngine *engine)
         IM_CHECK_EQ(stats->summary.valid_pixels, 0);
 
         // put the selection back so later tests see the default state
-        hdrview()->roi() = hdrview()->roi_live() = Box2i{int2{0}};
+        hdrview()->roi() = hdrview()->roi_live() = Box2i{};
         ctx->Yield(3);
     };
 }

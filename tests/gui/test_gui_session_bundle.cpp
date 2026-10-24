@@ -77,7 +77,8 @@ void RegisterTests_SessionBundle(ImGuiTestEngine *engine)
                                                        {"images/000_fixture.png", read_file(HDRVIEW_GUI_TEST_IMAGE)}});
 
         hdrview()->close_all_images();
-        // the same entry point drag-and-drop and CLI args use
+        // the same entry point drag-and-drop and CLI args use, and the blend mode the session sets put back after
+        OnExit restore{[] { hdrview()->blend_mode() = BlendMode_Normal; }};
         hdrview()->load_images({zip_path.string()});
         wait_for_loads(ctx);
 

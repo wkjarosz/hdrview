@@ -44,6 +44,7 @@ void RegisterTests_Lifetime(ImGuiTestEngine *engine)
         hdrview()->set_current_image_index(0);
         hdrview()->set_reference_image_index(1);
         hdrview()->blend_mode() = BlendMode_Difference;
+        OnExit restore{[] { hdrview()->blend_mode() = BlendMode_Normal; }};
         ctx->Yield();
 
         // kick off the comparison, then close the reference before it can finish

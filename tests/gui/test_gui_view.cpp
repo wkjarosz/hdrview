@@ -100,16 +100,23 @@ void RegisterTests_View(ImGuiTestEngine *engine)
         if (app->action("Clamp to LDR").enabled())
             toggles.push_back("Clamp to LDR");
 
-        // the fits exclude one another, so each is turned on from none; and fitting a selection needs one
-        for (int i = 0; i < 3; ++i) *app->action(toggles[i]).p_selected = false;
+        // the fits exclude one another, so each is turned on from none, and put back as they were after; and
+        // fitting a selection needs one
+        bool fits[3];
+        for (int i = 0; i < 3; ++i)
+        {
+            fits[i]                             = *app->action(toggles[i]).p_selected;
+            *app->action(toggles[i]).p_selected = false;
+        }
         app->set_selection(Box2i{app->current_image()->data_window.min, app->current_image()->data_window.min + 8});
         app->tonemap()  = Tonemap_Gamma;
         app->exposure() = app->exposure_live() = 0.f;
         app->gamma() = app->gamma_live() = 1.f;
-        OnExit restore{[ctx]
+        OnExit restore{[ctx, app, &toggles, &fits]
                        {
                            reset_view_controls(ctx);
                            hdrview()->tonemap() = Tonemap_Gamma;
+                           for (int i = 0; i < 3; ++i) *app->action(toggles[i]).p_selected = fits[i];
                        }};
 
         struct State
