@@ -355,7 +355,7 @@ void RegisterTests_Edit(ImGuiTestEngine *engine)
                   [](ImGuiTestContext *, const ConstImagePtr &img, const vector<float> &)
                   { IM_CHECK_EQ(img->color_space, ColorGamut_ACES_AP0); }}},
                 {"Channel mixer...",
-                 {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemClick("Monochrome"); }, mixed_to_gray}},
+                 {nullptr, [](ImGuiTestContext *ctx) { ctx->ItemCheck("Monochrome"); }, mixed_to_gray}},
                 {"Hue/saturation...",
                  {nullptr,
                   [](ImGuiTestContext *ctx)

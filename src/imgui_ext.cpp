@@ -1239,6 +1239,45 @@ bool RowBracketButton(const char *icon, const RowSpan &rows, bool bracketed, con
     return pressed;
 }
 
+FillsWidth::FillsWidth()
+{
+    const ImGuiWindow *window = ImGui::GetCurrentWindow();
+    m_max_x                   = window->DC.CursorMaxPos.x;
+    m_ideal_x                 = window->DC.IdealMaxPos.x;
+}
+
+FillsWidth::~FillsWidth()
+{
+    // the extents an auto-resizing window is sized from, as they were before the scope; only across, so the items
+    // still give it their height
+    ImGuiWindow *window       = ImGui::GetCurrentWindow();
+    window->DC.CursorMaxPos.x = m_max_x;
+    window->DC.IdealMaxPos.x  = m_ideal_x;
+}
+
+void TextWrappedToWidth(const char *text)
+{
+    FillsWidth fill;
+    ImGui::TextWrapped("%s", text);
+}
+
+RightAligned::RightAligned(float width)
+{
+    const ImGuiWindow *window = ImGui::GetCurrentWindow();
+    m_max_x                   = window->DC.CursorMaxPos.x;
+    m_ideal_x                 = window->DC.IdealMaxPos.x;
+    m_natural_right           = window->DC.CursorPos.x + width;
+    if (const float indent = ImGui::GetContentRegionAvail().x - width; indent > 0.f)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+}
+
+RightAligned::~RightAligned()
+{
+    ImGuiWindow *window       = ImGui::GetCurrentWindow();
+    window->DC.CursorMaxPos.x = ImMax(m_max_x, m_natural_right);
+    window->DC.IdealMaxPos.x  = ImMax(m_ideal_x, m_natural_right);
+}
+
 DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, bool use_shortcuts,
                            bool confirm_enabled)
 {
@@ -1258,10 +1297,9 @@ DialogResult DialogButtons(const char *confirm_label, const char *cancel_label, 
     const float       width = ImGui::CalcTextSize(cancel_label).x + ImGui::CalcTextSize(confirm_label).x +
                         4.f * style.FramePadding.x + style.ItemSpacing.x;
 
-    // Trailing edge of the content, which under an auto-resizing dialog is as wide as its widest row --
-    // so the buttons end where the controls above them do.
-    if (const float indent = ImGui::GetContentRegionAvail().x - width; indent > 0.f)
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    // at the trailing edge of the content, which under an auto-resizing dialog is as wide as its widest row, so the
+    // buttons end where the controls above them do, without being what holds the dialog that wide
+    RightAligned right(width);
 
     const bool cancel_pressed = ImGui::Button(cancel_label);
     if (cancel_pressed ||

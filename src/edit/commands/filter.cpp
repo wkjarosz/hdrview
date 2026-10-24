@@ -211,8 +211,6 @@ public:
                       "Set what fills in where the shift moves the image away from an edge. Repeat wraps the "
                       "image around, which keeps a tiling texture seamless.");
 
-        // only asked for when it is consulted: a whole-sample offset reads samples exactly
-        ImGui::BeginDisabled(m_offset.x == std::floor(m_offset.x) && m_offset.y == std::floor(m_offset.y));
         if (ImGui::BeginCombo("Sampler", sampler_name(m_sampler)))
         {
             for (int i = 0; i < Sampler_COUNT; ++i)
@@ -220,7 +218,6 @@ public:
                     m_sampler = i;
             ImGui::EndCombo();
         }
-        ImGui::EndDisabled();
         ImGui::Tooltip("Set how to interpolate between pixels for a fractional offset (unused for whole-pixel "
                        "offsets).");
     }
@@ -263,8 +260,9 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        ImGui::TextWrapped("Gremlins are NaNs or infinities that can corrupt various image operations. Here you can "
-                           "replace them with a specified color, or with the median of their neighborhood.");
+        ImGui::TextWrappedToWidth(
+            "Gremlins are NaNs or infinities that can corrupt various image operations. Here you can "
+            "replace them with a specified color, or with the median of their neighborhood.");
         ImGui::Spacing();
 
         if (auto img = ctx.image)
@@ -319,16 +317,15 @@ public:
                      ICON_MY_NORMAL_MAP,
                      ImGuiKey_None,
                      true,
-                     "Convert",
-                     27.f})
+                     "Convert"})
     {
     }
 
     void draw(EditContext &) override
     {
-        ImGui::TextWrapped("Reads the image as a height field -- the average of its channels -- and writes "
-                           "the surface normal that height field would have, encoded so that a component of "
-                           "zero is 0.5.");
+        ImGui::TextWrappedToWidth("Reads the image as a height field -- the average of its channels -- and writes "
+                                  "the surface normal that height field would have, encoded so that a component of "
+                                  "zero is 0.5.");
         ImGui::Spacing();
 
         ImGui::DragFloat("Scale", &m_scale, 0.01f, 0.f, 100.f, "%.2f");

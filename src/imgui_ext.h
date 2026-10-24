@@ -159,6 +159,44 @@ bool BeginModalDialog(const char *title, bool &open, DialogPosition position = D
 /// Whether a BeginModalDialog() dialog showed this frame or the last, for what should stand down behind one.
 bool AnyModalDialogOpen();
 
+/// A scope whose items take the window's width rather than give it one.
+/**
+    For what is sized to the space left, such as wrapped text or a strip drawn as wide as the window. In an
+    auto-resizing window such an item is as wide as the window, so it would hold the window at whatever width it has,
+    and the window could never shrink to fit the rest of its contents.
+*/
+class FillsWidth
+{
+public:
+    FillsWidth();
+    ~FillsWidth();
+    FillsWidth(const FillsWidth &)            = delete;
+    FillsWidth &operator=(const FillsWidth &) = delete;
+
+private:
+    float m_max_x, m_ideal_x;
+};
+
+/// Text wrapped at the window's width, without holding an auto-resizing window at that width.
+void TextWrappedToWidth(const char *text);
+
+/// A scope whose items, \p width wide, end at the window's right edge but give it only the width they take.
+/**
+    The cursor is indented so that the items end at the edge, but the window is sized as if they followed on from where
+    the cursor was, so they do not hold an auto-resizing window at its width.
+*/
+class RightAligned
+{
+public:
+    explicit RightAligned(float width);
+    ~RightAligned();
+    RightAligned(const RightAligned &)            = delete;
+    RightAligned &operator=(const RightAligned &) = delete;
+
+private:
+    float m_max_x, m_ideal_x, m_natural_right;
+};
+
 enum class DialogResult
 {
     None,

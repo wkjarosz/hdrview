@@ -10,6 +10,7 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "imgui_internal.h"
 
 #include <hello_imgui/hello_imgui.h>
 
@@ -183,9 +184,11 @@ void HDRViewApp::draw_edit_command_dialog(EditCommand &cmd, bool &open)
     {
         m_navigable_dialog_frame = ImGui::GetFrameCount();
 
-        // a minimum width, set by an item of that width: these dialogs are AlwaysAutoResize, which sizes
-        // the window from its contents and ignores a size set from outside
-        ImGui::Dummy(ImVec2(info.width_em * HelloImGui::EmSize(), 0.f));
+        // The dialog is as wide as its widest row, and what fills the width (wrapped text, a strip) follows it. Dear
+        // ImGui measures a reopened popup on a hidden first frame at no width at all, which wraps text a word to a
+        // line; one more hidden frame shows it at the size it settles at.
+        if (ImGui::IsWindowAppearing())
+            ImGui::GetCurrentWindow()->HiddenFramesCannotSkipItems = 2;
 
         // Point-wise edits, shifts and remaps preview in the viewport as the controls move, through the code that
         // applies them; ctx.previewing tells the command, before it draws, whether this one does.

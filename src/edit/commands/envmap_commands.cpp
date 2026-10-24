@@ -34,14 +34,6 @@ void mapping_combo(const char *label, int *value)
 
 constexpr float k_radians_per_degree = float(M_PI) / 180.f;
 
-/// Continue the line, beyond the last item's label, at the dialog's right edge for something \p width wide.
-void same_line_at_right(float width)
-{
-    ImGui::SameLine();
-    if (const float slack = ImGui::GetContentRegionAvail().x - width; slack > 0.f)
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + slack);
-}
-
 class Remap final : public EditCommand
 {
 public:
@@ -50,8 +42,7 @@ public:
                      ICON_MY_ENVMAP,
                      ImGuiKey_None,
                      true,
-                     "Remap",
-                     27.f})
+                     "Remap"})
     {
         // reparameterizes the whole image, so there is no subject to narrow
         m_info.draws_subject_selector = false;
@@ -104,10 +95,14 @@ public:
         m_size = la::max(m_size, int2{1});
 
         const auto &style = ImGui::GetStyle();
-        same_line_at_right(ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize("Auto aspect").x);
-        ImGui::Checkbox("Auto aspect", &m_auto_aspect);
-        ImGui::Tooltip("Keep the width and height at the target mapping's aspect ratio (e.g. 2:1 for a lat-long, "
-                       "3:4 for a cube cross).");
+        ImGui::SameLine();
+        {
+            ImGui::RightAligned right(ImGui::GetFrameHeight() + style.ItemInnerSpacing.x +
+                                      ImGui::CalcTextSize("Auto aspect").x);
+            ImGui::Checkbox("Auto aspect", &m_auto_aspect);
+            ImGui::Tooltip("Keep the width and height at the target mapping's aspect ratio (e.g. 2:1 for a lat-long, "
+                           "3:4 for a cube cross).");
+        }
 
         // follow whichever was just changed: a new target re-derives the width from its aspect, and
         // editing one field drives the other
@@ -130,11 +125,14 @@ public:
         ImGui::Tooltip("Tilt the environment up or down.");
         ImGui::SliderFloat("Roll", &m_angles.z, -180.f, 180.f, "%.1f deg");
         ImGui::Tooltip("Rotate the environment around the forward axis.");
-        same_line_at_right(ImGui::CalcTextSize("Reset rotation").x + 2.f * style.FramePadding.x);
-        if (ImGui::Button("Reset rotation"))
-            m_angles = float3{0.f};
-        ImGui::Tooltip("Set yaw, pitch and roll back to zero.\n\nYou can also rotate the environment by dragging "
-                       "the preview. Alt-drag to pan the view instead.");
+        ImGui::SameLine();
+        {
+            ImGui::RightAligned right(ImGui::CalcTextSize("Reset rotation").x + 2.f * style.FramePadding.x);
+            if (ImGui::Button("Reset rotation"))
+                m_angles = float3{0.f};
+            ImGui::Tooltip("Set yaw, pitch and roll back to zero.\n\nYou can also rotate the environment by "
+                           "dragging the preview. Alt-drag to pan the view instead.");
+        }
         if (m_angles != before_angles)
         {
             const float3 r = m_angles * k_radians_per_degree;
@@ -263,8 +261,7 @@ public:
                      ICON_MY_IRRADIANCE,
                      ImGuiKey_None,
                      true,
-                     "Convolve",
-                     27.f})
+                     "Convolve"})
     {
         m_info.draws_subject_selector = false;
     }

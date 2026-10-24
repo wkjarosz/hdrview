@@ -150,7 +150,6 @@ public:
                      ImGuiKey_None,
                      /* has_dialog */ false,
                      "Ungroup",
-                     24.f,
                      /* draws_subject_selector */ false})
     {
     }
@@ -210,7 +209,6 @@ public:
                      ImGuiKey_None,
                      /* has_dialog */ false,
                      "Regroup",
-                     24.f,
                      /* draws_subject_selector */ false})
     {
     }
@@ -248,7 +246,6 @@ public:
                      ImGuiKey_None,
                      /* has_dialog */ false,
                      "Delete",
-                     24.f,
                      /* draws_subject_selector */ false})
     {
     }

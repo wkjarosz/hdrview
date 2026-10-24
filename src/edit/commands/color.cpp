@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <hello_imgui/hello_imgui.h>
 #include <optional>
 #include <vector>
 
@@ -35,8 +36,7 @@ public:
                      ICON_MY_COLORSPACE,
                      ImGuiKey_None,
                      true,
-                     "Convert",
-                     27.f})
+                     "Convert"})
     {
     }
 
@@ -101,7 +101,8 @@ public:
 
         float3x3 M;
         if (!color_conversion_matrix(M, from(), to(), AdaptationMethod(m_method)))
-            ImGui::TextWrapped("These describe the same color space, so this would leave the samples as they are.");
+            ImGui::TextWrappedToWidth(
+                "These describe the same color space, so this would leave the samples as they are.");
     }
 
     std::optional<PointEdit> point_edit(const EditContext &) const override
@@ -167,50 +168,72 @@ class ChannelMixer final : public EditCommand
 {
 public:
     ChannelMixer() :
-        EditCommand({{"Channel mixer...", "Mix channels", "Monochrome"},
-                     ICON_MY_CHANNEL_MIXER,
-                     ImGuiKey_None,
-                     true,
-                     "Mix",
-                     27.f})
+        EditCommand(
+            {{"Channel mixer...", "Mix channels", "Monochrome"}, ICON_MY_CHANNEL_MIXER, ImGuiKey_None, true, "Mix"})
     {
     }
 
     void draw(EditContext &) override
     {
-        // radio-height text, so the label sits on the same line as the buttons beside it
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Output channel");
+        ImGui::Checkbox("Monochrome", &m_monochrome);
+        ImGui::Tooltip("Mix one gray value from the three channels, and write it to all of them.");
 
-        // each named in its own color, gray last
-        const char  *names[]  = {"Red", "Green", "Blue", "Monochrome"};
+        // The whole mix at once, a row of source weights per output channel, each channel named in its own color and
+        // the gray row in gray. Fit to its columns, so the table gives the dialog its width rather than taking it.
+        const char  *names[]  = {"Red", "Green", "Blue", "Gray"};
         const ImVec4 colors[] = {ImVec4(0.90f, 0.35f, 0.35f, 1.f), ImVec4(0.35f, 0.85f, 0.35f, 1.f),
                                  ImVec4(0.45f, 0.55f, 1.00f, 1.f), ImVec4(0.80f, 0.80f, 0.80f, 1.f)};
-
-        for (int i = 0; i < Out_COUNT; ++i)
+        auto         name     = [&](int i)
         {
-            // only between them: SameLine() before the first would put it back on the line above
-            ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text, colors[i]);
-            ImGui::PushStyleColor(ImGuiCol_CheckMark, colors[i]);
-            ImGui::RadioButton(names[i], &m_output, i);
-            ImGui::PopStyleColor(2);
+            ImGui::TextUnformatted(names[i]);
+            ImGui::PopStyleColor();
+        };
+
+        if (ImGui::BeginTable("##mix", 5, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+        {
+            const float cell = HelloImGui::EmSize(5.f);
+            ImGui::TableSetupColumn("##output");
+            for (int c = 0; c < 3; ++c) ImGui::TableSetupColumn(names[c], ImGuiTableColumnFlags_WidthFixed, cell);
+            ImGui::TableSetupColumn("Total");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            for (int c = 0; c < 3; ++c)
+            {
+                ImGui::TableNextColumn();
+                name(c);
+                ImGui::Tooltip("How much of each output is taken from this channel.");
+            }
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("Total");
+
+            for (int r = m_monochrome ? int(Out_Monochrome) : int(Out_Red);
+                 r < (m_monochrome ? int(Out_COUNT) : int(Out_Monochrome)); ++r)
+            {
+                float3 &w = m_rows[r];
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                name(r);
+                ImGui::Tooltip(r == Out_Monochrome ? "The weights the gray is mixed with."
+                                                   : "The weights this output channel is mixed with.");
+                for (int c = 0; c < 3; ++c)
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::DragFloat(fmt::format("##weight{}{}", r, c).c_str(), &w[c], 0.5f, -200.f, 200.f, "%.1f%%");
+                }
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextDisabled("%.1f%%", w.x + w.y + w.z);
+            }
+            ImGui::EndTable();
         }
-        ImGui::Tooltip("Which channel the weights below are written to. Monochrome writes one gray value "
-                       "to all three.");
 
-        float3 &w = m_rows[m_output];
-
-        ImGui::DragFloat("Red##weight", &w.x, 0.5f, -200.f, 200.f, "%.1f%%");
-        ImGui::DragFloat("Green##weight", &w.y, 0.5f, -200.f, 200.f, "%.1f%%");
-        ImGui::DragFloat("Blue##weight", &w.z, 0.5f, -200.f, 200.f, "%.1f%%");
-
-        // the checkbox first, so the total, whose width changes, has nothing after it to push around
         ImGui::Checkbox("Normalize", &m_normalize);
         ImGui::Tooltip("Divides each row by its own total, so the mix neither brightens nor darkens. Off, a "
                        "total above 100% lightens the result and one below darkens it.");
-        ImGui::SameLine();
-        ImGui::TextDisabled("Total: %.1f%%", w.x + w.y + w.z);
     }
 
     std::optional<PointEdit> point_edit(const EditContext &) const override
@@ -224,7 +247,7 @@ public:
         };
 
         // the rows of the matrix, as source weights per output channel; Monochrome writes one gray to all three
-        const bool   mono = m_output == Out_Monochrome;
+        const bool   mono = m_monochrome;
         const float3 r    = row(m_rows[mono ? Out_Monochrome : Out_Red]),
                      g    = row(m_rows[mono ? Out_Monochrome : Out_Green]),
                      b    = row(m_rows[mono ? Out_Monochrome : Out_Blue]);
@@ -236,7 +259,7 @@ public:
     void apply(const EditContext &ctx) override { apply_point_edit(ctx, "Channel mixer", *point_edit(ctx)); }
 
 private:
-    /// Which channel the weights are written to.
+    /// The rows of weights: one per output channel, and the one that mixes a single gray.
     enum Output : int
     {
         Out_Red = 0,
@@ -251,20 +274,16 @@ private:
     // as percentages the way Photoshop presents them. Thirds, so the monochrome default totals 100%.
     float3 m_rows[Out_COUNT] = {
         {100.f, 0.f, 0.f}, {0.f, 100.f, 0.f}, {0.f, 0.f, 100.f}, {100.f / 3.f, 100.f / 3.f, 100.f / 3.f}};
-    int  m_output    = Out_Red;
-    bool m_normalize = false;
+    bool m_monochrome = false;
+    bool m_normalize  = false;
 };
 
 class HueSaturation final : public EditCommand
 {
 public:
     HueSaturation() :
-        EditCommand({{"Hue/saturation...", "Colorize", "Desaturate"},
-                     ICON_MY_HUE_SATURATION,
-                     ImGuiKey_None,
-                     true,
-                     "Apply",
-                     27.f})
+        EditCommand(
+            {{"Hue/saturation...", "Colorize", "Desaturate"}, ICON_MY_HUE_SATURATION, ImGuiKey_None, true, "Apply"})
     {
     }
 
@@ -352,9 +371,13 @@ public:
             ImGui::SetItemTooltip("%s", id);
             return w;
         };
-        strip("The hue wheel as it is", PointEdit{shader::EDIT_HUE_SATURATION});
-        const float w =
-            strip("The hue wheel as these settings would leave it; drag it to turn the hue", *point_edit(ctx));
+        // as wide as the controls above them, rather than what makes the dialog wide
+        float w = 0.f;
+        {
+            ImGui::FillsWidth fill;
+            strip("The hue wheel as it is", PointEdit{shader::EDIT_HUE_SATURATION});
+            w = strip("The hue wheel as these settings would leave it; drag it to turn the hue", *point_edit(ctx));
+        }
 
         // dragging the strip carries its colors along with the mouse, so the hue under it is the one grabbed
         if (ImGui::IsItemActive() && ImGui::GetIO().MouseDelta.x != 0.f && w > 0.f)
@@ -393,8 +416,7 @@ public:
                      ICON_MY_BRIGHTNESS_CONTRAST,
                      ImGuiKey_None,
                      true,
-                     "Apply",
-                     27.f})
+                     "Apply"})
     {
     }
 
@@ -597,8 +619,8 @@ public:
 
     void draw(EditContext &ctx) override
     {
-        ImGui::TextWrapped("Composites the image over a background color, so what was transparent becomes "
-                           "that color and the result is opaque.");
+        ImGui::TextWrappedToWidth("Composites the image over a background color, so what was transparent becomes "
+                                  "that color and the result is opaque.");
         ImGui::Spacing();
 
         ImGui::ColorEdit4("Background", &m_bg.x,

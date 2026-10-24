@@ -37,8 +37,7 @@ public:
                      ICON_MY_CHANNEL_GROUP,
                      ImGuiKey_None,
                      true,
-                     "Generate",
-                     26.f})
+                     "Generate"})
     {
         // rewrites the whole image into a pyramid, so there is no subject to narrow
         m_info.draws_subject_selector = false;

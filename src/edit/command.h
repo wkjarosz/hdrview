@@ -129,8 +129,7 @@ public:
         ImGuiKeyChord            chord      = ImGuiKey_None;
         bool                     has_dialog = false; ///< Whether invoking this opens a dialog rather than editing.
 
-        std::string confirm  = "Apply"; ///< What the confirming button says. Ignored without a dialog.
-        float       width_em = 24.f;    ///< Least dialog width in em; an Info predates the ImGui context.
+        std::string confirm = "Apply"; ///< What the confirming button says. Ignored without a dialog.
 
         bool draws_subject_selector = true; ///< Whether "Apply to" means anything here, and so is shown.
         bool fans_out               = true; ///< Whether a multi-selection runs this once per image.

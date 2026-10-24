@@ -310,7 +310,6 @@ TEST_CASE("Every edit command is addressable and describes itself")
         REQUIRE_FALSE(info.names.empty());
         CHECK_FALSE(info.names.front().empty());
         CHECK_FALSE(info.icon.empty());
-        CHECK(info.width_em > 0.f);
 
         names.push_back(info.names.front());
     }
