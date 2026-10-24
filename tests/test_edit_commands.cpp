@@ -16,6 +16,7 @@
 #include "colorspace.h"
 #include "edit/commands.h"
 #include "edit/edit_ops.h"
+#include "edit/filters.h"
 #include "edit/subject.h"
 #include "image.h"
 
@@ -879,6 +880,31 @@ TEST_CASE("Generating mipmaps halves the image down to the number of levels aske
     // and the image it came from is untouched: this makes images, it does not edit one
     CHECK(img->size() == k_size);
     CHECK(img->history.size() == 0);
+
+    // Several levels to an octave: each smaller than the last, every one a whole number of octaves down the image
+    // halved that many times, as one to an octave makes it, and down to one sample; on a size that rounds unevenly.
+    const int2 odd{37, 23};
+    for (int per_octave = 1; per_octave <= 4; ++per_octave)
+    {
+        CAPTURE(per_octave);
+        const auto sizes = mip_level_sizes(odd, per_octave);
+        REQUIRE_FALSE(sizes.empty());
+        int2 halved = odd, last = odd;
+        for (size_t i = 0; i < sizes.size(); ++i)
+        {
+            CAPTURE(i);
+            CHECK(la::all(la::lequal(sizes[i], last)));
+            CHECK(sizes[i] != last);
+            last = sizes[i];
+        }
+        CHECK(sizes.back() == int2{1, 1});
+        for (int octave = 1; la::maxelem(halved) > 1; ++octave)
+        {
+            CAPTURE(octave);
+            halved = la::max(halved / 2, int2{1});
+            CHECK(std::find(sizes.begin(), sizes.end(), halved) != sizes.end());
+        }
+    }
 }
 
 TEST_CASE("A mip level is averaged from its samples rather than dropping three of every four")
@@ -904,6 +930,60 @@ TEST_CASE("A mip level is averaged from its samples rather than dropping three o
         CAPTURE(i);
         CHECK(half->channels[0](i) == doctest::Approx(0.5f).epsilon(0.2));
     }
+
+    // and so does every filter, a halving or half of one down
+    for (int filter = 0; filter < MipFilter_COUNT; ++filter)
+        for (int per_octave : {1, 2})
+        {
+            CAPTURE(mip_filter_name(filter));
+            CAPTURE(per_octave);
+            const Array2Df level =
+                mip_level(img->channels[0], mip_level_sizes(int2{16, 16}, per_octave).front(), filter);
+            float worst = 0.f;
+            for (int i = 0; i < level.num_elements(); ++i) worst = std::max(worst, std::abs(level(i) - 0.5f));
+            CHECK(worst < 0.15f);
+        }
+}
+
+TEST_CASE("A Gaussian mip chain blurs every level by sigma of its own samples")
+{
+    // Along the chain each level is blurred by what the one before lacks, so each is as if filtered from the image
+    // itself. A sinusoid across the image keeps its cycles, so at a level w samples wide it runs at cycles / w per
+    // sample, where a Gaussian of sigma passes exp(-2 pi^2 sigma^2 f^2): measured on levels down to a quarter cycle
+    // per sample, and at two widths and two spacings.
+    const int W = 512, cycles = 32;
+    Array2Df  image{int2{W, 2}};
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < W; ++x) image(x, y) = 0.5f + 0.25f * std::cos(2.0 * M_PI * cycles * (x + 0.5) / W);
+
+    for (float sigma : {0.5f, 0.8f})
+        for (int per_octave : {1, 2})
+        {
+            CAPTURE(sigma);
+            CAPTURE(per_octave);
+            Array2Df level   = image;
+            float    blurred = 0.f;
+            for (const int2 size : mip_level_sizes(image.size(), per_octave))
+            {
+                const double f = double(cycles) / size.x;
+                if (f > 0.25)
+                    break;
+                CAPTURE(size.x);
+                level   = mip_level(level, size, MipFilter_Gaussian, sigma, blurred);
+                blurred = sigma;
+
+                double c = 0.0, s = 0.0;
+                for (int x = 0; x < size.x; ++x)
+                {
+                    const double phase = 2.0 * M_PI * cycles * (x + 0.5) / size.x;
+                    c += level(x, 0) * std::cos(phase);
+                    s += level(x, 0) * std::sin(phase);
+                }
+                const double response = std::sqrt(c * c + s * s) * 2.0 / size.x / 0.25;
+                const double measured = std::sqrt(-std::log(response) / (2.0 * M_PI * M_PI * f * f));
+                CHECK(std::abs(measured - sigma) < 0.01);
+            }
+        }
 }
 
 TEST_CASE("Regrouping reaches the whole layer from any one of its exploded channels")

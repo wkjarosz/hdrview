@@ -8,12 +8,14 @@
 
 #include "common.h"
 #include "shared/shim.h"
+#include "stb_image_resize2.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
 #include <smallthreadpool.h>
+#include <stdexcept>
 #include <vector>
 
 namespace shader
@@ -64,6 +66,45 @@ std::vector<float> gaussian_taps(float sigma)
     for (auto &t : taps) t /= sum;
 
     return taps;
+}
+
+/// Normalized 1D Gaussian taps whose variance is exactly \p sigma squared, or none for a sigma of zero.
+/**
+    Sampled at whole samples, a Gaussian narrower than a sample or so has far less variance than its own, and as good
+    as none below half of one. These are a sampled Gaussian of whatever width gives the taps the variance asked for,
+    which a chain of small blurs needs, as each must add exactly its share.
+*/
+std::vector<float> variance_matched_gaussian_taps(float sigma)
+{
+    if (sigma <= 0.f)
+        return {};
+
+    auto taps_of = [](float s, int radius)
+    {
+        std::vector<float> taps(size_t(2 * radius + 1));
+        float              sum = 0.f;
+        for (int i = -radius; i <= radius; ++i)
+            sum += taps[size_t(i + radius)] = std::exp(-float(i * i) / (2.f * s * s));
+        for (auto &t : taps) t /= sum;
+        return taps;
+    };
+    auto variance = [](const std::vector<float> &taps)
+    {
+        const int radius = int(taps.size() / 2);
+        float     v      = 0.f;
+        for (int i = -radius; i <= radius; ++i) v += taps[size_t(i + radius)] * float(i * i);
+        return v;
+    };
+
+    // the variance grows with the width, so bisect on it; three sigma either side holds what matters
+    const int radius = std::max(1, int(std::ceil(3.f * sigma)));
+    float     lo = 1e-3f, hi = sigma + 1.f;
+    for (int iteration = 0; iteration < 40; ++iteration)
+    {
+        const float mid                                            = 0.5f * (lo + hi);
+        (variance(taps_of(mid, radius)) < sigma * sigma ? lo : hi) = mid;
+    }
+    return taps_of(0.5f * (lo + hi), radius);
 }
 
 /// Convolve \p region of \p src with the separable kernel \p taps_x by \p taps_y.
@@ -505,5 +546,71 @@ Array2Df zapped_gremlins(const Array2Df &src, const Box2i &region, float replace
                               }
                       });
 
+    return out;
+}
+
+const char *mip_filter_name(int filter)
+{
+    static const char *names[MipFilter_COUNT] = {"Box", "Mitchell", "Gaussian"};
+    return filter >= 0 && filter < MipFilter_COUNT ? names[filter] : "";
+}
+
+std::vector<int2> mip_level_sizes(int2 size, int per_octave)
+{
+    std::vector<int2> sizes;
+    int2              last = size;
+    for (int l = 1; la::maxelem(last) > 1; ++l)
+    {
+        const double s    = std::exp2(-double(l) / double(std::max(1, per_octave)));
+        const int2   next = la::max(int2{int(std::floor(size.x * s)), int(std::floor(size.y * s))}, int2{1});
+        if (next != last)
+            sizes.push_back(last = next);
+    }
+    return sizes;
+}
+
+Array2Df mip_level(const Array2Df &previous, int2 size, int filter, float sigma, float blurred)
+{
+    const int2 n = previous.size();
+    Array2Df   out{size};
+    if (filter != MipFilter_Gaussian)
+    {
+        if (!stbir_resize(previous.data(), n.x, n.y, 0, out.data(), size.x, size.y, 0, STBIR_1CHANNEL, STBIR_TYPE_FLOAT,
+                          STBIR_EDGE_CLAMP, filter == MipFilter_Box ? STBIR_FILTER_BOX : STBIR_FILTER_MITCHELL))
+            throw std::runtime_error{"Failed to resample image."};
+        return out;
+    }
+
+    // where each of the level's samples falls among the previous level's, held inside them
+    const float2 ratio{float(n.x) / float(size.x), float(n.y) / float(size.y)};
+    auto at = [&](int i, int a) { return std::clamp((float(i) + 0.5f) * ratio[a] - 0.5f, 0.f, float(n[a] - 1)); };
+
+    // A bilinear read a fraction t past a sample blurs by t (1 - t) of a squared sample, so the reads blur by the mean
+    // of that over the positions they take, a sixth for positions spread evenly and a quarter for a halving's, which
+    // all fall halfway; the blur makes up what the level lacks after the previous level's and the reads'.
+    auto lacking = [&](int a)
+    {
+        double reads = 0.0;
+        for (int i = 0; i < size[a]; ++i)
+        {
+            const float t = at(i, a) - std::floor(at(i, a));
+            reads += double(t) * double(1.f - t);
+        }
+        reads /= double(size[a]);
+        return std::sqrt(std::max(0.f, sigma * sigma * ratio[a] * ratio[a] - blurred * blurred - float(reads)));
+    };
+    const Array2Df smooth = convolve_separable(previous, Box2i{int2{0}, n}, variance_matched_gaussian_taps(lacking(0)),
+                                               variance_matched_gaussian_taps(lacking(1)), {});
+
+    for (int y = 0; y < size.y; ++y)
+        for (int x = 0; x < size.x; ++x)
+        {
+            const float2 p{at(x, 0), at(y, 1)};
+            const int2   p0 = int2(la::floor(p));
+            const int2   p1 = la::min(p0 + 1, n - 1);
+            const float2 t  = p - float2(p0);
+            out(x, y)       = (1.f - t.y) * ((1.f - t.x) * smooth(p0.x, p0.y) + t.x * smooth(p1.x, p0.y)) +
+                              t.y * ((1.f - t.x) * smooth(p0.x, p1.y) + t.x * smooth(p1.x, p1.y));
+        }
     return out;
 }
