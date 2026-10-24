@@ -9,6 +9,7 @@
 #include "edit/command.h"
 #include "fwd.h"
 
+#include <memory>
 #include <optional>
 
 /// What an edit dialog's preview has the viewport show of the image it would edit.
@@ -30,6 +31,7 @@ struct EditPreview
     std::optional<IrradianceEdit> irradiance; ///< An irradiance map of the whole image, in place of a point-wise edit
     std::optional<Box2i>       window;    ///< The display window of the image shown in place of this one, if reshaped
     EditCommand               *command = nullptr; ///< The command previewed, which a drag over the preview may steer
+    std::weak_ptr<const Image>    image;             ///< The image previewed, which the preview shows over alone
 };
 
 /// The preview of \p cmd as applying it in \p ctx would change its image, or none for a command that has none.

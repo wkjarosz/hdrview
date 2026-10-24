@@ -21,6 +21,7 @@ std::optional<EditPreview> make_edit_preview(EditCommand &cmd, const EditContext
 
     EditPreview p;
     p.command = &cmd;
+    p.image   = ctx.image;
     p.remap   = cmd.remap_preview(ctx);
     // a remap's or an irradiance map's result keeps the data window's corner, as resample_image_async() leaves it
     if (p.remap)

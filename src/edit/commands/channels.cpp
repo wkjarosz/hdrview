@@ -302,9 +302,12 @@ public:
                     if (c >= 0 && c < int(image.channels.size()))
                         image.channels.erase(image.channels.begin() + c);
                 image.rebuild_layers();
-                for (size_t c = 0; c < image.channels.size(); ++c)
+                for (size_t c = 0; !follow.empty() && c < image.channels.size(); ++c)
                     if (image.channels[c].name == follow)
+                    {
                         select_channels_group(image, int(c));
+                        break;
+                    }
             },
             structure_undo, Extent_Structure);
     }

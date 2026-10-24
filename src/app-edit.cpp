@@ -158,8 +158,9 @@ bool HDRViewApp::edit_command_enabled(const EditCommand &cmd)
 
 const EditPreview *HDRViewApp::edit_preview() const
 {
+    // held while the edit's worker runs, over the image it was made for and no other the view may have moved to
     if (m_edit_preview_frame == k_preview_held)
-        return m_running_filter ? &m_edit_preview : nullptr;
+        return m_running_filter && m_edit_preview.image.lock() == current_image() ? &m_edit_preview : nullptr;
     // the dialogs ask during the frame, after the viewport has drawn, so last frame's request is this frame's
     return ImGui::GetFrameCount() - m_edit_preview_frame <= 1 ? &m_edit_preview : nullptr;
 }
@@ -543,7 +544,8 @@ void HDRViewApp::drain_running_filter()
     m_running_filter = nullptr;
 
     // a preview held for this result ends as it lands, or with the run
-    if (m_edit_preview_frame == k_preview_held && (running->image == current_image() || running->progress.canceled()))
+    if (m_edit_preview_frame == k_preview_held &&
+        (running->image == m_edit_preview.image.lock() || running->progress.canceled()))
         m_edit_preview_frame = -2;
 
     // a partial result is a wrong one, so an abandoned run changes nothing

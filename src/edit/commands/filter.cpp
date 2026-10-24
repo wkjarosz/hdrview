@@ -196,12 +196,12 @@ public:
     void draw(EditContext &) override
     {
         ImGui::SliderFloat("Radius", &m_radius, 0.f, 32.f, "%.1f");
+        ImGui::Tooltip("Removes lone outliers -- fireflies in a render -- without the smearing a blur "
+                       "would cause. Costs the area of the disc per sample, so a large radius is slow.");
 
         ImGui::Checkbox("Circular window", &m_disc);
         ImGui::Tooltip("A square window reaches root-two farther at its corners than along its axes, which "
                        "leaves a faint squareness in what it removes.");
-        ImGui::Tooltip("Removes lone outliers -- fireflies in a render -- without the smearing a blur "
-                       "would cause. Costs the area of the disc per sample, so a large radius is slow.");
     }
 
     void apply(const EditContext &ctx) override
@@ -291,7 +291,7 @@ public:
             "replace them with a specified color, or with the median of their neighborhood.");
         ImGui::Spacing();
 
-        if (auto img = ctx.image)
+        if (auto img = ctx.image; img && img->is_valid_group(img->selected_group))
             if (auto *stats = img->channels[img->groups[img->selected_group].channels[0]].get_stats())
                 if (stats->computed)
                     ImGui::TextFmt("{} NaN and {} infinite samples in this channel.", stats->summary.nan_pixels,

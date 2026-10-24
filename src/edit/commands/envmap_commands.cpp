@@ -292,7 +292,7 @@ public:
     std::optional<IrradianceEdit> irradiance_preview(const EditContext &ctx) const override
     {
         auto img = ctx.image;
-        if (!img || m_size.x <= 0 || m_size.y <= 0)
+        if (!img || m_size.x <= 0 || m_size.y <= 0 || !img->is_valid_group(img->active_group_index(Target_Primary)))
             return std::nullopt;
 
         const ChannelGroup &group = img->groups[size_t(img->active_group_index(Target_Primary))];
