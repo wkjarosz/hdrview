@@ -194,23 +194,6 @@ std::string with_extra_boxes(const std::string &jp2, const std::string &extra)
     return jp2.substr(0, at - 4) + extra + jp2.substr(at - 4);
 }
 
-/// A little-endian TIFF holding one IFD0 entry, which is what an EXIF block is.
-std::string exif_blob(uint16_t tag, uint16_t value)
-{
-    std::string out;
-    out += "II";
-    put(out, (uint16_t)42);
-    put(out, (uint32_t)8);
-    put(out, (uint16_t)1);
-    put(out, tag);
-    put(out, (uint16_t)3); // SHORT
-    put(out, (uint32_t)1);
-    put(out, value);
-    put(out, (uint16_t)0);
-    put(out, (uint32_t)0);
-    return out;
-}
-
 /// The body of a 'uuid' box: the sixteen identifying bytes followed by the payload.
 std::string uuid_payload(const uint8_t uuid[16], const std::string &payload)
 {
@@ -438,10 +421,10 @@ TEST_CASE("A JP2's EXIF and XMP boxes reach the metadata the info panel reads")
     {
         CAPTURE(prefix.size());
 
-        // 0x0112 is Orientation, and 3 is a 180-degree rotation
-        const auto with_meta =
-            with_extra_boxes(plain, box("uuid", uuid_payload(k_exif_uuid, prefix + exif_blob(0x0112, 3))) +
-                                        box("uuid", uuid_payload(k_xmp_uuid, xmp)));
+        // an EXIF block whose one entry is Orientation (0x0112), a SHORT of 3 for a 180-degree rotation
+        const auto exif      = tiff_bytes(Endian::Little, {{0x0112, 3, 1, 3, {}}});
+        const auto with_meta = with_extra_boxes(plain, box("uuid", uuid_payload(k_exif_uuid, prefix + exif)) +
+                                                           box("uuid", uuid_payload(k_xmp_uuid, xmp)));
 
         // through load_image(), since finalize() is what turns the raw buffers into the metadata tree
         const auto img = load_bytes(with_meta, "meta.jp2");

@@ -119,14 +119,8 @@ std::string png_with_xmp(const std::string &xmp)
         put(s, v, Endian::Big);
         return s;
     };
-    auto chunk = [&](const std::string &type, const std::string &data)
-    {
-        const std::string body = type + data;
-        return be32((uint32_t)data.size()) + body +
-               be32((uint32_t)crc32(0, (const Bytef *)body.data(), (uInt)body.size()));
-    };
 
-    // 1x1 8-bit RGB, one uncompressed zlib block holding a single filtered scanline
+    // 1x1 8-bit RGB, a zlib stream holding a single filtered scanline
     std::string        ihdr = be32(1) + be32(1) + std::string("\x08\x02\x00\x00\x00", 5);
     std::string        raw  = std::string("\x00\xff\x00\x00", 4);
     uLongf             cap  = compressBound((uLong)raw.size());
@@ -136,8 +130,8 @@ std::string png_with_xmp(const std::string &xmp)
     // iTXt: keyword \0 compression-flag compression-method language \0 translated \0 text
     const std::string itxt = std::string("XML:com.adobe.xmp") + '\0' + '\0' + '\0' + '\0' + '\0' + xmp;
 
-    return std::string("\x89PNG\r\n\x1a\n", 8) + chunk("IHDR", ihdr) + chunk("iTXt", itxt) +
-           chunk("IDAT", std::string((char *)z.data(), cap)) + chunk("IEND", "");
+    return std::string("\x89PNG\r\n\x1a\n", 8) + png_chunk("IHDR", ihdr) + png_chunk("iTXt", itxt) +
+           png_chunk("IDAT", std::string((char *)z.data(), cap)) + png_chunk("IEND", "");
 }
 
 } // namespace

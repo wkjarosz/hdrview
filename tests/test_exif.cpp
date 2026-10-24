@@ -27,96 +27,14 @@ using namespace hdrview_test;
 namespace
 {
 
-constexpr uint16_t k_tag_make = 0x010f, k_tag_exif_ifd = 0x8769, k_tag_maker_note = 0x927c;
-constexpr uint16_t k_fmt_ascii = 2, k_fmt_short = 3, k_fmt_long = 4, k_fmt_rational = 5, k_fmt_undefined = 7;
+constexpr uint16_t k_tag_make = 0x010f, k_tag_maker_note = 0x927c;
+constexpr uint16_t k_fmt_ascii = 2, k_fmt_short = 3, k_fmt_rational = 5, k_fmt_undefined = 7;
 
-/// Builds a little-endian TIFF header with one IFD0, which is what an EXIF block is.
-struct TiffBuilder
-{
-    struct Entry
-    {
-        uint16_t             tag, format;
-        uint32_t             components;
-        std::vector<uint8_t> inline_or_external; ///< the 4 inline bytes, or the payload to place after the IFD
-        bool                 external = false;
-    };
+/// An IFD0 Make entry, an ordinary tag to sit beside the one a case is about.
+const TiffEntry k_make{k_tag_make, k_fmt_ascii, 8, 0, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0}};
 
-    std::vector<Entry> entries;      ///< IFD0
-    std::vector<Entry> exif_entries; ///< the EXIF sub-IFD, which IFD0 points to when non-empty
-
-    void add_inline(uint16_t tag, uint16_t format, uint32_t components, std::vector<uint8_t> four_bytes)
-    {
-        four_bytes.resize(4, 0);
-        entries.push_back({tag, format, components, std::move(four_bytes), false});
-    }
-    void add_external(uint16_t tag, uint16_t format, uint32_t components, std::vector<uint8_t> payload)
-    {
-        entries.push_back({tag, format, components, std::move(payload), true});
-    }
-    /// A maker note lives in the EXIF IFD, the only IFD libexif accepts the tag in.
-    void add_maker_note(std::vector<uint8_t> note)
-    {
-        exif_entries.push_back({k_tag_maker_note, k_fmt_undefined, (uint32_t)note.size(), std::move(note), true});
-    }
-
-    std::vector<uint8_t> build() const
-    {
-        std::vector<uint8_t> out;
-        auto                 u16 = [&](uint16_t v) { put(out, v); };
-        auto                 u32 = [&](uint32_t v) { put(out, v); };
-
-        out.insert(out.end(), {'I', 'I'});
-        u16(42);
-        u32(8); // IFD0 starts right after the header
-
-        // each IFD is a count + 12 bytes per entry + the next-IFD offset; external payloads follow both
-        const uint32_t ifd0_count = (uint32_t)entries.size() + (exif_entries.empty() ? 0u : 1u);
-        const uint32_t sub_at     = 8 + 2 + 12 * ifd0_count + 4;
-        const uint32_t sub_end    = exif_entries.empty() ? sub_at : sub_at + 2 + 12 * (uint32_t)exif_entries.size() + 4;
-
-        uint32_t payload_at = sub_end;
-        auto     emit       = [&](const Entry &e)
-        {
-            u16(e.tag);
-            u16(e.format);
-            u32(e.components);
-            if (e.external)
-            {
-                u32(payload_at);
-                payload_at += (uint32_t)e.inline_or_external.size();
-            }
-            else
-                out.insert(out.end(), e.inline_or_external.begin(), e.inline_or_external.end());
-        };
-
-        u16((uint16_t)ifd0_count);
-        for (const auto &e : entries) emit(e);
-        if (!exif_entries.empty())
-        {
-            u16(k_tag_exif_ifd);
-            u16(k_fmt_long);
-            u32(1);
-            u32(sub_at);
-        }
-        u32(0); // no IFD1
-
-        if (!exif_entries.empty())
-        {
-            u16((uint16_t)exif_entries.size());
-            for (const auto &e : exif_entries) emit(e);
-            u32(0);
-        }
-
-        for (const auto *list : {&entries, &exif_entries})
-            for (const auto &e : *list)
-                if (e.external)
-                    out.insert(out.end(), e.inline_or_external.begin(), e.inline_or_external.end());
-
-        return out;
-    }
-};
-
-json parse(const std::vector<uint8_t> &blob) { return exif_to_json(blob.data(), blob.size()); }
+json parse(const std::string &blob)
+{ return exif_to_json(reinterpret_cast<const uint8_t *>(blob.data()), blob.size()); }
 
 /// Whether any IFD in the result holds a tag with this title.
 bool has_tag_named(const json &j, const std::string &title)
@@ -175,12 +93,12 @@ TEST_CASE("One tag the file describes oddly does not discard the rest of the EXI
         const char          *label;
         uint16_t             format;
         uint32_t             components;
-        bool                 external;
         std::vector<uint8_t> bytes;
     };
+    // the array fits in the entry and the text lies outside it, so both ways a value is stored are read
     const Shape shapes[] = {
-        {"an array", k_fmt_short, 2, false, {1, 0, 6, 0}},
-        {"text", k_fmt_ascii, 4, true, {'n', 'o', 'n', 'e'}},
+        {"an array", k_fmt_short, 2, {1, 0, 6, 0}},
+        {"text", k_fmt_ascii, 5, {'n', 'o', 'n', 'e', 0}},
     };
     // Compression, PhotometricInterpretation and PlanarConfiguration
     for (uint16_t tag : {uint16_t(259), uint16_t(262), uint16_t(284)})
@@ -188,15 +106,9 @@ TEST_CASE("One tag the file describes oddly does not discard the rest of the EXI
         {
             CAPTURE(tag);
             CAPTURE(std::string{shape.label});
-            TiffBuilder t;
-            t.add_external(k_tag_make, k_fmt_ascii, 8, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0});
-            if (shape.external)
-                t.add_external(tag, shape.format, shape.components, shape.bytes);
-            else
-                t.add_inline(tag, shape.format, shape.components, shape.bytes);
-
             json j;
-            CHECK_NOTHROW(j = parse(t.build()));
+            CHECK_NOTHROW(
+                j = parse(tiff_bytes(Endian::Little, {k_make, {tag, shape.format, shape.components, 0, shape.bytes}})));
             CHECK(has_tag_named(j, "Manufacturer"));
         }
 }
@@ -213,14 +125,14 @@ TEST_CASE("A maker-note entry is followed only where its data lies inside the no
     for (uint32_t bad_offset : {0xFFFFFFF8u, 0xFFFFFFFFu, 0x80000000u, 1000u, k_data_at + 1u})
     {
         CAPTURE(bad_offset);
-        TiffBuilder t;
-        t.add_external(k_tag_make, k_fmt_ascii, 8, {'H', 'D', 'R', 'V', 'i', 'e', 'w', 0});
-        t.add_maker_note(apple_maker_note(
+        const auto note = apple_maker_note(
             {{k_gain_tag, k_fmt_rational, 1, bad_offset}, {k_headroom_tag, k_fmt_rational, 1, k_data_at}},
-            {84, 0, 0, 0, 2, 0, 0, 0}));
+            {84, 0, 0, 0, 2, 0, 0, 0});
 
-        const auto blob = t.build();
-        Exif       exif{blob.data(), blob.size()};
+        // a maker note lives in the EXIF IFD, the only IFD libexif accepts the tag in
+        const auto blob = tiff_bytes(Endian::Little, {k_make}, {},
+                                     {{k_tag_maker_note, k_fmt_undefined, uint32_t(note.size()), 0, note}});
+        Exif       exif{reinterpret_cast<const uint8_t *>(blob.data()), blob.size()};
         REQUIRE(exif.valid());
 
         CHECK_FALSE(exif.apple_makernote_value(k_gain_tag).has_value());

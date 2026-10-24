@@ -148,17 +148,6 @@ TEST_CASE("saving a transfer function this libpng cannot record fails instead of
 namespace
 {
 
-/// A PNG chunk: its length, type and data, then the CRC over the type and data.
-std::string png_chunk(const char *type, const std::string &data)
-{
-    const std::string body = std::string(type, 4) + data;
-    std::string       out;
-    put(out, (uint32_t)data.size(), Endian::Big);
-    out += body;
-    put(out, (uint32_t)crc32(0, (const Bytef *)body.data(), (uInt)body.size()), Endian::Big);
-    return out;
-}
-
 std::string zlib_compressed(const std::string &bytes)
 {
     uLongf      size = compressBound((uLong)bytes.size());
