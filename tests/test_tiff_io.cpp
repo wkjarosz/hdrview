@@ -217,8 +217,8 @@ TEST_CASE("A TIFF's alpha kind decides how many times its samples are multiplied
     SUBCASE("associated alpha is read as already multiplied into the encoded samples")
     {
         // pixel 1 holds 128/255 under alpha 128/255: a fully bright color at half coverage, multiplied into the
-        // encoded samples (a*OETF(C)), as Photoshop and OpenImageIO store it, and as vips 8.18 does asked to
-        // premultiply; ImageMagick 7.1.2's associated alpha multiplies the color the same way, but its alpha too
+        // encoded samples (a*OETF(C)), as Photoshop stores it, OpenImageIO 3.2 writes by default and vips 8.18 asked
+        // to premultiply; ImageMagick 7.1.2's associated alpha multiplies the color the same way, but its alpha too
         auto img = load_tiff(rgba_tiff(1, 0x80));
 
         REQUIRE(img->channels.size() == 4);
