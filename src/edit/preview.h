@@ -44,7 +44,7 @@ struct ShaderEdit
     int      op = 0; ///< An EDIT_ op, or EDIT_NONE
     float4   p0{0.f}, p1{0.f};
     float3x3 m0{la::identity}, m1{la::identity};
-    int4     i0{0}; ///< A resampling op's integers
+    int4     i0{0}; ///< The op's integer parameters, for a resampling op
 };
 
 /// The edit the image shader dispatches on for \p preview, a shift or remap packed as EDIT_SHIFT or EDIT_REMAP.

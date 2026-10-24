@@ -76,11 +76,11 @@ layout(binding=1) uniform fs_params {
     ivec4 edit_slots;                 // which of the subject's channels each slot shows, or -1 for none
     int   edit_color;                 // whether a color op reaches the shown group
     vec4  edit_rect;                  // the subject's rectangle in uv: min, then max
-    vec4  edit_p0;                    // the op's first vector
-    vec4  edit_p1;                    // its second
-    mat4  edit_m0;                    // its first matrix
-    mat4  edit_m1;                    // its second
-    ivec4 edit_i0;                    // a resampling op's integers
+    vec4  edit_p0;                    // the op's first vector of parameters
+    vec4  edit_p1;                    // the op's second vector of parameters
+    mat4  edit_m0;                    // the op's first matrix parameter
+    mat4  edit_m1;                    // the op's second matrix parameter
+    ivec4 edit_i0;                    // the op's integer parameters, for a resampling op
 } fsp;
 
 layout(binding=0) uniform texture2D colormap;
